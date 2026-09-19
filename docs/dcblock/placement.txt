@@ -1,0 +1,40 @@
+commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+
+PLACEMENT. Every number is a change from the uncoupled baseline of the
+SAME voice on the SAME instrument (DR 0015: same qualified basis).
+
+CY   baseline: peak -13.36 dBFS  sub20 -46.88 dB  body -56.46 dB  HF -34.09 dB  T20 460.0 ms  clip 0
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  exc                       +0.00    -0.00    +0.00    +0.01   -0.00   +0.00     +0   +0.01  ok
+  bus                      -14.64    +0.20    +0.00    +0.00   +0.06   -6.96     +0   +8.96  t20_ms_pct,centroid_pct
+  post                     -14.64    +0.19    +0.00    +0.00   +0.06   -6.96     +0   +8.96  t20_ms_pct,centroid_pct
+
+RS   baseline: peak -14.31 dBFS  sub20 -49.59 dB  body -42.61 dB  HF -75.73 dB  T20 10.0 ms  clip 0
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  exc                       -0.46    -0.14    +0.10    -0.20   -0.03   +0.00     +0   +2.26  hf_5k_20k_db,centroid_pct
+  bus                       -2.85    -0.06    +0.00    +0.00   -0.22 +220.00     +0   +9.70  t20_ms_pct,centroid_pct
+  post                      -2.85    -0.06    +0.00    +0.00   -0.22 +220.00     +0   +9.72  t20_ms_pct,centroid_pct
+
+BD   baseline: peak -12.93 dBFS  sub20 -47.13 dB  body -24.85 dB  HF -76.68 dB  T20 334.0 ms  clip 0
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  exc                       +5.58    +0.24    -0.00    +0.01   +1.17   +0.00    +16   -1.90  peak_dbfs,attack_samp,centroid_pct
+  bus                       -2.60    -0.10    +0.10    +0.00   -0.21   +0.00   +460   +0.34  attack_samp
+  post                      -2.60    -0.10    +0.10    +0.00   -0.21   +0.00   +462   +0.34  attack_samp
+
+HT   baseline: peak -12.95 dBFS  sub20 -56.14 dB  body -30.19 dB  HF -102.08 dB  T20 100.0 ms  clip 0
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  exc                       -2.52    -0.01    +0.00    -0.03   -0.22   +0.00   +123   +0.14  attack_samp
+  bus                       -2.65    -0.00    +0.01    +0.30   -0.22   +0.00   +123   +0.14  hf_5k_20k_db,attack_samp
+  post                      -2.66    -0.00    +0.01    +1.08   -0.22   +0.00   +123   +0.14  hf_5k_20k_db,attack_samp
+
+CH   baseline: peak -14.22 dBFS  sub20 -97.15 dB  body -109.64 dB  HF -40.80 dB  T20 48.0 ms  clip 0
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  exc                       +0.00    -0.13    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok
+  bus                       -5.03    -0.75    +0.00    +0.00   +0.01   +0.00     +0   +0.00  body_20_700_db
+  post                     -20.87    -1.62    +0.01    +0.00   +0.01   +0.00     +0   +0.00  body_20_700_db
+
