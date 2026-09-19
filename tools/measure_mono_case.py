@@ -109,10 +109,12 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
         apparatus = _apparatus()
         ref = apparatus["reference"]
         inc = vf.phase_inc(vf.note_hz(NOTE))
-        dut = np.asarray(vf.OscFx(WAVE).render(int(SECONDS * SR), inc), dtype=np.float64) / 32768.0
+        dut_raw = np.asarray(vf.OscFx(WAVE, smooth=False).render(int(SECONDS * SR), inc), dtype=np.float64) / 32768.0
+        dut = np.asarray(vf.OscFx(WAVE, smooth=True).render(int(SECONDS * SR), inc), dtype=np.float64) / 32768.0
         if len(dut) != len(ref):
             raise Refused(f"reference/DUT length mismatch: {len(ref)} != {len(dut)}")
         ref_m = _measure(ref, vf.note_hz(NOTE))
+        baseline_m = _measure(dut_raw, vf.note_hz(NOTE))
         dut_m = _measure(dut, vf.note_hz(NOTE))
         out.mkdir(parents=True, exist_ok=True)
         ref_wav, dut_wav = out / "reference-surge.wav", out / "dut-polyblep.wav"
@@ -128,16 +130,20 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
             "stimulus": {"midi_note": NOTE, "waveform": WAVE, "seconds": SECONDS,
                          "sample_rate": SR, "f0_command_hz": vf.note_hz(NOTE)},
             "reference": ref_m,
+            "baseline_dut": baseline_m,
             "dut": dut_m,
             "difference": {
                 "f0_cents_dut_minus_reference": round(dut_m["f0_cents"] - ref_m["f0_cents"], 6),
                 "inharmonic_db_dut_minus_reference": round(
                     dut_m["inharmonic_db"] - ref_m["inharmonic_db"], 6),
+                "inharmonic_db_filter_improvement": round(
+                    dut_m["inharmonic_db"] - baseline_m["inharmonic_db"], 6),
             },
             "diagnosis": (
-                "The DUT carries more inharmonic energy than the qualified Surge reference. "
-                "The next sound improvement is the high-note oscillator alias/foldback path; "
-                "this result does not qualify the full envelope/filter patch."),
+                "The causal oscillator filter reduces the DUT's inharmonic energy by "
+                f"{baseline_m['inharmonic_db'] - dut_m['inharmonic_db']:.3f} dB; "
+                "the filtered DUT is compared with the qualified Surge reference. "
+                "This component result does not qualify the full envelope/filter patch."),
             "audio": {
                 "reference": str(ref_wav), "dut": str(dut_wav),
                 "reference_sha256": _sha256(ref_wav), "dut_sha256": _sha256(dut_wav),

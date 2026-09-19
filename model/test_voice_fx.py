@@ -107,7 +107,10 @@ def test_glide_is_constant_rate_and_lands_exactly():
     # one octave at the reference rate takes 90 ms within 1 %
     assert abs(land / SR - vf.GLIDE_REF_S) / vf.GLIDE_REF_S < 0.01, land / SR
     # the held-note oscillator after landing, bit for bit
-    o = vf.OscFx("saw"); o.phase = int(seq[:land].sum()) & dsp.PHASE_MASK
+    raw = vf.OscFx("saw").render(land, seq[:land])
+    o = vf.OscFx("saw", smooth=True)
+    o.phase = int(seq[:land].sum()) & dsp.PHASE_MASK
+    o._smooth_d1, o._smooth_d2 = int(raw[-1]), int(raw[-2])
     held = o.render(len(seq) - land, i1)
     assert np.array_equal(v.trace["osc"][0][land:], held)
 
@@ -219,7 +222,7 @@ def test_oscillator_phase_is_not_reset_at_note_on():
     v.play(regs, w, int(0.6 * SR))
     incs = v.trace["incs"][0]
     ph = np.cumsum(np.concatenate([[0], incs[:-1]])) & dsp.PHASE_MASK
-    o = vf.OscFx("saw")
+    o = vf.OscFx("saw", smooth=True)
     assert np.array_equal(v.trace["osc"][0], o.render(len(incs), incs))
     assert int(ph[int(0.25 * SR)]) != 0                          # the second note did not start at phase 0
 

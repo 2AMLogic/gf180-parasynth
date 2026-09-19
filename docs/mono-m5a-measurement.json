@@ -15,18 +15,24 @@
     "f0_cents": 0.000223,
     "inharmonic_db": -47.226482
   },
-  "dut": {
+  "baseline_dut": {
     "f0_hz": 1046.502113,
     "f0_cents": -0.000245,
     "inharmonic_db": -31.068475
   },
+  "dut": {
+    "f0_hz": 1046.502113,
+    "f0_cents": -0.000245,
+    "inharmonic_db": -48.877461
+  },
   "difference": {
     "f0_cents_dut_minus_reference": -0.000468,
-    "inharmonic_db_dut_minus_reference": 16.158007
+    "inharmonic_db_dut_minus_reference": -1.650964,
+    "inharmonic_db_filter_improvement": -17.808986
   },
   "audio_sha256": {
-    "reference_surge_wav": "54aac8994eefec18167cd4b620cd299637fff8aea555caec1dcae40912641655",
-    "dut_polyblep_wav": "382d69c271b702afd392b180684ae22d55b8c3ece2022d7d2fdba2f713eceb3d"
+    "reference_surge_wav": "b5441f046be4cd592a029a41229619052d7d6f44d2f82739ae48cde4ce81d8e6",
+    "dut_polyblep_wav": "f0a0f49fecf5975da3071932feb979b58748bb179054b91ac78a9da197e59f58"
   },
-  "diagnosis": "The DUT carries more inharmonic energy than the qualified Surge reference. The next sound improvement is the high-note oscillator alias/foldback path; this result does not qualify the full envelope/filter patch."
+  "diagnosis": "The prototype causal oscillator filter reduces inharmonic energy by 17.809 dB; the filtered DUT is 1.651 dB below the qualified Surge reference but attenuates upper harmonics more strongly. This component result is not an accepted sound-quality fix and does not qualify the full envelope/filter patch."
 }

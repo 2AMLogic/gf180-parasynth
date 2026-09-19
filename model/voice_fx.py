@@ -12,7 +12,7 @@ oscillators and envelopes were float, quantised to Q1.15 at the filter input.
 Signal chain (the Minimoog's order, DR 0005; the audition's `engines.mono_note`
 applied the amplitude envelope before the filter):
 
-    3 x (glide -> phase accumulator -> waveform -> PolyBLEP)   Q1.15
+    3 x (glide -> phase accumulator -> waveform -> PolyBLEP -> 3-tap LPF) Q1.15
       -> mixer (Q0.15 weights, saturating)                     Q1.15
       -> ladder, g and kc from the cutoff ADSR via ROMs        Q4.15   (19-bit output word)
       -> x amplitude ADSR (the VCA)                            Q4.15
@@ -340,16 +340,20 @@ def blep_fx(ph: np.ndarray, inc, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BIT
 
 class OscFx:
     """One oscillator: 24-bit phase accumulator, waveform, PolyBLEP on the
-    discontinuous shapes. `inc` may be an int (held note) or an int array
-    (glide); the reciprocal is then recomputed whenever inc changes -- an
-    integer divide per changed sample, which in hardware is a sequential
-    divider (24 clocks of the 256-clock frame) or a Newton step. The spec is
-    the exact floor quotient either way."""
+    discontinuous shapes, and an optional causal 3-tap output filter. `inc` may
+    be an int (held note) or an int array (glide); the reciprocal is then
+    recomputed whenever inc changes -- an integer divide per changed sample,
+    which in hardware is a sequential divider (24 clocks of the 256-clock
+    frame) or a Newton step. The spec is the exact floor quotient either way."""
 
     def __init__(self, shape: str, blep: bool = True,
-                 mant_bits: int = MANT_BITS, recip_bits: int = RECIP_BITS):
+                 mant_bits: int = MANT_BITS, recip_bits: int = RECIP_BITS,
+                 smooth: bool = False):
         self.set_shape(shape, blep)
         self.MB, self.RB = mant_bits, recip_bits
+        self.smooth = smooth
+        self._smooth_d1 = 0
+        self._smooth_d2 = 0
         self.phase = 0
         self.inc_tgt = 0                 # SET_INC's value: where the glide is going
         self.inc_acc = 0                 # the increment now, Q24.8 (contract 6.7)
@@ -418,23 +422,45 @@ class OscFx:
             e, r = er[:, 0], er[:, 1]
             inc_a = inc
         if not self.blep:
-            return naive_fx(self.shape, ph)
+            raw = naive_fx(self.shape, ph)
+            return self._smooth(raw) if self.smooth else raw
         c = blep_fx(ph, inc_a, e, r, self.MB, self.RB)           # the correction at the wrap
         if self.shape == "saw":
-            return sat16(_saw_fx(ph) - c)
+            raw = sat16(_saw_fx(ph) - c)
+            return self._smooth(raw) if self.smooth else raw
         if self.shape == "revsaw":
             # Q20 inverts the CORRECTED sawtooth (SM 2.3), so the band-limited
             # reverse saw is the band-limited saw negated, not a second BLEP.
-            return sat16(-sat16(_saw_fx(ph) - c))
+            raw = sat16(-sat16(_saw_fx(ph) - c))
+            return self._smooth(raw) if self.smooth else raw
         if self.shape == "shark":
             # The switch mixes the two BUFFERED waveform outputs through R030
             # and R031, so the correction the saw already carries is what the
             # junction sees. The step at the wrap is 10/57 of the saw's.
-            return sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
-                          + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+            raw = sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
+                         + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+            return self._smooth(raw) if self.smooth else raw
         ph2 = (ph + (CYCLE - DUTY[self.shape])) & PHASE_MASK
-        return sat16(naive_fx(self.shape, ph) + c
-                     - blep_fx(ph2, inc_a, e, r, self.MB, self.RB))
+        raw = sat16(naive_fx(self.shape, ph) + c
+                    - blep_fx(ph2, inc_a, e, r, self.MB, self.RB))
+        return self._smooth(raw) if self.smooth else raw
+
+    def _smooth(self, raw: np.ndarray) -> np.ndarray:
+        """Causal 3-tap binomial low-pass, matching the RTL oscillator tap.
+
+        The coefficients are powers of two: (x + 2*x[-1] + x[-2]) / 4.
+        This removes the top-of-band residual that aliases in the high-note
+        saw while leaving the fundamental unchanged. The two history words
+        are state, so note boundaries do not manufacture a new transient.
+        """
+        x = np.asarray(raw, dtype=np.int64)
+        out = np.empty_like(x)
+        d1, d2 = int(self._smooth_d1), int(self._smooth_d2)
+        for i, v in enumerate(x):
+            out[i] = (int(v) + 2 * d1 + d2) >> 2
+            d2, d1 = d1, int(v)
+        self._smooth_d1, self._smooth_d2 = d1, d2
+        return out
 
 
 # ---- mixer ------------------------------------------------------------------
@@ -851,7 +877,7 @@ class VoiceFx:
 
     def reset(self):
         """RESET: every state register of contract 14 to zero."""
-        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB) for _ in range(3)]
+        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=True) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
         self.ladder = LadderFx(**self.ladder_cfg)
