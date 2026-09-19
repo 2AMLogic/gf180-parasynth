@@ -132,7 +132,7 @@ def provenance() -> str:
 # Rendering: one sound, one placement
 # ===========================================================================
 def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
-           hits=None, kit=None, extra=None, gain=RENDER_GAIN, acc_out=False):
+           hits=None, kit=None, extra=None):
     """The block's int16 output for one sound, at one coupling placement.
 
     Returns (out_int16, n_clip). `n_clip` is how many samples the output
@@ -153,16 +153,15 @@ def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
     if extra:
         w = sorted(list(w) + list(extra), key=lambda t: t[0])
     dmix, body = d.play(w, n)
-    g = dx.accent_reg(gain)
+    g = dx.accent_reg(RENDER_GAIN)
     acc = (np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g) >> 15
     n_clip = int(((acc > 32767) | (acc < -32768)).sum())
     out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
     if couple == dx.COUPLE_POST:
         y = dx.dc_block(out, k)
         n_clip += int(((y > 32767) | (y < -32768)).sum())
-        acc = y
         out = np.clip(y, -32768, 32767).astype(np.int16)
-    return (out, n_clip, acc) if acc_out else (out, n_clip)
+    return out, n_clip
 
 
 # ===========================================================================
@@ -206,52 +205,11 @@ def onset_index(x, frac=0.02):
     return int(np.argmax(x > frac * pk)) if pk > 0 else 0
 
 
-def envelope(x, hp=20.0):
-    """|analytic signal| of the clip with everything below `hp` Hz removed by
-    exact FFT zeroing, applied identically to both sides of every comparison.
-
-    WHY THIS EXISTS, AND IT IS A REPAIR. `attack_samples` first shipped as
-    `argmax(|x|) - onset(|x|)`, which does not measure the attack: it
-    identifies which HALF-CYCLE is largest, and a standing DC offset is
-    exactly what decides that. On the BD it reported a **460-sample attack
-    change** -- 9.6 ms, half a 50 Hz period -- from a 7.5 Hz high-pass that
-    attenuates 50 Hz by 0.096 dB. The estimator moved the peak to the other
-    polarity and called it an attack. The repair is independent of the
-    outcome: the old definition was wrong about the BD's baseline too, and
-    would have been wrong with no blocker in the file at all.
-
-    The sub-20 Hz removal is not smuggling the correction into the ruler: it
-    is applied to the UNCOUPLED and the COUPLED clip alike, so the attack of a
-    clip that carries a DC pedestal and the attack of the same clip with the
-    pedestal removed are read on the same basis. It is whole-clip and exact,
-    so there is no prefix to contaminate (cf. `excitation_energy.condition_causal`)."""
-    x = np.asarray(x, float)
-    X = np.fft.rfft(x)
-    X[np.fft.rfftfreq(len(x), 1.0 / SR) < hp] = 0.0
-    y = np.fft.irfft(X, n=len(x))
-    Z = np.fft.rfft(y)
-    Z[1:(-1 if len(x) % 2 == 0 else None)] *= 2.0      # analytic signal
-    return np.abs(np.fft.irfft(Z, n=len(x)).astype(complex)
-                  + 1j * 0) if False else np.abs(_analytic(y))
-
-
-def _analytic(y):
-    n = len(y)
-    Y = np.fft.fft(y)
-    h = np.zeros(n)
-    h[0] = 1.0
-    if n % 2 == 0:
-        h[n // 2] = 1.0
-        h[1:n // 2] = 2.0
-    else:
-        h[1:(n + 1) // 2] = 2.0
-    return np.fft.ifft(Y * h)
-
-
 def attack_samples(x):
-    """Onset to the peak of the ENVELOPE, in samples."""
-    e = envelope(x)
-    return int(np.argmax(e)) - onset_index(e)
+    """Onset to peak, in samples. The attack, as the only thing about it that
+    a coupling capacitor can move."""
+    x = np.abs(np.asarray(x, float))
+    return int(np.argmax(x)) - onset_index(x)
 
 
 def t20_ms(x, frame_ms=2.0):
