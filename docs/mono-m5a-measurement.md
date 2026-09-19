@@ -22,13 +22,16 @@ Run it with:
 .venv/bin/python tools/measure_mono_case.py --out build/mono-m5a
 ```
 
-The run at commit `0bb807f` produced a valid comparison. The measured
+The baseline run at commit `0bb807f` produced a valid comparison. The measured
 fundamentals were 1046.502 Hz on both sides (DUT − reference: −0.0005 cents).
 The inharmonic-energy measurement was −47.2265 dB for Surge and −31.0685 dB
-for the DUT, a **+16.158 dB DUT excess**. This is an actionable result: the
-next sound improvement is the high-note oscillator alias/foldback path, before
-tuning the full envelope/filter patch. It is not a pass, and it does not
-qualify the complete M5A case.
+for the unfiltered DUT, a **+16.158 dB DUT excess**. The prototype causal
+oscillator filter reduces the DUT to −48.8775 dB, a 17.809 dB improvement and
+1.651 dB below the reference. The fundamental remains −0.0005 cents from the
+reference. Its upper harmonics are also more attenuated than Surge (the twelfth
+is −30.21 dB versus −22.29 dB), so this is an aliasing experiment for review,
+not an accepted sound-quality fix. It is a component result, not a pass on the
+complete M5A case.
 
 The JSON report and both WAV hashes are produced by
 [`tools/measure_mono_case.py`](../tools/measure_mono_case.py). A missing or

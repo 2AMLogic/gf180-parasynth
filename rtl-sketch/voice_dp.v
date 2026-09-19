@@ -109,6 +109,11 @@ module voice_dp #(
     reg [19:0] dgain, dogain;
     // ---- state (contract 5.1, 6.1, 8.1) ---------------------------------------
     reg [23:0] phase   [0:2];
+    // Three-tap binomial smoothing removes the oscillator's top-of-band
+    // residual before it reaches the nonlinear path. It is causal and keeps
+    // two samples of state per oscillator so the model and RTL agree across
+    // note boundaries.
+    reg signed [15:0] osc_d1 [0:2], osc_d2 [0:2];
     reg [4:0]  sh      [0:2];          // e + 15
     reg [15:0] r       [0:2];
     reg [23:0] inc_er  [0:2];          // the inc (sh, r) was computed for
@@ -281,7 +286,15 @@ module voice_dp #(
                                : is_rev ? revc
                                : two_edge ? osc_two
                                : $signed({{2{naive[15]}}, naive});
-    wire signed [15:0] osc = (osc_raw > 18'sd32767) ? 16'sd32767 : (osc_raw < -18'sd32768) ? -16'sd32768 : osc_raw[15:0];
+    wire signed [15:0] osc_raw_clamped = (osc_raw > 18'sd32767) ? 16'sd32767 : (osc_raw < -18'sd32768) ? -16'sd32768 : osc_raw[15:0];
+    wire signed [18:0] osc_smooth_sum = $signed({{3{osc_raw_clamped[15]}}, osc_raw_clamped})
+                                      + ($signed({{3{osc_d1[kk][15]}}, osc_d1[kk]}) <<< 1)
+                                      + $signed({{3{osc_d2[kk][15]}}, osc_d2[kk]});
+`ifdef INJECT_BUG_VOICE_OSC_SMOOTH_OFF
+    wire signed [15:0] osc = osc_raw_clamped;         // NEGATIVE CONTROL: bypass alias filter
+`else
+    wire signed [15:0] osc = sat16t(osc_smooth_sum >>> 2);
+`endif
 
     // ---- envelopes (8.3) --------------------------------------------------------------
     function [25:0] env_update(input g_, input [1:0] seg, input [23:0] level,
@@ -428,6 +441,7 @@ module voice_dp #(
             for (i = 0; i < 3; i = i + 1) begin
                 inc_tgt[i] <= 0; inc_acc[i] <= 0; wave[i] <= 0; w[i] <= 0;
                 phase[i] <= 0; sh[i] <= 5'd15; r[i] <= 0; inc_er[i] <= 0; inc_mod[i] <= 0;
+                osc_d1[i] <= 0; osc_d2[i] <= 0;
             end
             // contract 14. The LFSR returns to its SEED, not to zero: an all-zero
             // LFSR is a fixed point and the noise source would never start.
@@ -551,6 +565,8 @@ module voice_dp #(
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
                 S_MIX: begin
                     ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
+                    osc_d2[kk] <= osc_d1[kk];
+                    osc_d1[kk] <= osc_raw_clamped;
                     phase[kk] <= ph + inc;                                    // step 9: advance
                     if (kk == 2'd2) naive3 <= naive;                          // the modulation tap (M5)
                     state <= S_ACC;
