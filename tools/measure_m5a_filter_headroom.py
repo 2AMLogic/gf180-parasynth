@@ -143,10 +143,23 @@ def main(argv=None) -> int:
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
+    comparison_summary = {
+        pulse: {
+            comparison: {
+                "accepts_incremental_improvement": row["accepts_incremental_improvement"],
+                "case_passes": row["case_passes"],
+                "improved_components": len(row["improved_components"]),
+                "regressed_components": len(row["regressed_components"]),
+            }
+            for comparison, row in comparisons.items()
+        }
+        for pulse, comparisons in report["comparisons"].items()
+    }
     print(json.dumps({"report": str(out.relative_to(ROOT)),
                       "source_commit": report["source_commit"],
                       "source_dirty": report["source_dirty"],
-                      "comparisons": report["comparisons"]}, indent=2))
+                      "comparisons": comparison_summary,
+                      "causal_converter": report["causal_converter"]}, indent=2))
     return 0
 
 
