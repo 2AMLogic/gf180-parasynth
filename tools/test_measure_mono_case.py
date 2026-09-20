@@ -7,6 +7,7 @@ import pytest
 import measure_mono_case as m
 import voice_fx as vf
 import audio_measure as am
+import oversampled_osc as os2
 
 
 def test_measure_accepts_a_known_saw():
@@ -43,3 +44,16 @@ def test_high_note_oscillator_filter_reduces_alias_metric():
     before = am.inharmonic_fraction_db(raw, f0, m.SR).require("raw")
     after = am.inharmonic_fraction_db(filtered, f0, m.SR).require("filtered")
     assert before - after > 10.0, (before, after)
+
+
+def test_true_2x_path_is_close_to_the_qualified_external_target():
+    note = 84
+    f0 = vf.note_hz(note)
+    n = int(m.SECONDS * m.SR)
+    fixed = os2.render_saw(n, vf.phase_inc(f0)) / 32768.0
+    measured = m._measure(fixed, f0)
+    # Surge's independently measured target is -47.2265 dB. Keep this gate
+    # local and deterministic; the live plugin comparison remains in the
+    # measurement command.
+    assert measured["inharmonic_db"] < -44.0
+    assert abs(measured["f0_cents"]) < 0.02
