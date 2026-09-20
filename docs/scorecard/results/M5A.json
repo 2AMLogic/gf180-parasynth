@@ -2,16 +2,16 @@
   "engine": "fixed-model",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "133a73d",
-  "analysis_run": "run_case@fb6e80c4d35f + audio_measure@2345ced894c7 at 2026-09-20T10:25:01Z",
+  "source_commit": "77a6209",
+  "analysis_run": "run_case@e35350a6388c + audio_measure@2345ced894c7 + mono_m5a_score@80a37e78f993 + scorecard@2094d43f15e9 at 2026-09-20T10:59:07Z",
   "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
   "render_run": "fixed integer model; saw and pulse, MIDI 84/96, complete 27.2 s phrase",
   "audio": "build/scorecard/M5A-model.wav",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "133a73d",
-      "described": "node/D-drums-bitexact-123-g133a73d",
+      "commit": "77a6209",
+      "described": "node/D-drums-bitexact-127-g77a6209",
       "branch": "fix/high-note-aliasing",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
@@ -21,7 +21,7 @@
       "checked": true,
       "origin_main": "cbcc8b9e10e4",
       "behind_commits": 0,
-      "ahead_commits": 28,
+      "ahead_commits": 32,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
@@ -37,7 +37,7 @@
       },
       "allow_stale": true,
       "problems": [],
-      "ahead_note": "28 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: docs/scorecard/cases.csv, model/voice_fx.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "32 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: docs/scorecard/cases.csv, model/voice_fx.py. That is not a stale premise -- the tree contains everything origin/main has."
     },
     "command": "tools/run_case.py M5A --allow-stale",
     "config": {
@@ -45,16 +45,17 @@
       "reference": "frozen Mini V3 WAV"
     },
     "python": "3.11.5",
-    "run_at": "2026-09-20T10:26:26Z",
+    "run_at": "2026-09-20T11:00:06Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:970aa5f1dbdcffe1",
       "model/audio_measure.py": "sha256:2345ced894c70d3d",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:fb6e80c4d35f1e5e",
+      "tools/run_case.py": "sha256:e35350a6388c5390",
       "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
-      "tools/mono_m5a_score.py": "sha256:be25fb22e7ee0be4",
+      "tools/mono_m5a_score.py": "sha256:80a37e78f9938045",
       "tools/measure_mono_m5a_reference.py": "sha256:8ea0aa3705d907aa",
+      "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
       "docs/scorecard/cases.csv": "sha256:ae732f0ffd317afc",
       "frozen:M5A:audio": "sha256:a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
@@ -68,6 +69,7 @@
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
+  "analysis_version": "m5a-score-v2",
   "note": "Full sound comparison uses the fixed integer model; a separate short M5A stimulus verifies the selected configuration through SPI to I2S.",
   "tolerance_policy": {
     "Pitch": [
@@ -80,7 +82,7 @@
     ],
     "Foldback energy": [
       3.0,
-      "dB; half-power convention"
+      "dB excess alias energy above the reference; cleaner output is not penalized"
     ],
     "Envelope attack": [
       5.0,
@@ -101,31 +103,31 @@
   },
   "metrics": {
     "Pitch": {
-      "value": -0.01234,
+      "value": -0.14813,
       "reference": 0.0,
-      "error": -0.01234,
+      "error": -0.14813,
       "units": "cents",
       "tolerance": 1.0,
       "valid": true,
       "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
     },
     "Harmonic shape": {
-      "value": 88.53888,
+      "value": 89.19131,
       "reference": 0.0,
-      "error": 88.53888,
+      "error": 89.19131,
       "units": "dB",
       "tolerance": 1.0,
       "valid": true,
       "tolerance_basis": "dB per measured partial; fixed screening limit"
     },
     "Foldback energy": {
-      "value": -25.85425,
-      "reference": -50.83477,
+      "value": 24.98053,
+      "reference": 0.0,
       "error": 24.98053,
       "units": "dB",
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "dB; half-power convention"
+      "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
     },
     "Envelope attack": {
       "value": 8.5625,
@@ -255,9 +257,9 @@
         "wave": "saw",
         "midi": 84,
         "pitch_cents_from_midi": {
-          "model": -0.00042,
-          "reference": 0.01193,
-          "model_minus_reference": -0.01234
+          "model": -0.00498,
+          "reference": 0.14315,
+          "model_minus_reference": -0.14813
         },
         "harmonic_error_db_model_minus_reference": {
           "h2": -4.7318,
@@ -272,9 +274,23 @@
           "h11": -7.7177,
           "h12": -7.9101
         },
+        "harmonic_comparison": {
+          "h2": "measured",
+          "h3": "measured",
+          "h4": "measured",
+          "h5": "measured",
+          "h6": "measured",
+          "h7": "measured",
+          "h8": "measured",
+          "h9": "measured",
+          "h10": "measured",
+          "h11": "measured",
+          "h12": "measured"
+        },
         "foldback_db": {
           "model": -34.9535,
-          "reference": -50.1287
+          "reference": -50.1287,
+          "excess_over_reference_db": 15.1752
         },
         "envelope_ms": {
           "attack_model": 8.5417,
@@ -291,9 +307,9 @@
         "wave": "saw",
         "midi": 96,
         "pitch_cents_from_midi": {
-          "model": -2e-05,
-          "reference": 0.01194,
-          "model_minus_reference": -0.01196
+          "model": -0.00022,
+          "reference": 0.14328,
+          "model_minus_reference": -0.14351
         },
         "harmonic_error_db_model_minus_reference": {
           "h2": -8.7048,
@@ -307,9 +323,22 @@
           "h10": -9.6825,
           "h11": -2.597
         },
+        "harmonic_comparison": {
+          "h2": "measured",
+          "h3": "measured",
+          "h4": "measured",
+          "h5": "measured",
+          "h6": "measured",
+          "h7": "measured",
+          "h8": "measured",
+          "h9": "measured",
+          "h10": "measured",
+          "h11": "measured"
+        },
         "foldback_db": {
           "model": -31.2082,
-          "reference": -49.3938
+          "reference": -49.3938,
+          "excess_over_reference_db": 18.1856
         },
         "envelope_ms": {
           "attack_model": 8.6042,
@@ -326,9 +355,9 @@
         "wave": "pulse",
         "midi": 84,
         "pitch_cents_from_midi": {
-          "model": -2e-05,
-          "reference": 0.01193,
-          "model_minus_reference": -0.01195
+          "model": -0.00021,
+          "reference": 0.14316,
+          "model_minus_reference": -0.14337
         },
         "harmonic_error_db_model_minus_reference": {
           "h2": -83.7405,
@@ -343,9 +372,23 @@
           "h11": -1.4288,
           "h12": -82.8187
         },
+        "harmonic_comparison": {
+          "h2": "measured",
+          "h3": "measured",
+          "h4": "measured",
+          "h5": "measured",
+          "h6": "measured",
+          "h7": "measured",
+          "h8": "measured",
+          "h9": "measured",
+          "h10": "measured",
+          "h11": "measured",
+          "h12": "measured"
+        },
         "foldback_db": {
           "model": -30.9832,
-          "reference": -53.5263
+          "reference": -53.5263,
+          "excess_over_reference_db": 22.5432
         },
         "envelope_ms": {
           "attack_model": 8.7917,
@@ -362,22 +405,38 @@
         "wave": "pulse",
         "midi": 96,
         "pitch_cents_from_midi": {
-          "model": -2e-05,
-          "reference": 0.01194,
-          "model_minus_reference": -0.01196
+          "model": -0.00029,
+          "reference": 0.14328,
+          "model_minus_reference": -0.14357
         },
         "harmonic_error_db_model_minus_reference": {
           "h2": -84.4256,
           "h3": -3.0979,
           "h4": -85.6803,
           "h5": -3.1594,
+          "h6": -89.1913,
           "h7": -1.793,
+          "h8": -84.0862,
           "h9": -3.6063,
+          "h10": -85.5155,
           "h11": 3.213
+        },
+        "harmonic_comparison": {
+          "h2": "measured",
+          "h3": "measured",
+          "h4": "measured",
+          "h5": "measured",
+          "h6": "model_below_floor_bound",
+          "h7": "measured",
+          "h8": "model_below_floor_bound",
+          "h9": "measured",
+          "h10": "model_below_floor_bound",
+          "h11": "measured"
         },
         "foldback_db": {
           "model": -25.8542,
-          "reference": -50.8348
+          "reference": -50.8348,
+          "excess_over_reference_db": 24.9805
         },
         "envelope_ms": {
           "attack_model": 8.5625,
@@ -415,6 +474,6 @@
       "overall_wrong_then_right_rate": "2/6"
     },
     "duration_s": 27.198166666666665,
-    "spi_i2s_report_sha256": "8b0d777b31bf013025a65d3ad767e457fa061137e4c0653f1e8929e9f5462422"
+    "spi_i2s_report_sha256": "a39de3994d11e8441e29f29e78de979b7ac01fe1a5e517e6baa2cd1df4c33193"
   }
 }
