@@ -30,7 +30,7 @@ def test_metric_keeps_signed_error_and_declared_units():
 def test_pulse_segment_selects_pulse_in_the_model():
     common = {"waves": ("saw", "saw", "saw"), "mix": (1.0, 0.0, 0.0)}
     assert score._patch_for_wave(common, "saw")["waves"][0] == "saw"
-    assert score._patch_for_wave(common, "pulse")["waves"][0] == "pulse"
+    assert score._patch_for_wave(common, "pulse")["waves"][0] == "square"
     with pytest.raises(score.Refused, match="unsupported"):
         score._patch_for_wave(common, "triangle")
 

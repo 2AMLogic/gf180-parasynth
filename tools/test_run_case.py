@@ -81,6 +81,33 @@ def test_changed_control_rejects_two_refusals():
     assert not rc.control_changed(clean, injected)
 
 
+def test_ref_corner_2x_control_moves_a_known_reference_corner(monkeypatch):
+    """The octave mutation is proven without the optional Surge audio cache."""
+    import reference_rigs as rr
+    freqs = np.geomspace(40.0, 12000.0, 32)
+    clip_id = "synthetic/known-4pole"
+    meta = {"freqs_hz": freqs.tolist(),
+            "parts": [[i * 16, 16, float(f)] for i, f in enumerate(freqs)],
+            "amp": 0.1, "sha256": "known-ground-truth"}
+    profile = {"clips": {clip_id: {"sha256": "known-ground-truth"}}}
+    monkeypatch.setattr(rc.rp, "load_profile", lambda: profile)
+    monkeypatch.setattr(rc.rp, "load_clip", lambda _cid, _profile: (np.zeros(32), SR, meta))
+    monkeypatch.setattr(rr.SurgeRig, "tone_project",
+                        staticmethod(lambda _y, parts, _amp, _cid:
+                                     ideal_4pole_db([p[2] for p in parts])))
+
+    clean_f, clean_g, _ = rc.load_filter_reference(clip_id)
+    shifted_f, shifted_g, _ = rc.load_filter_reference(clip_id, "REF_CORNER_2X")
+    clean_corner = rc.filt_corner(IDEAL_FP)(clean_f, clean_g)
+    shifted_corner = rc.filt_corner(IDEAL_FP)(shifted_f, shifted_g)
+    assert clean_corner.ok and shifted_corner.ok
+    assert np.array_equal(shifted_f, clean_f / 2.0)
+    assert np.array_equal(shifted_g, clean_g)
+    assert abs(shifted_corner.value / clean_corner.value - 0.5) < 0.01
+    assert rc.control_changed(("fail", clean_corner.value, "synthetic clean"),
+                              ("fail", shifted_corner.value, "synthetic octave fault"))
+
+
 # ===========================================================================
 # Ground truth: band_energy and band_ratio_db
 # ===========================================================================

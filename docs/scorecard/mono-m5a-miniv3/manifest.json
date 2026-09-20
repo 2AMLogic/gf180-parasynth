@@ -24,6 +24,75 @@
     "version": "3.12.0.3422"
   },
   "patch": {
+    "cutoff_measurement": {
+      "block_size_samples": 16,
+      "emphasis": 0.98,
+      "f0_hz": 14072.862206739199,
+      "f0_hz_repeats": [
+        14072.862206739199,
+        14072.862206739199,
+        14072.862206739199
+      ],
+      "knob": 1.0,
+      "method": "measured self-oscillation ring; dominant frequency",
+      "parameter_readbacks": [
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        }
+      ],
+      "prominence_db_repeats": [
+        10.350361942445932,
+        10.350361942445932,
+        10.350361942445932
+      ],
+      "repeat_count": 3,
+      "repeat_range_hz": 0.0,
+      "wrong_block_control": {
+        "block_size_samples": 512,
+        "caught": true,
+        "f0_hz": 14494.795083545734,
+        "separation_from_pinned_hz": 421.9328768065352
+      }
+    },
     "description": "Mini V3 oscillator 1 only, filter open, effects off; saw and pulse in separate segments",
     "gain_policy": "record raw levels; General Level 0.700 and Osc1 Level 0.900 are fixed patch settings",
     "normalisation": "none; float32 WAV retains raw plugin output",
@@ -126,13 +195,35 @@
     }
   },
   "qualification": {
+    "host_warning": {
+      "host": "dawdreamer 0.8.3",
+      "observed": "emitted on plugin instance creation; renders remained finite/non-silent and parameter name/value readbacks held",
+      "text": "error: attempt to map invalid URI '/Library/Audio/Plug-Ins/VST3/Mini V3.vst3'"
+    },
     "reference_integrity_command": "python3 model/reference_integrity.py --stage demo --devices miniv3 --source smooth --seconds 40",
     "reference_integrity_result": "0 unprompted transient events in 40 s; 5 injected click events detected",
     "wrong_then_right": {
       "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
       "attempts": 2,
+      "cutoff_calibration": {
+        "accepted": {
+          "host_block_size_samples": 16,
+          "measured_hz": 14072.862206739199,
+          "repeat_count": 3,
+          "repeat_range_hz": 0.0
+        },
+        "discarded": {
+          "host_block_size_samples": 512,
+          "injected_control_caught": true,
+          "measured_hz": 14494.795083545734,
+          "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+        }
+      },
       "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
-      "discarded_measurements": 1
+      "discarded_measurements": 1,
+      "overall_attempts": 6,
+      "overall_discarded_measurements": 2,
+      "overall_wrong_then_right_rate": "2/6"
     }
   },
   "reference_kind": "software synthesizer; not a physical Minimoog",
@@ -192,13 +283,13 @@
   },
   "schema": 1,
   "source": {
-    "commit": "78645e1165327d28a188e34e70210b7b3988f013",
+    "commit": "899e86d68cf37bacf79188bce142b42ea2d13564",
     "files_sha256": {
       "model/audio_measure.py": "2345ced894c70d3d57ed1a6f775ee5dcd0e27715af8a8f6ebfa8c3a69cb9d7f4",
       "model/reference_rigs.py": "99b1c862857a34a8689e9389010aabc86e3ec790c37da1ee5de84b88e449dce9",
       "model/reference_voice.py": "9b2222cfb0e7fb76078975f102b566d7ecb47715626dd8fd8fc8a37813db5dfa",
-      "model/voice_fx.py": "cb87bf4b4ab840e70db4fb18875998c7b9f02224bee46762b3b7afbac55c7bf7",
-      "tools/measure_mono_m5a_reference.py": "0e0796db8dc82cf948e77d319df75890bc42a7e559ea3539a8817949aa66fc6b",
+      "model/voice_fx.py": "970aa5f1dbdcffe133727ca31d970a52d04bd57de1511dabdee5e185ec0d9c77",
+      "tools/measure_mono_m5a_reference.py": "8ea0aa3705d907aa6b6260ee5bb611e48b32e7b9e6ebdd97ecca9f5b117e0e9a",
       "tools/test_measure_mono_m5a_reference.py": "72adfc363f85a67d6863762bd549da50f911ed9759d8c8c4bb61d4b3d200ac82"
     }
   },
@@ -315,6 +406,7 @@
             "envelope": {
               "attack_10_90_ms": 7.333333333333333,
               "held_rms": 0.15488423310396732,
+              "pre_next_note_clearance_db": -283.8001441945048,
               "release_complete_40db": true,
               "release_t20_ms": 1243.2291666666667,
               "tail_db": -283.8001441945048,
@@ -348,6 +440,7 @@
             "envelope": {
               "attack_10_90_ms": 3.4166666666666665,
               "held_rms": 0.14966118629243408,
+              "pre_next_note_clearance_db": null,
               "release_complete_40db": true,
               "release_t20_ms": 1243.0208333333333,
               "tail_db": -283.50218366689387,
@@ -608,6 +701,7 @@
             "envelope": {
               "attack_10_90_ms": 7.458333333333333,
               "held_rms": 0.27181507405635674,
+              "pre_next_note_clearance_db": -288.6854707549174,
               "release_complete_40db": true,
               "release_t20_ms": 1247.5208333333333,
               "tail_db": -288.6854707549174,
@@ -641,6 +735,7 @@
             "envelope": {
               "attack_10_90_ms": 3.3333333333333335,
               "held_rms": 0.26275894968463887,
+              "pre_next_note_clearance_db": null,
               "release_complete_40db": true,
               "release_t20_ms": 1247.4791666666667,
               "tail_db": -288.3911503442404,

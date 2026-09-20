@@ -42,7 +42,7 @@ measurements agree; the warning is preserved in the manifest rather than
 hidden.
 
 The full phrase is rendered by `model/voice_fx.py` with the selected 2x saw
-candidate and the legacy pulse oscillator. A separate short integration
+candidate and the chip's square wave for Mini V3's measured 47.9% pulse. A separate short integration
 stimulus exercises both waveforms at MIDI 84/96 through SPI writes and the
 production I2S serializer, then compares every emitted I2S word bit-exactly to
 `SynthTopModel`. That integration check makes no full-envelope claim; the

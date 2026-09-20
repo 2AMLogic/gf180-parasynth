@@ -1427,23 +1427,20 @@ def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     freqs = list(meta["freqs_hz"])
     parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
     amp = float(meta["amp"])
-    if inject == "REF_CORNER_2X":
-        # The reference as it would read if the filter that made it had a
-        # corner an OCTAVE lower: time-stretch by 2, which moves every
-        # frequency in the recording to f/2, and read the curve on the
-        # frequency grid it is now actually at. A window that held an integer
-        # number of periods of f holds the same integer number of periods of
-        # f/2 once doubled, so the projection stays exact.
-        n = len(y)
-        y = np.interp(np.linspace(0.0, n - 1.0, 2 * n), np.arange(n), y)
-        parts = [(2 * i0, 2 * nw, f / 2.0) for i0, nw, f in parts]
-        freqs = [f / 2.0 for f in freqs]
     try:
         import reference_rigs as rr
         g = rr.SurgeRig.tone_project(y, parts, amp, clip_id)
     except am.InsufficientEvidence as e:
         raise Refused(f"the frozen clip {clip_id} could not be projected: {e}")
-    return np.asarray(freqs, dtype=np.float64), np.asarray(g, dtype=np.float64), meta
+    freqs = np.asarray(freqs, dtype=np.float64)
+    g = np.asarray(g, dtype=np.float64)
+    if inject == "REF_CORNER_2X":
+        # The measured curve for a reference whose filter corner is an octave
+        # lower. This is equivalent to time-stretching the original audio by
+        # 2 before projection, but keeping the already-projected response makes
+        # the mutation independently testable without a plugin/cache.
+        freqs = freqs / 2.0
+    return freqs, g, meta
 
 
 def our_filter_curve(freqs, cut_hz: float, res: float, amp: float):

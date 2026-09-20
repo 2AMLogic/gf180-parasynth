@@ -64,9 +64,11 @@ def _voice_patch(manifest):
 def _patch_for_wave(patch, wave):
     if wave not in ("saw", "pulse"):
         raise Refused(f"unsupported M5A waveform {wave!r}")
-    # Model the register writes that select one waveform for all oscillators;
-    # only oscillator 1 is mixed in this patch.
-    return {**patch, "waves": (wave, wave, wave)}
+    # Mini V3 calls this setting "pulse" and the measured duty is 47.9%; the
+    # chip's matching register shape is its 50% "square". Do not pass the UI
+    # label into VoiceFx, whose pulse names mean 15/25/29% duty.
+    model_wave = "square" if wave == "pulse" else "saw"
+    return {**patch, "waves": (model_wave, model_wave, model_wave)}
 
 
 def measure():
