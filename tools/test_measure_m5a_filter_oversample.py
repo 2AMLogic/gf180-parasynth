@@ -66,3 +66,14 @@ def test_incremental_gate_rejects_any_property_regression_and_incomplete_evidenc
     del candidate["event_diagnostics"][0]["harmonic_error_db_model_minus_reference"]["h2"]
     with pytest.raises(m5a.Refused, match="partial evidence"):
         experiment._compare_incremental(baseline, candidate)
+
+
+def test_incremental_gate_uses_declared_materiality_deadbands_not_case_limits():
+    baseline, candidate = _row(0.8), _row(0.7)
+    candidate["metrics"]["Gain"]["error"] = 0.105
+    # A 0.005 dB change is below the declared meaningful regression threshold.
+    result = experiment._compare_incremental(baseline, candidate)
+    assert result["accepts_incremental_improvement"] is True
+    candidate["metrics"]["Gain"]["error"] = 0.2
+    result = experiment._compare_incremental(baseline, candidate)
+    assert result["accepts_incremental_improvement"] is False

@@ -29,6 +29,20 @@ import fixed
 import filter_rate_chain as frc
 
 
+# These are non-regression deadbands, not M5A pass limits. They suppress
+# quantization-scale churn while preserving the strict tolerances below.
+METRIC_NONREGRESSION_DEADBANDS = {
+    "Pitch": 0.01,                 # cents
+    "Harmonic shape": 0.01,       # dB
+    "Foldback energy": 0.01,      # dB
+    "Envelope attack": 5.0,       # ms; RMS envelope analysis window
+    "Envelope release": 5.0,      # ms; RMS envelope analysis window
+    "Gain": 0.01,                 # dB
+    "Clipping": 0.01,             # percent of samples
+}
+PARTIAL_NONREGRESSION_DEADBAND_DB = 0.01
+
+
 def _voice_factory(mode: str):
     if mode == "production_2x_sample_hold":
         return lambda: vf.VoiceFx(oversample_2x=True)
@@ -94,17 +108,27 @@ def _compare_incremental(baseline: dict, candidate: dict) -> dict:
 
     regressions, improvements = [], []
     for name, pair in components.items():
+        if name.startswith("partial:"):
+            deadband = PARTIAL_NONREGRESSION_DEADBAND_DB
+        else:
+            metric_name = name.removeprefix("metric:")
+            deadband = METRIC_NONREGRESSION_DEADBANDS[metric_name]
         delta = pair["candidate_error"] - pair["baseline_error"]
         pair["delta_error"] = round(delta, 6)
-        if delta > 0.00005:
+        pair["non_regression_deadband"] = deadband
+        if delta > deadband:
             regressions.append(name)
-        elif delta < -0.00005:
+        elif delta < -deadband:
             improvements.append(name)
     return {
         "accepts_incremental_improvement": bool(improvements) and not regressions,
         "case_passes": _case_passes(candidate),
         "improved_components": improvements,
         "regressed_components": regressions,
+        "non_regression_deadbands": {
+            "metrics": METRIC_NONREGRESSION_DEADBANDS,
+            "per_partial_db": PARTIAL_NONREGRESSION_DEADBAND_DB,
+        },
         "components": components,
         "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
     }

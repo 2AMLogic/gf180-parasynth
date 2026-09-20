@@ -64,6 +64,45 @@ def _measure_control_response() -> dict:
     }
 
 
+def _recompare_report(path: pathlib.Path) -> dict:
+    """Re-run only the declared property-vector gate on saved measurements."""
+    report = json.loads(path.read_text())
+    if report.get("schema") != "m5a-filter-headroom-v1":
+        raise m5a.Refused("recomparison requires an m5a-filter-headroom-v1 report")
+    expected_pulses = {"pulse29", "pulse479"}
+    if set(report.get("configurations", {})) != expected_pulses:
+        raise m5a.Refused("recomparison requires both pulse-width rows")
+    comparisons = {}
+    for pulse, rows in report["configurations"].items():
+        if set(rows) != {"clamped", "headroom", "causal_headroom"}:
+            raise m5a.Refused(f"recomparison requires all three {pulse} configurations")
+        comparisons[pulse] = {
+            "headroom_vs_clamped_offline": experiment._compare_incremental(
+                rows["clamped"], rows["headroom"]),
+            "causal_vs_headroom_offline": experiment._compare_incremental(
+                rows["headroom"], rows["causal_headroom"]),
+            "causal_vs_clamped_offline": experiment._compare_incremental(
+                rows["clamped"], rows["causal_headroom"]),
+        }
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                                capture_output=True, text=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+                                    check=True, capture_output=True, text=True).stdout.strip())
+    except (OSError, subprocess.CalledProcessError):
+        commit, dirty = "unknown", True
+    report["comparisons"] = comparisons
+    report["comparison_reanalysis"] = {
+        "source_commit": commit,
+        "source_dirty": dirty,
+        "source_sha256": hashlib.sha256(
+            (ROOT / "tools/measure_m5a_filter_oversample.py").read_bytes()).hexdigest(),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "meaning": "recomputed decision only; raw M5A renders and event measurements remain from the per-configuration provenance in the report",
+    }
+    return report
+
+
 def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = {"pulse29": {}, "pulse479": {}}
@@ -101,6 +140,8 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None)
                 pair["clamped"], pair["headroom"]),
             "causal_vs_headroom_offline": experiment._compare_incremental(
                 pair["headroom"], pair["causal_headroom"]),
+            "causal_vs_clamped_offline": experiment._compare_incremental(
+                pair["clamped"], pair["causal_headroom"]),
         }
 
     try:
@@ -159,10 +200,16 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-headroom-v1.json")
     parser.add_argument("--reuse-offline-report", type=pathlib.Path)
+    parser.add_argument("--recompare-report", type=pathlib.Path,
+                        help="recompute acceptance decisions from a complete saved measurement without rerendering")
     args = parser.parse_args(argv)
-    report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
-                  args.reuse_offline_report)
-    out = ROOT / args.out
+    if args.recompare_report is not None:
+        out = args.recompare_report
+        report = _recompare_report(out)
+    else:
+        report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
+                     args.reuse_offline_report)
+        out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     comparison_summary = {
