@@ -87,7 +87,7 @@ def _recompare_report(path: pathlib.Path) -> dict:
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
                                 capture_output=True, text=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
+        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
                                     check=True, capture_output=True, text=True).stdout.strip())
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
@@ -224,7 +224,7 @@ def main(argv=None) -> int:
         }
         for pulse, comparisons in report["comparisons"].items()
     }
-    print(json.dumps({"report": str(out.relative_to(ROOT)),
+    print(json.dumps({"report": str(out.resolve().relative_to(ROOT.resolve())),
                       "source_commit": report["source_commit"],
                       "source_dirty": report["source_dirty"],
                       "comparisons": comparison_summary,
