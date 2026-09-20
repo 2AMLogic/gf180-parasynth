@@ -54,7 +54,7 @@ def test_a_real_record_carries_a_basis_at_all():
 
 def test_m5a_record_pins_its_scorer_and_scorecard_implementation():
     basis = sc.measurement_basis(dict(REAL)["M5A"])
-    assert basis["analysis_version"] == "m5a-score-v2"
+    assert basis["analysis_version"] == "m5a-score-v3"
     assert basis["apparatus"].get("tools/mono_m5a_score.py")
     assert basis["apparatus"].get("tools/scorecard.py")
 

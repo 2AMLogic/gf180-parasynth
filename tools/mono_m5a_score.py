@@ -22,7 +22,7 @@ import voice_fx as vf
 from measure_mono_m5a_reference import envelope_timing
 
 SR = 48_000
-ANALYSIS_VERSION = "m5a-score-v2"
+ANALYSIS_VERSION = "m5a-score-v3"
 MANIFEST = ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json"
 TOLERANCES = {
     "Pitch": (1.0, "cents; fixed screening limit for this frozen software-synth patch"),
@@ -91,7 +91,7 @@ def _voice_patch(manifest):
         noise=0.0,
         cutoff=(int(round(manifest["patch"]["cutoff_measurement"]["f0_hz"])),
                 int(round(manifest["patch"]["cutoff_measurement"]["f0_hz"]))),
-        q=0.0, drive=1.0,
+        q=0.0, drive=0.75,
         amp=(env["attack_10_90_ms"] / 1000.0 / 0.8, 0.25, 1.0,
              env["release_t20_ms"] / 1000.0 * 4.0 / math.log(10.0)),
         fenv=(0.004, 0.30, 1.0, 0.10), track=0.0, vol=0.45,

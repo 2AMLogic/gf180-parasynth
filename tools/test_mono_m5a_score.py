@@ -59,6 +59,11 @@ def test_pulse_segment_selects_pulse_in_the_model():
         score._patch_for_wave(common, "triangle")
 
 
+def test_m5a_candidate_uses_the_measured_filter_drive_intervention():
+    manifest = json.loads(score.MANIFEST.read_text())
+    assert score._voice_patch(manifest)["drive"] == pytest.approx(0.75)
+
+
 def test_frozen_cutoff_measurement_is_repeatable_at_the_pinned_block_size():
     manifest = json.loads((score.MANIFEST).read_text())
     measurement = manifest["patch"]["cutoff_measurement"]

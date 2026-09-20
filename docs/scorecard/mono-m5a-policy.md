@@ -42,7 +42,14 @@ measurements agree; the warning is preserved in the manifest rather than
 hidden.
 
 The full phrase is rendered by `model/voice_fx.py` with the selected 2x saw
-candidate and the chip's square wave for Mini V3's measured 47.9% pulse. A separate short integration
+candidate, ladder drive 0.75, and the chip's square wave for Mini V3's measured
+47.9% pulse. The drive setting is one measured intervention against the frozen
+reference: it reduced both saw events' harmonic error and excess alias energy
+in the oscillator/mixer/ladder probe; M5A's complete seven-property result
+remains the acceptance check. The stage and drive measurements are preserved in
+[`signal-path-v1.json`](mono-m5a-miniv3/signal-path-v1.json) and
+[`signal-path-drive-v1.json`](mono-m5a-miniv3/signal-path-drive-v1.json).
+A separate short integration
 stimulus exercises both waveforms at MIDI 84/96 through SPI writes and the
 production I2S serializer, then compares every emitted I2S word bit-exactly to
 `SynthTopModel`. That integration check makes no full-envelope claim; the

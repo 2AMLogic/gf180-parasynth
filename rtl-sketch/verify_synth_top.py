@@ -293,7 +293,7 @@ def m5a_script(manifest_path: str, *, smoke: bool = False):
     release_s = float(env["release_t20_ms"]) / 1000.0 * 4.0 / np.log(10.0)
     regs = vf.VoiceFx.patch_regs(
         waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
-        noise=0.0, cutoff=(cutoff_hz, cutoff_hz), q=0.0, drive=1.0,
+        noise=0.0, cutoff=(cutoff_hz, cutoff_hz), q=0.0, drive=0.75,
         amp=(attack_s, 0.25, 1.0, release_s),
         fenv=(0.004, 0.30, 1.0, 0.10), track=0.0, vol=0.45,
         mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False)
@@ -370,6 +370,7 @@ def m5a_script(manifest_path: str, *, smoke: bool = False):
         cursor_s += float(segment["duration_s"]) + segment_silence_s
     tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
     return w, tail, {"events": events, "manifest": manifest, "reference_audio": ref_audio,
+                     "filter_drive": 0.75,
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
@@ -523,6 +524,7 @@ def main(argv=None) -> int:
                   f"{m5a['manifest']['timeline']['phrase_s']:.3f} s phrase and complete release")
         print(f"verify_synth_top: M5A stimulus has {len(m5a['events'])} note events, "
               f"{detail}; "
+              f"selected filter drive {m5a['filter_drive']:.2f}; "
               f"reference sha256 {m5a['manifest']['audio']['sha256']}")
     else:
         print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "

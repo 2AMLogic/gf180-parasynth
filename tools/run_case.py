@@ -2249,7 +2249,7 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                 "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
                 "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
                 "analysis_version": measured["analysis_version"],
-                "render_run": "fixed integer model; saw and pulse, MIDI 84/96, complete 27.2 s phrase",
+                "render_run": "fixed integer model; 2x saw, filter drive 0.75, square, MIDI 84/96, complete 27.2 s phrase",
                 "audio": measured["audio"], "note": measured["note"],
                 "tolerance_policy": mono_m5a.TOLERANCES,
                 "metrics": measured["metrics"],
@@ -2265,7 +2265,8 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                     model_input_hashes({"frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
                                         "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"]}),
                     {"ours": measured["audio"], "spi_i2s": str(report_path.relative_to(ROOT))},
-                    {"oscillator_config": "2x saw candidate", "reference": "frozen Mini V3 WAV"})})
+                    {"oscillator_config": "2x saw candidate", "filter_drive": 0.75,
+                     "reference": "frozen Mini V3 WAV"})})
             return base
         base["note"] = "REFUSED: this runner has no plan for this case."
         base["metrics"] = {m: invalid_metric("", "no measurement plan") for m in required}
