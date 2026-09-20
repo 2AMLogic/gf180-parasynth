@@ -5,9 +5,8 @@
 # "do not do that" in CLAUDE.md did not stop it: two more happened within five
 # minutes of the rule being committed.
 #
-# So the choice is removed rather than discouraged. There is no documented way
-# to run "some of the verifiers". There is `make verify`, and it runs them
-# together through tools/run_all.py, in parallel, in one turn.
+# The focused development gate is explicit so sound iteration need not wait on
+# the broad model suite. Both gates persist per-job results as they complete.
 
 PY  := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN := $(PY) tools/run_all.py
@@ -15,7 +14,8 @@ RUN := $(PY) tools/run_all.py
 .PHONY: help verify verify-fast verify-full controls test dag board
 
 help:
-	@echo "make verify       every fast check, in parallel, in ONE turn"
+	@echo "make verify       broad repository checks, run independently in parallel"
+	@echo "make verify-fast  focused sound/scorer tests and selected M5A path"
 	@echo "make verify-full  adds the hour-long runs (voice full set, drums)"
 	@echo "make controls     every injected defect that must turn something red"
 	@echo "make test         the Python suites only"
@@ -24,7 +24,7 @@ help:
 
 ## Everything a push should run.
 verify:
-	@$(RUN) \
+	@$(RUN) --timeout 3600 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
@@ -36,11 +36,20 @@ verify:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py"
 
-verify-fast: verify
+## Fast sound-development checks, separate from the broad repository suite.
+## A valid M5A mismatch remains a passing verification job: this checks that
+## the measurement and selected-path smoke produced a trustworthy verdict.
+verify-fast:
+	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
+	  "$(PY) -m pytest tools/test_mono_m5a_score.py tools/test_measure_m5a_pulse_duty.py tools/test_run_case.py rtl-sketch/test_m5a_stimulus.py -q" \
+	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
+	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
+	  "$(PY) tools/verify_mono_case.py" \
+	  "$(PY) tools/check_workflows.py"
 
 ## Adds the runs that take an hour. Still one turn.
 verify-full:
-	@$(RUN) --timeout 7200 \
+	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
@@ -113,7 +122,7 @@ verify-full:
 ## that still looks like a clean run. Any future concurrent variants of one
 ## verifier need the same treatment.
 controls:
-	@$(RUN) \
+	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \

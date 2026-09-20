@@ -10,7 +10,7 @@ The cases below are the ones that could produce a FALSE GREEN, which is the
 only failure mode of a runner that actually matters.
 """
 from __future__ import annotations
-import json, os, subprocess, sys, textwrap, time
+import json, os, subprocess, sys, textwrap, time, threading
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -110,6 +110,40 @@ def test_the_counts_survive_in_the_json_where_they_cannot_wrap(tmp_path):
     got = json.loads(out.read_text())
     assert [g["state"] for g in got] == [ra.PASS, ra.FAIL]
     assert got[1]["rc"] == 7
+
+
+def test_json_report_is_updated_when_each_job_finishes(tmp_path, monkeypatch):
+    report = tmp_path / "verification" / "results.json"
+    slow_started = threading.Event()
+    release_slow = threading.Event()
+    finished = []
+
+    def fake_run_one(cmd, timeout=None, env=None, verifier=True):
+        if cmd == "slow":
+            slow_started.set()
+            assert release_slow.wait(2.0)
+        return {"cmd": cmd, "state": ra.PASS, "rc": 0,
+                "out": "", "secs": 0.01}
+
+    monkeypatch.setattr(ra, "run_one", fake_run_one)
+    worker = threading.Thread(target=lambda: finished.append(
+        ra.main(["fast", "slow", "--jobs", "2", "--json", str(report)])))
+    worker.start()
+    assert slow_started.wait(1.0)
+    deadline = time.monotonic() + 1.0
+    snapshot = []
+    while time.monotonic() < deadline:
+        snapshot = json.loads(report.read_text())
+        if snapshot[0]["state"] == ra.PASS:
+            break
+        time.sleep(0.01)
+    assert snapshot[0]["state"] == ra.PASS
+    assert snapshot[1]["state"] == "PENDING"
+    release_slow.set()
+    worker.join(2.0)
+    assert not worker.is_alive()
+    assert finished == [0]
+    assert [item["state"] for item in json.loads(report.read_text())] == [ra.PASS, ra.PASS]
 
 
 # --- parallelism -------------------------------------------------------------

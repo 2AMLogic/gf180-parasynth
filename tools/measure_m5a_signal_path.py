@@ -24,6 +24,11 @@ import mono_m5a_score as m5a
 import voice_fx as vf
 
 
+def _q15_to_full_scale(samples) -> np.ndarray:
+    """Convert a voice trace's signed Q15 samples to normalized full scale."""
+    return np.asarray(samples, dtype=np.float64) / 32768.0
+
+
 def measure(cutoffs: list[int], drives: list[float]) -> dict:
     manifest = json.loads(m5a.MANIFEST.read_text())
     audio_meta = manifest["audio"]
@@ -56,10 +61,10 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
             pcm = vf.render_mono_fx(seq, float(segment["duration_s"]), voice)
             trace = voice.trace
             arrays = {
-                "oscillator": trace["osc"][0],
-                "mixer": trace["mixed"],
-                "ladder": trace["ladder"],
-                "output": pcm.astype(np.float64) / 32768.0,
+                "oscillator": _q15_to_full_scale(trace["osc"][0]),
+                "mixer": _q15_to_full_scale(trace["mixed"]),
+                "ladder": _q15_to_full_scale(trace["ladder"]),
+                "output": _q15_to_full_scale(pcm),
             }
             offset = int(segment["offset_samples"])
             ref_segment = ref[offset:offset + int(segment["samples"])]
@@ -104,6 +109,9 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
                         "max_common_partial_error_db": round(max(measured), 4),
                         "alias_db": round(float(alias.value), 4),
                         "excess_alias_db": round(m5a._excess_alias_db(alias.value, ref_alias.value), 4),
+                        "alias_band_power_dbfs": round(alias.detail["alias_band_power_dbfs"], 4),
+                        "alias_band_rms_fs": round(alias.detail["alias_band_rms_fs"], 8),
+                        "total_signal_power_dbfs": round(alias.detail["total_signal_power_dbfs"], 4),
                     }
                 out_level = 20.0 * np.log10(max(float(am.rms(arrays["output"][a:b])), 1e-15))
                 ref_level = 20.0 * np.log10(max(float(am.rms(xref)), 1e-15))
@@ -111,6 +119,9 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
                                "stages": stages,
                                "output_gain_error_db": round(out_level - ref_level, 4),
                                "reference": {"alias_db": round(float(ref_alias.value), 4),
+                                             "alias_band_power_dbfs": round(ref_alias.detail["alias_band_power_dbfs"], 4),
+                                             "alias_band_rms_fs": round(ref_alias.detail["alias_band_rms_fs"], 8),
+                                             "total_signal_power_dbfs": round(ref_alias.detail["total_signal_power_dbfs"], 4),
                                              "harmonics_db": {f"h{k}": ref_sig.get(f"h{k}")
                                                               for k in range(2, 13)}}})
             outputs.append({"cutoff_hz": cutoff, "filter_drive": drive, "events": events})
@@ -127,7 +138,7 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
     return {
         "probe": "M5A oscillator -> mixer -> ladder -> final output",
         "reference_identity": "Mini V3 3.12.0.3422 software synth; not physical hardware",
-        "analysis_version": "m5a-signal-path-v2",
+        "analysis_version": "m5a-signal-path-v3",
         "source_commit": commit,
         "source_sha256": source_hashes["tools/measure_m5a_signal_path.py"],
         "source_hashes": source_hashes,
@@ -136,6 +147,10 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
         "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
         "oscillator_config": "2x candidate saw; remaining Mini V3 oscillators disabled",
         "intervention": "change only filter drive; cutoff and all other patch fields fixed",
+        "alias_energy_definition": (
+            "predicted image-bin power converted by one-sided Parseval and Hann mean-square "
+            "correction after normalizing every Q15 stage to full scale; dBFS is absolute, "
+            "while alias_db remains image power / total power"),
         "runs": outputs,
     }
 
@@ -163,6 +178,8 @@ def main(argv=None) -> int:
                                                    stage: ev["stages"][stage]["max_common_partial_error_db"]
                                                    for stage in ev["stages"]},
                                                "final_excess_alias_db": ev["stages"]["output"]["excess_alias_db"],
+                                               "final_alias_band_power_dbfs": ev["stages"]["output"]["alias_band_power_dbfs"],
+                                               "final_total_signal_power_dbfs": ev["stages"]["output"]["total_signal_power_dbfs"],
                                                "output_gain_error_db": ev["output_gain_error_db"]}
                                               for ev in run["events"]]}
                                   for run in report["runs"]]}, indent=2))
