@@ -157,6 +157,12 @@ def test_changed_control_requires_comparable_valid_results_for_each_case():
         clean, missing)
     assert outcome[0] == "refused"
 
+    removed = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, clean)
+    assert removed[0] == "fail"
+    assert "indistinguishable" in removed[1]
+
 
 # ===========================================================================
 # Ground truth: band_energy and band_ratio_db
