@@ -27,7 +27,35 @@ def test_voice_2x_filter_history_survives_play_chunk_boundaries():
     split = vf.OscFx("saw", smooth=True)
     h0 = np.zeros(30, dtype=np.int64)
     h1 = np.zeros(30, dtype=np.int64)
-    expected, _ = vf._render_2x(whole, 500, inc, h0)
-    a, h1 = vf._render_2x(split, 250, inc, h1)
-    b, h1 = vf._render_2x(split, 250, inc, h1)
+    expected, _, _ = vf._render_2x(whole, 500, inc, h0, 0)
+    a, h1, phase = vf._render_2x(split, 250, inc, h1, 0)
+    b, h1, _ = vf._render_2x(split, 250, inc, h1, phase)
     assert np.array_equal(expected, np.concatenate((a, b)))
+
+
+def test_2x_decimator_headroom_is_safe_across_the_midi_range():
+    """The FIR must not turn its own ringing into Q1.15 clipping distortion."""
+    n = int(0.12 * dsp.SR)
+    worst_peak = (0, None)
+    full_scale_clips = 0
+    for note in range(128):
+        inc = vf.phase_inc(vf.note_hz(note))
+        hi = vf.OscFx("saw", smooth=False).render(2 * n, inc // 2).astype(np.int64)
+
+        def decimator_peak(gain_q15):
+            scaled = (hi * gain_q15) >> 15
+            joined = np.concatenate((np.zeros(30, dtype=np.int64), scaled))
+            accum = np.convolve(joined, vf._DECIM2_TAPS, mode="full")
+            raw = (accum[30:30 + 2 * n] >> 15)[1::2]
+            return int(np.max(np.abs(raw))), int(np.count_nonzero(np.abs(raw) > 32767))
+
+        peak, clips = decimator_peak(32767)
+        full_scale_clips += clips
+        peak_h, _ = decimator_peak(vf._OS2_SUBSTEP_GAIN_Q15)
+        if peak_h > worst_peak[0]:
+            worst_peak = (peak_h, note)
+
+    # The unattenuated control is deliberately wrong; the chosen input gain
+    # must leave every measured MIDI note below the saturating output rail.
+    assert full_scale_clips > 0
+    assert worst_peak[0] <= 32767, (worst_peak, full_scale_clips)

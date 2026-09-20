@@ -109,6 +109,7 @@ module voice_dp #(
     reg [19:0] dgain, dogain;
     // ---- state (contract 5.1, 6.1, 8.1) ---------------------------------------
     reg [23:0] phase   [0:2];
+    reg [23:0] phase_os2 [0:2];
     // Three-tap binomial smoothing removes the oscillator's top-of-band
     // residual before it reaches the nonlinear path. It is causal and keeps
     // two samples of state per oscillator so the model and RTL agree across
@@ -289,12 +290,17 @@ module voice_dp #(
     wire signed [15:0] osc_raw_clamped = (osc_raw > 18'sd32767) ? 16'sd32767 : (osc_raw < -18'sd32768) ? -16'sd32768 : osc_raw[15:0];
     wire osc2_valid;
     wire signed [15:0] osc2_sample;
+`ifdef VOICE_OSC_2X
     osc_2x_saw_bank osc2_path(
         .clk(clk), .rst_n(rst_n), .frame_valid((state == S_MIX) && is_saw),
-        .select(kk), .phase0(phase[0]), .phase1(phase[1]), .phase2(phase[2]),
+        .select(kk), .phase0(phase_os2[0]), .phase1(phase_os2[1]), .phase2(phase_os2[2]),
         .inc0(inc_mod[0]), .inc1(inc_mod[1]), .inc2(inc_mod[2]),
         .sh0(sh[0]), .sh1(sh[1]), .sh2(sh[2]), .r0(r[0]), .r1(r[1]), .r2(r[2]),
         .out_valid(osc2_valid), .out_sample(osc2_sample));
+`else
+    assign osc2_valid = 1'b0;
+    assign osc2_sample = 16'sd0;
+`endif
     wire signed [18:0] osc_smooth_sum = $signed({{3{osc_raw_clamped[15]}}, osc_raw_clamped})
                                       + ($signed({{3{osc_d1[kk][15]}}, osc_d1[kk]}) <<< 1)
                                       + $signed({{3{osc_d2[kk][15]}}, osc_d2[kk]});
@@ -448,7 +454,7 @@ module voice_dp #(
         if (!rst_n) begin
             for (i = 0; i < 3; i = i + 1) begin
                 inc_tgt[i] <= 0; inc_acc[i] <= 0; wave[i] <= 0; w[i] <= 0;
-                phase[i] <= 0; sh[i] <= 5'd15; r[i] <= 0; inc_er[i] <= 0; inc_mod[i] <= 0;
+                phase[i] <= 0; phase_os2[i] <= 0; sh[i] <= 5'd15; r[i] <= 0; inc_er[i] <= 0; inc_mod[i] <= 0;
                 osc_d1[i] <= 0; osc_d2[i] <= 0;
             end
             // contract 14. The LFSR returns to its SEED, not to zero: an all-zero
@@ -578,6 +584,7 @@ module voice_dp #(
                         ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
                         osc_d2[kk] <= osc_d1[kk]; osc_d1[kk] <= osc_raw_clamped;
                         phase[kk] <= ph + inc;
+                        phase_os2[kk] <= phase_os2[kk] + {inc[23:1],1'b0};
                         if (kk == 2'd2) naive3 <= naive;
                         state <= S_ACC;
                     end
@@ -594,6 +601,7 @@ module voice_dp #(
                     if (osc2_valid) begin
                         ma <= {{9{osc2_sample[15]}}, osc2_sample}; mb <= {5'b0, w[kk]};
                         phase[kk] <= ph + inc;
+                        phase_os2[kk] <= phase_os2[kk] + {inc[23:1],1'b0};
                         if (kk == 2'd2) naive3 <= naive;
                         state <= S_ACC;
                     end

@@ -855,20 +855,40 @@ def k_effective(k_q14, kc_q15) -> np.ndarray:
 _DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
                          -1296,-2819,1544,10175,14712,10175,1544,-2819,
                          -1296,1133,957,-397,-609,72,323,34,-138,-44,54,39), dtype=np.int64)
+_OS2_SUBSTEP_GAIN_Q15 = 27853  # 0.85 headroom keeps the Q1.15 FIR output below its rail.
 
-def _render_2x(o: OscFx, n: int, inc, history: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Render a saw oscillator at 2x, then apply the reference decimator."""
     inc_a = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
-    phase0 = o.phase
-    saved = o.smooth; o.smooth = False
-    hi = o.render(2 * n, np.repeat(inc_a // 2, 2))
-    o.smooth = saved
+    phase0 = int(o.phase)
+    base_inc = np.repeat(inc_a // 2, 2)
+    smooth = o.smooth
+    o.smooth = False
+    o.phase = int(phase2)
+    if o.blep:
+        # The RTL reuses the base-rate reciprocal, with the exponent reduced
+        # for the half-rate step. Recomputing recip_of(inc//2) differs by one
+        # for odd 16-bit increments, which produced rare 1-LSB block errors.
+        phase = (int(phase2) + np.concatenate(([0], np.cumsum(base_inc[:-1])))) & PHASE_MASK
+        er = np.array([o._er(int(v)) for v in inc_a], dtype=np.int64)
+        exp2 = np.repeat(er[:, 0] - 1, 2)
+        recip2 = np.repeat(er[:, 1], 2)
+        correction = blep_fx(phase, base_inc, exp2, recip2, o.MB, o.RB)
+        hi = sat16(_saw_fx(phase) - correction)
+        o.phase = int((int(phase2) + int(base_inc.sum())) & PHASE_MASK)
+    else:
+        hi = o.render(2 * n, base_inc)
+    o.smooth = smooth
+    next_phase2 = int(o.phase)
     o.phase = int((phase0 + int(inc_a.sum())) & PHASE_MASK)
-    joined = np.concatenate((history, np.asarray(hi, dtype=np.int64)))
+    # The decimator's ringing can exceed full scale around a PolyBLEP edge.
+    # Preserve headroom before the RTL's saturating Q1.15 output stage.
+    hi = (np.asarray(hi, dtype=np.int64) * _OS2_SUBSTEP_GAIN_Q15) >> 15
+    joined = np.concatenate((history, hi))
     y = np.convolve(joined, _DECIM2_TAPS, mode="full")
     filtered = y[len(history):len(history) + 2*n]
     next_history = joined[-len(history):].copy()
-    return sat16(filtered[1::2] >> 15).astype(np.int64), next_history
+    return sat16(filtered[1::2] >> 15).astype(np.int64), next_history, next_phase2
 
 class VoiceFx:
     """One voice: three oscillators, two envelopes, one ladder, and the state
@@ -894,11 +914,13 @@ class VoiceFx:
         self.k_rom = make_k_rom(krom_bits, grom_bits, self.ladder_cfg.get("oversample", 2))
         self.trace = {}
         self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
+        self._os2_phase = [0, 0, 0]
         self.reset()
 
     def reset(self):
         """RESET: every state register of contract 14 to zero."""
         self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
+        self._os2_phase = [0, 0, 0]
         self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=True) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
@@ -1094,12 +1116,23 @@ class VoiceFx:
             mw = np.full(n, self.mwheel, dtype=np.int64)
         incs, white, pink, red, mant_f, sh_f, msig = self._modulate(incs, n, mw)
         sig = []
+        phase2_trace = []
         for k, (o, inc) in enumerate(zip(self.oscs, incs)):
+            phase2_start = self._os2_phase[k]
+            ia = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
+            phase2_step = (ia // 2) * 2
             if self.oversample_2x and o.shape == "saw":
-                rendered, self._os2_history[k] = _render_2x(o, n, inc, self._os2_history[k])
+                rendered, self._os2_history[k], self._os2_phase[k] = _render_2x(
+                    o, n, inc, self._os2_history[k], self._os2_phase[k])
                 sig.append(rendered)
             else:
+                if self.oversample_2x:
+                    self._os2_phase[k] = (self._os2_phase[k] + int(np.sum(phase2_step))) & PHASE_MASK
                 sig.append(o.render(n, inc))
+            if self.oversample_2x:
+                phase2_trace.append((phase2_start + np.cumsum(phase2_step)) & PHASE_MASK)
+            else:
+                phase2_trace.append(np.zeros(n, dtype=np.int64))
         n_audio = pink if self.nsel else white                   # 2.5: WHITE or pink for audio
         mixed = mix_fx(sig + [n_audio], self.weights)            # step 3, four sources
         ae = self.amp_env.render(n, gate, trig)                  # step 4
@@ -1123,7 +1156,7 @@ class VoiceFx:
         self.trace = dict(osc=sig, mixed=mixed, amp_env=ae, filt_env=fe, cut=cut, g=g,
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
-                          mant_f=mant_f, sh_f=sh_f, mwheel=mw)
+                          mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace)
         return out.astype(np.int16)
 
     # ---- one note from reset: the reference sequences of contract 16 --------

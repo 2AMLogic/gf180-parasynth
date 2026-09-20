@@ -16,7 +16,10 @@ module decimate_2x_tm_sym(
    for(i=30;i>0;i=i-1)x[i]<=x[i-1]; x[0]<=in_sample;
    if(parity) begin busy<=1;tap<=0;acc<=0;end parity<=~parity;
   end else if(busy) begin
-   if(tap<15) begin pair_sum=$signed(x[tap])+$signed(x[30-tap]); prod=h[tap]*pair_sum; end
+   if(tap<15) begin
+    pair_sum=$signed({x[tap][15],x[tap]})+$signed({x[30-tap][15],x[30-tap]});
+    prod=h[tap]*pair_sum;
+   end
    else prod=h[15]*x[15];
    if(tap==15) begin
     if($signed(acc+prod) >>> 15 > 32767) out_sample<=16'sd32767;

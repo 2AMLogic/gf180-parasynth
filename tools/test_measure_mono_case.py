@@ -21,6 +21,14 @@ def test_measure_accepts_a_known_saw():
     assert got["inharmonic_db"] < -80
 
 
+def test_measure_reports_absolute_level_against_a_known_tone():
+    f0 = 440.0
+    t = np.arange(int(0.7 * m.SR)) / m.SR
+    got = m._measure(0.5 * np.sin(2 * np.pi * f0 * t), f0)
+    assert abs(got["rms_dbfs"] - (-9.0309)) < 0.01
+    assert abs(got["peak_dbfs"] - (-6.0206)) < 0.01
+
+
 def test_measure_refuses_silence():
     with pytest.raises(m.Refused, match="silent"):
         m._measure(np.zeros(int(0.7 * m.SR)), 440.0)

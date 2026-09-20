@@ -1,21 +1,30 @@
-# 2x oscillator RTL integration plan
+# 2× oscillator RTL
 
-The Python reference and the standalone decimator are now checked in. The
-remaining integration must preserve the existing voice contract:
+The voice can render saw oscillators through a 96 kHz PolyBLEP pair and a
+31-tap Q15 decimator. Each oscillator has its own phase and FIR history, so
+interleaving voices does not mix filter state. The model retains that state
+across frame and note boundaries.
 
-1. Keep the phase increment in base-rate units and derive two internal phase
-   points per output frame (`phase` and `phase + inc/2`).
-2. Run the existing PolyBLEP window for each internal point. The reciprocal is
-   shared because both points have the same increment.
-3. Present both Q1.15 oscillator words to `decimate_2x` in consecutive cycles.
-4. Wait for `out_valid`, then use the decimated word in `S_MIX` and advance the
-   base phase exactly once.
+The internal phase advances by `2 * floor(inc / 2)` per 48 kHz frame. The
+PolyBLEP pair shares the base reciprocal; the reciprocal is an explicit
+function input so it updates correctly during glides. Fifteen percent input
+headroom keeps FIR ringing below the decimator's saturating Q1.15 output across
+MIDI notes 0–127. Full-scale input clipped 1,080 of 33,600 MIDI 84 samples; a
+10% reduction still clipped one MIDI 2 sample. With 15% headroom, the worst
+filtered peak is 31,565 LSB at MIDI 2, below the 32,767 positive rail.
 
-The decimator costs 31 taps in the reference implementation. Its symmetric
-coefficients reduce this to 16 products; the current generic RTL block keeps
-all taps explicit so its impulse response is easy to audit. Before connecting
-it to the voice, synthesize both forms and measure the 256-cycle frame budget.
+## Evidence
 
-The integration is not accepted until a clean RTL run is bit-exact against
-`model.oversampled_osc.render_saw`, and the negative control bypasses the
-decimator with a clearly worse independent inharmonic measurement.
+`verify_voice.py --set quick --define VOICE_OSC_2X` passes 64,416 frames with
+every sample, tap and final state identical to `VoiceFx(oversample_2x=True)`.
+The worst `go`-to-`sample_valid` latency is 198 cycles in the 256-cycle frame.
+The focused default, glide and paraphonic sequence also passes 4,800 frames
+exactly. `model/test_oversampled_osc.py` checks high-note spectral behavior,
+FIR history across play boundaries and the independent Surge XT target.
+
+The valid MIDI 84 component comparison measures −46.943 dB inharmonic energy,
+0.283 dB from the qualified Surge Type 2 reference. Its refreshed RMS is
+13.620 dB above that reference, so the component comparison validates spectral shape only;
+absolute level is not calibrated and this is not full-patch acceptance. The
+complete M5A run returns `not run` because the repository has no qualified
+Mono envelope reference.

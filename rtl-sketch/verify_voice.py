@@ -87,13 +87,14 @@ A = dict(INC=0x00, WAVE=0x04, W=0x08, WN=0x0B, GLIDE=0x0C, VOL=0x0D, AMP=0x10, F
 WAVE_CODE = vf.WAVE_CODE
 FULL24 = (1 << 24) - 1
 FIELDS = ["sample", "osc0", "osc1", "osc2", "inc0", "inc1", "inc2", "sh0", "sh1", "sh2",
-          "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v"]
+          "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v",
+          "phase2x0", "phase2x1", "phase2x2"]
 STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2",
-                "level_a", "level_f", "seg_a", "seg_f"]
+                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2"]
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm.v", "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v"]
-BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_OFF",
+BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_OFF", "OSC2X_HEADROOM",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
 
@@ -445,7 +446,8 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
             row = [int(y[i])] + [int(t["osc"][k][i]) for k in range(3)] + [int(t["incs"][k][i]) for k in range(3)] \
                 + [er[k][i][0] + 15 for k in range(3)] + [er[k][i][1] for k in range(3)] \
                 + [int(t["mixed"][i]), int(t["amp_env"][i]), int(t["filt_env"][i]), int(t["cut"][i]), int(t["g"][i]),
-                   int(t["kc"][i]), int(t["k_eff"][i]), int(t["ladder"][i]), int(t["vca"][i]), (int(t["vca"][i]) * vol) >> 15]
+                   int(t["kc"][i]), int(t["k_eff"][i]), int(t["ladder"][i]), int(t["vca"][i]), (int(t["vca"][i]) * vol) >> 15] \
+                + [int(t["phase2"][k][i]) for k in range(3)]
             expected.append(row)
         cov = coverage(v, regs, writes, phases0, t["trig"], t["gate"])
         report.append(dict(key=key, name=name, f0=f0, n=n, writes=len(writes), cov=cov))
@@ -453,7 +455,7 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
             print(f"  [{key}] {name}: frames {f0}..{f0 + n - 1} ({n}), {len(writes)} writes; {cov}")
         f0 += n
     state = [o.phase for o in v.oscs] + [o.inc_acc for o in v.oscs] + \
-            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg]
+            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + list(v._os2_phase)
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "voice_writes.txt"), "w") as fh:
         fh.writelines("%d %d %d %d\n" % w for w in all_writes)

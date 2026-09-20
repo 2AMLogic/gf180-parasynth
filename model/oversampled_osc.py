@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from voice_fx import OscFx
+from voice_fx import OscFx, _render_2x
 
 SR2_TAPS_Q15 = np.array((
     39, 54, -44, -138, 34, 323, 72, -609, -397, 957, 1133,
@@ -23,10 +23,7 @@ def render_saw(n: int, inc: int) -> np.ndarray:
     """Render *n* base-rate Q1.15 samples through a true 2x path."""
     if n < 0 or inc < 0:
         raise ValueError("n and inc must be non-negative")
-    # The current phase register has integer increments.  Odd values round
-    # down at the internal rate; the resulting pitch error is under 0.005
-    # cents at the measured note and is reported by the measurement.
-    hi = OscFx("saw", smooth=False).render(2 * n, inc // 2)
-    filt = np.convolve(np.asarray(hi, dtype=np.int64), SR2_TAPS_Q15, mode="full")
-    filt = (filt[: 2 * n] >> 15).astype(np.int64)
-    return filt[1::2]
+    osc = OscFx("saw", smooth=False)
+    out, _, _ = _render_2x(osc, n, np.full(n, inc, dtype=np.int64),
+                           np.zeros(30, dtype=np.int64), 0)
+    return out

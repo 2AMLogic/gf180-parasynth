@@ -83,6 +83,7 @@ def _apparatus() -> dict:
 
 
 def _measure(x: np.ndarray, f0_cmd: float) -> dict:
+    x = np.asarray(x, dtype=np.float64)
     if not np.isfinite(x).all() or np.max(np.abs(x)) < 1e-5:
         raise Refused("signal is silent or non-finite")
     f = am.refine_f0(x, f0_cmd, SR)
@@ -95,9 +96,12 @@ def _measure(x: np.ndarray, f0_cmd: float) -> dict:
     alias = am.inharmonic_fraction_db(x, f.value, SR)
     if not alias.ok:
         raise Refused(f"alias estimator refused: {alias.reason}")
+    rms = float(np.sqrt(np.mean(x * x)))
     return {
         "f0_hz": round(float(f.value), 6),
         "f0_cents": round(float(f.detail["cents"]), 6),
+        "rms_dbfs": round(20.0 * float(np.log10(rms)), 6),
+        "peak_dbfs": round(20.0 * float(np.log10(float(np.max(np.abs(x))))), 6),
         "harmonics_db": {f"h{k}": round(float(sig[f"h{k}"]), 6)
                          for k in range(2, 13) if sig.get(f"h{k}") is not None},
         "inharmonic_db": round(float(alias.value), 6),
@@ -146,16 +150,21 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
                     dut_m["inharmonic_db"] - baseline_m["inharmonic_db"], 6),
                 "f0_cents_2x_minus_reference": round(
                     dut_2x_m["f0_cents"] - ref_m["f0_cents"], 6),
+                "rms_db_2x_minus_reference": round(
+                    dut_2x_m["rms_dbfs"] - ref_m["rms_dbfs"], 6),
                 "inharmonic_db_2x_minus_reference": round(
                     dut_2x_m["inharmonic_db"] - ref_m["inharmonic_db"], 6),
             },
             "diagnosis": (
                 "The causal oscillator filter reduces the DUT's inharmonic energy by "
                 f"{baseline_m['inharmonic_db'] - dut_m['inharmonic_db']:.3f} dB; "
-                f"the true 2x path is {dut_2x_m['inharmonic_db'] - ref_m['inharmonic_db']:.3f} dB from the qualified Surge reference. "
-                "This component result does not qualify the full envelope/filter patch."),
+                f"the true 2x path is {dut_2x_m['inharmonic_db'] - ref_m['inharmonic_db']:.3f} dB from Surge's inharmonic score, "
+                f"with an RMS level difference of {dut_2x_m['rms_dbfs'] - ref_m['rms_dbfs']:+.3f} dB. "
+                "This component comparison does not qualify absolute level or the full envelope/filter patch."),
             "audio": {
-                "reference": str(ref_wav), "dut": str(dut_wav), "dut_2x": str(dut_2x_wav),
+                # The report lives beside these files, so portable records keep
+                # artifact names relative instead of freezing the render path.
+                "reference": ref_wav.name, "dut": dut_wav.name, "dut_2x": dut_2x_wav.name,
                 "reference_sha256": _sha256(ref_wav), "dut_sha256": _sha256(dut_wav),
                 "dut_2x_sha256": _sha256(dut_2x_wav),
             },

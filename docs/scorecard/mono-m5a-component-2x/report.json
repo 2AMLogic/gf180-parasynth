@@ -1,0 +1,138 @@
+{
+  "status": "VALID",
+  "case": "M5A-component",
+  "scope": "M5A bright high lead: MIDI-84 saw oscillator segment only",
+  "reference_identity": "Surge XT Type 2 / Classic oscillator, qualified parameter readbacks; software reference, not a physical Model D",
+  "stimulus": {
+    "midi_note": 84,
+    "waveform": "saw",
+    "seconds": 0.7,
+    "sample_rate": 48000,
+    "f0_command_hz": 1046.5022612023945
+  },
+  "reference": {
+    "f0_hz": 1046.502396,
+    "f0_cents": 0.000223,
+    "rms_dbfs": -19.997695,
+    "peak_dbfs": -12.57959,
+    "harmonics_db": {
+      "h2": -6.018604,
+      "h3": -9.542441,
+      "h4": -12.047816,
+      "h5": -14.000133,
+      "h6": -15.60919,
+      "h7": -16.989298,
+      "h8": -18.210953,
+      "h9": -19.321719,
+      "h10": -20.355983,
+      "h11": -21.34,
+      "h12": -22.294718
+    },
+    "inharmonic_db": -47.226536,
+    "estimator": {
+      "covered": 0.014761026129397059,
+      "floor_db": -88.4102498875937,
+      "headroom_db": 41.18371349606733,
+      "window": "blackman-harris-4",
+      "guard_bins": 5
+    }
+  },
+  "baseline_dut": {
+    "f0_hz": 1046.502113,
+    "f0_cents": -0.000245,
+    "rms_dbfs": -5.040699,
+    "peak_dbfs": -0.382586,
+    "harmonics_db": {
+      "h2": -6.061379,
+      "h3": -9.651255,
+      "h4": -12.245481,
+      "h5": -14.306715,
+      "h6": -16.041193,
+      "h7": -17.559094,
+      "h8": -18.926366,
+      "h9": -20.185732,
+      "h10": -21.366565,
+      "h11": -22.490026,
+      "h12": -23.571965
+    },
+    "inharmonic_db": -31.068475,
+    "estimator": {
+      "covered": 0.014761026129397059,
+      "floor_db": -88.37952559077648,
+      "headroom_db": 57.311050268388996,
+      "window": "blackman-harris-4",
+      "guard_bins": 5
+    }
+  },
+  "dut": {
+    "f0_hz": 1046.502113,
+    "f0_cents": -0.000245,
+    "rms_dbfs": -5.318233,
+    "peak_dbfs": -0.774105,
+    "harmonics_db": {
+      "h2": -6.184105,
+      "h3": -9.979822,
+      "h4": -12.865001,
+      "h5": -15.305208,
+      "h6": -17.510613,
+      "h7": -19.596534,
+      "h8": -21.635499,
+      "h9": -23.678595,
+      "h10": -25.76581,
+      "h11": -27.931849,
+      "h12": -30.210006
+    },
+    "inharmonic_db": -48.877461,
+    "estimator": {
+      "covered": 0.014761026129397059,
+      "floor_db": -88.29475400726605,
+      "headroom_db": 39.41729293247044,
+      "window": "blackman-harris-4",
+      "guard_bins": 5
+    }
+  },
+  "dut_2x_reference": {
+    "f0_hz": 1046.499252,
+    "f0_cents": -0.004978,
+    "rms_dbfs": -6.377339,
+    "peak_dbfs": -0.715477,
+    "harmonics_db": {
+      "h2": -6.050834,
+      "h3": -9.59931,
+      "h4": -12.111188,
+      "h5": -14.059642,
+      "h6": -15.671173,
+      "h7": -17.065302,
+      "h8": -18.296757,
+      "h9": -19.387662,
+      "h10": -20.358097,
+      "h11": -21.239513,
+      "h12": -22.064193
+    },
+    "inharmonic_db": -46.943108,
+    "estimator": {
+      "covered": 0.014761026129397059,
+      "floor_db": -88.40301542605403,
+      "headroom_db": 41.45990770265471,
+      "window": "blackman-harris-4",
+      "guard_bins": 5
+    }
+  },
+  "difference": {
+    "f0_cents_dut_minus_reference": -0.000468,
+    "inharmonic_db_dut_minus_reference": -1.650925,
+    "inharmonic_db_filter_improvement": -17.808986,
+    "f0_cents_2x_minus_reference": -0.005201,
+    "rms_db_2x_minus_reference": 13.620356,
+    "inharmonic_db_2x_minus_reference": 0.283428
+  },
+  "diagnosis": "The causal oscillator filter reduces the DUT's inharmonic energy by 17.809 dB; the true 2x path is 0.283 dB from Surge's inharmonic score, with an RMS level difference of +13.620 dB. This component comparison does not qualify absolute level or the full envelope/filter patch.",
+  "audio": {
+    "reference": "reference-surge.wav",
+    "dut": "dut-polyblep.wav",
+    "dut_2x": "dut-2x-decimated.wav",
+    "reference_sha256": "8de91e06d9f6b77ead1c9170e8c8c3e9a6b379414a3f4bf103ab317f8e2be703",
+    "dut_sha256": "f0a0f49fecf5975da3071932feb979b58748bb179054b91ac78a9da197e59f58",
+    "dut_2x_sha256": "261499d636fa300d54c0722f3fac51ad682d9645f68ba74a7297d2a105895988"
+  }
+}
