@@ -290,7 +290,7 @@ module voice_dp #(
     wire osc2_valid;
     wire signed [15:0] osc2_sample;
     osc_2x_saw_path osc2_path(
-        .clk(clk), .rst_n(rst_n), .frame_valid(state == S_MIX),
+        .clk(clk), .rst_n(rst_n), .frame_valid((state == S_MIX) && is_saw),
         .phase(ph), .inc(inc), .sh(sh[kk]), .recip(r[kk]),
         .out_valid(osc2_valid), .out_sample(osc2_sample));
     wire signed [18:0] osc_smooth_sum = $signed({{3{osc_raw_clamped[15]}}, osc_raw_clamped})
@@ -571,7 +571,14 @@ module voice_dp #(
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
                 S_MIX: begin
 `ifdef VOICE_OSC_2X
-                    state <= S_OSCWAIT;
+                    if (is_saw) state <= S_OSCWAIT;
+                    else begin
+                        ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
+                        osc_d2[kk] <= osc_d1[kk]; osc_d1[kk] <= osc_raw_clamped;
+                        phase[kk] <= ph + inc;
+                        if (kk == 2'd2) naive3 <= naive;
+                        state <= S_ACC;
+                    end
 `else
                     ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
                     osc_d2[kk] <= osc_d1[kk];
