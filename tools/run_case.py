@@ -2305,14 +2305,76 @@ def control_changed(clean: tuple, injected: tuple) -> bool:
     values cannot establish a change, so two refusals never count as a fired
     control.
     """
-    clean_state, clean_worst, _ = clean
-    injected_state, injected_worst, _ = injected
+    clean_state, clean_worst = clean[:2]
+    injected_state, injected_worst = injected[:2]
     if clean_state != injected_state:
         return True
     if clean_worst is None or injected_worst is None:
         return False
     return not math.isclose(float(clean_worst), float(injected_worst),
                             rel_tol=1e-9, abs_tol=1e-6)
+
+
+CONTROL_CAUSE = {
+    "REF_MISSING": "no-such-file.wav",
+    "REF_PROFILE_MISSING": "no-such-clip",
+    "REF_PROFILE_TAMPERED": "hashes",
+}
+
+
+def control_outcome(expect: str, inject: str, case_ids: list[str],
+                    plans: dict[str, str], clean: dict[str, tuple],
+                    injected: dict[str, tuple]) -> tuple[str, str]:
+    """Judge an injected control only when its clean baseline is usable.
+
+    `REFUSED` is distinct from a caught defect: missing references, unplanned
+    cases, and incomplete comparisons cannot make an injection look effective.
+    Verdict tuples contain (state, worst, explanation, injection note).
+    """
+    if not case_ids:
+        return "refused", "no cases were selected"
+    unplanned = [cid for cid in case_ids if plans.get(cid) in (None, "not-run", "unplanned")]
+    if unplanned:
+        return "refused", f"cases are not implemented: {unplanned}"
+    if set(clean) != set(case_ids) or set(injected) != set(case_ids):
+        return "refused", "clean and injected runs did not execute the same nonempty case set"
+
+    def valid_measurement(v: tuple) -> bool:
+        state, worst = v[:2]
+        return (state in ("pass", "fail") and worst is not None
+                and math.isfinite(float(worst)))
+
+    for cid in case_ids:
+        baseline, result = clean[cid], injected[cid]
+        if not valid_measurement(baseline):
+            return "refused", f"{cid} clean baseline has no valid measured verdict"
+        if expect == "changed":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if not control_changed(baseline, result):
+                return "fail", f"{cid} is indistinguishable from the clean baseline"
+        elif expect == "no verdict":
+            if result[0] != "no verdict":
+                if result[0] == "not run":
+                    return "refused", f"{cid} injected run did not execute"
+                return "fail", f"{cid} injection did not produce no verdict"
+            cause = CONTROL_CAUSE.get(inject)
+            note = " ".join(str(part) for part in result[2:]).lower()
+            if not cause or cause not in note:
+                return "fail", f"{cid} refusal does not identify the {inject} mutation"
+        elif expect == "fail":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if baseline[0] != "pass":
+                return "refused", f"{cid} clean baseline must pass to qualify a fail control"
+            if result[0] != "fail":
+                return "fail", f"{cid} injection did not produce fail"
+        elif expect == "pass":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if result[0] != "pass":
+                return "fail", f"{cid} injection did not produce pass"
+    return "pass", f"{inject} caused the expected result on {len(case_ids)} measured case(s)"
 
 
 def cmd_list(cases: list[dict]) -> int:
@@ -2396,6 +2458,8 @@ def main(argv=None) -> int:
         chosen += all_cases
     if not chosen:
         ap.error("name at least one case, or --batch / --family / --all / --list")
+    if a.expect and not a.inject:
+        ap.error("--expect is only meaningful together with --inject")
     seen, uniq = set(), []
     for c in chosen:
         if c["case_id"] not in seen:
@@ -2439,14 +2503,17 @@ def main(argv=None) -> int:
 
     states, errors, code = {}, 0, 0
     clean_verdicts = {}
-    if a.expect == "changed":
+    plans = {c["case_id"]: plan_for(c["case_id"]) for c in chosen}
+    if a.expect:
+        unplanned = [cid for cid, kind in plans.items() if kind in ("not-run", "unplanned")]
+        if unplanned:
+            print(f"CONTROL REFUSED: cases are not implemented: {unplanned}",
+                  file=sys.stderr)
+            return 2
         print("CONTROL BASELINE: measuring the same cases without the injection")
         for c in chosen:
-            if plan_for(c["case_id"]) == "not-run":
-                clean_verdicts[c["case_id"]] = ("not run", None, NOT_RUN[c["case_id"]])
-                continue
             clean = run_case(c, refdir, "", keep_audio=False)
-            clean_verdicts[c["case_id"]] = verdict_of(c, clean)
+            clean_verdicts[c["case_id"]] = (*verdict_of(c, clean), clean.get("note", ""))
         print("CONTROL BASELINE: complete\n")
     injected_verdicts = {}
     for c in chosen:
@@ -2460,7 +2527,7 @@ def main(argv=None) -> int:
         # Judge BEFORE writing, so the outcome code on the record is the board's
         # verdict and not this runner's opinion of it.
         state, worst, why = verdict_of(c, res)
-        injected_verdicts[cid] = (state, worst, why)
+        injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
             (outdir / f"{cid}.json").write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
@@ -2475,26 +2542,16 @@ def main(argv=None) -> int:
     print("-" * 96)
     print("  ".join(f"{k}: {v}" for k, v in sorted(states.items())))
     if a.expect:
-        if a.expect == "changed":
-            unchanged = {
-                cid: clean_verdicts[cid]
-                for cid in injected_verdicts
-                if not control_changed(clean_verdicts[cid], injected_verdicts[cid])
-            }
-            if unchanged:
-                print("CONTROL DID NOT FIRE: injection was indistinguishable from "
-                      f"clean for {sorted(unchanged)}", file=sys.stderr)
-                return 1
-            print("control fired: every injected case changed state or measured distance")
-            return 0
-        # Control semantics, not verifier semantics: the question is whether
-        # the injected defect turned the board the colour it must.
-        bad = {k: v for k, v in states.items() if k != a.expect}
-        if bad:
-            print(f"CONTROL DID NOT FIRE: expected every case {a.expect!r}, got {bad}",
-                  file=sys.stderr)
+        outcome, reason = control_outcome(
+            a.expect, a.inject, [c["case_id"] for c in chosen], plans,
+            clean_verdicts, injected_verdicts)
+        if outcome == "refused":
+            print(f"CONTROL REFUSED: {reason}", file=sys.stderr)
+            return 2
+        if outcome == "fail":
+            print(f"CONTROL DID NOT FIRE: {reason}", file=sys.stderr)
             return 1
-        print(f"control fired: every case came back {a.expect!r}")
+        print(f"control fired: {reason}")
         return 0
     if errors:
         print(f"{errors} case(s) hit an unexpected internal error; see the result JSON",

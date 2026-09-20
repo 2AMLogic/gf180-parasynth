@@ -71,12 +71,11 @@ verify-full:
 ## (claves): clean pass at 0.61, a direct `Pitch` metric at the 10 % frequency
 ## tolerance so a 20 % shift is twice it, injected fail at worst 2.39.
 ##
-## THE THREE FILTER CONTROLS need the frozen reference cache, which most hosts
-## do not have -- and on those they REFUSE rather than fail, which `--expect`
-## reads as a control that did not fire. That is the correct reading: a control
-## that cannot run has not passed. Render the profile first
-## (`tools/refprofile.py --render`, which needs Surge XT and dawdreamer) or
-## accept that these three are not covered on this host and say so.
+## THE THREE FILTER CONTROLS need the frozen reference cache. Without it the
+## clean baseline refuses; the runner reports NO-VERDICT, and this aggregate
+## target fails. That is intentional: these controls cannot be called caught
+## without a valid clean comparison. Render the profile first
+## (`tools/refprofile.py --render`, which needs Surge XT and dawdreamer).
 ##
 ## THE TWO PROFILE CONTROLS NOW COVER F1B AND F1C. REF_CORNER_2X compares the
 ## injected run with a clean run, because all three F1 cases now fail cleanly;
