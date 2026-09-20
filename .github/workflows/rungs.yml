@@ -140,8 +140,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y iverilog
       - name: F1 -- ladder bit-exact
         run: python rtl-sketch/verify_ladder.py
-      - name: M1 -- one Moog voice bit-exact (quick set)
-        run: python rtl-sketch/verify_voice.py --set quick
+      - name: M1 -- selected 2x Moog voice bit-exact (quick set)
+        run: python rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x
 
       # The integration checks. These are the ones that matter most and were
       # the last to reach CI: every block in this design was bit-exact against
@@ -152,8 +152,8 @@ jobs:
         run: python rtl-sketch/verify_modal.py
       - name: I2 -- the control link carries every register write
         run: python rtl-sketch/verify_ctl.py
-      - name: I4 -- the whole chip at its pins, SPI in to I2S out
-        run: python rtl-sketch/verify_synth_top.py
+      - name: I4 -- selected 2x path at the pins, SPI in to I2S out
+        run: python rtl-sketch/verify_synth_top.py --osc2x
 
       # Each integration check carries a control that must turn it red. The
       # SPI_ADDR7 mutant reinstates the rev-1 seven-bit address field -- the
@@ -164,6 +164,10 @@ jobs:
           python rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail
           python rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail
           python rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail
+      - name: the selected 2x path and integration reject disabling mutations
+        run: |
+          python rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-control
+          python rtl-sketch/verify_synth_top.py --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-osc2x-control
 
   # The full 255,060-frame voice run and the drum runs, on demand and nightly
   # rather than per push.

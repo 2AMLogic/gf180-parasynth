@@ -124,6 +124,7 @@ def evaluate(case: dict, res: dict | None) -> dict:
             "properties": props,
             # carried so compare() can see the basis -- it could not before
             "provenance": prov, "analysis_run": res.get("analysis_run"),
+            "analysis_version": res.get("analysis_version"),
             "measurement_policy": {
                 "required": sorted(required),
                 "metrics": {name: {key: metric.get(key)
@@ -137,6 +138,7 @@ def evaluate(case: dict, res: dict | None) -> dict:
 # and model/voice_fx.py are what we are comparing, so they must stay out or every
 # model change reads as INCOMPARABLE.
 APPARATUS = ("model/audio_measure.py", "tools/run_case.py",
+             "tools/mono_m5a_score.py", "tools/scorecard.py",
              "model/reference_rigs.py", "tools/refprofile.py",
              "refprofile/profile.json")
 
@@ -169,6 +171,7 @@ def measurement_basis(res: dict) -> dict:
     prov = res.get("provenance") or {}
     inputs = prov.get("inputs") or {}
     return {"engine": res.get("engine") or prov.get("engine"),
+            "analysis_version": res.get("analysis_version"),
             # content hashes of what MEASURES -- these change when an estimator
             # is repaired, which is the case the guard is for.
             "apparatus": {k: v for k, v in inputs.items() if k in APPARATUS},

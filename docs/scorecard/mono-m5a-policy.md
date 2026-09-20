@@ -11,9 +11,9 @@ error; a pass cannot compensate for a miss in another dimension.
 
 | Measurement | Limit | Basis |
 |---|---:|---|
-| Pitch | 1 cent | Fixed pitch screening bound for the frozen patch |
-| Harmonic shape | 1 dB maximum absolute partial error | Fixed per-partial screening bound |
-| Foldback alias energy | 3 dB | Half-power convention on predicted above-Nyquist images |
+| Pitch | 1 cent | Fixed pitch screening bound; conversion is 1200 cents per octave |
+| Harmonic shape | 1 dB maximum absolute partial error | A missing measurable partial is compared against that signal's measured floor; two below-floor sides are explicitly unmeasured |
+| Foldback alias energy | 3 dB excess | Only predicted above-Nyquist image energy above the reference is penalized; cleaner output scores zero |
 | Attack, 10–90% | 5 ms | One 5 ms RMS-envelope measurement hop |
 | Release, T20 | 125 ms | 10% of measured reference release (about 1.25 s) |
 | Raw steady gain | 3 dB | Half/double amplitude screening range; no normalization |

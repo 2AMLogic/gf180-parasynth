@@ -72,6 +72,16 @@ def test_a_repaired_estimator_is_INCOMPARABLE_on_real_records():
     assert any("basis differs" in r for r in out["reasons"]), out
 
 
+def test_a_changed_mono_analysis_version_is_INCOMPARABLE():
+    doc = copy.deepcopy(dict(REAL)["M5A"])
+    base = _evaluated(doc)
+    changed = copy.deepcopy(doc)
+    changed["analysis_version"] = "m5a-score-next"
+    out = sc.compare(base, _evaluated(changed))
+    assert out["verdict"] == sc.INCOMPARABLE, out
+    assert any("analysis_version" in reason for reason in out["reasons"]), out
+
+
 def test_changing_the_DEVICE_is_still_comparable():
     """The converse, and it is what makes the guard usable: putting
     model/drums_fx.py in the basis would make every model change INCOMPARABLE

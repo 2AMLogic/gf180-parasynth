@@ -27,6 +27,30 @@ def test_metric_keeps_signed_error_and_declared_units():
     assert result["valid"] is True
 
 
+def test_pitch_deviation_uses_cents_not_semitone_percent():
+    assert score._cents_error(2.0, 1.0) == pytest.approx(1200.0)
+    assert score._cents_error(440.0 * 2 ** (1 / 12), 440.0) == pytest.approx(100.0)
+
+
+def test_cleaner_alias_output_is_not_penalized():
+    assert score._excess_alias_db(-62.0, -50.0) == 0.0
+    assert score._excess_alias_db(-45.0, -50.0) == pytest.approx(5.0)
+
+
+def test_missing_harmonic_is_scored_against_its_measured_floor():
+    error, status = score._harmonic_error(
+        {"h8": None, "floor8": -80.0}, {"h8": -25.9, "floor8": -90.0}, 8)
+    assert error == pytest.approx(-54.1)
+    assert status == "model_below_floor_bound"
+
+
+def test_two_unmeasurable_harmonics_are_explicitly_uncompared():
+    error, status = score._harmonic_error(
+        {"h8": None, "floor8": -80.0}, {"h8": None, "floor8": -82.0}, 8)
+    assert error is None
+    assert status == "both_below_floor"
+
+
 def test_pulse_segment_selects_pulse_in_the_model():
     common = {"waves": ("saw", "saw", "saw"), "mix": (1.0, 0.0, 0.0)}
     assert score._patch_for_wave(common, "saw")["waves"][0] == "saw"

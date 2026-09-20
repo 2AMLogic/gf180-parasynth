@@ -1974,7 +1974,7 @@ def provenance(inputs: dict, artefacts: dict, config: dict) -> dict:
 MODEL_INPUTS = ("model/drums_fx.py", "model/voice_fx.py", "model/audio_measure.py",
                 "model/reference_rigs.py", "tools/run_case.py", "tools/refprofile.py",
                 "tools/mono_m5a_score.py", "tools/measure_mono_m5a_reference.py",
-                "refprofile/profile.json", "docs/scorecard/cases.csv")
+                "tools/scorecard.py", "refprofile/profile.json", "docs/scorecard/cases.csv")
 
 
 def model_input_hashes(extra: dict | None = None) -> dict:
@@ -1989,6 +1989,8 @@ def _now() -> str:
 
 def analysis_run() -> str:
     return (f"run_case@{_sha(__file__)} + audio_measure@{_sha(ROOT / 'model' / 'audio_measure.py')}"
+            f" + mono_m5a_score@{_sha(ROOT / 'tools' / 'mono_m5a_score.py')}"
+            f" + scorecard@{_sha(ROOT / 'tools' / 'scorecard.py')}"
             f" at {_now()}")
 
 
@@ -2246,6 +2248,7 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
             base.update({
                 "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
                 "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
+                "analysis_version": measured["analysis_version"],
                 "render_run": "fixed integer model; saw and pulse, MIDI 84/96, complete 27.2 s phrase",
                 "audio": measured["audio"], "note": measured["note"],
                 "tolerance_policy": mono_m5a.TOLERANCES,
