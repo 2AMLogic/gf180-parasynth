@@ -1,4 +1,6 @@
 import numpy as np
+from pathlib import Path
+import re
 
 import audio_measure as am
 import dsp
@@ -59,3 +61,20 @@ def test_2x_decimator_headroom_is_safe_across_the_midi_range():
     # must leave every measured MIDI note below the saturating output rail.
     assert full_scale_clips > 0
     assert worst_peak[0] <= 32767, (worst_peak, full_scale_clips)
+
+
+def test_rtl_coefficients_and_headroom_match_python_reference():
+    rtl_dir = Path(__file__).parents[1] / "rtl-sketch"
+    rtl = (rtl_dir / "decimate_2x_tm_sym.v").read_text()
+    entries = {int(i): int(v) for i, v in re.findall(r"h\[(\d+)\]\s*=\s*(-?\d+)", rtl)}
+    taps = [entries[i] for i in range(16)] + [entries[i] for i in range(14, -1, -1)]
+    assert taps == vf._DECIM2_TAPS.tolist()
+    osc_rtl = (rtl_dir / "polyblep_saw_pair.v").read_text()
+    gains = [int(v) for v in re.findall(r"SUBSTEP_GAIN_Q15\s*=\s*16'sd(\d+)", osc_rtl)]
+    assert gains == [32767, vf._OS2_SUBSTEP_GAIN_Q15]
+
+
+def test_zero_increment_is_rejected_by_standalone_api():
+    import pytest
+    with pytest.raises(ValueError, match="inc must be positive"):
+        os2.render_saw(1, 0)

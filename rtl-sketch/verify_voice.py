@@ -93,7 +93,7 @@ STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2"
                 "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2"]
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
-             "decimate_2x_tm.v", "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v"]
+             "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v"]
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_OFF", "OSC2X_HEADROOM",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
@@ -554,20 +554,24 @@ def main(argv=None) -> int:
     ap.add_argument("--only", default=None, help="comma-separated scenario keys")
     ap.add_argument("--inject", default=None, choices=BUGS, help="INJECT_BUG_VOICE_<NAME> to compile in")
     ap.add_argument("--define", action="append", default=[], help="additional Verilog define")
+    ap.add_argument("--osc2x", action="store_true",
+                    help="enable the integrated 2x voice model and RTL path")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
     a = ap.parse_args(argv)
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
+    if "VOICE_OSC_2X" in a.define:
+        ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")
     only = set(a.only.split(",")) if a.only else None
     print(f"verify_voice: model VoiceFx() (contract rev 4), scenario set '{a.set}'"
           + (f", only {sorted(only)}" if only else ""))
     expected, state, writes, report = generate(a.outdir, a.set, only,
-                                               oversample_2x=("VOICE_OSC_2X" in a.define))
+                                               oversample_2x=a.osc2x)
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:
-        defines = list(a.define)
+        defines = list(a.define) + (["VOICE_OSC_2X"] if a.osc2x else [])
         if a.inject:
             defines.append(f"INJECT_BUG_VOICE_{a.inject}")
         rtl = os.path.relpath(os.path.abspath(a.rtl), HERE) if a.rtl else None

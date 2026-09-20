@@ -9,20 +9,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from voice_fx import OscFx, _render_2x
-
-SR2_TAPS_Q15 = np.array((
-    39, 54, -44, -138, 34, 323, 72, -609, -397, 957, 1133,
-    -1296, -2819, 1544, 10175, 14712, 10175, 1544, -2819,
-    -1296, 1133, 957, -397, -609, 72, 323, 34, -138, -44, 54, 39,
-), dtype=np.int64)
-assert SR2_TAPS_Q15.sum() == 1 << 15
+from voice_fx import OscFx, _DECIM2_TAPS as SR2_TAPS_Q15, _render_2x
 
 
 def render_saw(n: int, inc: int) -> np.ndarray:
     """Render *n* base-rate Q1.15 samples through a true 2x path."""
-    if n < 0 or inc < 0:
-        raise ValueError("n and inc must be non-negative")
+    if n < 0 or inc <= 0:
+        raise ValueError("n must be non-negative and inc must be positive")
     osc = OscFx("saw", smooth=False)
     out, _, _ = _render_2x(osc, n, np.full(n, inc, dtype=np.int64),
                            np.zeros(30, dtype=np.int64), 0)

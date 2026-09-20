@@ -1,3 +1,6 @@
+// Legacy prototype; not instantiated by voice_dp or compiled by verify_voice.
+// Unlike the shipping symmetric implementation this version does not saturate
+// its output, so do not reuse it in an audio path.
 // Time-multiplexed 2:1 decimator. One Q15 multiply is reused for 31 cycles
 // after each odd 96 kHz input; the voice frame has enough idle cycles for it.
 module decimate_2x_tm(

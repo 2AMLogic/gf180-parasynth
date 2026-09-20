@@ -31,7 +31,8 @@ verify:
 	  "$(PY) rtl-sketch/verify_ctl.py" \
 	  "$(PY) rtl-sketch/verify_synth_top.py" \
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick"
+	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
+	  "$(PY) tools/check_decimator_saturation.py"
 
 verify-fast: verify
 
@@ -111,7 +112,7 @@ verify-full:
 ## verifier need the same treatment.
 controls:
 	@$(RUN) \
-	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --define VOICE_OSC_2X --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \

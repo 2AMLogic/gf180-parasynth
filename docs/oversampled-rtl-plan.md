@@ -15,7 +15,7 @@ filtered peak is 31,565 LSB at MIDI 2, below the 32,767 positive rail.
 
 ## Evidence
 
-`verify_voice.py --set quick --define VOICE_OSC_2X` passes 64,416 frames with
+`verify_voice.py --set quick --osc2x` passes 64,416 frames with
 every sample, tap and final state identical to `VoiceFx(oversample_2x=True)`.
 The worst `go`-to-`sample_valid` latency is 198 cycles in the 256-cycle frame.
 The focused default, glide and paraphonic sequence also passes 4,800 frames

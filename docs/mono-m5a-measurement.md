@@ -22,7 +22,7 @@ Run it with:
 .venv/bin/python tools/measure_mono_case.py --out build/mono-m5a
 ```
 
-The baseline run at commit `0bb807f` produced a valid comparison. The measured
+The initial baseline run at commit `0bb807f` produced a valid comparison. The measured
 fundamentals were 1046.502 Hz on both sides (DUT − reference: −0.0005 cents).
 The inharmonic-energy measurement was −47.2265 dB for Surge and −31.0685 dB
 for the unfiltered DUT, a **+16.158 dB DUT excess**. The prototype causal
@@ -49,6 +49,9 @@ and the close spectral score is not an overall sound-quality pass.
 
 The captured report and all three WAVs are in the
 [M5A component evidence bundle](scorecard/mono-m5a-component-2x/report.json).
+[`mono-m5a-measurement.json`](mono-m5a-measurement.json) mirrors that current
+report. The initial run above is historical context; its rendered audio and
+rounded values are not mixed into the current evidence bundle.
 
 Two headroom candidates failed before the complete pitch sweep passed (2/3,
 66.7% wrong-candidate rate); the first spectrum is retained because it exposed
@@ -56,6 +59,11 @@ the missing saturation precondition. The integrated quick default scenario is
 bit-exact after the headroom change. `tools/run_case.py M5A --no-audio` returned
 `not run` (exit 2): the repo still lacks a qualified Mono envelope reference,
 so the harness will not report an ungrounded full-patch result.
+
+The causal 3-tap smoother used by the baseline DUT applies to all waveforms in
+the voice model and RTL, independently of the optional 2× saw path. Sound
+records made before that smoother require remeasurement; this MIDI-84 result
+compares the saw oscillator component only.
 
 The JSON report and all three WAV hashes are produced by
 [`tools/measure_mono_case.py`](../tools/measure_mono_case.py). A missing or

@@ -69,7 +69,7 @@ module tb_voice;
     reg st_def   = 0;                                    // was `state` ever DEFINED this frame?
     always @(posedge clk) begin
 `ifdef VOICE_OSC_2X
-        if (dut.state == 74 && dut.is_saw && dut.osc2_valid) begin
+        if (dut.state == dut.S_OSCWAIT && dut.is_saw && dut.osc2_valid) begin
             t_osc[dut.kk] <= dut.osc2_sample;
             t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
         end

@@ -1,3 +1,6 @@
+// Legacy prototype; not instantiated by voice_dp or compiled by verify_voice.
+// Unlike the shipping symmetric implementation this version does not saturate
+// its output, so do not reuse it in an audio path.
 // Streaming 2:1 decimator for the oscillator oversampling path.
 // Input samples arrive at 2*SR; every odd sample produces one SR output.
 // Coefficients match model/oversampled_osc.py (Q15, sum = 32768).
