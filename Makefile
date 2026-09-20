@@ -41,7 +41,7 @@ verify:
 ## the measurement and selected-path smoke produced a trustworthy verdict.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_mono_m5a_score.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_mono_m5a_score.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
