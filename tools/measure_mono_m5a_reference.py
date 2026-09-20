@@ -555,8 +555,13 @@ def main(argv=None) -> int:
                   f"A10-90 {m['envelope']['attack_10_90_ms']:.1f} ms, "
                   f"R20 {m['envelope']['release_t20_ms']:.1f} ms, "
                   f"tail {m['envelope']['tail_db']:.1f} dB")
-    print(f"wrong-then-right: {result['data']['qualification']['wrong_then_right']['discarded_measurements']}/"
-          f"{result['data']['qualification']['wrong_then_right']['attempts']} discarded estimator attempt")
+    wr = result["data"]["qualification"]["wrong_then_right"]
+    ctrl = wr["cutoff_calibration"]
+    print(f"wrong-then-right: {wr['overall_wrong_then_right_rate']} discarded measurements / "
+          f"{wr['overall_attempts']} attempts; saw-edge estimator 1/2 and cutoff host-block "
+          f"control caught ({ctrl['discarded']['host_block_size_samples']} -> "
+          f"{ctrl['accepted']['host_block_size_samples']} samples, "
+          f"{ctrl['discarded']['measured_hz'] - ctrl['accepted']['measured_hz']:+.1f} Hz)")
     return 0
 
 
