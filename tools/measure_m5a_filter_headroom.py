@@ -10,6 +10,8 @@ import pathlib
 import subprocess
 import sys
 
+import numpy as np
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
@@ -62,14 +64,31 @@ def _measure_control_response() -> dict:
     }
 
 
-def run(out_dir: pathlib.Path) -> dict:
+def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = {}
+    rows = {"pulse29": {}, "pulse479": {}}
+    reused_source = None
+    if reuse_offline_report is not None:
+        previous = json.loads(reuse_offline_report.read_text())
+        if (previous.get("schema") != "m5a-filter-headroom-v1"
+                or previous.get("reference_sha256") != json.loads(m5a.MANIFEST.read_text())["audio"]["sha256"]
+                or set(previous.get("configurations", {})) != set(rows)):
+            raise m5a.Refused("offline reuse report schema, reference, or pulse set does not match")
+        for pulse in rows:
+            for mode in ("clamped", "headroom"):
+                row = previous["configurations"][pulse].get(mode)
+                if row is None or set(row.get("metrics", {})) != set(m5a.TOLERANCES):
+                    raise m5a.Refused(f"offline reuse report lacks complete {pulse}/{mode} evidence")
+                rows[pulse][mode] = row
+        reused_source = {
+            "report": str(reuse_offline_report),
+            "source_commit": previous.get("source_commit"),
+            "source_dirty": previous.get("source_dirty"),
+            "source_sha256": previous.get("source_sha256"),
+            "note": "locally regenerated complete-phrase clamped/headroom rows from this session; reused to avoid repeating unchanged offline renders",
+        }
     for pulse in ("pulse29", "pulse479"):
-        rows[pulse] = {}
-        for label, preserve, causal in (("clamped", False, False),
-                                        ("headroom", True, False),
-                                        ("causal_headroom", True, True)):
+        for label, preserve, causal in (("causal_headroom", True, True),):
             rows[pulse][label] = m5a.measure(
                 pulse_shape=pulse, voice_factory=_factory(preserve, causal),
                 model_label=f"reconstructed_2x_{label}",
@@ -120,6 +139,7 @@ def run(out_dir: pathlib.Path) -> dict:
         },
         "comparisons": comparisons,
         "configurations": rows,
+        "reused_offline_baseline": reused_source,
         "source_sha256": {
             name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
             for name in ("model/filter_rate_chain.py", "model/voice_fx.py",
@@ -138,8 +158,10 @@ def run(out_dir: pathlib.Path) -> dict:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-headroom-v1.json")
+    parser.add_argument("--reuse-offline-report", type=pathlib.Path)
     args = parser.parse_args(argv)
-    report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio")
+    report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
+                  args.reuse_offline_report)
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
