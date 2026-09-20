@@ -6,21 +6,24 @@ module polyblep_saw_pair(
     output wire signed [15:0] sample0, output wire signed [15:0] sample1
 );
     function automatic signed [17:0] saw_blep(input [23:0] p, input [23:0] step, input [4:0] shift);
-        reg [23:0] x; reg [38:0] xs; reg [15:0] frac, u; reg [16:0] s; reg [33:0] ss;
-        reg signed [17:0] raw; reg signed [17:0] c;
+        reg [23:0] x; reg [24:0] q; reg [38:0] xs; reg [15:0] frac, u; reg [31:0] uu; reg [16:0] s; reg [33:0] ss;
+        reg signed [15:0] base; reg signed [17:0] raw; reg signed [17:0] c;
         begin
-            x = p;
-            // For low notes the half-rate exponent is -1; the divider stores
-            // that as shift zero, so recover the implicit left shift here.
-            xs = (shift == 0) ? ({x,15'b0} << 1) : ({x,15'b0} >> shift);
-            frac = xs[15:0];
-            u = (frac * recip) >> 15;
-            s = 17'h10000 - {1'b0,u};
-            // Saw falls at the phase wrap; the PolyBLEP correction is
-            // negative on the leading window (voice_dp's c_pp sign).
-            ss = s*s;
-            c = (p < step) ? -$signed(ss >> 17) : 0;
-            raw = -18'sd32768 + $signed({1'b0,p[22:8]}) - c;
+            q = 25'h1000000 - {1'b0,p};
+            c = 0;
+            if (p < step) begin
+                x = p;
+                xs = (shift == 0) ? ({x,15'b0} << 1) : ({x,15'b0} >> shift);
+                frac = xs[15:0]; uu = frac * recip; u = uu >> 15;
+                s = 17'h10000 - {1'b0,u}; ss = s*s; c = -$signed(ss >> 17);
+            end else if (q < {1'b0,step}) begin
+                x = q[23:0];
+                xs = (shift == 0) ? ({x,15'b0} << 1) : ({x,15'b0} >> shift);
+                frac = xs[15:0]; uu = frac * recip; u = uu >> 15;
+                s = 17'h10000 - {1'b0,u}; ss = s*s; c = $signed(ss >> 17);
+            end
+            base = {~p[23],p[22:8]};
+            raw = $signed(base) - c;
             if (raw > 18'sd32767) saw_blep = 18'sd32767;
             else if (raw < -18'sd32768) saw_blep = -18'sd32768;
             else saw_blep = raw;

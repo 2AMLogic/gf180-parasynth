@@ -68,12 +68,23 @@ module tb_voice;
     reg t_v_seen = 0;                                    // did S_VCA2 ever happen? (see the localparams)
     reg st_def   = 0;                                    // was `state` ever DEFINED this frame?
     always @(posedge clk) begin
+`ifdef VOICE_OSC_2X
+        if (dut.state == 74 && dut.is_saw && dut.osc2_valid) begin
+            t_osc[dut.kk] <= dut.osc2_sample;
+            t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
+        end
+        if (dut.state == S_MIX && !dut.is_saw) begin
+            t_osc[dut.kk] <= dut.osc;
+            t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
+        end
+`else
         if (dut.state == S_MIX) begin                     // oscillator kk is being mixed: its sample, inc, (e, r)
             t_osc[dut.kk] <= dut.osc;
             t_inc[dut.kk] <= dut.inc_mod[dut.kk];      // the MODULATED increment (6.9)
             t_sh[dut.kk]  <= dut.sh[dut.kk];
             t_r[dut.kk]   <= dut.r[dut.kk];
         end
+`endif
         if (dut.state == S_KEFF1) t_kc <= dut.mb[15:0];   // the operand loaded at S_KEFF0 is kc
         if (^dut.state !== 1'bx)  st_def = 1'b1;
         if (dut.state == S_VCA2)  begin t_v <= dut.ma; t_v_seen = 1'b1; end

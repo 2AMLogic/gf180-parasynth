@@ -19,3 +19,15 @@ def test_true_2x_decimator_preserves_high_note_harmonics_and_reduces_foldback():
     f_before = am.harmonic_signature(raw, dsp.SR, f0=f0, kmax=12)
     f_after = am.harmonic_signature(fixed, dsp.SR, f0=f0, kmax=12)
     assert max(abs(f_after[f"h{k}"] - f_before[f"h{k}"]) for k in range(2, 13)) < 2.0
+
+
+def test_voice_2x_filter_history_survives_play_chunk_boundaries():
+    inc = vf.phase_inc(vf.note_hz(45))
+    whole = vf.OscFx("saw", smooth=True)
+    split = vf.OscFx("saw", smooth=True)
+    h0 = np.zeros(30, dtype=np.int64)
+    h1 = np.zeros(30, dtype=np.int64)
+    expected, _ = vf._render_2x(whole, 500, inc, h0)
+    a, h1 = vf._render_2x(split, 250, inc, h1)
+    b, h1 = vf._render_2x(split, 250, inc, h1)
+    assert np.array_equal(expected, np.concatenate((a, b)))

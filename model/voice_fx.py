@@ -856,7 +856,7 @@ _DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
                          -1296,-2819,1544,10175,14712,10175,1544,-2819,
                          -1296,1133,957,-397,-609,72,323,34,-138,-44,54,39), dtype=np.int64)
 
-def _render_2x(o: OscFx, n: int, inc) -> np.ndarray:
+def _render_2x(o: OscFx, n: int, inc, history: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Render a saw oscillator at 2x, then apply the reference decimator."""
     inc_a = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
     phase0 = o.phase
@@ -864,8 +864,11 @@ def _render_2x(o: OscFx, n: int, inc) -> np.ndarray:
     hi = o.render(2 * n, np.repeat(inc_a // 2, 2))
     o.smooth = saved
     o.phase = int((phase0 + int(inc_a.sum())) & PHASE_MASK)
-    y = np.convolve(np.asarray(hi, dtype=np.int64), _DECIM2_TAPS, mode="full")[:2*n]
-    return (y[1::2] >> 15).astype(np.int64)
+    joined = np.concatenate((history, np.asarray(hi, dtype=np.int64)))
+    y = np.convolve(joined, _DECIM2_TAPS, mode="full")
+    filtered = y[len(history):len(history) + 2*n]
+    next_history = joined[-len(history):].copy()
+    return sat16(filtered[1::2] >> 15).astype(np.int64), next_history
 
 class VoiceFx:
     """One voice: three oscillators, two envelopes, one ladder, and the state
@@ -890,10 +893,12 @@ class VoiceFx:
         self.g_rom = make_g_rom(grom_bits, self.ladder_cfg.get("oversample", 2))
         self.k_rom = make_k_rom(krom_bits, grom_bits, self.ladder_cfg.get("oversample", 2))
         self.trace = {}
+        self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
         self.reset()
 
     def reset(self):
         """RESET: every state register of contract 14 to zero."""
+        self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
         self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=True) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
@@ -1088,8 +1093,13 @@ class VoiceFx:
         if mw is None:
             mw = np.full(n, self.mwheel, dtype=np.int64)
         incs, white, pink, red, mant_f, sh_f, msig = self._modulate(incs, n, mw)
-        sig = [_render_2x(o, n, inc) if self.oversample_2x and o.shape == "saw"
-               else o.render(n, inc) for o, inc in zip(self.oscs, incs)]
+        sig = []
+        for k, (o, inc) in enumerate(zip(self.oscs, incs)):
+            if self.oversample_2x and o.shape == "saw":
+                rendered, self._os2_history[k] = _render_2x(o, n, inc, self._os2_history[k])
+                sig.append(rendered)
+            else:
+                sig.append(o.render(n, inc))
         n_audio = pink if self.nsel else white                   # 2.5: WHITE or pink for audio
         mixed = mix_fx(sig + [n_audio], self.weights)            # step 3, four sources
         ae = self.amp_env.render(n, gate, trig)                  # step 4

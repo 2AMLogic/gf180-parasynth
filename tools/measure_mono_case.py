@@ -121,8 +121,10 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
         dut_2x_m = _measure(dut_2x, vf.note_hz(NOTE))
         out.mkdir(parents=True, exist_ok=True)
         ref_wav, dut_wav = out / "reference-surge.wav", out / "dut-polyblep.wav"
+        dut_2x_wav = out / "dut-2x-decimated.wav"
         _write_wav(ref_wav, ref)
         _write_wav(dut_wav, dut)
+        _write_wav(dut_2x_wav, dut_2x)
         report = {
             "status": "VALID",
             "case": "M5A-component",
@@ -150,11 +152,12 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
             "diagnosis": (
                 "The causal oscillator filter reduces the DUT's inharmonic energy by "
                 f"{baseline_m['inharmonic_db'] - dut_m['inharmonic_db']:.3f} dB; "
-                "the filtered DUT is compared with the qualified Surge reference. "
+                f"the true 2x path is {dut_2x_m['inharmonic_db'] - ref_m['inharmonic_db']:.3f} dB from the qualified Surge reference. "
                 "This component result does not qualify the full envelope/filter patch."),
             "audio": {
-                "reference": str(ref_wav), "dut": str(dut_wav),
+                "reference": str(ref_wav), "dut": str(dut_wav), "dut_2x": str(dut_2x_wav),
                 "reference_sha256": _sha256(ref_wav), "dut_sha256": _sha256(dut_wav),
+                "dut_2x_sha256": _sha256(dut_2x_wav),
             },
         }
         (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

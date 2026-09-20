@@ -11,7 +11,7 @@ module osc_substep_pair(
 );
     reg in_valid;
     reg signed [15:0] in_sample;
-    reg busy;
+    reg busy, second_sent;
     wire dec_valid;
     wire signed [15:0] dec_sample;
     decimate_2x_tm_sym dec(.clk(clk), .rst_n(rst_n), .in_valid(in_valid),
@@ -22,6 +22,7 @@ module osc_substep_pair(
         out_valid <= 1'b0;
         if (!rst_n) begin
             busy <= 1'b0;
+            second_sent <= 1'b0;
             in_sample <= 0;
             out_sample <= 0;
         end else if (dec_valid) begin
@@ -32,9 +33,11 @@ module osc_substep_pair(
             in_sample <= sample0;
             in_valid <= 1'b1;
             busy <= 1'b1;
-        end else if (busy) begin
+            second_sent <= 1'b0;
+        end else if (busy && !second_sent) begin
             in_sample <= sample1;
             in_valid <= 1'b1;
+            second_sent <= 1'b1;
         end
     end
 endmodule
