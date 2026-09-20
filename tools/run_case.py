@@ -119,6 +119,7 @@ from scipy.signal import butter, sosfiltfilt                         # noqa: E40
 import audio_measure as am                                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
 import refprofile as rp                                              # noqa: E402
+import mono_m5a_score as mono_m5a                                    # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -1711,7 +1712,7 @@ NOT_RUN["F5A"] = (
     "sweep is not one of them -- so there is nothing to compare a frozen sweep "
     "against yet.")
 
-for _c in ("M1A", "M2A", "M3A", "M4A", "M5A", "M6A", "M7A", "M8A"):
+for _c in ("M1A", "M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
     NOT_RUN[_c] = (
         "no qualified Mono reference, and the two candidates failed for different "
         "reasons that are MEASURED and recorded in refprofile/profile.json rather "
@@ -1745,6 +1746,8 @@ NOT_RUN["E3A"] = ("no shipped patch uses the noise source or oscillator-3 "
 def plan_for(case_id: str) -> str:
     """What this runner will do with a case: 'drum', 'ensemble', 'not-run' or
     'unplanned'."""
+    if case_id == "M5A":
+        return "mono"
     if case_id in NOT_RUN:
         return "not-run"
     if case_id in DRUM_CASE_VOICE:
@@ -1973,6 +1976,7 @@ def provenance(inputs: dict, artefacts: dict, config: dict) -> dict:
 # green result no longer covers the tree.
 MODEL_INPUTS = ("model/drums_fx.py", "model/voice_fx.py", "model/audio_measure.py",
                 "model/reference_rigs.py", "tools/run_case.py", "tools/refprofile.py",
+                "tools/mono_m5a_score.py", "tools/measure_mono_m5a_reference.py",
                 "refprofile/profile.json", "docs/scorecard/cases.csv")
 
 
@@ -2227,10 +2231,46 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
             return run_ensemble_case(case, keep_audio)
         if kind == "filter":
             return run_filter_case(case, inject, keep_audio)
+        if kind == "mono":
+            measured = mono_m5a.measure()
+            smoke_dir = ROOT / "build/scorecard/M5A-spi-i2s"
+            report_path = smoke_dir / "verification.txt"
+            smoke = subprocess.run(
+                [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
+                 "--m5a-smoke", "--osc2x", "--outdir", str(smoke_dir),
+                 "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
+                cwd=ROOT, capture_output=True, text=True, timeout=3600)
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(smoke.stdout + smoke.stderr)
+            if (smoke.returncode != 0 or "PASS --" not in report_path.read_text()
+                    or "M5A path verified" not in report_path.read_text()):
+                raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {report_path.relative_to(ROOT)}")
+            smoke_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+            base.update({
+                "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
+                "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
+                "render_run": "fixed integer model; saw and pulse, MIDI 84/96, complete 27.2 s phrase",
+                "audio": measured["audio"], "note": measured["note"],
+                "tolerance_policy": mono_m5a.TOLERANCES,
+                "metrics": measured["metrics"],
+                "diagnostics": {"reference_sha256": measured["reference_sha256"],
+                                "reference_manifest_sha256": measured["manifest_sha256"],
+                                "cutoff_calibration": measured["cutoff_calibration"],
+                                "model_segments": measured["model_segments"],
+                                "events": measured["event_diagnostics"],
+                                "wrong_then_right": measured["wrong_then_right"],
+                                "duration_s": measured["duration_s"],
+                                "spi_i2s_report_sha256": smoke_sha},
+                "provenance": provenance(
+                    model_input_hashes({"frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
+                                        "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"]}),
+                    {"ours": measured["audio"], "spi_i2s": str(report_path.relative_to(ROOT))},
+                    {"oscillator_config": "2x saw candidate", "reference": "frozen Mini V3 WAV"})})
+            return base
         base["note"] = "REFUSED: this runner has no plan for this case."
         base["metrics"] = {m: invalid_metric("", "no measurement plan") for m in required}
         return base
-    except (Refused, rp.Refused) as e:
+    except (Refused, rp.Refused, mono_m5a.Refused) as e:
         base["note"] = f"REFUSED: {e}"
         base["metrics"] = {m: invalid_metric("", str(e)) for m in required}
         return base
@@ -2299,6 +2339,8 @@ def cmd_list(cases: list[dict]) -> int:
             f = FILTER_CASES[c["case_id"]]
             why = (f"ours vs frozen {f['ref_clip']} "
                    f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+        elif kind == "mono":
+            why = "M5A fixed-model phrase vs frozen Mini V3; includes SPI-to-I2S smoke"
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")

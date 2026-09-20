@@ -301,13 +301,22 @@ module voice_dp #(
     assign osc2_valid = 1'b0;
     assign osc2_sample = 16'sd0;
 `endif
+`ifdef VOICE_OSC_2X
+`ifdef INJECT_BUG_VOICE_OSC2X_OFF
+    wire use_osc2x = 1'b0; // NEGATIVE CONTROL: candidate compiled, output selection disabled
+`else
+    wire use_osc2x = 1'b1;
+`endif
+`else
+    wire use_osc2x = 1'b0;
+`endif
     wire signed [18:0] osc_smooth_sum = $signed({{3{osc_raw_clamped[15]}}, osc_raw_clamped})
                                       + ($signed({{3{osc_d1[kk][15]}}, osc_d1[kk]}) <<< 1)
                                       + $signed({{3{osc_d2[kk][15]}}, osc_d2[kk]});
-`ifdef INJECT_BUG_VOICE_OSC_SMOOTH_OFF
-    wire signed [15:0] osc = osc_raw_clamped;         // NEGATIVE CONTROL: bypass alias filter
+`ifdef INJECT_BUG_VOICE_OSC_SMOOTH_ON
+    wire signed [15:0] osc = sat16t(osc_smooth_sum >>> 2); // NEGATIVE CONTROL: rejected smoother
 `else
-    wire signed [15:0] osc = sat16t(osc_smooth_sum >>> 2);
+    wire signed [15:0] osc = osc_raw_clamped;             // established waveform path
 `endif
 
     // ---- envelopes (8.3) --------------------------------------------------------------
@@ -578,24 +587,17 @@ module voice_dp #(
 `endif
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
                 S_MIX: begin
-`ifdef VOICE_OSC_2X
-                    if (is_saw) state <= S_OSCWAIT;
+                    if (use_osc2x && is_saw) state <= S_OSCWAIT;
                     else begin
                         ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
                         osc_d2[kk] <= osc_d1[kk]; osc_d1[kk] <= osc_raw_clamped;
                         phase[kk] <= ph + inc;
+`ifdef VOICE_OSC_2X
                         phase_os2[kk] <= phase_os2[kk] + {inc[23:1],1'b0};
+`endif
                         if (kk == 2'd2) naive3 <= naive;
                         state <= S_ACC;
                     end
-`else
-                    ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
-                    osc_d2[kk] <= osc_d1[kk];
-                    osc_d1[kk] <= osc_raw_clamped;
-                    phase[kk] <= ph + inc;                                    // step 9: advance
-                    if (kk == 2'd2) naive3 <= naive;                          // the modulation tap (M5)
-                    state <= S_ACC;
-`endif
                 end
                 S_OSCWAIT: begin
                     if (osc2_valid) begin

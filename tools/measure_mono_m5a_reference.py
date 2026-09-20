@@ -304,6 +304,9 @@ def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
             if residual_db > -40.0:
                 raise Refused(f"MIDI {event['note']} release has not cleared before the next note: "
                               f"{residual_db:.2f} dB")
+            times["pre_next_note_clearance_db"] = residual_db
+        else:
+            times["pre_next_note_clearance_db"] = None
         records.append({
             "note": event["note"], "wave": wave,
             "commanded_f0_hz": command_hz,
@@ -341,6 +344,47 @@ def _plugin_metadata() -> dict:
         "plugin_binary_sha256": sha256(executable) if executable.is_file() else None,
         "host": "dawdreamer", "host_version": host_version,
     }
+
+
+def _measure_open_cutoff(repeats: int = 3) -> dict:
+    """Measure the max-cutoff knob position by self-oscillation, not its 0..1 label."""
+    values = []
+    prominence = []
+    readbacks = []
+    wrong_block_rig = rr.MiniV3Rig(block=512)
+    wrong_block_audio = np.asarray(wrong_block_rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
+    wrong_block_estimate = am.dominant_frequency(wrong_block_audio, 25.0, 15000.0, SR)
+    if not wrong_block_estimate.ok:
+        raise Refused(f"wrong-block cutoff control could not be measured: {wrong_block_estimate.reason}")
+    for _ in range(repeats):
+        rig = rr.MiniV3Rig(block=BLOCK)
+        ring = np.asarray(rig.ring(1.0, 0.98, seconds=1.2), dtype=np.float64)
+        readbacks.append({
+            "cutoff": _readback(rig.p, 23, "CutOff", 1.0),
+            "emphasis": _readback(rig.p, 24, "Emphasis", 0.98),
+        })
+        if not len(ring) or float(np.max(np.abs(ring))) < 1e-5:
+            raise Refused("Mini V3 max-cutoff calibration ring is silent")
+        measured = am.dominant_frequency(ring, 25.0, 15000.0, SR)
+        if not measured.ok or measured.value < 1000.0:
+            raise Refused(f"Mini V3 max-cutoff ring measurement refused: {measured.reason}")
+        values.append(float(measured.value))
+        prominence.append(float(measured.detail.get("prominence_db", 0.0)))
+    spread = max(values) - min(values)
+    if spread > 10.0:
+        raise Refused(f"Mini V3 max-cutoff measurement is not repeatable: {spread:.2f} Hz")
+    if abs(float(wrong_block_estimate.value) - float(np.median(values))) <= 10.0:
+        raise Refused("wrong-block cutoff control did not distinguish the 512-sample apparatus from the pinned 16-sample setup")
+    return {"knob": 1.0, "emphasis": 0.98, "block_size_samples": BLOCK,
+            "method": "measured self-oscillation ring; dominant frequency",
+            "f0_hz_repeats": values, "repeat_range_hz": spread,
+            "prominence_db_repeats": prominence, "f0_hz": float(np.median(values)),
+            "repeat_count": repeats, "parameter_readbacks": readbacks,
+            "wrong_block_control": {"block_size_samples": 512,
+                                    "f0_hz": float(wrong_block_estimate.value),
+                                    "separation_from_pinned_hz": float(abs(
+                                        wrong_block_estimate.value - np.median(values))),
+                                    "caught": True}}
 
 
 def _source_provenance() -> dict:
@@ -424,6 +468,7 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
         offset += len(run["audio"]) + len(gap)
 
     artifact_sha = sha256(wav_path)
+    open_cutoff = _measure_open_cutoff()
     manifest = {
         "schema": 1,
         "case_id": "M5A",
@@ -441,6 +486,7 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
                                    "value": v[0], "readback": v[1]}
                               for k, v in WAVE_SETTINGS.items()},
             "range_readback": RANGE_READBACK,
+            "cutoff_measurement": open_cutoff,
             "normalisation": "none; float32 WAV retains raw plugin output",
             "gain_policy": "record raw levels; General Level 0.700 and Osc1 Level 0.900 are fixed patch settings",
         },
@@ -454,10 +500,28 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
         "qualification": {
             "reference_integrity_command": "python3 model/reference_integrity.py --stage demo --devices miniv3 --source smooth --seconds 40",
             "reference_integrity_result": "0 unprompted transient events in 40 s; 5 injected click events detected",
+            "host_warning": {
+                "text": "error: attempt to map invalid URI '/Library/Audio/Plug-Ins/VST3/Mini V3.vst3'",
+                "host": "dawdreamer 0.8.3",
+                "observed": "emitted on plugin instance creation; renders remained finite/non-silent and parameter name/value readbacks held",
+            },
             "wrong_then_right": {
                 "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
                 "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
                 "attempts": 2, "discarded_measurements": 1,
+                "cutoff_calibration": {
+                    "discarded": {"host_block_size_samples": 512,
+                                  "measured_hz": open_cutoff["wrong_block_control"]["f0_hz"],
+                                  "reason": "host automation block size was not pinned to the 16-sample qualification setting",
+                                  "injected_control_caught": open_cutoff["wrong_block_control"]["caught"]},
+                    "accepted": {"host_block_size_samples": BLOCK,
+                                 "measured_hz": open_cutoff["f0_hz"],
+                                 "repeat_count": open_cutoff["repeat_count"],
+                                 "repeat_range_hz": open_cutoff["repeat_range_hz"]},
+                },
+                "overall_attempts": 3 + open_cutoff["repeat_count"],
+                "overall_discarded_measurements": 2,
+                "overall_wrong_then_right_rate": f"2/{3 + open_cutoff['repeat_count']}",
             },
         },
         "audio": {"file": wav_path.name, "sha256": artifact_sha,

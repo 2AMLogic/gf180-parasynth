@@ -945,8 +945,16 @@ def test_no_case_is_both_planned_and_deliberately_not_run():
     """`plan_for` checks NOT_RUN first, so an id in both tables would be
     silently skipped -- the case would read as deliberately not attempted while
     a working plan for it sat right there."""
-    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES)
+    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES) | {"M5A"}
     assert not (planned & set(rc.NOT_RUN)), planned & set(rc.NOT_RUN)
+
+
+def test_m5a_is_a_mono_plan_with_a_frozen_reference():
+    """The first qualified Mono case must no longer be reported as not run."""
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5A")
+    assert rc.plan_for("M5A") == "mono"
+    assert "Mini V3 3.12" in case["reference_target"]
+    assert "Envelope release" in case["required_measurements"]
 
 
 def test_every_not_run_reason_says_something():

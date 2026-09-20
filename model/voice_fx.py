@@ -921,7 +921,10 @@ class VoiceFx:
         """RESET: every state register of contract 14 to zero."""
         self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
         self._os2_phase = [0, 0, 0]
-        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=True) for _ in range(3)]
+        # Preserve the established single-rate waveform unless the measured
+        # oversampled saw path is selected. The old three-tap smoother was an
+        # experiment that attenuated upper harmonics and must not be implicit.
+        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=False) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
         self.ladder = LadderFx(**self.ladder_cfg)

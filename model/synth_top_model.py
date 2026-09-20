@@ -95,8 +95,9 @@ class SynthTopModel:
     (frame, flag, sec, addr, data) applied at the START of the frames they
     name, in list order -- and returns every signal a bench can see."""
 
-    def __init__(self):
-        self.voice = VoiceFx()
+    def __init__(self, *, oversample_2x: bool = False):
+        self.oversample_2x = oversample_2x
+        self.voice = VoiceFx(oversample_2x=oversample_2x)
         self.drums = dx.DrumsFx()
         self.dl = LadderFx(**LADDER_CFG)              # ladder context 1: the drum filter
         self.base = VoiceFx.patch_regs()              # for `res`/`drive`, which the register
