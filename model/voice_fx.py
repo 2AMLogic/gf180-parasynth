@@ -193,12 +193,16 @@ DUTY_WIDE = 4865393                                     # 29 % of 2^24
 DUTY_NARROW = 2516582                                   # 15 % of 2^24
 DUTY_P25 = 1 << (PHASE_BITS - 2)                        # 25 %: NOT a Model D width. Kept
                                                         #   because contract rev 4 shipped it
-DUTY = dict(square=DUTY_SQUARE, pulse25=DUTY_P25, pulse29=DUTY_WIDE, pulse15=DUTY_NARROW)
+DUTY_479 = int(round(CYCLE * 0.479))                    # model-only M5A sweep challenger
+DUTY = dict(square=DUTY_SQUARE, pulse25=DUTY_P25, pulse29=DUTY_WIDE,
+            pulse15=DUTY_NARROW, pulse479=DUTY_479)
 WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4,
                  shark=5, revsaw=6, pulse29=7, pulse15=8)
 WAVE_BITS = 4
-BLEP_SHAPES = ("saw", "square", "pulse25", "pulse29", "pulse15", "shark", "revsaw")
-TWO_EDGE = ("square", "pulse25", "pulse29", "pulse15")
+# pulse479 intentionally has no WAVE_CODE: it is a model-only experimental
+# challenger and must not be mistaken for a waveform supported by RTL.
+BLEP_SHAPES = ("saw", "square", "pulse25", "pulse29", "pulse15", "shark", "revsaw", "pulse479")
+TWO_EDGE = ("square", "pulse25", "pulse29", "pulse15", "pulse479")
 
 # Register widths of the control image, NUMERIC-CONTRACT.md 5.1. Each host
 # conversion below clamps to the width named here; the sweep test walks them.
@@ -900,7 +904,7 @@ class VoiceFx:
                  recip_bits: int = RECIP_BITS, env_bits: int = ENV_BITS,
                  grom_bits: int = GROM_BITS, krom_bits: int = KROM_BITS,
                  ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True,
-                 oversample_2x: bool = False):
+                 oversample_2x: bool = False, rate_converted_ladder: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -910,6 +914,11 @@ class VoiceFx:
         self.ladder_cfg = dict(LADDER_CFG if ladder_cfg is None else ladder_cfg)
         self.g_exact, self.k_comp = g_exact, k_comp
         self.oversample_2x = oversample_2x
+        self.rate_converted_ladder = bool(rate_converted_ladder)
+        if self.rate_converted_ladder and self.g_exact:
+            raise ValueError("rate-converted ladder requires the rate-matched integer g ROM")
+        if self.rate_converted_ladder and self.ladder_cfg.get("oversample", 2) not in (2, 4):
+            raise ValueError("rate-converted ladder supports only 2x or 4x")
         self.g_rom = make_g_rom(grom_bits, self.ladder_cfg.get("oversample", 2))
         self.k_rom = make_k_rom(krom_bits, grom_bits, self.ladder_cfg.get("oversample", 2))
         self.trace = {}
@@ -927,7 +936,12 @@ class VoiceFx:
         self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=False) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
-        self.ladder = LadderFx(**self.ladder_cfg)
+        if self.rate_converted_ladder:
+            from filter_rate_chain import RateConvertedLadder
+            self.ladder = RateConvertedLadder(self.ladder_cfg.get("oversample", 2),
+                                              self.ladder_cfg)
+        else:
+            self.ladder = LadderFx(**self.ladder_cfg)
         self.noise = NoiseFx()
         self.track_hz, self.gate, self.glide = 0, 0, 0
         self.mod_sig = 0                             # the registered modulation value (6.9)

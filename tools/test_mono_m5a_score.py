@@ -55,6 +55,7 @@ def test_pulse_segment_selects_pulse_in_the_model():
     common = {"waves": ("saw", "saw", "saw"), "mix": (1.0, 0.0, 0.0)}
     assert score._patch_for_wave(common, "saw")["waves"][0] == "saw"
     assert score._patch_for_wave(common, "pulse")["waves"][0] == "pulse29"
+    assert score._patch_for_wave(common, "pulse", "pulse479")["waves"][0] == "pulse479"
     with pytest.raises(score.Refused, match="unsupported"):
         score._patch_for_wave(common, "triangle")
 
@@ -62,6 +63,40 @@ def test_pulse_segment_selects_pulse_in_the_model():
 def test_m5a_candidate_uses_the_measured_filter_drive_intervention():
     manifest = json.loads(score.MANIFEST.read_text())
     assert score._voice_patch(manifest)["drive"] == pytest.approx(0.75)
+
+
+def test_pulse479_is_explicitly_model_only_and_has_no_rtl_encoding():
+    import voice_fx as vf
+
+    assert "pulse479" not in vf.WAVE_CODE
+    with pytest.raises(score.Refused, match="unsupported M5A model pulse candidate"):
+        score._patch_for_wave({"waves": ("saw",) * 3}, "pulse", "pulse50")
+
+
+def test_stage_vector_reports_absolute_power_and_keeps_stages_distinct():
+    import numpy as np
+
+    note, f0, n = 84, score.vf.note_hz(84), 12_000
+    tone = score.vf.OscFx("saw").render(n, score.vf.phase_inc(f0)).astype(np.int16)
+    trace = {"osc": [tone], "mixed": tone, "ladder": tone.astype(np.int32) * 8}
+    stages = score._stage_diagnostics(trace, tone, 0, n, f0)
+    assert set(stages) == {"oscillator", "mixer", "ladder", "output"}
+    assert stages["ladder"]["total_signal_power_dbfs"] > stages["output"]["total_signal_power_dbfs"] + 15
+    for values in stages.values():
+        assert np.isfinite(values["alias_band_power_dbfs"])
+        assert np.isfinite(values["total_signal_power_dbfs"])
+
+
+def test_stage_vector_refuses_an_alias_ambiguous_pure_tone():
+    import numpy as np
+
+    n = 4_800
+    t = np.arange(n) / score.SR
+    tone = np.rint(0.1 * 32768 * np.sin(2 * np.pi * 440 * t)).astype(np.int16)
+    trace = {"osc": [tone], "mixed": tone,
+             "ladder": tone.astype(np.int32) * 8}
+    with pytest.raises(score.Refused, match="predicted images collide with real harmonics"):
+        score._stage_diagnostics(trace, tone, 0, n, 440.0)
 
 
 def test_frozen_cutoff_measurement_is_repeatable_at_the_pinned_block_size():

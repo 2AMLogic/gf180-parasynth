@@ -84,6 +84,31 @@ def _metric(name, ours, ref, units, tolerance, basis):
             "tolerance": tolerance, "valid": True, "tolerance_basis": basis}
 
 
+def _stage_diagnostics(trace, output, start: int, stop: int, f0: float) -> dict:
+    """Absolute stage vectors for localizing changes without calling a stage a reference."""
+    inputs = {
+        "oscillator": np.asarray(trace["osc"][0], dtype=np.float64) / 32768.0,
+        "mixer": np.asarray(trace["mixed"], dtype=np.float64) / 32768.0,
+        "ladder": np.asarray(trace["ladder"], dtype=np.float64) / 32768.0,
+        "output": np.asarray(output, dtype=np.float64) / 32768.0,
+    }
+    result = {}
+    for name, samples in inputs.items():
+        x = samples[start:stop]
+        signature = am.harmonic_signature(x, SR, f0=f0, kmax=12)
+        alias = am.foldback_alias_db(x, f0, SR)
+        if not alias.ok:
+            raise Refused(f"{name} stage foldback estimator refused: {alias.reason}")
+        result[name] = {
+            "harmonics_db": {f"h{k}": signature.get(f"h{k}") for k in range(1, 13)},
+            "foldback_db": round(float(alias.value), 5),
+            "alias_band_power_dbfs": round(float(alias.detail["alias_band_power_dbfs"]), 5),
+            "total_signal_power_dbfs": round(float(alias.detail["total_signal_power_dbfs"]), 5),
+            "rms_dbfs": round(20.0 * math.log10(max(float(am.rms(x)), 1e-15)), 5),
+        }
+    return result
+
+
 def _voice_patch(manifest):
     first = manifest["timeline"]["segments"][0]["measurements"][0]
     env = first["envelope"]
@@ -99,16 +124,19 @@ def _voice_patch(manifest):
         mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False)
 
 
-def _patch_for_wave(patch, wave):
+def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
     if wave not in ("saw", "pulse"):
         raise Refused(f"unsupported M5A waveform {wave!r}")
+    if pulse_shape not in ("pulse29", "pulse479"):
+        raise Refused(f"unsupported M5A model pulse candidate {pulse_shape!r}")
     # This is an explicit candidate choice, supported by the frozen-reference
-    # duty sweep. It is not a claim that Mini V3's measured 47.9% duty is 29%.
-    model_wave = M5A_PULSE_WAVE if wave == "pulse" else "saw"
+    # duty sweep. pulse479 is model-only because the RTL has no waveform code.
+    model_wave = pulse_shape if wave == "pulse" else "saw"
     return {**patch, "waves": (model_wave, model_wave, model_wave)}
 
 
-def measure():
+def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
+            model_label="production-2x-hold", output_path=None):
     manifest = json.loads(MANIFEST.read_text())
     manifest_digest = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     audio_meta = manifest["audio"]
@@ -133,12 +161,13 @@ def measure():
     for seg in manifest["timeline"]["segments"]:
         wave = seg["wave"]
         seq = []
-        segment_patch = _patch_for_wave(patch, wave)
+        segment_patch = _patch_for_wave(patch, wave, pulse_shape)
         for ev in seg["midi_events"]:
             seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
                         {**segment_patch, "gate": float(ev["gate_s"])}))
         duration = float(seg["duration_s"])
-        pcm = vf.render_mono_fx(seq, duration, vf.VoiceFx(oversample_2x=True))
+        voice = vf.VoiceFx(oversample_2x=True) if voice_factory is None else voice_factory()
+        pcm = vf.render_mono_fx(seq, duration, voice)
         ours = np.asarray(pcm, dtype=np.float64) / 32768.0
         offset = int(seg["offset_samples"])
         ref_segment = ref_pcm[offset:offset + int(seg["samples"])]
@@ -197,6 +226,7 @@ def measure():
                                       20 * math.log10(max(float(am.rms(xr)), 1e-15))))
             event_diagnostics.append({
                 "wave": wave, "midi": note,
+                "stages": _stage_diagnostics(voice.trace, pcm, a, b, eo.value),
                 "pitch_cents_from_midi": {"model": round(model_cents, 5),
                                           "reference": round(reference_cents, 5),
                                           "model_minus_reference": round(model_cents - reference_cents, 5)},
@@ -235,12 +265,13 @@ def measure():
 
     combined = np.concatenate([part for i, part in enumerate(model_parts)
                                if i == 0] + [np.zeros(silence)] + model_parts[1:])
-    out = ROOT / "build/scorecard/M5A-model.wav"
+    out = ROOT / "build/scorecard/M5A-model.wav" if output_path is None else pathlib.Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
     wavfile.write(out, SR, pcm_out)
     return {"analysis_version": ANALYSIS_VERSION,
             "metrics": metrics, "audio": str(out.relative_to(ROOT)),
+            "model_configuration": {"label": model_label, "pulse_shape": pulse_shape},
             "reference_sha256": digest, "manifest_sha256": manifest_digest,
             "cutoff_calibration": manifest["patch"]["cutoff_measurement"],
             "model_segments": renders,
