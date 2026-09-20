@@ -81,6 +81,56 @@ def test_changed_control_rejects_two_refusals():
     assert not rc.control_changed(clean, injected)
 
 
+def test_control_refuses_a_case_that_is_not_implemented():
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["M5A"], {"M5A": "not-run"}, {}, {})
+    assert outcome[0] == "refused"
+    assert "not implemented" in outcome[1]
+
+
+def test_control_refuses_when_clean_baseline_has_no_verdict():
+    clean = {"F1A": ("no verdict", None, "missing reference", "")}
+    injected = {"F1A": ("no verdict", None, "missing reference", "")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_PROFILE_MISSING", ["F1A"], {"F1A": "filter"},
+        clean, injected)
+    assert outcome[0] == "refused"
+    assert "clean baseline" in outcome[1]
+
+
+def test_no_verdict_control_requires_its_injected_cause():
+    clean = {"F1A": ("pass", 0.5, "", "")}
+    unrelated = {"F1A": ("no verdict", None, "", "simulator missing")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_PROFILE_MISSING", ["F1A"], {"F1A": "filter"},
+        clean, unrelated)
+    assert outcome[0] == "fail"
+    assert "does not identify" in outcome[1]
+
+
+def test_no_verdict_control_passes_only_for_measured_clean_and_matching_mutation():
+    clean = {"D09A": ("pass", 0.61, "", "")}
+    injected = {"D09A": ("no verdict", None, "", "REFUSED: no-such-file.wav")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_MISSING", ["D09A"], {"D09A": "drum"},
+        clean, injected)
+    assert outcome[0] == "pass"
+
+
+def test_changed_control_requires_comparable_valid_results_for_each_case():
+    clean = {"F1A": ("fail", 1.68, "", "")}
+    injected = {"F1A": ("fail", 6.45, "", "")}
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, injected)
+    assert outcome[0] == "pass"
+    missing = {"F1A": ("no verdict", None, "", "cache absent")}
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, missing)
+    assert outcome[0] == "refused"
+
+
 # ===========================================================================
 # Ground truth: band_energy and band_ratio_db
 # ===========================================================================
