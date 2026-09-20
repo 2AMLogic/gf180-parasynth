@@ -1,0 +1,420 @@
+{
+  "engine": "fixed-model",
+  "case_id": "M5A",
+  "subject": "Bright high lead / anchor",
+  "source_commit": "133a73d",
+  "analysis_run": "run_case@fb6e80c4d35f + audio_measure@2345ced894c7 at 2026-09-20T10:25:01Z",
+  "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
+  "render_run": "fixed integer model; saw and pulse, MIDI 84/96, complete 27.2 s phrase",
+  "audio": "build/scorecard/M5A-model.wav",
+  "provenance": {
+    "engine": "fixed-model",
+    "worktree": {
+      "commit": "133a73d",
+      "described": "node/D-drums-bitexact-123-g133a73d",
+      "branch": "fix/high-note-aliasing",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "untracked_files": 0
+    },
+    "base_check": {
+      "checked": true,
+      "origin_main": "cbcc8b9e10e4",
+      "behind_commits": 0,
+      "ahead_commits": 28,
+      "n_stops_here": 11,
+      "n_stops_origin_main": 11,
+      "stale_dependencies": {},
+      "ahead_dependencies": {
+        "model/voice_fx.py": {
+          "origin_main": "771f4a21ef76",
+          "here": "970aa5f1dbdc"
+        },
+        "docs/scorecard/cases.csv": {
+          "origin_main": "88de89b73e61",
+          "here": "07c2dc57c633"
+        }
+      },
+      "allow_stale": true,
+      "problems": [],
+      "ahead_note": "28 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: docs/scorecard/cases.csv, model/voice_fx.py. That is not a stale premise -- the tree contains everything origin/main has."
+    },
+    "command": "tools/run_case.py M5A --allow-stale",
+    "config": {
+      "oscillator_config": "2x saw candidate",
+      "reference": "frozen Mini V3 WAV"
+    },
+    "python": "3.11.5",
+    "run_at": "2026-09-20T10:26:26Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:4a0177412ff464a3",
+      "model/voice_fx.py": "sha256:970aa5f1dbdcffe1",
+      "model/audio_measure.py": "sha256:2345ced894c70d3d",
+      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
+      "tools/run_case.py": "sha256:fb6e80c4d35f1e5e",
+      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "tools/mono_m5a_score.py": "sha256:be25fb22e7ee0be4",
+      "tools/measure_mono_m5a_reference.py": "sha256:8ea0aa3705d907aa",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:ae732f0ffd317afc",
+      "frozen:M5A:audio": "sha256:a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+      "frozen:M5A:manifest": "sha256:b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8"
+    },
+    "artefacts": {
+      "ours": "build/scorecard/M5A-model.wav",
+      "spi_i2s": "build/scorecard/M5A-spi-i2s/verification.txt"
+    },
+    "outcome_code": 1,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
+  "note": "Full sound comparison uses the fixed integer model; a separate short M5A stimulus verifies the selected configuration through SPI to I2S.",
+  "tolerance_policy": {
+    "Pitch": [
+      1.0,
+      "cents; fixed screening limit for this frozen software-synth patch"
+    ],
+    "Harmonic shape": [
+      1.0,
+      "dB per measured partial; fixed screening limit"
+    ],
+    "Foldback energy": [
+      3.0,
+      "dB; half-power convention"
+    ],
+    "Envelope attack": [
+      5.0,
+      "ms; fixed limit above the 5 ms RMS measurement hop"
+    ],
+    "Envelope release": [
+      125.0,
+      "ms; fixed 10% of the measured reference T20"
+    ],
+    "Gain": [
+      3.0,
+      "dB; fixed half/double amplitude screening range"
+    ],
+    "Clipping": [
+      0.01,
+      "% samples at full-scale rail"
+    ]
+  },
+  "metrics": {
+    "Pitch": {
+      "value": -0.01234,
+      "reference": 0.0,
+      "error": -0.01234,
+      "units": "cents",
+      "tolerance": 1.0,
+      "valid": true,
+      "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+    },
+    "Harmonic shape": {
+      "value": 88.53888,
+      "reference": 0.0,
+      "error": 88.53888,
+      "units": "dB",
+      "tolerance": 1.0,
+      "valid": true,
+      "tolerance_basis": "dB per measured partial; fixed screening limit"
+    },
+    "Foldback energy": {
+      "value": -25.85425,
+      "reference": -50.83477,
+      "error": 24.98053,
+      "units": "dB",
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "dB; half-power convention"
+    },
+    "Envelope attack": {
+      "value": 8.5625,
+      "reference": 3.33333,
+      "error": 5.22917,
+      "units": "ms",
+      "tolerance": 5.0,
+      "valid": true,
+      "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+    },
+    "Envelope release": {
+      "value": 1040.89583,
+      "reference": 1243.22917,
+      "error": -202.33333,
+      "units": "ms",
+      "tolerance": 125.0,
+      "valid": true,
+      "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+    },
+    "Gain": {
+      "value": -16.20767,
+      "reference": -19.18712,
+      "error": 2.97945,
+      "units": "dB",
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "dB; fixed half/double amplitude screening range"
+    },
+    "Clipping": {
+      "value": 0.0,
+      "reference": 0.0,
+      "error": 0.0,
+      "units": "%",
+      "tolerance": 0.01,
+      "valid": true,
+      "tolerance_basis": "% samples at full-scale rail"
+    }
+  },
+  "diagnostics": {
+    "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+    "reference_manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+    "cutoff_calibration": {
+      "block_size_samples": 16,
+      "emphasis": 0.98,
+      "f0_hz": 14072.862206739199,
+      "f0_hz_repeats": [
+        14072.862206739199,
+        14072.862206739199,
+        14072.862206739199
+      ],
+      "knob": 1.0,
+      "method": "measured self-oscillation ring; dominant frequency",
+      "parameter_readbacks": [
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        }
+      ],
+      "prominence_db_repeats": [
+        10.350361942445932,
+        10.350361942445932,
+        10.350361942445932
+      ],
+      "repeat_count": 3,
+      "repeat_range_hz": 0.0,
+      "wrong_block_control": {
+        "block_size_samples": 512,
+        "caught": true,
+        "f0_hz": 14494.795083545734,
+        "separation_from_pinned_hz": 421.9328768065352
+      }
+    },
+    "model_segments": [
+      {
+        "wave": "saw",
+        "samples": 647956,
+        "offset_samples": 0,
+        "trimmed_candidate_tail_samples": 44
+      },
+      {
+        "wave": "pulse",
+        "samples": 647956,
+        "offset_samples": 657556,
+        "trimmed_candidate_tail_samples": 44
+      }
+    ],
+    "events": [
+      {
+        "wave": "saw",
+        "midi": 84,
+        "pitch_cents_from_midi": {
+          "model": -0.00042,
+          "reference": 0.01193,
+          "model_minus_reference": -0.01234
+        },
+        "harmonic_error_db_model_minus_reference": {
+          "h2": -4.7318,
+          "h3": -7.8306,
+          "h4": -5.2015,
+          "h5": -8.5088,
+          "h6": -7.9727,
+          "h7": -7.9961,
+          "h8": -9.3056,
+          "h9": -8.649,
+          "h10": -8.3405,
+          "h11": -7.7177,
+          "h12": -7.9101
+        },
+        "foldback_db": {
+          "model": -34.9535,
+          "reference": -50.1287
+        },
+        "envelope_ms": {
+          "attack_model": 8.5417,
+          "attack_reference": 7.3333,
+          "release_model": 1040.8958,
+          "release_reference": 1243.2292
+        },
+        "gain_dbfs": {
+          "model": -16.2077,
+          "reference": -19.1871
+        }
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "pitch_cents_from_midi": {
+          "model": -2e-05,
+          "reference": 0.01194,
+          "model_minus_reference": -0.01196
+        },
+        "harmonic_error_db_model_minus_reference": {
+          "h2": -8.7048,
+          "h3": -6.7866,
+          "h4": -7.45,
+          "h5": -9.2358,
+          "h6": -6.425,
+          "h7": -8.3209,
+          "h8": -6.6863,
+          "h9": -9.9245,
+          "h10": -9.6825,
+          "h11": -2.597
+        },
+        "foldback_db": {
+          "model": -31.2082,
+          "reference": -49.3938
+        },
+        "envelope_ms": {
+          "attack_model": 8.6042,
+          "attack_reference": 3.4167,
+          "release_model": 1046.25,
+          "release_reference": 1243.0208
+        },
+        "gain_dbfs": {
+          "model": -17.9114,
+          "reference": -19.5125
+        }
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "pitch_cents_from_midi": {
+          "model": -2e-05,
+          "reference": 0.01193,
+          "model_minus_reference": -0.01195
+        },
+        "harmonic_error_db_model_minus_reference": {
+          "h2": -83.7405,
+          "h3": -1.7538,
+          "h4": -84.5449,
+          "h5": -2.5997,
+          "h6": -86.5282,
+          "h7": -3.1515,
+          "h8": -88.5389,
+          "h9": -2.9292,
+          "h10": -87.5666,
+          "h11": -1.4288,
+          "h12": -82.8187
+        },
+        "foldback_db": {
+          "model": -30.9832,
+          "reference": -53.5263
+        },
+        "envelope_ms": {
+          "attack_model": 8.7917,
+          "attack_reference": 7.4583,
+          "release_model": 1046.125,
+          "release_reference": 1247.5208
+        },
+        "gain_dbfs": {
+          "model": -13.0828,
+          "reference": -14.3201
+        }
+      },
+      {
+        "wave": "pulse",
+        "midi": 96,
+        "pitch_cents_from_midi": {
+          "model": -2e-05,
+          "reference": 0.01194,
+          "model_minus_reference": -0.01196
+        },
+        "harmonic_error_db_model_minus_reference": {
+          "h2": -84.4256,
+          "h3": -3.0979,
+          "h4": -85.6803,
+          "h5": -3.1594,
+          "h7": -1.793,
+          "h9": -3.6063,
+          "h11": 3.213
+        },
+        "foldback_db": {
+          "model": -25.8542,
+          "reference": -50.8348
+        },
+        "envelope_ms": {
+          "attack_model": 8.5625,
+          "attack_reference": 3.3333,
+          "release_model": 1050.1875,
+          "release_reference": 1247.4792
+        },
+        "gain_dbfs": {
+          "model": -15.5089,
+          "reference": -14.6197
+        }
+      }
+    ],
+    "wrong_then_right": {
+      "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
+      "attempts": 2,
+      "cutoff_calibration": {
+        "accepted": {
+          "host_block_size_samples": 16,
+          "measured_hz": 14072.862206739199,
+          "repeat_count": 3,
+          "repeat_range_hz": 0.0
+        },
+        "discarded": {
+          "host_block_size_samples": 512,
+          "injected_control_caught": true,
+          "measured_hz": 14494.795083545734,
+          "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+        }
+      },
+      "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
+      "discarded_measurements": 1,
+      "overall_attempts": 6,
+      "overall_discarded_measurements": 2,
+      "overall_wrong_then_right_rate": "2/6"
+    },
+    "duration_s": 27.198166666666665,
+    "spi_i2s_report_sha256": "8b0d777b31bf013025a65d3ad767e457fa061137e4c0653f1e8929e9f5462422"
+  }
+}
