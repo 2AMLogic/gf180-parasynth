@@ -200,7 +200,7 @@ module voice_dp #(
         S_SK0 = 59, S_SK1 = 60, S_SK2 = 61,
         S_NMIX = 62, S_NACC = 63, S_CUTM = 64,
         S_RD0 = 65, S_RD1 = 66, S_RD2 = 67, S_RD3 = 68, S_RD4 = 69, S_RD5 = 70,
-        S_PN0 = 71, S_PN1 = 72, S_PN2 = 73;
+        S_PN0 = 71, S_PN1 = 72, S_PN2 = 73, S_OSCWAIT = 74;
     reg [6:0]  state;
     reg [1:0]  kk;                     // oscillator index
     reg [1:0]  win;                    // PolyBLEP window 0..3
@@ -287,6 +287,12 @@ module voice_dp #(
                                : two_edge ? osc_two
                                : $signed({{2{naive[15]}}, naive});
     wire signed [15:0] osc_raw_clamped = (osc_raw > 18'sd32767) ? 16'sd32767 : (osc_raw < -18'sd32768) ? -16'sd32768 : osc_raw[15:0];
+    wire osc2_valid;
+    wire signed [15:0] osc2_sample;
+    osc_2x_saw_path osc2_path(
+        .clk(clk), .rst_n(rst_n), .frame_valid(state == S_MIX),
+        .phase(ph), .inc(inc), .sh(sh[kk]), .recip(r[kk]),
+        .out_valid(osc2_valid), .out_sample(osc2_sample));
     wire signed [18:0] osc_smooth_sum = $signed({{3{osc_raw_clamped[15]}}, osc_raw_clamped})
                                       + ($signed({{3{osc_d1[kk][15]}}, osc_d1[kk]}) <<< 1)
                                       + $signed({{3{osc_d2[kk][15]}}, osc_d2[kk]});
@@ -564,12 +570,24 @@ module voice_dp #(
 `endif
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
                 S_MIX: begin
+`ifdef VOICE_OSC_2X
+                    state <= S_OSCWAIT;
+`else
                     ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
                     osc_d2[kk] <= osc_d1[kk];
                     osc_d1[kk] <= osc_raw_clamped;
                     phase[kk] <= ph + inc;                                    // step 9: advance
                     if (kk == 2'd2) naive3 <= naive;                          // the modulation tap (M5)
                     state <= S_ACC;
+`endif
+                end
+                S_OSCWAIT: begin
+                    if (osc2_valid) begin
+                        ma <= {{9{osc2_sample[15]}}, osc2_sample}; mb <= {5'b0, w[kk]};
+                        phase[kk] <= ph + inc;
+                        if (kk == 2'd2) naive3 <= naive;
+                        state <= S_ACC;
+                    end
                 end
                 S_ACC: begin
                     mixacc <= mixacc + {{3{mr[31]}}, mr[31:0]};
