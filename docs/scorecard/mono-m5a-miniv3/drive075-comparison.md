@@ -13,22 +13,27 @@ complete phrase result is in [`../results/M5A.json`](../results/M5A.json).
 | MIDI 96 | 9.9245 → 8.9212 | 18.1856 → 15.4779 | +1.6011 → +0.2600 |
 
 The isolated saw sweep supports drive 0.75: both notes improve in shape,
-excess alias and gain error. It does not cover pulse. The complete drive-0.75
-M5A run preserves separate diagnostics for saw and pulse at MIDI 84 and 96;
-its worst harmonic-shape error is 93.1901 dB on pulse MIDI 84, and its worst
-excess alias is 21.5061 dB on pulse MIDI 96. The case is a valid **FAIL**.
-The pulse is now the dominant shape mismatch and needs a separate duty-cycle
-investigation; this trial does not establish that reducing drive caused that
-pulse mismatch.
+excess alias and gain error. It does not cover pulse. The first complete
+drive-0.75 run retained a 50% square and recorded the pulse mismatch; its
+per-event values are preserved in the M5A result history. A separate duty
+sweep then showed that supported `pulse29` reduces worst pulse harmonic error
+to 19.3092 dB at MIDI 84 and 17.9919 dB at MIDI 96. The selected candidate now
+combines drive 0.75 and pulse29. Its complete model phrase keeps saw and pulse
+diagnostics separate: worst harmonic-shape error is 19.3092 dB and worst
+excess alias is 20.0613 dB. The case remains a valid **FAIL**.
 
-The drive-1.00 full-phrase record was made with `m5a-score-v2`, while the
-drive-0.75 record uses `m5a-score-v3`. Their aggregate harmonic-shape values
-are not presented as an apples-to-apples delta. The per-note drive deltas
-above come from the same isolated stage-sweep procedure, not from comparing
-those aggregate case scores.
+The drive-1.00 full-phrase record was made with `m5a-score-v2`, the square
+drive-0.75 intermediate used `m5a-score-v3`, and the selected candidate is
+also scored with `m5a-score-v3`. We do not present their aggregate
+harmonic-shape values as one apples-to-apples delta: the first transition
+changes analysis version, and the second changes pulse shape. The per-note
+drive deltas above come from the isolated saw stage sweep; the pulse-shape
+deltas come from the isolated duty sweep.
 
-The selected drive-0.75 candidate also has a short production-path SPI-to-I2S
-smoke record bound into the M5A provenance. That proves transport/sample
-agreement for the smoke stimulus, not bit-exact execution of the complete
-27.2-second phrase through I2S. Keep #180 draft until the full instrument
-acceptance path is measured.
+The selected 2× saw / pulse29 / drive-0.75 candidate has a short production-path
+SPI-to-I2S smoke record bound into the M5A provenance. It decodes 4,837 I2S
+periods with exact model agreement, no dropped writes, busy/overflow, or
+overrun. This proves the selected shape reaches the production transport for
+the smoke stimulus; it is not bit-exact execution of the complete 27.2-second
+phrase through I2S. Keep #180 draft until the full instrument acceptance path
+is measured.

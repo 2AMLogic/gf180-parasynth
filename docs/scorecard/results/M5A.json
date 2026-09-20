@@ -2,16 +2,16 @@
   "engine": "fixed-model",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "bf83339",
-  "analysis_run": "run_case@4a78c4dce2db + audio_measure@2345ced894c7 + mono_m5a_score@5e29eada2d47 + scorecard@2094d43f15e9 at 2026-09-20T19:40:00Z",
+  "source_commit": "91750d9",
+  "analysis_run": "run_case@8b961904a7f2 + audio_measure@2345ced894c7 + mono_m5a_score@80fc5881c47f + scorecard@2094d43f15e9 at 2026-09-20T20:21:36Z",
   "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
-  "render_run": "fixed integer model; 2x saw, filter drive 0.75, square, MIDI 84/96, complete 27.2 s phrase",
+  "render_run": "fixed integer model; 2x saw, filter drive 0.75, pulse29 pulse, MIDI 84/96, complete 27.2 s phrase",
   "audio": "build/scorecard/M5A-model.wav",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "bf83339",
-      "described": "node/D-drums-bitexact-132-gbf83339",
+      "commit": "91750d9",
+      "described": "node/D-drums-bitexact-136-g91750d9",
       "branch": "fix/high-note-aliasing",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
@@ -21,7 +21,7 @@
       "checked": true,
       "origin_main": "cbcc8b9e10e4",
       "behind_commits": 0,
-      "ahead_commits": 37,
+      "ahead_commits": 41,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
@@ -37,24 +37,25 @@
       },
       "allow_stale": true,
       "problems": [],
-      "ahead_note": "37 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: docs/scorecard/cases.csv, model/voice_fx.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "41 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: docs/scorecard/cases.csv, model/voice_fx.py. That is not a stale premise -- the tree contains everything origin/main has."
     },
     "command": "tools/run_case.py M5A --allow-stale",
     "config": {
       "oscillator_config": "2x saw candidate",
+      "pulse_shape": "pulse29",
       "filter_drive": 0.75,
       "reference": "frozen Mini V3 WAV"
     },
     "python": "3.11.5",
-    "run_at": "2026-09-20T19:41:21Z",
+    "run_at": "2026-09-20T20:22:50Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:970aa5f1dbdcffe1",
       "model/audio_measure.py": "sha256:2345ced894c70d3d",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:4a78c4dce2db5576",
+      "tools/run_case.py": "sha256:8b961904a7f2ed92",
       "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
-      "tools/mono_m5a_score.py": "sha256:5e29eada2d474f82",
+      "tools/mono_m5a_score.py": "sha256:80fc5881c47f0f3a",
       "tools/measure_mono_m5a_reference.py": "sha256:8ea0aa3705d907aa",
       "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
@@ -113,27 +114,27 @@
       "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
     },
     "Harmonic shape": {
-      "value": 93.19008,
+      "value": 19.30916,
       "reference": 0.0,
-      "error": 93.19008,
+      "error": 19.30916,
       "units": "dB",
       "tolerance": 1.0,
       "valid": true,
       "tolerance_basis": "dB per measured partial; fixed screening limit"
     },
     "Foldback energy": {
-      "value": 21.50606,
+      "value": 20.06131,
       "reference": 0.0,
-      "error": 21.50606,
+      "error": 20.06131,
       "units": "dB",
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
     },
     "Envelope attack": {
-      "value": 8.5625,
+      "value": 8.72917,
       "reference": 3.33333,
-      "error": 5.22917,
+      "error": 5.39583,
       "units": "ms",
       "tolerance": 5.0,
       "valid": true,
@@ -356,49 +357,49 @@
         "wave": "pulse",
         "midi": 84,
         "pitch_cents_from_midi": {
-          "model": -0.00023,
+          "model": -0.00024,
           "reference": 0.14316,
           "model_minus_reference": -0.14339
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": -90.0591,
-          "h3": -1.8106,
-          "h4": -85.367,
-          "h5": -2.7283,
-          "h6": -93.1901,
-          "h7": -3.1934,
-          "h8": -86.9408,
-          "h9": -3.0317,
-          "h10": -90.9878,
-          "h11": -1.4057,
-          "h12": -91.7252
+          "h2": 18.6783,
+          "h3": -6.7325,
+          "h4": 3.4707,
+          "h5": -1.1742,
+          "h6": 4.9775,
+          "h7": -19.3092,
+          "h8": 1.1717,
+          "h9": -1.2406,
+          "h10": -2.5865,
+          "h11": -10.0657,
+          "h12": 1.0058
         },
         "harmonic_comparison": {
-          "h2": "model_below_floor_bound",
+          "h2": "measured",
           "h3": "measured",
           "h4": "measured",
           "h5": "measured",
-          "h6": "model_below_floor_bound",
+          "h6": "measured",
           "h7": "measured",
           "h8": "measured",
           "h9": "measured",
-          "h10": "model_below_floor_bound",
+          "h10": "measured",
           "h11": "measured",
-          "h12": "model_below_floor_bound"
+          "h12": "measured"
         },
         "foldback_db": {
-          "model": -33.825,
+          "model": -34.9059,
           "reference": -53.5263,
-          "excess_over_reference_db": 19.7014
+          "excess_over_reference_db": 18.6204
         },
         "envelope_ms": {
-          "attack_model": 8.7917,
+          "attack_model": 8.7708,
           "attack_reference": 7.4583,
-          "release_model": 1046.5833,
+          "release_model": 1046.375,
           "release_reference": 1247.5208
         },
         "gain_dbfs": {
-          "model": -13.3302,
+          "model": -13.0123,
           "reference": -14.3201
         }
       },
@@ -406,47 +407,47 @@
         "wave": "pulse",
         "midi": 96,
         "pitch_cents_from_midi": {
-          "model": -0.00027,
+          "model": -0.00026,
           "reference": 0.14328,
-          "model_minus_reference": -0.14355
+          "model_minus_reference": -0.14354
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": -83.0232,
-          "h3": -3.1071,
-          "h4": -84.4072,
-          "h5": -3.174,
-          "h6": -89.5744,
-          "h7": -1.8385,
-          "h8": -83.4676,
-          "h9": -3.7129,
-          "h10": -81.3282,
-          "h11": 2.4487
+          "h2": 17.9919,
+          "h3": -5.9961,
+          "h4": -0.6748,
+          "h5": -2.2766,
+          "h6": 7.2164,
+          "h7": -7.1258,
+          "h8": -2.8942,
+          "h9": -2.1046,
+          "h10": 1.1175,
+          "h11": -2.2662
         },
         "harmonic_comparison": {
           "h2": "measured",
           "h3": "measured",
           "h4": "measured",
           "h5": "measured",
-          "h6": "model_below_floor_bound",
+          "h6": "measured",
           "h7": "measured",
-          "h8": "model_below_floor_bound",
+          "h8": "measured",
           "h9": "measured",
-          "h10": "model_below_floor_bound",
+          "h10": "measured",
           "h11": "measured"
         },
         "foldback_db": {
-          "model": -29.3287,
+          "model": -30.7735,
           "reference": -50.8348,
-          "excess_over_reference_db": 21.5061
+          "excess_over_reference_db": 20.0613
         },
         "envelope_ms": {
-          "attack_model": 8.5625,
+          "attack_model": 8.7292,
           "attack_reference": 3.3333,
-          "release_model": 1050.1875,
+          "release_model": 1044.4792,
           "release_reference": 1247.4792
         },
         "gain_dbfs": {
-          "model": -15.6788,
+          "model": -15.1568,
           "reference": -14.6197
         }
       }
@@ -475,6 +476,6 @@
       "overall_wrong_then_right_rate": "2/6"
     },
     "duration_s": 27.198166666666665,
-    "spi_i2s_report_sha256": "822170198cd22e043b1d02b16249a167fbe8edc76c2d9456d79819da1e1044e7"
+    "spi_i2s_report_sha256": "e9fcdcbf79bd2d0d714e2afbc0aace95b87900f15a7eedc259e93c0137a15655"
   }
 }

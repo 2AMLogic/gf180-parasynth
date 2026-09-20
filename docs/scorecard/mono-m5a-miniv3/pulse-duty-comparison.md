@@ -21,5 +21,7 @@ lowest alias excess. Neither passes the 1 dB shape or 3 dB alias limits. This
 is evidence to test the supported 29% setting as a bounded pulse intervention,
 not evidence that the 29% waveform reproduces the reference pulse.
 
-The report is a fixed-model comparison. The probe does not change the default
-waveform or claim RTL/I2S phrase verification.
+The selected M5A candidate now uses `pulse29` in the fixed-model phrase scorer
+and in the bounded SPI-to-I2S M5A smoke stimulus. The complete model phrase is
+a valid failure, not a pass. The smoke decodes 4,837 I2S periods with exact
+model agreement; it does not verify the entire 27.2-second phrase through I2S.
