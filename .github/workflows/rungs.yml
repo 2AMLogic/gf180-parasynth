@@ -9,6 +9,20 @@ name: nodes
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  m5a-fast:
+    # The explicitly scoped sound-development gate stays independent of the
+    # broad model suite below, so a long repository run cannot hide its result.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: focused sound and selected-path gate
+        run: make verify-fast
+
   python:
     runs-on: ubuntu-latest
     timeout-minutes: 30
