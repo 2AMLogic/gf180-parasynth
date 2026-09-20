@@ -54,7 +54,7 @@ def test_two_unmeasurable_harmonics_are_explicitly_uncompared():
 def test_pulse_segment_selects_pulse_in_the_model():
     common = {"waves": ("saw", "saw", "saw"), "mix": (1.0, 0.0, 0.0)}
     assert score._patch_for_wave(common, "saw")["waves"][0] == "saw"
-    assert score._patch_for_wave(common, "pulse")["waves"][0] == "square"
+    assert score._patch_for_wave(common, "pulse")["waves"][0] == "pulse29"
     with pytest.raises(score.Refused, match="unsupported"):
         score._patch_for_wave(common, "triangle")
 

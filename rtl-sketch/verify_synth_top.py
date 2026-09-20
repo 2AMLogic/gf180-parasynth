@@ -109,7 +109,8 @@ from verify_ladder import tool
 
 SEC_V, SEC_D = 0, 1
 A = stm
-WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4)
+WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4,
+                 shark=5, revsaw=6, pulse29=7, pulse15=8)
 SRCS = ("synth_top.v", "voice_dp.v", "spi_ctl.v", "drum_regs.v", "drum_kit.v",
         "drum_dp.v", "modal_dp.v", "i2s_tx.v", "ladder_dp_n.v", "recip_div.v",
         "osc_2x_saw_bank.v", "osc_2x_saw_path.v", "polyblep_saw_pair.v",
@@ -264,7 +265,8 @@ def script(short: bool = False):
     return w, tail, cover
 
 
-def m5a_script(manifest_path: str, *, smoke: bool = False):
+def m5a_script(manifest_path: str, *, smoke: bool = False,
+               pulse_shape: str = "pulse29"):
     """Build the frozen two-wave M5A phrase as register writes over SPI."""
     manifest_file = os.path.abspath(manifest_path)
     manifest = json.loads(open(manifest_file).read())
@@ -297,6 +299,8 @@ def m5a_script(manifest_path: str, *, smoke: bool = False):
         amp=(attack_s, 0.25, 1.0, release_s),
         fenv=(0.004, 0.30, 1.0, 0.10), track=0.0, vol=0.45,
         mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False)
+    if pulse_shape not in vf.WAVE_CODE or pulse_shape not in vf.DUTY:
+        raise ValueError(f"M5A pulse shape must be a supported rectangular shape: {pulse_shape}")
     w = []
 
     def put(wait, flag, addr, data):
@@ -354,7 +358,7 @@ def m5a_script(manifest_path: str, *, smoke: bool = False):
             # report below as the authoritative event time.
             wait = max(0, round((on_s - previous_off_s) * 48000) - 10)
             if event_index == 0:
-                wave_code = 0 if wave == "saw" else 1
+                wave_code = 0 if wave == "saw" else vf.WAVE_CODE[pulse_shape]
                 put(wait, 0, A.A_WAVE, wave_code)
                 wait = 0
             incs = vf.VoiceFx.note_incs(int(event["note"]), regs["detune"])
@@ -370,7 +374,7 @@ def m5a_script(manifest_path: str, *, smoke: bool = False):
         cursor_s += float(segment["duration_s"]) + segment_silence_s
     tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
     return w, tail, {"events": events, "manifest": manifest, "reference_audio": ref_audio,
-                     "filter_drive": 0.75,
+                    "filter_drive": 0.75, "pulse_shape": pulse_shape,
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
@@ -472,6 +476,8 @@ def main(argv=None) -> int:
                     help="play the frozen Mono M5A reference phrase through SPI and I2S")
     ap.add_argument("--m5a-smoke", action="store_true",
                     help="short SPI-to-I2S M5A pitch/waveform integration check; no envelope claim")
+    ap.add_argument("--m5a-pulse-shape", choices=("square", "pulse15", "pulse25", "pulse29"),
+                    default="pulse29", help="supported rectangular shape for M5A pulse segments")
     ap.add_argument("--m5a-manifest", default=os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json"))
     ap.add_argument("--wav-out", default=None,
                     help="write decoded left-channel I2S samples to an int16 WAV")
@@ -492,7 +498,8 @@ def main(argv=None) -> int:
             print("verify_synth_top: REFUSED -- M5A requires the selected 2x saw candidate")
             return 2
         try:
-            cmds, tail, m5a = m5a_script(a.m5a_manifest, smoke=a.m5a_smoke)
+            cmds, tail, m5a = m5a_script(a.m5a_manifest, smoke=a.m5a_smoke,
+                                         pulse_shape=a.m5a_pulse_shape)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             print(f"verify_synth_top: REFUSED -- M5A stimulus: {exc}")
             return 2

@@ -23,6 +23,7 @@ from measure_mono_m5a_reference import envelope_timing
 
 SR = 48_000
 ANALYSIS_VERSION = "m5a-score-v3"
+M5A_PULSE_WAVE = "pulse29"
 MANIFEST = ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json"
 TOLERANCES = {
     "Pitch": (1.0, "cents; fixed screening limit for this frozen software-synth patch"),
@@ -101,10 +102,9 @@ def _voice_patch(manifest):
 def _patch_for_wave(patch, wave):
     if wave not in ("saw", "pulse"):
         raise Refused(f"unsupported M5A waveform {wave!r}")
-    # Mini V3 calls this setting "pulse" and the measured duty is 47.9%; the
-    # chip's matching register shape is its 50% "square". Do not pass the UI
-    # label into VoiceFx, whose pulse names mean 15/25/29% duty.
-    model_wave = "square" if wave == "pulse" else "saw"
+    # This is an explicit candidate choice, supported by the frozen-reference
+    # duty sweep. It is not a claim that Mini V3's measured 47.9% duty is 29%.
+    model_wave = M5A_PULSE_WAVE if wave == "pulse" else "saw"
     return {**patch, "waves": (model_wave, model_wave, model_wave)}
 
 

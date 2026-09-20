@@ -2236,7 +2236,8 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
             report_path = smoke_dir / "verification.txt"
             smoke = subprocess.run(
                 [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
-                 "--m5a-smoke", "--osc2x", "--outdir", str(smoke_dir),
+                 "--m5a-smoke", "--osc2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
+                 "--outdir", str(smoke_dir),
                  "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
                 cwd=ROOT, capture_output=True, text=True, timeout=3600)
             report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2249,7 +2250,8 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                 "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
                 "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
                 "analysis_version": measured["analysis_version"],
-                "render_run": "fixed integer model; 2x saw, filter drive 0.75, square, MIDI 84/96, complete 27.2 s phrase",
+                "render_run": (f"fixed integer model; 2x saw, filter drive 0.75, "
+                               f"{mono_m5a.M5A_PULSE_WAVE} pulse, MIDI 84/96, complete 27.2 s phrase"),
                 "audio": measured["audio"], "note": measured["note"],
                 "tolerance_policy": mono_m5a.TOLERANCES,
                 "metrics": measured["metrics"],
@@ -2265,7 +2267,8 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                     model_input_hashes({"frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
                                         "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"]}),
                     {"ours": measured["audio"], "spi_i2s": str(report_path.relative_to(ROOT))},
-                    {"oscillator_config": "2x saw candidate", "filter_drive": 0.75,
+                    {"oscillator_config": "2x saw candidate", "pulse_shape": mono_m5a.M5A_PULSE_WAVE,
+                     "filter_drive": 0.75,
                      "reference": "frozen Mini V3 WAV"})})
             return base
         base["note"] = "REFUSED: this runner has no plan for this case."
