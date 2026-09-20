@@ -429,8 +429,8 @@ def coverage(v: vf.VoiceFx, regs: dict, writes: list, phases0: list, trig, gate)
 
 
 # ---- generate: run the model, write the writes and the expected taps -------------
-def generate(outdir: str, which: str, only=None, verbose=True):
-    v = vf.VoiceFx()
+def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=False):
+    v = vf.VoiceFx(oversample_2x=oversample_2x)
     v.reset()
     all_writes, expected, f0 = [], [], 0
     report = []
@@ -560,7 +560,8 @@ def main(argv=None) -> int:
     only = set(a.only.split(",")) if a.only else None
     print(f"verify_voice: model VoiceFx() (contract rev 4), scenario set '{a.set}'"
           + (f", only {sorted(only)}" if only else ""))
-    expected, state, writes, report = generate(a.outdir, a.set, only)
+    expected, state, writes, report = generate(a.outdir, a.set, only,
+                                               oversample_2x=("VOICE_OSC_2X" in a.define))
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:

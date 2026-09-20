@@ -852,6 +852,21 @@ def k_effective(k_q14, kc_q15) -> np.ndarray:
 
 
 # ---- the voice --------------------------------------------------------------
+_DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
+                         -1296,-2819,1544,10175,14712,10175,1544,-2819,
+                         -1296,1133,957,-397,-609,72,323,34,-138,-44,54,39), dtype=np.int64)
+
+def _render_2x(o: OscFx, n: int, inc) -> np.ndarray:
+    """Render a saw oscillator at 2x, then apply the reference decimator."""
+    inc_a = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
+    phase0 = o.phase
+    saved = o.smooth; o.smooth = False
+    hi = o.render(2 * n, np.repeat(inc_a // 2, 2))
+    o.smooth = saved
+    o.phase = int((phase0 + int(inc_a.sum())) & PHASE_MASK)
+    y = np.convolve(np.asarray(hi, dtype=np.int64), _DECIM2_TAPS, mode="full")[:2*n]
+    return (y[1::2] >> 15).astype(np.int64)
+
 class VoiceFx:
     """One voice: three oscillators, two envelopes, one ladder, and the state
     they keep between notes. `play` is the per-frame contract; `note` renders
@@ -861,7 +876,8 @@ class VoiceFx:
     def __init__(self, blep: bool = True, mant_bits: int = MANT_BITS,
                  recip_bits: int = RECIP_BITS, env_bits: int = ENV_BITS,
                  grom_bits: int = GROM_BITS, krom_bits: int = KROM_BITS,
-                 ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True):
+                 ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True,
+                 oversample_2x: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -870,6 +886,7 @@ class VoiceFx:
         self.EB, self.GB, self.KB = env_bits, grom_bits, krom_bits
         self.ladder_cfg = dict(LADDER_CFG if ladder_cfg is None else ladder_cfg)
         self.g_exact, self.k_comp = g_exact, k_comp
+        self.oversample_2x = oversample_2x
         self.g_rom = make_g_rom(grom_bits, self.ladder_cfg.get("oversample", 2))
         self.k_rom = make_k_rom(krom_bits, grom_bits, self.ladder_cfg.get("oversample", 2))
         self.trace = {}
@@ -1071,7 +1088,8 @@ class VoiceFx:
         if mw is None:
             mw = np.full(n, self.mwheel, dtype=np.int64)
         incs, white, pink, red, mant_f, sh_f, msig = self._modulate(incs, n, mw)
-        sig = [o.render(n, inc) for o, inc in zip(self.oscs, incs)]
+        sig = [_render_2x(o, n, inc) if self.oversample_2x and o.shape == "saw"
+               else o.render(n, inc) for o, inc in zip(self.oscs, incs)]
         n_audio = pink if self.nsel else white                   # 2.5: WHITE or pink for audio
         mixed = mix_fx(sig + [n_audio], self.weights)            # step 3, four sources
         ae = self.amp_env.render(n, gate, trig)                  # step 4
