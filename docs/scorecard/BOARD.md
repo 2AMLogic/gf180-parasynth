@@ -72,7 +72,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `M4B` | Mono | Development | Legato lead / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4C` | Mono | Development | Legato lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4D` | Mono | Development | Legato lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
-| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | fixed-model | ❌ fail | 89.19 | worst: Harmonic shape |
+| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | fixed-model | ❌ fail | 93.19 | worst: Harmonic shape |
 | `M5B` | Mono | Development | Bright high lead / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M5C` | Mono | Development | Bright high lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M5D` | Mono | Holdout | Bright high lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
