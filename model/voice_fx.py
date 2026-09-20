@@ -904,7 +904,9 @@ class VoiceFx:
                  recip_bits: int = RECIP_BITS, env_bits: int = ENV_BITS,
                  grom_bits: int = GROM_BITS, krom_bits: int = KROM_BITS,
                  ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True,
-                 oversample_2x: bool = False, rate_converted_ladder: bool = False):
+                 oversample_2x: bool = False, rate_converted_ladder: bool = False,
+                 preserve_filter_headroom: bool = False,
+                 causal_filter: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -915,6 +917,8 @@ class VoiceFx:
         self.g_exact, self.k_comp = g_exact, k_comp
         self.oversample_2x = oversample_2x
         self.rate_converted_ladder = bool(rate_converted_ladder)
+        self.preserve_filter_headroom = bool(preserve_filter_headroom)
+        self.causal_filter = bool(causal_filter)
         if self.rate_converted_ladder and self.g_exact:
             raise ValueError("rate-converted ladder requires the rate-matched integer g ROM")
         if self.rate_converted_ladder and self.ladder_cfg.get("oversample", 2) not in (2, 4):
@@ -939,7 +943,9 @@ class VoiceFx:
         if self.rate_converted_ladder:
             from filter_rate_chain import RateConvertedLadder
             self.ladder = RateConvertedLadder(self.ladder_cfg.get("oversample", 2),
-                                              self.ladder_cfg)
+                                              self.ladder_cfg,
+                                              preserve_headroom=self.preserve_filter_headroom,
+                                              causal=self.causal_filter)
         else:
             self.ladder = LadderFx(**self.ladder_cfg)
         self.noise = NoiseFx()
@@ -1173,7 +1179,8 @@ class VoiceFx:
         self.trace = dict(osc=sig, mixed=mixed, amp_env=ae, filt_env=fe, cut=cut, g=g,
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
-                          mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace)
+                          mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace,
+                          filter_reconstruction=getattr(lad, "last_reconstruction", None))
         return out.astype(np.int16)
 
     # ---- one note from reset: the reference sequences of contract 16 --------

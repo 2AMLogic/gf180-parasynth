@@ -227,6 +227,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             event_diagnostics.append({
                 "wave": wave, "midi": note,
                 "stages": _stage_diagnostics(voice.trace, pcm, a, b, eo.value),
+                "filter_reconstruction": voice.trace.get("filter_reconstruction"),
                 "pitch_cents_from_midi": {"model": round(model_cents, 5),
                                           "reference": round(reference_cents, 5),
                                           "model_minus_reference": round(model_cents - reference_cents, 5)},

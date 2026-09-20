@@ -46,6 +46,70 @@ def _error_magnitude(metric: dict) -> float:
     return abs(float(metric["error"]))
 
 
+def _case_passes(row: dict) -> bool:
+    """Strict case gate: every measured M5A property meets its fixed limit."""
+    if set(row.get("metrics", {})) != set(m5a.TOLERANCES):
+        raise m5a.Refused("case gate requires a complete seven-property score")
+    return all(_error_magnitude(row["metrics"][name])
+               <= float(m5a.TOLERANCES[name][0]) for name in m5a.TOLERANCES)
+
+
+def _compare_incremental(baseline: dict, candidate: dict) -> dict:
+    """Accept a genuine vector improvement without requiring a passing case.
+
+    Every scalar property and every measured partial must be present and must
+    not regress. At least one component must improve beyond report precision.
+    The independent strict case gate remains available as ``case_passes``.
+    """
+    expected = set(m5a.TOLERANCES)
+    for label, row in (("baseline", baseline), ("candidate", candidate)):
+        if set(row.get("metrics", {})) != expected:
+            raise m5a.Refused(f"{label} has an incomplete seven-property score")
+        events = row.get("event_diagnostics")
+        if not events:
+            raise m5a.Refused(f"{label} has no executed event evidence")
+
+    components = {}
+    for name in m5a.TOLERANCES:
+        b = _error_magnitude(baseline["metrics"][name])
+        c = _error_magnitude(candidate["metrics"][name])
+        components[f"metric:{name}"] = {"baseline_error": b, "candidate_error": c}
+
+    before_events, after_events = baseline["event_diagnostics"], candidate["event_diagnostics"]
+    if len(before_events) != len(after_events):
+        raise m5a.Refused("baseline and candidate event evidence differs")
+    for index, (before, after) in enumerate(zip(before_events, after_events)):
+        identity = (before.get("wave"), before.get("midi"))
+        if identity != (after.get("wave"), after.get("midi")):
+            raise m5a.Refused("baseline and candidate event order differs")
+        bpart = before.get("harmonic_error_db_model_minus_reference")
+        cpart = after.get("harmonic_error_db_model_minus_reference")
+        if not isinstance(bpart, dict) or not bpart or set(bpart) != set(cpart or {}):
+            raise m5a.Refused("baseline/candidate partial evidence is incomplete or differs")
+        for partial in sorted(bpart):
+            components[f"partial:{index}:{identity[0]}:{identity[1]}:{partial}"] = {
+                "baseline_error": abs(float(bpart[partial])),
+                "candidate_error": abs(float(cpart[partial])),
+            }
+
+    regressions, improvements = [], []
+    for name, pair in components.items():
+        delta = pair["candidate_error"] - pair["baseline_error"]
+        pair["delta_error"] = round(delta, 6)
+        if delta > 0.00005:
+            regressions.append(name)
+        elif delta < -0.00005:
+            improvements.append(name)
+    return {
+        "accepts_incremental_improvement": bool(improvements) and not regressions,
+        "case_passes": _case_passes(candidate),
+        "improved_components": improvements,
+        "regressed_components": regressions,
+        "components": components,
+        "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+    }
+
+
 def _model_screen(configurations: dict) -> dict:
     checks = {}
     for pulse in ("pulse29", "pulse479"):
