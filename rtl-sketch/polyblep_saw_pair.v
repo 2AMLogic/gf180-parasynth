@@ -6,7 +6,7 @@ module polyblep_saw_pair(
     output wire signed [15:0] sample0, output wire signed [15:0] sample1
 );
     function automatic signed [17:0] saw_blep(input [23:0] p, input [23:0] step, input [4:0] shift);
-        reg [23:0] x; reg [38:0] xs; reg [15:0] frac, u; reg [16:0] s;
+        reg [23:0] x; reg [38:0] xs; reg [15:0] frac, u; reg [16:0] s; reg [33:0] ss;
         reg signed [17:0] raw; reg signed [17:0] c;
         begin
             x = p;
@@ -18,8 +18,9 @@ module polyblep_saw_pair(
             s = 17'h10000 - {1'b0,u};
             // Saw falls at the phase wrap; the PolyBLEP correction is
             // negative on the leading window (voice_dp's c_pp sign).
-            c = (p < step) ? -$signed((s*s) >> 17) : 0;
-            raw = $signed({{2{(~p[23])}}, p[22:8]}) - c;
+            ss = s*s;
+            c = (p < step) ? -$signed(ss >> 17) : 0;
+            raw = -18'sd32768 + $signed({1'b0,p[22:8]}) - c;
             if (raw > 18'sd32767) saw_blep = 18'sd32767;
             else if (raw < -18'sd32768) saw_blep = -18'sd32768;
             else saw_blep = raw;
