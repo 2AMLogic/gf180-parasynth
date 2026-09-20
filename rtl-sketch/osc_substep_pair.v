@@ -14,7 +14,7 @@ module osc_substep_pair(
     reg busy;
     wire dec_valid;
     wire signed [15:0] dec_sample;
-    decimate_2x dec(.clk(clk), .rst_n(rst_n), .in_valid(in_valid),
+    decimate_2x_tm dec(.clk(clk), .rst_n(rst_n), .in_valid(in_valid),
                     .in_sample(in_sample), .out_valid(dec_valid),
                     .out_sample(dec_sample));
     always @(posedge clk) begin

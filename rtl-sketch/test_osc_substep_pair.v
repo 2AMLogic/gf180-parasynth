@@ -12,7 +12,7 @@ module test_osc_substep_pair;
         for (i=0; i<8; i=i+1) begin
             @(negedge clk); frame_valid=1; sample0=i*100; sample1=i*100+50;
             @(negedge clk); frame_valid=0;
-            repeat (4) begin @(posedge clk); if (out_valid) count=count+1; end
+            repeat (40) begin @(posedge clk); if (out_valid) count=count+1; end
         end
         if (count != 8) $fatal(1, "expected 8 filtered frames, got %0d", count);
         $display("PASS osc_substep_pair frames=%0d", count);
