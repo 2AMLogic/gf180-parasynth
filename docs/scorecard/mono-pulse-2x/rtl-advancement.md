@@ -64,3 +64,16 @@ execute: clean comparisons are valid, and missing/tampered mutations each
 produce the intended refusal (2/2 PASS locally and in CI). The local run took
 614 seconds per control under host contention; these are executed controls,
 not missing-baseline successes. See `rtl/reference-controls-repaired.json`.
+
+The directed cross-simulator comparison localizes the 5.020 discrepancy to
+`fe` at frame 193 and `ae` at frame 194; oscillator and mixer taps agree.
+Making `env_update` automatic was a rejected probe: 5.020 then left both
+envelopes at zero. This is preserved in `rtl/ci-envelope-probe-5.020.json`;
+the production function is unchanged. The independent rate converter passes
+all 512 vectors under 5.020. These findings narrow the tool discrepancy but
+do not establish its internal cause.
+
+CI now builds pinned Verilator 5.052, upstream commit
+`ea338be98e1e838d3518809ce8899f85a009963c`, and runs both simulators' directed
+checks, the clean/control pair, drums deadlines and both complete phrases.
+This is a toolchain qualification attempt, not yet a claimed Linux pass.
