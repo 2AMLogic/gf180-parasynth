@@ -2465,7 +2465,7 @@ def main(argv=None) -> int:
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
-                             "MONO_PITCH_UP_3_SEMITONES",
+                             "MONO_PITCH_UP_25_CENTS",
                              "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED"],
                     help="an injected control; requires --results outside the board")
     ap.add_argument("--expect", default="",

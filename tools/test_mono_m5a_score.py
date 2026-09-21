@@ -29,7 +29,7 @@ def test_metric_keeps_signed_error_and_declared_units():
 
 def test_mono_pitch_mutation_is_explicit_and_bounded():
     assert score._model_note(72) == 72
-    assert score._model_note(72, "MONO_PITCH_UP_3_SEMITONES") == 75
+    assert score._model_note(72, "MONO_PITCH_UP_25_CENTS") == 72.25
     with pytest.raises(score.Refused, match="unsupported Mono model injection"):
         score._model_note(72, "REF_F0_20PCT")
 

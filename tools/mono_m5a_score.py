@@ -30,7 +30,7 @@ MANIFESTS = {
     "M5B": ROOT / "docs/scorecard/mono-m5b-miniv3/manifest.json",
 }
 ANALYSIS_VERSIONS = {"M5A": ANALYSIS_VERSION, "M5B": "m5b-score-v1"}
-MODEL_NOTE_MUTATIONS = {"MONO_PITCH_UP_3_SEMITONES": 3}
+MODEL_NOTE_MUTATIONS = {"MONO_PITCH_UP_25_CENTS": 0.25}
 TOLERANCES = {
     "Pitch": (1.0, "cents; fixed screening limit for this frozen software-synth patch"),
     "Harmonic shape": (1.0, "dB per measured partial; fixed screening limit"),
@@ -158,13 +158,13 @@ def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
     return {**patch, "waves": (model_wave, model_wave, model_wave)}
 
 
-def _model_note(note: int, injection: str = "") -> int:
+def _model_note(note: float, injection: str = "") -> float:
     """Apply only the declared live-control mutation to the rendered model."""
     if not injection:
         return note
     if injection not in MODEL_NOTE_MUTATIONS:
         raise Refused(f"unsupported Mono model injection {injection!r}")
-    shifted = note + MODEL_NOTE_MUTATIONS[injection]
+    shifted = float(note) + MODEL_NOTE_MUTATIONS[injection]
     if not 0 <= shifted <= 127:
         raise Refused("injected model pitch lies outside MIDI range")
     return shifted
