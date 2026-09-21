@@ -906,7 +906,8 @@ class VoiceFx:
                  ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True,
                  oversample_2x: bool = False, rate_converted_ladder: bool = False,
                  preserve_filter_headroom: bool = False,
-                 causal_filter: bool = False):
+                 causal_filter: bool = False,
+                 pulse479_filter_candidate: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -919,6 +920,7 @@ class VoiceFx:
         self.rate_converted_ladder = bool(rate_converted_ladder)
         self.preserve_filter_headroom = bool(preserve_filter_headroom)
         self.causal_filter = bool(causal_filter)
+        self.pulse479_filter_candidate = bool(pulse479_filter_candidate)
         if self.rate_converted_ladder and self.g_exact:
             raise ValueError("rate-converted ladder requires the rate-matched integer g ROM")
         if self.rate_converted_ladder and self.ladder_cfg.get("oversample", 2) not in (2, 4):
@@ -1050,6 +1052,8 @@ class VoiceFx:
 
     def _apply_patch(self, r: dict):
         for o, shape in zip(self.oscs, r["waves"]):
+            if self.pulse479_filter_candidate and shape == "pulse29":
+                shape = "pulse479"
             o.set_shape(shape, self.blep)
         self.weights = list(r["weights"]) + [0] * (4 - len(r["weights"]))   # osc 0..2, then noise
         self.amp_env.set_regs(*r["amp"]); self.filt_env.set_regs(*r["fenv"])

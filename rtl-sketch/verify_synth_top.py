@@ -114,7 +114,7 @@ WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4,
 SRCS = ("synth_top.v", "voice_dp.v", "spi_ctl.v", "drum_regs.v", "drum_kit.v",
         "drum_dp.v", "modal_dp.v", "i2s_tx.v", "ladder_dp_n.v", "recip_div.v",
         "osc_2x_saw_bank.v", "osc_2x_saw_path.v", "polyblep_saw_pair.v",
-        "osc_substep_pair.v", "decimate_2x_tm_sym.v")
+        "osc_substep_pair.v", "decimate_2x_tm_sym.v", "rate_conv_2x.v")
 
 
 def script(short: bool = False):
@@ -472,6 +472,8 @@ def main(argv=None) -> int:
     ap.add_argument("--short", action="store_true"); ap.add_argument("--frames", type=int, default=None)
     ap.add_argument("--osc2x", action="store_true",
                     help="select the measured 2x saw chain in RTL and Python model")
+    ap.add_argument("--filter2x", action="store_true",
+                    help="select causal reconstructed 2x filter and pulse-duty challenger")
     ap.add_argument("--m5a", action="store_true",
                     help="play the frozen Mono M5A reference phrase through SPI and I2S")
     ap.add_argument("--m5a-smoke", action="store_true",
@@ -485,6 +487,8 @@ def main(argv=None) -> int:
                     help="take sources this directory holds from there (the start-red path)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
     a = ap.parse_args(argv)
+    if a.filter2x:
+        a.osc2x = True
     a.outdir = os.path.abspath(a.outdir); os.makedirs(a.outdir, exist_ok=True)
     if a.rtl:
         a.rtl = os.path.abspath(a.rtl)
@@ -539,9 +543,12 @@ def main(argv=None) -> int:
               f"({', '.join(dx.STOP_NAMES[i] for i in cover['stops'])}; swapped to "
               f"{', '.join(cover['swapped'])}), both pages reset while sounding")
     defines = (["VOICE_OSC_2X"] if a.osc2x else [])
+    if a.filter2x:
+        defines.append("VOICE_FILTER_2X")
     if a.inject:
         defines.append(f"INJECT_BUG_{a.inject}")
-    config = "2x saw candidate" if a.osc2x else "legacy single-rate waveform"
+    config = ("2x saw + causal 2x filter candidate" if a.filter2x else
+              "2x saw candidate" if a.osc2x else "legacy single-rate waveform")
     print(f"verify_synth_top: selected {config}; compile defines: {', '.join(defines) or '(none)'}")
     # The bench closes I2S at the final sample boundary and drops the three
     # serializer periods still in flight.  Give the M5A transport check three
@@ -623,7 +630,7 @@ def main(argv=None) -> int:
     print(f"verify_synth_top: writes landed in frames {model_writes[0][0]}..{last}; modelling {n} frames")
 
     # ---- the model, on those frames ----------------------------------------
-    m = stm.SynthTopModel(oversample_2x=a.osc2x).run(model_writes, n)
+    m = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x).run(model_writes, n)
     exp_i2s, exp_s = m["i2s"], m["sample"]
 
     # ---- the comparison: the WIRE against the MODEL -------------------------

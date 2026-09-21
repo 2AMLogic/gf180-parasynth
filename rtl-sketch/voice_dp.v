@@ -152,7 +152,11 @@ module voice_dp #(
     localparam signed [24:0] PA0 = -25'sd28689,  PA1 =  25'sd12348;                        // Q14
     localparam signed [24:0] RED_G = 25'sd904, RED_GAIN = 25'sd29841;
     localparam signed [24:0] SHK_SAW = 25'sd5749, SHK_TRI = 25'sd27019;
+`ifdef VOICE_FILTER_2X
+    localparam [23:0] DUTY_WIDE = 24'd8036286, DUTY_NARROW = 24'd2516582; // pulse479 candidate
+`else
     localparam [23:0] DUTY_WIDE = 24'd4865393, DUTY_NARROW = 24'd2516582;
+`endif
 
     // ---- the one multiplier -------------------------------------------------------
     reg  signed [24:0] ma;
@@ -176,9 +180,33 @@ module voice_dp #(
     wire signed [18:0] lad_y;
     wire        lad_yv;
     wire        lad_ych;
+`ifdef VOICE_FILTER_2X
+    reg voice_filter_phase;
+    reg filter_input_valid;
+    reg signed [15:0] filter_input;
+    reg signed [16:0] filter_x_even, filter_x_odd;
+    reg signed [18:0] filter_y_even;
+    wire signed [16:0] interp_even, interp_odd;
+    wire signed [18:0] decimated_voice_y;
+`ifdef INJECT_BUG_VOICE_FILTER2X_OFF
+    wire signed [16:0] lad_x_voice = {{1{filter_input[15]}}, filter_input};
+`else
+    wire signed [16:0] lad_x_voice = voice_filter_phase ? filter_x_odd : filter_x_even;
+`endif
+    wire signed [16:0] lad_x = lad_ch ? {{1{dx[15]}}, dx} : lad_x_voice;
+    wire lad_os2x = lad_ch;
+    rate_conv_2x voice_rate_converter (
+        .clk(clk), .rst_n(rst_n), .interp_valid(filter_input_valid),
+        .x_in(filter_input), .x_even(interp_even), .x_odd(interp_odd),
+        .decim_valid((lad_yv && !lad_ych) && voice_filter_phase),
+        .y_even(filter_y_even), .y_odd(lad_y), .y_out(decimated_voice_y));
+`else
+    wire signed [16:0] lad_x = lad_ch ? {{1{dx[15]}}, dx} : {{1{mixed[15]}}, mixed};
+    wire lad_os2x = 1'b1;
+`endif
     ladder_dp_n #(.NCH(2), .ROM_FILE(TANH_FILE), .OW(19)) u_ladder (
-        .clk(clk), .rst_n(rst_n), .sample_valid(lad_sv), .ch(lad_ch),
-        .x_in(lad_ch ? dx : mixed), .g(lad_ch ? g2 : g), .k(lad_ch ? k_eff2 : k_eff),
+        .clk(clk), .rst_n(rst_n), .sample_valid(lad_sv), .os2x(lad_os2x), .ch(lad_ch),
+        .x_in(lad_x), .g(lad_ch ? g2 : g), .k(lad_ch ? k_eff2 : k_eff),
         .gain(lad_ch ? dgain : gain), .ogain(lad_ch ? dogain : ogain),
         .y_out(lad_y), .y_valid(lad_yv), .y_ch(lad_ych));
 
@@ -484,9 +512,32 @@ module voice_dp #(
             g0 <= 0; g1 <= 0; kc0 <= 0; kc1 <= 0; kd <= 0; pacc <= 0; dacc <= 0; macc <= 0; tacc <= 0; d19 <= 0;
             ma <= 0; mb <= 0; div_start <= 0; div_inc <= 0; lad_sv <= 0; lad_ch <= 0; g <= 0; g2 <= 0; k_eff2 <= 0; dx <= 0;
             sample <= 0; sample_valid <= 0; mixed <= 0; ae <= 0; fe <= 0; cut <= 0; k_eff <= 0; y19 <= 0;
+`ifdef VOICE_FILTER_2X
+            voice_filter_phase <= 1'b0; filter_input_valid <= 1'b0; filter_input <= 0;
+            filter_x_even <= 0; filter_x_odd <= 0; filter_y_even <= 0;
+`endif
         end else begin
             sample_valid <= 1'b0; div_start <= 1'b0; lad_sv <= 1'b0;
+`ifdef VOICE_FILTER_2X
+            filter_input_valid <= 1'b0;
+            if (filter_input_valid) begin
+                filter_x_even <= interp_even; filter_x_odd <= interp_odd;
+                voice_filter_phase <= 1'b0; lad_sv <= 1'b1;
+            end
+            if (lad_yv && !lad_ych) begin
+                if (!voice_filter_phase) begin
+                    filter_y_even <= lad_y;
+                    voice_filter_phase <= 1'b1;
+                    lad_sv <= 1'b1;
+                end else begin
+                    y19 <= decimated_voice_y;
+                    y_seen <= 1'b1;
+                    voice_filter_phase <= 1'b0;
+                end
+            end
+`else
             if (lad_yv && !lad_ych) begin y19 <= lad_y; y_seen <= 1'b1; end
+`endif
             if (lad_yv &&  lad_ych) begin d19 <= lad_y; d_seen <= 1'b1; end
             case (state)
                 // ---- 0. the noise board (6.10), then the modulation path (6.9) ----
@@ -651,7 +702,13 @@ module voice_dp #(
 `else
                     mixed <= sat16m(msh);
 `endif
-                    lad_sv <= 1'b1; lad_ch <= 1'b0; y_seen <= 1'b0; d_seen <= 1'b0;
+`ifdef VOICE_FILTER_2X
+                    filter_input <= sat16m(msh); filter_input_valid <= 1'b1;
+`endif
+`ifndef VOICE_FILTER_2X
+                    lad_sv <= 1'b1;
+`endif
+                    lad_ch <= 1'b0; y_seen <= 1'b0; d_seen <= 1'b0;
                     ma <= {1'b0, level_a}; mb <= {5'b0, rate_a};
                     state <= S_EA1;
                 end

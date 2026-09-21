@@ -76,6 +76,23 @@ def _excess_alias_db(model_db: float, reference_db: float) -> float:
     return max(0.0, float(model_db) - float(reference_db))
 
 
+def _load_i2s_candidate(path, required_samples: int):
+    """Load only a complete mono signed-int16 I2S phrase at the target rate."""
+    candidate_path = pathlib.Path(path)
+    try:
+        digest = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+        sr, candidate = wavfile.read(candidate_path)
+    except OSError as exc:
+        raise Refused(f"decoded I2S WAV is unavailable: {exc}") from exc
+    if sr != SR or candidate.dtype != np.int16 or candidate.ndim != 1:
+        raise Refused("decoded I2S WAV must be mono signed-int16 at 48 kHz")
+    if len(candidate) < int(required_samples):
+        raise Refused(f"decoded I2S WAV is short ({len(candidate)} < {required_samples} samples)")
+    if not np.isfinite(candidate).all():
+        raise Refused("decoded I2S WAV contains non-finite samples")
+    return candidate[:required_samples].astype(np.float64) / 32768.0, digest
+
+
 def _metric(name, ours, ref, units, tolerance, basis):
     if not all(math.isfinite(float(x)) for x in (ours, ref)):
         raise Refused(f"{name} is not finite")
@@ -136,7 +153,8 @@ def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
 
 
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
-            model_label="production-2x-hold", output_path=None):
+            model_label="production-2x-hold", output_path=None,
+            candidate_wav=None):
     manifest = json.loads(MANIFEST.read_text())
     manifest_digest = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     audio_meta = manifest["audio"]
@@ -150,6 +168,12 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     ref_pcm = ref_pcm.astype(np.float64)
     if len(ref_pcm) != audio_meta["samples"] or not np.isfinite(ref_pcm).all():
         raise Refused("reference sample count or finite-sample precondition failed")
+
+    candidate_pcm = None
+    candidate_sha256 = None
+    if candidate_wav is not None:
+        required_samples = int(round(manifest["timeline"]["audio_duration_s"] * SR))
+        candidate_pcm, candidate_sha256 = _load_i2s_candidate(candidate_wav, required_samples)
 
     patch = _voice_patch(manifest)
     tolerance = TOLERANCES
@@ -168,8 +192,14 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         duration = float(seg["duration_s"])
         voice = vf.VoiceFx(oversample_2x=True) if voice_factory is None else voice_factory()
         pcm = vf.render_mono_fx(seq, duration, voice)
-        ours = np.asarray(pcm, dtype=np.float64) / 32768.0
         offset = int(seg["offset_samples"])
+        if candidate_pcm is None:
+            ours = np.asarray(pcm, dtype=np.float64) / 32768.0
+        else:
+            end = offset + int(seg["samples"])
+            if end > len(candidate_pcm):
+                raise Refused(f"decoded I2S WAV does not cover {wave} segment {offset}..{end}")
+            ours = candidate_pcm[offset:end]
         ref_segment = ref_pcm[offset:offset + int(seg["samples"])]
         # The host latency is removed from the frozen recording (44 samples
         # here). Compare the common timeline and trim only the candidate's
@@ -226,9 +256,12 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                                       20 * math.log10(max(float(am.rms(xr)), 1e-15))))
             event_diagnostics.append({
                 "wave": wave, "midi": note,
-                "stages": _stage_diagnostics(voice.trace, pcm, a, b, eo.value),
-                "filter_reconstruction": voice.trace.get("filter_reconstruction"),
-                "filter_decimation": voice.trace.get("filter_decimation"),
+                "stages": (None if candidate_sha256 else
+                           _stage_diagnostics(voice.trace, pcm, a, b, eo.value)),
+                "filter_reconstruction": (None if candidate_sha256 else
+                                          voice.trace.get("filter_reconstruction")),
+                "filter_decimation": (None if candidate_sha256 else
+                                      voice.trace.get("filter_decimation")),
                 "pitch_cents_from_midi": {"model": round(model_cents, 5),
                                           "reference": round(reference_cents, 5),
                                           "model_minus_reference": round(model_cents - reference_cents, 5)},
@@ -280,5 +313,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             "event_diagnostics": event_diagnostics,
             "wrong_then_right": manifest["qualification"]["wrong_then_right"],
             "duration_s": len(combined) / SR,
-            "note": ("Full sound comparison uses the fixed integer model; a separate "
-                     "short M5A stimulus verifies the selected configuration through SPI to I2S.")}
+        "candidate_i2s_sha256": candidate_sha256,
+        "note": ("Metrics use decoded SPI-to-I2S samples." if candidate_sha256 else
+                 "Full sound comparison uses the fixed integer model; a separate "
+                 "short M5A stimulus verifies the selected configuration through SPI to I2S.")}

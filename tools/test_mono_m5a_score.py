@@ -32,6 +32,29 @@ def test_pitch_deviation_uses_cents_not_semitone_percent():
     assert score._cents_error(440.0 * 2 ** (1 / 12), 440.0) == pytest.approx(100.0)
 
 
+def test_decoded_i2s_candidate_requires_full_mono_int16_phrase(tmp_path):
+    import numpy as np
+    from scipy.io import wavfile
+
+    short = tmp_path / "short.wav"
+    wavfile.write(short, score.SR, np.zeros(100, dtype=np.int16))
+    with pytest.raises(score.Refused, match="short"):
+        score._load_i2s_candidate(short, 101)
+
+    stereo = tmp_path / "stereo.wav"
+    wavfile.write(stereo, score.SR, np.zeros((128, 2), dtype=np.int16))
+    with pytest.raises(score.Refused, match="mono signed-int16"):
+        score._load_i2s_candidate(stereo, 100)
+
+    valid = tmp_path / "complete.wav"
+    samples = np.arange(128, dtype=np.int16)
+    wavfile.write(valid, score.SR, samples)
+    loaded, digest = score._load_i2s_candidate(valid, 100)
+    assert loaded.shape == (100,)
+    assert loaded[12] == pytest.approx(12 / 32768)
+    assert digest == hashlib.sha256(valid.read_bytes()).hexdigest()
+
+
 def test_cleaner_alias_output_is_not_penalized():
     assert score._excess_alias_db(-62.0, -50.0) == 0.0
     assert score._excess_alias_db(-45.0, -50.0) == pytest.approx(5.0)
