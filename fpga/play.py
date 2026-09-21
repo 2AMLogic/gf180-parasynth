@@ -40,6 +40,7 @@ import drums_fx as dx                                # noqa: E402
 import voice_fx as vf                                # noqa: E402
 import synth_top_model as stm                        # noqa: E402
 import fixtures                                      # noqa: E402
+import selected_preset                               # noqa: E402
 
 LINKS = {"bench": sh.BENCH, "max": sh.CONTRACT}
 PATTERNS = {
@@ -64,8 +65,9 @@ def build(a) -> tuple:
         return fixtures.demo(bars=a.bars, bpm=a.bpm)
     if a.fixture:
         return fixtures.FIXTURES[a.fixture]()
-    patch = vf.VoiceFx.patch_regs(cutoff=(a.cutoff, max(a.cutoff * 4, a.cutoff + 200)),
-                                  q=a.resonance)
+    patch = (selected_preset.definition(a.preset)["registers"] if a.preset else
+             vf.VoiceFx.patch_regs(cutoff=(a.cutoff, max(a.cutoff * 4, a.cutoff + 200)),
+                                   q=a.resonance))
     host = sh.MusicHost(patch=patch)
     host.load(0)
     step = int(round(60.0 / a.bpm / 4.0 * sh.SR))
@@ -83,6 +85,8 @@ def build(a) -> tuple:
     if a.decay is not None:
         host.knob(start // 2, "decay", a.decay)
     n = max(w.frame for w in host.w) + fixtures.TOM_DROP_FRAMES + 2000
+    if a.preset:
+        n = max(n, max(w.frame for w in host.w) + 3 * sh.SR)
     return host, n, fixtures._coverage(host)
 
 
@@ -92,6 +96,8 @@ def main(argv=None) -> int:
     ap.add_argument("--demo", action="store_true",
                     help="play with no keyboard attached: pattern, bass line and knob sweeps")
     ap.add_argument("--fixture", default=None, choices=sorted(fixtures.FIXTURES))
+    ap.add_argument("--preset", choices=selected_preset.NAMES,
+                    help="measured candidate settings; requires OSC2X=1 FILTER2X=1")
     ap.add_argument("--pattern", default="basic", choices=sorted(PATTERNS))
     ap.add_argument("--keys", default="", help="comma-separated MIDI notes, played in order")
     ap.add_argument("--cutoff", type=float, default=600.0, help="Hz")
@@ -102,6 +108,8 @@ def main(argv=None) -> int:
     ap.add_argument("--link", default="max", choices=sorted(LINKS))
     ap.add_argument("--out", default=os.path.join(ROOT, "build", "play.wav"))
     a = ap.parse_args(argv)
+    if a.preset and (a.demo or a.fixture):
+        ap.error("--preset requires --keys; demo and fixture carry their own patch")
     link = LINKS[a.link]
 
     host, n, cover = build(a)
@@ -127,7 +135,8 @@ def main(argv=None) -> int:
               f"quantised, by at most {st['anchor_jitter_us']:.1f} us "
               f"(one transaction is the floor)")
 
-    x = stm.SynthTopModel().run(sh.model_writes(sched), n)["sample"].astype(np.int16)
+    x = stm.SynthTopModel(oversample_2x=bool(a.preset), filter_2x=bool(a.preset)).run(
+        sh.model_writes(sched), n)["sample"].astype(np.int16)
     write_wav(a.out, x)
     peak = int(np.abs(x.astype(np.int64)).max())
     clip = int(np.sum(np.abs(x.astype(np.int64)) >= 32767))

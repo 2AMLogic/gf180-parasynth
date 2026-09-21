@@ -83,7 +83,7 @@ TOP_ICE40 := fpga_top
 # board must supply the frequency, so there it is a real constraint.
 FREQ_MHZ  ?= 12.288
 
-.PHONY: all ecp5 ice40 blocks headroom clean provenance srccheck \
+.PHONY: all candidate ecp5 ice40 blocks headroom clean provenance srccheck \
         budget host host-controls play
 
 # ---------------------------------------------------------- the control path
@@ -113,6 +113,10 @@ host-controls:
 
 play:
 	@$(PYTHON) $(FPGA)/play.py --demo --out $(ROOT)/build/demo.wav
+
+# Named sound checkpoint: this target always selects both measured 2x paths.
+candidate: srccheck
+	@$(PYTHON) $(FPGA)/build_selected.py --nextpnr $(NEXTPNR_ECP5)
 
 all: srccheck provenance ecp5 ice40 blocks
 	@echo "--- reports in $(REPORTS)"
