@@ -1,0 +1,14 @@
+{
+  "state": "NO-VERDICT",
+  "reason": "Agent stopped heavily contended local route after the pinned Linux build began; no timing or bitstream conclusion from this run.",
+  "pid": 5817,
+  "command": "/tmp/nextpnr-parasynth-build/build-homebrew/nextpnr-ecp5 --85k --package CABGA381 --json /private/tmp/wt-fpga-selected/build/fpga-selected/ecp5.json --lpf /private/tmp/wt-fpga-selected/fpga/boards/ulx3s.lpf --seed 1 --textcfg /private/tmp/wt-fpga-selected/build/fpga-selected-85k/ecp5.config --report /private/tmp/wt-fpga-selected/build/fpga-selected-85k/timing.json",
+  "replacement_workflow": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666476657",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "synthesis_netlist_sha256": "786baaa0b5b828ebc316388faa6531a6e6f4da4dc80d79fda26a97fa3f2a5ed6",
+  "partial_log_sha256": "a29b87042729cc35c7aeb67aa50984ef8c2cdb5759732aecf276aecdce7b53c5"
+}

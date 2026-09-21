@@ -75,5 +75,6 @@ archive identity are saved alongside the build artifacts.
 
 This moves the long 85F build to a dedicated runner without changing DSP or
 claiming that a bitstream proves live playback. `VOICE_PULSE_2X` remains absent.
-The earlier local route is retained until the Linux run can take over; its
-partial progress is not a timing pass.
+The earlier local route was interrupted after the Linux run started. Its
+partial log and explicit NO-VERDICT record are retained under
+`fpga/reports/selected/`; it supplies no timing pass or bitstream.
