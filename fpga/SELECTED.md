@@ -11,6 +11,11 @@ not load `pulse29`. The named-preset test exposed that `KeyError` before the
 host was changed to use the voice's full waveform-code table. The test now
 asserts code 7 in all three emitted waveform writes.
 
+The [recorded host run](reports/selected/preset-play.json) exercises MIDI
+72/84/96 for both presets. Both produce 3.73 seconds of model audio with zero
+samples at the output rail. The preset, host, and build-result checks passed
+46 tests. Saved register images and audio are in `fpga/reports/selected/`.
+
 Render a named preset through the host's SPI schedule and selected integer
 chip model, including three seconds for the final release:
 

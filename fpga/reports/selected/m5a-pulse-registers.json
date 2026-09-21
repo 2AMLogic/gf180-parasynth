@@ -1,0 +1,118 @@
+{
+  "name": "m5a-pulse",
+  "engine_profile": {
+    "name": "selected-m5a-reconstructed-filter2x",
+    "oscillator_oversample_2x": true,
+    "filter_rate_converted": true,
+    "filter_preserve_headroom": true,
+    "filter_causal": true,
+    "pulse479_filter_candidate": true,
+    "filter_g_exact": false,
+    "filter_k_comp": true,
+    "filter_oversample_factor": 2,
+    "ladder_coefficient_oversample": 2,
+    "filter_drive": 0.75,
+    "pulse_control_label": "pulse29",
+    "pulse_effective_waveform": "pulse479",
+    "pulse_effective_duty_percent": 47.89999723434448,
+    "saw_cutoff_hz": 20000,
+    "saw_volume_correction_db": -0.45428
+  },
+  "required_build": {
+    "OSC2X": 1,
+    "FILTER2X": 1
+  },
+  "oscillator_2x_waveforms": [
+    "saw"
+  ],
+  "reference_manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "patch": {
+    "waves": [
+      "pulse29",
+      "pulse29",
+      "pulse29"
+    ],
+    "detune": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "mix": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "noise": 0.0,
+    "cutoff": [
+      14073,
+      14073
+    ],
+    "q": 0.0,
+    "drive": 0.75,
+    "amp": [
+      0.009166666666666667,
+      0.25,
+      1.0,
+      2.159710267298046
+    ],
+    "fenv": [
+      0.004,
+      0.3,
+      1.0,
+      0.1
+    ],
+    "track": 0.0,
+    "vol": 0.45,
+    "mod_mix": 0.0,
+    "mod_wheel": 0.0,
+    "osc_mod": false,
+    "filt_mod": false
+  },
+  "registers": {
+    "waves": [
+      "pulse29",
+      "pulse29",
+      "pulse29"
+    ],
+    "detune": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "weights": [
+      32768,
+      0,
+      0,
+      0
+    ],
+    "cut_lo": 14073,
+    "cut_hi": 14073,
+    "res": 0.0,
+    "drive": 0.75,
+    "k": 0,
+    "gain": 127795,
+    "ogain": 25206,
+    "amp": [
+      38131,
+      0,
+      16777215,
+      958934
+    ],
+    "fenv": [
+      87382,
+      0,
+      16777215,
+      711261
+    ],
+    "track": 0.0,
+    "vol": 14746,
+    "glide": 2692,
+    "nsel": 0,
+    "mmix": 0,
+    "mwheel": 0,
+    "mpd": 3072,
+    "mfd": 5325,
+    "mroute": 4
+  },
+  "sound_status": "M5A has four passing properties and three failures"
+}
