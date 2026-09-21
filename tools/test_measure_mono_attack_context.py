@@ -1,4 +1,6 @@
 import copy
+import json
+from scipy.io import wavfile
 import pytest
 import measure_mono_attack_context as probe
 
@@ -19,3 +21,21 @@ def test_context_summary_requires_every_valid_executed_condition():
     bad[0]["measurements"][-1]["envelope"]["valid"] = False
     with pytest.raises(probe.ref.Refused, match="invalid"):
         probe.summarize(bad)
+
+
+def test_frozen_attack_context_is_reproducible_without_plugins():
+    directory = probe.ROOT / "docs/scorecard/mono-attack-context"
+    report = json.loads((directory / "report.json").read_text())
+    for row in report["renders"]:
+        path = directory / row["wav"]
+        assert probe.ref.sha256(path) == row["sha256"]
+        if row["repeat"] != 0:
+            continue
+        sr, audio = wavfile.read(path)
+        envelope = probe.ref.am.rms_envelope(audio, ms=5, sr=sr)
+        event = row["events"][-1]
+        timing = probe.ref.envelope_timing(envelope, sr, event["on_s"],
+                                           event["on_s"] + event["gate_s"])
+        assert timing["valid"] and timing["release_complete_40db"]
+        assert timing["attack_10_90_ms"] == pytest.approx(
+            row["measurements"][-1]["envelope"]["attack_10_90_ms"], abs=1000/sr)
