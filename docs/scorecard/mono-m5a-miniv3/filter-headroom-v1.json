@@ -6488,5 +6488,12 @@
     "causal_or_stateful": true,
     "rtl_verified": false,
     "meaning": "candidate is accepted only as an incremental model improvement if both pulse widths have a complete non-regressing property/partial vector and at least one measured improvement; strict case_passes remains separate"
+  },
+  "comparison_reanalysis": {
+    "source_commit": "1a99aed4e1cfb2d3ae3864da53881d43e06d7bf9",
+    "source_dirty": false,
+    "source_sha256": "b94ff599edd12c6f6a2fadeb5a5c152e49b53fa4c90152c3b8bf09d284a379e1",
+    "generated_at_utc": "2026-09-21T00:15:33.686519+00:00",
+    "meaning": "recomputed decision only; raw M5A renders and event measurements remain from the per-configuration provenance in the report"
   }
 }
