@@ -45,3 +45,21 @@ tool exits, stale output, and missing artifacts cannot report success.
 Synthesis-only output is explicitly `SYNTHESIZED`; it does not claim a
 bitstream or a timing pass. The selected configuration does not include the
 new model-only pulse experiment.
+
+## Fresh device-fit result
+
+The selected baseline synthesized successfully, but placement on the 25F
+failed: 30,803 / 24,288 logic cells and 104 / 28 multipliers. No bitstream or
+timing pass is claimed for that device. See `reports/selected/build-25k.json`
+and its placement log. The unchanged netlist is being evaluated on 85F;
+that is a different hardware target, not evidence of a 25F fit.
+
+Reproduce placement without repeating the 824-second synthesis only when
+all source hashes, configuration and saved netlist bytes still match:
+
+```sh
+python3 fpga/build_selected.py --device 85k --out build/fpga-selected-85k --from-synthesis build/fpga-selected/report.json --nextpnr /path/to/nextpnr-ecp5
+```
+
+The resume guard was tested red before implementation. Modified source,
+configuration, or netlist bytes refuse reuse. Four build-runner tests pass.

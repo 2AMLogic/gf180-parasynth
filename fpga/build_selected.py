@@ -65,10 +65,29 @@ def run_stage(command, cwd, log, artifact):
             "artifact_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest() if exists else None}
 
 
+def reuse_synthesis(path, current):
+    """Reuse a successful netlist only after rechecking its exact inputs/bytes."""
+    prior = json.loads(Path(path).read_text())
+    if prior.get("configuration") != current["configuration"]:
+        raise RuntimeError("saved synthesis configuration differs")
+    if prior.get("source_sha256") != current["source_sha256"]:
+        raise RuntimeError("saved synthesis source hashes differ")
+    stage = prior.get("stages", {}).get("synthesis", {})
+    artifact = Path(stage.get("artifact", ""))
+    if (stage.get("state") != "PASS" or stage.get("exit_code") != 0
+            or not artifact.is_file() or artifact.stat().st_size == 0
+            or hashlib.sha256(artifact.read_bytes()).hexdigest() != stage.get("artifact_sha256")):
+        raise RuntimeError("saved synthesis netlist is absent, changed or unsuccessful")
+    return {**stage, "reused_from_report": str(Path(path).resolve())}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=ROOT / "build/fpga-selected")
     parser.add_argument("--nextpnr", default="nextpnr-ecp5")
+    parser.add_argument("--device", choices=("25k", "45k", "85k"), default="25k")
+    parser.add_argument("--from-synthesis", type=Path,
+                        help="reuse a hash-verified successful synthesis report")
     parser.add_argument("--synth-only", action="store_true")
     args = parser.parse_args(argv)
     directory = args.out.resolve()
@@ -77,6 +96,7 @@ def main(argv=None):
     report = {"configuration": {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90},
               "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
               "source_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files},
+              "device": args.device, "package": "CABGA381",
               "stages": {}, "bitstream_built": False, "hardware_playback_tested": False}
     report_path = directory / "report.json"
 
@@ -86,15 +106,20 @@ def main(argv=None):
     try:
         report["simulation_evidence"] = simulation_evidence()
         report["yosys_version"] = subprocess.check_output(["yosys", "-V"], text=True).strip()
+        if args.from_synthesis:
+            report["stages"]["synthesis"] = reuse_synthesis(args.from_synthesis, report)
     except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
         report.update(state="REFUSED", reason=str(exc)); save(); print(report["reason"]); return 2
     quoted_sources = " ".join(f'"{p}"' for p in source_files)
     synth = ("read_verilog -defer " + " ".join(f"-D{d}" for d in DEFINES) + " " + quoted_sources
              + f'; synth_ecp5 -top ulx3s_top -json "{directory / "ecp5.json"}"; stat -top ulx3s_top')
-    jobs = [("synthesis", ["yosys", "-p", synth], ROOT / "rtl-sketch", directory / "ecp5.json")]
+    jobs = [] if args.from_synthesis else [
+        ("synthesis", ["yosys", "-p", synth], ROOT / "rtl-sketch", directory / "ecp5.json")]
+    netlist = (Path(report["stages"]["synthesis"]["artifact"]) if args.from_synthesis
+               else directory / "ecp5.json")
     if not args.synth_only:
         jobs.extend([
-            ("place_route", [args.nextpnr, "--25k", "--package", "CABGA381", "--json", str(directory / "ecp5.json"),
+            ("place_route", [args.nextpnr, "--" + args.device, "--package", "CABGA381", "--json", str(netlist),
              "--lpf", str(ROOT / "fpga/boards/ulx3s.lpf"), "--seed", "1", "--textcfg", str(directory / "ecp5.config"),
              "--report", str(directory / "timing.json")], directory, directory / "ecp5.config"),
             ("bitstream", ["ecppack", str(directory / "ecp5.config"), str(directory / "ecp5.bit")], directory, directory / "ecp5.bit")])
