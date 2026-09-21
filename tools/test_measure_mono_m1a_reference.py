@@ -20,3 +20,18 @@ def test_bass_measurement_uses_known_pitch_and_release():
     assert all(abs(row["envelope"]["release_t20_ms"] - 100 * np.log(10)) < 10 for row in rows)
     with pytest.raises(probe.ref.Refused):
         probe.event_measurements(np.zeros_like(audio))
+
+
+@pytest.mark.parametrize("note", [36, 43])
+@pytest.mark.parametrize("phase", [0, .25, .5, .75])
+def test_bass_release_window_is_qualified_across_carrier_phase(note, phase):
+    sr = probe.ref.SR
+    t = np.arange(round(1.8 * sr)) / sr
+    envelope = np.clip((t - .1) / .03, 0, 1)
+    envelope[t >= .7] = np.exp(-(t[t >= .7] - .7) / .1)
+    hz = 440 * 2 ** ((note - 69) / 12)
+    audio = envelope * np.sin(2 * np.pi * (hz * t + phase))
+    measured = probe.ref.am.rms_envelope(audio, ms=probe.ENVELOPE_WINDOW_MS, sr=sr)
+    timing = probe.ref.envelope_timing(measured, sr, .1, .7)
+    assert timing["valid"] and timing["release_complete_40db"]
+    assert abs(timing["release_t20_ms"] - 100 * np.log(10)) < 10

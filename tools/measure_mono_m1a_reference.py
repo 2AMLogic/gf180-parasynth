@@ -18,6 +18,9 @@ EVENTS = ({"note": 36, "on_s": .1, "gate_s": .6},
           {"note": 43, "on_s": 2.1, "gate_s": .6},
           {"note": 36, "on_s": 4.1, "gate_s": .6})
 SECONDS = 7.5
+# At MIDI 36 the lead's 5 ms RMS window spans only 0.33 cycles and crosses
+# release thresholds on carrier troughs. Qualify the bass basis separately.
+ENVELOPE_WINDOW_MS = 40.0
 PATCH = {
     "osc1_level": (15, "Level Osc1", .70),
     "osc2_level": (16, "Level Osc2", .30),
@@ -76,7 +79,7 @@ def render(overrides=None, events=EVENTS, seconds=SECONDS):
 
 
 def event_measurements(audio):
-    envelope = ref.am.rms_envelope(audio, ms=5, sr=ref.SR)
+    envelope = ref.am.rms_envelope(audio, ms=ENVELOPE_WINDOW_MS, sr=ref.SR)
     rows = []
     for e in EVENTS:
         hz = ref.vf.note_hz(e["note"])
@@ -100,6 +103,32 @@ def event_measurements(audio):
     return rows
 
 
+
+def qualify_envelope_basis():
+    """Independent mathematical release; retain the failed lead-window control."""
+    t = np.arange(round(SECONDS * ref.SR)) / ref.SR
+    audio = np.zeros_like(t)
+    for event in EVENTS:
+        dt = t - event["on_s"]
+        envelope = np.clip(dt / .03, 0, 1)
+        off = dt >= event["gate_s"]
+        envelope[off] = np.exp(-(dt[off] - event["gate_s"]) / .1)
+        hz = 440 * 2 ** ((event["note"] - 69) / 12)
+        audio += .1 * envelope * np.sin(2 * np.pi * hz * t)
+    rows = {}
+    expected = 100 * math.log(10)
+    for label, window in (("lead_window", 5.), ("bass_window", ENVELOPE_WINDOW_MS)):
+        measured = ref.am.rms_envelope(audio, ms=window, sr=ref.SR)
+        values = [ref.envelope_timing(measured, ref.SR, e["on_s"], e["on_s"] + e["gate_s"])["release_t20_ms"] for e in EVENTS]
+        rows[label] = {"window_ms": window, "release_ms": values,
+                       "max_error_ms": max(abs(v - expected) for v in values)}
+    if rows["bass_window"]["max_error_ms"] >= 10 or rows["lead_window"]["max_error_ms"] <= 10:
+        raise ref.Refused("bass envelope qualification or wrong-window control failed")
+    return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
+            "scope": "40 ms audio-envelope window; not internal VCA timing",
+            "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release"}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, default=ROOT / "docs/scorecard/mono-m1a-miniv3")
@@ -109,6 +138,7 @@ def main(argv=None):
             raise ref.Refused("commit instrument before capture")
         provenance = ref._source_provenance()
         provenance["files_sha256"]["tools/measure_mono_m1a_reference.py"] = ref.sha256(Path(__file__))
+        qualification = qualify_envelope_basis()
         identity = ref._plugin_metadata()
         integrity = ref._qualify_reference_integrity()
         renders = []
@@ -164,6 +194,8 @@ def main(argv=None):
                   "scope": "frozen Mini V3 reference; no model comparison or Model D cross-check yet",
                   "identity": identity, "integrity": integrity, "provenance": provenance,
                   "sample_rate_hz": ref.SR, "block_size_samples": ref.BLOCK,
+                  "envelope_window_ms": ENVELOPE_WINDOW_MS,
+                  "measurement_qualification": qualification,
                   "midi_velocity": ref.VELOCITY, "events": EVENTS, "duration_s": SECONDS,
                   "filter_rest_ring_hz": rings, "renders": renders, "controls": controls,
                   "wrong_then_right": {"corrected_measurements": 0, "phrase_repeats": 3}}
