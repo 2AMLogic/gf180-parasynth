@@ -1,4 +1,4 @@
-"""Measure the frozen Mini V3 M5A case against the selected integer voice model.
+"""Measure frozen Mini V3 M5A/M5B cases against the selected integer voice model.
 
 The Mini V3 recording is a software-synth reference, not a physical Model D.
 This module refuses if the frozen audio or its manifest has changed.
@@ -25,6 +25,12 @@ SR = 48_000
 ANALYSIS_VERSION = "m5a-score-v3"
 M5A_PULSE_WAVE = "pulse29"
 MANIFEST = ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json"
+MANIFESTS = {
+    "M5A": MANIFEST,
+    "M5B": ROOT / "docs/scorecard/mono-m5b-miniv3/manifest.json",
+}
+ANALYSIS_VERSIONS = {"M5A": ANALYSIS_VERSION, "M5B": "m5b-score-v1"}
+MODEL_NOTE_MUTATIONS = {"MONO_PITCH_UP_3_SEMITONES": 3}
 TOLERANCES = {
     "Pitch": (1.0, "cents; fixed screening limit for this frozen software-synth patch"),
     "Harmonic shape": (1.0, "dB per measured partial; fixed screening limit"),
@@ -143,7 +149,7 @@ def _voice_patch(manifest):
 
 def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
     if wave not in ("saw", "pulse"):
-        raise Refused(f"unsupported M5A waveform {wave!r}")
+        raise Refused(f"unsupported Mono waveform {wave!r}")
     if pulse_shape not in ("pulse29", "pulse479"):
         raise Refused(f"unsupported M5A model pulse candidate {pulse_shape!r}")
     # This is an explicit candidate choice, supported by the frozen-reference
@@ -152,20 +158,49 @@ def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
     return {**patch, "waves": (model_wave, model_wave, model_wave)}
 
 
+def _model_note(note: int, injection: str = "") -> int:
+    """Apply only the declared live-control mutation to the rendered model."""
+    if not injection:
+        return note
+    if injection not in MODEL_NOTE_MUTATIONS:
+        raise Refused(f"unsupported Mono model injection {injection!r}")
+    shifted = note + MODEL_NOTE_MUTATIONS[injection]
+    if not 0 <= shifted <= 127:
+        raise Refused("injected model pitch lies outside MIDI range")
+    return shifted
+
+
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label="production-2x-hold", output_path=None,
             candidate_wav=None, saw_cutoff_override=None,
-            saw_volume_correction_db=0.0):
-    manifest = json.loads(MANIFEST.read_text())
-    manifest_digest = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
+            saw_volume_correction_db=0.0, case_id="M5A", inject=""):
+    if case_id not in MANIFESTS:
+        raise Refused(f"unsupported Mono scorecard case {case_id!r}")
+    if inject == "REF_MISSING":
+        reference_override = MANIFESTS[case_id].parent / "no-such-file.wav"
+    else:
+        reference_override = None
+    if inject and inject not in MODEL_NOTE_MUTATIONS and inject != "REF_MISSING":
+        raise Refused(f"unsupported Mono model injection {inject!r}")
+    manifest_path = MANIFESTS[case_id]
+    if case_id == "M5A" and MANIFEST != ROOT / "docs/scorecard/mono-m5a-miniv3/manifest.json":
+        # Preserve the test/CLI override used to exercise corrupt M5A references.
+        manifest_path = MANIFEST
+    manifest = json.loads(manifest_path.read_text())
+    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if manifest.get("case_id") != case_id:
+        raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
     audio_meta = manifest["audio"]
-    ref_path = MANIFEST.parent / audio_meta["file"]
-    digest = hashlib.sha256(ref_path.read_bytes()).hexdigest()
+    ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
+    try:
+        digest = hashlib.sha256(ref_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise Refused(f"cannot read frozen {case_id} audio {ref_path.name}: {exc}") from exc
     if digest != audio_meta["sha256"]:
-        raise Refused("frozen Mini V3 audio hash mismatch")
+        raise Refused(f"frozen {case_id} Mini V3 audio hash mismatch")
     sr, ref_pcm = wavfile.read(ref_path)
     if sr != SR or ref_pcm.dtype != np.float32 or ref_pcm.ndim != 1:
-        raise Refused("reference WAV is not mono float32 at 48 kHz")
+        raise Refused(f"{case_id} reference WAV is not mono float32 at 48 kHz")
     ref_pcm = ref_pcm.astype(np.float64)
     if len(ref_pcm) != audio_meta["samples"] or not np.isfinite(ref_pcm).all():
         raise Refused("reference sample count or finite-sample precondition failed")
@@ -173,6 +208,8 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     candidate_pcm = None
     candidate_sha256 = None
     if candidate_wav is not None:
+        if inject:
+            raise Refused("Mono model/reference injection cannot alter supplied decoded I2S audio")
         required_samples = int(round(manifest["timeline"]["audio_duration_s"] * SR))
         candidate_pcm, candidate_sha256 = _load_i2s_candidate(candidate_wav, required_samples)
 
@@ -215,7 +252,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                     raise Refused("saw volume correction would leave the supported 0..1 range")
                 segment_patch = {**segment_patch, "vol": corrected_volume}
             for ev in seg["midi_events"]:
-                seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
+                seq.append((float(ev["on_s"]), _model_note(int(ev["note"]), inject), float(ev["gate_s"]),
                             {**segment_patch, "gate": float(ev["gate_s"])}))
             duration = float(seg["duration_s"])
             voice = (vf.VoiceFx(oversample_2x=True) if voice_factory is None
@@ -285,6 +322,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                                       20 * math.log10(max(float(am.rms(xr)), 1e-15))))
             event_diagnostics.append({
                 "wave": wave, "midi": note,
+                "model_midi": _model_note(note, inject),
                 "stages": (None if candidate_sha256 else
                            _stage_diagnostics(voice.trace, pcm, a, b, eo.value)),
                 "filter_reconstruction": (None if candidate_sha256 else
@@ -329,13 +367,18 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
 
     combined = np.concatenate([part for i, part in enumerate(model_parts)
                                if i == 0] + [np.zeros(silence)] + model_parts[1:])
-    out = ROOT / "build/scorecard/M5A-model.wav" if output_path is None else pathlib.Path(output_path)
+    out = ROOT / f"build/scorecard/{case_id}-model.wav" if output_path is None else pathlib.Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     pcm_out = np.clip(combined * 32768.0, -32768, 32767).astype("<i2")
     wavfile.write(out, SR, pcm_out)
-    return {"analysis_version": ANALYSIS_VERSION,
-            "metrics": metrics, "audio": str(out.relative_to(ROOT)),
+    try:
+        audio_path = str(out.relative_to(ROOT))
+    except ValueError:
+        audio_path = str(out)
+    return {"analysis_version": ANALYSIS_VERSIONS[case_id],
+            "metrics": metrics, "audio": audio_path,
             "model_configuration": {"label": model_label, "pulse_shape": pulse_shape,
+                                    "injection": inject or None,
                                     "saw_cutoff_override_hz": saw_cutoff_override,
                                     "saw_volume_correction_db": float(saw_volume_correction_db)},
             "reference_sha256": digest, "manifest_sha256": manifest_digest,
@@ -345,6 +388,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             "wrong_then_right": manifest["qualification"]["wrong_then_right"],
             "duration_s": len(combined) / SR,
         "candidate_i2s_sha256": candidate_sha256,
-        "note": ("Metrics use decoded SPI-to-I2S samples." if candidate_sha256 else
-                 "Full sound comparison uses the fixed integer model; a separate "
-                 "short M5A stimulus verifies the selected configuration through SPI to I2S.")}
+            "note": ("Metrics use decoded SPI-to-I2S samples." if candidate_sha256 else
+                 ("Fixed integer model comparison; M5A also has a separate SPI-to-I2S smoke."
+                  if case_id == "M5A" else
+                  "Fixed integer model comparison only; no M5B SPI-to-I2S evidence is claimed."))}

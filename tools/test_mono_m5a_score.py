@@ -10,7 +10,7 @@ def test_corrupted_reference_refuses_before_measurement(tmp_path, monkeypatch):
     audio = tmp_path / "broken.wav"
     audio.write_bytes(b"not the frozen audio")
     manifest = tmp_path / "manifest.json"
-    manifest.write_text(json.dumps({"audio": {
+    manifest.write_text(json.dumps({"case_id": "M5A", "audio": {
         "file": audio.name,
         "sha256": hashlib.sha256(b"different content").hexdigest(),
     }}))
@@ -25,6 +25,18 @@ def test_metric_keeps_signed_error_and_declared_units():
     assert result["tolerance"] == 1.0
     assert result["units"] == "cents"
     assert result["valid"] is True
+
+
+def test_mono_pitch_mutation_is_explicit_and_bounded():
+    assert score._model_note(72) == 72
+    assert score._model_note(72, "MONO_PITCH_UP_3_SEMITONES") == 75
+    with pytest.raises(score.Refused, match="unsupported Mono model injection"):
+        score._model_note(72, "REF_F0_20PCT")
+
+
+def test_m5b_missing_reference_injection_refuses_with_the_mutation_name():
+    with pytest.raises(score.Refused, match="no-such-file.wav"):
+        score.measure(case_id="M5B", inject="REF_MISSING")
 
 
 def test_pitch_deviation_uses_cents_not_semitone_percent():
@@ -86,6 +98,17 @@ def test_pulse_segment_selects_pulse_in_the_model():
 def test_m5a_candidate_uses_the_measured_filter_drive_intervention():
     manifest = json.loads(score.MANIFEST.read_text())
     assert score._voice_patch(manifest)["drive"] == pytest.approx(0.75)
+
+
+def test_m5b_model_score_covers_both_waveforms_and_notes(tmp_path):
+    measured = score.measure(case_id="M5B", output_path=tmp_path / "m5b-model.wav")
+    assert set(measured["metrics"]) == set(score.TOLERANCES)
+    assert all(metric["valid"] for metric in measured["metrics"].values())
+    assert measured["analysis_version"] == "m5b-score-v1"
+    assert measured["reference_sha256"]
+    assert measured["manifest_sha256"]
+    assert [(event["wave"], event["midi"]) for event in measured["event_diagnostics"]] == [
+        ("saw", 72), ("saw", 84), ("pulse", 72), ("pulse", 84)]
 
 
 def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed():

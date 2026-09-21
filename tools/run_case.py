@@ -1743,7 +1743,7 @@ NOT_RUN["E3A"] = ("no shipped patch uses the noise source or oscillator-3 "
 def plan_for(case_id: str) -> str:
     """What this runner will do with a case: 'drum', 'ensemble', 'not-run' or
     'unplanned'."""
-    if case_id == "M5A":
+    if case_id in ("M5A", "M5B"):
         return "mono"
     if case_id in NOT_RUN:
         return "not-run"
@@ -1772,6 +1772,16 @@ def _git(*args) -> str:
                                        stderr=subprocess.DEVNULL)
     except Exception:
         return ""
+
+
+def mono_reference_pulse_mapping(manifest: dict) -> str:
+    """Summarize only waveform labels the reference actually classified."""
+    values = {str(measurement["waveform"])
+              for segment in manifest["timeline"]["segments"]
+              if segment["wave"] == "pulse"
+              for measurement in segment["measurements"]
+              if measurement.get("waveform") is not None}
+    return ", ".join(sorted(values)) or "waveform not classified in frozen reference"
 
 
 def source_commit() -> str:
@@ -2231,27 +2241,54 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
         if kind == "filter":
             return run_filter_case(case, inject, keep_audio)
         if kind == "mono":
-            measured = mono_m5a.measure()
-            smoke_dir = ROOT / "build/scorecard/M5A-spi-i2s"
-            report_path = smoke_dir / "verification.txt"
-            smoke = subprocess.run(
-                [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
-                 "--m5a-smoke", "--osc2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
-                 "--outdir", str(smoke_dir),
-                 "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
-                cwd=ROOT, capture_output=True, text=True, timeout=3600)
-            report_path.parent.mkdir(parents=True, exist_ok=True)
-            report_path.write_text(smoke.stdout + smoke.stderr)
-            if (smoke.returncode != 0 or "PASS --" not in report_path.read_text()
-                    or "M5A path verified" not in report_path.read_text()):
-                raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {report_path.relative_to(ROOT)}")
-            smoke_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+            control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
+                             if inject else None)
+            measured = mono_m5a.measure(case_id=cid, inject=inject,
+                                         output_path=control_audio)
+            report_path = None
+            smoke_sha = None
+            if cid == "M5A":
+                smoke_dir = ROOT / "build/scorecard/M5A-spi-i2s"
+                report_path = smoke_dir / "verification.txt"
+                smoke = subprocess.run(
+                    [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
+                     "--m5a-smoke", "--osc2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
+                     "--outdir", str(smoke_dir),
+                     "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
+                    cwd=ROOT, capture_output=True, text=True, timeout=3600)
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(smoke.stdout + smoke.stderr)
+                if (smoke.returncode != 0 or "PASS --" not in report_path.read_text()
+                        or "M5A path verified" not in report_path.read_text()):
+                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {report_path.relative_to(ROOT)}")
+                smoke_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+            profile = mono_m5a.MANIFESTS[cid]
+            manifest = json.loads(profile.read_text())
+            notes = sorted({ev["note"] for seg in manifest["timeline"]["segments"]
+                            for ev in seg["midi_events"]})
+            duration = manifest["timeline"]["audio_duration_s"]
+            pulse_mapping = mono_reference_pulse_mapping(manifest)
+            outputs = {"ours": measured["audio"]}
+            if report_path is not None:
+                outputs["spi_i2s"] = str(report_path.relative_to(ROOT))
+            inputs = model_input_hashes({f"frozen:{cid}:audio": "sha256:" + measured["reference_sha256"],
+                                         f"frozen:{cid}:manifest": "sha256:" + measured["manifest_sha256"]})
+            config = {"oscillator_config": "2x saw candidate",
+                      "pulse_control": mono_m5a.M5A_PULSE_WAVE,
+                      "effective_reference_pulse": pulse_mapping,
+                      "case_id": cid,
+                      "reference": "frozen Mini V3 WAV",
+                      "inject": inject or None}
+            if smoke_sha:
+                config["filter_drive"] = 0.75
             base.update({
-                "reference_profile": "Mini V3 3.12.0.3422 via dawdreamer 0.8.3; frozen raw audio",
-                "reference_identity": "Mini V3 software synthesizer; not a physical Minimoog",
+                "reference_profile": (f"Mini V3 {manifest['identity']['version']} via "
+                                      f"dawdreamer {manifest['identity']['host_version']}; frozen raw audio"),
+                "reference_identity": manifest["reference_kind"],
                 "analysis_version": measured["analysis_version"],
-                "render_run": (f"fixed integer model; 2x saw, filter drive 0.75, "
-                               f"{mono_m5a.M5A_PULSE_WAVE} pulse, MIDI 84/96, complete 27.2 s phrase"),
+                "render_run": (f"fixed integer model; 2x saw, {mono_m5a.M5A_PULSE_WAVE} pulse "
+                               f"({pulse_mapping} measured in reference), MIDI {notes}, "
+                               f"complete {duration:.2f} s phrase"),
                 "audio": measured["audio"], "note": measured["note"],
                 "tolerance_policy": mono_m5a.TOLERANCES,
                 "metrics": measured["metrics"],
@@ -2262,14 +2299,10 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                                 "events": measured["event_diagnostics"],
                                 "wrong_then_right": measured["wrong_then_right"],
                                 "duration_s": measured["duration_s"],
-                                "spi_i2s_report_sha256": smoke_sha},
-                "provenance": provenance(
-                    model_input_hashes({"frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
-                                        "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"]}),
-                    {"ours": measured["audio"], "spi_i2s": str(report_path.relative_to(ROOT))},
-                    {"oscillator_config": "2x saw candidate", "pulse_shape": mono_m5a.M5A_PULSE_WAVE,
-                     "filter_drive": 0.75,
-                     "reference": "frozen Mini V3 WAV"})})
+                                **({"spi_i2s_report_sha256": smoke_sha} if smoke_sha else {})},
+                "provenance": provenance(inputs, outputs, config)})
+            if inject:
+                base["INJECTED_CONTROL"] = inject
             return base
         base["note"] = "REFUSED: this runner has no plan for this case."
         base["metrics"] = {m: invalid_metric("", "no measurement plan") for m in required}
@@ -2277,6 +2310,8 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
     except (Refused, rp.Refused, mono_m5a.Refused) as e:
         base["note"] = f"REFUSED: {e}"
         base["metrics"] = {m: invalid_metric("", str(e)) for m in required}
+        if inject:
+            base["INJECTED_CONTROL"] = inject
         return base
     except Exception as e:                       # pragma: no cover - guard
         base["note"] = f"REFUSED: {type(e).__name__}: {e}"
@@ -2406,7 +2441,9 @@ def cmd_list(cases: list[dict]) -> int:
             why = (f"ours vs frozen {f['ref_clip']} "
                    f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
         elif kind == "mono":
-            why = "M5A fixed-model phrase vs frozen Mini V3; includes SPI-to-I2S smoke"
+            why = ("fixed integer-model phrase vs frozen Mini V3; " +
+                   ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
+                    else "model-only; no integrated RTL claim"))
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")
@@ -2428,6 +2465,7 @@ def main(argv=None) -> int:
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
+                             "MONO_PITCH_UP_3_SEMITONES",
                              "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED"],
                     help="an injected control; requires --results outside the board")
     ap.add_argument("--expect", default="",
