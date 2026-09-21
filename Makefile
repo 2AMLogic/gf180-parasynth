@@ -31,6 +31,8 @@ verify:
 	  "$(PY) rtl-sketch/verify_ctl.py" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x" \
+	  "$(PY) tools/gen_rate_conv_2x.py --check" \
+	  "$(PY) tools/verify_rate_conv_2x.py" \
 	  "$(PY) tools/verify_mono_case.py" \
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
@@ -41,7 +43,7 @@ verify:
 ## the measurement and selected-path smoke produced a trustworthy verdict.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_mono_m5a_score.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
@@ -125,6 +127,7 @@ controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
+	  "$(PY) tools/verify_rate_conv_2x.py --inject-clamp --expect-fail" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
