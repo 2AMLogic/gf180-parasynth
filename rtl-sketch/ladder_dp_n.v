@@ -58,8 +58,9 @@ module ladder_dp_n #(
     input  wire               clk,
     input  wire               rst_n,
     input  wire               sample_valid,
+    input  wire               os2x,        // 1: two updates per sample; 0: one high-rate update
     input  wire [CHW-1:0]     ch,           // channel this sample belongs to, sampled with sample_valid
-    input  wire signed [15:0] x_in,
+    input  wire signed [16:0] x_in,         // Q1.15-scaled; high-rate reconstruction may exceed int16
     input  wire        [15:0] g,
     input  wire        [16:0] k,
     input  wire        [19:0] gain,
@@ -89,6 +90,7 @@ module ladder_dp_n #(
     reg signed [SW:0]   xg;                      // (x * gain) >> 11, 25 bits
     reg [3:0] step;                              // 0 idle, 1..12 below
     reg       os;                                // oversample pass
+    reg       os2r;                              // per-sample two-update mode
     reg       busy;
 
     // ---- the one multiplier: 24-bit signed x 20-bit unsigned ---------------
@@ -184,7 +186,7 @@ module ladder_dp_n #(
             y_valid <= 1'b0;
             if (!busy) begin
                 if (sample_valid) begin                  // load x * gain
-                    busy <= 1'b1; os <= 1'b0; step <= 4'd1; chr <= chsel;
+                    busy <= 1'b1; os <= 1'b0; os2r <= os2x; step <= 4'd1; chr <= chsel;
                     mul_a <= x_in; mul_b <= gain;
                 end
             end else case (step)
@@ -211,8 +213,12 @@ module ladder_dp_n #(
                 end
                 4'd11: begin                             // w_3 = tanh result; shift the delay line
                     w[y3i] <= tr; d2[dch] <= d1[dch]; d1[dch] <= y[y3i];
-                    if (!os) begin                       // pass 1: load k * fb from the new average
-                        os <= 1'b1; mul_a <= fb1; mul_b <= {3'b0, k}; step <= 4'd2;
+                    if (!os) begin
+                        if (os2r) begin                   // pass 1: load k * fb from the new average
+                            os <= 1'b1; mul_a <= fb1; mul_b <= {3'b0, k}; step <= 4'd2;
+                        end else begin                    // one update at the actual high-rate sample
+                            mul_a <= y[y3i] >>> TQ; mul_b <= ogain; step <= 4'd12;
+                        end
                     end else begin                       // output: load (y_3 >> 5) * ogain
                         mul_a <= y[y3i] >>> TQ; mul_b <= ogain; step <= 4'd12;
                     end

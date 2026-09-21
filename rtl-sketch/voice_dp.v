@@ -96,7 +96,9 @@ module voice_dp #(
     reg [2:0]  mroute;                     // bit0 osc mod, bit1 filter mod, bit2 OSC-3 CONTROL
     reg [15:0] mmix, mwheel, mpd, mfd;     // the MOD MIX pan, the wheel, the two depths (6.9)
     reg [23:0] a_inc_a, d_dec_a, sus_a, a_inc_f, d_dec_f, sus_f;
-    reg [15:0] rate_a, rate_f;
+    // Q0.16 normalized mantissa plus an 8-bit binary exponent. The exponent
+    // preserves precision for long releases without widening the shared MAC.
+    reg [23:0] rate_a, rate_f;
     reg        gate;
     reg [23:0] glide;
     reg [15:0] vol, dvol, bvol;
@@ -152,7 +154,11 @@ module voice_dp #(
     localparam signed [24:0] PA0 = -25'sd28689,  PA1 =  25'sd12348;                        // Q14
     localparam signed [24:0] RED_G = 25'sd904, RED_GAIN = 25'sd29841;
     localparam signed [24:0] SHK_SAW = 25'sd5749, SHK_TRI = 25'sd27019;
+`ifdef VOICE_FILTER_2X
+    localparam [23:0] DUTY_WIDE = 24'd8036286, DUTY_NARROW = 24'd2516582; // pulse479 candidate
+`else
     localparam [23:0] DUTY_WIDE = 24'd4865393, DUTY_NARROW = 24'd2516582;
+`endif
 
     // ---- the one multiplier -------------------------------------------------------
     reg  signed [24:0] ma;
@@ -176,9 +182,33 @@ module voice_dp #(
     wire signed [18:0] lad_y;
     wire        lad_yv;
     wire        lad_ych;
+`ifdef VOICE_FILTER_2X
+    reg voice_filter_phase;
+    reg filter_input_valid;
+    reg signed [15:0] filter_input;
+    reg signed [16:0] filter_x_even, filter_x_odd;
+    reg signed [18:0] filter_y_even;
+    wire signed [16:0] interp_even, interp_odd;
+    wire signed [18:0] decimated_voice_y;
+`ifdef INJECT_BUG_VOICE_FILTER2X_OFF
+    wire signed [16:0] lad_x_voice = {{1{filter_input[15]}}, filter_input};
+`else
+    wire signed [16:0] lad_x_voice = voice_filter_phase ? filter_x_odd : filter_x_even;
+`endif
+    wire signed [16:0] lad_x = lad_ch ? {{1{dx[15]}}, dx} : lad_x_voice;
+    wire lad_os2x = lad_ch;
+    rate_conv_2x voice_rate_converter (
+        .clk(clk), .rst_n(rst_n), .interp_valid(filter_input_valid),
+        .x_in(filter_input), .x_even(interp_even), .x_odd(interp_odd),
+        .decim_valid((lad_yv && !lad_ych) && voice_filter_phase),
+        .y_even(filter_y_even), .y_odd(lad_y), .y_out(decimated_voice_y));
+`else
+    wire signed [16:0] lad_x = lad_ch ? {{1{dx[15]}}, dx} : {{1{mixed[15]}}, mixed};
+    wire lad_os2x = 1'b1;
+`endif
     ladder_dp_n #(.NCH(2), .ROM_FILE(TANH_FILE), .OW(19)) u_ladder (
-        .clk(clk), .rst_n(rst_n), .sample_valid(lad_sv), .ch(lad_ch),
-        .x_in(lad_ch ? dx : mixed), .g(lad_ch ? g2 : g), .k(lad_ch ? k_eff2 : k_eff),
+        .clk(clk), .rst_n(rst_n), .sample_valid(lad_sv), .os2x(lad_os2x), .ch(lad_ch),
+        .x_in(lad_x), .g(lad_ch ? g2 : g), .k(lad_ch ? k_eff2 : k_eff),
         .gain(lad_ch ? dgain : gain), .ogain(lad_ch ? dogain : ogain),
         .y_out(lad_y), .y_valid(lad_yv), .y_ch(lad_ych));
 
@@ -346,6 +376,16 @@ module voice_dp #(
         end
     endfunction
 
+`ifdef INJECT_BUG_VOICE_ENV_RATE_EXP
+    // NEGATIVE CONTROL: ignore the scale field; long release codes become
+    // hundreds of times too fast and the voice comparison must turn red.
+    wire [45:0] env_decay_a = mr >> 16;
+    wire [45:0] env_decay_f = mr >> 16;
+`else
+    wire [45:0] env_decay_a = mr >> (16 + rate_a[23:16]);
+    wire [45:0] env_decay_f = mr >> (16 + rate_f[23:16]);
+`endif
+
     // ---- cutoff (10), for the voice (cut) and the drum filter (dcut, clamped) ----------
     wire signed [16:0] span = $signed({1'b0, cut_hi}) - $signed({1'b0, cut_lo});
     wire signed [16:0] t    = mr[31:15];                          // (span * fe) >> 15
@@ -484,9 +524,32 @@ module voice_dp #(
             g0 <= 0; g1 <= 0; kc0 <= 0; kc1 <= 0; kd <= 0; pacc <= 0; dacc <= 0; macc <= 0; tacc <= 0; d19 <= 0;
             ma <= 0; mb <= 0; div_start <= 0; div_inc <= 0; lad_sv <= 0; lad_ch <= 0; g <= 0; g2 <= 0; k_eff2 <= 0; dx <= 0;
             sample <= 0; sample_valid <= 0; mixed <= 0; ae <= 0; fe <= 0; cut <= 0; k_eff <= 0; y19 <= 0;
+`ifdef VOICE_FILTER_2X
+            voice_filter_phase <= 1'b0; filter_input_valid <= 1'b0; filter_input <= 0;
+            filter_x_even <= 0; filter_x_odd <= 0; filter_y_even <= 0;
+`endif
         end else begin
             sample_valid <= 1'b0; div_start <= 1'b0; lad_sv <= 1'b0;
+`ifdef VOICE_FILTER_2X
+            filter_input_valid <= 1'b0;
+            if (filter_input_valid) begin
+                filter_x_even <= interp_even; filter_x_odd <= interp_odd;
+                voice_filter_phase <= 1'b0; lad_sv <= 1'b1;
+            end
+            if (lad_yv && !lad_ych) begin
+                if (!voice_filter_phase) begin
+                    filter_y_even <= lad_y;
+                    voice_filter_phase <= 1'b1;
+                    lad_sv <= 1'b1;
+                end else begin
+                    y19 <= decimated_voice_y;
+                    y_seen <= 1'b1;
+                    voice_filter_phase <= 1'b0;
+                end
+            end
+`else
             if (lad_yv && !lad_ych) begin y19 <= lad_y; y_seen <= 1'b1; end
+`endif
             if (lad_yv &&  lad_ych) begin d19 <= lad_y; d_seen <= 1'b1; end
             case (state)
                 // ---- 0. the noise board (6.10), then the modulation path (6.9) ----
@@ -651,18 +714,24 @@ module voice_dp #(
 `else
                     mixed <= sat16m(msh);
 `endif
-                    lad_sv <= 1'b1; lad_ch <= 1'b0; y_seen <= 1'b0; d_seen <= 1'b0;
-                    ma <= {1'b0, level_a}; mb <= {5'b0, rate_a};
+`ifdef VOICE_FILTER_2X
+                    filter_input <= sat16m(msh); filter_input_valid <= 1'b1;
+`endif
+`ifndef VOICE_FILTER_2X
+                    lad_sv <= 1'b1;
+`endif
+                    lad_ch <= 1'b0; y_seen <= 1'b0; d_seen <= 1'b0;
+                    ma <= {1'b0, level_a}; mb <= {5'b0, rate_a[15:0]};
                     state <= S_EA1;
                 end
                 // ---- step 9 while the ladder runs: envelope updates, glide slews ----
                 S_EA1: begin
-                    {seg_a, level_a} <= env_update(gate, seg_a, level_a, a_inc_a, d_dec_a, sus_a, mr[39:16]);
-                    ma <= {1'b0, level_f}; mb <= {5'b0, rate_f};
+                    {seg_a, level_a} <= env_update(gate, seg_a, level_a, a_inc_a, d_dec_a, sus_a, env_decay_a[23:0]);
+                    ma <= {1'b0, level_f}; mb <= {5'b0, rate_f[15:0]};
                     state <= S_EF1;
                 end
                 S_EF1: begin
-                    {seg_f, level_f} <= env_update(gate, seg_f, level_f, a_inc_f, d_dec_f, sus_f, mr[39:16]);
+                    {seg_f, level_f} <= env_update(gate, seg_f, level_f, a_inc_f, d_dec_f, sus_f, env_decay_f[23:0]);
                     kk <= 2'd0; state <= S_SL0;
                 end
                 S_SL0: begin
@@ -772,8 +841,8 @@ module voice_dp #(
                 8'h0D: vol <= wr_data[15:0];
                 8'h0E: dvol <= wr_data[15:0];
                 8'h0F: dfilt <= wr_data[0];
-                8'h10: a_inc_a <= wr_data[23:0];  8'h11: d_dec_a <= wr_data[23:0];  8'h12: sus_a <= wr_data[23:0];  8'h13: rate_a <= wr_data[15:0];
-                8'h14: a_inc_f <= wr_data[23:0];  8'h15: d_dec_f <= wr_data[23:0];  8'h16: sus_f <= wr_data[23:0];  8'h17: rate_f <= wr_data[15:0];
+                8'h10: a_inc_a <= wr_data[23:0];  8'h11: d_dec_a <= wr_data[23:0];  8'h12: sus_a <= wr_data[23:0];  8'h13: rate_a <= wr_data[23:0];
+                8'h14: a_inc_f <= wr_data[23:0];  8'h15: d_dec_f <= wr_data[23:0];  8'h16: sus_f <= wr_data[23:0];  8'h17: rate_f <= wr_data[23:0];
                 8'h18: cut_lo <= wr_data[15:0];  8'h19: cut_hi <= wr_data[15:0];  8'h1A: track_hz <= wr_data[15:0];
                 8'h1B: nsel <= wr_data[0];                                     // white/pink selector (2.5)
                 8'h1C: k <= wr_data[16:0];  8'h1D: gain <= wr_data[19:0];  8'h1E: ogain <= wr_data[19:0];

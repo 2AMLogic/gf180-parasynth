@@ -6,6 +6,8 @@
 #   make ice40      iCE40 UP5K (iCEBreaker), bare wrapper, no PLL possible
 #   OSC2X=1 (default) selects the measured 2x saw chain; OSC2X=0 builds the
 #   legacy single-rate waveform for comparison.
+#   FILTER2X=1 opts into the reconstructed 2x filter/headroom candidate; it
+#   requires OSC2X=1 and remains off until the full scorecard is accepted.
 #   make headroom   route fpga/rtl/headroom_top.v -- the same design with the
 #                   drum bank grown to the completed 808 (MODES=16 NUMS=11) --
 #                   to measure the margin rather than estimate it
@@ -50,7 +52,13 @@ NEXTPNR_ECP5  ?= nextpnr-ecp5
 ECPPACK       ?= ecppack
 PYTHON        ?= $(firstword $(wildcard $(ROOT)/.venv/bin/python) $(wildcard /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python) python3)
 OSC2X         ?= 1
-RTL_DEFS      := $(if $(filter 1 yes true,$(OSC2X)),-DVOICE_OSC_2X,)
+FILTER2X      ?= 0
+ifneq ($(filter 1 yes true,$(FILTER2X)),)
+ifeq ($(filter 1 yes true,$(OSC2X)),)
+$(error FILTER2X=1 requires OSC2X=1)
+endif
+endif
+RTL_DEFS      := $(if $(filter 1 yes true,$(OSC2X)),-DVOICE_OSC_2X,) $(if $(filter 1 yes true,$(FILTER2X)),-DVOICE_FILTER_2X,)
 
 # The chip. This is rtl-sketch/verify_synth_top.py's own SRCS list -- the set
 # that bench elaborates and compares against the model -- and it must stay that
@@ -60,7 +68,7 @@ CORE := $(RTL)/synth_top.v $(RTL)/spi_ctl.v $(RTL)/voice_dp.v $(RTL)/recip_div.v
         $(RTL)/ladder_dp_n.v $(RTL)/i2s_tx.v \
         $(RTL)/drum_regs.v $(RTL)/drum_kit.v $(RTL)/drum_dp.v $(RTL)/modal_dp.v \
         $(RTL)/osc_2x_saw_bank.v $(RTL)/osc_2x_saw_path.v $(RTL)/polyblep_saw_pair.v \
-        $(RTL)/osc_substep_pair.v $(RTL)/decimate_2x_tm_sym.v
+        $(RTL)/osc_substep_pair.v $(RTL)/decimate_2x_tm_sym.v $(RTL)/rate_conv_2x.v
 
 SRC_ECP5  := $(FPGA)/rtl/ulx3s_top.v $(CORE)
 SRC_ICE40 := $(FPGA)/rtl/fpga_top.v  $(CORE)

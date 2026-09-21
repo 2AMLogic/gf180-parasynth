@@ -50,7 +50,7 @@ module tb_ladder_n;
     wire                 y_valid;
 
     ladder_dp_n #(.TANH_LOG2N(LOG2N), .ROM_FILE(ROM_FILE), .NCH(NCH), .OW(OW)) dut (
-        .clk(clk), .rst_n(rst_n), .sample_valid(sample_valid), .ch(ch), .x_in(x_in),
+        .clk(clk), .rst_n(rst_n), .sample_valid(sample_valid), .os2x(1'b1), .ch(ch), .x_in(x_in),
         .g(g), .k(k), .gain(gain), .ogain(ogain), .y_out(y_out), .y_valid(y_valid), .y_ch(y_ch));
 
     always #10 clk = ~clk;

@@ -105,7 +105,7 @@ fast-corner number.
 | `tanh` table | **16 entries, edge-sampled, interpolated** — 256 ROM bits | 16 scores identically to 256 on every patch |
 | phase accumulator | 24-bit | |
 | PolyBLEP reciprocal | 16-bit mantissa + 16-bit reciprocal, computed at note-on; one 16×16 multiply per sample | set by tracking the float waveform inside Q1.15, not by aliasing — 8 bits already reach the float's suppression |
-| envelope | 24-bit level, Q0.16 rate, release `L −= max(1, (L·rate) >> 16)` | 20 is the floor for attack time; 24 keeps the release floor below −62 dBFS up to a 1 s release |
+| envelope | 24-bit level; 24-bit voice rate code (Q0.16 mantissa + 8-bit exponent), release `L −= max(1, (L·mantissa) >> (16 + exponent))` | 20 is the floor for attack time; the exponent preserves long-release precision |
 | cutoff → `g` ROM | 128 × Q0.16, interpolated — 2 kbit | −0.6 % at 120 Hz, −0.05 % at 1 kHz |
 | drum envelope | the voice's release rule, 24-bit level, Q0.16 rate, plus a hold count, up to three re-strikes at 13/16 and a choke | one rule for every envelope on the chip; the dead zone closed the same way |
 | drum bodies and filters | modes of the modal bank: Q2.24 coefficients, 28-bit state; a numerator (`1 − z⁻²` or `(1 − z⁻¹)²`) on six of twelve | the 808's bridged-T voices are presets, its band- and high-passes the same resonator pre-differenced |

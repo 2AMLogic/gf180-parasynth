@@ -29,14 +29,12 @@ section 10 for where the chip sits against the wafer.space quarter slot.
 ### The board
 
 <!-- BOARD:BEGIN -->
-**19 of 100 acceptance cases have a valid measurement.** 6 pass · 13 fail · 4 no verdict · 77 not run.
-
-> **No case has been measured on the integrated RTL yet**, so these describe a model rather than the instrument.
+**20 of 100 acceptance cases have a valid measurement.** 6 pass · 14 fail · 4 no verdict · 76 not run.
 
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
 | Drums | 32 | 12 | 3 | 9 | 4 | 16 |
-| Mono | 32 | 1 | 0 | 1 | 0 | 31 |
+| Mono | 32 | 2 | 0 | 2 | 0 | 30 |
 | Filters | 24 | 3 | 0 | 3 | 0 | 21 |
 | Ensemble | 12 | 3 | 3 | 0 | 0 | 9 |
 
@@ -222,7 +220,7 @@ and not yet corrected.
 | `tanh` table | **16 entries, edge-sampled, interpolated — 256 ROM bits** | 16 scores identically to 256 on every patch |
 | phase accumulator | 24-bit | unchanged from the audition |
 | PolyBLEP reciprocal | increment normalised at note-on to a 16-bit mantissa; 16-bit reciprocal; one 16×16 multiply per sample | width is set by tracking the float waveform inside Q1.15, **not** by aliasing — 8 bits already reach the float's suppression |
-| envelope | 24-bit level, Q0.16 rate; release is `L −= max(1, (L·rate) >> 16)` | 20 is the floor for attack-time accuracy; 24 keeps the release floor below −62 dBFS for releases up to 1 s. The `max(1, ·)` is what makes a note end |
+| voice envelope | 24-bit level; release is a 24-bit Q0.16 mantissa plus 8-bit exponent, `L −= max(1, (L·mantissa) >> (16 + exponent))` | 24 level bits keep the release floor below −60 dBFS for releases up to 1 s; the exponent preserves precision for long releases |
 | cutoff → `g` | 128 entries × Q0.16, edge-sampled, interpolated — 2 kbit | −0.6 % at 120 Hz, −0.05 % at 1 kHz; 256 entries halve that for 2 kbit more |
 | cutoff `g` | Q0.16, unsigned | reaches 61,659 at the 0.45·fs clamp: bit 15 is data, not sign |
 | resonance `k` | Q3.14, 17 bits | 4·res; res = 1.0 is exactly 65,536 |

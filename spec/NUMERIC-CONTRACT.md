@@ -100,7 +100,7 @@ envelope.
 | PolyBLEP mantissa / reciprocal | 16 bits / 16 bits (`MANT_BITS`, `RECIP_BITS`) |
 | Mixer weight | Q0.15, 16-bit unsigned register; a weight of 32768 is 1.0 |
 | Envelope level | 24-bit unsigned, Q0.24 (`ENV_BITS`) |
-| Envelope release rate | Q0.16 (`RATE_Q`) |
+| Voice envelope release rate | 24-bit code: Q0.16 mantissa plus 8-bit binary exponent (`RATE_Q`, `RATE_EXP_BITS`) |
 | Cutoff | integer Hz, clamped to 30..21600 (`CUT_MIN`, `CUT_MAX`) |
 | Cutoff → g ROM | 128 entries + 1 guard, Q0.16, linear interpolation (`GROM_BITS` = 7) |
 | Cutoff → kc ROM | 32 entries + 1 guard, unsigned Q1.15, linear interpolation (`KROM_BITS` = 5) — DR 0006 |
@@ -253,7 +253,7 @@ product the host's job (5.5).
 | `wave[k]` | 3 | osc | one of saw, square, pulse25, tri, sine (encoding in 5.2) | `waves[k]` |
 | `w[k]` | 16 u | osc | mixer weight, Q0.15 | `weights[k]` |
 | `a_inc`, `d_dec`, `sus` | 24 u | env ×2 | attack increment, decay decrement, sustain level, Q0.24 | `AdsrFx.a_inc`, `.d_dec`, `.sus` |
-| `rate` | 16 u | env ×2 | release rate, Q0.16 | `AdsrFx.rate` |
+| `rate` | 24 u | env ×2 | release fraction as 16-bit Q0.16 mantissa + 8-bit binary exponent | `AdsrFx.rate` |
 | `gate` | 1 | voice | envelope gate (both envelopes) | `VoiceFx.gate` |
 | `glide` | 24 u | voice | glide rate, Q0.24, the ratio per frame minus 1; 0 = off (6.7) | `VoiceFx.glide` |
 | `vol` | 16 u | voice | output volume, Q0.15 (12) | `VoiceFx.vol` |
@@ -399,8 +399,12 @@ w[k]       = fit16( floor(mix_k / Σmix · 2^15) )     "floor-normalised": Σ w 
 a_inc      = fit24( ceil(2^24 / max(1, floor(attack_s · 48000))) )
 sus        = fit24( round(sustain · (2^24 − 1)) )
 d_dec      = fit24( ceil((2^24 − 1 − sus) / max(1, floor(decay_s · 48000))) )
-rate       = fit16( max(1, round((1 − exp(−4 / (release_s · 48000))) · 2^16)) )
-                                                     release_s ≤ 0 is instant: rate = 65535
+alpha      = clamp(1 − exp(−4 / (release_s · 48000)), 0, 1)
+exp        = clamp(max(0, ceil(−log2(alpha)) − 1), 0, 255)
+mantissa   = clamp(round(alpha · 2^(16 + exp)), 1, 65535)
+rate       = (exp << 16) | mantissa
+                                                     release_s ≤ 0: alpha = 1
+                                                     alpha = 0: rate = 0
 cut_lo/hi  = fit16( round(cutoff_lo/hi_hz) )
 track_hz   = fit16( round(track · f0 · 4) )
 k          = fit17( round(4 · res · 2^14) )
@@ -424,14 +428,12 @@ waveform — and pins the following:
   value completes the attack in one update from any level, so the register
   stays 24 bits rather than growing a bit that changes no sample
   (`test_attack_increment_clamps_below_two_frames`).
-- `rate`: the raw value is 2^16 — 1.0, which Q0.16 cannot hold — for
-  `release_s ≤ 4 / (17 ln 2 · 48000) = 7.072 µs`, a third of a frame, and
-  rev 1's model divided by zero at `release_s = 0`. It is clamped to 65535,
-  and `release_s ≤ 0` means instant, as the float model's `max(1e-9, ·)`
-  does. The cost of the clamp: full scale reaches zero in three updates
-  (16777215 → 256 → 1 → 0; 62.5 µs) where 1.0 would take one. A 17th bit
-  on every rate multiply, for a release nobody can hear, is not worth that
-  (`test_release_rate_clamps_below_seven_microseconds`).
+- `rate`: the 16-bit mantissa is normalized with a binary exponent in the
+  high byte. This keeps the control word at 24 bits and the shared multiplier
+  at 24 × 16, while representing slow exponential releases without rounding
+  the decrement to only two or three Q0.16 values. For `release_s ≤ 0`, the
+  host selects the fastest representable code; code zero retains the defined
+  one-level-per-frame floor (`test_release_rate_clamps_below_seven_microseconds`).
 - `inc`: the raw value exceeds 24 bits only for an oscillator at or above
   48 kHz, the sample rate — note 127 with a detune of +23.24 semitones or
   more; it is clamped to 2^24 − 1, which is already above Nyquist (6.3).
@@ -804,7 +806,7 @@ model that was auditioned; release is exponential with a floor.
 | `a_inc` | 24-bit unsigned | level increment per frame in ATTACK |
 | `d_dec` | 24-bit unsigned | level decrement per frame in DECAY |
 | `sus` | 24-bit unsigned | DECAY target and SUSTAIN level |
-| `rate` | 16-bit unsigned | Q0.16 release fraction |
+| `rate` | 24-bit unsigned | Q0.16 mantissa in bits 15:0, binary exponent in bits 23:16 |
 
 There is no IDLE state and no RELEASE state: the gate selects the branch. A
 voice from reset has `level = 0`, `seg = ATTACK`, `gate = 0`, and the release
@@ -833,19 +835,19 @@ gate = 1:
   SUSTAIN:  level ← sus
 
 gate = 0 (release, from any seg; seg is NOT changed):
-  dec   ← (level · rate) >> 16                        exact 40-bit product
+  dec   ← (level · mantissa) >> (16 + exponent)       exact 40-bit product, then scale shift
   level ← level − max(1, dec)
   if level < 0:  level ← 0
 ```
 
-**`max(1, dec)` is load-bearing.** Below `level = 2^16 / rate` the product
-truncates to zero and, without it, the level would never move again and the
-note would never end; with it the tail below that floor decays at one LSB per
-frame and reaches exactly zero (`test_release_reaches_exactly_zero`). The
-floor is `floor(2^16 / rate) + 1` levels (`AdsrFx.floor_level`); at 24 level
-bits it is below −60 dBFS for every release up to 1 s
-(`test_release_floor_is_below_the_noise_floor`), which is why the level is
-24 bits and not 20.
+**`max(1, dec)` is load-bearing.** Below `level = 2^(16+exponent) / mantissa`
+the product truncates to zero and, without it, the level would never move
+again and the note would never end; with it the tail below that floor decays
+at one LSB per frame and reaches exactly zero (`test_release_reaches_exactly_zero`).
+The floor is `floor(2^(16+exponent) / mantissa) + 1` levels
+(`AdsrFx.floor_level`); at 24 level bits it is below −60 dBFS for every
+release up to 1 s (`test_release_floor_is_below_the_noise_floor`), which is
+why the level is 24 bits and not 20.
 
 Notes that follow from the rule and are intentional:
 

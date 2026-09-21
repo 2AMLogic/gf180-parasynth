@@ -31,6 +31,10 @@ verify:
 	  "$(PY) rtl-sketch/verify_ctl.py" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --outdir build/voice-filter2x" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x" \
+	  "$(PY) tools/gen_rate_conv_2x.py --check" \
+	  "$(PY) tools/verify_rate_conv_2x.py" \
 	  "$(PY) tools/verify_mono_case.py" \
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
@@ -41,7 +45,7 @@ verify:
 ## the measurement and selected-path smoke produced a trustworthy verdict.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest tools/test_mono_m5a_score.py tools/test_measure_m5a_pulse_duty.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
@@ -58,7 +62,9 @@ verify-full:
 	  "$(PY) rtl-sketch/verify_voice.py --set full --osc2x --outdir build/voice-full-osc2x" \
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) rtl-sketch/verify_voice.py --set full" \
-	  "$(PY) rtl-sketch/verify_drums.py"
+	  "$(PY) rtl-sketch/verify_drums.py" \
+	  "$(PY) tools/verify_m5a_filter2x_i2s.py" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control"
 
 ## Every injected control that must turn something red, together.
 ## A run where these do not fire is a broken run, not a quiet one.
@@ -83,8 +89,8 @@ verify-full:
 ## THE THREE FILTER CONTROLS need the frozen reference cache. Without it the
 ## clean baseline refuses; the runner reports NO-VERDICT, and this aggregate
 ## target fails. That is intentional: these controls cannot be called caught
-## without a valid clean comparison. Render the profile first
-## (`tools/refprofile.py --render`, which needs Surge XT and dawdreamer).
+## without a valid clean comparison. Restore the frozen profile first
+## (`python3 tools/refprofile_restore.py`, which needs no plugin).
 ##
 ## THE TWO PROFILE CONTROLS NOW COVER F1B AND F1C. REF_CORNER_2X compares the
 ## injected run with a clean run, because all three F1 cases now fail cleanly;
@@ -123,8 +129,10 @@ verify-full:
 ## verifier need the same treatment.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
+	  "$(PY) tools/verify_rate_conv_2x.py --inject-clamp --expect-fail" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
@@ -135,6 +143,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_MASTER_PRESHIFT --expect-fail --outdir build/top-preshift" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-osc2x-off" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --osc2x --inject VOICE_OSC2X_OFF --expect-fail --outdir build/top-m5a-smoke-off" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-m5a-filter2x-off" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_DRUM_CLAMP16 --expect-fail --outdir build/top-dclamp16" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject VOICE_OUT_SAT --expect-fail --outdir build/top-outsat" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject I2S_SHIFT --expect-fail --outdir build/top-i2sshift" \
@@ -150,6 +159,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_DONE_NOWAIT --expect-fail --outdir build/top-nowait" \
+	  "$(PY) tools/run_case.py --inject MONO_PITCH_UP_25_CENTS M5B --results build/case-m5b-pitch --expect changed" \
 	  "$(PY) fpga/verify_fixture.py --wrong no-coef-seq --expect-fail --outdir build/fx-nocoef" \
 	  "$(PY) fpga/verify_fixture.py --wrong drop-restore --expect-fail --outdir build/fx-droprest" \
 	  "$(PY) fpga/verify_fixture.py --wrong late-window --expect-fail --outdir build/fx-late" \

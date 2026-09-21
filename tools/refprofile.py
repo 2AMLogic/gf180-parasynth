@@ -2,6 +2,7 @@
 """The frozen reference profile: reference audio rendered ONCE, cached, hashed,
 and described in a file that is committed.
 
+    tools/refprofile_restore.py         restore the exact committed audio archive
     tools/refprofile.py                 verify the cache against the profile
     tools/refprofile.py --list          what the profile holds
     tools/refprofile.py --render        re-render it (an explicit act, a visible diff)
@@ -437,8 +438,8 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
     if not p.exists():
         raise Refused(
             f"the frozen reference audio for {clip_id!r} is not in the cache "
-            f"({_rel(p)}). The profile is committed; the audio is not. "
-            f"Re-render it on a host with the plugin: tools/refprofile.py --render")
+            f"({_rel(p)}). Restore the frozen audio without a plugin: "
+            f"tools/refprofile_restore.py")
     got_bytes = p.stat().st_size
     if got_bytes != meta["bytes"]:
         raise Refused(f"{clip_id!r} is {got_bytes} bytes, the profile says {meta['bytes']}: "
