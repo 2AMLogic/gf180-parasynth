@@ -9,6 +9,31 @@ name: nodes
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  reference-controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install numpy scipy pytest
+      - name: restore and verify the frozen Surge audio
+        run: |
+          python -m pytest tools/test_refprofile_restore.py -q
+          python tools/refprofile_restore.py
+          python tools/refprofile.py
+      - name: missing and tampered clips must change valid clean comparisons
+        run: >-
+          python tools/run_all.py --timeout 600 --json build/reference-controls.json
+          "python tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/ref-missing --expect 'no verdict'"
+          "python tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/ref-tampered --expect 'no verdict'"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reference-controls
+          path: build/reference-controls.json
+
   m5a-fast:
     # The explicitly scoped sound-development gate stays independent of the
     # broad model suite below, so a long repository run cannot hide its result.
