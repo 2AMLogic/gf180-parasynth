@@ -1,9 +1,9 @@
 # M5B Mini V3 reference and mapping
 
-This freezes the M5B lower-note bright-lead reference before any sound tuning.
-It is a **software-synth reference**, not a recording of a physical Minimoog.
-M5B still has no model-comparison verdict: the Mono scorer has not yet been
-extended to dispatch this case.
+This freezes and scores the M5B lower-note bright-lead reference before any
+sound tuning. It is a **software-synth reference**, not a recording of a
+physical Minimoog. The first complete M5B score is a valid **fixed-model
+failure**; it is not integrated RTL evidence.
 
 The capture used Arturia Mini V3 3.12.0.3422 under DawDreamer 0.8.3 at 48 kHz
 and a pinned 16-sample host block. Each dry segment contains MIDI 72 and 84,
@@ -34,6 +34,44 @@ tracks the WAV alongside its hash-bearing manifest.
 The host also logs `attempt to map invalid URI` for the plugin bundle. The
 capture records this warning; all parameter readbacks, waveform classifications,
 finite/non-silent audio checks, and the integrity control succeeded.
+
+## First model score
+
+The complete phrase was scored against the seven required M5B properties using
+`production-2x-hold`, the `pulse29` control (which produces the separately
+measured reference duty near 48%), and no normalization. The run is bound to
+source commit `53c7466`, this reference audio and manifest, and analysis version
+`m5b-score-v1`. The full per-event diagnostics and provenance are in
+[`results/M5B.json`](../results/M5B.json).
+
+| Property | Result | Limit | Status |
+| --- | ---: | ---: | --- |
+| Pitch | −0.14826 cents | 1 cent | pass |
+| Harmonic shape | 23.21602 dB | 1 dB | fail |
+| Foldback energy | 18.61984 dB excess | 3 dB | fail |
+| Envelope attack | +6.08333 ms | 5 ms | fail |
+| Envelope release | −35.25 ms | 125 ms | pass |
+| Gain | +2.87502 dB | 3 dB | pass |
+| Clipping | 0% | 0.01% | pass |
+
+The score localizes the next sound work: pulse harmonic shape and foldback are
+the largest misses; saw harmonic shape and aliasing also remain outside the
+limits. Attack is just beyond tolerance. Pitch, release, gain, and clipping
+already pass. Keep the per-wave and per-note signed partial diagnostics in the
+JSON when selecting a pulse or saw change; the phrase aggregate alone can hide
+a regression in one segment.
+
+Reproduce the score with:
+
+```sh
+python3 tools/run_case.py M5B --results build/m5b-score-final
+```
+
+The command exits nonzero because this measured candidate fails the case
+tolerances. That is a valid result, not a missing verdict. The injected
+`MONO_PITCH_UP_25_CENTS` control also produces a valid changed score (24.88 dB
+worst normalized distance, with pitch as the worst property); `REF_MISSING`
+refuses with a no-verdict as required.
 
 The frozen artifacts are [raw audio](m5b-miniv3-raw.wav) and
 [capture manifest](manifest.json). WAV SHA-256:
