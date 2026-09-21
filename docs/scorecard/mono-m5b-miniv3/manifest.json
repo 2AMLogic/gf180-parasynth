@@ -218,7 +218,7 @@
         "--block",
         "16",
         "--out",
-        "/tmp/mono-reference-integrity-qv4ee5to"
+        "/tmp/mono-reference-integrity-k770k4gq"
       ],
       "detector_control_passed": true,
       "duration_s": 40,
@@ -303,9 +303,9 @@
   },
   "schema": 1,
   "source": {
-    "commit": "05b282c3530b917252501587a33c3452ed6f0aea",
+    "commit": "86c080ab11824aba0239a20d3f0a489df8559a4c",
     "files_sha256": {
-      "docs/scorecard/cases.csv": "4517580ec99f54385e35e78ccc14d7bcf4bb7a2c791d9b802639e78fca612c5e",
+      "docs/scorecard/cases.csv": "b644d0defa69e3b3c07e8665e74b78f8d11caed17d4c05617e87529a603377b5",
       "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36",
       "model/reference_integrity.py": "b9bee899539f53c8466dc35923422f10c9842cfbb2912e54698b6862b1971f25",
       "model/reference_rigs.py": "99b1c862857a34a8689e9389010aabc86e3ec790c37da1ee5de84b88e449dce9",
