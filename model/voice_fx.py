@@ -1180,7 +1180,9 @@ class VoiceFx:
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
                           mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace,
-                          filter_reconstruction=getattr(lad, "last_reconstruction", None))
+                          filter_reconstruction=getattr(lad, "last_reconstruction", None),
+                          filter_decimation=(getattr(getattr(lad, "converter", None),
+                                                     "last_decimation", None)))
         return out.astype(np.int16)
 
     # ---- one note from reset: the reference sequences of contract 16 --------

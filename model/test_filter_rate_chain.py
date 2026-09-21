@@ -81,6 +81,16 @@ def test_causal_converter_reset_repeats_impulse_and_known_tone_response():
     assert rms == pytest.approx(0.2 / np.sqrt(2), abs=3e-4)
 
 
+def test_causal_decimator_preserves_the_ladders_19_bit_output_headroom():
+    high_rate = np.full(4096, 40000, dtype=np.int32)
+    converter = frc.CausalRateConverter(2)
+    clipped16 = converter.decimate(high_rate, output_bits=16)
+    converter.reset()
+    preserved19 = converter.decimate(high_rate, output_bits=19)
+    assert np.max(clipped16[256:]) == 32767
+    assert np.mean(preserved19[256:]) == pytest.approx(40000, abs=1)
+
+
 def test_causal_ladder_adapter_is_chunk_invariant_and_resettable():
     rng = np.random.default_rng(1977)
     x = rng.integers(-9000, 9001, 384, dtype=np.int16)

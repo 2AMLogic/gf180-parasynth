@@ -89,6 +89,7 @@ class CausalRateConverter:
         self._interp_history = np.zeros(len(self._interp_taps) - 1, dtype=np.int64)
         self._decim_history = np.zeros(len(self._decim_taps) - 1, dtype=np.int64)
         self._decim_phase = 0
+        self.last_decimation = None
 
     @staticmethod
     def _filter_chunk(samples: np.ndarray, taps: np.ndarray,
@@ -117,16 +118,28 @@ class CausalRateConverter:
             raise ValueError("causal reconstruction exceeds safe int32 Q1.15 headroom")
         return high.astype(np.int32)
 
-    def decimate(self, x_high_q15: np.ndarray) -> np.ndarray:
+    def decimate(self, x_high_q15: np.ndarray, *, output_bits: int = 16) -> np.ndarray:
         x = np.asarray(x_high_q15)
         if x.ndim != 1 or not np.issubdtype(x.dtype, np.integer):
             raise ValueError("high-rate input must be a one-dimensional integer signal")
+        output_bits = int(output_bits)
+        if not 2 <= output_bits <= 31:
+            raise ValueError("decimator output width must be in 2..31 bits")
         filtered, self._decim_history = self._filter_chunk(
             x.astype(np.int64, copy=False), self._decim_taps, self._decim_history)
         keep = (self._decim_phase + np.arange(len(filtered))) % self.factor == 0
         self._decim_phase = (self._decim_phase + len(filtered)) % self.factor
         selected = filtered[keep]
-        return np.clip(selected, _Q15_MIN, _Q15_MAX).astype(np.int16)
+        lo, hi = -(1 << (output_bits - 1)), (1 << (output_bits - 1)) - 1
+        self.last_decimation = {
+            "output_bits": output_bits,
+            "would_clip_count": int(np.count_nonzero((selected < lo) | (selected > hi))),
+            "would_clip_fraction": float(np.mean((selected < lo) | (selected > hi))) if len(selected) else 0.0,
+            "max_abs_output": int(np.max(np.abs(selected))) if len(selected) else 0,
+            "samples": int(len(selected)),
+        }
+        dtype = np.int16 if output_bits <= 16 else np.int32
+        return np.clip(selected, lo, hi).astype(dtype)
 
 
 class RateConvertedLadder:
@@ -189,7 +202,7 @@ class RateConvertedLadder:
                                     k=k, gain=gain, ogain=ogain, k_q14=k_hi)
         lo, hi = -(1 << (self.out_bits - 1)), (1 << (self.out_bits - 1)) - 1
         if self.causal:
-            y = self.converter.decimate(y_hi)
+            y = self.converter.decimate(y_hi, output_bits=self.out_bits)
             return np.clip(y, lo, hi).astype(np.int32)
         y_f = resample_poly(y_hi.astype(np.float64) / 32768.0, 1, self.factor,
                             window=("kaiser", _KAISER_BETA))
