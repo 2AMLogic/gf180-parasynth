@@ -20,6 +20,19 @@ import voice_fx as vf
 import measure_m5a_filter_oversample as experiment
 import filter_rate_chain as frc
 
+_SOURCE_FILES = ("model/filter_rate_chain.py", "model/voice_fx.py",
+                 "tools/mono_m5a_score.py", "tools/measure_m5a_filter_headroom.py",
+                 "tools/measure_m5a_filter_oversample.py")
+
+
+def _source_dirty() -> bool:
+    """Report only edits to code that produces or judges the measurements."""
+    result = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", *_SOURCE_FILES],
+                            cwd=ROOT, check=False)
+    if result.returncode not in (0, 1):
+        raise m5a.Refused("could not establish measurement-source cleanliness")
+    return result.returncode == 1
+
 
 def _factory(preserve_headroom: bool, causal: bool = False):
     cfg = {**vf.LADDER_CFG, "oversample": 2}
@@ -87,11 +100,15 @@ def _recompare_report(path: pathlib.Path) -> dict:
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
                                 capture_output=True, text=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
-                                    check=True, capture_output=True, text=True).stdout.strip())
+        dirty = _source_dirty()
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
     report["comparisons"] = comparisons
+    report["configurations"] = {
+        pulse: {label: report["configurations"][pulse][label]
+                for label in ("causal_headroom", "clamped", "headroom")}
+        for pulse in ("pulse29", "pulse479")
+    }
     report["comparison_reanalysis"] = {
         "source_commit": commit,
         "source_dirty": dirty,
@@ -144,6 +161,12 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
                 model_label=f"reconstructed_2x_{label}",
                 output_path=out_dir / f"M5A-reconstructed-2x-{label}-{pulse}.wav")
 
+    rows = {
+        pulse: {label: rows[pulse][label]
+                for label in ("causal_headroom", "clamped", "headroom")}
+        for pulse in ("pulse29", "pulse479")
+    }
+
     comparisons = {}
     for pulse, pair in rows.items():
         comparisons[pulse] = {
@@ -158,8 +181,7 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
     try:
         commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
                                 capture_output=True, text=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
-                                    check=True, capture_output=True, text=True).stdout.strip())
+        dirty = _source_dirty()
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
     ref = json.loads(m5a.MANIFEST.read_text())
@@ -201,9 +223,7 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
         "reused_measurements": reused_sources,
         "source_sha256": {
             name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-            for name in ("model/filter_rate_chain.py", "model/voice_fx.py",
-                         "tools/mono_m5a_score.py",
-                         "tools/measure_m5a_filter_headroom.py")
+            for name in _SOURCE_FILES
         },
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "decision": {
