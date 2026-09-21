@@ -110,8 +110,13 @@ module tb_voice;
         $fclose(wfd);
         efd = $fopen(expfile, "r"); nexp = 0;
         while (!$feof(efd) && nexp < MAXN) begin
+            // Only the first integer is used here; Python compares all taps.
+            // Scanning the entire 512-byte buffer hits Verilator 5.020's
+            // VL_VALUE_STRING_MAX_WORDS limit. Read the integer from the file
+            // and consume the remaining fields (or the final STATE row).
+            rc = $fscanf(efd, "%d", expv[nexp]);
+            if (rc == 1) nexp = nexp + 1;
             rc = $fgets(line, efd);
-            if (rc > 0 && $sscanf(line, "%d", expv[nexp]) == 1) nexp = nexp + 1;
         end
         $fclose(efd);
         ofd = $fopen(outfile, "w");
