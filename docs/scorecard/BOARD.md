@@ -70,8 +70,8 @@ an invalid or missing measurement has **no** distance, never zero.
 | `M4B` | Mono | Development | Legato lead / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4C` | Mono | Development | Legato lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4D` | Mono | Development | Legato lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
-| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | integrated-rtl | ❌ fail | 8.84 | worst: Harmonic shape |
-| `M5B` | Mono | Development | Bright high lead / lower / darker | Mini V3 3.12 software reference | fixed-model | ❌ fail | 23.22 | worst: Harmonic shape |
+| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | integrated-rtl | ❌ fail | 7.56 | worst: Harmonic shape |
+| `M5B` | Mono | Development | Bright high lead / lower / darker | Mini V3 3.12 software reference | fixed-model | ❌ fail | 5.96 | worst: Harmonic shape |
 | `M5C` | Mono | Development | Bright high lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M5D` | Mono | Holdout | Bright high lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M6A` | Mono | Development | Resonant pluck / anchor | Mini V3; Model D cross-check | — | ⬜ not run |  |  |

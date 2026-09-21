@@ -1,3 +1,4 @@
+import json
 import pytest
 
 import measure_m5a_saw_cutoff as candidate
@@ -14,6 +15,8 @@ def test_invalid_cutoff_refuses_before_render(monkeypatch):
 
 def test_complete_candidate_uses_selected_filter_factory_and_saw_only_override(monkeypatch):
     calls = []
+    baseline_cutoff = int(round(json.loads(candidate.m5a.MANIFEST.read_text())
+                                ["patch"]["cutoff_measurement"]["f0_hz"]))
 
     def fake_measure(**kwargs):
         calls.append(kwargs)
@@ -29,7 +32,7 @@ def test_complete_candidate_uses_selected_filter_factory_and_saw_only_override(m
         metrics = {name: {"error": 0.0, "tolerance": tolerance[0],
                           "units": units[name]}
                    for name, tolerance in candidate.m5a.TOLERANCES.items()}
-        harmonic = {"h2": -1.0 if cutoff is None else -0.5}
+        harmonic = {"h2": -1.0 if cutoff == baseline_cutoff else -0.5}
         return {"metrics": metrics, "event_diagnostics": [
             {"wave": "saw", "midi": 84,
              "harmonic_error_db_model_minus_reference": harmonic}],
@@ -44,7 +47,7 @@ def test_complete_candidate_uses_selected_filter_factory_and_saw_only_override(m
     result = candidate.measure(20_000, -0.45428)
 
     assert len(calls) == 2
-    assert calls[0].get("saw_cutoff_override") is None
+    assert calls[0]["saw_cutoff_override"] == baseline_cutoff
     assert calls[1]["saw_cutoff_override"] == 20_000
     assert calls[0]["pulse_shape"] == calls[1]["pulse_shape"] == "pulse479"
     assert calls[0].get("saw_volume_correction_db", 0.0) == 0.0

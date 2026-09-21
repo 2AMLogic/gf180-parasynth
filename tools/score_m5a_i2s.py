@@ -138,6 +138,7 @@ def main(argv=None) -> int:
         "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
         "rtl-sketch/voice_dp.v", "rtl-sketch/ladder_dp_n.v",
         "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v")
+    engine = m5a.engine_configuration("selected")
     provenance = run_case.provenance(
         run_case.model_input_hashes({
             "frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
@@ -146,7 +147,18 @@ def main(argv=None) -> int:
             "verification:SPI-I2S": "sha256:" + hashlib.sha256(verification.read_bytes()).hexdigest()}),
         {"ours": str(candidate_audio.relative_to(ROOT)),
          "spi_i2s": str(verification.relative_to(ROOT))},
-        {"oscillator_config": "2x saw candidate",
+        {"engine_profile": engine["name"],
+         "oscillator_oversample_2x": engine["oscillator_oversample_2x"],
+         "filter_rate_converted": engine["filter_rate_converted"],
+         "filter_preserve_headroom": engine["filter_preserve_headroom"],
+         "filter_causal": engine["filter_causal"],
+         "pulse479_filter_candidate": engine["pulse479_filter_candidate"],
+         "filter_g_exact": engine["filter_g_exact"],
+         "filter_k_comp": engine["filter_k_comp"],
+         "filter_drive": engine["filter_drive"],
+         "filter_oversample_factor": engine["filter_oversample_factor"],
+         "ladder_coefficient_oversample": engine["ladder_coefficient_oversample"],
+         "oscillator_config": "2x saw candidate",
          "filter_config": "causal reconstructed 2x, headroom preserved",
          "simulator": simulator,
          "pulse_shape": controls["pulse_shape"],

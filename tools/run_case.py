@@ -2243,7 +2243,7 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
         if kind == "mono":
             control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
                              if inject else None)
-            measured = mono_m5a.measure(case_id=cid, inject=inject,
+            measured = mono_m5a.measure(case_id=cid, engine="selected", inject=inject,
                                          output_path=control_audio)
             report_path = None
             smoke_sha = None
@@ -2252,7 +2252,9 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                 report_path = smoke_dir / "verification.txt"
                 smoke = subprocess.run(
                     [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
-                     "--m5a-smoke", "--osc2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
+                     "--m5a-smoke", "--filter2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
+                     "--m5a-saw-cutoff-hz", "20000",
+                     "--m5a-saw-volume-correction-db", "-0.45428",
                      "--outdir", str(smoke_dir),
                      "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
                     cwd=ROOT, capture_output=True, text=True, timeout=3600)
@@ -2273,22 +2275,32 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
                 outputs["spi_i2s"] = str(report_path.relative_to(ROOT))
             inputs = model_input_hashes({f"frozen:{cid}:audio": "sha256:" + measured["reference_sha256"],
                                          f"frozen:{cid}:manifest": "sha256:" + measured["manifest_sha256"]})
-            config = {"oscillator_config": "2x saw candidate",
-                      "pulse_control": mono_m5a.M5A_PULSE_WAVE,
-                      "effective_reference_pulse": pulse_mapping,
+            config = {**measured["model_configuration"],
                       "case_id": cid,
                       "reference": "frozen Mini V3 WAV",
+                      "reference_pulse_classification": pulse_mapping,
                       "inject": inject or None}
             if smoke_sha:
-                config["filter_drive"] = 0.75
+                config["spi_i2s_smoke"] = "selected filter2x, saw 20000 Hz, gain correction -0.45428 dB"
             base.update({
                 "reference_profile": (f"Mini V3 {manifest['identity']['version']} via "
                                       f"dawdreamer {manifest['identity']['host_version']}; frozen raw audio"),
                 "reference_identity": manifest["reference_kind"],
                 "analysis_version": measured["analysis_version"],
-                "render_run": (f"fixed integer model; 2x saw, {mono_m5a.M5A_PULSE_WAVE} pulse "
-                               f"({pulse_mapping} measured in reference), MIDI {notes}, "
-                               f"complete {duration:.2f} s phrase"),
+                "render_run": (
+                    f"fixed integer model; engine={config['name']}; "
+                    f"osc2x={config['oscillator_oversample_2x']}; "
+                    f"filter_rate_converted={config['filter_rate_converted']}; "
+                    f"filter_preserve_headroom={config['filter_preserve_headroom']}; "
+                    f"filter_causal={config['filter_causal']}; "
+                    f"pulse479_filter_candidate={config['pulse479_filter_candidate']}; "
+                    f"pulse control={config['pulse_control_label']}; "
+                    f"effective pulse={config['pulse_effective_waveform']} "
+                    f"({config['pulse_effective_duty_percent']:.2f}% duty); "
+                    f"saw cutoff={config['saw_cutoff_override_hz']} Hz; "
+                    f"saw gain correction={config['saw_volume_correction_db']:+.5f} dB; "
+                    f"envelope={config['envelope_calibration_source']}; MIDI {notes}, "
+                    f"complete {duration:.2f} s phrase"),
                 "audio": measured["audio"], "note": measured["note"],
                 "tolerance_policy": mono_m5a.TOLERANCES,
                 "metrics": measured["metrics"],

@@ -31,6 +31,44 @@ MANIFESTS = {
 }
 ANALYSIS_VERSIONS = {"M5A": ANALYSIS_VERSION, "M5B": "m5b-score-v1"}
 MODEL_NOTE_MUTATIONS = {"MONO_PITCH_UP_25_CENTS": 0.25}
+ENGINE_PROFILES = {
+    "selected": {
+        "name": "selected-m5a-reconstructed-filter2x",
+        "oscillator_oversample_2x": True,
+        "filter_rate_converted": True,
+        "filter_preserve_headroom": True,
+        "filter_causal": True,
+        "pulse479_filter_candidate": True,
+        "filter_g_exact": False,
+        "filter_k_comp": True,
+        "filter_oversample_factor": 2,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse479",
+        "pulse_effective_duty_percent": 100.0 * vf.DUTY["pulse479"] / vf.CYCLE,
+        "saw_cutoff_hz": 20_000,
+        "saw_volume_correction_db": -0.45428,
+    },
+    "legacy": {
+        "name": "legacy-osc2x-base-rate-filter",
+        "oscillator_oversample_2x": True,
+        "filter_rate_converted": False,
+        "filter_preserve_headroom": False,
+        "filter_causal": False,
+        "pulse479_filter_candidate": False,
+        "filter_g_exact": False,
+        "filter_k_comp": True,
+        "filter_oversample_factor": 1,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse29",
+        "pulse_effective_duty_percent": 100.0 * vf.DUTY["pulse29"] / vf.CYCLE,
+        "saw_cutoff_hz": None,
+        "saw_volume_correction_db": 0.0,
+    },
+}
 TOLERANCES = {
     "Pitch": (1.0, "cents; fixed screening limit for this frozen software-synth patch"),
     "Harmonic shape": (1.0, "dB per measured partial; fixed screening limit"),
@@ -44,6 +82,27 @@ TOLERANCES = {
 
 class Refused(RuntimeError):
     pass
+
+
+def engine_configuration(name="selected"):
+    """Return the explicit shared M5A/M5B engine profile or refuse."""
+    try:
+        return dict(ENGINE_PROFILES[name])
+    except KeyError as exc:
+        raise Refused(f"unsupported Mono engine configuration {name!r}") from exc
+
+
+def _voice_for_engine(profile):
+    ladder_cfg = {**vf.LADDER_CFG,
+                  "oversample": profile["ladder_coefficient_oversample"]}
+    return vf.VoiceFx(
+        oversample_2x=profile["oscillator_oversample_2x"],
+        ladder_cfg=ladder_cfg,
+        rate_converted_ladder=profile["filter_rate_converted"],
+        preserve_filter_headroom=profile["filter_preserve_headroom"],
+        causal_filter=profile["filter_causal"],
+        pulse479_filter_candidate=profile["pulse479_filter_candidate"],
+    )
 
 
 def _cents_error(measured_hz: float, expected_hz: float) -> float:
@@ -171,11 +230,20 @@ def _model_note(note: float, injection: str = "") -> float:
 
 
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
-            model_label="production-2x-hold", output_path=None,
+            model_label=None, engine="selected", output_path=None,
             candidate_wav=None, saw_cutoff_override=None,
-            saw_volume_correction_db=0.0, case_id="M5A", inject=""):
+            saw_volume_correction_db=None, case_id="M5A", inject=""):
     if case_id not in MANIFESTS:
         raise Refused(f"unsupported Mono scorecard case {case_id!r}")
+    engine_profile = engine_configuration(engine)
+    if candidate_wav is None and saw_cutoff_override is None:
+        saw_cutoff_override = engine_profile["saw_cutoff_hz"]
+    if saw_volume_correction_db is None and candidate_wav is None:
+        saw_volume_correction_db = engine_profile["saw_volume_correction_db"]
+    elif saw_volume_correction_db is None:
+        saw_volume_correction_db = 0.0
+    if model_label is None:
+        model_label = engine_profile["name"]
     if inject == "REF_MISSING":
         reference_override = MANIFESTS[case_id].parent / "no-such-file.wav"
     else:
@@ -234,6 +302,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     observed = {name: [] for name in tolerance}
     event_diagnostics = []
     renders = []
+    executed_voice_flags = None
     model_parts = []
     silence = int(round(manifest["timeline"]["segment_silence_s"] * SR))
     for seg in manifest["timeline"]["segments"]:
@@ -255,8 +324,23 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                 seq.append((float(ev["on_s"]), _model_note(int(ev["note"]), inject), float(ev["gate_s"]),
                             {**segment_patch, "gate": float(ev["gate_s"])}))
             duration = float(seg["duration_s"])
-            voice = (vf.VoiceFx(oversample_2x=True) if voice_factory is None
+            voice = (_voice_for_engine(engine_profile) if voice_factory is None
                      else voice_factory())
+            flags = {
+                "oscillator_oversample_2x": bool(voice.oversample_2x),
+                "filter_rate_converted": bool(voice.rate_converted_ladder),
+                "filter_preserve_headroom": bool(voice.preserve_filter_headroom),
+                "filter_causal": bool(voice.causal_filter),
+                "pulse479_filter_candidate": bool(voice.pulse479_filter_candidate),
+                "filter_g_exact": bool(voice.g_exact),
+                "filter_k_comp": bool(voice.k_comp),
+                "filter_oversample_factor": (int(voice.ladder_cfg.get("oversample", 2))
+                                             if voice.rate_converted_ladder else 1),
+                "ladder_coefficient_oversample": int(voice.ladder_cfg.get("oversample", 2)),
+            }
+            if executed_voice_flags is not None and flags != executed_voice_flags:
+                raise Refused("Mono phrase segments used inconsistent engine flags")
+            executed_voice_flags = flags
             pcm = vf.render_mono_fx(seq, duration, voice)
             ours = np.asarray(pcm, dtype=np.float64) / 32768.0
             samples_before_trim = len(pcm)
@@ -377,10 +461,26 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         audio_path = str(out)
     return {"analysis_version": ANALYSIS_VERSIONS[case_id],
             "metrics": metrics, "audio": audio_path,
-            "model_configuration": {"label": model_label, "pulse_shape": pulse_shape,
-                                    "injection": inject or None,
-                                    "saw_cutoff_override_hz": saw_cutoff_override,
-                                    "saw_volume_correction_db": float(saw_volume_correction_db)},
+            "model_configuration": {
+                **engine_profile,
+                **(executed_voice_flags or {}),
+                "label": model_label,
+                "engine_profile": ("custom" if voice_factory is not None and candidate_pcm is None
+                                    else engine),
+                "control_defaults_profile": engine,
+                "pulse_shape_input": pulse_shape,
+                "pulse_effective_waveform": (
+                    engine_profile["pulse_effective_waveform"]
+                    if pulse_shape == engine_profile["pulse_control_label"]
+                    else pulse_shape),
+                "pulse_effective_duty_percent": (
+                    engine_profile["pulse_effective_duty_percent"]
+                    if pulse_shape == engine_profile["pulse_control_label"]
+                    else 100.0 * vf.DUTY[pulse_shape] / vf.CYCLE),
+                "envelope_calibration_source": f"frozen {case_id} Mini V3 measurements",
+                "injection": inject or None,
+                "saw_cutoff_override_hz": saw_cutoff_override,
+                "saw_volume_correction_db": float(saw_volume_correction_db)},
             "reference_sha256": digest, "manifest_sha256": manifest_digest,
             "cutoff_calibration": manifest["patch"]["cutoff_measurement"],
             "model_segments": renders,

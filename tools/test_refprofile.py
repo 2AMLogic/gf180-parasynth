@@ -124,7 +124,7 @@ def test_a_clip_missing_from_the_cache_is_refused_with_the_way_to_fix_it(profile
     with pytest.raises(rp.Refused) as e:
         rp.load_clip("fake/clip")
     assert "not in the cache" in str(e.value)
-    assert "--render" in str(e.value)
+    assert "tools/refprofile_restore.py" in str(e.value)
 
 
 def test_a_clip_that_is_not_in_the_profile_is_refused(profile):

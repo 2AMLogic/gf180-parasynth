@@ -35,14 +35,14 @@ The host also logs `attempt to map invalid URI` for the plugin bundle. The
 capture records this warning; all parameter readbacks, waveform classifications,
 finite/non-silent audio checks, and the integrity control succeeded.
 
-## First model score
+## Legacy model score (preserved)
 
-The complete phrase was scored against the seven required M5B properties using
-`production-2x-hold`, the `pulse29` control (which produces the separately
-measured reference duty near 48%), and no normalization. The run is bound to
-source commit `53c7466`, this reference audio and manifest, and analysis version
-`m5b-score-v1`. The full per-event diagnostics and provenance are in
-[`results/M5B.json`](../results/M5B.json).
+The original score used the older filter path and an actual 29% model pulse.
+The reference pulse itself is near 48%; the earlier report incorrectly
+described the model output as matching it. The exact legacy audio and score are
+preserved in [`legacy-model-v1.wav`](legacy-model-v1.wav) and
+[`legacy-score-v1.json`](legacy-score-v1.json). The selected profile can
+reproduce that score with `engine="legacy"`.
 
 | Property | Result | Limit | Status |
 | --- | ---: | ---: | --- |
@@ -54,12 +54,42 @@ source commit `53c7466`, this reference audio and manifest, and analysis version
 | Gain | +2.87502 dB | 3 dB | pass |
 | Clipping | 0% | 0.01% | pass |
 
-The score localizes the next sound work: pulse harmonic shape and foldback are
-the largest misses; saw harmonic shape and aliasing also remain outside the
-limits. Attack is just beyond tolerance. Pitch, release, gain, and clipping
-already pass. Keep the per-wave and per-note signed partial diagnostics in the
-JSON when selecting a pulse or saw change; the phrase aggregate alone can hide
-a regression in one segment.
+This score is retained as the legacy baseline, not the selected engine result.
+
+## Selected M5A engine configuration
+
+M5A and M5B now use the same explicit `selected` engine profile: 2× oscillator,
+rate-converted 2× filter with headroom preserved and causal state, 20 kHz saw
+cutoff and −0.45428 dB saw correction, `g_exact=False`, and `k_comp=True`. The
+`pulse29` control name maps to the candidate `pulse479` output; the rendered
+model duty is 47.90%. M5B retains its own frozen envelope calibration. This is
+model-only evidence; it does not claim RTL verification.
+
+| Property | Selected result | Limit | Status |
+| --- | ---: | ---: | --- |
+| Pitch | −0.14825 cents | 1 cent | pass |
+| Harmonic shape | 5.96219 dB | 1 dB | fail |
+| Foldback energy | 8.84954 dB excess | 3 dB | fail |
+| Envelope attack | +6.06250 ms | 5 ms | fail |
+| Envelope release | −30.00 ms | 125 ms | pass |
+| Gain | +2.70905 dB | 3 dB | pass |
+| Clipping | 0% | 0.01% | pass |
+
+Both saw notes pass their per-note foldback limit (1.45 dB at MIDI 72 and
+1.91 dB at MIDI 84); pulse remains the aliasing failure. The selected profile
+substantially reduces the worst harmonic error, but changes three previously
+passing pulse partials: MIDI 72 h5 (−0.24 to −2.45 dB), h9 (−0.84 to −3.97 dB),
+and h12 (+0.30 to −4.31 dB). The existing incremental non-regression gate
+rejects promotion on those regressions. Keep the complete signed per-note
+partial vector; do not promote or tune automatically from the aggregate alone.
+
+The selected report with full engine configuration and provenance is
+[`results/M5B.json`](../results/M5B.json). Reproduce it with
+`python3 tools/run_case.py M5B --results build/m5b-score-final`; a nonzero exit
+is expected because the valid measured candidate fails three properties.
+Retain the signed partial diagnostics when selecting further pulse or saw
+changes. The attack result is close to the boundary; compare attack context
+before tuning it.
 
 Reproduce the score with:
 

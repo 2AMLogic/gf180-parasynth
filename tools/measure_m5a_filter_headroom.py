@@ -152,7 +152,11 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
             if label in rows[pulse]:
                 continue
             rows[pulse][label] = m5a.measure(
-                pulse_shape=pulse, voice_factory=_factory(preserve, causal),
+                pulse_shape=pulse, engine="legacy",
+                saw_cutoff_override=int(round(m5a.json.loads(m5a.MANIFEST.read_text())
+                                               ["patch"]["cutoff_measurement"]["f0_hz"])),
+                saw_volume_correction_db=0.0,
+                voice_factory=_factory(preserve, causal),
                 model_label=f"reconstructed_2x_{label}",
                 output_path=out_dir / f"M5A-reconstructed-2x-{label}-{pulse}.wav")
 
