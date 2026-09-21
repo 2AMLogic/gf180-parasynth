@@ -2,8 +2,8 @@
   "engine": "integrated-rtl",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
-  "source_dirty": true,
+  "source_commit": "744b43fa0e5524824d28256db0c37a0ccf4bbf29",
+  "source_dirty": false,
   "analysis_version": "m5a-score-v3",
   "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
   "pulse_mapping": {
@@ -346,15 +346,15 @@
   "provenance": {
     "engine": "integrated-rtl",
     "worktree": {
-      "commit": "a966569",
-      "described": "node/D-drums-bitexact-182-ga966569-dirty",
+      "commit": "744b43f",
+      "described": "node/D-drums-bitexact-183-g744b43f",
       "branch": "experiment/m5a-filter-headroom",
-      "dirty": true,
-      "uncommitted_sha256": "1a57fe3e8b0855dd",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
     "base_check": {},
-    "command": "tools/score_m5a_i2s.py --wav docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.wav --verification docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out build/scorecard/saw-cutoff-duty-metadata.json --audio build/scorecard/saw-cutoff-duty-metadata.wav",
+    "command": "tools/score_m5a_i2s.py --wav docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.wav --verification docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.json --audio docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
     "config": {
       "oscillator_config": "2x saw candidate",
       "filter_config": "causal reconstructed 2x, headroom preserved",
@@ -386,7 +386,7 @@
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-21T07:37:05Z",
+    "run_at": "2026-09-21T09:00:26Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:6442bb9effb7fa70",
@@ -405,7 +405,7 @@
       "verification:SPI-I2S": "sha256:62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448"
     },
     "artefacts": {
-      "ours": "build/scorecard/saw-cutoff-duty-metadata.wav",
+      "ours": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
       "spi_i2s": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt"
     },
     "outcome_code": 1,
