@@ -94,7 +94,7 @@ STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2"
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
-BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF",
+BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
 
@@ -431,8 +431,9 @@ def coverage(v: vf.VoiceFx, regs: dict, writes: list, phases0: list, trig, gate)
 
 # ---- generate: run the model, write the writes and the expected taps -------------
 def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=False,
-             filter_2x=False):
+             filter_2x=False, pulse_2x=False):
     v = vf.VoiceFx(oversample_2x=oversample_2x,
+                   oversample_pulse_2x=pulse_2x,
                    rate_converted_ladder=filter_2x,
                    preserve_filter_headroom=filter_2x,
                    causal_filter=filter_2x,
@@ -561,6 +562,7 @@ def main(argv=None) -> int:
     ap.add_argument("--define", action="append", default=[], help="additional Verilog define")
     ap.add_argument("--osc2x", action="store_true",
                     help="enable the integrated 2x voice model and RTL path")
+    ap.add_argument("--pulse2x", action="store_true", help="select 2x rectangular oscillators")
     ap.add_argument("--filter2x", action="store_true",
                     help="enable causal reconstructed 2x filter and the pulse-duty challenger")
     ap.add_argument("--expect-fail", action="store_true")
@@ -570,20 +572,22 @@ def main(argv=None) -> int:
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
     if "VOICE_OSC_2X" in a.define:
         ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")
-    if a.filter2x:
+    if a.filter2x or a.pulse2x:
         a.osc2x = True
     only = set(a.only.split(",")) if a.only else None
     print(f"verify_voice: model VoiceFx() (contract rev 4), scenario set '{a.set}'"
           + (f", only {sorted(only)}" if only else ""))
     expected, state, writes, report = generate(a.outdir, a.set, only,
                                                oversample_2x=a.osc2x,
-                                               filter_2x=a.filter2x)
+                                               filter_2x=a.filter2x, pulse_2x=a.pulse2x)
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:
         defines = list(a.define) + (["VOICE_OSC_2X"] if a.osc2x else [])
         if a.filter2x:
             defines.append("VOICE_FILTER_2X")
+        if a.pulse2x:
+            defines.append("VOICE_PULSE_2X")
         if a.inject:
             defines.append(f"INJECT_BUG_VOICE_{a.inject}")
         rtl = os.path.relpath(os.path.abspath(a.rtl), HERE) if a.rtl else None

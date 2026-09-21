@@ -95,9 +95,10 @@ class SynthTopModel:
     (frame, flag, sec, addr, data) applied at the START of the frames they
     name, in list order -- and returns every signal a bench can see."""
 
-    def __init__(self, *, oversample_2x: bool = False, filter_2x: bool = False):
-        self.oversample_2x = oversample_2x or filter_2x
+    def __init__(self, *, oversample_2x: bool = False, filter_2x: bool = False, pulse_2x: bool = False):
+        self.oversample_2x = oversample_2x or filter_2x or pulse_2x
         self.voice = VoiceFx(oversample_2x=self.oversample_2x,
+                             oversample_pulse_2x=pulse_2x,
                              rate_converted_ladder=filter_2x,
                              preserve_filter_headroom=filter_2x,
                              causal_filter=filter_2x,

@@ -28,10 +28,15 @@ def _candidate_factory():
 
 def validate_integration_report(report_text: str, wav_sha256: str, *,
                                pulse_shape: str | None = None,
+                               case_id: str = "M5A", pulse_2x: bool | None = None,
                                saw_cutoff_hz: int | None = None,
                                saw_volume_correction_db: float | None = None) -> dict:
+    if case_id not in m5a.MANIFESTS:
+        raise ValueError("unsupported Mono case")
+    if "INJECT_BUG_" in report_text:
+        raise ValueError("mutation runs cannot provide sound evidence")
     required = (
-        "M5A path verified from SPI pins through the production voice and I2S pins",
+        f"{case_id} path verified from SPI pins through the production voice and I2S pins",
         "selected 2x saw + causal 2x filter candidate",
         "phrase and complete release",
         "PASS --",
@@ -41,7 +46,7 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
     if f"decoded I2S WAV sha256 {wav_sha256}" not in report_text:
         raise ValueError("report does not bind the decoded I2S WAV hash")
     match = re.search(
-        r"M5A controls: pulse=(\w+);(?: effective pulse=(\w+) "
+        rf"{case_id} controls: pulse=(\w+);(?: effective pulse=(\w+) "
         r"\((\d+(?:\.\d+)?)% duty\);)? saw cutoff=(\d+) Hz; "
         r"saw volume correction=([+-]?\d+(?:\.\d+)?) dB", report_text)
     if not match:
@@ -52,6 +57,10 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
                         if "compile defines:" in line), "")
     if "VOICE_FILTER_2X" not in define_line:
         raise ValueError("report omits VOICE_FILTER_2X, needed to identify effective pulse duty")
+    pulse_selected = "VOICE_PULSE_2X" in define_line
+    if pulse_2x is not None and pulse_selected != pulse_2x:
+        raise ValueError("report has a different pulse 2x configuration")
+    controls["oscillator_pulse_oversample_2x"] = pulse_selected
     effective_shape = ("pulse479" if controls["pulse_shape"] == "pulse29" else
                        controls["pulse_shape"])
     effective_duty = vf.DUTY[effective_shape] / vf.CYCLE
@@ -74,6 +83,8 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--case", choices=tuple(m5a.MANIFESTS), default="M5A")
+    ap.add_argument("--pulse2x", action="store_true", default=None)
     ap.add_argument("--wav", required=True, help="complete decoded int16 M5A I2S phrase")
     ap.add_argument("--verification", required=True,
                     help="captured stdout/stderr of the matching full --m5a --filter2x run")
@@ -96,6 +107,7 @@ def main(argv=None) -> int:
         wav_sha256 = hashlib.sha256(wav.read_bytes()).hexdigest()
         controls = validate_integration_report(
             report_text, wav_sha256, pulse_shape=a.pulse_shape,
+            case_id=a.case, pulse_2x=a.pulse2x,
             saw_cutoff_hz=a.saw_cutoff_hz,
             saw_volume_correction_db=a.saw_volume_correction_db)
     except ValueError as exc:
@@ -121,11 +133,14 @@ def main(argv=None) -> int:
         measured = m5a.measure(
             pulse_shape=controls["pulse_shape"], voice_factory=_candidate_factory,
             model_label=f"causal-reconstructed-2x-filter-headroom-{controls['pulse_shape']}-decoded-i2s",
-            output_path=candidate_audio, candidate_wav=wav)
+            output_path=candidate_audio, candidate_wav=wav, case_id=a.case)
     except (m5a.Refused, OSError, ValueError) as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
         return 2
-    case = next(c for c in run_case.load_cases() if c["case_id"] == "M5A")
+    if f"reference sha256 {measured['reference_sha256']}" not in report_text:
+        print("score_m5a_i2s: REFUSED -- transcript reference differs from scoring reference")
+        return 2
+    case = next(c for c in run_case.load_cases() if c["case_id"] == a.case)
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                             check=True, capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
@@ -137,12 +152,15 @@ def main(argv=None) -> int:
         "rtl-sketch/verify_synth_top.py", "rtl-sketch/tb_top_bx.v",
         "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
         "rtl-sketch/voice_dp.v", "rtl-sketch/ladder_dp_n.v",
-        "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v")
+        "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v",
+        "rtl-sketch/osc_2x_saw_bank.v", "rtl-sketch/osc_2x_saw_path.v",
+        "rtl-sketch/polyblep_saw_pair.v", "rtl-sketch/decimate_2x_tm_sym.v",
+        "rtl-sketch/osc_substep_pair.v")
     engine = m5a.engine_configuration("selected")
     provenance = run_case.provenance(
         run_case.model_input_hashes({
-            "frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
-            "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"],
+            f"frozen:{a.case}:audio": "sha256:" + measured["reference_sha256"],
+            f"frozen:{a.case}:manifest": "sha256:" + measured["manifest_sha256"],
             "decoded:I2S": "sha256:" + wav_sha256,
             "verification:SPI-I2S": "sha256:" + hashlib.sha256(verification.read_bytes()).hexdigest()}),
         {"ours": str(candidate_audio.relative_to(ROOT)),
@@ -158,7 +176,8 @@ def main(argv=None) -> int:
          "filter_drive": engine["filter_drive"],
          "filter_oversample_factor": engine["filter_oversample_factor"],
          "ladder_coefficient_oversample": engine["ladder_coefficient_oversample"],
-         "oscillator_config": "2x saw candidate",
+         "oscillator_config": ("2x saw and pulse candidate" if controls["oscillator_pulse_oversample_2x"] else "2x saw candidate"),
+         "oscillator_pulse_oversample_2x": controls["oscillator_pulse_oversample_2x"],
          "filter_config": "causal reconstructed 2x, headroom preserved",
          "simulator": simulator,
          "pulse_shape": controls["pulse_shape"],
@@ -176,7 +195,7 @@ def main(argv=None) -> int:
     provenance["engine"] = "integrated-rtl"
     record = {
         "engine": "integrated-rtl",
-        "case_id": "M5A", "subject": case["subject"],
+        "case_id": a.case, "subject": case["subject"],
         "source_commit": commit,
         "source_dirty": dirty,
         "analysis_version": measured["analysis_version"],
@@ -220,7 +239,7 @@ def main(argv=None) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(record, indent=2) + "\n")
-    print(f"score_m5a_i2s: valid {verdict['state']} M5A comparison; seven properties measured from decoded I2S")
+    print(f"score_m5a_i2s: valid {verdict['state']} {a.case} comparison; seven properties measured from decoded I2S")
     print(f"score_m5a_i2s: report {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
     return 0
 
