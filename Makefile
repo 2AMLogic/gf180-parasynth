@@ -63,7 +63,8 @@ verify-full:
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) rtl-sketch/verify_voice.py --set full" \
 	  "$(PY) rtl-sketch/verify_drums.py" \
-	  "$(PY) tools/verify_m5a_filter2x_i2s.py"
+	  "$(PY) tools/verify_m5a_filter2x_i2s.py" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control"
 
 ## Every injected control that must turn something red, together.
 ## A run where these do not fire is a broken run, not a quiet one.

@@ -58,6 +58,11 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
         return 2
+    simulator = next((name for name in ("verilator", "iverilog")
+                      if f"simulator backend {name}" in report_text), None)
+    if simulator is None:
+        print("score_m5a_i2s: REFUSED -- report omits the simulator backend")
+        return 2
 
     out = pathlib.Path(a.out)
     if not out.is_absolute():
@@ -100,7 +105,9 @@ def main(argv=None) -> int:
          "spi_i2s": str(verification.relative_to(ROOT))},
         {"oscillator_config": "2x saw candidate",
          "filter_config": "causal reconstructed 2x, headroom preserved",
+         "simulator": simulator,
          "pulse_shape": "pulse479", "candidate_wav_sha256": measured["candidate_i2s_sha256"],
+         "scored_audio_artifact_sha256": hashlib.sha256(candidate_audio.read_bytes()).hexdigest(),
          "measurement_source_sha256": {
              rel: hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
              for rel in source_files}})
@@ -120,6 +127,7 @@ def main(argv=None) -> int:
             "reference_sha256": measured["reference_sha256"],
             "reference_manifest_sha256": measured["manifest_sha256"],
             "decoded_i2s_sha256": wav_sha256,
+            "scored_audio_artifact_sha256": hashlib.sha256(candidate_audio.read_bytes()).hexdigest(),
             "spi_i2s_report_sha256": hashlib.sha256(verification.read_bytes()).hexdigest(),
             "events": measured["event_diagnostics"],
             "model_segments": measured["model_segments"],

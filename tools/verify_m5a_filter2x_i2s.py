@@ -27,6 +27,7 @@ def main(argv=None) -> int:
     ap.add_argument("--wav", default="build/scorecard/M5A-filter2x-i2s.wav")
     ap.add_argument("--record", default="build/scorecard/M5A-filter2x-i2s.json")
     ap.add_argument("--audio", default="build/scorecard/M5A-filter2x-i2s-measured.wav")
+    ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="verilator")
     ap.add_argument("--timeout", type=int, default=5400)
     a = ap.parse_args(argv)
     try:
@@ -39,7 +40,8 @@ def main(argv=None) -> int:
     report.parent.mkdir(parents=True, exist_ok=True)
     wav.parent.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
-               "--m5a", "--filter2x", "--wav-out", str(wav), "--outdir", str(outdir)]
+               "--m5a", "--filter2x", "--simulator", a.simulator,
+               "--wav-out", str(wav), "--outdir", str(outdir)]
     try:
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                                 timeout=a.timeout)

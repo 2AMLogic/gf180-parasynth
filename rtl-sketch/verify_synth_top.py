@@ -100,6 +100,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
 import hashlib
+import shutil
 import numpy as np
 from scipy.io import wavfile
 import voice_fx as vf
@@ -426,23 +427,38 @@ RE_BUSY = re.compile(r"datapath busy at a tick: (\d+).*overrun (\d+); overflow (
 RE_STRB = re.compile(r"sample strobed in (\d+) frames, MISSING in (\d+), worst strobe cycle (\d+)")
 
 
-def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None):
-    iverilog, vvp = tool("iverilog"), tool("vvp")
-    if not iverilog or not vvp:
-        print("verify_synth_top: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
+def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
+             simulator="iverilog"):
     tag = "_".join(d.replace("INJECT_BUG_", "") for d in defines) or "base"
-    vvp_file = os.path.join(outdir, f"tb_top_bx_{tag}.vvp")
     out = {k: os.path.join(outdir, f"top_{k}_{tag}.txt") for k in ("i2s", "samp", "wrs")}
     for f in out.values():
         if os.path.exists(f): os.remove(f)
     resolved = resolve_sources(rtl_dir)
     srcs = [f for _, f in resolved]
-    r = subprocess.run([iverilog, "-g2012", "-o", vvp_file] + [f"-D{d}" for d in defines] + srcs,
-                       cwd=HERE, capture_output=True, text=True)
+    if simulator == "iverilog":
+        iverilog, vvp = tool("iverilog"), tool("vvp")
+        if not iverilog or not vvp:
+            print("verify_synth_top: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
+        executable = os.path.join(outdir, f"tb_top_bx_{tag}.vvp")
+        compile_cmd = [iverilog, "-g2012", "-o", executable] + [f"-D{d}" for d in defines] + srcs
+    elif simulator == "verilator":
+        verilator = shutil.which("verilator")
+        if not verilator:
+            print("verify_synth_top: Verilator not on PATH"); return None
+        mdir = os.path.join(outdir, f"obj_top_bx_{tag}")
+        os.makedirs(mdir, exist_ok=True)
+        executable = os.path.join(mdir, "tb_top_bx")
+        compile_cmd = [verilator, "--binary", "--timing", "-Wno-fatal",
+                       "--top-module", "tb_top_bx", "--Mdir", mdir, "-o", executable]
+        compile_cmd += [f"-D{d}" for d in defines] + srcs
+    else:
+        raise ValueError(f"unknown simulator {simulator!r}")
+    r = subprocess.run(compile_cmd, cwd=HERE, capture_output=True, text=True)
     if r.returncode != 0:
-        print("verify_synth_top: iverilog failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_synth_top: {simulator} compile failed:\n" + r.stdout + r.stderr); return None
     try:
-        r = subprocess.run([vvp, "-n", vvp_file, f"+cmd={os.path.join(outdir, 'top_bx_cmds.txt')}",
+        run_cmd = ([tool("vvp"), "-n", executable] if simulator == "iverilog" else [executable])
+        r = subprocess.run(run_cmd + [f"+cmd={os.path.join(outdir, 'top_bx_cmds.txt')}",
                             f"+i2s={out['i2s']}", f"+samp={out['samp']}", f"+wrs={out['wrs']}",
                             f"+frames={frames}"], cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
@@ -483,6 +499,8 @@ def main(argv=None) -> int:
     ap.add_argument("--m5a-manifest", default=os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json"))
     ap.add_argument("--wav-out", default=None,
                     help="write decoded left-channel I2S samples to an int16 WAV")
+    ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog",
+                    help="RTL event engine (Verilator is substantially faster for complete phrases)")
     ap.add_argument("--rtl", default=None,
                     help="take sources this directory holds from there (the start-red path)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
@@ -550,12 +568,13 @@ def main(argv=None) -> int:
     config = ("2x saw + causal 2x filter candidate" if a.filter2x else
               "2x saw candidate" if a.osc2x else "legacy single-rate waveform")
     print(f"verify_synth_top: selected {config}; compile defines: {', '.join(defines) or '(none)'}")
+    print(f"verify_synth_top: simulator backend {a.simulator}")
     # The bench closes I2S at the final sample boundary and drops the three
     # serializer periods still in flight.  Give the M5A transport check three
     # drain frames so its *modelled* phrase length remains unchanged while the
     # wire has time to emit its complete final periods.
     sim_frames = tail + (3 if a.m5a else 0)
-    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl)
+    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl, simulator=a.simulator)
     if out is None:
         return 2
 

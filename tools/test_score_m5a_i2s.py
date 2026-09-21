@@ -10,6 +10,7 @@ def _report(detail="27.2 s phrase and complete release", config="selected 2x saw
                       "verify_synth_top: " + config,
                       "verify_synth_top: PASS -- decoded I2S periods match",
                       "verify_synth_top: M5A path verified from SPI pins through the production voice and I2S pins",
+                      "verify_synth_top: simulator backend verilator",
                       f"verify_synth_top: decoded I2S WAV sha256 {_HASH}"))
 
 

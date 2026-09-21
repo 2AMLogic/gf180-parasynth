@@ -202,10 +202,12 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
-      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      - run: sudo apt-get update && sudo apt-get install -y iverilog verilator
       - name: M1 -- one Moog voice bit-exact (full)
         run: python rtl-sketch/verify_voice.py --set full
       - name: D -- the eight-stop drum kit bit-exact
         run: python rtl-sketch/verify_drums.py
       - name: M5A -- complete reconstructed 2x filter phrase through SPI to I2S and score decoded audio
         run: python tools/verify_m5a_filter2x_i2s.py
+      - name: M5A -- Verilator integrated disabling control
+        run: python rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control
