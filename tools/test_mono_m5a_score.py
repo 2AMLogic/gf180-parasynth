@@ -132,3 +132,22 @@ def test_frozen_cutoff_measurement_is_repeatable_at_the_pinned_block_size():
     assert wr["overall_wrong_then_right_rate"] == "2/6"
     assert wr["cutoff_calibration"]["discarded"]["host_block_size_samples"] == 512
     assert wr["cutoff_calibration"]["discarded"]["injected_control_caught"] is True
+
+
+def test_supplied_i2s_audio_is_scored_without_rendering_the_software_voice(monkeypatch):
+    import json
+
+    candidate = score.ROOT / "docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav"
+    expected = json.loads((score.ROOT / "docs/scorecard/results/M5A.json").read_text())
+
+    def unexpected_render(*_args, **_kwargs):
+        pytest.fail("supplied I2S audio must not render the software voice")
+
+    monkeypatch.setattr(score.vf, "render_mono_fx", unexpected_render)
+    output = score.ROOT / "build/scorecard/test-supplied-audio-scored.wav"
+    try:
+        measured = score.measure(candidate_wav=candidate, output_path=output)
+        assert measured["metrics"] == expected["metrics"]
+        assert hashlib.sha256(output.read_bytes()).hexdigest() == hashlib.sha256(candidate.read_bytes()).hexdigest()
+    finally:
+        output.unlink(missing_ok=True)

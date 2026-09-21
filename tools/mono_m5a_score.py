@@ -175,7 +175,9 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         required_samples = int(round(manifest["timeline"]["audio_duration_s"] * SR))
         candidate_pcm, candidate_sha256 = _load_i2s_candidate(candidate_wav, required_samples)
 
-    patch = _voice_patch(manifest)
+    # Integrated scoring must measure the samples that arrived from I2S. The
+    # software voice is only needed for the model-only comparison path.
+    patch = _voice_patch(manifest) if candidate_pcm is None else None
     tolerance = TOLERANCES
     observed = {name: [] for name in tolerance}
     event_diagnostics = []
@@ -184,22 +186,25 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     silence = int(round(manifest["timeline"]["segment_silence_s"] * SR))
     for seg in manifest["timeline"]["segments"]:
         wave = seg["wave"]
-        seq = []
-        segment_patch = _patch_for_wave(patch, wave, pulse_shape)
-        for ev in seg["midi_events"]:
-            seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
-                        {**segment_patch, "gate": float(ev["gate_s"])}))
-        duration = float(seg["duration_s"])
-        voice = vf.VoiceFx(oversample_2x=True) if voice_factory is None else voice_factory()
-        pcm = vf.render_mono_fx(seq, duration, voice)
         offset = int(seg["offset_samples"])
         if candidate_pcm is None:
+            seq = []
+            segment_patch = _patch_for_wave(patch, wave, pulse_shape)
+            for ev in seg["midi_events"]:
+                seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
+                            {**segment_patch, "gate": float(ev["gate_s"])}))
+            duration = float(seg["duration_s"])
+            voice = (vf.VoiceFx(oversample_2x=True) if voice_factory is None
+                     else voice_factory())
+            pcm = vf.render_mono_fx(seq, duration, voice)
             ours = np.asarray(pcm, dtype=np.float64) / 32768.0
+            samples_before_trim = len(pcm)
         else:
             end = offset + int(seg["samples"])
             if end > len(candidate_pcm):
                 raise Refused(f"decoded I2S WAV does not cover {wave} segment {offset}..{end}")
             ours = candidate_pcm[offset:end]
+            samples_before_trim = len(ours)
         ref_segment = ref_pcm[offset:offset + int(seg["samples"])]
         # The host latency is removed from the frozen recording (44 samples
         # here). Compare the common timeline and trim only the candidate's
@@ -210,7 +215,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         ours, ref_segment = ours[:common], ref_segment[:common]
         model_parts.append(ours)
         renders.append({"wave": wave, "samples": common, "offset_samples": offset,
-                        "trimmed_candidate_tail_samples": max(0, len(pcm) - common)})
+                        "trimmed_candidate_tail_samples": max(0, samples_before_trim - common)})
         ours_env = am.rms_envelope(ours, ms=5.0, sr=SR)
         ref_env = am.rms_envelope(ref_segment, ms=5.0, sr=SR)
         for ev in seg["midi_events"]:
