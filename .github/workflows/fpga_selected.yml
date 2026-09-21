@@ -1,0 +1,36 @@
+name: fpga-selected-85f
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/fpga-selected-preset]
+    paths:
+      - '.github/workflows/fpga_selected.yml'
+      - 'tools/setup_ci_oss_cad.py'
+      - 'fpga/build_selected.py'
+      - 'fpga/rtl/**'
+      - 'fpga/boards/**'
+      - 'rtl-sketch/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-85f:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python tools/setup_ci_oss_cad.py
+      - name: selected baseline synthesis, timing and bitstream
+        run: python fpga/build_selected.py --device 85k --out build/fpga-selected-85k
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-85f
+          path: |
+            build/fpga-selected-85k/
+            build/oss-cad-pinned/toolchain.json

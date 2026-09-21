@@ -63,3 +63,17 @@ python3 fpga/build_selected.py --device 85k --out build/fpga-selected-85k --from
 
 The resume guard was tested red before implementation. Modified source,
 configuration, or netlist bytes refuse reuse. Four build-runner tests pass.
+
+## Linux build evidence
+
+`fpga-selected-85f` runs the same selected baseline on Ubuntu 24.04 with the
+2026-09-21 OSS CAD Suite archive pinned by SHA-256. It preserves the complete
+build directory (stage reports, logs, timing JSON, configuration and bitstream)
+even when a stage fails. The archive checksum is verified before extraction;
+tampering and archive traversal are covered by controls. Tool versions and
+archive identity are saved alongside the build artifacts.
+
+This moves the long 85F build to a dedicated runner without changing DSP or
+claiming that a bitstream proves live playback. `VOICE_PULSE_2X` remains absent.
+The earlier local route is retained until the Linux run can take over; its
+partial progress is not a timing pass.
