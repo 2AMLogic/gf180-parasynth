@@ -97,6 +97,7 @@ def compare_audio(ours, ref):
             raise Refused("bass release incomplete or unmeasurable")
         values["Envelope release"].append(tuple(t["release_t20_ms"] for t in timing))
         rows.append({**event, "pitch_error_cents": pitch_error,
+                     "harmonics_db": dict(zip(("model", "reference"), spectra)),
                      "harmonic_error_db_model_minus_reference": {k: v[0] for k, v in partials.items()},
                      "harmonic_comparison": {k: v[1] for k, v in partials.items()},
                      "rms_dbfs": dict(zip(("model", "reference"), levels)),
@@ -130,6 +131,8 @@ def required_metrics(measured):
 
 def run(case, inject="", keep_audio=True):
     import run_case
+    source_commit = run_case.source_commit()
+    source_tree = run_case.worktree_state()
     if inject == "REF_MISSING":
         load_reference(MANIFEST.parent / "missing-manifest.json")
     if inject not in ("", "MONO_PITCH_UP_25_CENTS"):
@@ -143,7 +146,8 @@ def run(case, inject="", keep_audio=True):
                  {**patch, "gate": e["gate_s"]}) for e in reference.EVENTS]
     pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
     measured = compare_audio(pcm.astype(np.float64) / 32768., reference_pcm)
-    output = ROOT / f"build/scorecard/M1A{('-' + inject) if inject else ''}-model.wav"
+    output = (ROOT / f"build/scorecard/M1A-{inject}-model.wav" if inject else
+              MANIFEST.parent / "m1a-model.wav")
     artifacts = {}
     if keep_audio:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -161,9 +165,14 @@ def run(case, inject="", keep_audio=True):
         "frozen:M1A:manifest": "sha256:" + sha(MANIFEST),
         "frozen:M1A:audio": "sha256:" + manifest["renders"][0]["sha256"],
         "tools/mono_m1a_score.py": "sha256:" + sha(Path(__file__)),
+        "model/filter_rate_chain.py": "sha256:" + sha(ROOT / "model/filter_rate_chain.py"),
         "tools/measure_mono_m1a_reference.py": "sha256:" + sha(ROOT / "tools/measure_mono_m1a_reference.py")})
+    for name in ("dsp.py", "fixed.py"):
+        inputs[f"model/{name}"] = "sha256:" + sha(ROOT / "model" / name)
+    provenance = run_case.provenance(inputs, artifacts, config)
+    provenance["worktree"] = source_tree
     return {"engine": "fixed-model", "case_id": "M1A", "subject": case["subject"],
-            "source_commit": run_case.source_commit(), "analysis_run": run_case.analysis_run(),
+            "source_commit": source_commit, "analysis_run": run_case.analysis_run(),
             "analysis_version": "m1a-partial-score-v1", "reference_profile": "frozen Mini V3; Model D cross-check unavailable",
             "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
             "audio": artifacts.get("ours", ""), "metrics": required_metrics(measured),
@@ -171,5 +180,5 @@ def run(case, inject="", keep_audio=True):
                             "model_audio_sha256": sha(output) if keep_audio else None,
                             "wrong_then_right": {"apparatus_corrections": 4,
                                 "latest": "release qualification had been extended to attack; known 8 ms signal rejects it"}},
-            "provenance": run_case.provenance(inputs, artifacts, config),
+            "provenance": provenance,
             "note": "NO VERDICT: first model comparison, with qualified component measurements and explicit missing evidence"}

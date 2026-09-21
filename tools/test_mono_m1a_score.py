@@ -16,7 +16,8 @@ def signal(cents=0):
         env[off] = np.exp(-(dt[off] - event["gate_s"]) / .05)
         hz = 440 * 2 ** ((event["note"] - 69 + cents / 100) / 12)
         audio += .1 * env * (np.sin(2 * np.pi * hz * t)
-                             + .2 * np.sin(4 * np.pi * hz * t))
+                             + .2 * np.sin(4 * np.pi * hz * t)
+                             + .1 * np.sin(6 * np.pi * hz * t))
     return audio
 
 
@@ -28,6 +29,10 @@ def test_known_bass_and_pitch_mutation():
     assert clean["properties"]["Envelope release"]["valid"]
     assert not clean["properties"]["Envelope attack"]["valid"]
     assert "error" not in clean["properties"]["Envelope attack"]
+    for event in clean["events"]:
+        assert event["harmonics_db"]["model"]["h2"] == pytest.approx(20 * np.log10(.2), abs=.05)
+        assert event["harmonics_db"]["model"]["h3"] == pytest.approx(-20., abs=.05)
+        assert event["release_t20_ms"]["model"] == pytest.approx(50 * np.log(10), abs=10)
 
 
 def test_missing_or_corrupt_reference_refuses(tmp_path):
