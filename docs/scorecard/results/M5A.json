@@ -2,7 +2,7 @@
   "engine": "integrated-rtl",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "ebafa49ea79d2e46e02cb74120ce08d743bd50ca",
+  "source_commit": "e7b9badfec3a09e30b0a7d68f8e2f1c5d7a50512",
   "source_dirty": true,
   "analysis_version": "m5a-score-v3",
   "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
@@ -76,9 +76,9 @@
       "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
     },
     "Envelope release": {
-      "value": 1040.39583,
+      "value": 1234.39583,
       "reference": 1243.22917,
-      "error": -202.83333,
+      "error": -8.83333,
       "units": "ms",
       "tolerance": 125.0,
       "valid": true,
@@ -106,9 +106,9 @@
   "diagnostics": {
     "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
     "reference_manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
-    "decoded_i2s_sha256": "03185172863180210e20d54c9ee32779cc68cd5ecee41844aee8efe7ce4c294c",
-    "scored_audio_artifact_sha256": "389f2068019e351436f034bb3e36d298c14dffcafcba4dcd1da2b5d7277fc9cb",
-    "spi_i2s_report_sha256": "19eb1c0294749313e9648fcb41ab576c716d27ab03e45b6231a60adf589cb103",
+    "decoded_i2s_sha256": "af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
+    "scored_audio_artifact_sha256": "51156a868d358ac108eaa3a759694b30ee216b20287b43815d4e35ec8e22e861",
+    "spi_i2s_report_sha256": "28e6e265d0d59e419ca6b2ce76c6bcac2887eeb0230e31981d5878efe6cfe9c5",
     "events": [
       {
         "wave": "saw",
@@ -155,7 +155,7 @@
         "envelope_ms": {
           "attack_model": 8.8542,
           "attack_reference": 7.3333,
-          "release_model": 1040.3958,
+          "release_model": 1234.3958,
           "release_reference": 1243.2292
         },
         "gain_dbfs": {
@@ -206,7 +206,7 @@
         "envelope_ms": {
           "attack_model": 8.9375,
           "attack_reference": 3.4167,
-          "release_model": 1046.1875,
+          "release_model": 1241.6042,
           "release_reference": 1243.0208
         },
         "gain_dbfs": {
@@ -259,7 +259,7 @@
         "envelope_ms": {
           "attack_model": 8.7917,
           "attack_reference": 7.4583,
-          "release_model": 1048.2708,
+          "release_model": 1243.7083,
           "release_reference": 1247.5208
         },
         "gain_dbfs": {
@@ -310,7 +310,7 @@
         "envelope_ms": {
           "attack_model": 8.7708,
           "attack_reference": 3.3333,
-          "release_model": 1052.1042,
+          "release_model": 1248.625,
           "release_reference": 1247.4792
         },
         "gain_dbfs": {
@@ -339,44 +339,44 @@
   "provenance": {
     "engine": "integrated-rtl",
     "worktree": {
-      "commit": "ebafa49",
-      "described": "node/D-drums-bitexact-162-gebafa49",
-      "branch": "experiment/m5a-filter-headroom",
+      "commit": "e7b9bad",
+      "described": "node/D-drums-bitexact-163-ge7b9bad-dirty",
+      "branch": "fix/m5a-envelope-timing",
       "dirty": true,
-      "uncommitted_sha256": "7438910b9eff9566",
+      "uncommitted_sha256": "303d903dc5eaa0ce",
       "untracked_files": 1
     },
     "base_check": {},
-    "command": "tools/score_m5a_i2s.py --wav /private/tmp/wt-parasynth-filter-headroom/build/m5a-filter2x-i2s-final/i2s.wav --verification /private/tmp/wt-parasynth-filter-headroom/docs/scorecard/mono-m5a-miniv3/filter2x-spi-i2s.txt --out /private/tmp/wt-parasynth-filter-headroom/docs/scorecard/results/M5A.json --audio /private/tmp/wt-parasynth-filter-headroom/docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
+    "command": "tools/score_m5a_i2s.py --wav build/scorecard/M5A-envelope-i2s.wav --verification build/verification/M5A-envelope-i2s.txt --out docs/scorecard/results/M5A.json --audio docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
     "config": {
       "oscillator_config": "2x saw candidate",
       "filter_config": "causal reconstructed 2x, headroom preserved",
       "simulator": "verilator",
       "pulse_shape": "pulse479",
-      "candidate_wav_sha256": "03185172863180210e20d54c9ee32779cc68cd5ecee41844aee8efe7ce4c294c",
-      "scored_audio_artifact_sha256": "389f2068019e351436f034bb3e36d298c14dffcafcba4dcd1da2b5d7277fc9cb",
+      "candidate_wav_sha256": "af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
+      "scored_audio_artifact_sha256": "51156a868d358ac108eaa3a759694b30ee216b20287b43815d4e35ec8e22e861",
       "measurement_source_sha256": {
         "tools/score_m5a_i2s.py": "cae31d2844a629eceb0750932fed86206f68ae160bd5ae4d199098e291724cde",
         "tools/verify_m5a_filter2x_i2s.py": "ad57fdd7cc66846cd423250217de869f64686725b952f545d313106330fb0d2a",
         "tools/mono_m5a_score.py": "7d9f4438f9ba0131cc602e8b7e37a3e4c9c2f262098b72a16ab2d6a1958bf53a",
         "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
-        "model/synth_top_model.py": "3221360032851c1c36a80226afa322b94538171294ab20e3a5eb1f780e50f18e",
-        "model/voice_fx.py": "441b845abd33b42b69fb1d69a1a8eac041cd82371a38bfcefe42378cf2adfc2c",
-        "rtl-sketch/verify_synth_top.py": "d2fa6b29c7809ec14c1b2b3d3302a0f29f433e43f7c75e3ba427897147429253",
-        "rtl-sketch/tb_top_bx.v": "962614ffea25b4fa1057b7f124060852b74b60eca35b88d1ff9eac03e9c49de8",
+        "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557",
+        "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
+        "rtl-sketch/verify_synth_top.py": "b998b6f5e60b96e5bb7598f92c5796be8a78bac51db6bc3585cc9f91e90879de",
+        "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
         "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
         "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
-        "rtl-sketch/voice_dp.v": "062f67d1fe15a6220fa9d6a0d22db403e893ee3ace8d331b86a35df42071a397",
+        "rtl-sketch/voice_dp.v": "7e659245dcadc3b19f562354838be66a66a48ac9dc0f367613c96760d2d01235",
         "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
         "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
         "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202"
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-21T01:20:10Z",
+    "run_at": "2026-09-21T03:32:05Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:441b845abd33b42b",
+      "model/voice_fx.py": "sha256:6442bb9effb7fa70",
       "model/audio_measure.py": "sha256:cd27a0a67dfde218",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
       "tools/run_case.py": "sha256:8b961904a7f2ed92",
@@ -388,12 +388,12 @@
       "docs/scorecard/cases.csv": "sha256:ae732f0ffd317afc",
       "frozen:M5A:audio": "sha256:a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
       "frozen:M5A:manifest": "sha256:b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
-      "decoded:I2S": "sha256:03185172863180210e20d54c9ee32779cc68cd5ecee41844aee8efe7ce4c294c",
-      "verification:SPI-I2S": "sha256:19eb1c0294749313e9648fcb41ab576c716d27ab03e45b6231a60adf589cb103"
+      "decoded:I2S": "sha256:af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
+      "verification:SPI-I2S": "sha256:28e6e265d0d59e419ca6b2ce76c6bcac2887eeb0230e31981d5878efe6cfe9c5"
     },
     "artefacts": {
       "ours": "docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
-      "spi_i2s": "docs/scorecard/mono-m5a-miniv3/filter2x-spi-i2s.txt"
+      "spi_i2s": "build/verification/M5A-envelope-i2s.txt"
     },
     "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"

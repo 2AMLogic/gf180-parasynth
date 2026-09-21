@@ -152,10 +152,10 @@ class SynthTopModel:
         if addr == A_ROUTE: i["route"] = data & W1;  return "image"
         if A_AMP <= addr <= A_AMP + 3:
             j = addr - A_AMP
-            i["amp"][j] = (data & W16) if j == 3 else (data & W24); return "image"
+            i["amp"][j] = data & W24; return "image"
         if A_FILT <= addr <= A_FILT + 3:
             j = addr - A_FILT
-            i["fenv"][j] = (data & W16) if j == 3 else (data & W24); return "image"
+            i["fenv"][j] = data & W24; return "image"
         if addr == A_CUT_LO: i["cut_lo"] = data & W16; return "image"
         if addr == A_CUT_HI: i["cut_hi"] = data & W16; return "image"
         if addr == A_TRACK:  return ("TRACK", data & W16)
