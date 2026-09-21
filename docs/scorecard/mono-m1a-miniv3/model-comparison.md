@@ -37,7 +37,7 @@ observations and the original failed 5 ms release-window control.
 Reproduce with `python3 tools/run_case.py M1A`. Expected exit is **2**, meaning
 NO VERDICT; a bad sound measurement and missing evidence are distinct outcomes.
 The WAV is `m1a-model.wav`; per-note signed partials, all settings and hashes
-are in `../results/M1A.json`. Fifteen focused tests validate known bass partial
+are in `../results/M1A.json`. Seventeen focused tests validate known bass partial
 levels, known release, a 25-cent pitch mutation, corrupt/missing references,
 silence/truncation refusal, and preservation of missing required evidence.
 
@@ -45,3 +45,10 @@ Wrong-then-right: the fourth apparatus correction prevents release qualification
 from being treated as attack qualification. The first synthetic scorer fixture
 had only one non-fundamental partial and correctly refused; adding its declared
 third harmonic made the known-signal qualification executable.
+
+A first full reporting attempt after adding DSP provenance refused because it
+looked for `model/dsp.py`; the module is in `audition/dsp.py`. The emitted WAV
+was retained, its hash matches the initial observation, and reanalysis from
+that bound audio reproduces all metrics. A reporting-path regression test now
+checks both DSP source paths. The record distinguishes analysis provenance
+from the original render worktree and records audio reuse explicitly.
