@@ -24,6 +24,7 @@ def test_m5b_reference_is_a_lower_lead_with_a_complete_phrase_and_release():
     assert 4.0 <= phrase_end <= 8.0
     assert case["segment_seconds"] > phrase_end
     assert case["segment_seconds"] - phrase_end >= 2.0
+    assert abs(case["segment_seconds"] - phrase_end - 2.8) < 1e-9
     assert case["requires_waveform_at_every_note"] is True
 
 

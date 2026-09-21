@@ -62,7 +62,7 @@ INTER_SEGMENT_SILENCE = 0.20
 
 # M5B is the lower-note expansion of the bright-lead case: the base
 # note is MIDI 72, with MIDI 84 checking that the mapping carries upward.
-# Each waveform segment is a 4.6 s note phrase followed by 2.9 s of release.
+# Each waveform segment is a 4.6 s note phrase followed by 2.8 s of release.
 M5B_EVENTS = {
     wave: (
         {"note": 72, "on_s": 0.10, "gate_s": 0.60},
