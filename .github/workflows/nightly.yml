@@ -22,7 +22,7 @@ jobs:
   # ---------------------------------------------------------------- the slow
   # bit-exactness runs. These are the ones a push cannot afford.
   full-rtl:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   # stops failing, either the defect stopped being injected or the check
   # stopped checking, and both are worse than a red build.
   controls:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +93,7 @@ jobs:
   # next agent "CP decay tau 34.5 ms against a 47 ms target" rather than a
   # pass/fail it has to go looking behind.
   sound-report:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -158,7 +158,7 @@ jobs:
   # it fails if the locally-produced result has gone stale, so "we have not
   # compared against the references lately" is a red build rather than silence.
   reference-freshness:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - name: the reference comparison must not go stale
