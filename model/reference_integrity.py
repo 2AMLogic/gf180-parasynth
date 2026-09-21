@@ -123,7 +123,7 @@ def inject_clicks(x, sr: int = SR, every_s: float = 7.0, amp_rel: float = 0.25,
 # ===========================================================================
 # a long steady note from each reference
 # ===========================================================================
-def steady(name, seconds=40.0, note=45, source="saw"):
+def steady(name, seconds=40.0, note=45, source="saw", block=rr.BLOCK):
     """A long held note. `source`:
 
       'saw'      each synth's own sawtooth. USELESS as a crackle background:
@@ -151,7 +151,7 @@ def steady(name, seconds=40.0, note=45, source="saw"):
         d.note = note
         y = d.render(np.zeros(1), seconds)
     elif name == "miniv3":
-        d = rr.MiniV3Rig()
+        d = rr.MiniV3Rig(block=block)
         d.set(d.I['lvl_ext'], 0.0)
         d.set(d.I['ext_sw'], 0.0)
         d.set(48, {"saw": 0.4083, "smooth": 0.075, "silence": 0.075}[source])  # Wave Osc1
@@ -182,11 +182,11 @@ def steady(name, seconds=40.0, note=45, source="saw"):
 
 
 # ===========================================================================
-def stage_demo(devices, seconds, out, source="smooth"):
+def stage_demo(devices, seconds, out, source="smooth", block=rr.BLOCK):
     rows = {}
     for name in devices:
         print(f"\n-- {name}: {seconds:.0f} s, one held note, source={source}", flush=True)
-        y = steady(name, seconds, source=source)
+        y = steady(name, seconds, source=source, block=block)
         r = transient_report(y)
         rows[f"{name}-{source}"] = r
         print(f"   rms {r['rms']:.4f}   peak {np.abs(y).max():.5f}   "
@@ -275,13 +275,17 @@ def main(argv=None) -> int:
     ap.add_argument("--devices", default="surge,miniv3,diva")
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--source", default="smooth", choices=["saw", "smooth", "silence"])
+    ap.add_argument("--block", type=int, default=rr.BLOCK,
+                    help="plugin host block size (Mini V3 apparatus)")
     ap.add_argument("--repeats", type=int, default=5)
     ap.add_argument("--out", default="/tmp/refint")
     a = ap.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
     devs = [d for d in a.devices.split(",") if d]
     if a.stage == "demo":
-        r = stage_demo(devs, a.seconds, a.out, a.source)
+        if a.block <= 0:
+            ap.error("--block must be positive")
+        r = stage_demo(devs, a.seconds, a.out, a.source, block=a.block)
     else:
         r = stage_variance(devs, a.repeats)
     json.dump(r, open(os.path.join(a.out, f"{a.stage}-{a.source}.json"), "w"),

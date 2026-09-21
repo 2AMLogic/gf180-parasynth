@@ -3,10 +3,28 @@ from __future__ import annotations
 
 import numpy as np
 
-from tools.measure_mono_m5a_reference import envelope_timing
+from tools.measure_mono_m5a_reference import CASES, envelope_timing
 
 
 SR = 48_000
+
+
+def test_m5a_reference_case_keeps_its_frozen_note_map_and_timing():
+    case = CASES["M5A"]
+    assert [event["note"] for event in case["events"]["saw"]] == [84, 96]
+    assert case["segment_seconds"] == 13.5
+    assert case["requires_waveform_at_every_note"] is False
+
+
+def test_m5b_reference_is_a_lower_lead_with_a_complete_phrase_and_release():
+    case = CASES["M5B"]
+    assert [event["note"] for event in case["events"]["saw"]] == [72, 84]
+    assert case["events"]["pulse"] == case["events"]["saw"]
+    phrase_end = max(e["on_s"] + e["gate_s"] for e in case["events"]["saw"])
+    assert 4.0 <= phrase_end <= 8.0
+    assert case["segment_seconds"] > phrase_end
+    assert case["segment_seconds"] - phrase_end >= 2.0
+    assert case["requires_waveform_at_every_note"] is True
 
 
 def test_envelope_timing_matches_a_piecewise_linear_attack_and_exponential_release():
