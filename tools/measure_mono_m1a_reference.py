@@ -126,7 +126,7 @@ def qualify_envelope_basis():
         raise ref.Refused("bass envelope qualification or wrong-window control failed")
     return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
             "scope": "40 ms audio-envelope window; not internal VCA timing",
-            "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release"}
+            "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release; early h4 window could not resolve the short filter transient"}
 
 
 def main(argv=None):
@@ -180,9 +180,29 @@ def main(argv=None):
             deltas.append({"midi": EVENTS[event]["note"], "baseline_median_db": float(np.median(values)),
                            "disabled_db": off, "difference_db": float(np.median(values) - off),
                            "repeat_range_db": float(np.ptp(values))})
-        if not any(abs(d["difference_db"]) > max(1., 3 * d["repeat_range_db"]) for d in deltas):
-            raise ref.Refused("removing the filter envelope is not distinguishable from repeat variation")
         disabled["early_h4_comparison"] = deltas
+        # A 250 ms harmonic window cannot resolve a very short filter attack.
+        # Use the causal sample difference, with independently repeated clean
+        # audio as its noise floor, and keep the insensitive spectral result.
+        baseline = wavfile.read(a.out / renders[0]["file"])[1].astype(np.float64)
+        comparison = np.asarray(audio, dtype=np.float32).astype(np.float64)
+        repeat_peak = max(float(np.max(np.abs(baseline - wavfile.read(a.out / r["file"])[1]))) for r in renders)
+        threshold = max(1e-5, 100 * repeat_peak)
+        responses = []
+        for event in EVENTS:
+            start = round(event["on_s"] * ref.SR)
+            end = round((event["on_s"] + event["gate_s"]) * ref.SR)
+            difference = np.abs(baseline[start:end] - comparison[start:end])
+            changed = np.flatnonzero(difference > threshold)
+            if not len(changed):
+                raise ref.Refused("disabled filter envelope caused no change above repeated-render variation")
+            duration = float(changed[-1] * 1000 / ref.SR)
+            if duration > 250:
+                raise ref.Refused("filter-envelope audio effect did not settle within 250 ms")
+            responses.append({"midi": event["note"], "peak_difference": float(difference.max()),
+                              "last_difference_ms": duration, "threshold": threshold})
+        disabled["audio_response"] = {"events": responses, "repeat_peak_difference": repeat_peak,
+                                      "scope": "duration of audible-output difference, not internal cutoff-envelope timing"}
         rings = []
         for _ in range(3):
             rig = ref.rr.MiniV3Rig(block=ref.BLOCK)
