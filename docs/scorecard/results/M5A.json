@@ -2,12 +2,19 @@
   "engine": "integrated-rtl",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "e7b9badfec3a09e30b0a7d68f8e2f1c5d7a50512",
-  "source_dirty": true,
+  "source_commit": "746b260554f1a5925334501eab3bd0c3b1abc3a7",
+  "source_dirty": false,
   "analysis_version": "m5a-score-v3",
   "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
-  "render_run": "full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; pulse479",
-  "audio": "docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
+  "pulse_mapping": {
+    "control_label": "pulse29",
+    "effective_waveform": "pulse479",
+    "effective_duty_fraction": 0.4789999723434448,
+    "effective_duty_percent": 47.89999723434448,
+    "selection": "VOICE_FILTER_2X DUTY_WIDE encoding"
+  },
+  "render_run": "full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; pulse control=pulse29; effective pulse=pulse479 (47.90% duty); saw_cutoff=20000 Hz; saw_volume_correction=-0.45428 dB",
+  "audio": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
   "tolerance_policy": {
     "Pitch": [
       1.0,
@@ -40,54 +47,54 @@
   },
   "metrics": {
     "Pitch": {
-      "value": -0.14812,
+      "value": -0.14813,
       "reference": 0.0,
-      "error": -0.14812,
+      "error": -0.14813,
       "units": "cents",
       "tolerance": 1.0,
       "valid": true,
       "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
     },
     "Harmonic shape": {
-      "value": 8.84429,
+      "value": 7.56137,
       "reference": 0.0,
-      "error": 8.84429,
+      "error": 7.56137,
       "units": "dB",
       "tolerance": 1.0,
       "valid": true,
       "tolerance_basis": "dB per measured partial; fixed screening limit"
     },
     "Foldback energy": {
-      "value": 10.2742,
+      "value": 10.27423,
       "reference": 0.0,
-      "error": 10.2742,
+      "error": 10.27423,
       "units": "dB",
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
     },
     "Envelope attack": {
-      "value": 8.9375,
-      "reference": 3.41667,
-      "error": 5.52083,
+      "value": 8.70833,
+      "reference": 3.33333,
+      "error": 5.375,
       "units": "ms",
       "tolerance": 5.0,
       "valid": true,
       "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
     },
     "Envelope release": {
-      "value": 1234.39583,
+      "value": 1235.27083,
       "reference": 1243.22917,
-      "error": -8.83333,
+      "error": -7.95833,
       "units": "ms",
       "tolerance": 125.0,
       "valid": true,
       "tolerance_basis": "ms; fixed 10% of the measured reference T20"
     },
     "Gain": {
-      "value": -17.76455,
+      "value": -17.76573,
       "reference": -19.18712,
-      "error": 1.42257,
+      "error": 1.42139,
       "units": "dB",
       "tolerance": 3.0,
       "valid": true,
@@ -106,33 +113,34 @@
   "diagnostics": {
     "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
     "reference_manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
-    "decoded_i2s_sha256": "af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
-    "scored_audio_artifact_sha256": "51156a868d358ac108eaa3a759694b30ee216b20287b43815d4e35ec8e22e861",
-    "spi_i2s_report_sha256": "28e6e265d0d59e419ca6b2ce76c6bcac2887eeb0230e31981d5878efe6cfe9c5",
+    "decoded_i2s_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
+    "scored_audio_artifact_sha256": "e01da671d11d1643066e75367998cdd8035c0bdf6847c978a892cb7f2602997b",
+    "spi_i2s_report_sha256": "62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448",
     "events": [
       {
         "wave": "saw",
         "midi": 84,
+        "model_midi": 84,
         "stages": null,
         "filter_reconstruction": null,
         "filter_decimation": null,
         "pitch_cents_from_midi": {
-          "model": -0.00497,
+          "model": -0.00498,
           "reference": 0.14315,
-          "model_minus_reference": -0.14812
+          "model_minus_reference": -0.14813
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": -2.5623,
-          "h3": -6.5061,
-          "h4": -5.9367,
-          "h5": -5.9023,
-          "h6": -7.6449,
-          "h7": -7.7708,
-          "h8": -7.3339,
-          "h9": -7.5614,
-          "h10": -7.3213,
-          "h11": -7.2591,
-          "h12": -6.5105
+          "h2": -1.7681,
+          "h3": -5.1166,
+          "h4": -5.5636,
+          "h5": -4.6617,
+          "h6": -5.6897,
+          "h7": -5.9622,
+          "h8": -5.1495,
+          "h9": -5.3113,
+          "h10": -5.1394,
+          "h11": -4.3444,
+          "h12": -3.2534
         },
         "harmonic_comparison": {
           "h2": "measured",
@@ -148,24 +156,25 @@
           "h12": "measured"
         },
         "foldback_db": {
-          "model": -55.6063,
+          "model": -48.2116,
           "reference": -50.1287,
-          "excess_over_reference_db": 0.0
+          "excess_over_reference_db": 1.9171
         },
         "envelope_ms": {
-          "attack_model": 8.8542,
+          "attack_model": 8.8125,
           "attack_reference": 7.3333,
-          "release_model": 1234.3958,
+          "release_model": 1235.2708,
           "release_reference": 1243.2292
         },
         "gain_dbfs": {
-          "model": -17.7646,
+          "model": -17.7657,
           "reference": -19.1871
         }
       },
       {
         "wave": "saw",
         "midi": 96,
+        "model_midi": 96,
         "stages": null,
         "filter_reconstruction": null,
         "filter_decimation": null,
@@ -175,16 +184,16 @@
           "model_minus_reference": -0.14353
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": -5.8435,
-          "h3": -8.0607,
-          "h4": -6.3666,
-          "h5": -8.1536,
-          "h6": -6.3452,
-          "h7": -6.2042,
-          "h8": -7.4009,
-          "h9": -8.7736,
-          "h10": -8.8443,
-          "h11": -5.6253
+          "h2": -4.26,
+          "h3": -7.5614,
+          "h4": -4.603,
+          "h5": -5.2716,
+          "h6": -3.5744,
+          "h7": -2.1441,
+          "h8": -2.7391,
+          "h9": -2.7022,
+          "h10": -2.7994,
+          "h11": 1.8197
         },
         "harmonic_comparison": {
           "h2": "measured",
@@ -199,24 +208,25 @@
           "h11": "measured"
         },
         "foldback_db": {
-          "model": -53.961,
+          "model": -47.1856,
           "reference": -49.3938,
-          "excess_over_reference_db": 0.0
+          "excess_over_reference_db": 2.2082
         },
         "envelope_ms": {
-          "attack_model": 8.9375,
+          "attack_model": 8.6875,
           "attack_reference": 3.4167,
-          "release_model": 1241.6042,
+          "release_model": 1241.0,
           "release_reference": 1243.0208
         },
         "gain_dbfs": {
-          "model": -19.2363,
+          "model": -18.9139,
           "reference": -19.5125
         }
       },
       {
         "wave": "pulse",
         "midi": 84,
+        "model_midi": 84,
         "stages": null,
         "filter_reconstruction": null,
         "filter_decimation": null,
@@ -257,7 +267,7 @@
           "excess_over_reference_db": 8.8497
         },
         "envelope_ms": {
-          "attack_model": 8.7917,
+          "attack_model": 8.9375,
           "attack_reference": 7.4583,
           "release_model": 1243.7083,
           "release_reference": 1247.5208
@@ -270,6 +280,7 @@
       {
         "wave": "pulse",
         "midi": 96,
+        "model_midi": 96,
         "stages": null,
         "filter_reconstruction": null,
         "filter_decimation": null,
@@ -287,7 +298,7 @@
           "h7": -2.7988,
           "h8": -2.0946,
           "h9": -5.3155,
-          "h10": -4.1132,
+          "h10": -4.1133,
           "h11": -2.9731
         },
         "harmonic_comparison": {
@@ -303,18 +314,18 @@
           "h11": "measured"
         },
         "foldback_db": {
-          "model": -40.5606,
+          "model": -40.5605,
           "reference": -50.8348,
           "excess_over_reference_db": 10.2742
         },
         "envelope_ms": {
-          "attack_model": 8.7708,
+          "attack_model": 8.7083,
           "attack_reference": 3.3333,
-          "release_model": 1248.625,
+          "release_model": 1248.0417,
           "release_reference": 1247.4792
         },
         "gain_dbfs": {
-          "model": -15.6678,
+          "model": -15.6672,
           "reference": -14.6197
         }
       }
@@ -324,13 +335,13 @@
         "wave": "saw",
         "samples": 647956,
         "offset_samples": 0,
-        "trimmed_candidate_tail_samples": 44
+        "trimmed_candidate_tail_samples": 0
       },
       {
         "wave": "pulse",
         "samples": 647956,
         "offset_samples": 657556,
-        "trimmed_candidate_tail_samples": 44
+        "trimmed_candidate_tail_samples": 0
       }
     ],
     "duration_s": 27.198166666666665,
@@ -339,30 +350,47 @@
   "provenance": {
     "engine": "integrated-rtl",
     "worktree": {
-      "commit": "e7b9bad",
-      "described": "node/D-drums-bitexact-163-ge7b9bad-dirty",
-      "branch": "fix/m5a-envelope-timing",
-      "dirty": true,
-      "uncommitted_sha256": "303d903dc5eaa0ce",
-      "untracked_files": 1
+      "commit": "746b260",
+      "described": "node/D-drums-bitexact-195-g746b260",
+      "branch": "feature/m5b-selected-engine",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "untracked_files": 0
     },
     "base_check": {},
-    "command": "tools/score_m5a_i2s.py --wav build/scorecard/M5A-envelope-i2s.wav --verification build/verification/M5A-envelope-i2s.txt --out docs/scorecard/results/M5A.json --audio docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
+    "command": "tools/score_m5a_i2s.py --wav docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.wav --verification docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out docs/scorecard/results/M5A.json --audio docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
     "config": {
+      "engine_profile": "selected-m5a-reconstructed-filter2x",
+      "oscillator_oversample_2x": true,
+      "filter_rate_converted": true,
+      "filter_preserve_headroom": true,
+      "filter_causal": true,
+      "pulse479_filter_candidate": true,
+      "filter_g_exact": false,
+      "filter_k_comp": true,
+      "filter_drive": 0.75,
+      "filter_oversample_factor": 2,
+      "ladder_coefficient_oversample": 2,
       "oscillator_config": "2x saw candidate",
       "filter_config": "causal reconstructed 2x, headroom preserved",
       "simulator": "verilator",
-      "pulse_shape": "pulse479",
-      "candidate_wav_sha256": "af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
-      "scored_audio_artifact_sha256": "51156a868d358ac108eaa3a759694b30ee216b20287b43815d4e35ec8e22e861",
+      "pulse_shape": "pulse29",
+      "pulse_control_label": "pulse29",
+      "pulse_effective_waveform": "pulse479",
+      "pulse_effective_duty_fraction": 0.4789999723434448,
+      "pulse_effective_duty_percent": 47.89999723434448,
+      "saw_cutoff_hz": 20000,
+      "saw_volume_correction_db": -0.45428,
+      "candidate_wav_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
+      "scored_audio_artifact_sha256": "e01da671d11d1643066e75367998cdd8035c0bdf6847c978a892cb7f2602997b",
       "measurement_source_sha256": {
-        "tools/score_m5a_i2s.py": "cae31d2844a629eceb0750932fed86206f68ae160bd5ae4d199098e291724cde",
+        "tools/score_m5a_i2s.py": "073e8d9db4be552a0682dce0b015fd53b77866d9e34b2ab77bc452f448abc833",
         "tools/verify_m5a_filter2x_i2s.py": "ad57fdd7cc66846cd423250217de869f64686725b952f545d313106330fb0d2a",
-        "tools/mono_m5a_score.py": "7d9f4438f9ba0131cc602e8b7e37a3e4c9c2f262098b72a16ab2d6a1958bf53a",
+        "tools/mono_m5a_score.py": "b4210e59eb8fec07bafe75203c5d017514ec786e963bc53e9c8fc6a92d918267",
         "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
         "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557",
         "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
-        "rtl-sketch/verify_synth_top.py": "b998b6f5e60b96e5bb7598f92c5796be8a78bac51db6bc3585cc9f91e90879de",
+        "rtl-sketch/verify_synth_top.py": "526d55c4030bb01aea9dfe792f583c5b17f524780b66f527ecb797f991115864",
         "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
         "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
         "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
@@ -372,28 +400,28 @@
         "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202"
       }
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-21T03:32:05Z",
+    "python": "3.11.5",
+    "run_at": "2026-09-21T16:22:25Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:6442bb9effb7fa70",
       "model/audio_measure.py": "sha256:cd27a0a67dfde218",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:8b961904a7f2ed92",
+      "tools/run_case.py": "sha256:f35be8dc86cd9fef",
       "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
-      "tools/mono_m5a_score.py": "sha256:7d9f4438f9ba0131",
-      "tools/measure_mono_m5a_reference.py": "sha256:8ea0aa3705d907aa",
+      "tools/mono_m5a_score.py": "sha256:b4210e59eb8fec07",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
       "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:ae732f0ffd317afc",
+      "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:M5A:audio": "sha256:a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
       "frozen:M5A:manifest": "sha256:b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
-      "decoded:I2S": "sha256:af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
-      "verification:SPI-I2S": "sha256:28e6e265d0d59e419ca6b2ce76c6bcac2887eeb0230e31981d5878efe6cfe9c5"
+      "decoded:I2S": "sha256:d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
+      "verification:SPI-I2S": "sha256:62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448"
     },
     "artefacts": {
-      "ours": "docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
-      "spi_i2s": "docs/scorecard/mono-m5a-miniv3/filter2x-spi-i2s.txt"
+      "ours": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
+      "spi_i2s": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt"
     },
     "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
