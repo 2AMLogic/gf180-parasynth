@@ -68,12 +68,23 @@ module tb_voice;
     reg t_v_seen = 0;                                    // did S_VCA2 ever happen? (see the localparams)
     reg st_def   = 0;                                    // was `state` ever DEFINED this frame?
     always @(posedge clk) begin
+`ifdef VOICE_OSC_2X
+        if (dut.state == dut.S_OSCWAIT && dut.is_saw && dut.osc2_valid) begin
+            t_osc[dut.kk] <= dut.osc2_sample;
+            t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
+        end
+        if (dut.state == S_MIX && !dut.is_saw) begin
+            t_osc[dut.kk] <= dut.osc;
+            t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
+        end
+`else
         if (dut.state == S_MIX) begin                     // oscillator kk is being mixed: its sample, inc, (e, r)
             t_osc[dut.kk] <= dut.osc;
             t_inc[dut.kk] <= dut.inc_mod[dut.kk];      // the MODULATED increment (6.9)
             t_sh[dut.kk]  <= dut.sh[dut.kk];
             t_r[dut.kk]   <= dut.r[dut.kk];
         end
+`endif
         if (dut.state == S_KEFF1) t_kc <= dut.mb[15:0];   // the operand loaded at S_KEFF0 is kc
         if (^dut.state !== 1'bx)  st_def = 1'b1;
         if (dut.state == S_VCA2)  begin t_v <= dut.ma; t_v_seen = 1'b1; end
@@ -137,10 +148,11 @@ module tb_voice;
             t_v_seen = 1'b0; st_def = 1'b0;
             if (!got_valid) begin $display("tb_voice: no sample in frame %0d", f); $finish; end
             lat_total = lat_total + lat; if (lat > lat_worst) lat_worst = lat; if (lat < lat_best) lat_best = lat;
-            $fdisplay(ofd, "%0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
+            $fdisplay(ofd, "%0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
                       f, got, t_osc[0], t_osc[1], t_osc[2], t_inc[0], t_inc[1], t_inc[2],
                       t_sh[0], t_sh[1], t_sh[2], t_r[0], t_r[1], t_r[2],
-                      mixed, ae, fe, cut, dut.g, t_kc, k_eff, y19, t_v, ($signed(dut.macc) >>> 15), lat);
+                      mixed, ae, fe, cut, dut.g, t_kc, k_eff, y19, t_v, ($signed(dut.macc) >>> 15),
+                      dut.phase_os2[0], dut.phase_os2[1], dut.phase_os2[2], lat);
             if (got !== expv[f]) begin
                 if (mism == 0) begin first_f = f; first_exp = expv[f]; first_got = got; end
                 mism = mism + 1;
@@ -149,9 +161,10 @@ module tb_voice;
             if (err > maxerr) maxerr = err;
             nout = nout + 1;
         end
-        $fdisplay(ofd, "STATE %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
+        $fdisplay(ofd, "STATE %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
                   dut.phase[0], dut.phase[1], dut.phase[2], dut.inc_acc[0], dut.inc_acc[1], dut.inc_acc[2],
-                  dut.level_a, dut.level_f, dut.seg_a, dut.seg_f);
+                  dut.level_a, dut.level_f, dut.seg_a, dut.seg_f,
+                  dut.phase_os2[0], dut.phase_os2[1], dut.phase_os2[2]);
         $fclose(ofd);
         $display("tb_voice: %0d writes, %0d frames, %0d sample mismatches, worst |error| %0d LSB", nw, nout, mism, maxerr);
         $display("tb_voice: cycles from go to sample_valid: best %0d, mean %0d, worst %0d (chip: go at cycle 8 of 256)",

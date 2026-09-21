@@ -4,6 +4,10 @@
 #                   per-block breakdown, reports/
 #   make ecp5       ECP5 25F, ULX3S board wrapper WITH the PLL  <- the playable one
 #   make ice40      iCE40 UP5K (iCEBreaker), bare wrapper, no PLL possible
+#   OSC2X=1 (default) selects the measured 2x saw chain; OSC2X=0 builds the
+#   legacy single-rate waveform for comparison.
+#   FILTER2X=1 opts into the reconstructed 2x filter/headroom candidate; it
+#   requires OSC2X=1 and remains off until the full scorecard is accepted.
 #   make headroom   route fpga/rtl/headroom_top.v -- the same design with the
 #                   drum bank grown to the completed 808 (MODES=16 NUMS=11) --
 #                   to measure the margin rather than estimate it
@@ -47,6 +51,14 @@ ICETIME       ?= icetime
 NEXTPNR_ECP5  ?= nextpnr-ecp5
 ECPPACK       ?= ecppack
 PYTHON        ?= $(firstword $(wildcard $(ROOT)/.venv/bin/python) $(wildcard /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python) python3)
+OSC2X         ?= 1
+FILTER2X      ?= 0
+ifneq ($(filter 1 yes true,$(FILTER2X)),)
+ifeq ($(filter 1 yes true,$(OSC2X)),)
+$(error FILTER2X=1 requires OSC2X=1)
+endif
+endif
+RTL_DEFS      := $(if $(filter 1 yes true,$(OSC2X)),-DVOICE_OSC_2X,) $(if $(filter 1 yes true,$(FILTER2X)),-DVOICE_FILTER_2X,)
 
 # The chip. This is rtl-sketch/verify_synth_top.py's own SRCS list -- the set
 # that bench elaborates and compares against the model -- and it must stay that
@@ -54,7 +66,9 @@ PYTHON        ?= $(firstword $(wildcard $(ROOT)/.venv/bin/python) $(wildcard /Us
 # `make srccheck` asserts exactly that, and `all` runs it first.
 CORE := $(RTL)/synth_top.v $(RTL)/spi_ctl.v $(RTL)/voice_dp.v $(RTL)/recip_div.v \
         $(RTL)/ladder_dp_n.v $(RTL)/i2s_tx.v \
-        $(RTL)/drum_regs.v $(RTL)/drum_kit.v $(RTL)/drum_dp.v $(RTL)/modal_dp.v
+        $(RTL)/drum_regs.v $(RTL)/drum_kit.v $(RTL)/drum_dp.v $(RTL)/modal_dp.v \
+        $(RTL)/osc_2x_saw_bank.v $(RTL)/osc_2x_saw_path.v $(RTL)/polyblep_saw_pair.v \
+        $(RTL)/osc_substep_pair.v $(RTL)/decimate_2x_tm_sym.v $(RTL)/rate_conv_2x.v
 
 SRC_ECP5  := $(FPGA)/rtl/ulx3s_top.v $(CORE)
 SRC_ICE40 := $(FPGA)/rtl/fpga_top.v  $(CORE)
@@ -120,6 +134,7 @@ srccheck:
 provenance: | $(REPORTS)
 	@{ echo "# FPGA build provenance"; echo; \
 	   echo "date        : $$(date -u '+%Y-%m-%dT%H:%M:%SZ')"; \
+	   echo "oscillator  : $(if $(filter 1 yes true,$(OSC2X)),2x saw candidate,legacy single-rate waveform) (OSC2X=$(OSC2X))"; \
 	   echo "rtl commit  : $$(git -C $(ROOT) rev-parse HEAD)"; \
 	   echo "rtl branch  : $$(git -C $(ROOT) rev-parse --abbrev-ref HEAD)"; \
 	   echo "tree state  : $$(git -C $(ROOT) status --porcelain -- rtl-sketch fpga/rtl fpga/scripts fpga/boards fpga/Makefile | wc -l | tr -d ' ') modified file(s) among the RTL and the flow (reports/ excluded: this file is one of them)"; \
@@ -157,7 +172,7 @@ ecp5: $(REPORTS)/ecp5_25f.txt
 $(REPORTS)/ecp5_25f.txt: $(SRC_ECP5) $(FPGA)/boards/ulx3s.lpf | $(BUILD) $(REPORTS)
 	@mkdir -p $(BUILD)
 	cd $(RTL) && $(YOSYS) -l $(BUILD)/ecp5_synth.log -p \
-	  'read_verilog -defer $(SRC_ECP5); \
+	  'read_verilog -defer $(RTL_DEFS) $(SRC_ECP5); \
 	   synth_ecp5 -top $(TOP_ECP5) -json $(BUILD)/ecp5.json; \
 	   tee -o $(BUILD)/ecp5_stat.txt stat -top $(TOP_ECP5); \
 	   write_verilog -noattr $(BUILD)/ecp5_netlist.v'
@@ -174,7 +189,7 @@ ice40: $(REPORTS)/ice40_up5k.txt
 $(REPORTS)/ice40_up5k.txt: $(SRC_ICE40) $(FPGA)/boards/icebreaker.pcf | $(BUILD) $(REPORTS)
 	@mkdir -p $(BUILD)
 	cd $(RTL) && $(YOSYS) -l $(BUILD)/ice40_synth.log -p \
-	  'read_verilog -defer $(SRC_ICE40); \
+	  'read_verilog -defer $(RTL_DEFS) $(SRC_ICE40); \
 	   synth_ice40 -top $(TOP_ICE40) -dsp -json $(BUILD)/ice40.json; \
 	   tee -o $(BUILD)/ice40_stat.txt stat -top $(TOP_ICE40)'
 	-cd $(BUILD) && $(NEXTPNR_ICE40) --up5k --package sg48 \

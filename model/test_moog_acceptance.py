@@ -1052,7 +1052,9 @@ class _NoFloorAdsr(vf.AdsrFx):
                 else:
                     L = self.sus
             else:
-                L -= (L * self.rate) >> self.RQ          # the floor, removed
+                mantissa = self.rate & ((1 << self.RQ) - 1)
+                exponent = self.rate >> self.RQ
+                L -= (L * mantissa) >> (self.RQ + exponent)  # the floor, removed
                 if L < 0:
                     L = 0
         self.level, self.seg = L, seg
@@ -1061,7 +1063,7 @@ class _NoFloorAdsr(vf.AdsrFx):
 
 def test_control_removing_the_envelope_release_floor(monkeypatch):
     """Defect: no `max(1, .)` in the release. The level stalls at
-    `2^16/rate - 1` and the note never ends -- which is exactly what the
+    `2^(16+exponent)/mantissa - 1` and the note never ends -- which is exactly what the
     'a note ends' property is for."""
     monkeypatch.setattr(vf, "AdsrFx", _NoFloorAdsr)
     env = vf.AdsrFx(0.005, 0.1, 1.0, 0.12)

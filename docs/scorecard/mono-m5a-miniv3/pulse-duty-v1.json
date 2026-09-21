@@ -1,0 +1,361 @@
+{
+  "probe": "M5A pulse duty sweep",
+  "reference_identity": "Mini V3 3.12.0.3422 software synth; not physical hardware",
+  "analysis_version": "m5a-pulse-duty-v1",
+  "source_commit": "bf3680d5d8809ddf10415a0e1fddb74b6b13bfe7",
+  "source_hashes": {
+    "tools/measure_m5a_pulse_duty.py": "a3c7e82353e249b658b912ea0d3d54ae4a7df4da11f02716d48ce352fc3ffe42",
+    "tools/mono_m5a_score.py": "5e29eada2d474f82901c8f9629cf6b4148a97c6accb415ccdf43bdacdbbb1dff",
+    "model/audio_measure.py": "2345ced894c70d3d57ed1a6f775ee5dcd0e27715af8a8f6ebfa8c3a69cb9d7f4",
+    "model/voice_fx.py": "970aa5f1dbdcffe133727ca31d970a52d04bd57de1511dabdee5e185ec0d9c77"
+  },
+  "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+  "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "oscillator_config": "selected 2x voice model",
+  "fixed_filter_drive": 0.75,
+  "fixed_cutoff_hz": 14073,
+  "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
+  "intervention": "existing rectangular waveform duty only",
+  "runs": [
+    {
+      "shape": "square",
+      "duty_fraction": 0.5,
+      "events": [
+        {
+          "harmonic_comparison": {
+            "h2": "model_below_floor_bound",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "model_below_floor_bound",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "model_below_floor_bound",
+            "h11": "measured",
+            "h12": "model_below_floor_bound"
+          },
+          "max_common_partial_error_db": 93.1901,
+          "wave": "square",
+          "midi": 84,
+          "pitch_error_cents": -0.14339,
+          "excess_alias_db": 19.7014,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -90.0591,
+            "h3": -1.8106,
+            "h4": -85.367,
+            "h5": -2.7283,
+            "h6": -93.1901,
+            "h7": -3.1934,
+            "h8": -86.9408,
+            "h9": -3.0317,
+            "h10": -90.9878,
+            "h11": -1.4057,
+            "h12": -91.7252
+          },
+          "reference_even_harmonics_db": {
+            "h2": -24.195521562806558,
+            "h4": -24.091942211950112,
+            "h6": -24.526056124348607,
+            "h8": -25.90222917429681,
+            "h10": -27.811236081933085,
+            "h12": -30.28886734593968
+          }
+        },
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "model_below_floor_bound",
+            "h7": "measured",
+            "h8": "model_below_floor_bound",
+            "h9": "measured",
+            "h10": "model_below_floor_bound",
+            "h11": "measured"
+          },
+          "max_common_partial_error_db": 89.5744,
+          "wave": "square",
+          "midi": 96,
+          "pitch_error_cents": -0.14355,
+          "excess_alias_db": 21.5061,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -83.0232,
+            "h3": -3.1071,
+            "h4": -84.4072,
+            "h5": -3.174,
+            "h6": -89.5744,
+            "h7": -1.8385,
+            "h8": -83.4676,
+            "h9": -3.7129,
+            "h10": -81.3282,
+            "h11": 2.4487
+          },
+          "reference_even_harmonics_db": {
+            "h2": -23.843362717374088,
+            "h4": -25.384537585820528,
+            "h6": -29.3782744931583,
+            "h8": -32.963195723214184,
+            "h10": -35.9526122373316
+          }
+        }
+      ]
+    },
+    {
+      "shape": "pulse15",
+      "duty_fraction": 0.1499999761581421,
+      "events": [
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "max_common_partial_error_db": 21.0979,
+          "wave": "pulse15",
+          "midi": 84,
+          "pitch_error_cents": -0.14339,
+          "excess_alias_db": 16.295,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 21.0979,
+            "h3": 3.932,
+            "h4": 15.1701,
+            "h5": 1.8822,
+            "h6": 6.3014,
+            "h7": -8.1977,
+            "h8": -2.9955,
+            "h9": -1.8727,
+            "h10": 4.8684,
+            "h11": 4.1833,
+            "h12": 5.336
+          },
+          "reference_even_harmonics_db": {
+            "h2": -24.195521562806558,
+            "h4": -24.091942211950112,
+            "h6": -24.526056124348607,
+            "h8": -25.90222917429681,
+            "h10": -27.811236081933085,
+            "h12": -30.28886734593968
+          }
+        },
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "max_common_partial_error_db": 19.7263,
+          "wave": "pulse15",
+          "midi": 96,
+          "pitch_error_cents": -0.14353,
+          "excess_alias_db": 18.739,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 19.7263,
+            "h3": 2.2732,
+            "h4": 14.5592,
+            "h5": 2.9133,
+            "h6": 10.9401,
+            "h7": 1.8903,
+            "h8": 4.639,
+            "h9": -4.0064,
+            "h10": -1.7515,
+            "h11": 4.6792
+          },
+          "reference_even_harmonics_db": {
+            "h2": -23.843362717374088,
+            "h4": -25.384537585820528,
+            "h6": -29.3782744931583,
+            "h8": -32.963195723214184,
+            "h10": -35.9526122373316
+          }
+        }
+      ]
+    },
+    {
+      "shape": "pulse25",
+      "duty_fraction": 0.25,
+      "events": [
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "max_common_partial_error_db": 19.7916,
+          "wave": "pulse25",
+          "midi": 84,
+          "pitch_error_cents": -0.14338,
+          "excess_alias_db": 18.1947,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 19.7916,
+            "h3": -1.4409,
+            "h4": -4.5906,
+            "h5": -4.3742,
+            "h6": 7.3228,
+            "h7": -1.9364,
+            "h8": -5.9842,
+            "h9": -6.8247,
+            "h10": 2.6896,
+            "h11": 0.5153,
+            "h12": -4.9768
+          },
+          "reference_even_harmonics_db": {
+            "h2": -24.195521562806558,
+            "h4": -24.091942211950112,
+            "h6": -24.526056124348607,
+            "h8": -25.90222917429681,
+            "h10": -27.811236081933085,
+            "h12": -30.28886734593968
+          }
+        },
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "max_common_partial_error_db": 18.999,
+          "wave": "pulse25",
+          "midi": 96,
+          "pitch_error_cents": -0.14355,
+          "excess_alias_db": 19.4168,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 18.999,
+            "h3": -1.5491,
+            "h4": 2.2491,
+            "h5": -8.4745,
+            "h6": 7.3084,
+            "h7": 0.9375,
+            "h8": 2.6911,
+            "h9": -13.5555,
+            "h10": -2.1742,
+            "h11": 6.0757
+          },
+          "reference_even_harmonics_db": {
+            "h2": -23.843362717374088,
+            "h4": -25.384537585820528,
+            "h6": -29.3782744931583,
+            "h8": -32.963195723214184,
+            "h10": -35.9526122373316
+          }
+        }
+      ]
+    },
+    {
+      "shape": "pulse29",
+      "duty_fraction": 0.2900000214576721,
+      "events": [
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "max_common_partial_error_db": 19.3092,
+          "wave": "pulse29",
+          "midi": 84,
+          "pitch_error_cents": -0.14339,
+          "excess_alias_db": 18.6204,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 18.6783,
+            "h3": -6.7325,
+            "h4": 3.4707,
+            "h5": -1.1742,
+            "h6": 4.9775,
+            "h7": -19.3092,
+            "h8": 1.1717,
+            "h9": -1.2406,
+            "h10": -2.5865,
+            "h11": -10.0657,
+            "h12": 1.0058
+          },
+          "reference_even_harmonics_db": {
+            "h2": -24.195521562806558,
+            "h4": -24.091942211950112,
+            "h6": -24.526056124348607,
+            "h8": -25.90222917429681,
+            "h10": -27.811236081933085,
+            "h12": -30.28886734593968
+          }
+        },
+        {
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "max_common_partial_error_db": 17.9919,
+          "wave": "pulse29",
+          "midi": 96,
+          "pitch_error_cents": -0.14354,
+          "excess_alias_db": 20.0613,
+          "harmonic_error_db_model_minus_reference": {
+            "h2": 17.9919,
+            "h3": -5.9961,
+            "h4": -0.6748,
+            "h5": -2.2766,
+            "h6": 7.2164,
+            "h7": -7.1258,
+            "h8": -2.8942,
+            "h9": -2.1046,
+            "h10": 1.1175,
+            "h11": -2.2662
+          },
+          "reference_even_harmonics_db": {
+            "h2": -23.843362717374088,
+            "h4": -25.384537585820528,
+            "h6": -29.3782744931583,
+            "h8": -32.963195723214184,
+            "h10": -35.9526122373316
+          }
+        }
+      ]
+    }
+  ]
+}

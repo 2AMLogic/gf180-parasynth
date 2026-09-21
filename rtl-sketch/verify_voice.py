@@ -87,11 +87,14 @@ A = dict(INC=0x00, WAVE=0x04, W=0x08, WN=0x0B, GLIDE=0x0C, VOL=0x0D, AMP=0x10, F
 WAVE_CODE = vf.WAVE_CODE
 FULL24 = (1 << 24) - 1
 FIELDS = ["sample", "osc0", "osc1", "osc2", "inc0", "inc1", "inc2", "sh0", "sh1", "sh2",
-          "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v"]
+          "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v",
+          "phase2x0", "phase2x1", "phase2x2"]
 STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2",
-                "level_a", "level_f", "seg_a", "seg_f"]
-RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v"]
-BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT",
+                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2"]
+RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
+             "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
+             "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
+BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
 
@@ -427,8 +430,13 @@ def coverage(v: vf.VoiceFx, regs: dict, writes: list, phases0: list, trig, gate)
 
 
 # ---- generate: run the model, write the writes and the expected taps -------------
-def generate(outdir: str, which: str, only=None, verbose=True):
-    v = vf.VoiceFx()
+def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=False,
+             filter_2x=False):
+    v = vf.VoiceFx(oversample_2x=oversample_2x,
+                   rate_converted_ladder=filter_2x,
+                   preserve_filter_headroom=filter_2x,
+                   causal_filter=filter_2x,
+                   pulse479_filter_candidate=filter_2x)
     v.reset()
     all_writes, expected, f0 = [], [], 0
     report = []
@@ -443,7 +451,8 @@ def generate(outdir: str, which: str, only=None, verbose=True):
             row = [int(y[i])] + [int(t["osc"][k][i]) for k in range(3)] + [int(t["incs"][k][i]) for k in range(3)] \
                 + [er[k][i][0] + 15 for k in range(3)] + [er[k][i][1] for k in range(3)] \
                 + [int(t["mixed"][i]), int(t["amp_env"][i]), int(t["filt_env"][i]), int(t["cut"][i]), int(t["g"][i]),
-                   int(t["kc"][i]), int(t["k_eff"][i]), int(t["ladder"][i]), int(t["vca"][i]), (int(t["vca"][i]) * vol) >> 15]
+                   int(t["kc"][i]), int(t["k_eff"][i]), int(t["ladder"][i]), int(t["vca"][i]), (int(t["vca"][i]) * vol) >> 15] \
+                + [int(t["phase2"][k][i]) for k in range(3)]
             expected.append(row)
         cov = coverage(v, regs, writes, phases0, t["trig"], t["gate"])
         report.append(dict(key=key, name=name, f0=f0, n=n, writes=len(writes), cov=cov))
@@ -451,7 +460,7 @@ def generate(outdir: str, which: str, only=None, verbose=True):
             print(f"  [{key}] {name}: frames {f0}..{f0 + n - 1} ({n}), {len(writes)} writes; {cov}")
         f0 += n
     state = [o.phase for o in v.oscs] + [o.inc_acc for o in v.oscs] + \
-            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg]
+            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + list(v._os2_phase)
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "voice_writes.txt"), "w") as fh:
         fh.writelines("%d %d %d %d\n" % w for w in all_writes)
@@ -549,22 +558,38 @@ def main(argv=None) -> int:
     ap.add_argument("--set", default="full", choices=("full", "quick"))
     ap.add_argument("--only", default=None, help="comma-separated scenario keys")
     ap.add_argument("--inject", default=None, choices=BUGS, help="INJECT_BUG_VOICE_<NAME> to compile in")
+    ap.add_argument("--define", action="append", default=[], help="additional Verilog define")
+    ap.add_argument("--osc2x", action="store_true",
+                    help="enable the integrated 2x voice model and RTL path")
+    ap.add_argument("--filter2x", action="store_true",
+                    help="enable causal reconstructed 2x filter and the pulse-duty challenger")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
     a = ap.parse_args(argv)
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
+    if "VOICE_OSC_2X" in a.define:
+        ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")
+    if a.filter2x:
+        a.osc2x = True
     only = set(a.only.split(",")) if a.only else None
     print(f"verify_voice: model VoiceFx() (contract rev 4), scenario set '{a.set}'"
           + (f", only {sorted(only)}" if only else ""))
-    expected, state, writes, report = generate(a.outdir, a.set, only)
+    expected, state, writes, report = generate(a.outdir, a.set, only,
+                                               oversample_2x=a.osc2x,
+                                               filter_2x=a.filter2x)
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:
-        defines = [f"INJECT_BUG_VOICE_{a.inject}"] if a.inject else []
+        defines = list(a.define) + (["VOICE_OSC_2X"] if a.osc2x else [])
+        if a.filter2x:
+            defines.append("VOICE_FILTER_2X")
+        if a.inject:
+            defines.append(f"INJECT_BUG_VOICE_{a.inject}")
         rtl = os.path.relpath(os.path.abspath(a.rtl), HERE) if a.rtl else None
-        print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}"
-              f"{', ' + defines[0] if defines else ''}), {len(expected)} frames, {len(writes)} writes at the register port")
+        print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}; "
+              f"defines {', '.join(defines) or '(none)'}), {len(expected)} frames, "
+              f"{len(writes)} writes at the register port")
         out = simulate(a.outdir, defines, rtl)
         status = 2 if out is None else compare(expected, state, report, out)
     if a.expect_fail:

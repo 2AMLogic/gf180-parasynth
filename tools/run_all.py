@@ -98,13 +98,47 @@ def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
 
 
 def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = None,
-            jobs: int | None = None) -> list[dict]:
+            jobs: int | None = None, on_result=None) -> list[dict]:
+    """Run commands and call `on_result(index, result)` as each one finishes."""
+    results: list[dict | None] = [None] * len(cmds)
+
+    def finished(index: int, result: dict) -> None:
+        results[index] = result
+        if on_result is not None:
+            on_result(index, result)
+
     if serial or len(cmds) == 1:
-        return [run_one(c, timeout) for c in cmds]
-    workers = jobs or min(len(cmds), (os.cpu_count() or 4))
-    with cf.ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = [ex.submit(run_one, c, timeout) for c in cmds]
-        return [f.result() for f in futs]
+        for index, cmd in enumerate(cmds):
+            finished(index, run_one(cmd, timeout))
+    else:
+        workers = jobs or min(len(cmds), (os.cpu_count() or 4))
+        with cf.ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = {ex.submit(run_one, cmd, timeout): index
+                    for index, cmd in enumerate(cmds)}
+            for future in cf.as_completed(futs):
+                finished(futs[future], future.result())
+    if any(result is None for result in results):
+        raise RuntimeError("runner finished without recording every job")
+    return results
+
+
+def write_json_atomic(path: str, value) -> None:
+    """Replace a JSON report atomically so readers never see a partial file."""
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    temporary = f"{path}.tmp-{os.getpid()}"
+    try:
+        with open(temporary, "w") as fh:
+            json.dump(value, fh, indent=2)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
 
 
 def summarise(results: list[dict], tail: int = 4) -> str:
@@ -133,14 +167,25 @@ def main(argv: list[str] | None = None) -> int:
                     help="seconds per job; a timeout is NO-VERDICT, not FAIL")
     ap.add_argument("--tail", type=int, default=4)
     ap.add_argument("--json", metavar="PATH",
-                    help="write the full result set, including every child's own status")
+                    help=("atomically record PENDING jobs initially and update each entry "
+                          "as its process finishes"))
     a = ap.parse_args(argv)
 
-    results = run_all(a.cmds, serial=a.serial, timeout=a.timeout, jobs=a.jobs)
+    partial = ([{"cmd": cmd, "state": "PENDING", "rc": None,
+                 "out": "", "secs": 0.0} for cmd in a.cmds]
+               if a.json else None)
+    if a.json:
+        write_json_atomic(a.json, partial)
+
+    def persist(index, result):
+        partial[index] = result
+        write_json_atomic(a.json, partial)
+
+    results = run_all(a.cmds, serial=a.serial, timeout=a.timeout, jobs=a.jobs,
+                      on_result=persist if a.json else None)
     print(summarise(results, a.tail))
     if a.json:
-        with open(a.json, "w") as fh:
-            json.dump(results, fh, indent=2)
+        write_json_atomic(a.json, results)
     # Bounded: 0 or 1. The count is in the summary and the JSON, where it
     # cannot wrap round to zero.
     return 0 if all(r["state"] == PASS for r in results) else 1

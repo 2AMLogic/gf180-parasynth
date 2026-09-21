@@ -119,6 +119,7 @@ from scipy.signal import butter, sosfiltfilt                         # noqa: E40
 import audio_measure as am                                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
 import refprofile as rp                                              # noqa: E402
+import mono_m5a_score as mono_m5a                                    # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -1426,23 +1427,20 @@ def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     freqs = list(meta["freqs_hz"])
     parts = [(int(a), int(b), float(f)) for a, b, f in meta["parts"]]
     amp = float(meta["amp"])
-    if inject == "REF_CORNER_2X":
-        # The reference as it would read if the filter that made it had a
-        # corner an OCTAVE lower: time-stretch by 2, which moves every
-        # frequency in the recording to f/2, and read the curve on the
-        # frequency grid it is now actually at. A window that held an integer
-        # number of periods of f holds the same integer number of periods of
-        # f/2 once doubled, so the projection stays exact.
-        n = len(y)
-        y = np.interp(np.linspace(0.0, n - 1.0, 2 * n), np.arange(n), y)
-        parts = [(2 * i0, 2 * nw, f / 2.0) for i0, nw, f in parts]
-        freqs = [f / 2.0 for f in freqs]
     try:
         import reference_rigs as rr
         g = rr.SurgeRig.tone_project(y, parts, amp, clip_id)
     except am.InsufficientEvidence as e:
         raise Refused(f"the frozen clip {clip_id} could not be projected: {e}")
-    return np.asarray(freqs, dtype=np.float64), np.asarray(g, dtype=np.float64), meta
+    freqs = np.asarray(freqs, dtype=np.float64)
+    g = np.asarray(g, dtype=np.float64)
+    if inject == "REF_CORNER_2X":
+        # The measured curve for a reference whose filter corner is an octave
+        # lower. This is equivalent to time-stretching the original audio by
+        # 2 before projection, but keeping the already-projected response makes
+        # the mutation independently testable without a plugin/cache.
+        freqs = freqs / 2.0
+    return freqs, g, meta
 
 
 def our_filter_curve(freqs, cut_hz: float, res: float, amp: float):
@@ -1711,7 +1709,7 @@ NOT_RUN["F5A"] = (
     "sweep is not one of them -- so there is nothing to compare a frozen sweep "
     "against yet.")
 
-for _c in ("M1A", "M2A", "M3A", "M4A", "M5A", "M6A", "M7A", "M8A"):
+for _c in ("M1A", "M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
     NOT_RUN[_c] = (
         "no qualified Mono reference, and the two candidates failed for different "
         "reasons that are MEASURED and recorded in refprofile/profile.json rather "
@@ -1745,6 +1743,8 @@ NOT_RUN["E3A"] = ("no shipped patch uses the noise source or oscillator-3 "
 def plan_for(case_id: str) -> str:
     """What this runner will do with a case: 'drum', 'ensemble', 'not-run' or
     'unplanned'."""
+    if case_id in ("M5A", "M5B"):
+        return "mono"
     if case_id in NOT_RUN:
         return "not-run"
     if case_id in DRUM_CASE_VOICE:
@@ -1772,6 +1772,16 @@ def _git(*args) -> str:
                                        stderr=subprocess.DEVNULL)
     except Exception:
         return ""
+
+
+def mono_reference_pulse_mapping(manifest: dict) -> str:
+    """Summarize only waveform labels the reference actually classified."""
+    values = {str(measurement["waveform"])
+              for segment in manifest["timeline"]["segments"]
+              if segment["wave"] == "pulse"
+              for measurement in segment["measurements"]
+              if measurement.get("waveform") is not None}
+    return ", ".join(sorted(values)) or "waveform not classified in frozen reference"
 
 
 def source_commit() -> str:
@@ -1973,7 +1983,8 @@ def provenance(inputs: dict, artefacts: dict, config: dict) -> dict:
 # green result no longer covers the tree.
 MODEL_INPUTS = ("model/drums_fx.py", "model/voice_fx.py", "model/audio_measure.py",
                 "model/reference_rigs.py", "tools/run_case.py", "tools/refprofile.py",
-                "refprofile/profile.json", "docs/scorecard/cases.csv")
+                "tools/mono_m5a_score.py", "tools/measure_mono_m5a_reference.py",
+                "tools/scorecard.py", "refprofile/profile.json", "docs/scorecard/cases.csv")
 
 
 def model_input_hashes(extra: dict | None = None) -> dict:
@@ -1988,6 +1999,8 @@ def _now() -> str:
 
 def analysis_run() -> str:
     return (f"run_case@{_sha(__file__)} + audio_measure@{_sha(ROOT / 'model' / 'audio_measure.py')}"
+            f" + mono_m5a_score@{_sha(ROOT / 'tools' / 'mono_m5a_score.py')}"
+            f" + scorecard@{_sha(ROOT / 'tools' / 'scorecard.py')}"
             f" at {_now()}")
 
 
@@ -2227,12 +2240,90 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
             return run_ensemble_case(case, keep_audio)
         if kind == "filter":
             return run_filter_case(case, inject, keep_audio)
+        if kind == "mono":
+            control_audio = (ROOT / f"build/scorecard/{cid}-model-control-{inject}.wav"
+                             if inject else None)
+            measured = mono_m5a.measure(case_id=cid, engine="selected", inject=inject,
+                                         output_path=control_audio)
+            report_path = None
+            smoke_sha = None
+            if cid == "M5A":
+                smoke_dir = ROOT / "build/scorecard/M5A-spi-i2s"
+                report_path = smoke_dir / "verification.txt"
+                smoke = subprocess.run(
+                    [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
+                     "--m5a-smoke", "--filter2x", "--m5a-pulse-shape", mono_m5a.M5A_PULSE_WAVE,
+                     "--m5a-saw-cutoff-hz", "20000",
+                     "--m5a-saw-volume-correction-db", "-0.45428",
+                     "--outdir", str(smoke_dir),
+                     "--wav-out", str(smoke_dir / "m5a-i2s.wav")],
+                    cwd=ROOT, capture_output=True, text=True, timeout=3600)
+                report_path.parent.mkdir(parents=True, exist_ok=True)
+                report_path.write_text(smoke.stdout + smoke.stderr)
+                if (smoke.returncode != 0 or "PASS --" not in report_path.read_text()
+                        or "M5A path verified" not in report_path.read_text()):
+                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {report_path.relative_to(ROOT)}")
+                smoke_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
+            profile = mono_m5a.MANIFESTS[cid]
+            manifest = json.loads(profile.read_text())
+            notes = sorted({ev["note"] for seg in manifest["timeline"]["segments"]
+                            for ev in seg["midi_events"]})
+            duration = manifest["timeline"]["audio_duration_s"]
+            pulse_mapping = mono_reference_pulse_mapping(manifest)
+            outputs = {"ours": measured["audio"]}
+            if report_path is not None:
+                outputs["spi_i2s"] = str(report_path.relative_to(ROOT))
+            inputs = model_input_hashes({f"frozen:{cid}:audio": "sha256:" + measured["reference_sha256"],
+                                         f"frozen:{cid}:manifest": "sha256:" + measured["manifest_sha256"]})
+            config = {**measured["model_configuration"],
+                      "case_id": cid,
+                      "reference": "frozen Mini V3 WAV",
+                      "reference_pulse_classification": pulse_mapping,
+                      "inject": inject or None}
+            if smoke_sha:
+                config["spi_i2s_smoke"] = "selected filter2x, saw 20000 Hz, gain correction -0.45428 dB"
+            base.update({
+                "reference_profile": (f"Mini V3 {manifest['identity']['version']} via "
+                                      f"dawdreamer {manifest['identity']['host_version']}; frozen raw audio"),
+                "reference_identity": manifest["reference_kind"],
+                "analysis_version": measured["analysis_version"],
+                "render_run": (
+                    f"fixed integer model; engine={config['name']}; "
+                    f"osc2x={config['oscillator_oversample_2x']}; "
+                    f"filter_rate_converted={config['filter_rate_converted']}; "
+                    f"filter_preserve_headroom={config['filter_preserve_headroom']}; "
+                    f"filter_causal={config['filter_causal']}; "
+                    f"pulse479_filter_candidate={config['pulse479_filter_candidate']}; "
+                    f"pulse control={config['pulse_control_label']}; "
+                    f"effective pulse={config['pulse_effective_waveform']} "
+                    f"({config['pulse_effective_duty_percent']:.2f}% duty); "
+                    f"saw cutoff={config['saw_cutoff_override_hz']} Hz; "
+                    f"saw gain correction={config['saw_volume_correction_db']:+.5f} dB; "
+                    f"envelope={config['envelope_calibration_source']}; MIDI {notes}, "
+                    f"complete {duration:.2f} s phrase"),
+                "audio": measured["audio"], "note": measured["note"],
+                "tolerance_policy": mono_m5a.TOLERANCES,
+                "metrics": measured["metrics"],
+                "diagnostics": {"reference_sha256": measured["reference_sha256"],
+                                "reference_manifest_sha256": measured["manifest_sha256"],
+                                "cutoff_calibration": measured["cutoff_calibration"],
+                                "model_segments": measured["model_segments"],
+                                "events": measured["event_diagnostics"],
+                                "wrong_then_right": measured["wrong_then_right"],
+                                "duration_s": measured["duration_s"],
+                                **({"spi_i2s_report_sha256": smoke_sha} if smoke_sha else {})},
+                "provenance": provenance(inputs, outputs, config)})
+            if inject:
+                base["INJECTED_CONTROL"] = inject
+            return base
         base["note"] = "REFUSED: this runner has no plan for this case."
         base["metrics"] = {m: invalid_metric("", "no measurement plan") for m in required}
         return base
-    except (Refused, rp.Refused) as e:
+    except (Refused, rp.Refused, mono_m5a.Refused) as e:
         base["note"] = f"REFUSED: {e}"
         base["metrics"] = {m: invalid_metric("", str(e)) for m in required}
+        if inject:
+            base["INJECTED_CONTROL"] = inject
         return base
     except Exception as e:                       # pragma: no cover - guard
         base["note"] = f"REFUSED: {type(e).__name__}: {e}"
@@ -2268,14 +2359,76 @@ def control_changed(clean: tuple, injected: tuple) -> bool:
     values cannot establish a change, so two refusals never count as a fired
     control.
     """
-    clean_state, clean_worst, _ = clean
-    injected_state, injected_worst, _ = injected
+    clean_state, clean_worst = clean[:2]
+    injected_state, injected_worst = injected[:2]
     if clean_state != injected_state:
         return True
     if clean_worst is None or injected_worst is None:
         return False
     return not math.isclose(float(clean_worst), float(injected_worst),
                             rel_tol=1e-9, abs_tol=1e-6)
+
+
+CONTROL_CAUSE = {
+    "REF_MISSING": "no-such-file.wav",
+    "REF_PROFILE_MISSING": "no-such-clip",
+    "REF_PROFILE_TAMPERED": "hashes",
+}
+
+
+def control_outcome(expect: str, inject: str, case_ids: list[str],
+                    plans: dict[str, str], clean: dict[str, tuple],
+                    injected: dict[str, tuple]) -> tuple[str, str]:
+    """Judge an injected control only when its clean baseline is usable.
+
+    `REFUSED` is distinct from a caught defect: missing references, unplanned
+    cases, and incomplete comparisons cannot make an injection look effective.
+    Verdict tuples contain (state, worst, explanation, injection note).
+    """
+    if not case_ids:
+        return "refused", "no cases were selected"
+    unplanned = [cid for cid in case_ids if plans.get(cid) in (None, "not-run", "unplanned")]
+    if unplanned:
+        return "refused", f"cases are not implemented: {unplanned}"
+    if set(clean) != set(case_ids) or set(injected) != set(case_ids):
+        return "refused", "clean and injected runs did not execute the same nonempty case set"
+
+    def valid_measurement(v: tuple) -> bool:
+        state, worst = v[:2]
+        return (state in ("pass", "fail") and worst is not None
+                and math.isfinite(float(worst)))
+
+    for cid in case_ids:
+        baseline, result = clean[cid], injected[cid]
+        if not valid_measurement(baseline):
+            return "refused", f"{cid} clean baseline has no valid measured verdict"
+        if expect == "changed":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if not control_changed(baseline, result):
+                return "fail", f"{cid} is indistinguishable from the clean baseline"
+        elif expect == "no verdict":
+            if result[0] != "no verdict":
+                if result[0] == "not run":
+                    return "refused", f"{cid} injected run did not execute"
+                return "fail", f"{cid} injection did not produce no verdict"
+            cause = CONTROL_CAUSE.get(inject)
+            note = " ".join(str(part) for part in result[2:]).lower()
+            if not cause or cause not in note:
+                return "fail", f"{cid} refusal does not identify the {inject} mutation"
+        elif expect == "fail":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if baseline[0] != "pass":
+                return "refused", f"{cid} clean baseline must pass to qualify a fail control"
+            if result[0] != "fail":
+                return "fail", f"{cid} injection did not produce fail"
+        elif expect == "pass":
+            if not valid_measurement(result):
+                return "refused", f"{cid} injected run has no valid measured verdict"
+            if result[0] != "pass":
+                return "fail", f"{cid} injection did not produce pass"
+    return "pass", f"{inject} caused the expected result on {len(case_ids)} measured case(s)"
 
 
 def cmd_list(cases: list[dict]) -> int:
@@ -2299,6 +2452,10 @@ def cmd_list(cases: list[dict]) -> int:
             f = FILTER_CASES[c["case_id"]]
             why = (f"ours vs frozen {f['ref_clip']} "
                    f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+        elif kind == "mono":
+            why = ("fixed integer-model phrase vs frozen Mini V3; " +
+                   ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
+                    else "model-only; no integrated RTL claim"))
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")
@@ -2320,6 +2477,7 @@ def main(argv=None) -> int:
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
+                             "MONO_PITCH_UP_25_CENTS",
                              "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED"],
                     help="an injected control; requires --results outside the board")
     ap.add_argument("--expect", default="",
@@ -2357,6 +2515,8 @@ def main(argv=None) -> int:
         chosen += all_cases
     if not chosen:
         ap.error("name at least one case, or --batch / --family / --all / --list")
+    if a.expect and not a.inject:
+        ap.error("--expect is only meaningful together with --inject")
     seen, uniq = set(), []
     for c in chosen:
         if c["case_id"] not in seen:
@@ -2400,14 +2560,17 @@ def main(argv=None) -> int:
 
     states, errors, code = {}, 0, 0
     clean_verdicts = {}
-    if a.expect == "changed":
+    plans = {c["case_id"]: plan_for(c["case_id"]) for c in chosen}
+    if a.expect:
+        unplanned = [cid for cid, kind in plans.items() if kind in ("not-run", "unplanned")]
+        if unplanned:
+            print(f"CONTROL REFUSED: cases are not implemented: {unplanned}",
+                  file=sys.stderr)
+            return 2
         print("CONTROL BASELINE: measuring the same cases without the injection")
         for c in chosen:
-            if plan_for(c["case_id"]) == "not-run":
-                clean_verdicts[c["case_id"]] = ("not run", None, NOT_RUN[c["case_id"]])
-                continue
             clean = run_case(c, refdir, "", keep_audio=False)
-            clean_verdicts[c["case_id"]] = verdict_of(c, clean)
+            clean_verdicts[c["case_id"]] = (*verdict_of(c, clean), clean.get("note", ""))
         print("CONTROL BASELINE: complete\n")
     injected_verdicts = {}
     for c in chosen:
@@ -2421,7 +2584,7 @@ def main(argv=None) -> int:
         # Judge BEFORE writing, so the outcome code on the record is the board's
         # verdict and not this runner's opinion of it.
         state, worst, why = verdict_of(c, res)
-        injected_verdicts[cid] = (state, worst, why)
+        injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
             (outdir / f"{cid}.json").write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
@@ -2436,26 +2599,16 @@ def main(argv=None) -> int:
     print("-" * 96)
     print("  ".join(f"{k}: {v}" for k, v in sorted(states.items())))
     if a.expect:
-        if a.expect == "changed":
-            unchanged = {
-                cid: clean_verdicts[cid]
-                for cid in injected_verdicts
-                if not control_changed(clean_verdicts[cid], injected_verdicts[cid])
-            }
-            if unchanged:
-                print("CONTROL DID NOT FIRE: injection was indistinguishable from "
-                      f"clean for {sorted(unchanged)}", file=sys.stderr)
-                return 1
-            print("control fired: every injected case changed state or measured distance")
-            return 0
-        # Control semantics, not verifier semantics: the question is whether
-        # the injected defect turned the board the colour it must.
-        bad = {k: v for k, v in states.items() if k != a.expect}
-        if bad:
-            print(f"CONTROL DID NOT FIRE: expected every case {a.expect!r}, got {bad}",
-                  file=sys.stderr)
+        outcome, reason = control_outcome(
+            a.expect, a.inject, [c["case_id"] for c in chosen], plans,
+            clean_verdicts, injected_verdicts)
+        if outcome == "refused":
+            print(f"CONTROL REFUSED: {reason}", file=sys.stderr)
+            return 2
+        if outcome == "fail":
+            print(f"CONTROL DID NOT FIRE: {reason}", file=sys.stderr)
             return 1
-        print(f"control fired: every case came back {a.expect!r}")
+        print(f"control fired: {reason}")
         return 0
     if errors:
         print(f"{errors} case(s) hit an unexpected internal error; see the result JSON",

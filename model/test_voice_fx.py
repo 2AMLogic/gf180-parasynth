@@ -107,7 +107,8 @@ def test_glide_is_constant_rate_and_lands_exactly():
     # one octave at the reference rate takes 90 ms within 1 %
     assert abs(land / SR - vf.GLIDE_REF_S) / vf.GLIDE_REF_S < 0.01, land / SR
     # the held-note oscillator after landing, bit for bit
-    o = vf.OscFx("saw"); o.phase = int(seq[:land].sum()) & dsp.PHASE_MASK
+    o = vf.OscFx("saw")
+    o.phase = int(seq[:land].sum()) & dsp.PHASE_MASK
     held = o.render(len(seq) - land, i1)
     assert np.array_equal(v.trace["osc"][0][land:], held)
 
@@ -295,6 +296,21 @@ def test_release_reaches_exactly_zero(release):
     # measured: exactly zero at 2.6-2.7x the release time, where the float
     # reaches about -90 dB
     assert z < 2.9 * release * SR
+
+
+@pytest.mark.parametrize("target_t20", [0.35, 0.70, 1.243229])
+def test_envelope_release_register_preserves_t20_at_short_and_long_settings(target_t20):
+    """The release code must retain enough precision across control settings."""
+    release_s = target_t20 * 4.0 / math.log(10.0)
+    gate_frames = int(0.6 * SR)
+    total_frames = gate_frames + int(2.0 * SR)
+    env = vf.AdsrFx(0.01, 0.25, 1.0, release_s)
+    signal = env.render(total_frames, gate_frames, q=24)
+    held = int(np.max(signal[:gate_frames]))
+    crossed = np.flatnonzero(signal[gate_frames:] <= held * 0.1)
+    assert len(crossed), "release did not cross the 20 dB threshold"
+    measured_t20 = int(crossed[0]) / SR
+    assert measured_t20 == pytest.approx(target_t20, abs=0.005)
 
 
 def test_release_floor_is_below_the_noise_floor():
@@ -534,30 +550,19 @@ def test_attack_increment_clamps_below_two_frames():
 
 
 def test_release_rate_clamps_below_seven_microseconds():
-    """Open item 17.7, rate. round((1 - exp(-4/(r*48000))) * 2^16) is 2^16
-    -- 1.0, which Q0.16 cannot hold -- for r <= 4 / (17 ln 2 * 48000) =
-    7.072 us, a third of a frame; and r = 0 divided by zero, a third raise
-    the contract had not recorded. The model now clamps to 65535 and treats
-    r <= 0 as instant, as the float model's max(1e-9, .) does. The cost of
-    clamping rather than widening, pinned: full scale reaches zero in three
-    updates (62.5 us) instead of one -- not worth a 17th bit on every rate
-    multiply for a release nobody can hear."""
-    r_star = 4.0 / (17.0 * math.log(2.0) * SR)
-    assert abs(r_star - 7.072e-6) < 1e-9
-    for r in (0.0, -1.0, 1e-6, 7.07e-6, r_star):
-        assert vf.AdsrFx(0.005, 0.25, 0.75, r).rate == 65535
-    for r in (1e-6, 7.07e-6):
-        assert round((1 - math.exp(-4 / (r * SR))) * 65536) == 65536   # the raw overflow
-    assert round((1 - math.exp(-4 / (7.08e-6 * SR))) * 65536) == 65535  # fits unclamped
-    assert vf.AdsrFx(0.005, 0.25, 0.75, 7.08e-6).rate == 65535
-    assert vf.AdsrFx(0.005, 0.25, 0.75, 1.0 / SR).rate == 64336
-    assert vf.AdsrFx(0.005, 0.25, 0.75, 0.12).rate == 45                # the default patch
+    """The exponent extends dynamic range while the mantissa retains precision."""
+    for release in (0.0, -1.0, 1e-6, 7.07e-6, 7.08e-6, 1.0 / SR, 0.12, 1.243):
+        rate = vf.AdsrFx(0.005, 0.25, 0.75, release).rate
+        mantissa, exponent = rate & 0xFFFF, rate >> 16
+        represented = mantissa / float(1 << (16 + exponent))
+        expected = (1.0 if release <= 0.0 else
+                    1.0 - math.exp(-4.0 / (release * SR)))
+        assert represented == pytest.approx(expected, rel=2.0e-5, abs=1.0 / 65536)
     def levels(rate):
         e = vf.AdsrFx(0.005, 0.25, 0.75, 0.12)
         e.rate, e.level = rate, FULL24
         return e.render(5, 0, q=24).tolist()
-    assert levels(65535) == [FULL24, 256, 1, 0, 0]                      # three updates
-    assert levels(1 << 16) == [FULL24, 0, 0, 0, 0]                      # 1.0 would take one
+    assert levels(65535) == [FULL24, 256, 1, 0, 0]  # fastest representable rate
 
 
 def test_zero_increment_stalls_the_oscillator():
@@ -647,10 +652,10 @@ def test_every_host_conversion_fits_its_register():
     for rel in [0.0] + list(np.geomspace(1e-7, 30.0, 300)):
         e = vf.AdsrFx(0.005, 0.25, 0.75, rel)
         assert _fits(e.rate, B["rate"]) and e.rate >= 1
-        if rel > r_star * (1 + 1e-9):
-            assert e.rate == max(1, round((1 - math.exp(-4 / (rel * SR))) * 65536))
-        else:
-            assert e.rate == 65535
+        mantissa, exponent = e.rate & 0xFFFF, e.rate >> 16
+        represented = mantissa / float(1 << (16 + exponent))
+        alpha = (1.0 if rel == 0 else 1.0 - math.exp(-4.0 / (rel * SR)))
+        assert represented == pytest.approx(alpha, rel=2.0e-5, abs=1.0 / 65536)
     # mixer weights: every 3-oscillator mix on a quarter grid, plus 1 and 2 oscillators
     grid = (0.0, 0.25, 0.5, 0.75, 1.0)
     for mix in [(a, b, c) for a in grid for b in grid for c in grid] + [(1.0,), (0.3, 1.0), (0.0,)]:

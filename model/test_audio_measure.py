@@ -763,7 +763,24 @@ def test_foldback_finds_a_planted_image_and_ignores_the_real_harmonics():
     e = am.foldback_alias_db(harm + _sine(am.fold_frequency(25 * f0), n, a), f0)
     assert e.detail["images"] > 20 and e.detail["collided"] == 0
     assert abs(e.require() - 10 * math.log10(share)) < 0.8, e
+    assert math.isfinite(e.detail["alias_band_power_dbfs"])
+    assert math.isfinite(e.detail["total_signal_power_dbfs"])
+    assert 0.0 < e.detail["alias_band_rms_fs"] < 1.0
     assert am.foldback_alias_db(harm, f0).require() < -60.0
+
+
+def test_foldback_absolute_band_and_total_energy_track_gain_but_fraction_does_not():
+    n = 1 << 15
+    f0 = 1318.5
+    harm = _series(f0, n, int(SR / 2 / f0) - 1)
+    image = _sine(am.fold_frequency(25 * f0), n, 0.03)
+    quiet = am.foldback_alias_db(harm + image, f0)
+    loud = am.foldback_alias_db(2.0 * (harm + image), f0)
+    quiet.require("quiet alias")
+    loud.require("loud alias")
+    assert loud.detail["alias_band_power_dbfs"] - quiet.detail["alias_band_power_dbfs"] == pytest.approx(6.0206, abs=0.02)
+    assert loud.detail["total_signal_power_dbfs"] - quiet.detail["total_signal_power_dbfs"] == pytest.approx(6.0206, abs=0.02)
+    assert loud.value == pytest.approx(quiet.value, abs=1e-10)
 
 
 def test_foldback_refuses_a_low_note_where_the_images_are_dense():

@@ -12,7 +12,7 @@ oscillators and envelopes were float, quantised to Q1.15 at the filter input.
 Signal chain (the Minimoog's order, DR 0005; the audition's `engines.mono_note`
 applied the amplitude envelope before the filter):
 
-    3 x (glide -> phase accumulator -> waveform -> PolyBLEP)   Q1.15
+    3 x (glide -> phase accumulator -> waveform -> PolyBLEP -> 3-tap LPF) Q1.15
       -> mixer (Q0.15 weights, saturating)                     Q1.15
       -> ladder, g and kc from the cutoff ADSR via ROMs        Q4.15   (19-bit output word)
       -> x amplitude ADSR (the VCA)                            Q4.15
@@ -47,10 +47,10 @@ Formats:
     envelope        24-bit unsigned level, Q0.24. Attack and decay are linear
                     ramps (an increment per frame), matching the float model
                     that was auditioned. Release is exponential: subtract a
-                    fraction of the level each frame, L -= max(1, (L*rate)>>16)
-                    with rate in Q0.16. The max(1, .) is load-bearing -- without
-                    it the shifted product truncates to zero below
-                    2^16/rate and the note never ends. Output Q0.15 = L >> 9.
+                    fraction of the level each frame, L -= max(1,
+                    (L*mantissa)>>(16+exponent)). The max(1, .) is load-bearing:
+                    below the coefficient floor the tail still reaches zero.
+                    Output Q0.15 = L >> 9.
     glide           Q0.24 register, the ratio per frame minus 1 (0 = off);
                     the increment slews in a Q24.8 accumulator by
                     max(1, (acc * glide) >> 24) per frame toward its target:
@@ -90,6 +90,7 @@ from fixed import LadderFx, sat, shl, usat
 CYCLE = 1 << PHASE_BITS
 ENV_BITS = 24
 RATE_Q = 16
+RATE_EXP_BITS = 8
 MANT_BITS = 16
 RECIP_BITS = 16
 GROM_BITS = 7                    # 128-entry cutoff -> g ROM
@@ -193,17 +194,22 @@ DUTY_WIDE = 4865393                                     # 29 % of 2^24
 DUTY_NARROW = 2516582                                   # 15 % of 2^24
 DUTY_P25 = 1 << (PHASE_BITS - 2)                        # 25 %: NOT a Model D width. Kept
                                                         #   because contract rev 4 shipped it
-DUTY = dict(square=DUTY_SQUARE, pulse25=DUTY_P25, pulse29=DUTY_WIDE, pulse15=DUTY_NARROW)
+DUTY_479 = int(round(CYCLE * 0.479))                    # model-only M5A sweep challenger
+DUTY = dict(square=DUTY_SQUARE, pulse25=DUTY_P25, pulse29=DUTY_WIDE,
+            pulse15=DUTY_NARROW, pulse479=DUTY_479)
 WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4,
                  shark=5, revsaw=6, pulse29=7, pulse15=8)
 WAVE_BITS = 4
-BLEP_SHAPES = ("saw", "square", "pulse25", "pulse29", "pulse15", "shark", "revsaw")
-TWO_EDGE = ("square", "pulse25", "pulse29", "pulse15")
+# pulse479 intentionally has no WAVE_CODE: it is a model-only experimental
+# challenger and must not be mistaken for a waveform supported by RTL.
+BLEP_SHAPES = ("saw", "square", "pulse25", "pulse29", "pulse15", "shark", "revsaw", "pulse479")
+TWO_EDGE = ("square", "pulse25", "pulse29", "pulse15", "pulse479")
 
 # Register widths of the control image, NUMERIC-CONTRACT.md 5.1. Each host
 # conversion below clamps to the width named here; the sweep test walks them.
 REG_BITS = dict(inc=INC_BITS, w=WEIGHT_BITS, wn=WEIGHT_BITS,
-                a_inc=ENV_BITS, d_dec=ENV_BITS, sus=ENV_BITS, rate=RATE_Q,
+                a_inc=ENV_BITS, d_dec=ENV_BITS, sus=ENV_BITS,
+                rate=RATE_Q + RATE_EXP_BITS,
                 cut_lo=CUT_BITS, cut_hi=CUT_BITS, track_hz=CUT_BITS,
                 k=LadderFx.K_BITS, gain=LadderFx.GAIN_BITS, ogain=LadderFx.GAIN_BITS,
                 glide=GLIDE_BITS, vol=VOL_BITS, nsel=NSEL_BITS, mmix=MOD_BITS,
@@ -340,16 +346,20 @@ def blep_fx(ph: np.ndarray, inc, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BIT
 
 class OscFx:
     """One oscillator: 24-bit phase accumulator, waveform, PolyBLEP on the
-    discontinuous shapes. `inc` may be an int (held note) or an int array
-    (glide); the reciprocal is then recomputed whenever inc changes -- an
-    integer divide per changed sample, which in hardware is a sequential
-    divider (24 clocks of the 256-clock frame) or a Newton step. The spec is
-    the exact floor quotient either way."""
+    discontinuous shapes, and an optional causal 3-tap output filter. `inc` may
+    be an int (held note) or an int array (glide); the reciprocal is then
+    recomputed whenever inc changes -- an integer divide per changed sample,
+    which in hardware is a sequential divider (24 clocks of the 256-clock
+    frame) or a Newton step. The spec is the exact floor quotient either way."""
 
     def __init__(self, shape: str, blep: bool = True,
-                 mant_bits: int = MANT_BITS, recip_bits: int = RECIP_BITS):
+                 mant_bits: int = MANT_BITS, recip_bits: int = RECIP_BITS,
+                 smooth: bool = False):
         self.set_shape(shape, blep)
         self.MB, self.RB = mant_bits, recip_bits
+        self.smooth = smooth
+        self._smooth_d1 = 0
+        self._smooth_d2 = 0
         self.phase = 0
         self.inc_tgt = 0                 # SET_INC's value: where the glide is going
         self.inc_acc = 0                 # the increment now, Q24.8 (contract 6.7)
@@ -418,23 +428,45 @@ class OscFx:
             e, r = er[:, 0], er[:, 1]
             inc_a = inc
         if not self.blep:
-            return naive_fx(self.shape, ph)
+            raw = naive_fx(self.shape, ph)
+            return self._smooth(raw) if self.smooth else raw
         c = blep_fx(ph, inc_a, e, r, self.MB, self.RB)           # the correction at the wrap
         if self.shape == "saw":
-            return sat16(_saw_fx(ph) - c)
+            raw = sat16(_saw_fx(ph) - c)
+            return self._smooth(raw) if self.smooth else raw
         if self.shape == "revsaw":
             # Q20 inverts the CORRECTED sawtooth (SM 2.3), so the band-limited
             # reverse saw is the band-limited saw negated, not a second BLEP.
-            return sat16(-sat16(_saw_fx(ph) - c))
+            raw = sat16(-sat16(_saw_fx(ph) - c))
+            return self._smooth(raw) if self.smooth else raw
         if self.shape == "shark":
             # The switch mixes the two BUFFERED waveform outputs through R030
             # and R031, so the correction the saw already carries is what the
             # junction sees. The step at the wrap is 10/57 of the saw's.
-            return sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
-                          + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+            raw = sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
+                         + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+            return self._smooth(raw) if self.smooth else raw
         ph2 = (ph + (CYCLE - DUTY[self.shape])) & PHASE_MASK
-        return sat16(naive_fx(self.shape, ph) + c
-                     - blep_fx(ph2, inc_a, e, r, self.MB, self.RB))
+        raw = sat16(naive_fx(self.shape, ph) + c
+                    - blep_fx(ph2, inc_a, e, r, self.MB, self.RB))
+        return self._smooth(raw) if self.smooth else raw
+
+    def _smooth(self, raw: np.ndarray) -> np.ndarray:
+        """Causal 3-tap binomial low-pass, matching the RTL oscillator tap.
+
+        The coefficients are powers of two: (x + 2*x[-1] + x[-2]) / 4.
+        This removes the top-of-band residual that aliases in the high-note
+        saw while leaving the fundamental unchanged. The two history words
+        are state, so note boundaries do not manufacture a new transient.
+        """
+        x = np.asarray(raw, dtype=np.int64)
+        out = np.empty_like(x)
+        d1, d2 = int(self._smooth_d1), int(self._smooth_d2)
+        for i, v in enumerate(x):
+            out[i] = (int(v) + 2 * d1 + d2) >> 2
+            d2, d1 = d1, int(v)
+        self._smooth_d1, self._smooth_d2 = d1, d2
+        return out
 
 
 # ---- mixer ------------------------------------------------------------------
@@ -589,20 +621,19 @@ class AdsrFx:
       attack   L += a_inc (ceil(2^EB / attack_frames)); clamps at full
       decay    L -= d_dec (ceil((full - sus) / decay_frames)); clamps at sus
       sustain  L = sus
-      release  L -= max(1, (L * rate) >> RATE_Q); clamps at 0
-    rate = round((1 - exp(-4 / (release_s * SR))) * 2^RATE_Q), min 1, so the
-    exponential matches the float's exp(-4 t / release). The `env_bits`
-    parameter exists to measure the dead zone, exactly as fixed.LadderFx's
-    `state_q` does.
+      release  L -= max(1, (L * mantissa) >> (RATE_Q + exponent)); clamps at 0
+    The hardware rate register stores a 16-bit Q0.16 mantissa and an 8-bit
+    exponent. Together they represent alpha = mantissa * 2^-(RATE_Q+exponent),
+    where alpha = 1 - exp(-4 / (release_s * SR)). Splitting scale from
+    precision avoids rounding long release times to only two or three useful
+    Q0.16 values. The `env_bits` parameter exists to measure the dead zone,
+    exactly as fixed.LadderFx's `state_q` does.
 
     Every register is clamped to its width (a_inc, d_dec, sus to env_bits;
-    rate to rate_q bits). Two conversions reach the clamp: an attack shorter
-    than two frames (< 41.67 us) gives a_inc = 2^24, clamped to 2^24 - 1,
-    which still completes the attack in one update from any level; a release
-    of 7.07 us or less (release_s <= 4 / (17 ln 2 * SR)), including 0, gives
-    rate = 2^16 = 1.0, clamped to 65535, which releases full scale to zero in
-    three updates instead of one. release_s <= 0 means instant, as the float
-    model's max(1e-9, .) does; the model no longer divides by it."""
+    rate code to rate_q + RATE_EXP_BITS bits). An attack shorter than two
+    frames (< 41.67 us) gives a_inc = 2^24, clamped to 2^24 - 1, which still
+    completes the attack in one update from any level. A nonpositive release
+    selects the fastest representable code, avoiding division by zero."""
     ATTACK, DECAY, SUSTAIN = 0, 1, 2
 
     def __init__(self, a_s, d_s, sus, r_s, env_bits: int = ENV_BITS, rate_q: int = RATE_Q):
@@ -622,7 +653,15 @@ class AdsrFx:
         sus_r = usat(int(round(sus * full)), env_bits)
         d_dec = usat(-(-(full - sus_r) // d), env_bits)
         decay = math.exp(-4.0 / (r_s * SR)) if r_s > 0.0 else 0.0
-        rate = max(1, usat(int(round((1.0 - decay) * (1 << rate_q))), rate_q))
+        alpha = min(1.0, max(0.0, 1.0 - decay))
+        if alpha == 0.0:
+            rate = 0
+        else:
+            exponent = max(0, math.ceil(-math.log2(alpha)) - 1)
+            exponent = min(exponent, (1 << RATE_EXP_BITS) - 1)
+            mantissa = int(round(alpha * (1 << (rate_q + exponent))))
+            mantissa = min((1 << rate_q) - 1, max(1, mantissa))
+            rate = (exponent << rate_q) | mantissa
         return a_inc, d_dec, sus_r, rate
 
     def set(self, a_s, d_s, sus, r_s):
@@ -644,8 +683,10 @@ class AdsrFx:
             gate_a = np.asarray(gate, dtype=np.int64)
         trig_a = None if trig is None else np.asarray(trig, dtype=np.int64)
         L, seg = self.level, self.seg
-        full, sus, a_inc, d_dec, rate, RQ = (self.full, self.sus, self.a_inc,
-                                             self.d_dec, self.rate, self.RQ)
+        full, sus, a_inc, d_dec, rate_code, RQ = (self.full, self.sus, self.a_inc,
+                                                  self.d_dec, self.rate, self.RQ)
+        rate_mantissa = rate_code & ((1 << RQ) - 1)
+        rate_exponent = rate_code >> RQ
         sh = self.EB - q
         for i in range(n):
             if trig_a is not None and trig_a[i]:
@@ -663,7 +704,7 @@ class AdsrFx:
                 else:
                     L = sus
             else:
-                dec = (L * rate) >> RQ
+                dec = (L * rate_mantissa) >> (RQ + rate_exponent)
                 L -= dec if dec else 1
                 if L < 0:
                     L = 0
@@ -673,8 +714,12 @@ class AdsrFx:
     @property
     def floor_level(self) -> int:
         """Below this level the exponential step truncates to zero and the
-        release continues at 1 LSB per frame (linear). 2^RQ / rate."""
-        return (1 << self.RQ) // self.rate + 1
+        release continues at 1 LSB per frame (linear)."""
+        mantissa = self.rate & ((1 << self.RQ) - 1)
+        exponent = self.rate >> self.RQ
+        if mantissa == 0:
+            return self.full + 1
+        return (1 << (self.RQ + exponent)) // mantissa + 1
 
 
 # ---- cutoff -> coefficient ROM ---------------------------------------------
@@ -826,6 +871,44 @@ def k_effective(k_q14, kc_q15) -> np.ndarray:
 
 
 # ---- the voice --------------------------------------------------------------
+_DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
+                         -1296,-2819,1544,10175,14712,10175,1544,-2819,
+                         -1296,1133,957,-397,-609,72,323,34,-138,-44,54,39), dtype=np.int64)
+_OS2_SUBSTEP_GAIN_Q15 = 27853  # 0.85 headroom keeps the Q1.15 FIR output below its rail.
+
+def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple[np.ndarray, np.ndarray, int]:
+    """Render a saw oscillator at 2x, then apply the reference decimator."""
+    inc_a = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
+    phase0 = int(o.phase)
+    base_inc = np.repeat(inc_a // 2, 2)
+    smooth = o.smooth
+    o.smooth = False
+    o.phase = int(phase2)
+    if o.blep:
+        # The RTL reuses the base-rate reciprocal, with the exponent reduced
+        # for the half-rate step. Recomputing recip_of(inc//2) differs by one
+        # for odd 16-bit increments, which produced rare 1-LSB block errors.
+        phase = (int(phase2) + np.concatenate(([0], np.cumsum(base_inc[:-1])))) & PHASE_MASK
+        er = np.array([o._er(int(v)) for v in inc_a], dtype=np.int64)
+        exp2 = np.repeat(er[:, 0] - 1, 2)
+        recip2 = np.repeat(er[:, 1], 2)
+        correction = blep_fx(phase, base_inc, exp2, recip2, o.MB, o.RB)
+        hi = sat16(_saw_fx(phase) - correction)
+        o.phase = int((int(phase2) + int(base_inc.sum())) & PHASE_MASK)
+    else:
+        hi = o.render(2 * n, base_inc)
+    o.smooth = smooth
+    next_phase2 = int(o.phase)
+    o.phase = int((phase0 + int(inc_a.sum())) & PHASE_MASK)
+    # The decimator's ringing can exceed full scale around a PolyBLEP edge.
+    # Preserve headroom before the RTL's saturating Q1.15 output stage.
+    hi = (np.asarray(hi, dtype=np.int64) * _OS2_SUBSTEP_GAIN_Q15) >> 15
+    joined = np.concatenate((history, hi))
+    y = np.convolve(joined, _DECIM2_TAPS, mode="full")
+    filtered = y[len(history):len(history) + 2*n]
+    next_history = joined[-len(history):].copy()
+    return sat16(filtered[1::2] >> 15).astype(np.int64), next_history, next_phase2
+
 class VoiceFx:
     """One voice: three oscillators, two envelopes, one ladder, and the state
     they keep between notes. `play` is the per-frame contract; `note` renders
@@ -835,7 +918,11 @@ class VoiceFx:
     def __init__(self, blep: bool = True, mant_bits: int = MANT_BITS,
                  recip_bits: int = RECIP_BITS, env_bits: int = ENV_BITS,
                  grom_bits: int = GROM_BITS, krom_bits: int = KROM_BITS,
-                 ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True):
+                 ladder_cfg: dict = None, g_exact: bool = False, k_comp: bool = True,
+                 oversample_2x: bool = False, rate_converted_ladder: bool = False,
+                 preserve_filter_headroom: bool = False,
+                 causal_filter: bool = False,
+                 pulse479_filter_candidate: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -844,17 +931,40 @@ class VoiceFx:
         self.EB, self.GB, self.KB = env_bits, grom_bits, krom_bits
         self.ladder_cfg = dict(LADDER_CFG if ladder_cfg is None else ladder_cfg)
         self.g_exact, self.k_comp = g_exact, k_comp
+        self.oversample_2x = oversample_2x
+        self.rate_converted_ladder = bool(rate_converted_ladder)
+        self.preserve_filter_headroom = bool(preserve_filter_headroom)
+        self.causal_filter = bool(causal_filter)
+        self.pulse479_filter_candidate = bool(pulse479_filter_candidate)
+        if self.rate_converted_ladder and self.g_exact:
+            raise ValueError("rate-converted ladder requires the rate-matched integer g ROM")
+        if self.rate_converted_ladder and self.ladder_cfg.get("oversample", 2) not in (2, 4):
+            raise ValueError("rate-converted ladder supports only 2x or 4x")
         self.g_rom = make_g_rom(grom_bits, self.ladder_cfg.get("oversample", 2))
         self.k_rom = make_k_rom(krom_bits, grom_bits, self.ladder_cfg.get("oversample", 2))
         self.trace = {}
+        self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
+        self._os2_phase = [0, 0, 0]
         self.reset()
 
     def reset(self):
         """RESET: every state register of contract 14 to zero."""
-        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB) for _ in range(3)]
+        self._os2_history = [np.zeros(30, dtype=np.int64) for _ in range(3)]
+        self._os2_phase = [0, 0, 0]
+        # Preserve the established single-rate waveform unless the measured
+        # oversampled saw path is selected. The old three-tap smoother was an
+        # experiment that attenuated upper harmonics and must not be implicit.
+        self.oscs = [OscFx("saw", self.blep, self.MB, self.RB, smooth=False) for _ in range(3)]
         self.amp_env = AdsrFx(0.005, 0.25, 0.75, 0.12, env_bits=self.EB)
         self.filt_env = AdsrFx(0.004, 0.30, 0.25, 0.10, env_bits=self.EB)
-        self.ladder = LadderFx(**self.ladder_cfg)
+        if self.rate_converted_ladder:
+            from filter_rate_chain import RateConvertedLadder
+            self.ladder = RateConvertedLadder(self.ladder_cfg.get("oversample", 2),
+                                              self.ladder_cfg,
+                                              preserve_headroom=self.preserve_filter_headroom,
+                                              causal=self.causal_filter)
+        else:
+            self.ladder = LadderFx(**self.ladder_cfg)
         self.noise = NoiseFx()
         self.track_hz, self.gate, self.glide = 0, 0, 0
         self.mod_sig = 0                             # the registered modulation value (6.9)
@@ -957,6 +1067,8 @@ class VoiceFx:
 
     def _apply_patch(self, r: dict):
         for o, shape in zip(self.oscs, r["waves"]):
+            if self.pulse479_filter_candidate and shape == "pulse29":
+                shape = "pulse479"
             o.set_shape(shape, self.blep)
         self.weights = list(r["weights"]) + [0] * (4 - len(r["weights"]))   # osc 0..2, then noise
         self.amp_env.set_regs(*r["amp"]); self.filt_env.set_regs(*r["fenv"])
@@ -1045,7 +1157,24 @@ class VoiceFx:
         if mw is None:
             mw = np.full(n, self.mwheel, dtype=np.int64)
         incs, white, pink, red, mant_f, sh_f, msig = self._modulate(incs, n, mw)
-        sig = [o.render(n, inc) for o, inc in zip(self.oscs, incs)]
+        sig = []
+        phase2_trace = []
+        for k, (o, inc) in enumerate(zip(self.oscs, incs)):
+            phase2_start = self._os2_phase[k]
+            ia = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
+            phase2_step = (ia // 2) * 2
+            if self.oversample_2x and o.shape == "saw":
+                rendered, self._os2_history[k], self._os2_phase[k] = _render_2x(
+                    o, n, inc, self._os2_history[k], self._os2_phase[k])
+                sig.append(rendered)
+            else:
+                if self.oversample_2x:
+                    self._os2_phase[k] = (self._os2_phase[k] + int(np.sum(phase2_step))) & PHASE_MASK
+                sig.append(o.render(n, inc))
+            if self.oversample_2x:
+                phase2_trace.append((phase2_start + np.cumsum(phase2_step)) & PHASE_MASK)
+            else:
+                phase2_trace.append(np.zeros(n, dtype=np.int64))
         n_audio = pink if self.nsel else white                   # 2.5: WHITE or pink for audio
         mixed = mix_fx(sig + [n_audio], self.weights)            # step 3, four sources
         ae = self.amp_env.render(n, gate, trig)                  # step 4
@@ -1069,7 +1198,10 @@ class VoiceFx:
         self.trace = dict(osc=sig, mixed=mixed, amp_env=ae, filt_env=fe, cut=cut, g=g,
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
-                          mant_f=mant_f, sh_f=sh_f, mwheel=mw)
+                          mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace,
+                          filter_reconstruction=getattr(lad, "last_reconstruction", None),
+                          filter_decimation=(getattr(getattr(lad, "converter", None),
+                                                     "last_decimation", None)))
         return out.astype(np.int16)
 
     # ---- one note from reset: the reference sequences of contract 16 --------

@@ -1080,7 +1080,11 @@ def foldback_alias_db(x, f0: float, sr: int = SR_DEFAULT, *, kmax: int = None,
     Refuses when too many predicted images fall within a guard of a real
     harmonic (they cannot be attributed) or when the image bins cover more
     than `max_occupancy` of the spectrum, which is what happens at a low f0
-    where the images are dense. `detail['images']` is how many were used."""
+    where the images are dense. `detail['images']` is how many were used.
+    Detail also includes the predicted-image-band and whole-record mean-square
+    levels in dBFS. Unlike the returned fraction, these absolute levels change
+    with gain, allowing a reader to distinguish newly added alias energy from
+    reduced wanted-signal energy."""
     x = _as_float(x)
     if is_silent(x):
         return _fail("silent")
@@ -1114,9 +1118,27 @@ def foldback_alias_db(x, f0: float, sr: int = SR_DEFAULT, *, kmax: int = None,
     if mask.mean() > max_occupancy:
         return _fail("image bins cover the spectrum", occupancy=float(mask.mean()),
                      images=len(images))
+    # Convert the one-sided FFT power sums to mean-square full-scale units.
+    # Parseval doubles interior positive-frequency bins; DC and Nyquist are
+    # singletons. The Hann window's mean-square is removed so a stationary
+    # signal's dBFS level is comparable between records of different lengths.
+    one_sided = np.full(len(p), 2.0)
+    one_sided[0] = 1.0
+    if n % 2 == 0:
+        one_sided[-1] = 1.0
+    window_mean_square = float(np.mean(np.hanning(n) ** 2))
+    scale = float(n * n * window_mean_square)
+    total_power = float(np.dot(p, one_sided)) / scale
+    alias_power = float(np.dot(p[mask], one_sided[mask])) / scale
+    floor = 1e-300
+    total_dbfs = 10.0 * math.log10(max(total_power, floor))
+    alias_dbfs = 10.0 * math.log10(max(alias_power, floor))
     return Estimate(10.0 * math.log10(max(p[mask].sum(), 1e-300) / p.sum()), True, "",
                     dict(images=len(images), collided=collided,
-                         occupancy=float(mask.mean())))
+                         occupancy=float(mask.mean()),
+                         alias_band_power_dbfs=alias_dbfs,
+                         alias_band_rms_fs=math.sqrt(max(alias_power, 0.0)),
+                         total_signal_power_dbfs=total_dbfs))
 
 
 def max_sample_step(x) -> float:

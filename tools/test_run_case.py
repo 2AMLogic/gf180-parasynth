@@ -81,6 +81,89 @@ def test_changed_control_rejects_two_refusals():
     assert not rc.control_changed(clean, injected)
 
 
+def test_ref_corner_2x_control_moves_a_known_reference_corner(monkeypatch):
+    """The octave mutation is proven without the optional Surge audio cache."""
+    import reference_rigs as rr
+    freqs = np.geomspace(40.0, 12000.0, 32)
+    clip_id = "synthetic/known-4pole"
+    meta = {"freqs_hz": freqs.tolist(),
+            "parts": [[i * 16, 16, float(f)] for i, f in enumerate(freqs)],
+            "amp": 0.1, "sha256": "known-ground-truth"}
+    profile = {"clips": {clip_id: {"sha256": "known-ground-truth"}}}
+    monkeypatch.setattr(rc.rp, "load_profile", lambda: profile)
+    monkeypatch.setattr(rc.rp, "load_clip", lambda _cid, _profile: (np.zeros(32), SR, meta))
+    monkeypatch.setattr(rr.SurgeRig, "tone_project",
+                        staticmethod(lambda _y, parts, _amp, _cid:
+                                     ideal_4pole_db([p[2] for p in parts])))
+
+    clean_f, clean_g, _ = rc.load_filter_reference(clip_id)
+    shifted_f, shifted_g, _ = rc.load_filter_reference(clip_id, "REF_CORNER_2X")
+    clean_corner = rc.filt_corner(IDEAL_FP)(clean_f, clean_g)
+    shifted_corner = rc.filt_corner(IDEAL_FP)(shifted_f, shifted_g)
+    assert clean_corner.ok and shifted_corner.ok
+    assert np.array_equal(shifted_f, clean_f / 2.0)
+    assert np.array_equal(shifted_g, clean_g)
+    assert abs(shifted_corner.value / clean_corner.value - 0.5) < 0.01
+    assert rc.control_changed(("fail", clean_corner.value, "synthetic clean"),
+                              ("fail", shifted_corner.value, "synthetic octave fault"))
+
+
+def test_control_refuses_a_case_that_is_not_implemented():
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["M5A"], {"M5A": "not-run"}, {}, {})
+    assert outcome[0] == "refused"
+    assert "not implemented" in outcome[1]
+
+
+def test_control_refuses_when_clean_baseline_has_no_verdict():
+    clean = {"F1A": ("no verdict", None, "missing reference", "")}
+    injected = {"F1A": ("no verdict", None, "missing reference", "")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_PROFILE_MISSING", ["F1A"], {"F1A": "filter"},
+        clean, injected)
+    assert outcome[0] == "refused"
+    assert "clean baseline" in outcome[1]
+
+
+def test_no_verdict_control_requires_its_injected_cause():
+    clean = {"F1A": ("pass", 0.5, "", "")}
+    unrelated = {"F1A": ("no verdict", None, "", "simulator missing")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_PROFILE_MISSING", ["F1A"], {"F1A": "filter"},
+        clean, unrelated)
+    assert outcome[0] == "fail"
+    assert "does not identify" in outcome[1]
+
+
+def test_no_verdict_control_passes_only_for_measured_clean_and_matching_mutation():
+    clean = {"D09A": ("pass", 0.61, "", "")}
+    injected = {"D09A": ("no verdict", None, "", "REFUSED: no-such-file.wav")}
+    outcome = rc.control_outcome(
+        "no verdict", "REF_MISSING", ["D09A"], {"D09A": "drum"},
+        clean, injected)
+    assert outcome[0] == "pass"
+
+
+def test_changed_control_requires_comparable_valid_results_for_each_case():
+    clean = {"F1A": ("fail", 1.68, "", "")}
+    injected = {"F1A": ("fail", 6.45, "", "")}
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, injected)
+    assert outcome[0] == "pass"
+    missing = {"F1A": ("no verdict", None, "", "cache absent")}
+    outcome = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, missing)
+    assert outcome[0] == "refused"
+
+    removed = rc.control_outcome(
+        "changed", "REF_CORNER_2X", ["F1A"], {"F1A": "filter"},
+        clean, clean)
+    assert removed[0] == "fail"
+    assert "indistinguishable" in removed[1]
+
+
 # ===========================================================================
 # Ground truth: band_energy and band_ratio_db
 # ===========================================================================
@@ -945,8 +1028,31 @@ def test_no_case_is_both_planned_and_deliberately_not_run():
     """`plan_for` checks NOT_RUN first, so an id in both tables would be
     silently skipped -- the case would read as deliberately not attempted while
     a working plan for it sat right there."""
-    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES)
+    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES) | {"M5A", "M5B"}
     assert not (planned & set(rc.NOT_RUN)), planned & set(rc.NOT_RUN)
+
+
+def test_m5a_is_a_mono_plan_with_a_frozen_reference():
+    """The first qualified Mono case must no longer be reported as not run."""
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5A")
+    assert rc.plan_for("M5A") == "mono"
+    assert "Mini V3 3.12" in case["reference_target"]
+    assert "Envelope release" in case["required_measurements"]
+
+
+def test_m5b_is_a_mono_plan_with_its_frozen_lower_note_reference():
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5B")
+    assert rc.plan_for("M5B") == "mono"
+    assert "Mini V3 3.12" in case["reference_target"]
+    assert all(name in case["required_measurements"] for name in (
+        "Pitch", "Harmonic shape", "Foldback energy", "Envelope attack",
+        "Envelope release", "Gain", "Clipping"))
+
+
+def test_mono_reference_summary_skips_unclassified_pulse_notes():
+    manifest = {"timeline": {"segments": [{"wave": "pulse", "measurements": [
+        {"waveform": "pulse:47.9%"}, {"waveform": None}]}]}}
+    assert rc.mono_reference_pulse_mapping(manifest) == "pulse:47.9%"
 
 
 def test_every_not_run_reason_says_something():

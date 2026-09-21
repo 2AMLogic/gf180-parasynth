@@ -1,0 +1,598 @@
+{
+  "probe": "M5A oscillator -> mixer -> ladder -> final output",
+  "reference_identity": "Mini V3 3.12.0.3422 software synth; not physical hardware",
+  "analysis_version": "m5a-signal-path-v1",
+  "source_commit": "0875708d54c4540d9f60ead79fc8e8fb25f063e3",
+  "source_sha256": "08601fdd23ac149da7b9f08f2c17e4443a4cb884fbbae759ea23328d12c2192a",
+  "source_hashes": {
+    "tools/measure_m5a_signal_path.py": "08601fdd23ac149da7b9f08f2c17e4443a4cb884fbbae759ea23328d12c2192a",
+    "tools/mono_m5a_score.py": "80a37e78f9938045576c04ce752d390ff6a3485b61b289e1de7159c3486ec14d",
+    "model/audio_measure.py": "2345ced894c70d3d57ed1a6f775ee5dcd0e27715af8a8f6ebfa8c3a69cb9d7f4",
+    "model/voice_fx.py": "970aa5f1dbdcffe133727ca31d970a52d04bd57de1511dabdee5e185ec0d9c77"
+  },
+  "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+  "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
+  "oscillator_config": "2x candidate saw; remaining Mini V3 oscillators disabled",
+  "cutoff_intervention": "change only model cutoff; all other patch fields fixed",
+  "runs": [
+    {
+      "cutoff_hz": 14073,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.7322,
+                "h3": -7.8301,
+                "h4": -5.2018,
+                "h5": -8.5082,
+                "h6": -7.9729,
+                "h7": -7.9959,
+                "h8": -9.3056,
+                "h9": -8.6482,
+                "h10": -8.3409,
+                "h11": -7.7168,
+                "h12": -7.9107
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 9.3056,
+              "alias_db": -34.9529,
+              "excess_alias_db": 15.1758
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.7318,
+                "h3": -7.8306,
+                "h4": -5.2015,
+                "h5": -8.5088,
+                "h6": -7.9727,
+                "h7": -7.9961,
+                "h8": -9.3056,
+                "h9": -8.649,
+                "h10": -8.3405,
+                "h11": -7.7177,
+                "h12": -7.9101
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 9.3056,
+              "alias_db": -34.9535,
+              "excess_alias_db": 15.1752
+            }
+          },
+          "reference": {
+            "alias_db": -50.1287,
+            "harmonics_db": {
+              "h2": -6.168985916402972,
+              "h3": -9.696601682224689,
+              "h4": -12.025226461854343,
+              "h5": -14.405999212216283,
+              "h6": -15.91384441855903,
+              "h7": -17.68299693630111,
+              "h8": -19.71699819066696,
+              "h9": -21.04063835310599,
+              "h10": -23.334916662043454,
+              "h11": -25.43252646418511,
+              "h12": -27.147615603646816
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -8.7052,
+                "h3": -6.7861,
+                "h4": -7.4506,
+                "h5": -9.2348,
+                "h6": -6.4256,
+                "h7": -8.3189,
+                "h8": -6.6878,
+                "h9": -9.9233,
+                "h10": -9.6841,
+                "h11": -2.596
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 9.9233,
+              "alias_db": -31.2073,
+              "excess_alias_db": 18.1865
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -8.7048,
+                "h3": -6.7866,
+                "h4": -7.45,
+                "h5": -9.2358,
+                "h6": -6.425,
+                "h7": -8.3209,
+                "h8": -6.6863,
+                "h9": -9.9245,
+                "h10": -9.6825,
+                "h11": -2.597
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 9.9245,
+              "alias_db": -31.2082,
+              "excess_alias_db": 18.1856
+            }
+          },
+          "reference": {
+            "alias_db": -49.3938,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885526,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "cutoff_hz": 21600,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -3.5547,
+                "h3": -7.8195,
+                "h4": -4.5313,
+                "h5": -5.9086,
+                "h6": -7.597,
+                "h7": -5.8466,
+                "h8": -6.3802,
+                "h9": -6.2497,
+                "h10": -4.6998,
+                "h11": -4.6979,
+                "h12": -4.1644
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.8195,
+              "alias_db": -30.5156,
+              "excess_alias_db": 19.6131
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -3.5544,
+                "h3": -7.8201,
+                "h4": -4.5309,
+                "h5": -5.9088,
+                "h6": -7.5968,
+                "h7": -5.8469,
+                "h8": -6.3801,
+                "h9": -6.2503,
+                "h10": -4.6996,
+                "h11": -4.6984,
+                "h12": -4.1642
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.8201,
+              "alias_db": -30.5157,
+              "excess_alias_db": 19.613
+            }
+          },
+          "reference": {
+            "alias_db": -50.1287,
+            "harmonics_db": {
+              "h2": -6.168985916402972,
+              "h3": -9.696601682224689,
+              "h4": -12.025226461854343,
+              "h5": -14.405999212216283,
+              "h6": -15.91384441855903,
+              "h7": -17.68299693630111,
+              "h8": -19.71699819066696,
+              "h9": -21.04063835310599,
+              "h10": -23.334916662043454,
+              "h11": -25.43252646418511,
+              "h12": -27.147615603646816
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -6.6626,
+                "h3": -6.6875,
+                "h4": -4.32,
+                "h5": -7.69,
+                "h6": -2.5125,
+                "h7": -3.1306,
+                "h8": -1.8948,
+                "h9": -2.9443,
+                "h10": -2.5922,
+                "h11": 6.8475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.69,
+              "alias_db": -28.5865,
+              "excess_alias_db": 20.8073
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -6.6623,
+                "h3": -6.688,
+                "h4": -4.3198,
+                "h5": -7.691,
+                "h6": -2.5124,
+                "h7": -3.1314,
+                "h8": -1.8944,
+                "h9": -2.9449,
+                "h10": -2.5917,
+                "h11": 6.8466
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.691,
+              "alias_db": -28.5872,
+              "excess_alias_db": 20.8066
+            }
+          },
+          "reference": {
+            "alias_db": -49.3938,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885526,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -22,15 +22,50 @@ Run it with:
 .venv/bin/python tools/measure_mono_case.py --out build/mono-m5a
 ```
 
-The run at commit `0bb807f` produced a valid comparison. The measured
+The initial baseline run at commit `0bb807f` produced a valid comparison. The measured
 fundamentals were 1046.502 Hz on both sides (DUT − reference: −0.0005 cents).
 The inharmonic-energy measurement was −47.2265 dB for Surge and −31.0685 dB
-for the DUT, a **+16.158 dB DUT excess**. This is an actionable result: the
-next sound improvement is the high-note oscillator alias/foldback path, before
-tuning the full envelope/filter patch. It is not a pass, and it does not
-qualify the complete M5A case.
+for the unfiltered DUT, a **+16.158 dB DUT excess**. The prototype causal
+oscillator filter reduces the DUT to −48.8775 dB, a 17.809 dB improvement and
+1.651 dB below the reference. The fundamental remains −0.0005 cents from the
+reference. Its upper harmonics are also more attenuated than Surge (the twelfth
+is −30.21 dB versus −22.29 dB), so this is an aliasing experiment for review,
+not an accepted sound-quality fix. It is a component result, not a pass on the
+complete M5A case.
 
-The JSON report and both WAV hashes are produced by
+## True 2× oscillator path
+
+The integrated 2× path initially measured −36.232 dB inharmonic energy, 10.995
+dB above the qualified Surge result. Inspection found that the decimator's FIR
+ringing drove its saturating Q1.15 output over full scale on 1,080 of 33,600
+samples. A 10% headroom sweep still clipped one MIDI 2 sample at 33,420 LSB.
+Fifteen percent headroom kept the complete MIDI 0–127 sweep below the rail; the
+worst filtered peak was 31,565 LSB at MIDI 2. The corrected path measured
+−46.943 dB, 0.283 dB above
+Surge, with a fundamental offset of −0.0052 cents. Its RMS is −6.377 dBFS versus
+Surge at −19.995 dBFS, a +13.620 dB level difference in the refreshed run.
+The component rig's oscillator level is therefore not calibrated to the chip's amplitude scale,
+and the close spectral score is not an overall sound-quality pass.
+
+The captured report and all three WAVs are in the
+[M5A component evidence bundle](scorecard/mono-m5a-component-2x/report.json).
+[`mono-m5a-measurement.json`](mono-m5a-measurement.json) mirrors that current
+report. The initial run above is historical context; its rendered audio and
+rounded values are not mixed into the current evidence bundle.
+
+Two headroom candidates failed before the complete pitch sweep passed (2/3,
+66.7% wrong-candidate rate); the first spectrum is retained because it exposed
+the missing saturation precondition. The integrated quick default scenario is
+bit-exact after the headroom change. `tools/run_case.py M5A --no-audio` returned
+`not run` (exit 2): the repo still lacks a qualified Mono envelope reference,
+so the harness will not report an ungrounded full-patch result.
+
+The causal 3-tap smoother used by the baseline DUT applies to all waveforms in
+the voice model and RTL, independently of the optional 2× saw path. Sound
+records made before that smoother require remeasurement; this MIDI-84 result
+compares the saw oscillator component only.
+
+The JSON report and all three WAV hashes are produced by
 [`tools/measure_mono_case.py`](../tools/measure_mono_case.py). A missing or
 unusable plugin, silent/non-finite output, wrong fundamental, or estimator
 refusal returns `REFUSED` and writes no measurement numbers.
