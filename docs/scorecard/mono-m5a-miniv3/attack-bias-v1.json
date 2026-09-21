@@ -90,10 +90,10 @@
     "event_attack_spread_ms": 4.125
   },
   "provenance": {
-    "commit": "d767386ddc6719f5a57ad90b3a09d09a6f4f2ab9",
-    "dirty": true,
+    "commit": "dac81ddcc373213c34876e743593344f4a7a44df",
+    "dirty": false,
     "tool_sha256": "a624797c3c2ec63a11b30ebb81f40e7854827c34ffdad2f5085f67961981620b",
-    "run_at_utc": "2026-09-21T05:36:53.791975+00:00"
+    "run_at_utc": "2026-09-21T05:37:02.735743+00:00"
   },
   "interpretation": "The known envelope is measured 1.2\u20131.6 ms slower by this RMS meter. The frozen patch reports 3.33\u20137.46 ms across notes/waves despite a common 0.050 attack readback. Therefore the 5.52 ms score error does not isolate the actual VCA rise time; keep it measured, but do not tune the envelope from this comparison until the estimator is qualified against the plugin's signal path."
 }
