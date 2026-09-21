@@ -1,0 +1,904 @@
+{
+  "engine": "fixed-model",
+  "analysis_version": "attack-context-model-v1",
+  "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
+  "source_sha256": {
+    "tools/compare_mono_attack_context.py": "f697c93cff1dd2860612ec1a1802364c21fda88d9d4879185598bf3dacc74cca",
+    "tools/measure_mono_attack_context.py": "b3e8020cc6b7ea71c27fc4a7202e94501f6d4a5eec8305efeafc9df5d9995c61",
+    "tools/measure_mono_m5a_reference.py": "7f4e6d4e820e10ef3e4742fbabce1ff57815325bbbf80472f865104a9978405f",
+    "tools/mono_m5a_score.py": "b4210e59eb8fec07bafe75203c5d017514ec786e963bc53e9c8fc6a92d918267",
+    "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
+    "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36",
+    "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798"
+  },
+  "reference_report_sha256": "19472d7f64f9b44dee0205d08cb508cb64ec0900eab23f4ef484d7449627e672",
+  "envelope_calibration_manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "engine_configuration": {
+    "name": "selected-m5a-reconstructed-filter2x",
+    "oscillator_oversample_2x": true,
+    "filter_rate_converted": true,
+    "filter_preserve_headroom": true,
+    "filter_causal": true,
+    "pulse479_filter_candidate": true,
+    "filter_g_exact": false,
+    "filter_k_comp": true,
+    "filter_oversample_factor": 2,
+    "ladder_coefficient_oversample": 2,
+    "filter_drive": 0.75,
+    "pulse_control_label": "pulse29",
+    "pulse_effective_waveform": "pulse479",
+    "pulse_effective_duty_percent": 47.89999723434448,
+    "saw_cutoff_hz": 20000,
+    "saw_volume_correction_db": -0.45428
+  },
+  "pulse_oscillator_2x": false,
+  "scope": "unchanged baseline model; matched note-history contexts; no global attack adjustment",
+  "rows": [
+    {
+      "wave": "saw",
+      "condition": "delayed84_at4p1",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 8.291666666666666,
+      "model_attack_ms": 8.708333333333334,
+      "error_ms": 0.41666666666666785,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.708333333333334,
+        "release_t20_ms": 1234.2708333333333,
+        "held_rms": 0.18357548713271765,
+        "tail_db": -285.2762937863532,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-delayed84_at4p1.wav",
+      "sha256": "82490cffa440cd7d8a2731509eb42ad1a132f8307d4d051beb6681b89e1803a4"
+    },
+    {
+      "wave": "saw",
+      "condition": "delayed84_at5p7",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 5.7,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 8.541666666666666,
+      "model_attack_ms": 8.729166666666666,
+      "error_ms": 0.1875,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.729166666666666,
+        "release_t20_ms": 1234.2916666666667,
+        "held_rms": 0.18357886690841888,
+        "tail_db": -285.2764536992532,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-delayed84_at5p7.wav",
+      "sha256": "641fd4c29265ea29a3182e5c6d51c488f95259bfe8917db9e1ac34753cb64a32"
+    },
+    {
+      "wave": "saw",
+      "condition": "isolated84",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 7.333333333333333,
+      "model_attack_ms": 8.729166666666666,
+      "error_ms": 1.395833333333333,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.729166666666666,
+        "release_t20_ms": 1234.2916666666667,
+        "held_rms": 0.18357886690841888,
+        "tail_db": -285.2764536992532,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-isolated84.wav",
+      "sha256": "3f26be6f72619fb74f39f248346ee1b4fbdf3561d1107745d2206dc59f53e14b"
+    },
+    {
+      "wave": "saw",
+      "condition": "repeat84_gap3p4",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 3.1041666666666665,
+      "model_attack_ms": 8.708333333333334,
+      "error_ms": 5.604166666666668,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.708333333333334,
+        "release_t20_ms": 1234.2916666666667,
+        "held_rms": 0.18358293810958523,
+        "tail_db": -285.27664632279703,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-repeat84_gap3p4.wav",
+      "sha256": "4d8a2634f611c2c74e1ce86abc2bc1f604144f1e8800717efd7c57c9a2f338ec"
+    },
+    {
+      "wave": "saw",
+      "condition": "from72_gap3p4",
+      "events": [
+        {
+          "note": 72,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 3.2083333333333335,
+      "model_attack_ms": 8.6875,
+      "error_ms": 5.479166666666666,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.6875,
+        "release_t20_ms": 1234.2708333333333,
+        "held_rms": 0.18356619782392647,
+        "tail_db": -285.2758542508044,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-from72_gap3p4.wav",
+      "sha256": "2c8b6945ce9fe17f7b46aded581f0a55d7dd606067b7b5b2ac3caa1cf6fddb2c"
+    },
+    {
+      "wave": "saw",
+      "condition": "repeat84_gap5",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 5.7,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 3.5625,
+      "model_attack_ms": 8.520833333333334,
+      "error_ms": 4.958333333333334,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.520833333333334,
+        "release_t20_ms": 1233.9375,
+        "held_rms": 0.18355762253252972,
+        "tail_db": -285.27544848015935,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "saw",
+          "saw",
+          "saw"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          20000,
+          20000
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.42706945793876744,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/saw-repeat84_gap5.wav",
+      "sha256": "36d69d85cc70bb49f295377d2d2417f8315eb3b86edaaabceac8be808a00c18f"
+    },
+    {
+      "wave": "pulse",
+      "condition": "delayed84_at4p1",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 7.958333333333333,
+      "model_attack_ms": 8.729166666666666,
+      "error_ms": 0.770833333333333,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.729166666666666,
+        "release_t20_ms": 1242.3958333333333,
+        "held_rms": 0.3050120744247323,
+        "tail_db": -289.6863406395415,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-delayed84_at4p1.wav",
+      "sha256": "70b7e7b4512c2b5471d613425d539705c0397acaaab116ad2f043198d4aaffe0"
+    },
+    {
+      "wave": "pulse",
+      "condition": "delayed84_at5p7",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 5.7,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 8.3125,
+      "model_attack_ms": 8.75,
+      "error_ms": 0.4375,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.75,
+        "release_t20_ms": 1242.4166666666667,
+        "held_rms": 0.30500751424614925,
+        "tail_db": -289.6862107774563,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-delayed84_at5p7.wav",
+      "sha256": "6a1a4504ee416648143e18e1d6badffdb59f86e54146295757c9876882b86310"
+    },
+    {
+      "wave": "pulse",
+      "condition": "isolated84",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 7.458333333333333,
+      "model_attack_ms": 8.75,
+      "error_ms": 1.291666666666667,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.75,
+        "release_t20_ms": 1242.4166666666667,
+        "held_rms": 0.30500751424614925,
+        "tail_db": -289.6862107774563,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-isolated84.wav",
+      "sha256": "b21cd69388b09d756f95e809e746db01320095fc15b7535c407ae501eeeee45f"
+    },
+    {
+      "wave": "pulse",
+      "condition": "repeat84_gap3p4",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 2.875,
+      "model_attack_ms": 8.729166666666666,
+      "error_ms": 5.854166666666666,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.729166666666666,
+        "release_t20_ms": 1241.9166666666667,
+        "held_rms": 0.3050046125250935,
+        "tail_db": -289.6861281429389,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-repeat84_gap3p4.wav",
+      "sha256": "87b59bc286e4152b613946b7cbe402c9bae47ba1d64d7f68da87d44dfab909ba"
+    },
+    {
+      "wave": "pulse",
+      "condition": "from72_gap3p4",
+      "events": [
+        {
+          "note": 72,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 4.1,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 2.8541666666666665,
+      "model_attack_ms": 8.729166666666666,
+      "error_ms": 5.875,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.729166666666666,
+        "release_t20_ms": 1242.3958333333333,
+        "held_rms": 0.30501736105322663,
+        "tail_db": -289.68649118661017,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-from72_gap3p4.wav",
+      "sha256": "5a1e1f3370cb3b59dc38992c6521034b9106f973701fb42efb944831dadca92e"
+    },
+    {
+      "wave": "pulse",
+      "condition": "repeat84_gap5",
+      "events": [
+        {
+          "note": 84,
+          "on_s": 0.1,
+          "gate_s": 0.6
+        },
+        {
+          "note": 84,
+          "on_s": 5.7,
+          "gate_s": 0.6
+        }
+      ],
+      "reference_attack_ms": 3.375,
+      "model_attack_ms": 8.791666666666666,
+      "error_ms": 5.416666666666666,
+      "model_timing": {
+        "valid": true,
+        "attack_10_90_ms": 8.791666666666666,
+        "release_t20_ms": 1242.0416666666667,
+        "held_rms": 0.3050077877121119,
+        "tail_db": -289.68621856511396,
+        "release_complete_40db": true
+      },
+      "patch": {
+        "waves": [
+          "pulse29",
+          "pulse29",
+          "pulse29"
+        ],
+        "detune": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mix": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "noise": 0.0,
+        "cutoff": [
+          14073,
+          14073
+        ],
+        "q": 0.0,
+        "drive": 0.75,
+        "amp": [
+          0.009166666666666667,
+          0.25,
+          1.0,
+          2.159710267298046
+        ],
+        "fenv": [
+          0.004,
+          0.3,
+          1.0,
+          0.1
+        ],
+        "track": 0.0,
+        "vol": 0.45,
+        "mod_mix": 0.0,
+        "mod_wheel": 0.0,
+        "osc_mod": false,
+        "filt_mod": false
+      },
+      "audio": "docs/scorecard/mono-attack-context/model/pulse-repeat84_gap5.wav",
+      "sha256": "2d1b55e7d8d553b67a75139f0f58ff62cdd7fa1dc1c0e1575544e59c8fb4d0c8"
+    }
+  ],
+  "history_effect_ms": [
+    {
+      "wave": "saw",
+      "with_history": "repeat84_gap3p4",
+      "without_history": "delayed84_at4p1",
+      "model_attack_ms": 0.0,
+      "reference_attack_ms": -5.1875
+    },
+    {
+      "wave": "saw",
+      "with_history": "from72_gap3p4",
+      "without_history": "delayed84_at4p1",
+      "model_attack_ms": -0.020833333333333925,
+      "reference_attack_ms": -5.083333333333332
+    },
+    {
+      "wave": "saw",
+      "with_history": "repeat84_gap5",
+      "without_history": "delayed84_at5p7",
+      "model_attack_ms": -0.20833333333333215,
+      "reference_attack_ms": -4.979166666666666
+    },
+    {
+      "wave": "pulse",
+      "with_history": "repeat84_gap3p4",
+      "without_history": "delayed84_at4p1",
+      "model_attack_ms": 0.0,
+      "reference_attack_ms": -5.083333333333333
+    },
+    {
+      "wave": "pulse",
+      "with_history": "from72_gap3p4",
+      "without_history": "delayed84_at4p1",
+      "model_attack_ms": 0.0,
+      "reference_attack_ms": -5.104166666666666
+    },
+    {
+      "wave": "pulse",
+      "with_history": "repeat84_gap5",
+      "without_history": "delayed84_at5p7",
+      "model_attack_ms": 0.041666666666666075,
+      "reference_attack_ms": -4.9375
+    }
+  ]
+}

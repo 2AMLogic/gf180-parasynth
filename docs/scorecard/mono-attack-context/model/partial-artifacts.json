@@ -1,6 +1,6 @@
 {
-  "state": "in progress",
-  "scope": "completed model WAVs only; full context report pending",
+  "state": "superseded by complete report.json",
+  "scope": "five original local WAVs, all byte-identical to complete Linux run",
   "producer_commit": "96e71c15",
   "reference_report_sha256": "19472d7f64f9b44dee0205d08cb508cb64ec0900eab23f4ef484d7449627e672",
   "audio_sha256": {
