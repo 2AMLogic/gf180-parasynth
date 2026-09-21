@@ -95,3 +95,8 @@ A failed build still preserves raw reports and compressed complete logs, with
 an explicit nonpassing publication state. A qualified bitstream additionally
 requires all three build stages to pass. Neither state establishes live control
 or captured physical line output.
+
+## Completed Linux run
+
+See [the recorded 85F result](reports/selected/linux-85f/README.md) and its
+hash-bound publication record. Physical playback remains unverified.
