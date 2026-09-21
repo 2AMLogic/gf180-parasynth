@@ -1,0 +1,99 @@
+{
+  "schema": "m5a-attack-bias-v1",
+  "valid": true,
+  "claim": "The scorecard's 5 ms RMS meter adds measurable bias to a known linear attack; this does not reveal Mini V3's hidden envelope.",
+  "method": {
+    "sample_rate_hz": 48000,
+    "rms_window_ms": 5.0,
+    "crossings": "first 10% to first 90% of the event peak",
+    "known_envelope": "exact linear full-scale ramp followed by a known exponential release",
+    "true_attack_10_90_ms": 7.333333333333333,
+    "full_ramp_ms": 9.166666666666666,
+    "carrier_phases_per_condition": 8
+  },
+  "known_signal": {
+    "conditions": [
+      {
+        "f0_hz": 1046.5022612023945,
+        "wave": "saw",
+        "phases": 8,
+        "true_attack_10_90_ms": 7.333333333333333,
+        "measured_min_ms": 8.604166666666666,
+        "measured_median_ms": 8.854166666666668,
+        "measured_max_ms": 9.208333333333334,
+        "median_bias_ms": 1.5208333333333348
+      },
+      {
+        "f0_hz": 1046.5022612023945,
+        "wave": "pulse479",
+        "phases": 8,
+        "true_attack_10_90_ms": 7.333333333333333,
+        "measured_min_ms": 8.5625,
+        "measured_median_ms": 8.5625,
+        "measured_max_ms": 8.5625,
+        "median_bias_ms": 1.229166666666667
+      },
+      {
+        "f0_hz": 2093.004522404789,
+        "wave": "saw",
+        "phases": 8,
+        "true_attack_10_90_ms": 7.333333333333333,
+        "measured_min_ms": 8.583333333333334,
+        "measured_median_ms": 8.729166666666668,
+        "measured_max_ms": 8.895833333333334,
+        "median_bias_ms": 1.3958333333333348
+      },
+      {
+        "f0_hz": 2093.004522404789,
+        "wave": "pulse479",
+        "phases": 8,
+        "true_attack_10_90_ms": 7.333333333333333,
+        "measured_min_ms": 8.5625,
+        "measured_median_ms": 8.5625,
+        "measured_max_ms": 8.5625,
+        "median_bias_ms": 1.229166666666667
+      }
+    ],
+    "median_bias_range_ms": [
+      1.229166666666667,
+      1.5208333333333348
+    ]
+  },
+  "frozen_reference": {
+    "audio_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+    "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+    "audio_path": "docs/scorecard/mono-m5a-miniv3/m5a-miniv3-raw.wav",
+    "manifest_path": "docs/scorecard/mono-m5a-miniv3/manifest.json",
+    "amp_attack_readback": 0.05,
+    "events": [
+      {
+        "wave": "saw",
+        "midi": 84,
+        "attack_10_90_ms": 7.333333333333333
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "attack_10_90_ms": 3.4166666666666665
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "attack_10_90_ms": 7.458333333333333
+      },
+      {
+        "wave": "pulse",
+        "midi": 96,
+        "attack_10_90_ms": 3.3333333333333335
+      }
+    ],
+    "event_attack_spread_ms": 4.125
+  },
+  "provenance": {
+    "commit": "d767386ddc6719f5a57ad90b3a09d09a6f4f2ab9",
+    "dirty": true,
+    "tool_sha256": "a624797c3c2ec63a11b30ebb81f40e7854827c34ffdad2f5085f67961981620b",
+    "run_at_utc": "2026-09-21T05:36:53.791975+00:00"
+  },
+  "interpretation": "The known envelope is measured 1.2\u20131.6 ms slower by this RMS meter. The frozen patch reports 3.33\u20137.46 ms across notes/waves despite a common 0.050 attack readback. Therefore the 5.52 ms score error does not isolate the actual VCA rise time; keep it measured, but do not tune the envelope from this comparison until the estimator is qualified against the plugin's signal path."
+}
