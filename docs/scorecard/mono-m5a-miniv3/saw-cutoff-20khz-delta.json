@@ -1,0 +1,525 @@
+{
+  "schema": "m5a-integrated-rtl-delta-v1",
+  "valid": true,
+  "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+  "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "filter_config": "causal reconstructed 2x, headroom preserved",
+  "baseline": {
+    "source_commit": "e7b9badfec3a09e30b0a7d68f8e2f1c5d7a50512",
+    "scorecard_state": "fail",
+    "decoded_i2s_sha256": "af762ecf13c01cb7b796b260ec24c731750b553ea60cf8ed4aeba76cab49dc20",
+    "metrics": {
+      "Pitch": {
+        "value": -0.14812,
+        "reference": 0.0,
+        "error": -0.14812,
+        "units": "cents",
+        "tolerance": 1.0,
+        "valid": true,
+        "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+      },
+      "Harmonic shape": {
+        "value": 8.84429,
+        "reference": 0.0,
+        "error": 8.84429,
+        "units": "dB",
+        "tolerance": 1.0,
+        "valid": true,
+        "tolerance_basis": "dB per measured partial; fixed screening limit"
+      },
+      "Foldback energy": {
+        "value": 10.2742,
+        "reference": 0.0,
+        "error": 10.2742,
+        "units": "dB",
+        "tolerance": 3.0,
+        "valid": true,
+        "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+      },
+      "Envelope attack": {
+        "value": 8.9375,
+        "reference": 3.41667,
+        "error": 5.52083,
+        "units": "ms",
+        "tolerance": 5.0,
+        "valid": true,
+        "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+      },
+      "Envelope release": {
+        "value": 1234.39583,
+        "reference": 1243.22917,
+        "error": -8.83333,
+        "units": "ms",
+        "tolerance": 125.0,
+        "valid": true,
+        "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+      },
+      "Gain": {
+        "value": -17.76455,
+        "reference": -19.18712,
+        "error": 1.42257,
+        "units": "dB",
+        "tolerance": 3.0,
+        "valid": true,
+        "tolerance_basis": "dB; fixed half/double amplitude screening range"
+      },
+      "Clipping": {
+        "value": 0.0,
+        "reference": 0.0,
+        "error": 0.0,
+        "units": "%",
+        "tolerance": 0.01,
+        "valid": true,
+        "tolerance_basis": "% samples at full-scale rail"
+      }
+    }
+  },
+  "candidate": {
+    "source_commit": "36137df5e43a4f5c74839ff96cac3230acaa6229",
+    "scorecard_state": "fail",
+    "decoded_i2s_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
+    "controls": {
+      "oscillator_config": "2x saw candidate",
+      "filter_config": "causal reconstructed 2x, headroom preserved",
+      "simulator": "verilator",
+      "pulse_shape": "pulse29",
+      "saw_cutoff_hz": 20000,
+      "saw_volume_correction_db": -0.45428,
+      "candidate_wav_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
+      "scored_audio_artifact_sha256": "e01da671d11d1643066e75367998cdd8035c0bdf6847c978a892cb7f2602997b",
+      "measurement_source_sha256": {
+        "tools/score_m5a_i2s.py": "809e5907955440dbd75aafb9b71711238c5423dcb02ebf8700960e89c0fc4200",
+        "tools/verify_m5a_filter2x_i2s.py": "ad57fdd7cc66846cd423250217de869f64686725b952f545d313106330fb0d2a",
+        "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817",
+        "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
+        "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557",
+        "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
+        "rtl-sketch/verify_synth_top.py": "8f2c9cb145de7c8bbfe20e0e5af174849bb2a196a83fadaa20a7d13bc9bb2d63",
+        "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
+        "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
+        "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+        "rtl-sketch/voice_dp.v": "7e659245dcadc3b19f562354838be66a66a48ac9dc0f367613c96760d2d01235",
+        "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+        "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+        "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202"
+      }
+    },
+    "metrics": {
+      "Pitch": {
+        "value": -0.14813,
+        "reference": 0.0,
+        "error": -0.14813,
+        "units": "cents",
+        "tolerance": 1.0,
+        "valid": true,
+        "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+      },
+      "Harmonic shape": {
+        "value": 7.56137,
+        "reference": 0.0,
+        "error": 7.56137,
+        "units": "dB",
+        "tolerance": 1.0,
+        "valid": true,
+        "tolerance_basis": "dB per measured partial; fixed screening limit"
+      },
+      "Foldback energy": {
+        "value": 10.27423,
+        "reference": 0.0,
+        "error": 10.27423,
+        "units": "dB",
+        "tolerance": 3.0,
+        "valid": true,
+        "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+      },
+      "Envelope attack": {
+        "value": 8.70833,
+        "reference": 3.33333,
+        "error": 5.375,
+        "units": "ms",
+        "tolerance": 5.0,
+        "valid": true,
+        "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+      },
+      "Envelope release": {
+        "value": 1235.27083,
+        "reference": 1243.22917,
+        "error": -7.95833,
+        "units": "ms",
+        "tolerance": 125.0,
+        "valid": true,
+        "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+      },
+      "Gain": {
+        "value": -17.76573,
+        "reference": -19.18712,
+        "error": 1.42139,
+        "units": "dB",
+        "tolerance": 3.0,
+        "valid": true,
+        "tolerance_basis": "dB; fixed half/double amplitude screening range"
+      },
+      "Clipping": {
+        "value": 0.0,
+        "reference": 0.0,
+        "error": 0.0,
+        "units": "%",
+        "tolerance": 0.01,
+        "valid": true,
+        "tolerance_basis": "% samples at full-scale rail"
+      }
+    }
+  },
+  "comparison": {
+    "accepts_incremental_improvement": true,
+    "case_passes": false,
+    "improved_components": [
+      "metric:Harmonic shape",
+      "partial:0:saw:84:h10",
+      "partial:0:saw:84:h11",
+      "partial:0:saw:84:h12",
+      "partial:0:saw:84:h2",
+      "partial:0:saw:84:h3",
+      "partial:0:saw:84:h4",
+      "partial:0:saw:84:h5",
+      "partial:0:saw:84:h6",
+      "partial:0:saw:84:h7",
+      "partial:0:saw:84:h8",
+      "partial:0:saw:84:h9",
+      "partial:1:saw:96:h10",
+      "partial:1:saw:96:h11",
+      "partial:1:saw:96:h2",
+      "partial:1:saw:96:h3",
+      "partial:1:saw:96:h4",
+      "partial:1:saw:96:h5",
+      "partial:1:saw:96:h6",
+      "partial:1:saw:96:h7",
+      "partial:1:saw:96:h8",
+      "partial:1:saw:96:h9"
+    ],
+    "regressed_components": [],
+    "non_regression_deadbands": {
+      "metrics": {
+        "Pitch": 0.01,
+        "Harmonic shape": 0.01,
+        "Foldback energy": 0.01,
+        "Envelope attack": 5.0,
+        "Envelope release": 5.0,
+        "Gain": 0.01,
+        "Clipping": 0.01
+      },
+      "per_partial_db": 0.01
+    },
+    "components": {
+      "metric:Pitch": {
+        "baseline_error": 0.14812,
+        "candidate_error": 0.14813,
+        "delta_error": 1e-05,
+        "non_regression_deadband": 0.01
+      },
+      "metric:Harmonic shape": {
+        "baseline_error": 8.84429,
+        "candidate_error": 7.56137,
+        "delta_error": -1.28292,
+        "non_regression_deadband": 0.01
+      },
+      "metric:Foldback energy": {
+        "baseline_error": 10.2742,
+        "candidate_error": 10.27423,
+        "delta_error": 3e-05,
+        "non_regression_deadband": 0.01
+      },
+      "metric:Envelope attack": {
+        "baseline_error": 5.52083,
+        "candidate_error": 5.375,
+        "delta_error": -0.14583,
+        "non_regression_deadband": 5.0
+      },
+      "metric:Envelope release": {
+        "baseline_error": 8.83333,
+        "candidate_error": 7.95833,
+        "delta_error": -0.875,
+        "non_regression_deadband": 5.0
+      },
+      "metric:Gain": {
+        "baseline_error": 1.42257,
+        "candidate_error": 1.42139,
+        "delta_error": -0.00118,
+        "non_regression_deadband": 0.01
+      },
+      "metric:Clipping": {
+        "baseline_error": 0.0,
+        "candidate_error": 0.0,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h10": {
+        "baseline_error": 7.3213,
+        "candidate_error": 5.1394,
+        "delta_error": -2.1819,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h11": {
+        "baseline_error": 7.2591,
+        "candidate_error": 4.3444,
+        "delta_error": -2.9147,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h12": {
+        "baseline_error": 6.5105,
+        "candidate_error": 3.2534,
+        "delta_error": -3.2571,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h2": {
+        "baseline_error": 2.5623,
+        "candidate_error": 1.7681,
+        "delta_error": -0.7942,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h3": {
+        "baseline_error": 6.5061,
+        "candidate_error": 5.1166,
+        "delta_error": -1.3895,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h4": {
+        "baseline_error": 5.9367,
+        "candidate_error": 5.5636,
+        "delta_error": -0.3731,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h5": {
+        "baseline_error": 5.9023,
+        "candidate_error": 4.6617,
+        "delta_error": -1.2406,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h6": {
+        "baseline_error": 7.6449,
+        "candidate_error": 5.6897,
+        "delta_error": -1.9552,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h7": {
+        "baseline_error": 7.7708,
+        "candidate_error": 5.9622,
+        "delta_error": -1.8086,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h8": {
+        "baseline_error": 7.3339,
+        "candidate_error": 5.1495,
+        "delta_error": -2.1844,
+        "non_regression_deadband": 0.01
+      },
+      "partial:0:saw:84:h9": {
+        "baseline_error": 7.5614,
+        "candidate_error": 5.3113,
+        "delta_error": -2.2501,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h10": {
+        "baseline_error": 8.8443,
+        "candidate_error": 2.7994,
+        "delta_error": -6.0449,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h11": {
+        "baseline_error": 5.6253,
+        "candidate_error": 1.8197,
+        "delta_error": -3.8056,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h2": {
+        "baseline_error": 5.8435,
+        "candidate_error": 4.26,
+        "delta_error": -1.5835,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h3": {
+        "baseline_error": 8.0607,
+        "candidate_error": 7.5614,
+        "delta_error": -0.4993,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h4": {
+        "baseline_error": 6.3666,
+        "candidate_error": 4.603,
+        "delta_error": -1.7636,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h5": {
+        "baseline_error": 8.1536,
+        "candidate_error": 5.2716,
+        "delta_error": -2.882,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h6": {
+        "baseline_error": 6.3452,
+        "candidate_error": 3.5744,
+        "delta_error": -2.7708,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h7": {
+        "baseline_error": 6.2042,
+        "candidate_error": 2.1441,
+        "delta_error": -4.0601,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h8": {
+        "baseline_error": 7.4009,
+        "candidate_error": 2.7391,
+        "delta_error": -4.6618,
+        "non_regression_deadband": 0.01
+      },
+      "partial:1:saw:96:h9": {
+        "baseline_error": 8.7736,
+        "candidate_error": 2.7022,
+        "delta_error": -6.0714,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h10": {
+        "baseline_error": 3.3462,
+        "candidate_error": 3.3462,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h11": {
+        "baseline_error": 4.0793,
+        "candidate_error": 4.0793,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h12": {
+        "baseline_error": 2.7171,
+        "candidate_error": 2.7171,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h2": {
+        "baseline_error": 0.4802,
+        "candidate_error": 0.4802,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h3": {
+        "baseline_error": 1.9675,
+        "candidate_error": 1.9675,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h4": {
+        "baseline_error": 2.0755,
+        "candidate_error": 2.0755,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h5": {
+        "baseline_error": 3.2093,
+        "candidate_error": 3.2093,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h6": {
+        "baseline_error": 3.1919,
+        "candidate_error": 3.1919,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h7": {
+        "baseline_error": 4.1815,
+        "candidate_error": 4.1815,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h8": {
+        "baseline_error": 3.3941,
+        "candidate_error": 3.3941,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:2:pulse:84:h9": {
+        "baseline_error": 4.7351,
+        "candidate_error": 4.7351,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h10": {
+        "baseline_error": 4.1132,
+        "candidate_error": 4.1133,
+        "delta_error": 0.0001,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h11": {
+        "baseline_error": 2.9731,
+        "candidate_error": 2.9731,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h2": {
+        "baseline_error": 1.0246,
+        "candidate_error": 1.0246,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h3": {
+        "baseline_error": 3.2636,
+        "candidate_error": 3.2636,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h4": {
+        "baseline_error": 2.4035,
+        "candidate_error": 2.4035,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h5": {
+        "baseline_error": 3.6502,
+        "candidate_error": 3.6502,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h6": {
+        "baseline_error": 1.6669,
+        "candidate_error": 1.6669,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h7": {
+        "baseline_error": 2.7988,
+        "candidate_error": 2.7988,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h8": {
+        "baseline_error": 2.0946,
+        "candidate_error": 2.0946,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      },
+      "partial:3:pulse:96:h9": {
+        "baseline_error": 5.3155,
+        "candidate_error": 5.3155,
+        "delta_error": 0.0,
+        "non_regression_deadband": 0.01
+      }
+    },
+    "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit"
+  },
+  "provenance": {
+    "source_commit": "36137df5e43a4f5c74839ff96cac3230acaa6229",
+    "source_dirty": true,
+    "input_sha256": {
+      "baseline_record": "ce59a8094115cb8062d934613da8ed013352cb18584565072ea16223dfb35377",
+      "candidate_record": "a5dcdaa5f7e18cff9aecd8635ada78f61a0d7410e3f465095a5f183492c75f21"
+    },
+    "source_sha256": {
+      "tools/compare_m5a_i2s_candidate.py": "11d1e2fa8ce0b24d8b89429f05368dbe152fb40b385d395b8c371293375f4e2a",
+      "tools/measure_m5a_filter_oversample.py": "b94ff599edd12c6f6a2fadeb5a5c152e49b53fa4c90152c3b8bf09d284a379e1",
+      "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817"
+    },
+    "run_at_utc": "2026-09-21T07:10:18.437490+00:00"
+  }
+}
