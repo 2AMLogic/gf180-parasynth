@@ -196,7 +196,7 @@ jobs:
   rtl-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -207,3 +207,5 @@ jobs:
         run: python rtl-sketch/verify_voice.py --set full
       - name: D -- the eight-stop drum kit bit-exact
         run: python rtl-sketch/verify_drums.py
+      - name: M5A -- complete reconstructed 2x filter phrase through SPI to I2S and score decoded audio
+        run: python tools/verify_m5a_filter2x_i2s.py

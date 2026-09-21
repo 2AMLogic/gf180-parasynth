@@ -82,8 +82,14 @@ def main(argv=None) -> int:
                             check=True, capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
                                 check=True, capture_output=True, text=True).stdout.strip())
-    source_files = ("tools/score_m5a_i2s.py", "tools/mono_m5a_score.py",
-                    "model/filter_rate_chain.py", "model/voice_fx.py")
+    source_files = (
+        "tools/score_m5a_i2s.py", "tools/verify_m5a_filter2x_i2s.py",
+        "tools/mono_m5a_score.py", "model/filter_rate_chain.py",
+        "model/synth_top_model.py", "model/voice_fx.py",
+        "rtl-sketch/verify_synth_top.py", "rtl-sketch/tb_top_bx.v",
+        "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
+        "rtl-sketch/voice_dp.v", "rtl-sketch/ladder_dp_n.v",
+        "rtl-sketch/rate_conv_2x.v", "rtl-sketch/i2s_tx.v")
     provenance = run_case.provenance(
         run_case.model_input_hashes({
             "frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
