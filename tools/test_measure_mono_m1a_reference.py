@@ -51,3 +51,12 @@ def test_frozen_bass_reference_reproduces_without_a_plugin():
         assert got["f0_hz"] == pytest.approx(expected["f0_hz"], abs=1e-5)
         assert got["rms_dbfs"] == pytest.approx(expected["rms_dbfs"], abs=1e-5)
         assert got["envelope"]["release_t20_ms"] == expected["envelope"]["release_t20_ms"]
+        assert got["envelope"]["attack_valid"] is False
+        assert got["envelope"]["release_valid"] is True
+
+
+def test_fast_bass_attack_is_explicitly_unqualified():
+    qualification = probe.qualify_attack_basis()
+    assert qualification["known_attack_10_90_ms"] == 8.0
+    assert qualification["valid"] is False
+    assert qualification["max_error_ms"] > 5.0

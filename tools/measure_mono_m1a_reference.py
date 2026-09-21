@@ -90,6 +90,8 @@ def event_measurements(audio):
         env = ref.envelope_timing(envelope, ref.SR, e["on_s"], e["on_s"] + e["gate_s"])
         if not env.get("valid") or not env.get("release_complete_40db"):
             raise ref.Refused(f"incomplete bass envelope: {env}")
+        env.update(valid=False, attack_valid=False, release_valid=True,
+                   why="40 ms RMS window qualified for release only; fast bass attack is unresolved")
         shape = ref.am.harmonic_signature(steady, ref.SR, f0=pitch.value, kmax=12)
         trajectory = []
         for offset in (.02, .16, .30):
@@ -102,6 +104,28 @@ def event_measurements(audio):
                      "h4_trajectory": trajectory})
     return rows
 
+
+
+def qualify_attack_basis():
+    """Known 8 ms 10–90% linear rise, independent of either synthesizer."""
+    t = np.arange(round(1.8 * ref.SR)) / ref.SR
+    envelope = np.clip((t - .1) / .01, 0, 1)
+    envelope[t >= .7] = np.exp(-(t[t >= .7] - .7) / .1)
+    rows = []
+    for note in (36, 43):
+        hz = 440 * 2 ** ((note - 69) / 12)
+        for phase in (0., .25, .5, .75):
+            audio = envelope * np.sin(2 * np.pi * (hz * t + phase))
+            rms = ref.am.rms_envelope(audio, ms=ENVELOPE_WINDOW_MS, sr=ref.SR)
+            timing = ref.envelope_timing(rms, ref.SR, .1, .7)
+            if not timing.get("valid"):
+                raise ref.Refused("known-signal attack probe produced no measurement")
+            rows.append({"note": note, "phase_cycles": phase,
+                         "observed_ms": timing["attack_10_90_ms"]})
+    return {"valid": False, "known_attack_10_90_ms": 8.0,
+            "window_ms": ENVELOPE_WINDOW_MS, "observations": rows,
+            "max_error_ms": max(abs(r["observed_ms"] - 8.) for r in rows),
+            "why": "release-window qualification does not qualify fast bass attacks"}
 
 
 def qualify_envelope_basis():
@@ -125,7 +149,8 @@ def qualify_envelope_basis():
     if rows["bass_window"]["max_error_ms"] >= 10 or rows["lead_window"]["max_error_ms"] <= 10:
         raise ref.Refused("bass envelope qualification or wrong-window control failed")
     return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
-            "scope": "40 ms audio-envelope window; not internal VCA timing",
+            "scope": "40 ms audio-envelope window qualified for release ONLY; not internal VCA timing",
+            "attack": qualify_attack_basis(),
             "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release; early h4 window could not resolve the short filter transient"}
 
 

@@ -1709,7 +1709,7 @@ NOT_RUN["F5A"] = (
     "sweep is not one of them -- so there is nothing to compare a frozen sweep "
     "against yet.")
 
-for _c in ("M1A", "M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
+for _c in ("M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
     NOT_RUN[_c] = (
         "no qualified Mono reference, and the two candidates failed for different "
         "reasons that are MEASURED and recorded in refprofile/profile.json rather "
@@ -1743,6 +1743,8 @@ NOT_RUN["E3A"] = ("no shipped patch uses the noise source or oscillator-3 "
 def plan_for(case_id: str) -> str:
     """What this runner will do with a case: 'drum', 'ensemble', 'not-run' or
     'unplanned'."""
+    if case_id == "M1A":
+        return "mono-bass"
     if case_id in ("M5A", "M5B"):
         return "mono"
     if case_id in NOT_RUN:
@@ -2234,6 +2236,9 @@ def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
     required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
                 if m.strip()]
     try:
+        if kind == "mono-bass":
+            import mono_m1a_score
+            return mono_m1a_score.run(case, inject, keep_audio)
         if kind == "drum":
             return run_drum_case(case, refdir, inject, keep_audio)
         if kind == "ensemble":

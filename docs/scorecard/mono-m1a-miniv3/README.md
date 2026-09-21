@@ -1,7 +1,7 @@
 # M1A frozen round-bass reference
 
-This is a qualified Mini V3 software reference, not a model score or a
-Model D cross-check. The official scorecard coverage is unchanged.
+This is frozen Mini V3 software reference audio. Its release measurement is
+qualified; its fast attack measurement is not. It is not a Model D cross-check. The official scorecard coverage is unchanged.
 
 The dry phrase plays MIDI 36, 43, 36 over 4.6 seconds, then finishes the
 release. It uses a saw plus a quieter octave saw, low resonance, and a short
@@ -32,3 +32,18 @@ Wrong-then-right: three apparatus checks needed correction before the reference
 qualified (spectral window, envelope window, transient control). No refused
 attempt was published as a valid reference. The final phrase was rendered
 three times, with all three identical.
+
+The 40 ms RMS window is **not qualified for attack**: an independent 8 ms
+10–90% linear rise at MIDI 36/43 measures about 19–21 ms, depending on carrier
+phase. `qualify_attack_basis()` preserves all eight observations. Historical
+attack observations in the capture manifest are unqualified; the current
+analysis marks `attack_valid=false` and `release_valid=true`. Neither changing
+the synth attack nor reporting a passing attack follows from these numbers.
+This is the fourth corrected apparatus claim (release qualification had been
+extended to attack without testing it).
+
+The first model mapping is fixed in `tools/mono_m1a_score.py` before rendering.
+It uses the shared selected engine, the measured quieter-octave level ratio,
+and measured release. Attack/decay/sustain, resonance, and filter-envelope
+shape remain explicitly provisional. The runner reports component measurements
+but keeps the required envelope and Model D cross-check at **NO VERDICT**.
