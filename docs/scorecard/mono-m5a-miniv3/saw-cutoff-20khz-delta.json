@@ -76,7 +76,7 @@
     }
   },
   "candidate": {
-    "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
+    "source_commit": "744b43fa0e5524824d28256db0c37a0ccf4bbf29",
     "scorecard_state": "fail",
     "decoded_i2s_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
     "controls": {
@@ -695,17 +695,17 @@
     ]
   },
   "provenance": {
-    "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
-    "source_dirty": true,
+    "source_commit": "0db22dd4fd8bb5da89516a404e087e92062652bd",
+    "source_dirty": false,
     "input_sha256": {
       "baseline_record": "ce59a8094115cb8062d934613da8ed013352cb18584565072ea16223dfb35377",
-      "candidate_record": "4c7d5e1dd2c998a966dbd936bf23136327c5e6fcd033ad06f03fe786d85bd275"
+      "candidate_record": "43d6a9ebe4f30ea800458c1e0510d0f992563f69c999bca1cad38602e424db18"
     },
     "source_sha256": {
-      "tools/compare_m5a_i2s_candidate.py": "925e58e46cb27e953defb69124b3085b78b375321130b90e99ff49b6d356007d",
+      "tools/compare_m5a_i2s_candidate.py": "7f52f76a11a81a5e639890dd84c34d1e05892317b0917454a69ffde66dc92269",
       "tools/measure_m5a_filter_oversample.py": "b94ff599edd12c6f6a2fadeb5a5c152e49b53fa4c90152c3b8bf09d284a379e1",
       "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817"
     },
-    "run_at_utc": "2026-09-21T07:37:57.742804+00:00"
+    "run_at_utc": "2026-09-21T09:00:57.741571+00:00"
   }
 }
