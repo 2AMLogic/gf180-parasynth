@@ -19,13 +19,15 @@ def test_full_scale_conversion_is_gain_linear():
 
 
 def test_polyblep_off_is_an_executed_distinct_oscillator_challenger():
-    candidate = probe.measure([14073], [1.0], blep=False)
+    candidate = probe.measure([14073], [0.75], blep=False)
     baseline_path = Path(probe.ROOT) / "docs/scorecard/mono-m5a-miniv3/signal-path-alias-energy-v1.json"
-    baseline = json.loads(baseline_path.read_text())["runs"][0]
+    baseline_report = json.loads(baseline_path.read_text())
+    baseline = next(run for run in baseline_report["runs"]
+                    if run["cutoff_hz"] == 14073 and run["filter_drive"] == 0.75)
     run = candidate["runs"][0]
 
     assert "PolyBLEP disabled" in candidate["oscillator_config"]
-    assert candidate["reference_sha256"] == json.loads(baseline_path.read_text())["reference_sha256"]
+    assert candidate["reference_sha256"] == baseline_report["reference_sha256"]
     for got, old in zip(run["events"], baseline["events"], strict=True):
         assert got["midi"] == old["midi"]
         assert got["stages"]["oscillator"]["harmonic_error_db_model_minus_reference"] != \
