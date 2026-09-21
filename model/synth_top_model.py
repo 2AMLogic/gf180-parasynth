@@ -95,9 +95,13 @@ class SynthTopModel:
     (frame, flag, sec, addr, data) applied at the START of the frames they
     name, in list order -- and returns every signal a bench can see."""
 
-    def __init__(self, *, oversample_2x: bool = False):
-        self.oversample_2x = oversample_2x
-        self.voice = VoiceFx(oversample_2x=oversample_2x)
+    def __init__(self, *, oversample_2x: bool = False, filter_2x: bool = False):
+        self.oversample_2x = oversample_2x or filter_2x
+        self.voice = VoiceFx(oversample_2x=self.oversample_2x,
+                             rate_converted_ladder=filter_2x,
+                             preserve_filter_headroom=filter_2x,
+                             causal_filter=filter_2x,
+                             pulse479_filter_candidate=filter_2x)
         self.drums = dx.DrumsFx()
         self.dl = LadderFx(**LADDER_CFG)              # ladder context 1: the drum filter
         self.base = VoiceFx.patch_regs()              # for `res`/`drive`, which the register
@@ -148,10 +152,10 @@ class SynthTopModel:
         if addr == A_ROUTE: i["route"] = data & W1;  return "image"
         if A_AMP <= addr <= A_AMP + 3:
             j = addr - A_AMP
-            i["amp"][j] = (data & W16) if j == 3 else (data & W24); return "image"
+            i["amp"][j] = data & W24; return "image"
         if A_FILT <= addr <= A_FILT + 3:
             j = addr - A_FILT
-            i["fenv"][j] = (data & W16) if j == 3 else (data & W24); return "image"
+            i["fenv"][j] = data & W24; return "image"
         if addr == A_CUT_LO: i["cut_lo"] = data & W16; return "image"
         if addr == A_CUT_HI: i["cut_hi"] = data & W16; return "image"
         if addr == A_TRACK:  return ("TRACK", data & W16)

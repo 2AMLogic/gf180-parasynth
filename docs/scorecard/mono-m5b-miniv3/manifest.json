@@ -1,0 +1,917 @@
+{
+  "audio": {
+    "channels": 1,
+    "file": "m5b-miniv3-raw.wav",
+    "format": "IEEE float32 WAV",
+    "sample_rate_hz": 48000,
+    "samples": 729512,
+    "sha256": "ee77ef2180c91e2f6628339872589e0dcafb9344a30288b4a2da86274a919a29"
+  },
+  "case_id": "M5B",
+  "case_spec": {
+    "base_midi_note": 72,
+    "high_midi_note": 84,
+    "phrase_duration_s": 4.6,
+    "waveform_identity_required_at_every_note": true
+  },
+  "host": {
+    "automation": "none; fixed patch, note events only",
+    "block_size_samples": 16,
+    "midi_velocity": 100,
+    "sample_rate_hz": 48000
+  },
+  "identity": {
+    "bundle_id": "com.Arturia.Mini-V3.vst3",
+    "bundle_info_sha256": "f98d1a2857dd6fadbe41925c9089a975352cb2f8889659a67bffe79c55c88004",
+    "host": "dawdreamer",
+    "host_version": "0.8.3",
+    "name": "Mini V3",
+    "plugin_binary_sha256": "6b11ae9cc12d5ae476bd3ba686e5d3ac28b0a6031bf9ad86fbd83cead2f3ca09",
+    "version": "3.12.0.3422"
+  },
+  "patch": {
+    "cutoff_measurement": {
+      "block_size_samples": 16,
+      "emphasis": 0.98,
+      "f0_hz": 14072.862206739199,
+      "f0_hz_repeats": [
+        14072.862206739199,
+        14072.862206739199,
+        14072.862206739199
+      ],
+      "knob": 1.0,
+      "method": "measured self-oscillation ring; dominant frequency",
+      "parameter_readbacks": [
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        },
+        {
+          "cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.980",
+            "written": 0.98
+          }
+        }
+      ],
+      "prominence_db_repeats": [
+        10.350361942445932,
+        10.350361942445932,
+        10.350361942445932
+      ],
+      "repeat_count": 3,
+      "repeat_range_hz": 0.0,
+      "wrong_block_control": {
+        "block_size_samples": 512,
+        "caught": true,
+        "f0_hz": 14494.795083545734,
+        "separation_from_pinned_hz": 421.9328768065352
+      }
+    },
+    "description": "Mini V3 oscillator 1 only, filter open, effects off; saw and pulse in separate segments",
+    "gain_policy": "record raw levels; General Level 0.700 and Osc1 Level 0.900 are fixed patch settings",
+    "normalisation": "none; float32 WAV retains raw plugin output",
+    "range_readback": "8'",
+    "settings": {
+      "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "value": 0.05
+      },
+      "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "value": 0.45
+      },
+      "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "value": 1.0
+      },
+      "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "value": 0.0
+      },
+      "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "value": 0.0
+      },
+      "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "value": 0.0
+      },
+      "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "value": 1.0
+      },
+      "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "value": 0.0
+      },
+      "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "value": 0.0
+      },
+      "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "value": 1.0
+      },
+      "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "value": 0.7
+      },
+      "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "value": 1.0
+      },
+      "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "value": 0.9
+      },
+      "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "value": 0.575
+      },
+      "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "value": 0.0
+      },
+      "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "value": 0.0
+      }
+    },
+    "wave_settings": {
+      "pulse": {
+        "index": 48,
+        "name": "Wave Osc1",
+        "readback": "square",
+        "value": 0.575
+      },
+      "saw": {
+        "index": 48,
+        "name": "Wave Osc1",
+        "readback": "sawtooth",
+        "value": 0.4083
+      }
+    }
+  },
+  "qualification": {
+    "reference_integrity": {
+      "block_size_samples": 16,
+      "clean_events": 0,
+      "command": [
+        "/opt/homebrew/anaconda3/bin/python3",
+        "/private/tmp/wt-m5b-reference/model/reference_integrity.py",
+        "--stage",
+        "demo",
+        "--devices",
+        "miniv3",
+        "--source",
+        "smooth",
+        "--seconds",
+        "40",
+        "--block",
+        "16",
+        "--out",
+        "/tmp/mono-reference-integrity-k770k4gq"
+      ],
+      "detector_control_passed": true,
+      "duration_s": 40,
+      "injected_click_events": 5,
+      "stderr": "error: attempt to map invalid URI `/Library/Audio/Plug-Ins/VST3/Mini V3.vst3'",
+      "stdout": "-- miniv3: 40 s, one held note, source=smooth\n   rms 0.0487   peak 0.07434   peak/median high-band   +0.6 dB   events 0 (0.00/min)   per minute [0]\n   CONTROL, same render with a click every 7 s at 0.25 x peak: 5 events (+60.7 dB) -- detector WORKS"
+    },
+    "wrong_then_right": {
+      "cutoff_calibration": {
+        "accepted": {
+          "host_block_size_samples": 16,
+          "measured_hz": 14072.862206739199,
+          "repeat_count": 3,
+          "repeat_range_hz": 0.0
+        },
+        "discarded": {
+          "host_block_size_samples": 512,
+          "injected_control_caught": true,
+          "measured_hz": 14494.795083545734,
+          "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+        }
+      },
+      "cutoff_measurements": 4,
+      "discarded_cutoff_measurements": 1,
+      "wrong_then_right_rate": "1/4 cutoff measurements"
+    }
+  },
+  "reference_kind": "software synthesizer; not a physical Minimoog",
+  "repeatability": {
+    "pulse": {
+      "midi84_f0_hz": {
+        "range": 0.0,
+        "values": [
+          523.2888894054968,
+          523.2888894054968,
+          523.2888894054968
+        ]
+      },
+      "midi84_h2_db": {
+        "range": 0.0,
+        "values": [
+          -23.887963720763654,
+          -23.887963720763654,
+          -23.887963720763654
+        ]
+      },
+      "midi84_rms_dbfs": {
+        "range": 0.0,
+        "values": [
+          -14.342916290785638,
+          -14.342916290785638,
+          -14.342916290785638
+        ]
+      }
+    },
+    "saw": {
+      "midi84_f0_hz": {
+        "range": 0.0,
+        "values": [
+          523.2889028420294,
+          523.2889028420294,
+          523.2889028420294
+        ]
+      },
+      "midi84_h2_db": {
+        "range": 0.0,
+        "values": [
+          -5.865661675594004,
+          -5.865661675594004,
+          -5.865661675594004
+        ]
+      },
+      "midi84_rms_dbfs": {
+        "range": 0.0,
+        "values": [
+          -19.124103460793606,
+          -19.124103460793606,
+          -19.124103460793606
+        ]
+      }
+    }
+  },
+  "schema": 1,
+  "source": {
+    "commit": "86c080ab11824aba0239a20d3f0a489df8559a4c",
+    "files_sha256": {
+      "docs/scorecard/cases.csv": "b644d0defa69e3b3c07e8665e74b78f8d11caed17d4c05617e87529a603377b5",
+      "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36",
+      "model/reference_integrity.py": "b9bee899539f53c8466dc35923422f10c9842cfbb2912e54698b6862b1971f25",
+      "model/reference_rigs.py": "99b1c862857a34a8689e9389010aabc86e3ec790c37da1ee5de84b88e449dce9",
+      "model/reference_voice.py": "9b2222cfb0e7fb76078975f102b566d7ecb47715626dd8fd8fc8a37813db5dfa",
+      "model/test_reference_integrity.py": "503e95af5f18a114312cd670cde42a92adc1d905b7ea805fce2e2e14c5d5329f",
+      "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
+      "tools/measure_mono_m5a_reference.py": "7f4e6d4e820e10ef3e4742fbabce1ff57815325bbbf80472f865104a9978405f",
+      "tools/test_measure_mono_m5a_reference.py": "733e4bf24c8496345738b583672b545e6759aafc748053d6b97ab54958bc46c8"
+    }
+  },
+  "timeline": {
+    "audio_duration_s": 15.198166666666667,
+    "final_release_s": 2.8000000000000007,
+    "phrase_s": 4.6,
+    "segment_silence_s": 0.2,
+    "segments": [
+      {
+        "clipped_samples": 0,
+        "duration_s": 7.5,
+        "final_readbacks": {
+          "amp_attack": {
+            "index": 29,
+            "name": "VCA Attack",
+            "readback": "0.050",
+            "written": 0.05
+          },
+          "amp_decay": {
+            "index": 30,
+            "name": "VCA Decay",
+            "readback": "0.450",
+            "written": 0.45
+          },
+          "amp_sustain": {
+            "index": 31,
+            "name": "VCA Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "external_level": {
+            "index": 22,
+            "name": "Level Ext",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_attack": {
+            "index": 26,
+            "name": "VCF Attack",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_contour": {
+            "index": 25,
+            "name": "Amount",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "filter_decay": {
+            "index": 27,
+            "name": "VCF Decay",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_sustain": {
+            "index": 28,
+            "name": "VCF Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "general_level": {
+            "index": 0,
+            "name": "General Level",
+            "readback": "0.700",
+            "written": 0.7
+          },
+          "osc1_enable": {
+            "index": 72,
+            "name": "Osc1",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "osc1_level": {
+            "index": 15,
+            "name": "Level Osc1",
+            "readback": "0.900",
+            "written": 0.9
+          },
+          "osc1_range": {
+            "index": 45,
+            "name": "Range Osc1",
+            "readback": "8'",
+            "written": "8'"
+          },
+          "osc2_enable": {
+            "index": 73,
+            "name": "Osc2",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "osc3_enable": {
+            "index": 74,
+            "name": "Osc3",
+            "readback": "0.000",
+            "written": 0.0
+          }
+        },
+        "measurements": [
+          {
+            "commanded_f0_hz": 523.2511306011972,
+            "envelope": {
+              "attack_10_90_ms": 7.708333333333333,
+              "held_rms": 0.1572096140416943,
+              "pre_next_note_clearance_db": -283.92958202968924,
+              "release_complete_40db": true,
+              "release_t20_ms": 1222.3541666666667,
+              "tail_db": -283.92958202968924,
+              "valid": true
+            },
+            "f0_cents": 0.12496911226889797,
+            "f0_hz": 523.2889028420294,
+            "gain_rms_dbfs": -19.124103460793606,
+            "harmonics_db": {
+              "h10": -20.25387703383747,
+              "h11": -21.08872839829962,
+              "h12": -21.74686878488191,
+              "h2": -5.865661675594004,
+              "h3": -9.378870299871421,
+              "h4": -12.029801288498906,
+              "h5": -14.065639220949143,
+              "h6": -15.550008921927782,
+              "h7": -16.71618358080099,
+              "h8": -17.8804157084629,
+              "h9": -19.117976210751163
+            },
+            "inharmonic_db": -53.47137094871926,
+            "note": 72,
+            "wave": "saw",
+            "waveform": "saw",
+            "waveform_scope": "waveform independently classified at every commanded note",
+            "waveform_verified": true
+          },
+          {
+            "commanded_f0_hz": 1046.5022612023945,
+            "envelope": {
+              "attack_10_90_ms": 3.2083333333333335,
+              "held_rms": 0.15488418134934728,
+              "pre_next_note_clearance_db": null,
+              "release_complete_40db": true,
+              "release_t20_ms": 1243.25,
+              "tail_db": -283.8001412921113,
+              "valid": true
+            },
+            "f0_cents": 0.1432841210642385,
+            "f0_hz": 1046.58887766079,
+            "gain_rms_dbfs": -19.187579680018775,
+            "harmonics_db": {
+              "h10": -23.334990328685276,
+              "h11": -25.432322479855195,
+              "h12": -27.147782901749977,
+              "h2": -6.169020175133742,
+              "h3": -9.696570874584065,
+              "h4": -12.025245133736087,
+              "h5": -14.406023475675804,
+              "h6": -15.91375696373153,
+              "h7": -17.683088441658548,
+              "h8": -19.71688833770263,
+              "h9": -21.04061990532099
+            },
+            "inharmonic_db": -50.01983146825383,
+            "note": 84,
+            "wave": "saw",
+            "waveform": "saw",
+            "waveform_scope": "waveform independently classified at every commanded note",
+            "waveform_verified": true
+          }
+        ],
+        "midi_events": [
+          {
+            "gate_s": 0.6,
+            "note": 72,
+            "on_s": 0.1,
+            "velocity": 100
+          },
+          {
+            "gate_s": 0.6,
+            "note": 84,
+            "on_s": 4.1,
+            "velocity": 100
+          }
+        ],
+        "offset_samples": 0,
+        "peak": 0.21780745685100555,
+        "raw_rms_dbfs": -25.19960063576304,
+        "readbacks": {
+          "amp_attack": {
+            "index": 29,
+            "name": "VCA Attack",
+            "readback": "0.050",
+            "written": 0.05
+          },
+          "amp_decay": {
+            "index": 30,
+            "name": "VCA Decay",
+            "readback": "0.450",
+            "written": 0.45
+          },
+          "amp_sustain": {
+            "index": 31,
+            "name": "VCA Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "external_level": {
+            "index": 22,
+            "name": "Level Ext",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_attack": {
+            "index": 26,
+            "name": "VCF Attack",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_contour": {
+            "index": 25,
+            "name": "Amount",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "filter_decay": {
+            "index": 27,
+            "name": "VCF Decay",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_sustain": {
+            "index": 28,
+            "name": "VCF Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "general_level": {
+            "index": 0,
+            "name": "General Level",
+            "readback": "0.700",
+            "written": 0.7
+          },
+          "osc1_enable": {
+            "index": 72,
+            "name": "Osc1",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "osc1_level": {
+            "index": 15,
+            "name": "Level Osc1",
+            "readback": "0.900",
+            "written": 0.9
+          },
+          "osc1_range": {
+            "index": 45,
+            "name": "Range Osc1",
+            "readback": "8'",
+            "written": "8'"
+          },
+          "osc1_wave": {
+            "index": 48,
+            "name": "Wave Osc1",
+            "readback": "sawtooth",
+            "written": "sawtooth"
+          },
+          "osc2_enable": {
+            "index": 73,
+            "name": "Osc2",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "osc3_enable": {
+            "index": 74,
+            "name": "Osc3",
+            "readback": "0.000",
+            "written": 0.0
+          }
+        },
+        "samples": 359956,
+        "wave": "saw"
+      },
+      {
+        "clipped_samples": 0,
+        "duration_s": 7.5,
+        "final_readbacks": {
+          "amp_attack": {
+            "index": 29,
+            "name": "VCA Attack",
+            "readback": "0.050",
+            "written": 0.05
+          },
+          "amp_decay": {
+            "index": 30,
+            "name": "VCA Decay",
+            "readback": "0.450",
+            "written": 0.45
+          },
+          "amp_sustain": {
+            "index": 31,
+            "name": "VCA Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "external_level": {
+            "index": 22,
+            "name": "Level Ext",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_attack": {
+            "index": 26,
+            "name": "VCF Attack",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_contour": {
+            "index": 25,
+            "name": "Amount",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "filter_decay": {
+            "index": 27,
+            "name": "VCF Decay",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_sustain": {
+            "index": 28,
+            "name": "VCF Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "general_level": {
+            "index": 0,
+            "name": "General Level",
+            "readback": "0.700",
+            "written": 0.7
+          },
+          "osc1_enable": {
+            "index": 72,
+            "name": "Osc1",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "osc1_level": {
+            "index": 15,
+            "name": "Level Osc1",
+            "readback": "0.900",
+            "written": 0.9
+          },
+          "osc1_range": {
+            "index": 45,
+            "name": "Range Osc1",
+            "readback": "8'",
+            "written": "8'"
+          },
+          "osc2_enable": {
+            "index": 73,
+            "name": "Osc2",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "osc3_enable": {
+            "index": 74,
+            "name": "Osc3",
+            "readback": "0.000",
+            "written": 0.0
+          }
+        },
+        "measurements": [
+          {
+            "commanded_f0_hz": 523.2511306011972,
+            "envelope": {
+              "attack_10_90_ms": 7.854166666666667,
+              "held_rms": 0.2712763755480777,
+              "pre_next_note_clearance_db": -288.6682394863011,
+              "release_complete_40db": true,
+              "release_t20_ms": 1245.6666666666667,
+              "tail_db": -288.6682394863011,
+              "valid": true
+            },
+            "f0_cents": 0.1249246592276317,
+            "f0_hz": 523.2888894054968,
+            "gain_rms_dbfs": -14.342916290785638,
+            "harmonics_db": {
+              "h10": -24.825770329765376,
+              "h11": -23.294881850978445,
+              "h12": -24.999330547113527,
+              "h2": -23.887963720763654,
+              "h3": -9.523268815032845,
+              "h4": -24.104100306791423,
+              "h5": -14.47916436257107,
+              "h6": -24.19173623521552,
+              "h7": -17.555621198058418,
+              "h8": -24.212115060982722,
+              "h9": -20.57551776278913
+            },
+            "inharmonic_db": -55.68743546649464,
+            "note": 72,
+            "wave": "pulse",
+            "waveform": "pulse:48.0%",
+            "waveform_scope": "waveform independently classified at every commanded note",
+            "waveform_verified": true
+          },
+          {
+            "commanded_f0_hz": 1046.5022612023945,
+            "envelope": {
+              "attack_10_90_ms": 2.8541666666666665,
+              "held_rms": 0.27181466444000313,
+              "pre_next_note_clearance_db": null,
+              "release_complete_40db": true,
+              "release_t20_ms": 1247.5208333333333,
+              "tail_db": -288.68545766555826,
+              "valid": true
+            },
+            "f0_cents": 0.14329419018075681,
+            "f0_hz": 1046.5888837479079,
+            "gain_rms_dbfs": -14.32014011005095,
+            "harmonics_db": {
+              "h10": -27.81148280831825,
+              "h11": -27.42616734620181,
+              "h12": -30.288741850251878,
+              "h2": -24.195582301610457,
+              "h3": -9.803912658367958,
+              "h4": -24.091581922793168,
+              "h5": -14.783609318850207,
+              "h6": -24.525814324981738,
+              "h7": -18.53747138168114,
+              "h8": -25.902440704610108,
+              "h9": -22.493254997881568
+            },
+            "inharmonic_db": -53.41160193584659,
+            "note": 84,
+            "wave": "pulse",
+            "waveform": "pulse:47.9%",
+            "waveform_scope": "waveform independently classified at every commanded note",
+            "waveform_verified": true
+          }
+        ],
+        "midi_events": [
+          {
+            "gate_s": 0.6,
+            "note": 72,
+            "on_s": 0.1,
+            "velocity": 100
+          },
+          {
+            "gate_s": 0.6,
+            "note": 84,
+            "on_s": 4.1,
+            "velocity": 100
+          }
+        ],
+        "offset_samples": 369556,
+        "peak": 0.23604366183280945,
+        "raw_rms_dbfs": -20.374346177981533,
+        "readbacks": {
+          "amp_attack": {
+            "index": 29,
+            "name": "VCA Attack",
+            "readback": "0.050",
+            "written": 0.05
+          },
+          "amp_decay": {
+            "index": 30,
+            "name": "VCA Decay",
+            "readback": "0.450",
+            "written": 0.45
+          },
+          "amp_sustain": {
+            "index": 31,
+            "name": "VCA Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "external_level": {
+            "index": 22,
+            "name": "Level Ext",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_attack": {
+            "index": 26,
+            "name": "VCF Attack",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_contour": {
+            "index": 25,
+            "name": "Amount",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_cutoff": {
+            "index": 23,
+            "name": "CutOff",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "filter_decay": {
+            "index": 27,
+            "name": "VCF Decay",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_emphasis": {
+            "index": 24,
+            "name": "Emphasis",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "filter_sustain": {
+            "index": 28,
+            "name": "VCF Sustain",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "general_level": {
+            "index": 0,
+            "name": "General Level",
+            "readback": "0.700",
+            "written": 0.7
+          },
+          "osc1_enable": {
+            "index": 72,
+            "name": "Osc1",
+            "readback": "1.00",
+            "written": 1.0
+          },
+          "osc1_level": {
+            "index": 15,
+            "name": "Level Osc1",
+            "readback": "0.900",
+            "written": 0.9
+          },
+          "osc1_range": {
+            "index": 45,
+            "name": "Range Osc1",
+            "readback": "8'",
+            "written": "8'"
+          },
+          "osc1_wave": {
+            "index": 48,
+            "name": "Wave Osc1",
+            "readback": "square",
+            "written": "square"
+          },
+          "osc2_enable": {
+            "index": 73,
+            "name": "Osc2",
+            "readback": "0.000",
+            "written": 0.0
+          },
+          "osc3_enable": {
+            "index": 74,
+            "name": "Osc3",
+            "readback": "0.000",
+            "written": 0.0
+          }
+        },
+        "samples": 359956,
+        "wave": "pulse"
+      }
+    ]
+  }
+}

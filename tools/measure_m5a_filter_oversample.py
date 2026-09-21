@@ -29,6 +29,20 @@ import fixed
 import filter_rate_chain as frc
 
 
+# These are non-regression deadbands, not M5A pass limits. They suppress
+# quantization-scale churn while preserving the strict tolerances below.
+METRIC_NONREGRESSION_DEADBANDS = {
+    "Pitch": 0.01,                 # cents
+    "Harmonic shape": 0.01,       # dB
+    "Foldback energy": 0.01,      # dB
+    "Envelope attack": 5.0,       # ms; RMS envelope analysis window
+    "Envelope release": 5.0,      # ms; RMS envelope analysis window
+    "Gain": 0.01,                 # dB
+    "Clipping": 0.01,             # percent of samples
+}
+PARTIAL_NONREGRESSION_DEADBAND_DB = 0.01
+
+
 def _voice_factory(mode: str):
     if mode == "production_2x_sample_hold":
         return lambda: vf.VoiceFx(oversample_2x=True)
@@ -44,6 +58,80 @@ def _error_magnitude(metric: dict) -> float:
     if metric["units"] == "cents":
         return abs(float(metric["error"]))
     return abs(float(metric["error"]))
+
+
+def _case_passes(row: dict) -> bool:
+    """Strict case gate: every measured M5A property meets its fixed limit."""
+    if set(row.get("metrics", {})) != set(m5a.TOLERANCES):
+        raise m5a.Refused("case gate requires a complete seven-property score")
+    return all(_error_magnitude(row["metrics"][name])
+               <= float(m5a.TOLERANCES[name][0]) for name in m5a.TOLERANCES)
+
+
+def _compare_incremental(baseline: dict, candidate: dict) -> dict:
+    """Accept a genuine vector improvement without requiring a passing case.
+
+    Every scalar property and every measured partial must be present and must
+    not regress. At least one component must improve beyond report precision.
+    The independent strict case gate remains available as ``case_passes``.
+    """
+    expected = set(m5a.TOLERANCES)
+    for label, row in (("baseline", baseline), ("candidate", candidate)):
+        if set(row.get("metrics", {})) != expected:
+            raise m5a.Refused(f"{label} has an incomplete seven-property score")
+        events = row.get("event_diagnostics")
+        if not events:
+            raise m5a.Refused(f"{label} has no executed event evidence")
+
+    components = {}
+    for name in m5a.TOLERANCES:
+        b = _error_magnitude(baseline["metrics"][name])
+        c = _error_magnitude(candidate["metrics"][name])
+        components[f"metric:{name}"] = {"baseline_error": b, "candidate_error": c}
+
+    before_events, after_events = baseline["event_diagnostics"], candidate["event_diagnostics"]
+    if len(before_events) != len(after_events):
+        raise m5a.Refused("baseline and candidate event evidence differs")
+    for index, (before, after) in enumerate(zip(before_events, after_events)):
+        identity = (before.get("wave"), before.get("midi"))
+        if identity != (after.get("wave"), after.get("midi")):
+            raise m5a.Refused("baseline and candidate event order differs")
+        bpart = before.get("harmonic_error_db_model_minus_reference")
+        cpart = after.get("harmonic_error_db_model_minus_reference")
+        if not isinstance(bpart, dict) or not bpart or set(bpart) != set(cpart or {}):
+            raise m5a.Refused("baseline/candidate partial evidence is incomplete or differs")
+        for partial in sorted(bpart):
+            components[f"partial:{index}:{identity[0]}:{identity[1]}:{partial}"] = {
+                "baseline_error": abs(float(bpart[partial])),
+                "candidate_error": abs(float(cpart[partial])),
+            }
+
+    regressions, improvements = [], []
+    for name, pair in components.items():
+        if name.startswith("partial:"):
+            deadband = PARTIAL_NONREGRESSION_DEADBAND_DB
+        else:
+            metric_name = name.removeprefix("metric:")
+            deadband = METRIC_NONREGRESSION_DEADBANDS[metric_name]
+        delta = pair["candidate_error"] - pair["baseline_error"]
+        pair["delta_error"] = round(delta, 6)
+        pair["non_regression_deadband"] = deadband
+        if delta > deadband:
+            regressions.append(name)
+        elif delta < -deadband:
+            improvements.append(name)
+    return {
+        "accepts_incremental_improvement": bool(improvements) and not regressions,
+        "case_passes": _case_passes(candidate),
+        "improved_components": improvements,
+        "regressed_components": regressions,
+        "non_regression_deadbands": {
+            "metrics": METRIC_NONREGRESSION_DEADBANDS,
+            "per_partial_db": PARTIAL_NONREGRESSION_DEADBAND_DB,
+        },
+        "components": components,
+        "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+    }
 
 
 def _model_screen(configurations: dict) -> dict:
@@ -148,7 +236,10 @@ def run(out_dir: pathlib.Path) -> dict:
         configurations[mode] = {}
         for pulse in ("pulse29", "pulse479"):
             result = m5a.measure(
-                pulse_shape=pulse,
+                pulse_shape=pulse, engine="legacy",
+                saw_cutoff_override=int(round(m5a.json.loads(m5a.MANIFEST.read_text())
+                                               ["patch"]["cutoff_measurement"]["f0_hz"])),
+                saw_volume_correction_db=0.0,
                 voice_factory=_voice_factory(mode),
                 model_label=mode,
                 output_path=out_dir / f"M5A-{mode}-{pulse}.wav",

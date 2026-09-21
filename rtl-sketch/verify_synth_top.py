@@ -93,13 +93,14 @@ is a broken instrument, and is reported as one rather than as a pass.
   --frames N      override the run length
 """
 from __future__ import annotations
-import argparse, json, os, re, subprocess, sys
+import argparse, json, math, os, re, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
 import hashlib
+import shutil
 import numpy as np
 from scipy.io import wavfile
 import voice_fx as vf
@@ -114,7 +115,7 @@ WAVE_CODE = dict(saw=0, square=1, pulse25=2, tri=3, sine=4,
 SRCS = ("synth_top.v", "voice_dp.v", "spi_ctl.v", "drum_regs.v", "drum_kit.v",
         "drum_dp.v", "modal_dp.v", "i2s_tx.v", "ladder_dp_n.v", "recip_div.v",
         "osc_2x_saw_bank.v", "osc_2x_saw_path.v", "polyblep_saw_pair.v",
-        "osc_substep_pair.v", "decimate_2x_tm_sym.v")
+        "osc_substep_pair.v", "decimate_2x_tm_sym.v", "rate_conv_2x.v")
 
 
 def script(short: bool = False):
@@ -266,7 +267,8 @@ def script(short: bool = False):
 
 
 def m5a_script(manifest_path: str, *, smoke: bool = False,
-               pulse_shape: str = "pulse29"):
+               pulse_shape: str = "pulse29", saw_cutoff_hz: int | None = None,
+               saw_volume_correction_db: float = 0.0):
     """Build the frozen two-wave M5A phrase as register writes over SPI."""
     manifest_file = os.path.abspath(manifest_path)
     manifest = json.loads(open(manifest_file).read())
@@ -293,12 +295,29 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
         raise ValueError(f"measured M5A max cutoff is outside the qualified range: {cutoff_hz} Hz")
     attack_s = float(env["attack_10_90_ms"]) / 1000.0 / 0.8
     release_s = float(env["release_t20_ms"]) / 1000.0 * 4.0 / np.log(10.0)
-    regs = vf.VoiceFx.patch_regs(
+    if saw_cutoff_hz is not None and not vf.CUT_MIN <= saw_cutoff_hz <= vf.CUT_MAX:
+        raise ValueError(f"saw cutoff outside [{vf.CUT_MIN}, {vf.CUT_MAX}]")
+    if (isinstance(saw_volume_correction_db, bool)
+            or not isinstance(saw_volume_correction_db, (int, float))
+            or not math.isfinite(saw_volume_correction_db)
+            or not -12.0 <= saw_volume_correction_db <= 12.0):
+        raise ValueError("saw volume correction must be finite and within [-12, 12] dB")
+    base_volume = 0.45
+    saw_volume = base_volume * 10.0 ** (saw_volume_correction_db / 20.0)
+    if not 0.0 <= saw_volume <= 1.0:
+        raise ValueError("saw volume correction would leave the supported 0..1 range")
+    patch = dict(
         waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
         noise=0.0, cutoff=(cutoff_hz, cutoff_hz), q=0.0, drive=0.75,
         amp=(attack_s, 0.25, 1.0, release_s),
         fenv=(0.004, 0.30, 1.0, 0.10), track=0.0, vol=0.45,
         mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False)
+    regs = vf.VoiceFx.patch_regs(**patch)
+    effective_saw_cutoff = cutoff_hz if saw_cutoff_hz is None else saw_cutoff_hz
+    saw_regs = vf.VoiceFx.patch_regs(
+        **{**patch, "cutoff": (effective_saw_cutoff, effective_saw_cutoff),
+           "vol": saw_volume})
+    segment_controls = saw_cutoff_hz is not None or saw_volume_correction_db != 0.0
     if pulse_shape not in vf.WAVE_CODE or pulse_shape not in vf.DUTY:
         raise ValueError(f"M5A pulse shape must be a supported rectangular shape: {pulse_shape}")
     w = []
@@ -356,8 +375,15 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
             # A write serializes for about 1.55 frames. Reserve ten frames for
             # the three increment writes and gate write, then use the pin-side
             # report below as the authoritative event time.
-            wait = max(0, round((on_s - previous_off_s) * 48000) - 10)
+            margin = 16 if segment_controls else 10
+            wait = max(0, round((on_s - previous_off_s) * 48000) - margin)
             if event_index == 0:
+                if segment_controls:
+                    target_regs = saw_regs if wave == "saw" else regs
+                    put(wait, 0, A.A_CUT_LO, target_regs["cut_lo"])
+                    put(0, 0, A.A_CUT_HI, target_regs["cut_hi"])
+                    put(0, 0, A.A_VOL, target_regs["vol"])
+                    wait = 0
                 wave_code = 0 if wave == "saw" else vf.WAVE_CODE[pulse_shape]
                 put(wait, 0, A.A_WAVE, wave_code)
                 wait = 0
@@ -375,6 +401,9 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
     tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
     return w, tail, {"events": events, "manifest": manifest, "reference_audio": ref_audio,
                     "filter_drive": 0.75, "pulse_shape": pulse_shape,
+                    "saw_cutoff_hz": effective_saw_cutoff,
+                    "saw_cutoff_override": saw_cutoff_hz is not None,
+                    "saw_volume_correction_db": float(saw_volume_correction_db),
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
@@ -426,25 +455,44 @@ RE_BUSY = re.compile(r"datapath busy at a tick: (\d+).*overrun (\d+); overflow (
 RE_STRB = re.compile(r"sample strobed in (\d+) frames, MISSING in (\d+), worst strobe cycle (\d+)")
 
 
-def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None):
-    iverilog, vvp = tool("iverilog"), tool("vvp")
-    if not iverilog or not vvp:
-        print("verify_synth_top: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
+def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
+             simulator="iverilog", envtrace_path=None):
     tag = "_".join(d.replace("INJECT_BUG_", "") for d in defines) or "base"
-    vvp_file = os.path.join(outdir, f"tb_top_bx_{tag}.vvp")
     out = {k: os.path.join(outdir, f"top_{k}_{tag}.txt") for k in ("i2s", "samp", "wrs")}
+    if envtrace_path:
+        out["envtrace"] = envtrace_path
     for f in out.values():
         if os.path.exists(f): os.remove(f)
     resolved = resolve_sources(rtl_dir)
     srcs = [f for _, f in resolved]
-    r = subprocess.run([iverilog, "-g2012", "-o", vvp_file] + [f"-D{d}" for d in defines] + srcs,
-                       cwd=HERE, capture_output=True, text=True)
+    if simulator == "iverilog":
+        iverilog, vvp = tool("iverilog"), tool("vvp")
+        if not iverilog or not vvp:
+            print("verify_synth_top: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
+        executable = os.path.join(outdir, f"tb_top_bx_{tag}.vvp")
+        compile_cmd = [iverilog, "-g2012", "-o", executable] + [f"-D{d}" for d in defines] + srcs
+    elif simulator == "verilator":
+        verilator = shutil.which("verilator")
+        if not verilator:
+            print("verify_synth_top: Verilator not on PATH"); return None
+        mdir = os.path.join(outdir, f"obj_top_bx_{tag}")
+        os.makedirs(mdir, exist_ok=True)
+        executable = os.path.join(mdir, "tb_top_bx")
+        compile_cmd = [verilator, "--binary", "--timing", "-Wno-fatal",
+                       "--top-module", "tb_top_bx", "--Mdir", mdir, "-o", executable]
+        compile_cmd += [f"-D{d}" for d in defines] + srcs
+    else:
+        raise ValueError(f"unknown simulator {simulator!r}")
+    r = subprocess.run(compile_cmd, cwd=HERE, capture_output=True, text=True)
     if r.returncode != 0:
-        print("verify_synth_top: iverilog failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_synth_top: {simulator} compile failed:\n" + r.stdout + r.stderr); return None
     try:
-        r = subprocess.run([vvp, "-n", vvp_file, f"+cmd={os.path.join(outdir, 'top_bx_cmds.txt')}",
+        run_cmd = ([tool("vvp"), "-n", executable] if simulator == "iverilog" else [executable])
+        r = subprocess.run(run_cmd + [f"+cmd={os.path.join(outdir, 'top_bx_cmds.txt')}",
                             f"+i2s={out['i2s']}", f"+samp={out['samp']}", f"+wrs={out['wrs']}",
-                            f"+frames={frames}"], cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
+                            f"+frames={frames}"] +
+                           ([f"+env={envtrace_path}"] if envtrace_path else []),
+                           cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
         print("verify_synth_top: simulation timed out"); return None
     report = [l for l in r.stdout.splitlines() if l.startswith("tb_top_bx")]
@@ -472,19 +520,31 @@ def main(argv=None) -> int:
     ap.add_argument("--short", action="store_true"); ap.add_argument("--frames", type=int, default=None)
     ap.add_argument("--osc2x", action="store_true",
                     help="select the measured 2x saw chain in RTL and Python model")
+    ap.add_argument("--filter2x", action="store_true",
+                    help="select causal reconstructed 2x filter and pulse-duty challenger")
     ap.add_argument("--m5a", action="store_true",
                     help="play the frozen Mono M5A reference phrase through SPI and I2S")
     ap.add_argument("--m5a-smoke", action="store_true",
                     help="short SPI-to-I2S M5A pitch/waveform integration check; no envelope claim")
     ap.add_argument("--m5a-pulse-shape", choices=("square", "pulse15", "pulse25", "pulse29"),
                     default="pulse29", help="supported rectangular shape for M5A pulse segments")
+    ap.add_argument("--m5a-saw-cutoff-hz", type=int, default=None,
+                    help="saw-only cutoff override sent through SPI on each saw segment")
+    ap.add_argument("--m5a-saw-volume-correction-db", type=float, default=0.0,
+                    help="saw-only final-volume correction sent through SPI")
     ap.add_argument("--m5a-manifest", default=os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json"))
     ap.add_argument("--wav-out", default=None,
                     help="write decoded left-channel I2S samples to an int16 WAV")
+    ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog",
+                    help="RTL event engine (Verilator is substantially faster for complete phrases)")
     ap.add_argument("--rtl", default=None,
                     help="take sources this directory holds from there (the start-red path)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--envtrace", action="store_true",
+                    help="write diagnostic voice gate/envelope registers per frame")
     a = ap.parse_args(argv)
+    if a.filter2x:
+        a.osc2x = True
     a.outdir = os.path.abspath(a.outdir); os.makedirs(a.outdir, exist_ok=True)
     if a.rtl:
         a.rtl = os.path.abspath(a.rtl)
@@ -499,7 +559,9 @@ def main(argv=None) -> int:
             return 2
         try:
             cmds, tail, m5a = m5a_script(a.m5a_manifest, smoke=a.m5a_smoke,
-                                         pulse_shape=a.m5a_pulse_shape)
+                                         pulse_shape=a.m5a_pulse_shape,
+                                         saw_cutoff_hz=a.m5a_saw_cutoff_hz,
+                                         saw_volume_correction_db=a.m5a_saw_volume_correction_db)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             print(f"verify_synth_top: REFUSED -- M5A stimulus: {exc}")
             return 2
@@ -529,9 +591,18 @@ def main(argv=None) -> int:
     if a.m5a:
         detail = ("smoke: envelope completion not claimed" if m5a["smoke"] else
                   f"{m5a['manifest']['timeline']['phrase_s']:.3f} s phrase and complete release")
+        effective_pulse = ("pulse479" if a.filter2x and m5a["pulse_shape"] == "pulse29"
+                           else m5a["pulse_shape"])
+        effective_duty = vf.DUTY[effective_pulse] / vf.CYCLE
+        print(f"verify_synth_top: M5A controls: pulse={m5a['pulse_shape']}; "
+              f"effective pulse={effective_pulse} ({100.0 * effective_duty:.2f}% duty); "
+              f"saw cutoff={m5a['saw_cutoff_hz']} Hz; "
+              f"saw volume correction={m5a['saw_volume_correction_db']:+.5f} dB")
         print(f"verify_synth_top: M5A stimulus has {len(m5a['events'])} note events, "
               f"{detail}; "
               f"selected filter drive {m5a['filter_drive']:.2f}; "
+              f"pulse {m5a['pulse_shape']}; saw cutoff {m5a['saw_cutoff_hz']} Hz; "
+              f"saw volume correction {m5a['saw_volume_correction_db']:+.5f} dB; "
               f"reference sha256 {m5a['manifest']['audio']['sha256']}")
     else:
         print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
@@ -539,16 +610,22 @@ def main(argv=None) -> int:
               f"({', '.join(dx.STOP_NAMES[i] for i in cover['stops'])}; swapped to "
               f"{', '.join(cover['swapped'])}), both pages reset while sounding")
     defines = (["VOICE_OSC_2X"] if a.osc2x else [])
+    if a.filter2x:
+        defines.append("VOICE_FILTER_2X")
     if a.inject:
         defines.append(f"INJECT_BUG_{a.inject}")
-    config = "2x saw candidate" if a.osc2x else "legacy single-rate waveform"
+    config = ("2x saw + causal 2x filter candidate" if a.filter2x else
+              "2x saw candidate" if a.osc2x else "legacy single-rate waveform")
     print(f"verify_synth_top: selected {config}; compile defines: {', '.join(defines) or '(none)'}")
+    print(f"verify_synth_top: simulator backend {a.simulator}")
     # The bench closes I2S at the final sample boundary and drops the three
     # serializer periods still in flight.  Give the M5A transport check three
     # drain frames so its *modelled* phrase length remains unchanged while the
     # wire has time to emit its complete final periods.
     sim_frames = tail + (3 if a.m5a else 0)
-    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl)
+    envtrace_path = os.path.join(a.outdir, "top_envtrace.txt") if a.envtrace else None
+    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl, simulator=a.simulator,
+                   envtrace_path=envtrace_path)
     if out is None:
         return 2
 
@@ -623,7 +700,7 @@ def main(argv=None) -> int:
     print(f"verify_synth_top: writes landed in frames {model_writes[0][0]}..{last}; modelling {n} frames")
 
     # ---- the model, on those frames ----------------------------------------
-    m = stm.SynthTopModel(oversample_2x=a.osc2x).run(model_writes, n)
+    m = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x).run(model_writes, n)
     exp_i2s, exp_s = m["i2s"], m["sample"]
 
     # ---- the comparison: the WIRE against the MODEL -------------------------
@@ -658,6 +735,9 @@ def main(argv=None) -> int:
         wavfile.write(a.wav_out, 48000,
                       np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int16))
         print(f"verify_synth_top: decoded I2S WAV written to {a.wav_out}")
+        with open(a.wav_out, "rb") as fh:
+            wav_sha256 = hashlib.sha256(fh.read()).hexdigest()
+        print(f"verify_synth_top: decoded I2S WAV sha256 {wav_sha256}")
     # the DUT's own stream, as a DIAGNOSTIC only
     sm = rows(out["samp"])
     core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))

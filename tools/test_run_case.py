@@ -1028,7 +1028,7 @@ def test_no_case_is_both_planned_and_deliberately_not_run():
     """`plan_for` checks NOT_RUN first, so an id in both tables would be
     silently skipped -- the case would read as deliberately not attempted while
     a working plan for it sat right there."""
-    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES) | {"M5A"}
+    planned = set(rc.DRUM_CASE_VOICE) | set(rc.ENSEMBLE_CASES) | set(rc.FILTER_CASES) | {"M5A", "M5B"}
     assert not (planned & set(rc.NOT_RUN)), planned & set(rc.NOT_RUN)
 
 
@@ -1038,6 +1038,21 @@ def test_m5a_is_a_mono_plan_with_a_frozen_reference():
     assert rc.plan_for("M5A") == "mono"
     assert "Mini V3 3.12" in case["reference_target"]
     assert "Envelope release" in case["required_measurements"]
+
+
+def test_m5b_is_a_mono_plan_with_its_frozen_lower_note_reference():
+    case = next(c for c in rc.load_cases() if c["case_id"] == "M5B")
+    assert rc.plan_for("M5B") == "mono"
+    assert "Mini V3 3.12" in case["reference_target"]
+    assert all(name in case["required_measurements"] for name in (
+        "Pitch", "Harmonic shape", "Foldback energy", "Envelope attack",
+        "Envelope release", "Gain", "Clipping"))
+
+
+def test_mono_reference_summary_skips_unclassified_pulse_notes():
+    manifest = {"timeline": {"segments": [{"wave": "pulse", "measurements": [
+        {"waveform": "pulse:47.9%"}, {"waveform": None}]}]}}
+    assert rc.mono_reference_pulse_mapping(manifest) == "pulse:47.9%"
 
 
 def test_every_not_run_reason_says_something():

@@ -1,0 +1,1632 @@
+{
+  "probe": "M5A oscillator -> mixer -> ladder -> final output",
+  "reference_identity": "Mini V3 3.12.0.3422 software synth; not physical hardware",
+  "analysis_version": "m5a-signal-path-v4",
+  "source_commit": "c75ca74db61e364caed4d0a0e62858fe715ffa16",
+  "source_sha256": "1a0f9e0ffa20dcf5e8d1d07a16ea56869332b9fa7b16b6aef112ca8a8f4a0c1c",
+  "source_hashes": {
+    "tools/measure_m5a_signal_path.py": "1a0f9e0ffa20dcf5e8d1d07a16ea56869332b9fa7b16b6aef112ca8a8f4a0c1c",
+    "tools/mono_m5a_score.py": "f943af433f24dab9b5e1a91811d588378b77a40c453aa7bec264c8b5f96b5fa6",
+    "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36",
+    "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19"
+  },
+  "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+  "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+  "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
+  "oscillator_config": "2x candidate saw; PolyBLEP enabled; remaining Mini V3 oscillators disabled",
+  "filter_config": "selected production candidate: causal reconstructed 2x ladder with headroom preserved",
+  "intervention": "requested cutoff, drive, and PolyBLEP setting only; selected 2x signal-chain topology and frozen reference held fixed",
+  "alias_energy_definition": "predicted image-bin power converted by one-sided Parseval and Hann mean-square correction after normalizing every Q15 stage to full scale; dBFS is absolute, while alias_db remains image power / total power",
+  "runs": [
+    {
+      "cutoff_hz": 14073,
+      "filter_drive": 0.75,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -2.5628,
+                "h3": -6.5056,
+                "h4": -5.9371,
+                "h5": -5.9018,
+                "h6": -7.6455,
+                "h7": -7.77,
+                "h8": -7.334,
+                "h9": -7.561,
+                "h10": -7.3216,
+                "h11": -7.2583,
+                "h12": -6.5114
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.77,
+              "alias_db": -55.6081,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -66.4381,
+              "alias_band_rms_fs": 0.00047653,
+              "total_signal_power_dbfs": -10.8303
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -2.5623,
+                "h3": -6.5061,
+                "h4": -5.9367,
+                "h5": -5.9023,
+                "h6": -7.6449,
+                "h7": -7.7708,
+                "h8": -7.3339,
+                "h9": -7.5614,
+                "h10": -7.3213,
+                "h11": -7.2591,
+                "h12": -6.5105
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.7708,
+              "alias_db": -55.6063,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -73.3721,
+              "alias_band_rms_fs": 0.00021448,
+              "total_signal_power_dbfs": -17.7662
+            }
+          },
+          "output_gain_error_db": 1.4212,
+          "reference": {
+            "alias_db": -50.1287,
+            "alias_band_power_dbfs": -69.3149,
+            "alias_band_rms_fs": 0.00034218,
+            "total_signal_power_dbfs": -19.1862,
+            "harmonics_db": {
+              "h2": -6.168985916402969,
+              "h3": -9.696601682224685,
+              "h4": -12.025226461854341,
+              "h5": -14.405999212216283,
+              "h6": -15.913844418559034,
+              "h7": -17.68299693630111,
+              "h8": -19.716998190666956,
+              "h9": -21.040638353105983,
+              "h10": -23.33491666204345,
+              "h11": -25.432526464185106,
+              "h12": -27.147615603646813
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -5.844,
+                "h3": -8.0599,
+                "h4": -6.3671,
+                "h5": -8.1522,
+                "h6": -6.3459,
+                "h7": -6.2031,
+                "h8": -7.4016,
+                "h9": -8.7718,
+                "h10": -8.8472,
+                "h11": -5.6212
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.8472,
+              "alias_db": -53.9624,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -66.2627,
+              "alias_band_rms_fs": 0.00048625,
+              "total_signal_power_dbfs": -12.3004
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -5.8436,
+                "h3": -8.0608,
+                "h4": -6.3666,
+                "h5": -8.1539,
+                "h6": -6.345,
+                "h7": -6.2048,
+                "h8": -7.4004,
+                "h9": -8.7732,
+                "h10": -8.8458,
+                "h11": -5.6215
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.8458,
+              "alias_db": -53.9617,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -73.1981,
+              "alias_band_rms_fs": 0.00021882,
+              "total_signal_power_dbfs": -19.2364
+            }
+          },
+          "output_gain_error_db": 0.2759,
+          "reference": {
+            "alias_db": -49.3938,
+            "alias_band_power_dbfs": -68.9077,
+            "alias_band_rms_fs": 0.0003586,
+            "total_signal_power_dbfs": -19.5139,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885528,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "cutoff_hz": 16000,
+      "filter_drive": 0.75,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -2.2508,
+                "h3": -6.0245,
+                "h4": -5.7959,
+                "h5": -5.3534,
+                "h6": -6.8816,
+                "h7": -7.0784,
+                "h8": -6.4502,
+                "h9": -6.6955,
+                "h10": -6.4778,
+                "h11": -6.0612,
+                "h12": -5.1374
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.0784,
+              "alias_db": -52.3619,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -63.0165,
+              "alias_band_rms_fs": 0.0007066,
+              "total_signal_power_dbfs": -10.6549
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -2.2503,
+                "h3": -6.0248,
+                "h4": -5.7954,
+                "h5": -5.3537,
+                "h6": -6.8814,
+                "h7": -7.0793,
+                "h8": -6.4497,
+                "h9": -6.6961,
+                "h10": -6.4772,
+                "h11": -6.0617,
+                "h12": -5.1371
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 7.0793,
+              "alias_db": -52.3644,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -69.9548,
+              "alias_band_rms_fs": 0.00031788,
+              "total_signal_power_dbfs": -17.5908
+            }
+          },
+          "output_gain_error_db": 1.5965,
+          "reference": {
+            "alias_db": -50.1287,
+            "alias_band_power_dbfs": -69.3149,
+            "alias_band_rms_fs": 0.00034218,
+            "total_signal_power_dbfs": -19.1862,
+            "harmonics_db": {
+              "h2": -6.168985916402969,
+              "h3": -9.696601682224685,
+              "h4": -12.025226461854341,
+              "h5": -14.405999212216283,
+              "h6": -15.913844418559034,
+              "h7": -17.68299693630111,
+              "h8": -19.716998190666956,
+              "h9": -21.040638353105983,
+              "h10": -23.33491666204345,
+              "h11": -25.432526464185106,
+              "h12": -27.147615603646813
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -5.2139,
+                "h3": -7.9121,
+                "h4": -5.602,
+                "h5": -7.016,
+                "h6": -5.1364,
+                "h7": -4.6093,
+                "h8": -5.6854,
+                "h9": -6.293,
+                "h10": -6.3445,
+                "h11": -2.4286
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.9121,
+              "alias_db": -51.1034,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -63.097,
+              "alias_band_rms_fs": 0.00070008,
+              "total_signal_power_dbfs": -11.9937
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -5.2134,
+                "h3": -7.9129,
+                "h4": -5.6016,
+                "h5": -7.017,
+                "h6": -5.1358,
+                "h7": -4.6107,
+                "h8": -5.6852,
+                "h9": -6.294,
+                "h10": -6.3414,
+                "h11": -2.4322
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.9129,
+              "alias_db": -51.0978,
+              "excess_alias_db": 0.0,
+              "alias_band_power_dbfs": -70.0274,
+              "alias_band_rms_fs": 0.00031523,
+              "total_signal_power_dbfs": -18.9297
+            }
+          },
+          "output_gain_error_db": 0.5825,
+          "reference": {
+            "alias_db": -49.3938,
+            "alias_band_power_dbfs": -68.9077,
+            "alias_band_rms_fs": 0.0003586,
+            "total_signal_power_dbfs": -19.5139,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885528,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "cutoff_hz": 18000,
+      "filter_drive": 0.75,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.9865,
+                "h3": -5.5506,
+                "h4": -5.6786,
+                "h5": -4.9518,
+                "h6": -6.2251,
+                "h7": -6.4732,
+                "h8": -5.7255,
+                "h9": -5.9468,
+                "h10": -5.7699,
+                "h11": -5.1228,
+                "h12": -4.0864
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 6.4732,
+              "alias_db": -50.0545,
+              "excess_alias_db": 0.0742,
+              "alias_band_power_dbfs": -60.5577,
+              "alias_band_rms_fs": 0.00093781,
+              "total_signal_power_dbfs": -10.5035
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.986,
+                "h3": -5.551,
+                "h4": -5.6781,
+                "h5": -4.9521,
+                "h6": -6.2248,
+                "h7": -6.4737,
+                "h8": -5.7252,
+                "h9": -5.9471,
+                "h10": -5.7694,
+                "h11": -5.1234,
+                "h12": -4.0858
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 6.4737,
+              "alias_db": -50.0503,
+              "excess_alias_db": 0.0784,
+              "alias_band_power_dbfs": -67.4893,
+              "alias_band_rms_fs": 0.00042222,
+              "total_signal_power_dbfs": -17.4394
+            }
+          },
+          "output_gain_error_db": 1.7479,
+          "reference": {
+            "alias_db": -50.1287,
+            "alias_band_power_dbfs": -69.3149,
+            "alias_band_rms_fs": 0.00034218,
+            "total_signal_power_dbfs": -19.1862,
+            "harmonics_db": {
+              "h2": -6.168985916402969,
+              "h3": -9.696601682224685,
+              "h4": -12.025226461854341,
+              "h5": -14.405999212216283,
+              "h6": -15.913844418559034,
+              "h7": -17.68299693630111,
+              "h8": -19.716998190666956,
+              "h9": -21.040638353105983,
+              "h10": -23.33491666204345,
+              "h11": -25.432526464185106,
+              "h12": -27.147615603646813
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.6901,
+                "h3": -7.7513,
+                "h4": -5.0302,
+                "h5": -6.0641,
+                "h6": -4.2374,
+                "h7": -3.254,
+                "h8": -4.131,
+                "h9": -4.3069,
+                "h10": -4.3784,
+                "h11": -0.01
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.7513,
+              "alias_db": -49.03,
+              "excess_alias_db": 0.3638,
+              "alias_band_power_dbfs": -60.7659,
+              "alias_band_rms_fs": 0.0009156,
+              "total_signal_power_dbfs": -11.736
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.6897,
+                "h3": -7.752,
+                "h4": -5.0297,
+                "h5": -6.065,
+                "h6": -4.2368,
+                "h7": -3.2548,
+                "h8": -4.1303,
+                "h9": -4.308,
+                "h10": -4.3768,
+                "h11": -0.0121
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.752,
+              "alias_db": -49.0254,
+              "excess_alias_db": 0.3684,
+              "alias_band_power_dbfs": -67.6972,
+              "alias_band_rms_fs": 0.00041223,
+              "total_signal_power_dbfs": -18.672
+            }
+          },
+          "output_gain_error_db": 0.84,
+          "reference": {
+            "alias_db": -49.3938,
+            "alias_band_power_dbfs": -68.9077,
+            "alias_band_rms_fs": 0.0003586,
+            "total_signal_power_dbfs": -19.5139,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885528,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "cutoff_hz": 20000,
+      "filter_drive": 0.75,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.7685,
+                "h3": -5.1164,
+                "h4": -5.5639,
+                "h5": -4.6614,
+                "h6": -5.6901,
+                "h7": -5.9617,
+                "h8": -5.15,
+                "h9": -5.3108,
+                "h10": -5.1397,
+                "h11": -4.3437,
+                "h12": -3.2541
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.9617,
+              "alias_db": -48.2128,
+              "excess_alias_db": 1.9159,
+              "alias_band_power_dbfs": -58.5882,
+              "alias_band_rms_fs": 0.00117649,
+              "total_signal_power_dbfs": -10.3758
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.7681,
+                "h3": -5.1167,
+                "h4": -5.5636,
+                "h5": -4.6618,
+                "h6": -5.6899,
+                "h7": -5.9624,
+                "h8": -5.1495,
+                "h9": -5.3111,
+                "h10": -5.1394,
+                "h11": -4.3443,
+                "h12": -3.2537
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.9624,
+              "alias_db": -48.2104,
+              "excess_alias_db": 1.9183,
+              "alias_band_power_dbfs": -65.5217,
+              "alias_band_rms_fs": 0.00052956,
+              "total_signal_power_dbfs": -17.3117
+            }
+          },
+          "output_gain_error_db": 1.8755,
+          "reference": {
+            "alias_db": -50.1287,
+            "alias_band_power_dbfs": -69.3149,
+            "alias_band_rms_fs": 0.00034218,
+            "total_signal_power_dbfs": -19.1862,
+            "harmonics_db": {
+              "h2": -6.168985916402969,
+              "h3": -9.696601682224685,
+              "h4": -12.025226461854341,
+              "h5": -14.405999212216283,
+              "h6": -15.913844418559034,
+              "h7": -17.68299693630111,
+              "h8": -19.716998190666956,
+              "h9": -21.040638353105983,
+              "h10": -23.33491666204345,
+              "h11": -25.432526464185106,
+              "h12": -27.147615603646813
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.2604,
+                "h3": -7.5606,
+                "h4": -4.6035,
+                "h5": -5.2709,
+                "h6": -3.5751,
+                "h7": -2.1432,
+                "h8": -2.7398,
+                "h9": -2.7012,
+                "h10": -2.8012,
+                "h11": 1.8218
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.5606,
+              "alias_db": -47.1927,
+              "excess_alias_db": 2.2011,
+              "alias_band_power_dbfs": -58.7151,
+              "alias_band_rms_fs": 0.00115944,
+              "total_signal_power_dbfs": -11.5226
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -4.26,
+                "h3": -7.5612,
+                "h4": -4.603,
+                "h5": -5.2714,
+                "h6": -3.5746,
+                "h7": -2.144,
+                "h8": -2.7397,
+                "h9": -2.7024,
+                "h10": -2.7993,
+                "h11": 1.8199
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.5612,
+              "alias_db": -47.1905,
+              "excess_alias_db": 2.2033,
+              "alias_band_power_dbfs": -65.6488,
+              "alias_band_rms_fs": 0.00052187,
+              "total_signal_power_dbfs": -18.4585
+            }
+          },
+          "output_gain_error_db": 1.0534,
+          "reference": {
+            "alias_db": -49.3938,
+            "alias_band_power_dbfs": -68.9077,
+            "alias_band_rms_fs": 0.0003586,
+            "total_signal_power_dbfs": -19.5139,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885528,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "cutoff_hz": 21600,
+      "filter_drive": 0.75,
+      "events": [
+        {
+          "midi": 84,
+          "reference_f0_hz": 1046.5888,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": 0.1182,
+                "h3": 0.0973,
+                "h4": -0.086,
+                "h5": 0.3464,
+                "h6": 0.2427,
+                "h7": 0.6177,
+                "h8": 1.4202,
+                "h9": 1.653,
+                "h10": 2.9768,
+                "h11": 4.193,
+                "h12": 5.0834
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.0834,
+              "alias_db": -46.9435,
+              "excess_alias_db": 3.1852,
+              "alias_band_power_dbfs": -53.3205,
+              "alias_band_rms_fs": 0.00215761,
+              "total_signal_power_dbfs": -6.377
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.6204,
+                "h3": -4.7973,
+                "h4": -5.4639,
+                "h5": -4.4839,
+                "h6": -5.3369,
+                "h7": -5.61,
+                "h8": -4.7768,
+                "h9": -4.8767,
+                "h10": -4.6768,
+                "h11": -3.794,
+                "h12": -2.6904
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.61,
+              "alias_db": -46.9991,
+              "excess_alias_db": 3.1296,
+              "alias_band_power_dbfs": -57.2862,
+              "alias_band_rms_fs": 0.00136675,
+              "total_signal_power_dbfs": -10.2875
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -1.62,
+                "h3": -4.7976,
+                "h4": -5.4634,
+                "h5": -4.4842,
+                "h6": -5.3368,
+                "h7": -5.6105,
+                "h8": -4.7766,
+                "h9": -4.8772,
+                "h10": -4.6766,
+                "h11": -3.7944,
+                "h12": -2.6901
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured",
+                "h12": "measured"
+              },
+              "max_common_partial_error_db": 5.6105,
+              "alias_db": -46.9975,
+              "excess_alias_db": 3.1312,
+              "alias_band_power_dbfs": -64.2205,
+              "alias_band_rms_fs": 0.00061514,
+              "total_signal_power_dbfs": -17.2234
+            }
+          },
+          "output_gain_error_db": 1.9638,
+          "reference": {
+            "alias_db": -50.1287,
+            "alias_band_power_dbfs": -69.3149,
+            "alias_band_rms_fs": 0.00034218,
+            "total_signal_power_dbfs": -19.1862,
+            "harmonics_db": {
+              "h2": -6.168985916402969,
+              "h3": -9.696601682224685,
+              "h4": -12.025226461854341,
+              "h5": -14.405999212216283,
+              "h6": -15.913844418559034,
+              "h7": -17.68299693630111,
+              "h8": -19.716998190666956,
+              "h9": -21.040638353105983,
+              "h10": -23.33491666204345,
+              "h11": -25.432526464185106,
+              "h12": -27.147615603646813
+            }
+          }
+        },
+        {
+          "midi": 96,
+          "reference_f0_hz": 2093.1778,
+          "stages": {
+            "oscillator": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "mixer": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -0.1357,
+                "h3": 0.1618,
+                "h4": 1.3807,
+                "h5": 2.9518,
+                "h6": 5.2664,
+                "h7": 7.4673,
+                "h8": 8.437,
+                "h9": 7.5703,
+                "h10": 6.0604,
+                "h11": 8.1475
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 8.437,
+              "alias_db": -48.5637,
+              "excess_alias_db": 0.8301,
+              "alias_band_power_dbfs": -55.1344,
+              "alias_band_rms_fs": 0.00175097,
+              "total_signal_power_dbfs": -6.5707
+            },
+            "ladder": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -3.9725,
+                "h3": -7.382,
+                "h4": -4.3104,
+                "h5": -4.7056,
+                "h6": -3.1793,
+                "h7": -1.4208,
+                "h8": -1.7319,
+                "h9": -1.5885,
+                "h10": -1.6945,
+                "h11": 3.0623
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.382,
+              "alias_db": -46.0772,
+              "excess_alias_db": 3.3166,
+              "alias_band_power_dbfs": -57.4532,
+              "alias_band_rms_fs": 0.00134072,
+              "total_signal_power_dbfs": -11.3763
+            },
+            "output": {
+              "harmonic_error_db_model_minus_reference": {
+                "h2": -3.9721,
+                "h3": -7.3827,
+                "h4": -4.31,
+                "h5": -4.7062,
+                "h6": -3.1786,
+                "h7": -1.4219,
+                "h8": -1.7319,
+                "h9": -1.5895,
+                "h10": -1.6943,
+                "h11": 3.0605
+              },
+              "harmonic_comparison": {
+                "h2": "measured",
+                "h3": "measured",
+                "h4": "measured",
+                "h5": "measured",
+                "h6": "measured",
+                "h7": "measured",
+                "h8": "measured",
+                "h9": "measured",
+                "h10": "measured",
+                "h11": "measured"
+              },
+              "max_common_partial_error_db": 7.3827,
+              "alias_db": -46.0774,
+              "excess_alias_db": 3.3164,
+              "alias_band_power_dbfs": -64.3894,
+              "alias_band_rms_fs": 0.0006033,
+              "total_signal_power_dbfs": -18.3123
+            }
+          },
+          "output_gain_error_db": 1.1996,
+          "reference": {
+            "alias_db": -49.3938,
+            "alias_band_power_dbfs": -68.9077,
+            "alias_band_rms_fs": 0.0003586,
+            "total_signal_power_dbfs": -19.5139,
+            "harmonics_db": {
+              "h2": -5.924674779626169,
+              "h3": -9.782151591885528,
+              "h4": -13.626617711302993,
+              "h5": -17.25905055885152,
+              "h6": -21.279755235311477,
+              "h7": -25.003537172937733,
+              "h8": -27.43512430896155,
+              "h9": -28.778790167420325,
+              "h10": -31.685837862173706,
+              "h11": -41.97112675671111,
+              "h12": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
