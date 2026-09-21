@@ -120,6 +120,9 @@ def main(argv=None) -> int:
         "provenance": provenance,
     }
     verdict = scorecard.evaluate(case, record)
+    if verdict["state"] not in (scorecard.PASS, scorecard.FAIL):
+        print(f"score_m5a_i2s: REFUSED -- measurement is not scoreable: {verdict['why']}")
+        return 2
     record["provenance"]["outcome_code"] = 0 if verdict["state"] == scorecard.PASS else 1
     record["scorecard_state"] = verdict["state"]
     record["scorecard_reason"] = verdict["why"]
