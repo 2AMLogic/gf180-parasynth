@@ -8,6 +8,7 @@ _HASH = "a" * 64
 def _report(detail="27.2 s phrase and complete release", config="selected 2x saw + causal 2x filter candidate"):
     return "\n".join(("verify_synth_top: " + detail,
                       "verify_synth_top: " + config,
+                      "verify_synth_top: M5A controls: pulse=pulse29; saw cutoff=20000 Hz; saw volume correction=-0.45428 dB",
                       "verify_synth_top: PASS -- decoded I2S periods match",
                       "verify_synth_top: M5A path verified from SPI pins through the production voice and I2S pins",
                       "verify_synth_top: simulator backend verilator",
@@ -15,7 +16,9 @@ def _report(detail="27.2 s phrase and complete release", config="selected 2x saw
 
 
 def test_accepts_only_complete_filter_candidate_integration_report():
-    validate_integration_report(_report(), _HASH)
+    validate_integration_report(_report(), _HASH, pulse_shape="pulse29",
+                                saw_cutoff_hz=20_000,
+                                saw_volume_correction_db=-0.45428)
 
 
 @pytest.mark.parametrize("text", [
@@ -31,3 +34,8 @@ def test_rejects_smoke_or_unrelated_report(text):
 def test_refuses_report_bound_to_a_different_wav():
     with pytest.raises(ValueError, match="does not bind"):
         validate_integration_report(_report(), "b" * 64)
+
+
+def test_refuses_report_with_different_sound_controls():
+    with pytest.raises(ValueError, match="cutoff"):
+        validate_integration_report(_report(), _HASH, saw_cutoff_hz=14_073)

@@ -93,7 +93,7 @@ is a broken instrument, and is reported as one rather than as a pass.
   --frames N      override the run length
 """
 from __future__ import annotations
-import argparse, json, os, re, subprocess, sys
+import argparse, json, math, os, re, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
@@ -267,7 +267,8 @@ def script(short: bool = False):
 
 
 def m5a_script(manifest_path: str, *, smoke: bool = False,
-               pulse_shape: str = "pulse29"):
+               pulse_shape: str = "pulse29", saw_cutoff_hz: int | None = None,
+               saw_volume_correction_db: float = 0.0):
     """Build the frozen two-wave M5A phrase as register writes over SPI."""
     manifest_file = os.path.abspath(manifest_path)
     manifest = json.loads(open(manifest_file).read())
@@ -294,12 +295,29 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
         raise ValueError(f"measured M5A max cutoff is outside the qualified range: {cutoff_hz} Hz")
     attack_s = float(env["attack_10_90_ms"]) / 1000.0 / 0.8
     release_s = float(env["release_t20_ms"]) / 1000.0 * 4.0 / np.log(10.0)
-    regs = vf.VoiceFx.patch_regs(
+    if saw_cutoff_hz is not None and not vf.CUT_MIN <= saw_cutoff_hz <= vf.CUT_MAX:
+        raise ValueError(f"saw cutoff outside [{vf.CUT_MIN}, {vf.CUT_MAX}]")
+    if (isinstance(saw_volume_correction_db, bool)
+            or not isinstance(saw_volume_correction_db, (int, float))
+            or not math.isfinite(saw_volume_correction_db)
+            or not -12.0 <= saw_volume_correction_db <= 12.0):
+        raise ValueError("saw volume correction must be finite and within [-12, 12] dB")
+    base_volume = 0.45
+    saw_volume = base_volume * 10.0 ** (saw_volume_correction_db / 20.0)
+    if not 0.0 <= saw_volume <= 1.0:
+        raise ValueError("saw volume correction would leave the supported 0..1 range")
+    patch = dict(
         waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
         noise=0.0, cutoff=(cutoff_hz, cutoff_hz), q=0.0, drive=0.75,
         amp=(attack_s, 0.25, 1.0, release_s),
         fenv=(0.004, 0.30, 1.0, 0.10), track=0.0, vol=0.45,
         mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False)
+    regs = vf.VoiceFx.patch_regs(**patch)
+    effective_saw_cutoff = cutoff_hz if saw_cutoff_hz is None else saw_cutoff_hz
+    saw_regs = vf.VoiceFx.patch_regs(
+        **{**patch, "cutoff": (effective_saw_cutoff, effective_saw_cutoff),
+           "vol": saw_volume})
+    segment_controls = saw_cutoff_hz is not None or saw_volume_correction_db != 0.0
     if pulse_shape not in vf.WAVE_CODE or pulse_shape not in vf.DUTY:
         raise ValueError(f"M5A pulse shape must be a supported rectangular shape: {pulse_shape}")
     w = []
@@ -357,8 +375,15 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
             # A write serializes for about 1.55 frames. Reserve ten frames for
             # the three increment writes and gate write, then use the pin-side
             # report below as the authoritative event time.
-            wait = max(0, round((on_s - previous_off_s) * 48000) - 10)
+            margin = 16 if segment_controls else 10
+            wait = max(0, round((on_s - previous_off_s) * 48000) - margin)
             if event_index == 0:
+                if segment_controls:
+                    target_regs = saw_regs if wave == "saw" else regs
+                    put(wait, 0, A.A_CUT_LO, target_regs["cut_lo"])
+                    put(0, 0, A.A_CUT_HI, target_regs["cut_hi"])
+                    put(0, 0, A.A_VOL, target_regs["vol"])
+                    wait = 0
                 wave_code = 0 if wave == "saw" else vf.WAVE_CODE[pulse_shape]
                 put(wait, 0, A.A_WAVE, wave_code)
                 wait = 0
@@ -376,6 +401,9 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
     tail = max(1, round((final_audio_s - previous_off_s) * 48000) - 3)
     return w, tail, {"events": events, "manifest": manifest, "reference_audio": ref_audio,
                     "filter_drive": 0.75, "pulse_shape": pulse_shape,
+                    "saw_cutoff_hz": effective_saw_cutoff,
+                    "saw_cutoff_override": saw_cutoff_hz is not None,
+                    "saw_volume_correction_db": float(saw_volume_correction_db),
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
@@ -500,6 +528,10 @@ def main(argv=None) -> int:
                     help="short SPI-to-I2S M5A pitch/waveform integration check; no envelope claim")
     ap.add_argument("--m5a-pulse-shape", choices=("square", "pulse15", "pulse25", "pulse29"),
                     default="pulse29", help="supported rectangular shape for M5A pulse segments")
+    ap.add_argument("--m5a-saw-cutoff-hz", type=int, default=None,
+                    help="saw-only cutoff override sent through SPI on each saw segment")
+    ap.add_argument("--m5a-saw-volume-correction-db", type=float, default=0.0,
+                    help="saw-only final-volume correction sent through SPI")
     ap.add_argument("--m5a-manifest", default=os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json"))
     ap.add_argument("--wav-out", default=None,
                     help="write decoded left-channel I2S samples to an int16 WAV")
@@ -527,7 +559,9 @@ def main(argv=None) -> int:
             return 2
         try:
             cmds, tail, m5a = m5a_script(a.m5a_manifest, smoke=a.m5a_smoke,
-                                         pulse_shape=a.m5a_pulse_shape)
+                                         pulse_shape=a.m5a_pulse_shape,
+                                         saw_cutoff_hz=a.m5a_saw_cutoff_hz,
+                                         saw_volume_correction_db=a.m5a_saw_volume_correction_db)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             print(f"verify_synth_top: REFUSED -- M5A stimulus: {exc}")
             return 2
@@ -557,9 +591,14 @@ def main(argv=None) -> int:
     if a.m5a:
         detail = ("smoke: envelope completion not claimed" if m5a["smoke"] else
                   f"{m5a['manifest']['timeline']['phrase_s']:.3f} s phrase and complete release")
+        print(f"verify_synth_top: M5A controls: pulse={m5a['pulse_shape']}; "
+              f"saw cutoff={m5a['saw_cutoff_hz']} Hz; "
+              f"saw volume correction={m5a['saw_volume_correction_db']:+.5f} dB")
         print(f"verify_synth_top: M5A stimulus has {len(m5a['events'])} note events, "
               f"{detail}; "
               f"selected filter drive {m5a['filter_drive']:.2f}; "
+              f"pulse {m5a['pulse_shape']}; saw cutoff {m5a['saw_cutoff_hz']} Hz; "
+              f"saw volume correction {m5a['saw_volume_correction_db']:+.5f} dB; "
               f"reference sha256 {m5a['manifest']['audio']['sha256']}")
     else:
         print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "

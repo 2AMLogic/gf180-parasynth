@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -25,7 +26,10 @@ def _candidate_factory():
                       preserve_filter_headroom=True, causal_filter=True)
 
 
-def validate_integration_report(report_text: str, wav_sha256: str) -> None:
+def validate_integration_report(report_text: str, wav_sha256: str, *,
+                               pulse_shape: str | None = None,
+                               saw_cutoff_hz: int | None = None,
+                               saw_volume_correction_db: float | None = None) -> dict:
     required = (
         "M5A path verified from SPI pins through the production voice and I2S pins",
         "selected 2x saw + causal 2x filter candidate",
@@ -36,6 +40,21 @@ def validate_integration_report(report_text: str, wav_sha256: str) -> None:
         raise ValueError("report is not a passing full filter-candidate I2S run")
     if f"decoded I2S WAV sha256 {wav_sha256}" not in report_text:
         raise ValueError("report does not bind the decoded I2S WAV hash")
+    match = re.search(
+        r"M5A controls: pulse=(\w+); saw cutoff=(\d+) Hz; "
+        r"saw volume correction=([+-]?\d+(?:\.\d+)?) dB", report_text)
+    if not match:
+        raise ValueError("report omits the M5A sound controls")
+    controls = {"pulse_shape": match.group(1), "saw_cutoff_hz": int(match.group(2)),
+                "saw_volume_correction_db": float(match.group(3))}
+    if pulse_shape is not None and controls["pulse_shape"] != pulse_shape:
+        raise ValueError("report has a different pulse shape")
+    if saw_cutoff_hz is not None and controls["saw_cutoff_hz"] != saw_cutoff_hz:
+        raise ValueError("report has a different saw cutoff")
+    if (saw_volume_correction_db is not None
+            and abs(controls["saw_volume_correction_db"] - saw_volume_correction_db) > 0.00001):
+        raise ValueError("report has a different saw volume correction")
+    return controls
 
 
 def main(argv=None) -> int:
@@ -45,6 +64,12 @@ def main(argv=None) -> int:
                     help="captured stdout/stderr of the matching full --m5a --filter2x run")
     ap.add_argument("--out", default="docs/scorecard/results/M5A.json")
     ap.add_argument("--audio", default="docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav")
+    ap.add_argument("--pulse-shape", choices=("square", "pulse15", "pulse25", "pulse29"),
+                    default=None, help="expected SPI-selected pulse shape; defaults to report value")
+    ap.add_argument("--saw-cutoff-hz", type=int, default=None,
+                    help="expected saw cutoff; defaults to report value")
+    ap.add_argument("--saw-volume-correction-db", type=float, default=None,
+                    help="expected saw-only volume correction; defaults to report value")
     a = ap.parse_args(argv)
     wav = pathlib.Path(a.wav).resolve()
     verification = pathlib.Path(a.verification).resolve()
@@ -54,7 +79,10 @@ def main(argv=None) -> int:
     report_text = verification.read_text()
     try:
         wav_sha256 = hashlib.sha256(wav.read_bytes()).hexdigest()
-        validate_integration_report(report_text, wav_sha256)
+        controls = validate_integration_report(
+            report_text, wav_sha256, pulse_shape=a.pulse_shape,
+            saw_cutoff_hz=a.saw_cutoff_hz,
+            saw_volume_correction_db=a.saw_volume_correction_db)
     except ValueError as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
         return 2
@@ -76,8 +104,8 @@ def main(argv=None) -> int:
         return 2
     try:
         measured = m5a.measure(
-            pulse_shape="pulse479", voice_factory=_candidate_factory,
-            model_label="causal-reconstructed-2x-filter-headroom-pulse479-decoded-i2s",
+            pulse_shape=controls["pulse_shape"], voice_factory=_candidate_factory,
+            model_label=f"causal-reconstructed-2x-filter-headroom-{controls['pulse_shape']}-decoded-i2s",
             output_path=candidate_audio, candidate_wav=wav)
     except (m5a.Refused, OSError, ValueError) as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
@@ -106,7 +134,10 @@ def main(argv=None) -> int:
         {"oscillator_config": "2x saw candidate",
          "filter_config": "causal reconstructed 2x, headroom preserved",
          "simulator": simulator,
-         "pulse_shape": "pulse479", "candidate_wav_sha256": measured["candidate_i2s_sha256"],
+         "pulse_shape": controls["pulse_shape"],
+         "saw_cutoff_hz": controls["saw_cutoff_hz"],
+         "saw_volume_correction_db": controls["saw_volume_correction_db"],
+         "candidate_wav_sha256": measured["candidate_i2s_sha256"],
          "scored_audio_artifact_sha256": hashlib.sha256(candidate_audio.read_bytes()).hexdigest(),
          "measurement_source_sha256": {
              rel: hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
@@ -119,7 +150,9 @@ def main(argv=None) -> int:
         "source_dirty": dirty,
         "analysis_version": measured["analysis_version"],
         "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
-        "render_run": "full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; pulse479",
+        "render_run": ("full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; "
+                       f"pulse={controls['pulse_shape']}; saw_cutoff={controls['saw_cutoff_hz']} Hz; "
+                       f"saw_volume_correction={controls['saw_volume_correction_db']:+.5f} dB"),
         "audio": str(candidate_audio.relative_to(ROOT)),
         "tolerance_policy": m5a.TOLERANCES,
         "metrics": measured["metrics"],
