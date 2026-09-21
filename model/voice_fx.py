@@ -879,8 +879,8 @@ _OS2_SUBSTEP_GAIN_Q15 = 27853  # 0.85 headroom keeps the Q1.15 FIR output below 
 def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Render saw or a rectangular waveform at 2x, then decimate.
 
-    Rectangular-wave use is an optional model experiment; the shipped RTL
-    bank still computes saw only.
+    Rectangular-wave use is selected explicitly by oversample_pulse_2x;
+    the RTL selects the same chain with VOICE_PULSE_2X.
     """
     if o.shape not in ("saw", *TWO_EDGE):
         raise ValueError(f"unsupported 2x waveform {o.shape!r}")
