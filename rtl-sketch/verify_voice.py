@@ -529,33 +529,46 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
     return 1
 
 
-def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0) -> str | None:
+def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0,
+             simulator: str = "iverilog") -> str | None:
+    import shutil
     iverilog, vvp = tool("iverilog"), tool("vvp")
-    if not iverilog or not vvp:
+    if simulator == "iverilog" and (not iverilog or not vvp):
         print("verify_voice: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
     vvp_file = os.path.join(outdir, "tb_voice.vvp")
     out_file = os.path.join(outdir, "voice_rtl_out.txt")
     if os.path.exists(out_file): os.remove(out_file)
     files = [rtl if (f == "voice_dp.v" and rtl) else f for f in RTL_FILES]
-    r = subprocess.run([iverilog, "-g2012", "-o", vvp_file] + [f"-D{d}" for d in defines] + files,
+    if simulator == "verilator":
+        verilator = shutil.which("verilator")
+        if not verilator:
+            print("verify_voice: Verilator not on PATH"); return None
+        compiler = [verilator, "--binary", "--timing", "-Wno-fatal", "--top-module", "tb_voice",
+                    "--Mdir", os.path.join(outdir, "obj_voice"), "-o", vvp_file]
+        runner = [vvp_file]
+    else:
+        compiler = [iverilog, "-g2012", "-o", vvp_file]
+        runner = [vvp, "-n", vvp_file]
+    r = subprocess.run(compiler + [f"-D{d}" for d in defines] + files,
                        cwd=HERE, capture_output=True, text=True)
     if r.returncode != 0:
-        print("verify_voice: iverilog failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_voice: {simulator} compile failed:\n" + r.stdout + r.stderr); return None
     try:
-        r = subprocess.run([vvp, "-n", vvp_file, f"+wr={os.path.join(outdir, 'voice_writes.txt')}",
+        r = subprocess.run(runner + [f"+wr={os.path.join(outdir, 'voice_writes.txt')}",
                             f"+exp={os.path.join(outdir, 'voice_expected.txt')}", f"+out={out_file}"],
                            cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
         print("verify_voice: simulation timed out"); return None
     sys.stdout.write("".join("  sim: " + l + "\n" for l in r.stdout.splitlines() if l.startswith("tb_voice")))
     if r.returncode != 0 or not os.path.exists(out_file):
-        print("verify_voice: vvp failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_voice: {simulator} run failed:\n" + r.stdout + r.stderr); return None
     return out_file
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog")
     ap.add_argument("--set", default="full", choices=("full", "quick"))
     ap.add_argument("--only", default=None, help="comma-separated scenario keys")
     ap.add_argument("--inject", default=None, choices=BUGS, help="INJECT_BUG_VOICE_<NAME> to compile in")
@@ -594,7 +607,7 @@ def main(argv=None) -> int:
         print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}; "
               f"defines {', '.join(defines) or '(none)'}), {len(expected)} frames, "
               f"{len(writes)} writes at the register port")
-        out = simulate(a.outdir, defines, rtl)
+        out = simulate(a.outdir, defines, rtl, simulator=a.simulator)
         status = 2 if out is None else compare(expected, state, report, out)
     if a.expect_fail:
         if status == 1:

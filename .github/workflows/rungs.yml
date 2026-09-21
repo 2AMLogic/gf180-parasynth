@@ -26,6 +26,7 @@ jobs:
         run: >-
           python tools/run_all.py --timeout 900 --json build/pulse2x-ci.json
           "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --outdir build/pulse-voice"
+          "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --simulator verilator --outdir build/pulse-voice-verilator"
           "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
           "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
           "python rtl-sketch/verify_synth_top.py --filter2x --pulse2x --simulator verilator --outdir build/pulse-drums"
