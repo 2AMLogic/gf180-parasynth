@@ -104,11 +104,6 @@ def _recompare_report(path: pathlib.Path) -> dict:
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
     report["comparisons"] = comparisons
-    report["configurations"] = {
-        pulse: {label: report["configurations"][pulse][label]
-                for label in ("causal_headroom", "clamped", "headroom")}
-        for pulse in ("pulse29", "pulse479")
-    }
     report["comparison_reanalysis"] = {
         "source_commit": commit,
         "source_dirty": dirty,
@@ -160,12 +155,6 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
                 pulse_shape=pulse, voice_factory=_factory(preserve, causal),
                 model_label=f"reconstructed_2x_{label}",
                 output_path=out_dir / f"M5A-reconstructed-2x-{label}-{pulse}.wav")
-
-    rows = {
-        pulse: {label: rows[pulse][label]
-                for label in ("causal_headroom", "clamped", "headroom")}
-        for pulse in ("pulse29", "pulse479")
-    }
 
     comparisons = {}
     for pulse, pair in rows.items():
