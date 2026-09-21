@@ -77,3 +77,6 @@ CI now builds pinned Verilator 5.052, upstream commit
 `ea338be98e1e838d3518809ce8899f85a009963c`, and runs both simulators' directed
 checks, the clean/control pair, drums deadlines and both complete phrases.
 This is a toolchain qualification attempt, not yet a claimed Linux pass.
+
+The simulator discrepancy and exact reproducer are filed upstream as
+[Verilator #8442](https://github.com/verilator/verilator/issues/8442).
