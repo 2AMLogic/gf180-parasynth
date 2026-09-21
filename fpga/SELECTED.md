@@ -44,7 +44,7 @@ hash in `build/fpga-selected/report.json`. Missing tools refuse. Nonzero
 tool exits, stale output, and missing artifacts cannot report success.
 Synthesis-only output is explicitly `SYNTHESIZED`; it does not claim a
 bitstream or a timing pass. The selected configuration does not include the
-new model-only pulse experiment.
+separately verified pulse 2× candidate from #192.
 
 ## Fresh device-fit result
 
@@ -78,3 +78,20 @@ claiming that a bitstream proves live playback. `VOICE_PULSE_2X` remains absent.
 The earlier local route was interrupted after the Linux run started. Its
 partial log and explicit NO-VERDICT record are retained under
 `fpga/reports/selected/`; it supplies no timing pass or bitstream.
+
+The completed Linux artifact is published with `fpga/publish_selected.py`. It
+checks the recorded stage artifacts, source/ROM/constraint hashes and reused
+SPI→I²S core simulation. A timing pass requires a nonempty report covering the
+actual 725/59 MHz core clock, achieved frequency at least the constraint, and
+resource use within the selected device. A missing clock, wrong clock, missed
+timing, NaN frequency, overfull device or absent paths is rejected. The seven
+clock/resource controls started red against an unimplemented gate.
+
+```sh
+python3 fpga/publish_selected.py /path/to/downloaded-selected-85f --workflow-url https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666476657 --out /tmp/selected-85f-publication
+```
+
+A failed build still preserves raw reports and compressed complete logs, with
+an explicit nonpassing publication state. A qualified bitstream additionally
+requires all three build stages to pass. Neither state establishes live control
+or captured physical line output.
