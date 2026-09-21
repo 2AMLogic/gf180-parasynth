@@ -1,0 +1,18 @@
+verify_synth_top: 67 writes over the pins (67 voice, 0 drum), 134309 frames after the last
+verify_synth_top: M5B controls: pulse=pulse29; effective pulse=pulse479 (47.90% duty); saw cutoff=20000 Hz; saw volume correction=-0.45428 dB
+verify_synth_top: M5B stimulus has 4 note events, 4.600 s phrase and complete release; selected filter drive 0.75; pulse pulse29; saw cutoff 20000 Hz; saw volume correction -0.45428 dB; reference sha256 ee77ef2180c91e2f6628339872589e0dcafb9344a30288b4a2da86274a919a29
+verify_synth_top: selected 2x saw + causal 2x filter candidate; compile defines: VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 67 writes sent, 729534 frames, 729533 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 67, writes drained 67, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 729534 frames, MISSING in 0, worst strobe cycle 175 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 22c688c, outdir /home/runner/work/gf180-parasynth/gf180-parasynth/build/full-M5B; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 175 of 256, past the LRCLK transition at 128 (32 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..595223; modelling 729533 frames
+verify_synth_top: decoded I2S WAV written to /home/runner/work/gf180-parasynth/gf180-parasynth/build/pulse-evidence/M5B-i2s.wav
+verify_synth_top: decoded I2S WAV sha256 eb3526b4c5692cd12004290fead4449f0785d05ef705ac215f455a8b9049b042
+verify_synth_top: model peak |sample| 9326 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames
+verify_synth_top: PASS -- 729533 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+verify_synth_top: M5B path verified from SPI pins through the production voice and I2S pins
