@@ -48,6 +48,8 @@ impulse peaks after **20 base frames (0.417 ms)**. A known cutoff coefficient
 step first changes the quantized output after **4 frames**; 50% and 90% of the
 paired output-difference energy arrive 27 and 50 frames after the step. The
 causal chain retains the offline headroom result within the declared deadbands.
+The decimator preserves the ladder's 19-bit output range; on this phrase its
+largest decimated value is 24,573 and no samples reach that output rail.
 
 This report is **model evidence only**. The causal filter is not implemented
 in RTL, and this candidate has not been verified through SPI → I2S. The

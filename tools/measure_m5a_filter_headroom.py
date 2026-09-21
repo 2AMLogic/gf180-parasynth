@@ -123,11 +123,11 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
                     raise m5a.Refused(f"reuse report lacks complete {pulse}/{mode} evidence")
                 rows[pulse][mode] = row
         reused_sources["+".join(labels)] = {
-            "report": str(path),
+            "reused_rows": list(labels),
             "source_commit": previous.get("source_commit"),
             "source_dirty": previous.get("source_dirty"),
             "source_sha256": previous.get("source_sha256"),
-            "note": "saved complete-phrase measurements reused without rerendering",
+            "note": "saved complete-phrase measurement rows reused without rerendering; row data is embedded in this report",
         }
     if reuse_offline_report is not None:
         load_reuse(reuse_offline_report, ("clamped", "headroom"))
