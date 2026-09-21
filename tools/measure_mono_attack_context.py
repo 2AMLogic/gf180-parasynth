@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 import measure_mono_m5a_reference as ref
 
 CONDITIONS = {
+    "delayed84_at4p1": ({"note": 84, "on_s": 4.1, "gate_s": .6},),
+    "delayed84_at5p7": ({"note": 84, "on_s": 5.7, "gate_s": .6},),
     "isolated84": ({"note": 84, "on_s": .1, "gate_s": .6},),
     "repeat84_gap3p4": ({"note": 84, "on_s": .1, "gate_s": .6},
                           {"note": 84, "on_s": 4.1, "gate_s": .6}),
@@ -55,6 +57,7 @@ def summarize(rows):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=Path, default=ROOT / "docs/scorecard/mono-attack-context")
+    ap.add_argument("--resume", type=Path, help="reuse hash-verified prior renders")
     a = ap.parse_args(argv)
     a.out.mkdir(parents=True, exist_ok=True)
     try:
@@ -65,8 +68,26 @@ def main(argv=None):
         identity = ref._plugin_metadata()
         integrity = ref._qualify_reference_integrity()
         rows = []
+        if a.resume:
+            prior = json.loads(a.resume.read_text())
+            if prior["identity"] != identity:
+                raise ref.Refused("plugin/host identity differs from prior capture")
+            for name, digest in prior["provenance"]["files_sha256"].items():
+                if name != "tools/measure_mono_attack_context.py" and ref.sha256(ROOT / name) != digest:
+                    raise ref.Refused(f"prior capture source differs: {name}")
+            for row in prior["renders"]:
+                path = a.resume.parent / row["wav"]
+                if ref.sha256(path) != row["sha256"] or row["events"] != list(CONDITIONS[row["condition"]]):
+                    raise ref.Refused("prior capture audio or event timeline differs")
+                rows.append(row)
+            code["reused_report_sha256"] = ref.sha256(a.resume)
         for wave in ref.WAVE_SETTINGS:
             for condition, events in CONDITIONS.items():
+                previous = [r for r in rows if r["wave"] == wave and r["condition"] == condition]
+                if previous:
+                    if len(previous) != 3:
+                        raise ref.Refused("prior condition lacks exactly three renders")
+                    continue
                 for repeat in range(3):
                     audio, apparatus = ref._render_segment(wave, ref.PATCH["amp_decay"][2],
                                                            {wave: events}, 13.5)
