@@ -1,5 +1,7 @@
 import numpy as np
 import pytest
+import json
+from scipy.io import wavfile
 import measure_mono_m1a_reference as probe
 
 
@@ -35,3 +37,17 @@ def test_bass_release_window_is_qualified_across_carrier_phase(note, phase):
     timing = probe.ref.envelope_timing(measured, sr, .1, .7)
     assert timing["valid"] and timing["release_complete_40db"]
     assert abs(timing["release_t20_ms"] - 100 * np.log(10)) < 10
+
+
+def test_frozen_bass_reference_reproduces_without_a_plugin():
+    directory = probe.ROOT / "docs/scorecard/mono-m1a-miniv3"
+    manifest = json.loads((directory / "manifest.json").read_text())
+    for artifact in [*manifest["renders"], *manifest["controls"].values()]:
+        assert probe.ref.sha256(directory / artifact["file"]) == artifact["sha256"]
+    sr, audio = wavfile.read(directory / manifest["renders"][0]["file"])
+    assert sr == probe.ref.SR
+    observed = probe.event_measurements(audio)
+    for got, expected in zip(observed, manifest["renders"][0]["events"]):
+        assert got["f0_hz"] == pytest.approx(expected["f0_hz"], abs=1e-5)
+        assert got["rms_dbfs"] == pytest.approx(expected["rms_dbfs"], abs=1e-5)
+        assert got["envelope"]["release_t20_ms"] == expected["envelope"]["release_t20_ms"]
