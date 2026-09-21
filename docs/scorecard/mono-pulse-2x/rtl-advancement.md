@@ -58,3 +58,9 @@ scorer retry passed, while the focused suite retry remained NO-VERDICT after
 1,800 seconds. Those outcomes are retained in `rtl/baseline-*.json`, not
 reported as a local aggregate pass. Standard CI passed on the identical
 baseline tree. Full RTL was not rerun for the baseline landing.
+
+The repaired branch provenance gate now permits both reference controls to
+execute: clean comparisons are valid, and missing/tampered mutations each
+produce the intended refusal (2/2 PASS locally and in CI). The local run took
+614 seconds per control under host contention; these are executed controls,
+not missing-baseline successes. See `rtl/reference-controls-repaired.json`.
