@@ -393,7 +393,7 @@
     },
     "artefacts": {
       "ours": "docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav",
-      "spi_i2s": "build/verification/M5A-envelope-i2s.txt"
+      "spi_i2s": "docs/scorecard/mono-m5a-miniv3/filter2x-spi-i2s.txt"
     },
     "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
