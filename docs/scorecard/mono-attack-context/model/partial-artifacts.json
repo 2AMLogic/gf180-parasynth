@@ -1,0 +1,13 @@
+{
+  "state": "in progress",
+  "scope": "completed model WAVs only; full context report pending",
+  "producer_commit": "96e71c15",
+  "reference_report_sha256": "19472d7f64f9b44dee0205d08cb508cb64ec0900eab23f4ef484d7449627e672",
+  "audio_sha256": {
+    "saw-delayed84_at4p1.wav": "82490cffa440cd7d8a2731509eb42ad1a132f8307d4d051beb6681b89e1803a4",
+    "saw-isolated84.wav": "3f26be6f72619fb74f39f248346ee1b4fbdf3561d1107745d2206dc59f53e14b",
+    "saw-from72_gap3p4.wav": "2c8b6945ce9fe17f7b46aded581f0a55d7dd606067b7b5b2ac3caa1cf6fddb2c",
+    "saw-delayed84_at5p7.wav": "641fd4c29265ea29a3182e5c6d51c488f95259bfe8917db9e1ac34753cb64a32",
+    "saw-repeat84_gap3p4.wav": "4d8a2634f611c2c74e1ce86abc2bc1f604144f1e8800717efd7c57c9a2f338ec"
+  }
+}
