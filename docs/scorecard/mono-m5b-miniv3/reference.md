@@ -28,6 +28,9 @@ events; its injected-click control detected all five clicks.
 The first report draft misstated the final release interval as 2.9 s. Auditing
 the event timeline against the audio caught the 0.1 s error; the corrected
 case definition and manifest use 2.8 s. The waveform data were unchanged.
+The artifact audit also found that the repository-wide `*.wav` ignore rule
+had omitted the raw recording from the first commit. The final capture commit
+tracks the WAV alongside its hash-bearing manifest.
 The host also logs `attempt to map invalid URI` for the plugin bundle. The
 capture records this warning; all parameter readbacks, waveform classifications,
 finite/non-silent audio checks, and the integrity control succeeded.
