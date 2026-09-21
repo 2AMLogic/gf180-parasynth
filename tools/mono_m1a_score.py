@@ -129,7 +129,36 @@ def required_metrics(measured):
             "Model D cross-check": invalid("case requires a Model D cross-check; only Mini V3 frozen reference exists", "")}
 
 
-def run(case, inject="", keep_audio=True):
+def load_model_cache(record, patch, engine):
+    """Reanalyse a hash-bound model render only while its DSP tree is unchanged."""
+    import subprocess
+    pcm_path = ROOT / record["audio"]
+    config = record["diagnostics"]["configuration"]
+    if json.dumps(config["patch"], sort_keys=True) != json.dumps(patch, sort_keys=True) or config["engine"] != engine:
+        raise Refused("cached model patch or engine differs")
+    if config.get("inject") or record["engine"] != "fixed-model":
+        raise Refused("only clean model audio may be reused")
+    if sha(pcm_path) != record["diagnostics"]["model_audio_sha256"]:
+        raise Refused("cached model audio hash mismatch")
+    if record["provenance"]["inputs"]["frozen:M1A:manifest"] != "sha256:" + sha(MANIFEST):
+        raise Refused("cached model reference differs")
+    # Older records have shortened model hashes. Check every recorded DSP input
+    # as well as the committed tree; retain their original dirty-tree identity.
+    for rel, digest in record["provenance"]["inputs"].items():
+        if rel.startswith(("model/", "audition/")):
+            if digest.removeprefix("sha256:") not in (sha(ROOT / rel), sha(ROOT / rel)[:16]):
+                raise Refused(f"cached model input differs: {rel}")
+    changed = subprocess.run(["git", "diff", "--exit-code", record["source_commit"], "--", "model", "audition"],
+                             cwd=ROOT, capture_output=True, text=True)
+    if changed.returncode != 0:
+        raise Refused("cached model DSP sources differ or cannot be checked")
+    sr, pcm = wavfile.read(pcm_path)
+    if sr != SR or pcm.dtype != np.int16 or pcm.ndim != 1:
+        raise Refused("cached model audio format differs")
+    return pcm
+
+
+def run(case, inject="", keep_audio=True, cached_record=None):
     import run_case
     source_commit = run_case.source_commit()
     source_tree = run_case.worktree_state()
@@ -141,10 +170,15 @@ def run(case, inject="", keep_audio=True):
     qualification = reference.qualify_envelope_basis()
     patch = patch_for_reference(manifest)
     engine = lead.engine_configuration("selected")
-    voice = lead._voice_for_engine(engine)
     sequence = [(e["on_s"], e["note"] + (.25 if inject else 0), e["gate_s"],
                  {**patch, "gate": e["gate_s"]}) for e in reference.EVENTS]
-    pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
+    if cached_record is not None:
+        if inject:
+            raise Refused("model mutations cannot reuse cached audio")
+        pcm = load_model_cache(cached_record, patch, engine)
+    else:
+        voice = lead._voice_for_engine(engine)
+        pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
     measured = compare_audio(pcm.astype(np.float64) / 32768., reference_pcm)
     output = (ROOT / f"build/scorecard/M1A-{inject}-model.wav" if inject else
               MANIFEST.parent / "m1a-model.wav")
@@ -167,8 +201,8 @@ def run(case, inject="", keep_audio=True):
         "tools/mono_m1a_score.py": "sha256:" + sha(Path(__file__)),
         "model/filter_rate_chain.py": "sha256:" + sha(ROOT / "model/filter_rate_chain.py"),
         "tools/measure_mono_m1a_reference.py": "sha256:" + sha(ROOT / "tools/measure_mono_m1a_reference.py")})
-    for name in ("dsp.py", "fixed.py"):
-        inputs[f"model/{name}"] = "sha256:" + sha(ROOT / "model" / name)
+    for rel in ("audition/dsp.py", "model/fixed.py"):
+        inputs[rel] = "sha256:" + sha(ROOT / rel)
     provenance = run_case.provenance(inputs, artifacts, config)
     provenance["worktree"] = source_tree
     return {"engine": "fixed-model", "case_id": "M1A", "subject": case["subject"],
@@ -177,6 +211,9 @@ def run(case, inject="", keep_audio=True):
             "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
             "audio": artifacts.get("ours", ""), "metrics": required_metrics(measured),
             "diagnostics": {**measured, "qualification": qualification, "configuration": config,
+                            "render_source_commit": (cached_record["source_commit"] if cached_record else source_commit),
+                            "render_worktree": (cached_record["provenance"]["worktree"] if cached_record else source_tree),
+                            "audio_reused": cached_record is not None,
                             "model_audio_sha256": sha(output) if keep_audio else None,
                             "wrong_then_right": {"apparatus_corrections": 4,
                                 "latest": "release qualification had been extended to attack; known 8 ms signal rejects it"}},

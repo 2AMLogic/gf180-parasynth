@@ -66,3 +66,24 @@ def test_runner_executes_bass_and_preserves_required_no_verdict():
     assert metrics["bass level"]["valid"]
     assert not metrics["envelope"]["valid"]
     assert not metrics["Model D cross-check"]["valid"]
+
+
+def test_render_provenance_uses_existing_dsp_sources(monkeypatch):
+    # Exercise the complete reporting path without an expensive synth render.
+    # This caught the mistaken model/dsp.py path (the module is in audition/).
+    pcm = np.asarray(signal() * 32768, dtype=np.int16)
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", lambda *args: pcm)
+    case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
+    record = bass.run(case, keep_audio=False)
+    assert record["provenance"]["inputs"]["audition/dsp.py"] == "sha256:" + bass.sha(bass.ROOT / "audition/dsp.py")
+    assert record["provenance"]["inputs"]["model/fixed.py"] == "sha256:" + bass.sha(bass.ROOT / "model/fixed.py")
+
+
+def test_changed_cached_audio_refuses(tmp_path):
+    path = tmp_path / "changed.wav"
+    path.write_bytes(b"corrupt")
+    record = {"audio": str(path), "engine": "fixed-model",
+              "diagnostics": {"configuration": {"patch": {}, "engine": {}, "inject": None},
+                              "model_audio_sha256": "original"}}
+    with pytest.raises(bass.Refused, match="hash mismatch"):
+        bass.load_model_cache(record, {}, {})
