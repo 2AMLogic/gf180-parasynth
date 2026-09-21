@@ -85,7 +85,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=ROOT / "build/fpga-selected")
     parser.add_argument("--nextpnr", default="nextpnr-ecp5")
-    parser.add_argument("--device", choices=("25k", "45k", "85k"), default="25k")
+    parser.add_argument("--device", choices=("25k", "45k", "85k"), default="85k")
     parser.add_argument("--from-synthesis", type=Path,
                         help="reuse a hash-verified successful synthesis report")
     parser.add_argument("--synth-only", action="store_true")

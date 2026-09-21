@@ -31,7 +31,7 @@ evidence; all core source files and ROMs are checked byte-for-byte against
 that simulation's commit before a build. The FPGA wrapper is outside that
 simulation's scope.
 
-Build the ULX3S 25F candidate:
+Build the ULX3S 85F candidate (the selected default target):
 
 ```sh
 make -C fpga candidate
