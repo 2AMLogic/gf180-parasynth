@@ -7,9 +7,9 @@ per-note property is lost against the selected baseline; an already-failing
 partial worsens from approximately 3.39 to 3.74 dB. Legacy-to-selected losses
 remain recorded separately.
 
-Both complete model phrases have five of seven passing properties. This is
-model evidence until the full phrases pass SPI-to-I2S comparison and are scored
-from their decoded audio. The official board remains unchanged.
+Both complete phrases now have five of seven passing properties measured from
+decoded SPI-to-I2S audio. The official board remains 20 valid cases / six passing
+cases; these candidate results remain separate from the selected baseline.
 
 Start red: c6b509a selected the pulse2x model against the existing saw-only RTL.
 The 4,837-period SPI-to-I2S smoke delivered all 61 writes and met the deadline
