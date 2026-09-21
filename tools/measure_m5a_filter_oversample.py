@@ -236,7 +236,10 @@ def run(out_dir: pathlib.Path) -> dict:
         configurations[mode] = {}
         for pulse in ("pulse29", "pulse479"):
             result = m5a.measure(
-                pulse_shape=pulse,
+                pulse_shape=pulse, engine="legacy",
+                saw_cutoff_override=int(round(m5a.json.loads(m5a.MANIFEST.read_text())
+                                               ["patch"]["cutoff_measurement"]["f0_hz"])),
+                saw_volume_correction_db=0.0,
                 voice_factory=_voice_factory(mode),
                 model_label=mode,
                 output_path=out_dir / f"M5A-{mode}-{pulse}.wav",
