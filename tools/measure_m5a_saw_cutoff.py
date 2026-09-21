@@ -38,11 +38,14 @@ def measure(cutoff_hz: int, saw_gain_correction_db: float = 0.0) -> dict:
 
     voice_factory = score_m5a_i2s._candidate_factory
     baseline = m5a.measure(
-        pulse_shape="pulse479", voice_factory=voice_factory,
+        pulse_shape="pulse479", engine="selected", voice_factory=voice_factory,
+        saw_cutoff_override=int(round(json.loads(m5a.MANIFEST.read_text())
+                                      ["patch"]["cutoff_measurement"]["f0_hz"])),
+        saw_volume_correction_db=0.0,
         model_label="selected-filter-2x-saw-cutoff-baseline",
         output_path=ROOT / "build/scorecard/M5A-saw-cutoff-baseline.wav")
     candidate = m5a.measure(
-        pulse_shape="pulse479", voice_factory=voice_factory,
+        pulse_shape="pulse479", engine="selected", voice_factory=voice_factory,
         model_label=f"selected-filter-2x-saw-cutoff-{cutoff_hz}",
         output_path=ROOT / "build/scorecard/M5A-saw-cutoff-candidate.wav",
         saw_cutoff_override=cutoff_hz,

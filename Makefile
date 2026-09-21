@@ -89,8 +89,8 @@ verify-full:
 ## THE THREE FILTER CONTROLS need the frozen reference cache. Without it the
 ## clean baseline refuses; the runner reports NO-VERDICT, and this aggregate
 ## target fails. That is intentional: these controls cannot be called caught
-## without a valid clean comparison. Render the profile first
-## (`tools/refprofile.py --render`, which needs Surge XT and dawdreamer).
+## without a valid clean comparison. Restore the frozen profile first
+## (`python3 tools/refprofile_restore.py`, which needs no plugin).
 ##
 ## THE TWO PROFILE CONTROLS NOW COVER F1B AND F1C. REF_CORNER_2X compares the
 ## injected run with a clean run, because all three F1 cases now fail cleanly;
@@ -159,6 +159,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_DONE_NOWAIT --expect-fail --outdir build/top-nowait" \
+	  "$(PY) tools/run_case.py --inject MONO_PITCH_UP_25_CENTS M5B --results build/case-m5b-pitch --expect changed" \
 	  "$(PY) fpga/verify_fixture.py --wrong no-coef-seq --expect-fail --outdir build/fx-nocoef" \
 	  "$(PY) fpga/verify_fixture.py --wrong drop-restore --expect-fail --outdir build/fx-droprest" \
 	  "$(PY) fpga/verify_fixture.py --wrong late-window --expect-fail --outdir build/fx-late" \

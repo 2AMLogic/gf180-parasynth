@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Capture one portable Mini V3 reference for the M5A high-note case.
+"""Capture a portable Mini V3 reference for M5A or the lower-note M5B case.
 
     python3 tools/measure_mono_m5a_reference.py --out docs/scorecard/mono-m5a-miniv3
+    python3 tools/measure_mono_m5a_reference.py --case M5B --out docs/scorecard/mono-m5b-miniv3
 
 The output is raw float WAV plus a hash-bearing manifest. No normalisation is
 applied. The plugin name, version, parameter names/readbacks, host settings,
-MIDI gates, measured pitch/waveform, envelope, harmonic shape and clipping
-state are recorded at the point of capture. A missing plugin or failed
-precondition refuses to produce a reference.
+MIDI gates, measured pitch/waveform, envelope, harmonic shape, cutoff mapping,
+and clipping state are recorded at the point of capture. A missing plugin or
+failed precondition refuses to produce a reference. M5B uses MIDI 72 and 84,
+classifies both waveforms at both pitches, and includes a complete release.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ import pathlib
 import plistlib
 import subprocess
 import sys
+import tempfile
 
 import numpy as np
 from scipy.io import wavfile
@@ -40,7 +43,7 @@ WAVE_SETTINGS = {
     "saw": (0.4083, "sawtooth"),
     "pulse": (0.575, "square"),
 }
-EVENTS = {
+M5A_EVENTS = {
     # Keep the M5A base pitch and octave-above pitch check in both segments.
     # At MIDI 96 only four saw partials and two square partials lie below
     # 12 kHz, so waveform identity is asserted only at MIDI 84; high-note
@@ -56,6 +59,24 @@ EVENTS = {
 }
 SEGMENT_SECONDS = 13.50
 INTER_SEGMENT_SILENCE = 0.20
+
+# M5B is the lower-note expansion of the bright-lead case: the base
+# note is MIDI 72, with MIDI 84 checking that the mapping carries upward.
+# Each waveform segment is a 4.6 s note phrase followed by 2.8 s of release.
+M5B_EVENTS = {
+    wave: (
+        {"note": 72, "on_s": 0.10, "gate_s": 0.60},
+        {"note": 84, "on_s": 4.10, "gate_s": 0.60},
+    ) for wave in WAVE_SETTINGS
+}
+CASES = {
+    "M5A": {"events": M5A_EVENTS, "segment_seconds": SEGMENT_SECONDS,
+            "requires_waveform_at_every_note": False,
+            "base_midi_note": 84, "high_midi_note": 96},
+    "M5B": {"events": M5B_EVENTS, "segment_seconds": 7.50,
+            "requires_waveform_at_every_note": True,
+            "base_midi_note": 72, "high_midi_note": 84},
+}
 
 # The artifact fixes the mixer/output gain. These are captured as settings,
 # not used to normalise either side of a later comparison.
@@ -149,18 +170,19 @@ def _apply_patch(rig: rr.MiniV3Rig, wave: str, *, decay: float) -> dict:
             "other_sources_disabled": True}
 
 
-def _render_segment(wave: str, decay: float, block: int = BLOCK):
+def _render_segment(wave: str, decay: float, events: dict,
+                    segment_seconds: float, block: int = BLOCK):
     if wave not in WAVE_SETTINGS:
-        raise ValueError(f"unsupported M5A waveform {wave!r}")
+        raise ValueError(f"unsupported Mono waveform {wave!r}")
     if not math.isclose(decay, PATCH["amp_decay"][2], abs_tol=1e-9):
         raise ValueError("the frozen artifact uses the declared patch decay")
     try:
         rig = rr.MiniV3Rig(block=block)
         patch = _apply_patch(rig, wave, decay=decay)
-        seconds = SEGMENT_SECONDS
+        seconds = segment_seconds
         rig.pb.set_data(np.zeros((2, int(seconds * SR)), dtype=np.float32))
         rig.p.clear_midi()
-        for event in EVENTS[wave]:
+        for event in events[wave]:
             rig.p.add_midi_note(event["note"], VELOCITY,
                                 event["on_s"], event["gate_s"])
         rig.eng.render(seconds)
@@ -240,10 +262,14 @@ def envelope_timing(env, sr: int, on_s: float, off_s: float) -> dict:
     }
 
 
-def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
+def _event_analysis(audio: np.ndarray, wave: str, events: dict,
+                    *, classify_every_note: bool) -> list[dict]:
     env = am.rms_envelope(audio, ms=5.0, sr=SR)
     records = []
-    for event in EVENTS[wave]:
+    waveform_scope = ("waveform independently classified at every commanded note"
+                      if classify_every_note else
+                      "qualified at MIDI 84; MIDI 96 shape unclassified due to band limit")
+    for event in events[wave]:
         # Stay away from both the note edge and gate-off. High notes provide
         # hundreds of cycles in this stationary analysis window.
         t0 = event["on_s"] + 0.12
@@ -253,10 +279,10 @@ def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
         if len(steady) < int(0.2 * SR):
             raise Refused(f"MIDI {event['note']} has too little steady audio")
         command_hz = vf.note_hz(event["note"])
-        if event["note"] == 84:
-            # The base note has enough partials for the independent
-            # time-domain waveform classifier; this is the waveform-shape
-            # anchor for each segment.
+        if classify_every_note or event["note"] == 84:
+            # M5B classifies both notes to prove waveform mapping at its base
+            # pitch and at the high-note extension. M5A keeps its established
+            # MIDI 84 waveform anchor; its MIDI 96 partials are band-limited.
             row = rv.measure(steady, command_hz, f"Mini V3 {wave} MIDI {event['note']}",
                              "saw" if wave == "saw" else "square")
             if not row.get("steady") or not row.get("verified"):
@@ -275,9 +301,9 @@ def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
                    "wave_label": None, "verified": None, "steady": True,
                    **{f"h{k}": sig.get(f"h{k}") for k in range(2, 13)}}
         measured_harmonics = sum(row.get(f"h{k}") is not None for k in range(2, 9))
-        if wave == "saw" and event["note"] == 84:
+        if wave == "saw" and (classify_every_note or event["note"] == 84):
             # Require five whenever the Nyquist-limited 12 kHz band contains
-            # five; at MIDI 96 it contains four, all of which must be measured.
+            # five; high notes must at least provide every usable partial.
             expected = min(5, max(1, int(12000 / command_hz) - 1))
             if measured_harmonics < expected:
                 raise Refused(f"MIDI {event['note']} saw has {measured_harmonics} usable harmonics, "
@@ -295,9 +321,9 @@ def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
         if not times["release_complete_40db"]:
             raise Refused(f"MIDI {event['note']} release is not complete to -40 dB: "
                           f"tail {times['tail_db']:.2f} dB")
-        event_index = EVENTS[wave].index(event)
-        if event_index + 1 < len(EVENTS[wave]):
-            next_on = EVENTS[wave][event_index + 1]["on_s"]
+        event_index = events[wave].index(event)
+        if event_index + 1 < len(events[wave]):
+            next_on = events[wave][event_index + 1]["on_s"]
             n = max(1, int(0.040 * SR))
             residual = float(np.median(env[int((next_on * SR)) - n:int(next_on * SR)]))
             residual_db = 20.0 * math.log10(max(residual, 1e-15) / times["held_rms"])
@@ -312,7 +338,7 @@ def _event_analysis(audio: np.ndarray, wave: str) -> list[dict]:
             "commanded_f0_hz": command_hz,
             "f0_hz": row["f0"], "f0_cents": row["f0_cents"],
             "waveform": row["wave_label"], "waveform_verified": row["verified"],
-            "waveform_scope": "qualified at MIDI 84; high-note shape unclassified due to band limit",
+            "waveform_scope": waveform_scope,
             "harmonics_db": {f"h{k}": row.get(f"h{k}") for k in range(2, 13)},
             "inharmonic_db": inharmonic.value,
             "gain_rms_dbfs": 20.0 * math.log10(max(float(am.rms(steady)), 1e-15)),
@@ -344,6 +370,38 @@ def _plugin_metadata() -> dict:
         "plugin_binary_sha256": sha256(executable) if executable.is_file() else None,
         "host": "dawdreamer", "host_version": host_version,
     }
+
+
+def _qualify_reference_integrity() -> dict:
+    """Prove this installed plugin/host pair is clean and the click detector works."""
+    with tempfile.TemporaryDirectory(prefix="mono-reference-integrity-") as tmp:
+        command = [sys.executable, str(ROOT / "model/reference_integrity.py"),
+                   "--stage", "demo", "--devices", "miniv3", "--source", "smooth",
+                   "--seconds", "40", "--block", str(BLOCK), "--out", tmp]
+        run = subprocess.run(command, cwd=ROOT, text=True, capture_output=True,
+                             timeout=180, check=False)
+        if run.returncode != 0:
+            raise Refused("Mini V3 reference-integrity qualification failed: " +
+                          (run.stderr.strip() or run.stdout.strip() or str(run.returncode)))
+        result_path = pathlib.Path(tmp) / "demo-smooth.json"
+        if not result_path.is_file():
+            raise Refused("reference-integrity tool returned without its measurement JSON")
+        rows = json.loads(result_path.read_text())
+        clean = rows.get("miniv3-smooth")
+        injected = rows.get("miniv3-smooth+injected")
+        if not isinstance(clean, dict) or not isinstance(injected, dict):
+            raise Refused("reference-integrity result lacks clean or injected control")
+        if clean.get("n_events") != 0:
+            raise Refused(f"Mini V3 produced {clean.get('n_events')} unprompted transient events")
+        expected_clicks = int(40 // 7)
+        if injected.get("n_events", 0) < expected_clicks:
+            raise Refused("injected-click control failed: "
+                          f"{injected.get('n_events')} events, needs {expected_clicks}")
+        return {"command": command, "duration_s": 40, "block_size_samples": BLOCK,
+                "clean_events": clean["n_events"],
+                "injected_click_events": injected["n_events"],
+                "detector_control_passed": True,
+                "stdout": run.stdout.strip(), "stderr": run.stderr.strip()}
 
 
 def _measure_open_cutoff(repeats: int = 3) -> dict:
@@ -389,8 +447,11 @@ def _measure_open_cutoff(repeats: int = 3) -> dict:
 
 def _source_provenance() -> dict:
     paths = ("tools/measure_mono_m5a_reference.py", "tools/test_measure_mono_m5a_reference.py",
+             "docs/scorecard/cases.csv",
              "model/audio_measure.py",
-             "model/reference_rigs.py", "model/reference_voice.py", "model/voice_fx.py")
+             "model/reference_integrity.py", "model/reference_rigs.py",
+             "model/test_reference_integrity.py",
+             "model/reference_voice.py", "model/voice_fx.py")
     dirty = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", *paths],
                            capture_output=True, text=True, check=True).stdout.strip()
     if dirty:
@@ -406,20 +467,29 @@ def _write_float_wav(path: pathlib.Path, audio: np.ndarray):
     wavfile.write(path, SR, np.asarray(audio, dtype=np.float32))
 
 
-def capture(out: pathlib.Path, repeats: int = 3) -> dict:
-    """Capture and qualify the fixed two-wave, two-note M5A phrase."""
+def capture(out: pathlib.Path, repeats: int = 3, case_id: str = "M5A") -> dict:
+    """Capture and qualify a configured two-wave Mono reference phrase."""
     if repeats < 2:
         raise ValueError("at least two independent renders are needed to report repeatability")
+    if case_id not in CASES:
+        raise ValueError(f"unsupported case {case_id!r}; choose one of {sorted(CASES)}")
+    case = CASES[case_id]
+    events = case["events"]
+    segment_seconds = case["segment_seconds"]
     identity = _plugin_metadata()
     source = _source_provenance()
     if identity["name"] != "Mini V3":
         raise Refused(f"plugin bundle identifies as {identity['name']!r}, not Mini V3")
+    integrity = _qualify_reference_integrity()
 
     attempts = {wave: [] for wave in WAVE_SETTINGS}
     for wave in WAVE_SETTINGS:
         for repeat in range(repeats):
-            audio, apparatus = _render_segment(wave, PATCH["amp_decay"][2])
-            measurements = _event_analysis(audio, wave)
+            audio, apparatus = _render_segment(wave, PATCH["amp_decay"][2],
+                                                events, segment_seconds)
+            measurements = _event_analysis(
+                audio, wave, events,
+                classify_every_note=case["requires_waveform_at_every_note"])
             attempts[wave].append({"audio": audio, "apparatus": apparatus,
                                   "measurements": measurements, "repeat": repeat})
 
@@ -445,7 +515,7 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
     phrase = np.concatenate([attempts["saw"][0]["audio"].astype(np.float32), gap,
                              attempts["pulse"][0]["audio"].astype(np.float32)])
     out.mkdir(parents=True, exist_ok=True)
-    wav_path = out / "m5a-miniv3-raw.wav"
+    wav_path = out / f"{case_id.lower()}-miniv3-raw.wav"
     _write_float_wav(wav_path, phrase)
 
     segments = []
@@ -456,8 +526,8 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
             "wave": wave,
             "offset_samples": offset,
             "samples": len(run["audio"]),
-            "duration_s": SEGMENT_SECONDS,
-            "midi_events": [dict(e, velocity=VELOCITY) for e in EVENTS[wave]],
+            "duration_s": segment_seconds,
+            "midi_events": [dict(e, velocity=VELOCITY) for e in events[wave]],
             "readbacks": run["apparatus"]["patch"]["readbacks"],
             "final_readbacks": run["apparatus"]["final_readbacks"],
             "measurements": run["measurements"],
@@ -471,7 +541,12 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
     open_cutoff = _measure_open_cutoff()
     manifest = {
         "schema": 1,
-        "case_id": "M5A",
+        "case_id": case_id,
+        "case_spec": {"base_midi_note": case["base_midi_note"],
+                       "high_midi_note": case["high_midi_note"],
+                       "phrase_duration_s": max(e["on_s"] + e["gate_s"] for e in events["saw"]) -
+                                             min(e["on_s"] for e in events["saw"]),
+                       "waveform_identity_required_at_every_note": case["requires_waveform_at_every_note"]},
         "reference_kind": "software synthesizer; not a physical Minimoog",
         "identity": identity,
         "source": source,
@@ -490,25 +565,16 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
             "normalisation": "none; float32 WAV retains raw plugin output",
             "gain_policy": "record raw levels; General Level 0.700 and Osc1 Level 0.900 are fixed patch settings",
         },
-        "timeline": {"phrase_s": max(e["on_s"] + e["gate_s"] for e in EVENTS["saw"]) -
-                                 min(e["on_s"] for e in EVENTS["saw"]),
+        "timeline": {"phrase_s": max(e["on_s"] + e["gate_s"] for e in events["saw"]) -
+                                 min(e["on_s"] for e in events["saw"]),
                      "audio_duration_s": len(phrase) / SR,
                      "segment_silence_s": INTER_SEGMENT_SILENCE,
-                     "final_release_s": SEGMENT_SECONDS - (EVENTS["saw"][-1]["on_s"] + EVENTS["saw"][-1]["gate_s"]),
+                     "final_release_s": segment_seconds - (events["saw"][-1]["on_s"] + events["saw"][-1]["gate_s"]),
                      "segments": segments},
         "repeatability": repeatability,
         "qualification": {
-            "reference_integrity_command": "python3 model/reference_integrity.py --stage demo --devices miniv3 --source smooth --seconds 40",
-            "reference_integrity_result": "0 unprompted transient events in 40 s; 5 injected click events detected",
-            "host_warning": {
-                "text": "error: attempt to map invalid URI '/Library/Audio/Plug-Ins/VST3/Mini V3.vst3'",
-                "host": "dawdreamer 0.8.3",
-                "observed": "emitted on plugin instance creation; renders remained finite/non-silent and parameter name/value readbacks held",
-            },
+            "reference_integrity": integrity,
             "wrong_then_right": {
-                "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
-                "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
-                "attempts": 2, "discarded_measurements": 1,
                 "cutoff_calibration": {
                     "discarded": {"host_block_size_samples": 512,
                                   "measured_hz": open_cutoff["wrong_block_control"]["f0_hz"],
@@ -519,9 +585,9 @@ def capture(out: pathlib.Path, repeats: int = 3) -> dict:
                                  "repeat_count": open_cutoff["repeat_count"],
                                  "repeat_range_hz": open_cutoff["repeat_range_hz"]},
                 },
-                "overall_attempts": 3 + open_cutoff["repeat_count"],
-                "overall_discarded_measurements": 2,
-                "overall_wrong_then_right_rate": f"2/{3 + open_cutoff['repeat_count']}",
+                "discarded_cutoff_measurements": 1,
+                "cutoff_measurements": 1 + open_cutoff["repeat_count"],
+                "wrong_then_right_rate": f"1/{1 + open_cutoff['repeat_count']} cutoff measurements",
             },
         },
         "audio": {"file": wav_path.name, "sha256": artifact_sha,
@@ -537,10 +603,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", type=pathlib.Path, required=True,
                     help="directory for the frozen WAV and manifest")
+    ap.add_argument("--case", choices=sorted(CASES), default="M5A",
+                    help="scorecard case; M5B uses MIDI 72/84 and a 4.6 s phrase")
     ap.add_argument("--repeats", type=int, default=3)
     args = ap.parse_args(argv)
     try:
-        result = capture(args.out, repeats=args.repeats)
+        result = capture(args.out, repeats=args.repeats, case_id=args.case)
     except (Refused, ValueError) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -557,9 +625,8 @@ def main(argv=None) -> int:
                   f"tail {m['envelope']['tail_db']:.1f} dB")
     wr = result["data"]["qualification"]["wrong_then_right"]
     ctrl = wr["cutoff_calibration"]
-    print(f"wrong-then-right: {wr['overall_wrong_then_right_rate']} discarded measurements / "
-          f"{wr['overall_attempts']} attempts; saw-edge estimator 1/2 and cutoff host-block "
-          f"control caught ({ctrl['discarded']['host_block_size_samples']} -> "
+    print(f"wrong-then-right: {wr['wrong_then_right_rate']}; host-block control caught "
+          f"({ctrl['discarded']['host_block_size_samples']} -> "
           f"{ctrl['accepted']['host_block_size_samples']} samples, "
           f"{ctrl['discarded']['measured_hz'] - ctrl['accepted']['measured_hz']:+.1f} Hz)")
     return 0
