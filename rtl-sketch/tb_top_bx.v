@@ -74,7 +74,7 @@ module tb_top_bx;
     end
 
     // ---- the DUT's own sample stream: a DIAGNOSTIC, never the expectation ---------
-    integer samp_fd = 0, wr_fd = 0, i2s_fd = 0;
+    integer samp_fd = 0, wr_fd = 0, i2s_fd = 0, env_fd = 0;
     reg signed [15:0] samp = 0;
     integer n_strobe = 0, n_nostrobe = 0, worst_cyc = 0, busy_at_tick = 0;
     reg got = 0;
@@ -87,6 +87,10 @@ module tb_top_bx;
         if (dut.cyc == 8'd255) begin
             if (!got) n_nostrobe = n_nostrobe + 1;
             if (samp_fd) $fdisplay(samp_fd, "%0d %0d", fr, dut.sample_valid ? dut.sample : samp);
+            if (env_fd) $fdisplay(env_fd, "%0d %0d %0d %0d %0d %0d %0d",
+                                  fr, dut.u_voice.gate, dut.u_voice.rate_a,
+                                  dut.u_voice.level_a, dut.u_voice.seg_a,
+                                  dut.u_voice.rate_f, dut.u_voice.level_f);
             got <= 1'b0;
         end
         if (dut.wr_valid) begin
@@ -138,13 +142,14 @@ module tb_top_bx;
 
     // ---- the script --------------------------------------------------------------
     integer cmd_fd, rc, wait_f, flag_i, sec_i, addr_i, data_i, n_sent = 0, run_frames = 200, t0;
-    reg [8*512-1:0] cmd_file, i2s_file, samp_file, wr_file;
+    reg [8*512-1:0] cmd_file, i2s_file, samp_file, wr_file, env_file;
     task wait_ticks(input integer n); begin t0 = ticks; wait (ticks >= t0 + n); end endtask
     initial begin
         if (!$value$plusargs("cmd=%s", cmd_file))   cmd_file  = "build/top_bx_cmds.txt";
         if ($value$plusargs("i2s=%s", i2s_file))    i2s_fd    = $fopen(i2s_file, "w");
         if ($value$plusargs("samp=%s", samp_file))  samp_fd   = $fopen(samp_file, "w");
         if ($value$plusargs("wrs=%s", wr_file))     wr_fd     = $fopen(wr_file, "w");
+        if ($value$plusargs("env=%s", env_file))    env_fd    = $fopen(env_file, "w");
         if ($value$plusargs("frames=%d", run_frames)) ;
         repeat (8) @(posedge clk);
         @(negedge clk) rst_n = 1;                         // released with cyc = 0: frame 0 starts here

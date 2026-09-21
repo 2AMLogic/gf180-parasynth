@@ -47,10 +47,10 @@ Formats:
     envelope        24-bit unsigned level, Q0.24. Attack and decay are linear
                     ramps (an increment per frame), matching the float model
                     that was auditioned. Release is exponential: subtract a
-                    fraction of the level each frame, L -= max(1, (L*rate)>>16)
-                    with rate in Q0.16. The max(1, .) is load-bearing -- without
-                    it the shifted product truncates to zero below
-                    2^16/rate and the note never ends. Output Q0.15 = L >> 9.
+                    fraction of the level each frame, L -= max(1,
+                    (L*mantissa)>>(16+exponent)). The max(1, .) is load-bearing:
+                    below the coefficient floor the tail still reaches zero.
+                    Output Q0.15 = L >> 9.
     glide           Q0.24 register, the ratio per frame minus 1 (0 = off);
                     the increment slews in a Q24.8 accumulator by
                     max(1, (acc * glide) >> 24) per frame toward its target:
@@ -90,6 +90,7 @@ from fixed import LadderFx, sat, shl, usat
 CYCLE = 1 << PHASE_BITS
 ENV_BITS = 24
 RATE_Q = 16
+RATE_EXP_BITS = 8
 MANT_BITS = 16
 RECIP_BITS = 16
 GROM_BITS = 7                    # 128-entry cutoff -> g ROM
@@ -207,7 +208,8 @@ TWO_EDGE = ("square", "pulse25", "pulse29", "pulse15", "pulse479")
 # Register widths of the control image, NUMERIC-CONTRACT.md 5.1. Each host
 # conversion below clamps to the width named here; the sweep test walks them.
 REG_BITS = dict(inc=INC_BITS, w=WEIGHT_BITS, wn=WEIGHT_BITS,
-                a_inc=ENV_BITS, d_dec=ENV_BITS, sus=ENV_BITS, rate=RATE_Q,
+                a_inc=ENV_BITS, d_dec=ENV_BITS, sus=ENV_BITS,
+                rate=RATE_Q + RATE_EXP_BITS,
                 cut_lo=CUT_BITS, cut_hi=CUT_BITS, track_hz=CUT_BITS,
                 k=LadderFx.K_BITS, gain=LadderFx.GAIN_BITS, ogain=LadderFx.GAIN_BITS,
                 glide=GLIDE_BITS, vol=VOL_BITS, nsel=NSEL_BITS, mmix=MOD_BITS,
@@ -619,20 +621,19 @@ class AdsrFx:
       attack   L += a_inc (ceil(2^EB / attack_frames)); clamps at full
       decay    L -= d_dec (ceil((full - sus) / decay_frames)); clamps at sus
       sustain  L = sus
-      release  L -= max(1, (L * rate) >> RATE_Q); clamps at 0
-    rate = round((1 - exp(-4 / (release_s * SR))) * 2^RATE_Q), min 1, so the
-    exponential matches the float's exp(-4 t / release). The `env_bits`
-    parameter exists to measure the dead zone, exactly as fixed.LadderFx's
-    `state_q` does.
+      release  L -= max(1, (L * mantissa) >> (RATE_Q + exponent)); clamps at 0
+    The hardware rate register stores a 16-bit Q0.16 mantissa and an 8-bit
+    exponent. Together they represent alpha = mantissa * 2^-(RATE_Q+exponent),
+    where alpha = 1 - exp(-4 / (release_s * SR)). Splitting scale from
+    precision avoids rounding long release times to only two or three useful
+    Q0.16 values. The `env_bits` parameter exists to measure the dead zone,
+    exactly as fixed.LadderFx's `state_q` does.
 
     Every register is clamped to its width (a_inc, d_dec, sus to env_bits;
-    rate to rate_q bits). Two conversions reach the clamp: an attack shorter
-    than two frames (< 41.67 us) gives a_inc = 2^24, clamped to 2^24 - 1,
-    which still completes the attack in one update from any level; a release
-    of 7.07 us or less (release_s <= 4 / (17 ln 2 * SR)), including 0, gives
-    rate = 2^16 = 1.0, clamped to 65535, which releases full scale to zero in
-    three updates instead of one. release_s <= 0 means instant, as the float
-    model's max(1e-9, .) does; the model no longer divides by it."""
+    rate code to rate_q + RATE_EXP_BITS bits). An attack shorter than two
+    frames (< 41.67 us) gives a_inc = 2^24, clamped to 2^24 - 1, which still
+    completes the attack in one update from any level. A nonpositive release
+    selects the fastest representable code, avoiding division by zero."""
     ATTACK, DECAY, SUSTAIN = 0, 1, 2
 
     def __init__(self, a_s, d_s, sus, r_s, env_bits: int = ENV_BITS, rate_q: int = RATE_Q):
@@ -652,7 +653,15 @@ class AdsrFx:
         sus_r = usat(int(round(sus * full)), env_bits)
         d_dec = usat(-(-(full - sus_r) // d), env_bits)
         decay = math.exp(-4.0 / (r_s * SR)) if r_s > 0.0 else 0.0
-        rate = max(1, usat(int(round((1.0 - decay) * (1 << rate_q))), rate_q))
+        alpha = min(1.0, max(0.0, 1.0 - decay))
+        if alpha == 0.0:
+            rate = 0
+        else:
+            exponent = max(0, math.ceil(-math.log2(alpha)) - 1)
+            exponent = min(exponent, (1 << RATE_EXP_BITS) - 1)
+            mantissa = int(round(alpha * (1 << (rate_q + exponent))))
+            mantissa = min((1 << rate_q) - 1, max(1, mantissa))
+            rate = (exponent << rate_q) | mantissa
         return a_inc, d_dec, sus_r, rate
 
     def set(self, a_s, d_s, sus, r_s):
@@ -674,8 +683,10 @@ class AdsrFx:
             gate_a = np.asarray(gate, dtype=np.int64)
         trig_a = None if trig is None else np.asarray(trig, dtype=np.int64)
         L, seg = self.level, self.seg
-        full, sus, a_inc, d_dec, rate, RQ = (self.full, self.sus, self.a_inc,
-                                             self.d_dec, self.rate, self.RQ)
+        full, sus, a_inc, d_dec, rate_code, RQ = (self.full, self.sus, self.a_inc,
+                                                  self.d_dec, self.rate, self.RQ)
+        rate_mantissa = rate_code & ((1 << RQ) - 1)
+        rate_exponent = rate_code >> RQ
         sh = self.EB - q
         for i in range(n):
             if trig_a is not None and trig_a[i]:
@@ -693,7 +704,7 @@ class AdsrFx:
                 else:
                     L = sus
             else:
-                dec = (L * rate) >> RQ
+                dec = (L * rate_mantissa) >> (RQ + rate_exponent)
                 L -= dec if dec else 1
                 if L < 0:
                     L = 0
@@ -703,8 +714,12 @@ class AdsrFx:
     @property
     def floor_level(self) -> int:
         """Below this level the exponential step truncates to zero and the
-        release continues at 1 LSB per frame (linear). 2^RQ / rate."""
-        return (1 << self.RQ) // self.rate + 1
+        release continues at 1 LSB per frame (linear)."""
+        mantissa = self.rate & ((1 << self.RQ) - 1)
+        exponent = self.rate >> self.RQ
+        if mantissa == 0:
+            return self.full + 1
+        return (1 << (self.RQ + exponent)) // mantissa + 1
 
 
 # ---- cutoff -> coefficient ROM ---------------------------------------------

@@ -6,8 +6,6 @@ push. **Do not edit by hand** -- it is a view of
 
 **19 of 100 cases have a valid measurement.** 6 pass, 13 fail, 4 no verdict, 77 not run.
 
-> **No case has been measured on the integrated RTL.** Everything below describes a model, not the instrument.
-
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
 | **Drums** | 32 | 12 | 3 | 9 | 4 | 16 |
@@ -72,7 +70,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `M4B` | Mono | Development | Legato lead / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4C` | Mono | Development | Legato lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M4D` | Mono | Development | Legato lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
-| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | fixed-model | ❌ fail | 19.31 | worst: Harmonic shape |
+| `M5A` | Mono | Development | Bright high lead / anchor | Mini V3 3.12 software reference | integrated-rtl | ❌ fail | 8.84 | worst: Harmonic shape |
 | `M5B` | Mono | Development | Bright high lead / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M5C` | Mono | Development | Bright high lead / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M5D` | Mono | Holdout | Bright high lead / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |

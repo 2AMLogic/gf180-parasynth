@@ -428,9 +428,11 @@ RE_STRB = re.compile(r"sample strobed in (\d+) frames, MISSING in (\d+), worst s
 
 
 def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
-             simulator="iverilog"):
+             simulator="iverilog", envtrace_path=None):
     tag = "_".join(d.replace("INJECT_BUG_", "") for d in defines) or "base"
     out = {k: os.path.join(outdir, f"top_{k}_{tag}.txt") for k in ("i2s", "samp", "wrs")}
+    if envtrace_path:
+        out["envtrace"] = envtrace_path
     for f in out.values():
         if os.path.exists(f): os.remove(f)
     resolved = resolve_sources(rtl_dir)
@@ -460,7 +462,9 @@ def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
         run_cmd = ([tool("vvp"), "-n", executable] if simulator == "iverilog" else [executable])
         r = subprocess.run(run_cmd + [f"+cmd={os.path.join(outdir, 'top_bx_cmds.txt')}",
                             f"+i2s={out['i2s']}", f"+samp={out['samp']}", f"+wrs={out['wrs']}",
-                            f"+frames={frames}"], cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
+                            f"+frames={frames}"] +
+                           ([f"+env={envtrace_path}"] if envtrace_path else []),
+                           cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
         print("verify_synth_top: simulation timed out"); return None
     report = [l for l in r.stdout.splitlines() if l.startswith("tb_top_bx")]
@@ -504,6 +508,8 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl", default=None,
                     help="take sources this directory holds from there (the start-red path)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--envtrace", action="store_true",
+                    help="write diagnostic voice gate/envelope registers per frame")
     a = ap.parse_args(argv)
     if a.filter2x:
         a.osc2x = True
@@ -574,7 +580,9 @@ def main(argv=None) -> int:
     # drain frames so its *modelled* phrase length remains unchanged while the
     # wire has time to emit its complete final periods.
     sim_frames = tail + (3 if a.m5a else 0)
-    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl, simulator=a.simulator)
+    envtrace_path = os.path.join(a.outdir, "top_envtrace.txt") if a.envtrace else None
+    out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl, simulator=a.simulator,
+                   envtrace_path=envtrace_path)
     if out is None:
         return 2
 
