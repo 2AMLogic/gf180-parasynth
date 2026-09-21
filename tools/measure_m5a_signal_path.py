@@ -29,7 +29,7 @@ def _q15_to_full_scale(samples) -> np.ndarray:
     return np.asarray(samples, dtype=np.float64) / 32768.0
 
 
-def measure(cutoffs: list[int], drives: list[float]) -> dict:
+def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> dict:
     manifest = json.loads(m5a.MANIFEST.read_text())
     audio_meta = manifest["audio"]
     ref_path = m5a.MANIFEST.parent / audio_meta["file"]
@@ -57,7 +57,7 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
             seq = [(float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
                     {**patch, "gate": float(ev["gate_s"])})
                    for ev in segment["midi_events"]]
-            voice = vf.VoiceFx(oversample_2x=True)
+            voice = vf.VoiceFx(blep=blep, oversample_2x=True)
             pcm = vf.render_mono_fx(seq, float(segment["duration_s"]), voice)
             trace = voice.trace
             arrays = {
@@ -145,7 +145,7 @@ def measure(cutoffs: list[int], drives: list[float]) -> dict:
         "reference_sha256": reference_sha,
         "manifest_sha256": hashlib.sha256(m5a.MANIFEST.read_bytes()).hexdigest(),
         "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
-        "oscillator_config": "2x candidate saw; remaining Mini V3 oscillators disabled",
+        "oscillator_config": f"2x candidate saw; PolyBLEP {'enabled' if blep else 'disabled'}; remaining Mini V3 oscillators disabled",
         "intervention": "change only filter drive; cutoff and all other patch fields fixed",
         "alias_energy_definition": (
             "predicted image-bin power converted by one-sided Parseval and Hann mean-square "
@@ -161,9 +161,11 @@ def main(argv=None) -> int:
                     help="one or more cutoff values in Hz (default: baseline and maximum)")
     ap.add_argument("--drive", type=float, nargs="+", default=[1.0, 0.75, 0.5],
                     help="one or more ladder drive values (default: baseline, 0.75, 0.5)")
+    ap.add_argument("--disable-polyblep", action="store_true",
+                    help="controlled oscillator challenger: use the naive saw before the same 2x decimator")
     ap.add_argument("--out", default="build/scorecard/m5a-signal-path.json")
     args = ap.parse_args(argv)
-    report = measure(args.cutoff, args.drive)
+    report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
