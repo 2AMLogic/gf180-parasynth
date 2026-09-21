@@ -19,9 +19,10 @@ import run_case
 import voice_fx as vf
 
 
-def _candidate_factory():
+def _candidate_factory(*, pulse_2x=False):
     cfg = {**vf.LADDER_CFG, "oversample": 2}
-    return vf.VoiceFx(oversample_2x=True, ladder_cfg=cfg,
+    return vf.VoiceFx(oversample_2x=True, oversample_pulse_2x=pulse_2x, ladder_cfg=cfg,
+                      pulse479_filter_candidate=True,
                       rate_converted_ladder=True,
                       preserve_filter_headroom=True, causal_filter=True)
 
@@ -88,8 +89,8 @@ def main(argv=None) -> int:
     ap.add_argument("--wav", required=True, help="complete decoded int16 M5A I2S phrase")
     ap.add_argument("--verification", required=True,
                     help="captured stdout/stderr of the matching full --m5a --filter2x run")
-    ap.add_argument("--out", default="docs/scorecard/results/M5A.json")
-    ap.add_argument("--audio", default="docs/scorecard/mono-m5a-miniv3/filter2x-i2s.wav")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--audio", default=None)
     ap.add_argument("--pulse-shape", choices=("square", "pulse15", "pulse25", "pulse29"),
                     default=None, help="expected SPI-selected pulse shape; defaults to report value")
     ap.add_argument("--saw-cutoff-hz", type=int, default=None,
@@ -97,6 +98,8 @@ def main(argv=None) -> int:
     ap.add_argument("--saw-volume-correction-db", type=float, default=None,
                     help="expected saw-only volume correction; defaults to report value")
     a = ap.parse_args(argv)
+    a.out = a.out or f"docs/scorecard/results/{a.case}.json"
+    a.audio = a.audio or f"docs/scorecard/mono-{a.case.lower()}-miniv3/filter2x-i2s.wav"
     wav = pathlib.Path(a.wav).resolve()
     verification = pathlib.Path(a.verification).resolve()
     if not wav.is_file() or not verification.is_file():
@@ -131,7 +134,8 @@ def main(argv=None) -> int:
         return 2
     try:
         measured = m5a.measure(
-            pulse_shape=controls["pulse_shape"], voice_factory=_candidate_factory,
+            pulse_shape=controls["pulse_shape"],
+            voice_factory=lambda: _candidate_factory(pulse_2x=controls["oscillator_pulse_oversample_2x"]),
             model_label=f"causal-reconstructed-2x-filter-headroom-{controls['pulse_shape']}-decoded-i2s",
             output_path=candidate_audio, candidate_wav=wav, case_id=a.case)
     except (m5a.Refused, OSError, ValueError) as exc:
