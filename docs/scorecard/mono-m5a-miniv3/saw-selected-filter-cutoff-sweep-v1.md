@@ -15,11 +15,11 @@ At 20,000 Hz, foldback excess is 1.918/2.203 dB and gain error is
 +1.876/+1.053 dB, still within the individual limits of 3 dB for foldback and
 gain. At 21,600 Hz, foldback reaches 3.131/3.316 dB and fails the limit.
 
-The 20 kHz point is a promising model-only saw challenger: it improves shape
-without crossing the saw foldback or gain limits. This stage probe does not
-score attack, release, pitch, or pulse. A separate complete-phrase property
-vector is required before selecting it for implementation, and it does not
-establish integrated RTL behavior.
+The 20 kHz point improves the saw stage vector without crossing its foldback
+or gain limits. A complete-phrase score then found a 0.454 dB gain regression,
+so the strict incremental gate rejects it. See
+[`m5a-saw-cutoff-candidate-v1.md`](m5a-saw-cutoff-candidate-v1.md). This is a
+model-only result, not integrated RTL evidence.
 
 Reproduce with:
 
