@@ -1,10 +1,12 @@
 # M5A saw PolyBLEP control
 
-This controlled 2× model experiment changes one oscillator setting: the normal
-PolyBLEP saw correction is enabled or disabled before the same 2× decimator.
-Cutoff (14,073 Hz), ladder drive (1.0), frozen Mini V3 reference, event windows,
-and all other patch settings are fixed. Full oscillator, mixer, ladder, and
-output vectors are recorded in the paired JSON files.
+This controlled oscillator experiment changes one oscillator setting: the
+normal PolyBLEP saw correction is enabled or disabled before the same 2×
+decimator. Cutoff (14,073 Hz), ladder drive (1.0), frozen Mini V3 reference,
+event windows, and all other patch settings are fixed. The probe left the ladder
+at its default single-rate configuration, so this is not evidence for the
+selected causal, headroom-preserving 2× ladder path. Full oscillator, mixer,
+ladder, and output vectors are recorded in the paired JSON files.
 
 Disabling PolyBLEP is rejected. At the oscillator output, worst common-partial
 error grows from 5.083 to 5.572 dB at MIDI 84 and from 8.437 to 9.809 dB at

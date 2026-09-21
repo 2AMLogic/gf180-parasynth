@@ -154,7 +154,7 @@ def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
 
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label="production-2x-hold", output_path=None,
-            candidate_wav=None):
+            candidate_wav=None, saw_cutoff_override=None):
     manifest = json.loads(MANIFEST.read_text())
     manifest_digest = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     audio_meta = manifest["audio"]
@@ -178,6 +178,13 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     # Integrated scoring must measure the samples that arrived from I2S. The
     # software voice is only needed for the model-only comparison path.
     patch = _voice_patch(manifest) if candidate_pcm is None else None
+    if saw_cutoff_override is not None:
+        if candidate_pcm is not None:
+            raise Refused("saw cutoff override applies only to model renders")
+        if isinstance(saw_cutoff_override, bool) or not isinstance(saw_cutoff_override, int):
+            raise Refused("saw cutoff override must be an integer Hz value")
+        if not vf.CUT_MIN <= saw_cutoff_override <= vf.CUT_MAX:
+            raise Refused(f"saw cutoff override outside [{vf.CUT_MIN}, {vf.CUT_MAX}]")
     tolerance = TOLERANCES
     observed = {name: [] for name in tolerance}
     event_diagnostics = []
@@ -190,6 +197,9 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
         if candidate_pcm is None:
             seq = []
             segment_patch = _patch_for_wave(patch, wave, pulse_shape)
+            if wave == "saw" and saw_cutoff_override is not None:
+                segment_patch = {**segment_patch,
+                                 "cutoff": (saw_cutoff_override, saw_cutoff_override)}
             for ev in seg["midi_events"]:
                 seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
                             {**segment_patch, "gate": float(ev["gate_s"])}))
@@ -311,7 +321,8 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     wavfile.write(out, SR, pcm_out)
     return {"analysis_version": ANALYSIS_VERSION,
             "metrics": metrics, "audio": str(out.relative_to(ROOT)),
-            "model_configuration": {"label": model_label, "pulse_shape": pulse_shape},
+            "model_configuration": {"label": model_label, "pulse_shape": pulse_shape,
+                                    "saw_cutoff_override_hz": saw_cutoff_override},
             "reference_sha256": digest, "manifest_sha256": manifest_digest,
             "cutoff_calibration": manifest["patch"]["cutoff_measurement"],
             "model_segments": renders,

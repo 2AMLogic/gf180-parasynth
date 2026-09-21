@@ -88,6 +88,38 @@ def test_m5a_candidate_uses_the_measured_filter_drive_intervention():
     assert score._voice_patch(manifest)["drive"] == pytest.approx(0.75)
 
 
+def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed():
+    import score_m5a_i2s
+
+    common = {"pulse_shape": "pulse479",
+              "voice_factory": score_m5a_i2s._candidate_factory}
+    baseline = score.measure(**common, model_label="cutoff-control-baseline")
+    candidate = score.measure(**common, model_label="cutoff-control-20000",
+                              saw_cutoff_override=20000)
+
+    assert set(candidate["metrics"]) == set(score.TOLERANCES)
+    assert candidate["model_configuration"]["saw_cutoff_override_hz"] == 20000
+    assert len(baseline["event_diagnostics"]) == len(candidate["event_diagnostics"])
+    saw_changed = False
+    for before, after in zip(baseline["event_diagnostics"],
+                             candidate["event_diagnostics"], strict=True):
+        assert (before["wave"], before["midi"]) == (after["wave"], after["midi"])
+        if before["wave"] == "pulse":
+            assert before["harmonic_error_db_model_minus_reference"] == \
+                   after["harmonic_error_db_model_minus_reference"]
+            assert before["gain_dbfs"] == after["gain_dbfs"]
+        else:
+            saw_changed |= before["harmonic_error_db_model_minus_reference"] != \
+                           after["harmonic_error_db_model_minus_reference"]
+    assert saw_changed, "cutoff override must change the executed saw measurement"
+
+
+@pytest.mark.parametrize("bad", [0, 30_000, True, 14_073.5])
+def test_saw_cutoff_override_refuses_invalid_model_settings(bad):
+    with pytest.raises(score.Refused, match="cutoff override"):
+        score.measure(saw_cutoff_override=bad)
+
+
 def test_pulse479_is_explicitly_model_only_and_has_no_rtl_encoding():
     import voice_fx as vf
 

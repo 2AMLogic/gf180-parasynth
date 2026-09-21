@@ -29,6 +29,14 @@ def _q15_to_full_scale(samples) -> np.ndarray:
     return np.asarray(samples, dtype=np.float64) / 32768.0
 
 
+def _selected_candidate_voice(*, blep: bool = True):
+    """Match score_m5a_i2s._candidate_factory exactly."""
+    ladder_cfg = {**vf.LADDER_CFG, "oversample": 2}
+    return vf.VoiceFx(blep=blep, oversample_2x=True, ladder_cfg=ladder_cfg,
+                      rate_converted_ladder=True,
+                      preserve_filter_headroom=True, causal_filter=True)
+
+
 def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> dict:
     manifest = json.loads(m5a.MANIFEST.read_text())
     audio_meta = manifest["audio"]
@@ -57,7 +65,7 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
             seq = [(float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
                     {**patch, "gate": float(ev["gate_s"])})
                    for ev in segment["midi_events"]]
-            voice = vf.VoiceFx(blep=blep, oversample_2x=True)
+            voice = _selected_candidate_voice(blep=blep)
             pcm = vf.render_mono_fx(seq, float(segment["duration_s"]), voice)
             trace = voice.trace
             arrays = {
@@ -138,7 +146,7 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
     return {
         "probe": "M5A oscillator -> mixer -> ladder -> final output",
         "reference_identity": "Mini V3 3.12.0.3422 software synth; not physical hardware",
-        "analysis_version": "m5a-signal-path-v3",
+        "analysis_version": "m5a-signal-path-v4",
         "source_commit": commit,
         "source_sha256": source_hashes["tools/measure_m5a_signal_path.py"],
         "source_hashes": source_hashes,
@@ -146,7 +154,8 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
         "manifest_sha256": hashlib.sha256(m5a.MANIFEST.read_bytes()).hexdigest(),
         "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
         "oscillator_config": f"2x candidate saw; PolyBLEP {'enabled' if blep else 'disabled'}; remaining Mini V3 oscillators disabled",
-        "intervention": "change only filter drive; cutoff and all other patch fields fixed",
+        "filter_config": "selected production candidate: causal reconstructed 2x ladder with headroom preserved",
+        "intervention": "requested cutoff, drive, and PolyBLEP setting only; selected 2x signal-chain topology and frozen reference held fixed",
         "alias_energy_definition": (
             "predicted image-bin power converted by one-sided Parseval and Hann mean-square "
             "correction after normalizing every Q15 stage to full scale; dBFS is absolute, "
