@@ -21,3 +21,10 @@ before its implementation and passes afterward.
 The RTL candidate uses VOICE_OSC_2X plus VOICE_PULSE_2X. VOICE_FILTER_2X selects
 the existing reconstructed filter and 47.9% duty. The disabling mutation is
 INJECT_BUG_VOICE_PULSE2X_OFF. Default builds retain their previous behavior.
+
+The first directed voice run produced zero output-sample mismatches across
+2,880 frames, but failed its internal oscillator taps: the bench still chose
+the base-rate tap for every non-saw waveform. The bench now selects the same
+explicit 2x waveform predicate as the datapath. This is a diagnostic repair;
+the audio-producing RTL is unchanged. Wrong-then-right count at this point:
+one trace-selection defect found by the directed comparison.
