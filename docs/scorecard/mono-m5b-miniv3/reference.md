@@ -86,7 +86,7 @@ partial vector; do not promote or tune automatically from the aggregate alone.
 The selected report with full engine configuration and provenance is
 [`results/M5B.json`](../results/M5B.json). Reproduce it with
 `python3 tools/run_case.py M5B --results build/m5b-score-final`; a nonzero exit
-is expected because the valid measured candidate fails four properties.
+is expected because the valid measured candidate fails three properties.
 Retain the signed partial diagnostics when selecting further pulse or saw
 changes. The attack result is close to the boundary; compare attack context
 before tuning it.
