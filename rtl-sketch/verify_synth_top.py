@@ -665,6 +665,9 @@ def main(argv=None) -> int:
         wavfile.write(a.wav_out, 48000,
                       np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int16))
         print(f"verify_synth_top: decoded I2S WAV written to {a.wav_out}")
+        with open(a.wav_out, "rb") as fh:
+            wav_sha256 = hashlib.sha256(fh.read()).hexdigest()
+        print(f"verify_synth_top: decoded I2S WAV sha256 {wav_sha256}")
     # the DUT's own stream, as a DIAGNOSTIC only
     sm = rows(out["samp"])
     core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))

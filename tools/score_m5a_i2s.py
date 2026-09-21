@@ -25,7 +25,7 @@ def _candidate_factory():
                       preserve_filter_headroom=True, causal_filter=True)
 
 
-def validate_integration_report(report_text: str) -> None:
+def validate_integration_report(report_text: str, wav_sha256: str) -> None:
     required = (
         "M5A path verified from SPI pins through the production voice and I2S pins",
         "selected 2x saw + causal 2x filter candidate",
@@ -34,6 +34,8 @@ def validate_integration_report(report_text: str) -> None:
     )
     if any(token not in report_text for token in required) or "smoke" in report_text:
         raise ValueError("report is not a passing full filter-candidate I2S run")
+    if f"decoded I2S WAV sha256 {wav_sha256}" not in report_text:
+        raise ValueError("report does not bind the decoded I2S WAV hash")
 
 
 def main(argv=None) -> int:
@@ -51,7 +53,8 @@ def main(argv=None) -> int:
         return 2
     report_text = verification.read_text()
     try:
-        validate_integration_report(report_text)
+        wav_sha256 = hashlib.sha256(wav.read_bytes()).hexdigest()
+        validate_integration_report(report_text, wav_sha256)
     except ValueError as exc:
         print(f"score_m5a_i2s: REFUSED -- {exc}")
         return 2
@@ -85,7 +88,7 @@ def main(argv=None) -> int:
         run_case.model_input_hashes({
             "frozen:M5A:audio": "sha256:" + measured["reference_sha256"],
             "frozen:M5A:manifest": "sha256:" + measured["manifest_sha256"],
-            "decoded:I2S": "sha256:" + hashlib.sha256(wav.read_bytes()).hexdigest(),
+            "decoded:I2S": "sha256:" + wav_sha256,
             "verification:SPI-I2S": "sha256:" + hashlib.sha256(verification.read_bytes()).hexdigest()}),
         {"ours": str(candidate_audio.relative_to(ROOT)),
          "spi_i2s": str(verification.relative_to(ROOT))},
@@ -110,7 +113,7 @@ def main(argv=None) -> int:
         "diagnostics": {
             "reference_sha256": measured["reference_sha256"],
             "reference_manifest_sha256": measured["manifest_sha256"],
-            "decoded_i2s_sha256": hashlib.sha256(wav.read_bytes()).hexdigest(),
+            "decoded_i2s_sha256": wav_sha256,
             "spi_i2s_report_sha256": hashlib.sha256(verification.read_bytes()).hexdigest(),
             "events": measured["event_diagnostics"],
             "model_segments": measured["model_segments"],
