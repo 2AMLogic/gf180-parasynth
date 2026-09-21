@@ -28,3 +28,7 @@ the base-rate tap for every non-saw waveform. The bench now selects the same
 explicit 2x waveform predicate as the datapath. This is a diagnostic repair;
 the audio-producing RTL is unchanged. Wrong-then-right count at this point:
 one trace-selection defect found by the directed comparison.
+
+FPGA synthesis selects this candidate explicitly with `OSC2X=1 FILTER2X=1
+PULSE2X=1`; requesting pulse 2x without the oscillator chain refuses. The
+separate selected-baseline FPGA build in #191 does not include pulse 2x.
