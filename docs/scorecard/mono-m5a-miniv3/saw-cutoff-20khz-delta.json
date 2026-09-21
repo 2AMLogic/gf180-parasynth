@@ -4,6 +4,7 @@
   "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
   "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
   "filter_config": "causal reconstructed 2x, headroom preserved",
+  "analysis_version": "m5a-score-v3",
   "baseline": {
     "source_commit": "e7b9badfec3a09e30b0a7d68f8e2f1c5d7a50512",
     "scorecard_state": "fail",
@@ -75,7 +76,7 @@
     }
   },
   "candidate": {
-    "source_commit": "36137df5e43a4f5c74839ff96cac3230acaa6229",
+    "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
     "scorecard_state": "fail",
     "decoded_i2s_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
     "controls": {
@@ -83,18 +84,22 @@
       "filter_config": "causal reconstructed 2x, headroom preserved",
       "simulator": "verilator",
       "pulse_shape": "pulse29",
+      "pulse_control_label": "pulse29",
+      "pulse_effective_waveform": "pulse479",
+      "pulse_effective_duty_fraction": 0.4789999723434448,
+      "pulse_effective_duty_percent": 47.89999723434448,
       "saw_cutoff_hz": 20000,
       "saw_volume_correction_db": -0.45428,
       "candidate_wav_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
       "scored_audio_artifact_sha256": "e01da671d11d1643066e75367998cdd8035c0bdf6847c978a892cb7f2602997b",
       "measurement_source_sha256": {
-        "tools/score_m5a_i2s.py": "809e5907955440dbd75aafb9b71711238c5423dcb02ebf8700960e89c0fc4200",
+        "tools/score_m5a_i2s.py": "bc2c34e04120ea82180452aeaaba1314c9940d5f5b74e962aeb108a1ea9d5811",
         "tools/verify_m5a_filter2x_i2s.py": "ad57fdd7cc66846cd423250217de869f64686725b952f545d313106330fb0d2a",
         "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817",
         "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
         "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557",
         "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
-        "rtl-sketch/verify_synth_top.py": "8f2c9cb145de7c8bbfe20e0e5af174849bb2a196a83fadaa20a7d13bc9bb2d63",
+        "rtl-sketch/verify_synth_top.py": "526d55c4030bb01aea9dfe792f583c5b17f524780b66f527ecb797f991115864",
         "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
         "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
         "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
@@ -506,20 +511,201 @@
         "non_regression_deadband": 0.01
       }
     },
-    "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit"
+    "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+    "preserved_per_note_passes": [
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Pitch",
+        "baseline_error": 0.14812,
+        "candidate_error": 0.14813,
+        "limit": 1.0
+      },
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Foldback energy",
+        "baseline_error": 0.0,
+        "candidate_error": 1.9171,
+        "limit": 3.0
+      },
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Envelope attack",
+        "baseline_error": 1.5209,
+        "candidate_error": 1.4792,
+        "limit": 5.0
+      },
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Envelope release",
+        "baseline_error": 8.8334,
+        "candidate_error": 7.9584,
+        "limit": 125.0
+      },
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Gain",
+        "baseline_error": 1.4225,
+        "candidate_error": 1.4214,
+        "limit": 3.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Pitch",
+        "baseline_error": 0.14353,
+        "candidate_error": 0.14353,
+        "limit": 1.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Foldback energy",
+        "baseline_error": 0.0,
+        "candidate_error": 2.2082,
+        "limit": 3.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Envelope release",
+        "baseline_error": 1.4166,
+        "candidate_error": 2.0208,
+        "limit": 125.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Gain",
+        "baseline_error": 0.2762,
+        "candidate_error": 0.5986,
+        "limit": 3.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Pitch",
+        "baseline_error": 0.1434,
+        "candidate_error": 0.1434,
+        "limit": 1.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Envelope attack",
+        "baseline_error": 1.3334,
+        "candidate_error": 1.4792,
+        "limit": 5.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Envelope release",
+        "baseline_error": 3.8125,
+        "candidate_error": 3.8125,
+        "limit": 125.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Gain",
+        "baseline_error": 0.9956,
+        "candidate_error": 0.9956,
+        "limit": 3.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Harmonic shape/h2",
+        "baseline_error": 0.4802,
+        "candidate_error": 0.4802,
+        "limit": 1.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 96,
+        "property": "Pitch",
+        "baseline_error": 0.14353,
+        "candidate_error": 0.14353,
+        "limit": 1.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 96,
+        "property": "Envelope release",
+        "baseline_error": 1.1458,
+        "candidate_error": 0.5625,
+        "limit": 125.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 96,
+        "property": "Gain",
+        "baseline_error": 1.0481,
+        "candidate_error": 1.0475,
+        "limit": 3.0
+      }
+    ],
+    "lost_per_note_passes": [],
+    "degraded_but_within_per_note_limit": [
+      {
+        "wave": "saw",
+        "midi": 84,
+        "property": "Foldback energy",
+        "baseline_error": 0.0,
+        "candidate_error": 1.9171,
+        "limit": 3.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Foldback energy",
+        "baseline_error": 0.0,
+        "candidate_error": 2.2082,
+        "limit": 3.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Envelope release",
+        "baseline_error": 1.4166,
+        "candidate_error": 2.0208,
+        "limit": 125.0
+      },
+      {
+        "wave": "saw",
+        "midi": 96,
+        "property": "Gain",
+        "baseline_error": 0.2762,
+        "candidate_error": 0.5986,
+        "limit": 3.0
+      },
+      {
+        "wave": "pulse",
+        "midi": 84,
+        "property": "Envelope attack",
+        "baseline_error": 1.3334,
+        "candidate_error": 1.4792,
+        "limit": 5.0
+      }
+    ]
   },
   "provenance": {
-    "source_commit": "adf28bab024ac8d85987b7a383ba27bc5725f568",
-    "source_dirty": false,
+    "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
+    "source_dirty": true,
     "input_sha256": {
       "baseline_record": "ce59a8094115cb8062d934613da8ed013352cb18584565072ea16223dfb35377",
-      "candidate_record": "7f3f4ad01f6fe604fa5f8cdbcc60cb4dbe495b6b78e9881ebd714c3cc65efa54"
+      "candidate_record": "4c7d5e1dd2c998a966dbd936bf23136327c5e6fcd033ad06f03fe786d85bd275"
     },
     "source_sha256": {
-      "tools/compare_m5a_i2s_candidate.py": "11d1e2fa8ce0b24d8b89429f05368dbe152fb40b385d395b8c371293375f4e2a",
+      "tools/compare_m5a_i2s_candidate.py": "925e58e46cb27e953defb69124b3085b78b375321130b90e99ff49b6d356007d",
       "tools/measure_m5a_filter_oversample.py": "b94ff599edd12c6f6a2fadeb5a5c152e49b53fa4c90152c3b8bf09d284a379e1",
       "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817"
     },
-    "run_at_utc": "2026-09-21T07:15:26.259548+00:00"
+    "run_at_utc": "2026-09-21T07:37:57.742804+00:00"
   }
 }

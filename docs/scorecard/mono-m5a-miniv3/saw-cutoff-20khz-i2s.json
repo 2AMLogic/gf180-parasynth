@@ -2,11 +2,18 @@
   "engine": "integrated-rtl",
   "case_id": "M5A",
   "subject": "Bright high lead / anchor",
-  "source_commit": "36137df5e43a4f5c74839ff96cac3230acaa6229",
-  "source_dirty": false,
+  "source_commit": "a9665696dce11e2b8aabadbaa6f421b0ca8995d5",
+  "source_dirty": true,
   "analysis_version": "m5a-score-v3",
   "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
-  "render_run": "full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; pulse=pulse29; saw_cutoff=20000 Hz; saw_volume_correction=-0.45428 dB",
+  "pulse_mapping": {
+    "control_label": "pulse29",
+    "effective_waveform": "pulse479",
+    "effective_duty_fraction": 0.4789999723434448,
+    "effective_duty_percent": 47.89999723434448,
+    "selection": "VOICE_FILTER_2X DUTY_WIDE encoding"
+  },
+  "render_run": "full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; pulse control=pulse29; effective pulse=pulse479 (47.90% duty); saw_cutoff=20000 Hz; saw_volume_correction=-0.45428 dB",
   "audio": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-scored.wav",
   "tolerance_policy": {
     "Pitch": [
@@ -339,32 +346,36 @@
   "provenance": {
     "engine": "integrated-rtl",
     "worktree": {
-      "commit": "36137df",
-      "described": "node/D-drums-bitexact-180-g36137df",
+      "commit": "a966569",
+      "described": "node/D-drums-bitexact-182-ga966569-dirty",
       "branch": "experiment/m5a-filter-headroom",
-      "dirty": false,
-      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "dirty": true,
+      "uncommitted_sha256": "1a57fe3e8b0855dd",
       "untracked_files": 0
     },
     "base_check": {},
-    "command": "tools/score_m5a_i2s.py --wav build/scorecard/M5A-saw-cutoff-i2s.wav --verification build/verification/M5A-saw-cutoff-i2s.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out build/scorecard/M5A-saw-cutoff-integrated.json --audio build/scorecard/M5A-saw-cutoff-scored.wav",
+    "command": "tools/score_m5a_i2s.py --wav docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.wav --verification docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out build/scorecard/saw-cutoff-duty-metadata.json --audio build/scorecard/saw-cutoff-duty-metadata.wav",
     "config": {
       "oscillator_config": "2x saw candidate",
       "filter_config": "causal reconstructed 2x, headroom preserved",
       "simulator": "verilator",
       "pulse_shape": "pulse29",
+      "pulse_control_label": "pulse29",
+      "pulse_effective_waveform": "pulse479",
+      "pulse_effective_duty_fraction": 0.4789999723434448,
+      "pulse_effective_duty_percent": 47.89999723434448,
       "saw_cutoff_hz": 20000,
       "saw_volume_correction_db": -0.45428,
       "candidate_wav_sha256": "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494",
       "scored_audio_artifact_sha256": "e01da671d11d1643066e75367998cdd8035c0bdf6847c978a892cb7f2602997b",
       "measurement_source_sha256": {
-        "tools/score_m5a_i2s.py": "809e5907955440dbd75aafb9b71711238c5423dcb02ebf8700960e89c0fc4200",
+        "tools/score_m5a_i2s.py": "bc2c34e04120ea82180452aeaaba1314c9940d5f5b74e962aeb108a1ea9d5811",
         "tools/verify_m5a_filter2x_i2s.py": "ad57fdd7cc66846cd423250217de869f64686725b952f545d313106330fb0d2a",
         "tools/mono_m5a_score.py": "8ddc4a8d7b3852066fec63f717a304c1dbaa1544cc7307e460bd7074dcb95817",
         "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
         "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557",
         "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
-        "rtl-sketch/verify_synth_top.py": "8f2c9cb145de7c8bbfe20e0e5af174849bb2a196a83fadaa20a7d13bc9bb2d63",
+        "rtl-sketch/verify_synth_top.py": "526d55c4030bb01aea9dfe792f583c5b17f524780b66f527ecb797f991115864",
         "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
         "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
         "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
@@ -375,7 +386,7 @@
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-21T07:04:24Z",
+    "run_at": "2026-09-21T07:37:05Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:6442bb9effb7fa70",
@@ -394,8 +405,8 @@
       "verification:SPI-I2S": "sha256:62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448"
     },
     "artefacts": {
-      "ours": "build/scorecard/M5A-saw-cutoff-scored.wav",
-      "spi_i2s": "build/verification/M5A-saw-cutoff-i2s.txt"
+      "ours": "build/scorecard/saw-cutoff-duty-metadata.wav",
+      "spi_i2s": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt"
     },
     "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"

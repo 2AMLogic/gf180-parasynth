@@ -591,7 +591,11 @@ def main(argv=None) -> int:
     if a.m5a:
         detail = ("smoke: envelope completion not claimed" if m5a["smoke"] else
                   f"{m5a['manifest']['timeline']['phrase_s']:.3f} s phrase and complete release")
+        effective_pulse = ("pulse479" if a.filter2x and m5a["pulse_shape"] == "pulse29"
+                           else m5a["pulse_shape"])
+        effective_duty = vf.DUTY[effective_pulse] / vf.CYCLE
         print(f"verify_synth_top: M5A controls: pulse={m5a['pulse_shape']}; "
+              f"effective pulse={effective_pulse} ({100.0 * effective_duty:.2f}% duty); "
               f"saw cutoff={m5a['saw_cutoff_hz']} Hz; "
               f"saw volume correction={m5a['saw_volume_correction_db']:+.5f} dB")
         print(f"verify_synth_top: M5A stimulus has {len(m5a['events'])} note events, "

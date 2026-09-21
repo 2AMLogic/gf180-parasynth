@@ -41,12 +41,27 @@ def validate_integration_report(report_text: str, wav_sha256: str, *,
     if f"decoded I2S WAV sha256 {wav_sha256}" not in report_text:
         raise ValueError("report does not bind the decoded I2S WAV hash")
     match = re.search(
-        r"M5A controls: pulse=(\w+); saw cutoff=(\d+) Hz; "
+        r"M5A controls: pulse=(\w+);(?: effective pulse=(\w+) "
+        r"\((\d+(?:\.\d+)?)% duty\);)? saw cutoff=(\d+) Hz; "
         r"saw volume correction=([+-]?\d+(?:\.\d+)?) dB", report_text)
     if not match:
         raise ValueError("report omits the M5A sound controls")
-    controls = {"pulse_shape": match.group(1), "saw_cutoff_hz": int(match.group(2)),
-                "saw_volume_correction_db": float(match.group(3))}
+    controls = {"pulse_shape": match.group(1), "saw_cutoff_hz": int(match.group(4)),
+                "saw_volume_correction_db": float(match.group(5))}
+    define_line = next((line for line in report_text.splitlines()
+                        if "compile defines:" in line), "")
+    if "VOICE_FILTER_2X" not in define_line:
+        raise ValueError("report omits VOICE_FILTER_2X, needed to identify effective pulse duty")
+    effective_shape = ("pulse479" if controls["pulse_shape"] == "pulse29" else
+                       controls["pulse_shape"])
+    effective_duty = vf.DUTY[effective_shape] / vf.CYCLE
+    if match.group(2) and (match.group(2) != effective_shape
+                           or abs(float(match.group(3)) - 100.0 * effective_duty) > 0.01):
+        raise ValueError("report effective pulse does not match the registered width and VOICE_FILTER_2X")
+    controls["pulse_control_label"] = controls["pulse_shape"]
+    controls["pulse_effective_waveform"] = effective_shape
+    controls["pulse_effective_duty_fraction"] = effective_duty
+    controls["pulse_effective_duty_percent"] = 100.0 * controls["pulse_effective_duty_fraction"]
     if pulse_shape is not None and controls["pulse_shape"] != pulse_shape:
         raise ValueError("report has a different pulse shape")
     if saw_cutoff_hz is not None and controls["saw_cutoff_hz"] != saw_cutoff_hz:
@@ -135,6 +150,10 @@ def main(argv=None) -> int:
          "filter_config": "causal reconstructed 2x, headroom preserved",
          "simulator": simulator,
          "pulse_shape": controls["pulse_shape"],
+         "pulse_control_label": controls["pulse_control_label"],
+         "pulse_effective_waveform": controls["pulse_effective_waveform"],
+         "pulse_effective_duty_fraction": controls["pulse_effective_duty_fraction"],
+         "pulse_effective_duty_percent": controls["pulse_effective_duty_percent"],
          "saw_cutoff_hz": controls["saw_cutoff_hz"],
          "saw_volume_correction_db": controls["saw_volume_correction_db"],
          "candidate_wav_sha256": measured["candidate_i2s_sha256"],
@@ -150,8 +169,18 @@ def main(argv=None) -> int:
         "source_dirty": dirty,
         "analysis_version": measured["analysis_version"],
         "reference_profile": "Mini V3 3.12.0.3422; frozen mono 48 kHz reference",
+        "pulse_mapping": {
+            "control_label": controls["pulse_control_label"],
+            "effective_waveform": controls["pulse_effective_waveform"],
+            "effective_duty_fraction": controls["pulse_effective_duty_fraction"],
+            "effective_duty_percent": controls["pulse_effective_duty_percent"],
+            "selection": "VOICE_FILTER_2X DUTY_WIDE encoding",
+        },
         "render_run": ("full phrase decoded from SPI-driven I2S; causal reconstructed 2x filter; "
-                       f"pulse={controls['pulse_shape']}; saw_cutoff={controls['saw_cutoff_hz']} Hz; "
+                       f"pulse control={controls['pulse_control_label']}; "
+                       f"effective pulse={controls['pulse_effective_waveform']} "
+                       f"({controls['pulse_effective_duty_percent']:.2f}% duty); "
+                       f"saw_cutoff={controls['saw_cutoff_hz']} Hz; "
                        f"saw_volume_correction={controls['saw_volume_correction_db']:+.5f} dB"),
         "audio": str(candidate_audio.relative_to(ROOT)),
         "tolerance_policy": m5a.TOLERANCES,
