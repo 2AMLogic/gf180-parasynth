@@ -89,8 +89,8 @@ verify-full:
 ## THE THREE FILTER CONTROLS need the frozen reference cache. Without it the
 ## clean baseline refuses; the runner reports NO-VERDICT, and this aggregate
 ## target fails. That is intentional: these controls cannot be called caught
-## without a valid clean comparison. Render the profile first
-## (`tools/refprofile.py --render`, which needs Surge XT and dawdreamer).
+## without a valid clean comparison. Restore the frozen profile first
+## (`python3 tools/refprofile_restore.py`, which needs no plugin).
 ##
 ## THE TWO PROFILE CONTROLS NOW COVER F1B AND F1C. REF_CORNER_2X compares the
 ## injected run with a clean run, because all three F1 cases now fail cleanly;
