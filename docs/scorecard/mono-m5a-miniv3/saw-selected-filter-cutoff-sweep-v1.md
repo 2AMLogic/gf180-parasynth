@@ -15,11 +15,13 @@ At 20,000 Hz, foldback excess is 1.918/2.203 dB and gain error is
 +1.876/+1.053 dB, still within the individual limits of 3 dB for foldback and
 gain. At 21,600 Hz, foldback reaches 3.131/3.316 dB and fails the limit.
 
-The 20 kHz point improves the saw stage vector without crossing its foldback
-or gain limits. A complete-phrase score then found a 0.454 dB gain regression,
-so the strict incremental gate rejects it. See
-[`m5a-saw-cutoff-candidate-v1.md`](m5a-saw-cutoff-candidate-v1.md). This is a
-model-only result, not integrated RTL evidence.
+The 20 kHz cutoff alone improves the saw stage vector but the complete-phrase
+comparison rejects it for a 0.454 dB gain regression. Applying a fixed
+−0.45428 dB saw-only volume correction returns gain to baseline; the corrected
+complete vector passes the incremental gate with 22 improvements and no
+regressions. See
+[`m5a-saw-cutoff-gain-corrected-v1.md`](m5a-saw-cutoff-gain-corrected-v1.md).
+The accepted result remains model-only, not integrated RTL evidence.
 
 Reproduce with:
 
