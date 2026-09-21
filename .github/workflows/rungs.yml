@@ -18,6 +18,10 @@ jobs:
         with: { python-version: '3.12' }
       - run: python -m pip install numpy scipy pytest
       - run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+      - name: simulator identity and independent converter diagnostic
+        run: |
+          verilator --version
+          python tools/verify_rate_conv_2x.py --simulator verilator
       - name: pulse candidate, transport, deadlines and disabling control
         run: >-
           python tools/run_all.py --timeout 900 --json build/pulse2x-ci.json
