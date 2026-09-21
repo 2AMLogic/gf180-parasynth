@@ -32,3 +32,29 @@ one trace-selection defect found by the directed comparison.
 FPGA synthesis selects this candidate explicitly with `OSC2X=1 FILTER2X=1
 PULSE2X=1`; requesting pulse 2x without the oscillator chain refuses. The
 separate selected-baseline FPGA build in #191 does not include pulse 2x.
+
+## Independent CI qualification remains open
+
+Ubuntu 24.04 Verilator 5.020-1 produces 2,897 smoke-period mismatches,
+starting at period 489 in the saw segment. The same sources pass locally
+under Verilator 5.052, and directed Icarus verification passes. The cause is
+not yet established. The CI disabling-control job also reports a mismatch
+from this unrelated baseline failure, so that CI control is **not evidence**
+of mutation detection. The local clean/control pair remains recorded above.
+`rtl/ci-verilator-5.020-failure.json` preserves all four CI job outcomes.
+
+A separate provenance guard rejected deliberate candidate changes when main
+only gained documentation. The repaired guard compares each dependency with
+the common ancestor and still refuses missing upstream dependency changes.
+The new red test failed before the repair; five focused checks pass afterward.
+
+## Landed baseline verification
+
+The baseline stack landed at main `356c6799bee9e07677f3f2d4df8ac904eaba83ed`;
+its tree is exactly `349a382a391a21fa112b889eed87b6b49866220d`, the tested
+#190 tree. The local aggregate injected-defect gate passes all 42 controls.
+The local fast aggregate timed out on two jobs under host contention; its
+scorer retry passed, while the focused suite retry remained NO-VERDICT after
+1,800 seconds. Those outcomes are retained in `rtl/baseline-*.json`, not
+reported as a local aggregate pass. Standard CI passed on the identical
+baseline tree. Full RTL was not rerun for the baseline landing.
