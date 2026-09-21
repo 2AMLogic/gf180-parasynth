@@ -41,11 +41,14 @@ def test_complete_candidate_uses_selected_filter_factory_and_saw_only_override(m
             "cutoff_calibration": {"f0_hz": 14_073}}
 
     monkeypatch.setattr(candidate.m5a, "measure", fake_measure)
-    result = candidate.measure(20_000)
+    result = candidate.measure(20_000, -0.45428)
 
     assert len(calls) == 2
     assert calls[0].get("saw_cutoff_override") is None
     assert calls[1]["saw_cutoff_override"] == 20_000
     assert calls[0]["pulse_shape"] == calls[1]["pulse_shape"] == "pulse479"
+    assert calls[0].get("saw_volume_correction_db", 0.0) == 0.0
+    assert calls[1]["saw_volume_correction_db"] == pytest.approx(-0.45428)
+    assert result["saw_gain_correction_db"]["candidate"] == pytest.approx(-0.45428)
     assert result["comparison"]["case_passes"] is True
     assert result["comparison"]["accepts_incremental_improvement"] is True

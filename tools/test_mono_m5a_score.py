@@ -95,10 +95,14 @@ def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed
               "voice_factory": score_m5a_i2s._candidate_factory}
     baseline = score.measure(**common, model_label="cutoff-control-baseline")
     candidate = score.measure(**common, model_label="cutoff-control-20000",
-                              saw_cutoff_override=20000)
+                              saw_cutoff_override=20000,
+                              saw_volume_correction_db=-0.45428)
 
     assert set(candidate["metrics"]) == set(score.TOLERANCES)
     assert candidate["model_configuration"]["saw_cutoff_override_hz"] == 20000
+    assert candidate["model_configuration"]["saw_volume_correction_db"] == pytest.approx(-0.45428)
+    assert candidate["metrics"]["Gain"]["error"] == pytest.approx(
+        baseline["metrics"]["Gain"]["error"], abs=0.01)
     assert len(baseline["event_diagnostics"]) == len(candidate["event_diagnostics"])
     saw_changed = False
     for before, after in zip(baseline["event_diagnostics"],
@@ -118,6 +122,12 @@ def test_saw_cutoff_override_is_scored_on_complete_phrase_and_leaves_pulse_fixed
 def test_saw_cutoff_override_refuses_invalid_model_settings(bad):
     with pytest.raises(score.Refused, match="cutoff override"):
         score.measure(saw_cutoff_override=bad)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -13.0, 13.0, True])
+def test_saw_volume_correction_refuses_invalid_model_settings(bad):
+    with pytest.raises(score.Refused, match="saw volume correction"):
+        score.measure(saw_volume_correction_db=bad)
 
 
 def test_pulse479_is_explicitly_model_only_and_has_no_rtl_encoding():

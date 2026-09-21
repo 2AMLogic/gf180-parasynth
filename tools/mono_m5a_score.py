@@ -154,7 +154,8 @@ def _patch_for_wave(patch, wave, pulse_shape=M5A_PULSE_WAVE):
 
 def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_label="production-2x-hold", output_path=None,
-            candidate_wav=None, saw_cutoff_override=None):
+            candidate_wav=None, saw_cutoff_override=None,
+            saw_volume_correction_db=0.0):
     manifest = json.loads(MANIFEST.read_text())
     manifest_digest = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     audio_meta = manifest["audio"]
@@ -185,6 +186,13 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             raise Refused("saw cutoff override must be an integer Hz value")
         if not vf.CUT_MIN <= saw_cutoff_override <= vf.CUT_MAX:
             raise Refused(f"saw cutoff override outside [{vf.CUT_MIN}, {vf.CUT_MAX}]")
+    if (not isinstance(saw_volume_correction_db, (int, float))
+            or isinstance(saw_volume_correction_db, bool)
+            or not math.isfinite(saw_volume_correction_db)
+            or not -12.0 <= saw_volume_correction_db <= 12.0):
+        raise Refused("saw volume correction must be finite and within [-12, 12] dB")
+    if candidate_pcm is not None and saw_volume_correction_db != 0.0:
+        raise Refused("saw volume correction applies only to model renders")
     tolerance = TOLERANCES
     observed = {name: [] for name in tolerance}
     event_diagnostics = []
@@ -200,6 +208,12 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             if wave == "saw" and saw_cutoff_override is not None:
                 segment_patch = {**segment_patch,
                                  "cutoff": (saw_cutoff_override, saw_cutoff_override)}
+            if wave == "saw" and saw_volume_correction_db != 0.0:
+                base_volume = float(segment_patch["vol"])
+                corrected_volume = base_volume * 10.0 ** (saw_volume_correction_db / 20.0)
+                if not 0.0 <= corrected_volume <= 1.0:
+                    raise Refused("saw volume correction would leave the supported 0..1 range")
+                segment_patch = {**segment_patch, "vol": corrected_volume}
             for ev in seg["midi_events"]:
                 seq.append((float(ev["on_s"]), int(ev["note"]), float(ev["gate_s"]),
                             {**segment_patch, "gate": float(ev["gate_s"])}))
@@ -322,7 +336,8 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
     return {"analysis_version": ANALYSIS_VERSION,
             "metrics": metrics, "audio": str(out.relative_to(ROOT)),
             "model_configuration": {"label": model_label, "pulse_shape": pulse_shape,
-                                    "saw_cutoff_override_hz": saw_cutoff_override},
+                                    "saw_cutoff_override_hz": saw_cutoff_override,
+                                    "saw_volume_correction_db": float(saw_volume_correction_db)},
             "reference_sha256": digest, "manifest_sha256": manifest_digest,
             "cutoff_calibration": manifest["patch"]["cutoff_measurement"],
             "model_segments": renders,

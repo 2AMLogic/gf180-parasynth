@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -24,11 +25,16 @@ import score_m5a_i2s
 import voice_fx as vf
 
 
-def measure(cutoff_hz: int) -> dict:
+def measure(cutoff_hz: int, saw_gain_correction_db: float = 0.0) -> dict:
     if isinstance(cutoff_hz, bool) or not isinstance(cutoff_hz, int):
         raise m5a.Refused("saw cutoff must be an integer Hz value")
     if not vf.CUT_MIN <= cutoff_hz <= vf.CUT_MAX:
         raise m5a.Refused(f"saw cutoff {cutoff_hz} outside [{vf.CUT_MIN}, {vf.CUT_MAX}]")
+    if (isinstance(saw_gain_correction_db, bool)
+            or not isinstance(saw_gain_correction_db, (int, float))
+            or not math.isfinite(saw_gain_correction_db)
+            or not -12.0 <= saw_gain_correction_db <= 12.0):
+        raise m5a.Refused("saw gain correction must be finite and within [-12, 12] dB")
 
     voice_factory = score_m5a_i2s._candidate_factory
     baseline = m5a.measure(
@@ -39,7 +45,8 @@ def measure(cutoff_hz: int) -> dict:
         pulse_shape="pulse479", voice_factory=voice_factory,
         model_label=f"selected-filter-2x-saw-cutoff-{cutoff_hz}",
         output_path=ROOT / "build/scorecard/M5A-saw-cutoff-candidate.wav",
-        saw_cutoff_override=cutoff_hz)
+        saw_cutoff_override=cutoff_hz,
+        saw_volume_correction_db=saw_gain_correction_db)
     comparison = filter_gate._compare_incremental(baseline, candidate)
 
     source_files = (
@@ -59,6 +66,8 @@ def measure(cutoff_hz: int) -> dict:
         "cutoff_hz": {"baseline": baseline["cutoff_calibration"]["f0_hz"],
                       "saw_candidate": cutoff_hz,
                       "pulse_candidate": "unchanged from frozen manifest"},
+        "saw_gain_correction_db": {"baseline": 0.0,
+                                   "candidate": float(saw_gain_correction_db)},
         "comparison": comparison,
         "baseline": {"model_configuration": baseline["model_configuration"],
                      "metrics": baseline["metrics"],
@@ -82,10 +91,12 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cutoff", type=int, default=20_000,
                         help="saw-only cutoff challenger in Hz (default: 20000)")
+    parser.add_argument("--gain-correction-db", type=float, default=0.0,
+                        help="fixed saw-only final-volume correction in dB (default: 0)")
     parser.add_argument("--out", default="build/scorecard/m5a-saw-cutoff-candidate.json")
     args = parser.parse_args(argv)
     try:
-        report = measure(args.cutoff)
+        report = measure(args.cutoff, args.gain_correction_db)
     except (OSError, ValueError, m5a.Refused) as exc:
         print(f"measure_m5a_saw_cutoff: REFUSED -- {exc}")
         return 2
