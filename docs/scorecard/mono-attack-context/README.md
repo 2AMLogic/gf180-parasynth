@@ -1,19 +1,36 @@
 # Mono attack-context diagnostic
 
-The frozen Mini V3 patch was rendered three times per waveform and context.
-All 24 renders qualified and all repeat ranges were zero at the measurement
-resolution. MIDI 84 on its own measures 7.33 ms (saw) / 7.46 ms (pulse).
-After another MIDI 84 with a 3.4-second gap it measures 3.10 / 2.88 ms.
-After MIDI 72 at that gap it measures 3.21 / 2.85 ms. A 5-second gap after
-MIDI 84 gives 3.56 / 3.38 ms.
+The frozen Mini V3 patch was rendered three times for each of six contexts
+and both waveforms. All 36 renders qualified. Every repeat range was zero
+at the measurement resolution. The attack knob and MIDI 84 target were fixed.
 
-This reproduces the four-to-five millisecond context difference seen between
-M5A and M5B without changing the attack knob. Changing the preceding pitch
-has little effect at the tested gap. These are audio-envelope measurements;
-they do not identify the plugin's internal VCA state. Delayed isolated-note
-controls will distinguish preceding-note history from absolute event time.
+| Context | Saw attack (ms) | Pulse attack (ms) |
+| --- | ---: | ---: |
+| delayed84_at4p1 | 8.292 | 7.958 |
+| delayed84_at5p7 | 8.542 | 8.312 |
+| isolated84 | 7.333 | 7.458 |
+| repeat84_gap3p4 | 3.104 | 2.875 |
+| from72_gap3p4 | 3.208 | 2.854 |
+| repeat84_gap5 | 3.562 | 3.375 |
 
-`phase1.json` preserves the first bounded experiment; every WAV is frozen
-with its SHA-256. The qualified reference-integrity check detected the
-injected clicks and found none in the clean render. No sound or tolerance
-was changed. Wrong-then-right: 0 corrected audio measurements / 24 renders.
+The delayed isolated controls distinguish event time from preceding-note
+history: at 4.1 seconds, an isolated note measures 8.292 / 7.958 ms, while
+a note following MIDI 84 measures 3.104 / 2.875 ms. A preceding MIDI 72
+gives nearly the same result. At 5.7 seconds, the isolated-versus-repeated
+difference remains approximately 4.94–4.98 ms. Elapsed time alone does not
+explain the attack discrepancy between the frozen lead phrases.
+
+These are audio-envelope measurements. They establish a prior-note effect,
+but do not identify the plugin’s internal VCA mechanism. Keep that distinction
+when changing the model; a single global attack adjustment cannot match both
+contexts. No sound code or tolerance was changed.
+
+`phase1.json` preserves the first 24-render experiment. `report.json` adds
+12 delayed-isolated controls, reusing the original WAVs only after checking
+their hashes, event timelines, plugin/host identity and analysis sources.
+Every measured WAV is committed. The clean reference-integrity run found no
+unprompted clicks and its injected-click control fired.
+
+Reproduce with `python3 tools/measure_mono_attack_context.py` in a clean
+checkout with the qualified Mini V3 host installed, using a fresh output
+directory. Wrong-then-right: 0 corrected audio measurements / 36 renders.
