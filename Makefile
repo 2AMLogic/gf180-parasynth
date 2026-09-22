@@ -46,7 +46,7 @@ verify:
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
-	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_publish_selected.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q" \
+	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_selected.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q" \
 	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \

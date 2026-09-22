@@ -1,0 +1,8 @@
+{
+  "state": "PASS",
+  "clean_passed": true,
+  "controls_caught": {
+    "ARTY_MOSI_ZERO": true,
+    "ARTY_SDATA_ZERO": true
+  }
+}

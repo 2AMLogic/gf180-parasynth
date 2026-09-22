@@ -1,0 +1,155 @@
+# Arty A7-100T first audio
+
+The bring-up target is **Arty A7-100T, XC7A100T-CSG324-1**, with an Adafruit
+PCM5102 breakout (#6250). IcePi capacity work is parked. The ULX3S bitstream
+cannot program this board; this is a separate Xilinx port.
+
+## What is implemented and measured
+
+The wrapper, constraints, build preparation and digital checks exist.
+**No Arty bitstream, fit/timing result, or physical audio recording exists yet.**
+The actual Vivado run remains blocked on tool access and a reachable Linux
+runner. A successful build will still require review of clock and I/O timing.
+
+The fixed first-playback configuration is `OSC2X=1 FILTER2X=1 PULSE2X=0`.
+It uses the selected reconstructed filter and near-47.9% pulse, addressed by
+the existing `pulse29` register label. Pulse 2x remains a separate upgrade;
+neither the old ULX3S resource count nor this port proves its Artix fit.
+
+| Digital check | Result |
+|---|---|
+| Arty wrapper SPI writes | 67/67 delivered, zero frame-prediction mismatches |
+| Decoded I2S vs integer model | 4,821 periods match; both channels agree |
+| Deadline | latest sample cycle 175/256; no overrun, overflow or missing sample |
+| Muted-output starting stub | 4,527 wire mismatches; zero internal-core mismatches |
+| MOSI forced low | all 67 intended writes mismatch |
+| I2S data forced low | 4,527 wire mismatches; zero internal-core mismatches |
+
+The clean run must pass before a mutation can count as caught. Compilation
+failure, unavailable simulator and unrelated failures do not count. Reports
+and transcripts are in [reports/arty](reports/arty). The preserved starting
+stub is [stubs/arty_a7_silent.v](stubs/arty_a7_silent.v). Its report records the
+original wrapper pathname; its hash matches the preserved stub, not today's
+wrapper. All reports retain their original transcript hashes.
+
+This is a short four-event stimulus, not a complete envelope/phrase result.
+It bypasses the MMCM and supplies the core clock directly. The reset test
+checks button assertion, delayed release and loss/recovery of lock; it does
+not model MMCM analog behavior. Hardware synthesis explicitly forces
+`SIM_NO_MMCM=0`.
+
+Wrong-then-right accounting: one harness construction failure (a Verilog
+declaration-order error) was fixed before obtaining the numerical start-red
+result. It was not credited as a detected defect. The three intentional broken
+configurations above all failed numerically; there was no accepted sound
+measurement in this porting work.
+
+## Wiring
+
+The pin map comes from Digilent's
+[Arty A7-100 master XDC](https://github.com/Digilent/digilent-xdc/blob/00a3404901f35aa9567b01ecb3f2c233b6efe9f4/Arty-A7-100-Master.xdc)
+(Rev D/E) and [schematic](https://digilent.com/reference/_media/reference/programmable-logic/arty-a7/arty_a7_sch.pdf).
+Check the board's model and revision before applying this map. Pmod numbers
+below mean **connector positions**, not FPGA package pins.
+
+| Arty position | FPGA pin | Connection |
+|---|---|---|
+| JA1 | G13 | DAC BCLK |
+| JA2 | B11 | DAC WSEL / LRCLK |
+| JA3 | A11 | DAC DIN |
+| JA5 or JA11 | ground | DAC GND |
+| JA6 or JA12 | 3.3 V | DAC VIN |
+| JB1 | E15 | external controller SCK |
+| JB2 | E16 | external controller MOSI |
+| JB3 | D15 | external controller MISO |
+| JB4 | C15 | external controller CS_N |
+| JB5 or JB11 | ground | controller ground |
+
+Use 3.3 V logic and a common ground. Power off while wiring. The
+[Adafruit breakout](https://www.adafruit.com/product/6250) accepts 3–5 V supply
+and 3.3 V data. Its default I2S configuration needs BCLK, WSEL and DIN, with no
+separate master clock. Its jack is **line output**, not a headphone driver.
+Connect it through a stereo TRS-to-two-mono cable to two line inputs on the
+recording interface; leave automatic gain and effects off.
+
+The expected nominal rates are 48 kHz LRCLK and 3.072 MHz BCLK, with 32-bit
+slots carrying 16-bit samples. The 100 MHz E3 oscillator feeds an MMCM:
+`100 / 5 * 48 / 78.125 = 12.288 MHz`; VCO is 960 MHz. This arithmetic is
+checked independently of the HDL model. Actual clock suitability, jitter,
+route timing and DAC setup/hold still require the implementation reports and
+physical measurement. The XDC deliberately leaves external output delays
+unqualified rather than inventing a DAC timing guarantee.
+
+BTN0 (D9) resets the design. LEDs 0/1 show clock lock/reset release, LED2 is a
+heartbeat, and LED3 carries LRCLK. These lights do not prove correct audio.
+
+## USB and timed controls
+
+Arty's USB programming/UART connector does not directly provide this design's
+SPI controller. The current wrapper accepts external SPI on JB. It does not
+yet implement a USB-UART-to-timed-SPI bridge. Reserve the board UART pins:
+**A9 is FPGA RX** (`UART_TXD_IN`); **D10 is FPGA TX** (`UART_RXD_OUT`).
+
+The existing [spi_host.py](spi_host.py) supplies the six-byte, MSB-first,
+mode-0 register framing and schedules. The bridge must execute queued events
+on the device; host-side USB sleeps cannot guarantee audio-frame deadlines.
+Preserve kick/tom coefficient writes and note-off events, report queue errors,
+and test disconnect/reset behavior. `play.py` and the named preset renderers
+produce model audio; they are not physical playback commands.
+
+First exercise a held note, then the complete scripted phrase, then drums
+and simultaneous voice. Decode/record what actually leaves the device and
+compare against the same named configuration, preserving raw gain and timing.
+
+## Build and verify
+
+On a checkout with Python, numpy, scipy, pytest and Icarus Verilog:
+
+```text
+python -m pytest fpga/test_build_arty.py -q
+python fpga/verify_arty_controls.py
+python fpga/build_arty.py --prepare-only
+```
+
+The build preparer checks clean numerical evidence and source/ROM/transcript
+hashes, then snapshots the actual build inputs. Missing or changed evidence
+refuses the build. The CI workflow repeats the wrapper checks and preparation.
+
+On x86-64 Linux with Vivado available on PATH:
+
+```text
+python fpga/build_arty.py
+```
+
+To reuse the committed digital evidence on that host, without rerunning the
+same unchanged RTL smoke:
+
+```text
+python fpga/build_arty.py --verification fpga/reports/arty/clean/verification.json
+```
+
+This produces a batch Tcl script, tool log, input hashes, utilization, clock,
+DRC and timing reports, checkpoints and `arty.bit`. Missing Vivado returns
+`REFUSED` (exit 2). A nonzero tool exit or absent fresh artifact fails. Even
+successful execution is labelled `BUILT_REQUIRES_TIMING_REVIEW`, not a timing
+or playback pass. Review the MMCM clock, unconstrained endpoints and any setup,
+hold or DRC failures before programming. Preserve the final bitstream hash.
+
+For first programming, use Vivado Hardware Manager on a supported host with
+the board connected by USB; target the detected XC7A100T and the reviewed
+`arty.bit`. A tested Mac programming command is still outstanding.
+
+## Remote build status
+
+A tagged 8-vCPU/32-GB Ubuntu 22.04 EC2 runner was provisioned using the supplied
+Repo Remote handoff. The idle guard remains set to 120 minutes. It passed AWS
+system and instance checks, but SSH timed out despite a source-IP-specific
+ingress rule. It was stopped to avoid idle compute charges; disk is retained.
+Private instance/access details are kept in local operator state, outside git.
+
+The official Vivado 2025.1 Marketplace image separately refused launch with
+`OptInRequired`: the account must accept its subscription terms, or provide
+an authorized Linux installer. The restricted provisioning identity cannot
+manage Marketplace subscriptions or inspect/alter network routing. Resolve
+tool access and SSH reachability before resuming the build. No FPGA results
+are inferred from successful cloud provisioning.
