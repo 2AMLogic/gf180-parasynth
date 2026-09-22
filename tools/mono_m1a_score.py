@@ -1,4 +1,4 @@
-"""First M1A comparison. Bass attack and Model D cross-check remain NO VERDICT.
+"""M1A comparison. Bass attack/filter mapping remain NO VERDICT.
 
 The mapping is fixed before rendering. Uncalibrated envelope controls are
 explicit hypotheses, never inferred from the Mini V3 normalized knob numbers.
@@ -125,8 +125,7 @@ def required_metrics(measured):
     return {"Fundamental/harmonics": lead._metric("Fundamental/harmonics", distance, 0., "normalized maximum", 1.,
                 "maximum of pitch / 1 cent and harmonic error / 1 dB; no averaging"),
             "envelope": invalid("attack estimator and filter-envelope mapping unqualified; qualified release reported separately"),
-            "bass level": props["Gain"],
-            "Model D cross-check": invalid("case requires a Model D cross-check; only Mini V3 frozen reference exists", "")}
+            "bass level": props["Gain"]}
 
 
 def load_model_cache(record, patch, engine):
@@ -207,10 +206,12 @@ def run(case, inject="", keep_audio=True, cached_record=None):
     provenance["worktree"] = source_tree
     return {"engine": "fixed-model", "case_id": "M1A", "subject": case["subject"],
             "source_commit": source_commit, "analysis_run": run_case.analysis_run(),
-            "analysis_version": "m1a-partial-score-v1", "reference_profile": "frozen Mini V3; Model D cross-check unavailable",
+            "analysis_version": "m1a-partial-score-v2", "reference_profile": "frozen Mini V3; Model D corroboration unavailable",
             "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
             "audio": artifacts.get("ours", ""), "metrics": required_metrics(measured),
             "diagnostics": {**measured, "qualification": qualification, "configuration": config,
+                            "corroboration": {"Model D cross-check": invalid(
+                                "separate corroboration milestone; Mini V3 comparison only", "")},
                             "render_source_commit": (cached_record["source_commit"] if cached_record else source_commit),
                             "render_worktree": (cached_record["provenance"]["worktree"] if cached_record else source_tree),
                             "audio_reused": cached_record is not None,

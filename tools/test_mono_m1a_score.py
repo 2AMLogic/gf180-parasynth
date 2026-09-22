@@ -61,11 +61,19 @@ def test_runner_executes_bass_and_preserves_required_no_verdict():
     metrics = bass.required_metrics(measured)
     case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
     required = {x.strip() for x in case["required_measurements"].split(";")}
-    assert required <= metrics.keys()
+    assert required == metrics.keys()
     assert metrics["Fundamental/harmonics"]["valid"]
     assert metrics["bass level"]["valid"]
     assert not metrics["envelope"]["valid"]
-    assert not metrics["Model D cross-check"]["valid"]
+
+
+def test_output_gain_change_has_known_units_without_erasing_unqualified_envelope():
+    clean = signal()
+    measured = bass.compare_audio(clean * 10 ** (-4 / 20), clean)
+    assert measured["properties"]["Gain"]["error"] == pytest.approx(-4., abs=1e-9)
+    assert measured["properties"]["Harmonic shape"]["error"] < .001
+    assert not measured["properties"]["Envelope attack"]["valid"]
+    assert not measured["properties"]["Filter envelope"]["valid"]
 
 
 def test_render_provenance_uses_existing_dsp_sources(monkeypatch):
