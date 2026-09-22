@@ -328,6 +328,7 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
                      else voice_factory())
             flags = {
                 "oscillator_oversample_2x": bool(voice.oversample_2x),
+                "oscillator_pulse_oversample_2x": bool(voice.oversample_pulse_2x),
                 "filter_rate_converted": bool(voice.rate_converted_ladder),
                 "filter_preserve_headroom": bool(voice.preserve_filter_headroom),
                 "filter_causal": bool(voice.causal_filter),

@@ -69,11 +69,11 @@ module tb_voice;
     reg st_def   = 0;                                    // was `state` ever DEFINED this frame?
     always @(posedge clk) begin
 `ifdef VOICE_OSC_2X
-        if (dut.state == dut.S_OSCWAIT && dut.is_saw && dut.osc2_valid) begin
+        if (dut.state == dut.S_OSCWAIT && dut.shape_osc2x && dut.osc2_valid) begin
             t_osc[dut.kk] <= dut.osc2_sample;
             t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
         end
-        if (dut.state == S_MIX && !dut.is_saw) begin
+        if (dut.state == S_MIX && !dut.shape_osc2x) begin
             t_osc[dut.kk] <= dut.osc;
             t_inc[dut.kk] <= dut.inc_mod[dut.kk]; t_sh[dut.kk] <= dut.sh[dut.kk]; t_r[dut.kk] <= dut.r[dut.kk];
         end
@@ -110,8 +110,13 @@ module tb_voice;
         $fclose(wfd);
         efd = $fopen(expfile, "r"); nexp = 0;
         while (!$feof(efd) && nexp < MAXN) begin
+            // Only the first integer is used here; Python compares all taps.
+            // Scanning the entire 512-byte buffer hits Verilator 5.020's
+            // VL_VALUE_STRING_MAX_WORDS limit. Read the integer from the file
+            // and consume the remaining fields (or the final STATE row).
+            rc = $fscanf(efd, "%d", expv[nexp]);
+            if (rc == 1) nexp = nexp + 1;
             rc = $fgets(line, efd);
-            if (rc > 0 && $sscanf(line, "%d", expv[nexp]) == 1) nexp = nexp + 1;
         end
         $fclose(efd);
         ofd = $fopen(outfile, "w");

@@ -1,0 +1,37 @@
+[
+  {
+    "cmd": "python3 -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q",
+    "state": "NO-VERDICT",
+    "rc": null,
+    "out": "/opt/homebrew/anaconda3/lib/python3.11/site-packages/pytest_asyncio/plugin.py:252: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\"\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n................................",
+    "secs": 600.0731630325317
+  },
+  {
+    "cmd": "python3 -m pytest model/test_audio_measure.py -q -k foldback",
+    "state": "PASS",
+    "rc": 0,
+    "out": "/opt/homebrew/anaconda3/lib/python3.11/site-packages/pytest_asyncio/plugin.py:252: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\"\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n...                                                                      [100%]\n3 passed, 131 deselected in 4.27s\n",
+    "secs": 31.082425117492676
+  },
+  {
+    "cmd": "python3 tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "{\n  \"report\": \"build/verification/m5a-signal-path-fast.json\",\n  \"source_commit\": \"db2ffb5fa4c6cd9982fd5318f51fdd7a4d42a476\",\n  \"cutoffs_hz\": [\n    14073\n  ],\n  \"filter_drives\": [\n    1.0,\n    0.75\n  ],\n  \"results\": [\n    {\n      \"cutoff_hz\": 14073,\n      \"filter_drive\": 1.0,\n      \"events\": [\n        {\n          \"midi\": 84,\n          \"stage_max_error_db\": {\n            \"oscillator\": 5.0834,\n            \"mixer\": 5.0834,\n            \"ladder\": 9.2374,\n            \"output\": 9.2371\n          },\n          \"final_excess_alias_db\": 0.0,\n          \"final_alias_band_power_dbfs\": -69.5345,\n          \"final_total_signal_power_dbfs\": -16.2017,\n          \"output_gain_error_db\": 2.9858\n        },\n        {\n          \"midi\": 96,\n          \"stage_max_error_db\": {\n            \"oscillator\": 8.437,\n            \"mixer\": 8.437,\n            \"ladder\": 9.8549,\n            \"output\": 9.8526\n          },\n          \"final_excess_alias_db\": 0.0,\n          \"final_alias_band_power_dbfs\": -68.7033,\n          \"final_total_signal_power_dbfs\": -17.8983,\n          \"output_gain_error_db\": 1.6144\n        }\n      ]\n    },\n    {\n      \"cutoff_hz\": 14073,\n      \"filter_drive\": 0.75,\n      \"events\": [\n        {\n          \"midi\": 84,\n          \"stage_max_error_db\": {\n            \"oscillator\": 5.0834,\n            \"mixer\": 5.0834,\n            \"ladder\": 7.77,\n            \"output\": 7.7708\n          },\n          \"final_excess_alias_db\": 0.0,\n          \"final_alias_band_power_dbfs\": -73.3721,\n          \"final_total_signal_power_dbfs\": -17.7662,\n          \"output_gain_error_db\": 1.4212\n        },\n        {\n          \"midi\": 96,\n          \"stage_max_error_db\": {\n            \"oscillator\": 8.437,\n            \"mixer\": 8.437,\n            \"ladder\": 8.8472,\n            \"output\": 8.8458\n          },\n          \"final_excess_alias_db\": 0.0,\n          \"final_alias_band_power_dbfs\": -73.1981,\n          \"final_total_signal_power_dbfs\": -19.2364,\n          \"output_gain_error_db\": 0.2759\n        }\n      ]\n    }\n  ]\n}\n",
+    "secs": 355.8853189945221
+  },
+  {
+    "cmd": "python3 tools/verify_mono_case.py",
+    "state": "NO-VERDICT",
+    "rc": null,
+    "out": "",
+    "secs": 600.046061038971
+  },
+  {
+    "cmd": "python3 tools/check_workflows.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": "4 workflow(s) parse and declare a usable trigger\n",
+    "secs": 0.9382967948913574
+  }
+]

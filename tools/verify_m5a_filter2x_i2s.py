@@ -22,6 +22,8 @@ def _repo_path(value: str) -> pathlib.Path:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--case", choices=("M5A", "M5B"), default="M5A")
+    ap.add_argument("--pulse2x", action="store_true")
     ap.add_argument("--outdir", default="build/m5a-filter2x-i2s")
     ap.add_argument("--verification", default="build/verification/M5A-filter2x-i2s.txt")
     ap.add_argument("--wav", default="build/scorecard/M5A-filter2x-i2s.wav")
@@ -42,6 +44,15 @@ def main(argv=None) -> int:
     command = [sys.executable, str(ROOT / "rtl-sketch/verify_synth_top.py"),
                "--m5a", "--filter2x", "--simulator", a.simulator,
                "--wav-out", str(wav), "--outdir", str(outdir)]
+    if a.case != "M5A" or a.pulse2x:
+        sys.path.insert(0, str(ROOT / "tools"))
+        from mono_m5a_score import MANIFESTS, engine_configuration
+        engine = engine_configuration("selected")
+        command += ["--m5a-manifest", str(MANIFESTS[a.case]),
+                    "--m5a-saw-cutoff-hz", str(engine["saw_cutoff_hz"]),
+                    "--m5a-saw-volume-correction-db", str(engine["saw_volume_correction_db"])]
+    if a.pulse2x:
+        command += ["--pulse2x"]
     try:
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                                 timeout=a.timeout)
@@ -61,6 +72,9 @@ def main(argv=None) -> int:
     score_command = [sys.executable, str(ROOT / "tools/score_m5a_i2s.py"),
                      "--wav", str(wav), "--verification", str(report),
                      "--out", str(record), "--audio", str(audio)]
+    score_command += ["--case", a.case]
+    if a.pulse2x:
+        score_command += ["--pulse2x"]
     scored = subprocess.run(score_command, cwd=ROOT, text=True)
     return scored.returncode
 

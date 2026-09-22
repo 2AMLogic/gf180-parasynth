@@ -520,6 +520,7 @@ def main(argv=None) -> int:
     ap.add_argument("--short", action="store_true"); ap.add_argument("--frames", type=int, default=None)
     ap.add_argument("--osc2x", action="store_true",
                     help="select the measured 2x saw chain in RTL and Python model")
+    ap.add_argument("--pulse2x", action="store_true", help="select 2x rectangular oscillators in model and RTL")
     ap.add_argument("--filter2x", action="store_true",
                     help="select causal reconstructed 2x filter and pulse-duty challenger")
     ap.add_argument("--m5a", action="store_true",
@@ -543,7 +544,7 @@ def main(argv=None) -> int:
     ap.add_argument("--envtrace", action="store_true",
                     help="write diagnostic voice gate/envelope registers per frame")
     a = ap.parse_args(argv)
-    if a.filter2x:
+    if a.filter2x or a.pulse2x:
         a.osc2x = True
     a.outdir = os.path.abspath(a.outdir); os.makedirs(a.outdir, exist_ok=True)
     if a.rtl:
@@ -552,6 +553,7 @@ def main(argv=None) -> int:
             print(f"verify_synth_top: REFUSED -- --rtl {a.rtl} is not a directory"); return 2
 
     m5a = None
+    case_id = "M5A"
     if a.m5a or a.m5a_smoke:
         a.m5a = True
         if not a.osc2x:
@@ -565,6 +567,9 @@ def main(argv=None) -> int:
         except (OSError, ValueError, KeyError, TypeError) as exc:
             print(f"verify_synth_top: REFUSED -- M5A stimulus: {exc}")
             return 2
+        case_id = m5a["manifest"].get("case_id")
+        if case_id not in ("M5A", "M5B"):
+            print("verify_synth_top: REFUSED -- unsupported Mono manifest case"); return 2
         cover = {}
     else:
         cmds, tail, cover = script(a.short)
@@ -594,11 +599,11 @@ def main(argv=None) -> int:
         effective_pulse = ("pulse479" if a.filter2x and m5a["pulse_shape"] == "pulse29"
                            else m5a["pulse_shape"])
         effective_duty = vf.DUTY[effective_pulse] / vf.CYCLE
-        print(f"verify_synth_top: M5A controls: pulse={m5a['pulse_shape']}; "
+        print(f"verify_synth_top: {case_id} controls: pulse={m5a['pulse_shape']}; "
               f"effective pulse={effective_pulse} ({100.0 * effective_duty:.2f}% duty); "
               f"saw cutoff={m5a['saw_cutoff_hz']} Hz; "
               f"saw volume correction={m5a['saw_volume_correction_db']:+.5f} dB")
-        print(f"verify_synth_top: M5A stimulus has {len(m5a['events'])} note events, "
+        print(f"verify_synth_top: {case_id} stimulus has {len(m5a['events'])} note events, "
               f"{detail}; "
               f"selected filter drive {m5a['filter_drive']:.2f}; "
               f"pulse {m5a['pulse_shape']}; saw cutoff {m5a['saw_cutoff_hz']} Hz; "
@@ -612,6 +617,8 @@ def main(argv=None) -> int:
     defines = (["VOICE_OSC_2X"] if a.osc2x else [])
     if a.filter2x:
         defines.append("VOICE_FILTER_2X")
+    if a.pulse2x:
+        defines.append("VOICE_PULSE_2X")
     if a.inject:
         defines.append(f"INJECT_BUG_{a.inject}")
     config = ("2x saw + causal 2x filter candidate" if a.filter2x else
@@ -700,7 +707,7 @@ def main(argv=None) -> int:
     print(f"verify_synth_top: writes landed in frames {model_writes[0][0]}..{last}; modelling {n} frames")
 
     # ---- the model, on those frames ----------------------------------------
-    m = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x).run(model_writes, n)
+    m = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(model_writes, n)
     exp_i2s, exp_s = m["i2s"], m["sample"]
 
     # ---- the comparison: the WIRE against the MODEL -------------------------
@@ -763,7 +770,7 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: PASS -- {nper} I2S periods decoded from the wire, every one identical "
               f"to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too")
         if a.m5a:
-            print("verify_synth_top: M5A path verified from SPI pins through the production voice and I2S pins")
+            print(f"verify_synth_top: {case_id} path verified from SPI pins through the production voice and I2S pins")
         return 0
     print(f"verify_synth_top: FAIL -- of {nper} decoded I2S periods: {mism} differ from the model, "
           f"{swap} have L != R, {width} have a slot that is not 32 BCLK")
