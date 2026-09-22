@@ -17,9 +17,11 @@ def test_stored_audio_reproduces_without_rendering(monkeypatch):
     result = verifier.verify(REPORT)
     assert result["exact_timing_rows"] == 12
     assert result["history_contrasts"] == 6
+    assert result["render_source_commit"] == json.loads(REPORT.read_text())["source_commit"]
+    assert "historical" in result["evidence_basis"]
 
 
-@pytest.mark.parametrize("mutation", ["timing", "history", "missing-row", "audio-hash", "invalid"])
+@pytest.mark.parametrize("mutation", ["timing", "history", "missing-row", "audio-hash", "invalid", "source-hash"])
 def test_changed_evidence_refuses(tmp_path, mutation):
     record = copy.deepcopy(json.loads(REPORT.read_text()))
     for row in record["rows"]:
@@ -35,7 +37,20 @@ def test_changed_evidence_refuses(tmp_path, mutation):
         record["rows"][0]["sha256"] = "0" * 64
     elif mutation == "invalid":
         record["rows"][0]["model_timing"]["valid"] = False
+    elif mutation == "source-hash":
+        record["source_sha256"]["model/voice_fx.py"] = "0" * 64
     mutated = tmp_path / "report.json"
     mutated.write_text(json.dumps(record))
     with pytest.raises(AssertionError):
         verifier.verify(mutated)
+
+
+def test_changed_analysis_basis_refuses(monkeypatch):
+    original = verifier.producer.context.ref.sha256
+    def changed(path):
+        if str(path).endswith("model/audio_measure.py"):
+            return "0" * 64
+        return original(path)
+    monkeypatch.setattr(verifier.producer.context.ref, "sha256", changed)
+    with pytest.raises(AssertionError, match="analysis basis changed"):
+        verifier.verify(REPORT)

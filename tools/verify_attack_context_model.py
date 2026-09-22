@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import hashlib
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -21,8 +23,18 @@ def verify(report_path: Path) -> dict:
     reference_path = root / "docs/scorecard/mono-attack-context/report.json"
     assert ref.sha256(reference_path) == report["reference_report_sha256"], "reference report changed"
     assert ref.sha256(lead.MANIFEST) == report["envelope_calibration_manifest_sha256"], "calibration changed"
+    changed_sources = []
+    # The stored audio remains evidence for its original engine commit.
+    # Verify that historical identity without relabelling it as today's engine.
+    analysis_sources = {"model/audio_measure.py", "tools/measure_mono_m5a_reference.py",
+                        "tools/measure_mono_attack_context.py"}
+    assert analysis_sources <= report["source_sha256"].keys(), "analysis source binding absent"
     for name, digest in report["source_sha256"].items():
-        assert ref.sha256(root / name) == digest, f"source changed: {name}"
+        historical = subprocess.check_output(["git", "show", f"{report['source_commit']}:{name}"], cwd=root)
+        assert hashlib.sha256(historical).hexdigest() == digest, f"historical source hash differs: {name}"
+        if ref.sha256(root / name) != digest:
+            changed_sources.append(name)
+            assert name not in analysis_sources, f"analysis basis changed: {name}; use the recorded checkout"
     reference = json.loads(reference_path.read_text())
     for row in reference["renders"]:
         assert ref.sha256(reference_path.parent / row["wav"]) == row["sha256"], "reference audio changed"
@@ -71,6 +83,8 @@ def verify(report_path: Path) -> dict:
                                  for key in ("model_attack_ms", "reference_attack_ms")}})
     assert contrasts == report["history_effect_ms"], "history contrasts differ"
     return {"state": "reproduced", "model_wavs": len(expected), "reference_wavs": len(reference["renders"]),
+            "evidence_basis": "historical model audio; unchanged analysis basis",
+            "render_source_commit": report["source_commit"], "current_source_differences": changed_sources,
             "exact_timing_rows": len(expected), "held_rms_max_absolute_delta": rms_max_delta,
             "history_contrasts": len(contrasts)}
 
