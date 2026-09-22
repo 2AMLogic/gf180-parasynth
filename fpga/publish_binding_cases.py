@@ -54,9 +54,18 @@ def make_artifact(tmp):
     art = tmp / "artifact"
     shutil.copytree(FIXTURE, art)
     (art / "routed.dcp").write_bytes(b"publication-binding-case\n")
+    # an honest build snapshots its inputs; the fixture predates that copy
+    snap = art / "inputs/fpga/boards/arty-a7-100.xdc"
+    snap.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "fpga/boards/arty-a7-100.xdc", snap)
     record = json.loads((art / "report.json").read_text())
     record["artifact_sha256"] = {name: sha(art / name) for name in
                                  record["artifact_sha256"]}
+    # re-bind sources to the CURRENT tree: the committed fixture predates
+    # later comment-level edits (e.g. the SLAS764B citation fix), and the
+    # publisher must refuse artifacts that are not tree-current
+    record["source_sha256"] = {rel: sha(ROOT / rel)
+                               for rel in record["source_sha256"]}
     (art / "report.json").write_text(json.dumps(record, indent=2) + "\n")
     return art
 
@@ -140,7 +149,16 @@ def case_uart_ports_without_disposition(tmp):
     return art
 
 
+def case_baseline(tmp):
+    """The unmutated internally-consistent artifact: MUST still publish.
+
+    Without this case the binding gates above could be unsatisfiable --
+    the failure mode that trains everyone to ignore gates."""
+    return make_artifact(tmp)
+
+
 CASES = [
+    ("baseline", case_baseline),
     ("extra_compiled_source", case_extra_compiled_source),
     ("uart_top_with_clean_proof", case_uart_top_with_clean_proof),
     ("foreign_exception", case_foreign_exception),

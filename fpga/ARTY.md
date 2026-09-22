@@ -12,6 +12,26 @@ bitstream to its source inputs, digital verification and implementation reports.
 External I/O timing, DSP feedback warnings and physical playback remain under
 review; this is not yet a qualified hardware audio result.
 
+Since 2026-09-22 the publisher additionally binds, at publication time and
+refusing drift (regression-tested in `fpga/test_publish_binding.py`):
+
+- the digital verification record is **derived from the wrapper the build
+  compiled** (`build.tcl` `-top` → `VERIFICATION_BY_WRAPPER`:
+  `arty_a7_top` → `reports/arty/clean/verification.json`,
+  `arty_a7_uart_top` → `reports/arty/uart-clean/verification.json`; an
+  unlisted wrapper has no evidence and is refused), and the proof is
+  hash-validated against the wrapper's compiled source set;
+- the compiled `read_verilog`/`read_xdc` set must equal the build record's
+  `source_sha256` minus ROM data files — an artifact whose build script
+  reads sources the proof never covered is refused;
+- the compiled XDC must carry **exactly** the approved external-I/O
+  constraints (`ext_io_timing.py::xdc_contract_drift`), the routed
+  report's output-delay exception list must be exactly
+  `["i2s_bclk"]`, and UART ports (TX D10 / RX A9, upcoming in the
+  integrated tree) may appear only with pin, constraint and — for TX — a
+  recorded receiver/baud disposition (`uart_gate_drift`; inert until the
+  ports exist).
+
 The fixed first-playback configuration is `OSC2X=1 FILTER2X=1 PULSE2X=0`.
 It uses the selected reconstructed filter and near-47.9% pulse, addressed by
 the existing `pulse29` register label. Pulse 2x remains a separate upgrade;
@@ -50,7 +70,8 @@ constraint set was proven against the published routed checkpoint
   with `create_generated_clock -divide_by 4` sourced from the MMCM, so SDATA
   and LRCLK are analyzed as source-synchronous data against the clock that
   actually reaches the DAC. The DAC's clock-input requirements — TI PCM5102
-  SLOS811 (SLAS764B) Table 7: tBCY ≥ 40 ns, tBCH/tBCL ≥ 16 ns, fBCK ≤
+  SLAS764B Table 7 p.13 (an earlier revision mis-cited the wrong identifier
+  SLOS811 — withdrawn): tBCY ≥ 40 ns, tBCH/tBCL ≥ 16 ns, fBCK ≤
   24.576 MHz — are met with ≥ 146 ns of margin and checked arithmetically.
   A forwarded clock carries no output delay: adding one fails a
   self-referential hold check (measured WHS −1.021 ns), and Vivado classifies
@@ -58,7 +79,7 @@ constraint set was proven against the published routed checkpoint
   That classification is the one permitted exception in the publication
   machinery, recorded as `output_delay_exceptions: ["i2s_bclk"]`.
 - **i2s_sdata (A11), i2s_lrclk (B11)**: setup −max 8.200 ns = tDS/tLB 8 ns
-  (SLOS811 Table 7) + 0.2 ns assumed flight imbalance. Hold is a skew budget:
+  (SLAS764B Table 7 p.13) + 0.2 ns assumed flight imbalance. Hold is a skew budget:
   the RTL switches these outputs only on BCLK-falling cycles (`i2s_tx.v:48`),
   so the DAC's tDH/tBL is guaranteed by the half-period structure; `-min
   154.560` (= 162.760 half period − 8.200 tDH budget) makes STA verify

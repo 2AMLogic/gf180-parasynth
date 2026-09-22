@@ -55,7 +55,8 @@ set_property CFGBVS VCCO [current_design]
 create_generated_clock -name i2s_bclk_ext \
     -source [get_pins hardware_clock.mmcm/CLKOUT0] -divide_by 4 [get_ports i2s_bclk]
 
-# PCM5102 (SLOS811 / SLAS764B, Table 7 "Audio Interface Slave Timing"):
+# PCM5102 (SLAS764B, Table 7 p.13 "Audio Interface Slave Timing"; an earlier
+# revision mis-cited the wrong identifier SLOS811 -- withdrawn):
 # tDS = tDH = 8 ns (DIN vs BCLK rising), tLB = tBL = 8 ns (LRCLK vs BCLK
 # rising). SDATA and LRCLK change on BCLK's falling edge (i2s_tx.v:48), half
 # a BCLK period before the sampling edge. Jumpers are short (~0.2 ns) and of
