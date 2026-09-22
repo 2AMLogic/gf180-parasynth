@@ -6,15 +6,36 @@ cannot program this board; this is a separate Xilinx port.
 
 ## What is implemented and measured
 
-The wrapper, constraints, build preparation and digital checks exist.
-**No Arty bitstream, fit/timing result, or physical audio recording exists yet.**
-The actual Vivado run remains blocked on tool access and a reachable Linux
-runner. A successful build will still require review of clock and I/O timing.
+**Vivado 2025.1 produced a routed bitstream and passing internal timing.**
+The [published build](reports/arty/vivado-2025.1/publication.json) binds the
+bitstream to its source inputs, digital verification and implementation reports.
+External I/O timing, DSP feedback warnings and physical playback remain under
+review; this is not yet a qualified hardware audio result.
 
 The fixed first-playback configuration is `OSC2X=1 FILTER2X=1 PULSE2X=0`.
 It uses the selected reconstructed filter and near-47.9% pulse, addressed by
 the existing `pulse29` register label. Pulse 2x remains a separate upgrade;
-neither the old ULX3S resource count nor this port proves its Artix fit.
+this baseline build does not establish its Artix fit.
+
+| Routed implementation | Result |
+|---|---|
+| Slice LUTs | 12,695 / 63,400 (20.02%) |
+| Registers | 12,171 / 126,800 (9.60%) |
+| DSP blocks | 100 / 240 (41.67%) |
+| Core clock | 12.288 MHz; reported period 81.380 ns |
+| Final setup / hold slack | +46.498 ns / +0.050 ns; zero failing endpoints |
+| Internal timing coverage | zero unclocked or unconstrained internal endpoints |
+| External timing | seven outputs without delay constraints; unqualified |
+| DRC | 268 warnings, including 13 DPREG-4 DSP feedback warnings; zero errors or critical warnings |
+
+The [bitstream](reports/arty/vivado-2025.1/arty.bit) is 3,825,912 bytes,
+SHA-256 `fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439`.
+It was built from `602f7a09adb33d36b1fbc82de00f3e10d0890498` in 413 seconds.
+Final timing comes from `timing.rpt`, not the router's intermediate estimate.
+All warning classes remain recorded. Review DPREG-4 feedback behavior before
+claiming implementation correctness; the RTL simulation below does not model
+the mapped DSP primitives. Report host headers are omitted for privacy, with
+both original and published report hashes retained.
 
 | Digital check | Result |
 |---|---|
@@ -38,10 +59,13 @@ checks button assertion, delayed release and loss/recovery of lock; it does
 not model MMCM analog behavior. Hardware synthesis explicitly forces
 `SIM_NO_MMCM=0`.
 
-Wrong-then-right accounting: two setup errors were found and corrected: a
+Wrong-then-right accounting: three setup errors were found and corrected: a
 Verilog declaration-order error before the numerical start-red run, and an
-incomplete Vivado snapshot that omitted the voice lookup tables. A regression
+incomplete Vivado snapshot that omitted the voice lookup tables, and the first
+real build refusing our misplaced Verilog-define option. A regression
 test reproduces the missing-ROM failure using filenames from the actual HDL.
+The [failed first build](reports/arty/first-vivado-attempt.json) retains the
+exact Tcl error and repair.
 Fresh digital evidence hashes all six ROM inputs. The compiler error was not
 credited as a detected defect. The three intentional broken
 configurations above all failed numerically; there was no accepted sound
@@ -78,9 +102,9 @@ recording interface; leave automatic gain and effects off.
 The expected nominal rates are 48 kHz LRCLK and 3.072 MHz BCLK, with 32-bit
 slots carrying 16-bit samples. The 100 MHz E3 oscillator feeds an MMCM:
 `100 / 5 * 48 / 78.125 = 12.288 MHz`; VCO is 960 MHz. This arithmetic is
-checked independently of the HDL model. Actual clock suitability, jitter,
-route timing and DAC setup/hold still require the implementation reports and
-physical measurement. The XDC deliberately leaves external output delays
+checked independently of the HDL model and confirmed by Vivado's generated
+clock report. Jitter and DAC setup/hold still require external timing review
+and physical measurement. The XDC deliberately leaves external output delays
 unqualified rather than inventing a DAC timing guarantee.
 
 BTN0 (D9) resets the design. LEDs 0/1 show clock lock/reset release, LED2 is a
@@ -109,7 +133,7 @@ compare against the same named configuration, preserving raw gain and timing.
 On a checkout with Python, numpy, scipy, pytest and Icarus Verilog:
 
 ```text
-python -m pytest fpga/test_build_arty.py -q
+python -m pytest fpga/test_build_arty.py fpga/test_publish_arty.py -q
 python fpga/verify_arty_controls.py
 python fpga/build_arty.py --prepare-only
 ```
@@ -138,21 +162,54 @@ successful execution is labelled `BUILT_REQUIRES_TIMING_REVIEW`, not a timing
 or playback pass. Review the MMCM clock, unconstrained endpoints and any setup,
 hold or DRC failures before programming. Preserve the final bitstream hash.
 
-For first programming, use Vivado Hardware Manager on a supported host with
-the board connected by USB; target the detected XC7A100T and the reviewed
-`arty.bit`. A tested Mac programming command is still outstanding.
+Publish a successful build into an empty directory:
+
+```text
+python fpga/publish_arty.py build/arty --out build/arty-publication
+```
+
+The publisher requires matching source, verification and artifact hashes,
+checks the actual routed reports, and refuses missing reports, timing failures,
+wrong clocks, resource overflow and DRC errors. Tests mutate the real report
+fixture to demonstrate those refusals. Its successful state is
+`BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED`; it retains the separate,
+unqualified external-timing, DSP-review and physical-playback fields.
+
+For first programming from the Mac, the upstream
+[openFPGALoader board database](https://github.com/trabucayre/openFPGALoader/blob/master/src/board.hpp)
+names this board `arty_a7_100t`. Use that exact identifier (`arty` is the
+35T alias). After the bitstream and wiring are reviewed:
+
+```text
+brew install openfpgaloader
+openFPGALoader --list-boards
+openFPGALoader -b arty_a7_100t --detect
+openFPGALoader -b arty_a7_100t fpga/reports/arty/vivado-2025.1/arty.bit
+```
+
+The final command loads volatile FPGA configuration; the board returns to
+its flash image at power cycle. openFPGALoader 1.1.1 is installed on the Mac and its board entry is verified.
+Physical programming has not been tested because the board has not arrived. Vivado Hardware Manager on a supported
+USB-connected host is another programming route.
 
 ## Remote build status
 
-A tagged 8-vCPU/32-GB Ubuntu 22.04 EC2 runner was provisioned using the supplied
-Repo Remote handoff. The idle guard remains set to 120 minutes. It passed AWS
-system and instance checks, but SSH timed out despite a source-IP-specific
-ingress rule. It was stopped to avoid idle compute charges; disk is retained.
-Private instance/access details are kept in local operator state, outside git.
+The official AMD Vivado 2025.1 Marketplace subscription is enabled. An
+8-vCPU/32-GB Ubuntu 22.04 runner completed the build using Vivado
+2025.1, SW Build 6140274. Its catalog recognizes `xc7a100tcsg324-1`, and
+synthesis successfully checked out the device license. The artifacts have
+been collected and AWS confirms the runner is **stopped**. Its disk is retained
+for future builds; storage charges continue. The idle guard remains set to
+120 minutes for subsequent runs.
+Private cloud/access details stay in local operator state, outside git.
 
-The official Vivado 2025.1 Marketplace image separately refused launch with
-`OptInRequired`: the account must accept its subscription terms, or provide
-an authorized Linux installer. The restricted provisioning identity cannot
-manage Marketplace subscriptions or inspect/alter network routing. Resolve
-tool access and SSH reachability before resuming the build. No FPGA results
-are inferred from successful cloud provisioning.
+The earlier empty Ubuntu fallback was terminated. The initial readiness probe
+returned before the new guest accepted SSH; bounded retries succeeded without
+changing ingress or credentials. This is tracked in
+[Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
+
+The first real build refused `read_verilog -define` outside compile-unit mode.
+The script now passes both macros explicitly to `synth_design`, following
+[AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
+This was a build-script error, not an RTL sound change. The corrected retry
+produced the published fit, timing and bitstream evidence above.

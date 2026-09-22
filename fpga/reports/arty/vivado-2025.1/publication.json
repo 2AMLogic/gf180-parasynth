@@ -1,0 +1,168 @@
+{
+  "internal_timing_pass": true,
+  "timing": {
+    "wns_ns": 46.498,
+    "tns_ns": 0.0,
+    "setup_failing": 0.0,
+    "setup_endpoints": 38304.0,
+    "whs_ns": 0.05,
+    "ths_ns": 0.0,
+    "hold_failing": 0.0,
+    "hold_endpoints": 38304.0,
+    "wpws_ns": 3.0,
+    "tpws_ns": 0.0,
+    "pulse_failing": 0.0,
+    "pulse_endpoints": 12247.0
+  },
+  "core_period_ns": 81.38,
+  "resources": {
+    "Slice LUTs": {
+      "used": 12695.0,
+      "available": 63400.0
+    },
+    "Slice Registers": {
+      "used": 12171.0,
+      "available": 126800.0
+    },
+    "DSPs": {
+      "used": 100.0,
+      "available": 240.0
+    },
+    "Block RAM Tile": {
+      "used": 0.0,
+      "available": 135.0
+    },
+    "Bonded IOB": {
+      "used": 13.0,
+      "available": 210.0
+    }
+  },
+  "missing_output_delays": 7,
+  "drc": {
+    "DPIP-1": {
+      "severity": "Warning",
+      "count": 64
+    },
+    "DPOP-1": {
+      "severity": "Warning",
+      "count": 97
+    },
+    "DPOP-2": {
+      "severity": "Warning",
+      "count": 94
+    },
+    "DPREG-4": {
+      "severity": "Warning",
+      "count": 13
+    }
+  },
+  "external_io_timing_qualified": false,
+  "dsp_feedback_review_complete": false,
+  "hardware_playback_tested": false,
+  "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "part": "xc7a100tcsg324-1",
+  "bitstream_sha256": "fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439",
+  "source_sha256": {
+    "fpga/rtl/arty_a7_top.v": "1af5f47fa4212fdac3647b6d786af3d2dc578879a172ee6c141886ef1affae3d",
+    "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
+    "rtl-sketch/voice_dp.v": "a1575257054328dbc460f81cb4e3c1d901a81b565a332c00da0df9c8aa29c097",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+    "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+    "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+    "fpga/boards/arty-a7-100.xdc": "8c6e60a53aaa1c3195144169bbd3a37a1f4f2d76a13715dd6ef2646ee334bbd7"
+  },
+  "verification": {
+    "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+    "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+    "periods": 4821,
+    "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+  },
+  "tool": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
+  "build_seconds": 413.066,
+  "original_artifact_sha256": {
+    "arty.bit": "fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439",
+    "utilization.rpt": "9bbca3fb5266dccb7e4ee6ae4c6a9d22ff1bea9694bf8faa782382c7adc9812b",
+    "timing.rpt": "fdf910cbeba31a52e812050601875bca24bc1feb91668291696daf4039fdb17f",
+    "clocks.rpt": "709cfe267f739c7c8ff1830e5ec05311a53074ad1db6d5a8042cb9559076c00d",
+    "drc.rpt": "1c06b86f770da9e1fea2b70de8a04a77193dfc78def994a10eb9de77dc9c981f",
+    "routed.dcp": "fdb3b45d7d7b108bf3246a5013f7ac6171f126956a4d0fcc2af1a20e499945fe"
+  },
+  "report_transformation": "Host header omitted; numerical report contents unchanged",
+  "remaining_review": [
+    "DAC/controller output timing",
+    "13 DPREG-4 DSP feedback warnings",
+    "physical programming, control and audio capture"
+  ],
+  "input_bundle": {
+    "git_commit": "602f7a09adb33d36b1fbc82de00f3e10d0890498",
+    "bundle_sha256": "13ad20cf5e868ceb4d3a7d93ad47f24a4fe6ebec877ea4c2f2c0c8dbceeb87a9",
+    "files": {
+      "fpga/rtl/arty_a7_top.v": "1af5f47fa4212fdac3647b6d786af3d2dc578879a172ee6c141886ef1affae3d",
+      "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
+      "rtl-sketch/voice_dp.v": "a1575257054328dbc460f81cb4e3c1d901a81b565a332c00da0df9c8aa29c097",
+      "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+      "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+      "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+      "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+      "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+      "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+      "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+      "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+      "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+      "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+      "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+      "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+      "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+      "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+      "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+      "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+      "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+      "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+      "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+      "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+      "fpga/boards/arty-a7-100.xdc": "8c6e60a53aaa1c3195144169bbd3a37a1f4f2d76a13715dd6ef2646ee334bbd7",
+      "fpga/build_arty.py": "90fb9c451b540abdc994d81da1851407bbe911fef813e4568aa6659662d31b57",
+      "fpga/build_selected.py": "714980a61f76d1a573f3d1a3144561ee89a3d2ca158b326683f46bb54e172468",
+      "rtl-sketch/verify_synth_top.py": "22d72368c508c881c135d55887e1e1bc2b7fdf09072ae49ed3cc571f054bcb0b",
+      "fpga/reports/arty/clean/verification.json": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "fpga/reports/arty/clean/verification.txt": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6"
+    },
+    "digital_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  "published_sha256": {
+    "timing.rpt": "18bff68421dbad62db210f02937b5fc7450263d33114fe8e7d2b662e1f50f22d",
+    "utilization.rpt": "612623be91db5b635804ac67eeb9f3832a2c027e231bc8c78c3aa90c0a55a70c",
+    "arty.bit": "fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439",
+    "report.json": "223e8d83b1444ba671924e594fe643e8315bba5c0ec8621da6b0e6b75b834f63",
+    "clocks.rpt": "dea8345d7b4a28ca2598065bd7558789a583c843580b1a7c0b89078c2be3b562",
+    "drc.rpt": "0cc7bd52075367c4a518e45ffc6ff5e22957a96bd395ce78bbebc8b5d7ec1121",
+    "build.tcl": "1b8be1da84abd0aa862820c9ee08e77348c43bf670c61640bd02028639c420f4"
+  }
+}
