@@ -1,0 +1,52 @@
+[
+  {
+    "case": "empty_dump",
+    "exit": 3,
+    "verdict": "NO VERDICT: dump parses to zero cells"
+  },
+  {
+    "case": "truncated_dump",
+    "exit": 3,
+    "verdict": "NO VERDICT: dump is missing 5 DPREG-4-flagged instance(s) required by drc.rpt, e.g. ['u_synth/u_voice/voice_rate_converter/p_1_out__4', 'u_synth/u_voice/voice_rate_converter/p_1_out__5', 'u_synth/u_voice/voice_rate_converter/p_1_out__6']"
+  },
+  {
+    "case": "missing_opmode_pins",
+    "exit": 3,
+    "verdict": "NO VERDICT: required cell u_synth/u_voice/voice_rate_converter/p_1_out__3: no OPMODE pins in the extraction -- a defect of the apparatus, not OPMODE 0000000"
+  },
+  {
+    "case": "wrong_hash",
+    "exit": 3,
+    "verdict": "NO VERDICT: hash mismatch for dsp_cells_dump.txt: recorded 3a8f8b83d124f1be09c229134e6cdfd8e6eaceeb05e0d1b9f39579597832208d"
+  },
+  {
+    "case": "missing_manifest",
+    "exit": 3,
+    "verdict": "NO VERDICT: missing evidence manifest: MANIFEST.sha256"
+  },
+  {
+    "case": "missing_drc_rpt",
+    "exit": 3,
+    "verdict": "NO VERDICT: missing bound DRC report: /var/folders/fb/l4j31ymn3bn0mc6v1qbvvl8c0000gn/T/dsp-refusal-400n0nqo/missing_drc_rpt/drc.rpt"
+  },
+  {
+    "case": "extra_flagged_cell",
+    "exit": 3,
+    "verdict": "NO VERDICT: extra dump cell with dynamic OPMODE, flagged by no DPREG-4 in drc.rpt: u_synth/u_voice/voice_rate_converter/p_1_out__9"
+  },
+  {
+    "case": "duplicate_cell",
+    "exit": 3,
+    "verdict": "NO VERDICT: duplicate cell header in dump: u_synth/u_voice/voice_rate_converter/p_1_out"
+  },
+  {
+    "case": "drc_dump_mismatch",
+    "exit": 3,
+    "verdict": "NO VERDICT: dump is missing 1 DPREG-4-flagged instance(s) required by drc.rpt, e.g. ['u_synth/u_voice/osc2_path/p9/pair/dec/prod0__0']"
+  },
+  {
+    "case": "sim_short_trace",
+    "exit": 1,
+    "verdict": "NO VERDICT: mode 0 trace incomplete: 100 actual / 148 expected cycles, stimulus has 148 rows"
+  }
+]

@@ -392,8 +392,22 @@ def main():
                     if first is None:
                         first = {"cycle": i, "expected": exp[mode][i],
                                  "actual": f"{p2h} {p1h}"}
+        # a trace shorter than the stimulus is a broken run, not a pass:
+        # the comparison must cover every stimulus cycle, for the clean
+        # sequence AND for both controls
+        rec["trace_complete"] = (rec["cycles"] == len(rows)
+                                 and len(exp[mode]) == len(rows))
+        rec["expected_cycles"] = len(exp[mode])
         rec["first_mismatch"] = first
         verdict[mode] = rec
+    incomplete = [m for m in (1, 2, 0) if not verdict[m]["trace_complete"]]
+    if incomplete:
+        for m in incomplete:
+            print(f"NO VERDICT: mode {m} trace incomplete: "
+                  f"{verdict[m]['cycles']} actual / "
+                  f"{verdict[m]['expected_cycles']} expected cycles, "
+                  f"stimulus has {len(rows)} rows")
+        return 1
     vlog2 = DSIM / "vvp_mode2.log"
     loop_evidence = vlog2.exists() and re.search(
         r"iteration limit|INFINITE|stopped|abort", vlog2.read_text(),
@@ -402,7 +416,8 @@ def main():
     red2 = (verdict[2]["wrong_cycles"] > 0 or verdict[2]["x_cycles"] > 0
             or verdict[2]["sim_aborted"])
     clean0 = (not verdict[0]["sim_aborted"] and
-              verdict[0]["x_cycles"] == 0 and verdict[0]["wrong_cycles"] == 0)
+              verdict[0]["x_cycles"] == 0 and verdict[0]["wrong_cycles"] == 0
+              and verdict[0]["trace_complete"])
     iver = subprocess.run(["iverilog", "-V"], capture_output=True, text=True)
     version_line = iver.stdout.splitlines()[0] if iver.stdout else "unknown"
     commit = (EVIDENCE / "unisim_source_commit.txt").read_text().split("=")[-1].split()[0]
@@ -418,6 +433,8 @@ def main():
     (DSIM / "verdict.json").write_text(json.dumps(
         {"verdict": verdict, "pregflip_red": red1, "opmodep_red": red2,
          "loop_evidence_in_log": loop_evidence, "clean_pass": clean0,
+         "trace_complete_all": all(verdict[m]["trace_complete"]
+                                   for m in (0, 1, 2)),
          "stimulus_rows": len(rows), "simulator": version_line,
          "unisim_commit": commit,
          "run_order": "controls (1=pregflip, 2=opmodep) before clean (0)"},

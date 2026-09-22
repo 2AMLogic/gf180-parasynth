@@ -2370,6 +2370,28 @@
     }
   ],
   "source_dump": "dsp_cells_dump.txt",
+  "required_source": "drc.rpt DPREG-4 violations (parsed at analysis time)",
+  "required_instances": [
+    "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
+    "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0",
+    "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0",
+    "u_synth/u_voice/voice_rate_converter/p_1_out",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__0",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__1",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__2",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__3",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__4",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__5",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__6",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__7",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__8"
+  ],
+  "dump_sha256": "3a8f8b83d124f1be09c229134e6cdfd8e6eaceeb05e0d1b9f39579597832208d",
+  "drc_identity": {
+    "grep_identity": "drc_dpreg_names.txt == grep -n DPREG drc.rpt",
+    "box_rpt_sha256_recorded": "1c06b86f770da9e1fea2b70de8a04a77193dfc78def994a10eb9de77dc9c981f",
+    "note": "report_drc embeds a run timestamp, so box bytes are not reproducible; the DPREG-4 body is bound via the manifest-pinned names file"
+  },
   "mux_tables": {
     "X": {
       "0": "0",

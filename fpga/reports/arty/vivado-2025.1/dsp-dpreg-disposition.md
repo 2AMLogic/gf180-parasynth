@@ -392,3 +392,61 @@ Instruments (this branch): `tools/dsp_dpreg_extract.py`,
 `tools/dsp_dpreg_analyse.py`, `tools/dsp_dpreg_sim.py`.
 Vivado: `vivado v2025.1 (64-bit)` SW Build 6140274. Simulator: Icarus
 Verilog 13.0 (v13_0), `-g2005`.
+
+## 9. Apparatus hardening: the analyser refuses absent evidence
+
+Independent review confirmed the evidence (2026-09-22) but found the
+analyser would accept its absence: an **empty dump** printed the same
+"all 13 cells" verdict with exit 0 (the string was hardcoded, so it said
+13 while analysing any number of cells), a cell with **no OPMODE pins**
+was analysed as OPMODE `0000000` and dismissed, the required target set
+came from whatever the dump contained, no hash was checked, and the
+simulator's clean-pass predicate did not require the trace length to equal
+the stimulus count. `REFUSED` is a first-class outcome
+(docs/failure-modes.md); it is now the only answer such inputs get.
+
+What the analyser now requires (exit 3 `NO VERDICT: <reason>` otherwise):
+
+- **Required target set derived from the bound DRC report**: the 13
+  instance names are parsed from `drc.rpt`'s DPREG-4 body at analysis
+  time — never hardcoded, never taken from the dump — and the summary
+  table's count must equal the parsed body count.
+- **Complete, unique instances**: every flagged instance present exactly
+  once; duplicate cell headers refused; an extra dump cell with a
+  *dynamic* OPMODE (flag-shaped evidence from another build) refused;
+  constant-OPMODE siblings stay allowed as context.
+- **Mandatory properties and all seven OPMODE pins per cell**: absent or
+  partial OPMODE pins are an apparatus defect, not mode `0000000`.
+- **File identity at analysis time**: every `MANIFEST.sha256` entry must
+  exist and hash-match (the dump among them). The box `drc.rpt` hash in
+  `drc_rpt.sha256` is *not* byte-reproducible — `report_drc` embeds a run
+  timestamp, and the box re-ran the report at 05:08 after the committed
+  02:48 copy — so the local report's DPREG-4 body is bound instead via
+  `drc_dpreg_names.txt` (box-side `grep -n DPREG drc.rpt`, itself
+  manifest-pinned): grep of the local report must equal that file.
+- **Complete traces in the simulator**: clean AND control comparisons
+  require `cycles == stimulus rows` (148) for actual and expected alike;
+  a short trace is `NO VERDICT`, not a pass.
+
+Wrong-then-right accounting: all ten refusal cases below **passed the
+pre-fix apparatus** (`refusal-cases.pre-fix.json`); the same harness
+against the fixed apparatus refuses every one (`refusal-cases.post-fix.json`),
+and the analyser on the preserved extraction + manifest still reproduces
+the 13/13 dismissal exactly (regression test
+`test_real_committed_evidence_still_dismisses_13_of_13`).
+
+| input condition | pre-fix | post-fix |
+|---|---|---|
+| empty dump | exit 0, "all 13 cells" | NO VERDICT: dump parses to zero cells |
+| truncated dump | exit 0, dismisses survivors | NO VERDICT: N flagged instances missing |
+| missing OPMODE pins on a cell | dismissed as mode 0000000 | NO VERDICT: apparatus defect |
+| one changed byte, stale manifest | exit 0 | NO VERDICT: hash mismatch |
+| manifest absent | exit 0 | NO VERDICT: missing evidence manifest |
+| drc.rpt absent | exit 0 | NO VERDICT: missing bound DRC report |
+| extra flagged cell (other build) | exit 0, "all 13 cells" | NO VERDICT: extra dynamic-OPMODE cell |
+| duplicated cell block | silent overwrite, exit 0 | NO VERDICT: duplicate cell header |
+| drc.rpt / dump pairing stale | exit 0 | NO VERDICT: flagged instance missing from dump |
+| clean trace cut to 100/148 cycles | clean PASS, exit 0 | NO VERDICT: trace incomplete |
+
+Gate: `tools/test_dsp_dpreg_refusal_cases.py` runs every case in a
+subprocess under `make verify`.

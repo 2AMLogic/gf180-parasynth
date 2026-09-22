@@ -45,6 +45,7 @@ sys.modules["dsp_dpreg_analyse"] = mod
 spec.loader.exec_module(mod)
 mod.EVIDENCE = pathlib.Path(sys.argv[2])
 mod.DUMP = mod.EVIDENCE / "dsp_cells_dump.txt"
+mod.DRC_RPT = mod.EVIDENCE / "drc.rpt"
 sys.exit(mod.main())
 """
 
@@ -192,8 +193,7 @@ def case_missing_drc_rpt(d):
     shutil.copy(REAL_DUMP, d / "dsp_cells_dump.txt")
     shutil.copy(EVIDENCE / "drc_dpreg_names.txt", d / "drc_dpreg_names.txt")
     shutil.copy(EVIDENCE / "drc_rpt.sha256", d / "drc_rpt.sha256")
-    shutil.copy(EVIDENCE / "MANIFEST.sha256", d / "MANIFEST.sha256")
-    (d / "drc.rpt").unlink(missing_ok=True)
+    write_manifest(d)
 
 
 def case_extra_flagged_cell(d):
@@ -216,11 +216,14 @@ def case_drc_dump_mismatch(d):
     base_dir(d)
     shutil.copy(REAL_DUMP, d / "dsp_cells_dump.txt")
     # the DRC now flags an instance the dump has never seen; the recorded
-    # names file still describes the OLD report (stale identity)
-    text = (d / "drc.rpt").read_text().replace(
-        "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
-        "u_synth/u_voice/osc2_path/p9/pair/dec/prod0__0", 1)
-    (d / "drc.rpt").write_text(text)
+    # names file still describes the OLD report (stale identity). The
+    # instance path also occurs in earlier DRC-rule bodies, so target the
+    # DPREG-4#1 body itself.
+    text = (d / "drc.rpt").read_text()
+    old = "The DSP48E1 cell u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0"
+    new = "The DSP48E1 cell u_synth/u_voice/osc2_path/p9/pair/dec/prod0__0"
+    i = text.rfind(old)
+    (d / "drc.rpt").write_text(text[:i] + new + text[i + len(old):])
     write_manifest(d)
 
 
