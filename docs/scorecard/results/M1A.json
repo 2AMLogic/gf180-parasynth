@@ -2,10 +2,10 @@
   "engine": "fixed-model",
   "case_id": "M1A",
   "subject": "Round bass / anchor",
-  "source_commit": "d99559b",
-  "analysis_run": "run_case@e79a1bbd0a34 + audio_measure@cd27a0a67dfd + mono_m5a_score@b4210e59eb8f + scorecard@2094d43f15e9 at 2026-09-21T22:59:46Z",
-  "analysis_version": "m1a-partial-score-v1",
-  "reference_profile": "frozen Mini V3; Model D cross-check unavailable",
+  "source_commit": "954acb2",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-22T00:33:47Z",
+  "analysis_version": "m1a-partial-score-v2",
+  "reference_profile": "frozen Mini V3; Model D corroboration unavailable",
   "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
   "audio": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav",
   "metrics": {
@@ -32,12 +32,6 @@
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "dB; fixed half/double amplitude screening range"
-    },
-    "Model D cross-check": {
-      "valid": false,
-      "state": "no verdict",
-      "why": "case requires a Model D cross-check; only Mini V3 frozen reference exists",
-      "units": ""
     }
   },
   "diagnostics": {
@@ -564,16 +558,24 @@
         "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"
       }
     },
-    "render_source_commit": "bfaa71e",
+    "corroboration": {
+      "Model D cross-check": {
+        "valid": false,
+        "state": "no verdict",
+        "why": "separate corroboration milestone; Mini V3 comparison only",
+        "units": ""
+      }
+    },
+    "render_source_commit": "954acb2",
     "render_worktree": {
-      "commit": "bfaa71e",
-      "described": "node/D-drums-bitexact-213-gbfaa71e-dirty",
-      "branch": "measure/mono-m1a-reference",
-      "dirty": true,
-      "uncommitted_sha256": "b5cae6b52fa57209",
+      "commit": "954acb2",
+      "described": "node/D-drums-bitexact-259-g954acb2",
+      "branch": "measure/m1a-volume-mapping",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
-    "audio_reused": true,
+    "audio_reused": false,
     "model_audio_sha256": "50add9b962caa5f37716f030c7254141664ddd238ab13300708ae6f40ddd8c05",
     "wrong_then_right": {
       "apparatus_corrections": 4,
@@ -583,15 +585,15 @@
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "d99559b",
-      "described": "node/D-drums-bitexact-215-gd99559b",
-      "branch": "measure/mono-m1a-reference",
+      "commit": "954acb2",
+      "described": "node/D-drums-bitexact-259-g954acb2",
+      "branch": "measure/m1a-volume-mapping",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
     "base_check": {},
-    "command": "-",
+    "command": "tools/run_case.py M1A",
     "config": {
       "engine": {
         "name": "selected-m5a-reconstructed-filter2x",
@@ -664,22 +666,22 @@
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-21T22:59:46Z",
+    "run_at": "2026-09-22T00:33:47Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:6442bb9effb7fa70",
+      "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
       "model/audio_measure.py": "sha256:cd27a0a67dfde218",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:e79a1bbd0a34f17f",
+      "tools/run_case.py": "sha256:77739a9434f2605e",
       "tools/refprofile.py": "sha256:a5c5196a1ecc952b",
-      "tools/mono_m5a_score.py": "sha256:b4210e59eb8fec07",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
       "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
       "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
       "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:M1A:manifest": "sha256:681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d",
       "frozen:M1A:audio": "sha256:a66700fc66287bfb9023e986d35ec76ca6fabbe1c600368181de8270a55248f9",
-      "tools/mono_m1a_score.py": "sha256:6035ef006efe819ae966b9150ce52bc08cd3ec98281141a9a7e1d6037bc75bd9",
+      "tools/mono_m1a_score.py": "sha256:445b6d14cc45eb3e02a1c31dbe96d11c2c8b2eec118f2b3a7e76605899a9abe1",
       "model/filter_rate_chain.py": "sha256:134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
       "tools/measure_mono_m1a_reference.py": "sha256:45947c736ccb4460b3427c0d1cbeaeca5139bfe67a067c80523d4558e5e5dc36",
       "audition/dsp.py": "sha256:7bd8e2dcce3934908a3175af0032aabe5031139baf0873bcc2a26f4cfea880fe",
@@ -691,7 +693,5 @@
     "outcome_code": 2,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
-  "note": "NO VERDICT: first model comparison, with qualified component measurements and explicit missing evidence",
-  "scorecard_state": "no verdict",
-  "scorecard_reason": "invalid: envelope, Model D cross-check"
+  "note": "NO VERDICT: first model comparison, with qualified component measurements and explicit missing evidence"
 }

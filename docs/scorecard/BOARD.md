@@ -54,7 +54,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `D15B` | Drums | Holdout | Open hat / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D16A` | Drums | Development | Closed hat / anchor | Fischer hardware sample | fixed-model | ✅ pass | 0.96 |  |
 | `D16B` | Drums | Holdout | Closed hat / variation | Second documented hardware setting | — | ⬜ not run |  |  |
-| `M1A` | Mono | Development | Round bass / anchor | Mini V3; Model D cross-check | fixed-model | ⚠️ no verdict |  | invalid: envelope, Model D cross-check |
+| `M1A` | Mono | Development | Round bass / anchor | Mini V3; Model D cross-check | fixed-model | ⚠️ no verdict |  | invalid: envelope |
 | `M1B` | Mono | Development | Round bass / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M1C` | Mono | Development | Round bass / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M1D` | Mono | Holdout | Round bass / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |

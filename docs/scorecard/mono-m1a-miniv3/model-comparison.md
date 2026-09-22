@@ -17,8 +17,7 @@ and a declared provisional patch. No sound code was changed to fit this result.
 
 The component view is **three passes, two failures, two no-verdict properties**.
 The case's required fundamental/harmonics and bass-level measurements fail;
-its required envelope remains NO VERDICT. Its named Model D cross-check is
-also missing. The official board remains **20 valid / six passing**: this
+its required envelope remains NO VERDICT. Model D remains a separate, unmeasured corroboration milestone. The official board remains **20 valid / six passing**: this
 result does not increase valid coverage.
 
 The mapping uses the measured open-filter oscillator level ratio, measured
@@ -50,7 +49,9 @@ A first full reporting attempt after adding DSP provenance refused because it
 looked for `model/dsp.py`; the module is in `audition/dsp.py`. The emitted WAV
 was retained, its hash matches the initial observation, and reanalysis from
 that bound audio reproduces all metrics. A reporting-path regression test now
-checks both DSP source paths. The record distinguishes analysis provenance
-from the original render worktree and records audio reuse explicitly.
+checks both DSP source paths. The original record distinguished analysis provenance
+from the original render worktree. The current v2 baseline was rendered again
+through the final runner, reproducing the identical WAV hash and all seven
+component values; only the declared gate set and analysis provenance changed.
 
 The v2 scorer treats Model D as a separate corroboration milestone, following the declared required-measurement list. Unqualified attack and filter-envelope evidence still keep M1A at NO VERDICT. See [the fixed volume challenger and oscillator diagnosis](volume-mapping/README.md) for the next measured component improvement.
