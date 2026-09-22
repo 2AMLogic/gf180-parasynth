@@ -175,7 +175,11 @@ module uart_bridge #(
 `else                                                                    // CONTROL
     wire [47:0] pay_out = pay;
 `endif
-    wire [15:0] ddiff    = due - frame;               // wrap-safe
+    // synth_top's frame register reads audio_frame+1 during the frame (it
+    // increments at cycle 0), so the AUDIO frame is frame-1 here; dues are in
+    // audio frames -- an event due F must fire during the frame whose audio is F
+    wire [15:0] audio_frame = frame - 16'd1;
+    wire [15:0] ddiff    = due - audio_frame;         // wrap-safe
     wire        due_past = (ddiff == 16'd0) || (ddiff > 16'h7FFF);
 
     // parser decisions, applied one cycle later (so a push landing in the same
@@ -188,7 +192,7 @@ module uart_bridge #(
     wire [63:0] evq_head = evq[evq_rp[EVQ_AW-1:0]];
     wire [15:0] evq_head_due = evq_head[63:48];
     wire        evq_due = (evq_count != 8'd0) &&
-                          ((frame - evq_head_due) < 16'h8000);   // due <= frame
+                          ((audio_frame - evq_head_due) < 16'h8000); // due <= audio frame
     wire [63:0] wrq_head = wrq[wrq_rp];
     wire [15:0] wrq_head_stamp = wrq_head[63:48];
 `ifdef INJECT_BUG_UART_NOFF_BLOCKED
@@ -345,8 +349,8 @@ module uart_bridge #(
                             err_code_d <= 8'd2; err_info_d <= pay_out[39:32];
                         end else begin
                             evq_push_d <= 1'b1;
-                            evq_push_w <= {frame + 16'd1, pay_out};
-                            last_due <= frame + 16'd1;
+                            evq_push_w <= {audio_frame + 16'd1, pay_out};
+                            last_due <= audio_frame + 16'd1;
                             seq <= seq + 8'd1;
                         end
                     end else if (evq_count != 8'd0

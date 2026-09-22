@@ -48,6 +48,12 @@ module tb_uart_bx;
     // ---- total frames: free-running, reset-independent --------------------
     reg [31:0] tcc = 0;
     always @(posedge clk) tcc <= tcc + 32'd1;
+    // the DUT's own frame index per segment (tb_top_bx's `fr`): incremented at
+    // cyc 255, reset to 0 at each SEG anchor. Labels in the output files are
+    // seg_base + dfr, i.e. the frame of the AUDIO timeline the model uses.
+    integer dfr = 0;
+    integer seg_base = 0;
+    always @(posedge clk) if (rst_n && board.u_synth.cyc == 8'd255) dfr = dfr + 1;
 
     // ---- write-port monitor -----------------------------------------------
     integer wr_fd = 0, i2s_fd = 0, txd_fd = 0;
@@ -74,6 +80,12 @@ module tb_uart_bx;
                      board.u_synth.g_uart.u_uart.wrq_rp,
                      board.u_synth.g_uart.u_uart.wrq_wp,
                      board.u_synth.g_uart.u_uart.wrq_head);
+        if (board.u_synth.g_uart.u_uart.evq_head_fire)
+            $display("EFIRE t=%0t frame=%0d due=%0d cyc=%0d addr=%h", $time,
+                     board.u_synth.g_uart.u_uart.frame,
+                     board.u_synth.g_uart.u_uart.evq_head_due,
+                     board.u_synth.cyc,
+                     board.u_synth.u_wr_addr);
         if (board.u_synth.wr_valid)
             $display("PORT t=%0t fr=%0d v=%b f=%b s=%b a=%h d=%h", $time, tcc >> 8,
                      board.u_synth.wr_valid, board.u_synth.wr_flag,
@@ -84,7 +96,7 @@ module tb_uart_bx;
     always @(posedge clk) if (rst_n) begin
         if (board.u_synth.wr_valid) begin
             writes_seen = writes_seen + 1;
-            if (wr_fd) $fdisplay(wr_fd, "%0d %0d %0d %0d %0d %0d", tcc >> 8,
+            if (wr_fd) $fdisplay(wr_fd, "%0d %0d %0d %0d %0d %0d", seg_base + dfr,
                                  board.u_synth.wr_flag, board.u_synth.wr_sec,
                                  board.u_synth.wr_addr, board.u_synth.wr_data,
                                  board.u_synth.spi_wr_valid ? 0 : 1);
@@ -122,9 +134,11 @@ module tb_uart_bx;
     integer samp_fd = 0;
     reg got = 0;
     reg seg_ready = 0;                   // counting starts at the SEG anchor
+    reg signed [15:0] samp_latch = 0;           // the last strobed sample, tb_top_bx-style
     always @(posedge clk) if (rst_n && seg_ready) begin
         if (board.u_synth.sample_valid) begin
             got <= 1'b1; n_strobe = n_strobe + 1;
+            samp_latch <= board.u_synth.sample;
             if (board.u_synth.cyc > worst_cyc) worst_cyc = board.u_synth.cyc;
         end
         if (board.u_synth.cyc == 8'd0) begin
@@ -136,7 +150,7 @@ module tb_uart_bx;
                 $display("NOSTROBE fr=%0d tcc=%0d", tcc >> 8, tcc);
 `endif
             end
-            if (samp_fd) $fdisplay(samp_fd, "%0d %0d", tcc >> 8, board.u_synth.sample);
+            if (samp_fd) $fdisplay(samp_fd, "%0d %0d", seg_base + dfr - 1, samp_latch);
             got <= 1'b0;
         end
     end
@@ -202,6 +216,7 @@ module tb_uart_bx;
             $display("tb_uart_bx: SEG %0d origin_tcc %0d periods %0d strobes %0d",
                      seg_idx, tcc, nper, n_strobe);
             n_strobe = 0; n_nostrobe = 0; worst_cyc = 0; busy_at_tick = 0;
+            seg_base = tcc >> 8; dfr = 0;
             seg_ready = 1'b1;
         end
     endtask
@@ -232,6 +247,7 @@ module tb_uart_bx;
         $display("tb_uart_bx: SEG %0d origin_tcc %0d periods %0d strobes %0d",
                  seg_idx, tcc, nper, n_strobe);
         n_strobe = 0; n_nostrobe = 0; worst_cyc = 0; busy_at_tick = 0;
+        seg_base = tcc >> 8; dfr = 0;
         seg_ready = 1'b1;
         cmd_fd = $fopen(cmd_file, "r");
         if (cmd_fd == 0) begin $display("tb_uart_bx: cannot open %0s", cmd_file); $finish; end

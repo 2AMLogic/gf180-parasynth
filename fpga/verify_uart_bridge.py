@@ -350,6 +350,13 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
 
     cmd_path = outdir / "uart_cmds.txt"
     build_cmd_file(planned_segments, reset_frames, cmd_path)
+    # the tail must outlast the last DUE, not the last SEND: a phrase keeps
+    # firing events long after the wire has gone quiet
+    last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
+                   + [0])
+    last_send = max([r.send_frame for rows in planned_segments for r in rows]
+                    + [0])
+    tail_frames = max(800, last_due - last_send + 800)
 
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
     srcs = [str(BENCH)] + [p for _, p in resolved] + [str(BRIDGE), str(rtl_wrapper)]
@@ -372,7 +379,7 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
     run_cmd = [vvp, "-n", str(exe), f"+uart={cmd_path}",
                f"+i2s={files['i2s']}", f"+wrs={files['wrs']}",
                f"+txd={files['txd']}", f"+samp={files['samp']}",
-               "+frames=800"]
+               f"+frames={tail_frames}"]
     try:
         # cwd = rtl-sketch: the core's $readmemh ROM paths resolve from there,
         # exactly as verify_synth_top.simulate runs it. From anywhere else the
