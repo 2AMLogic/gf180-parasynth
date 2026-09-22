@@ -418,12 +418,23 @@ def resolve_sources(rtl_dir: str | None):
     holds some of them swaps exactly those; everything else stays rtl-sketch's.
     Returned so that the run can SAY which top level it built rather than
     leaving it to be inferred -- this project has published area figures for a
-    chip whose drum section was a placeholder."""
+    chip whose drum section was a placeholder.
+
+    This resolved list is the SINGLE AUTHORITATIVE source set: the compile
+    reads it, the provenance record hashes it, and fpga/build_arty.py's gate
+    checks its hashes. uart_bridge.v belongs here (synth_top elaborates it
+    under WITH_UART=1 and the Arty wrapper instantiates it) -- it was once
+    appended out of band by one caller, which is how a build's required
+    source went missing from the verification hashes and CI went red."""
     names = list(SRCS) + ["tb_top_bx.v"]
     out = []
     for n in names:
         alt = os.path.join(rtl_dir, n) if rtl_dir else None
         out.append((n, alt if alt and os.path.exists(alt) else os.path.join(HERE, n)))
+    bridge = os.path.join(rtl_dir, "uart_bridge.v") if rtl_dir \
+        else os.path.join(HERE, "uart_bridge.v")
+    if os.path.exists(bridge):
+        out.append(("uart_bridge.v", bridge))
     return out
 
 
@@ -465,13 +476,6 @@ def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
         if os.path.exists(f): os.remove(f)
     resolved = resolve_sources(rtl_dir)
     srcs = [f for _, f in resolved]
-    uart_bridge = os.path.join(HERE, "uart_bridge.v")
-    if os.path.exists(uart_bridge) and not any(f.endswith("uart_bridge.v") for f in srcs):
-        # synth_top's optional UART front end: elaborated only with WITH_UART=1,
-        # which no bench in this file selects. Compiled so synth_top elaborates
-        # everywhere; deliberately NOT in SRCS, so the recorded SPI evidence
-        # file set (and build_selected.simulation_evidence) is unchanged.
-        srcs.append(uart_bridge)
     if simulator == "iverilog":
         iverilog, vvp = tool("iverilog"), tool("vvp")
         if not iverilog or not vvp:

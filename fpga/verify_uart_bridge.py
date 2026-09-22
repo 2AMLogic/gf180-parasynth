@@ -368,7 +368,10 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
     tail_frames = max(800, last_due - last_send + 800)
 
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
-    srcs = [str(BENCH)] + [p for _, p in resolved] + [str(BRIDGE), str(rtl_wrapper)]
+    # uart_bridge.v arrives via resolve_sources now; the explicit entry below
+    # would duplicate the compile unit
+    srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
+        + [str(BRIDGE), str(rtl_wrapper)]
     defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
