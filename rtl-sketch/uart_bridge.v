@@ -128,7 +128,9 @@ module uart_bridge #(
                 rxdiv <= rxdiv + 1'b1;
                 if (rxdiv == HALF - 1) begin
                     if (rbit == 4'd0) begin
-                        if (!rx_s) rbit <= 4'd1;         // start bit confirmed
+                        // start bit confirmed; rbit stays 0 -- the wrap at the
+                        // end of the start bit makes it 1 for data bit 0
+                        if (!rx_s) begin end
                         else       rx_busy <= 1'b0;      // glitch
                     end else if (rbit <= 4'd8) begin
                         rxsh <= {rx_s, rxsh[7:1]};       // LSB first
@@ -200,10 +202,12 @@ module uart_bridge #(
     wire wrq_head_fire = grant && !evq_due && wrq_ready;
 
     // one write per granted cycle; due events before live writes
+    // (the RHS must be sliced to the port's 42 bits: flag, sec, addr, data)
     always @(*) begin
         wr_valid = grant && (evq_due || wrq_ready);
         {wr_flag, wr_sec, wr_addr, wr_data} =
-            evq_due ? evq_head[47:0] : wrq_head[47:0];
+            evq_due ? {evq_head[47], evq_head[40], evq_head[39:32], evq_head[31:0]}
+                    : {wrq_head[47], wrq_head[40], wrq_head[39:32], wrq_head[31:0]};
     end
 
     // ---- responses: one pattern register, fed one byte per cycle ------------
@@ -212,7 +216,7 @@ module uart_bridge #(
     wire      txf_full  = (txf_wp[3:0] == txf_rp[3:0]) && (txf_wp[4] != txf_rp[4]);
     wire      txf_empty = (txf_wp == txf_rp);
     reg [3:0]  resp_len;                 // bytes waiting to enter the FIFO
-    reg [55:0] resp_bytes;               // up to 8, most significant first
+    reg [63:0] resp_bytes;               // up to 8, most significant first
 
     // ---- the parser, the queue effects, the response feeder -----------------
     reg booted;
@@ -234,6 +238,7 @@ module uart_bridge #(
             gap <= 16'd0;
             resp_len <= 4'd0;
             booted <= 1'b0;
+            txf_wp <= 5'd0;
         end else begin
             if (rx_framing) begin                            // stop bit != 1
                 resync_seen <= 1'b1;
@@ -272,7 +277,8 @@ module uart_bridge #(
                     endcase
                 end
                 P_W1, P_W2, P_W3, P_W4, P_W5, P_W6: begin
-                    pay <= {rx_byte, pay[47:8]};
+                    pay <= {pay[39:0], rx_byte};   // MSB first: first byte ends at the top
+                    cksum <= cksum + rx_byte;
                     pstate <= (pstate == P_W6) ? P_WCK : pstate + 5'd1;
                 end
                 P_WCK: begin
@@ -300,14 +306,17 @@ module uart_bridge #(
                 end
                 P_F0: begin
                     due[7:0] <= rx_byte;
+                    cksum <= cksum + rx_byte;
                     pstate <= P_F1;
                 end
                 P_F1: begin
                     due[15:8] <= rx_byte;
+                    cksum <= cksum + rx_byte;
                     pstate <= P_E1;
                 end
                 P_E1, P_E2, P_E3, P_E4, P_E5, P_E6: begin
-                    pay <= {rx_byte, pay[47:8]};
+                    pay <= {pay[39:0], rx_byte};   // MSB first: first byte ends at the top
+                    cksum <= cksum + rx_byte;
                     pstate <= (pstate == P_E6) ? P_ECK : pstate + 5'd1;
                 end
                 P_ECK: begin
@@ -395,12 +404,12 @@ module uart_bridge #(
             // ---- responses: one byte into the FIFO per cycle ----------------
             if (resp_len != 4'd0) begin
                 if (!txf_full) begin
-                    txf[txf_wp[3:0]] <= resp_bytes[55:48];
+                    txf[txf_wp[3:0]] <= resp_bytes[63:56];
                     txf_wp <= txf_wp + 5'd1;
                 end else begin
                     errs <= errs + 8'd1;    // a report we cannot send is still
                 end                          // an error, and is counted
-                resp_bytes <= {resp_bytes[47:0], 8'd0};
+                resp_bytes <= {resp_bytes[55:0], 8'd0};
                 resp_len   <= resp_len - 4'd1;
             end else if (ack_err_d) begin
                 errs <= errs + 8'd1;

@@ -53,6 +53,35 @@ module tb_uart_bx;
     integer wr_fd = 0, i2s_fd = 0, txd_fd = 0;
     integer writes_seen = 0, collisions = 0;
     always @(posedge clk) if (rst_n) begin
+`ifdef UART_DBG
+        if (board.u_synth.cyc == 8'd1 && (tcc >> 8) < 4)
+            $display("CORE fr=%0d sample=%h sv=%b dmix=%h body=%h done=%b mixv=%b bodyv=%b wra=%h wrd=%h y19=%h mix=%h cut=%h k=%h",
+                     tcc >> 8, board.u_synth.sample, board.u_synth.sample_valid,
+                     board.u_synth.dmix_v, board.u_synth.body_v, board.u_synth.done_v,
+                     board.u_synth.mix_valid, board.u_synth.body_valid,
+                     board.u_synth.wr_addr, board.u_synth.wr_data,
+                     board.u_synth.u_voice.y19, board.u_synth.u_voice.mixed,
+                     board.u_synth.u_voice.cut, board.u_synth.u_voice.k_eff);
+        if (board.u_synth.g_uart.u_uart.rx_done)
+            $display("RXB t=%0t byte=%h pstate=%0d", $time,
+                     board.u_synth.g_uart.u_uart.rx_byte,
+                     board.u_synth.g_uart.u_uart.pstate);
+        if (board.u_synth.g_uart.u_uart.wrq_push_d)
+            $display("PUSH t=%0t w=%h", $time,
+                     board.u_synth.g_uart.u_uart.wrq_push_w);
+        if (board.u_synth.g_uart.u_uart.wrq_head_fire)
+            $display("FIRE t=%0t rp=%0d wp=%0d head=%h", $time,
+                     board.u_synth.g_uart.u_uart.wrq_rp,
+                     board.u_synth.g_uart.u_uart.wrq_wp,
+                     board.u_synth.g_uart.u_uart.wrq_head);
+        if (board.u_synth.wr_valid)
+            $display("PORT t=%0t fr=%0d v=%b f=%b s=%b a=%h d=%h", $time, tcc >> 8,
+                     board.u_synth.wr_valid, board.u_synth.wr_flag,
+                     board.u_synth.wr_sec, board.u_synth.wr_addr,
+                     board.u_synth.wr_data);
+`endif
+    end
+    always @(posedge clk) if (rst_n) begin
         if (board.u_synth.wr_valid) begin
             writes_seen = writes_seen + 1;
             if (wr_fd) $fdisplay(wr_fd, "%0d %0d %0d %0d %0d %0d", tcc >> 8,
@@ -92,7 +121,8 @@ module tb_uart_bx;
     integer n_strobe = 0, n_nostrobe = 0, worst_cyc = 0, busy_at_tick = 0;
     integer samp_fd = 0;
     reg got = 0;
-    always @(posedge clk) if (rst_n) begin
+    reg seg_ready = 0;                   // counting starts at the SEG anchor
+    always @(posedge clk) if (rst_n && seg_ready) begin
         if (board.u_synth.sample_valid) begin
             got <= 1'b1; n_strobe = n_strobe + 1;
             if (board.u_synth.cyc > worst_cyc) worst_cyc = board.u_synth.cyc;
@@ -100,7 +130,12 @@ module tb_uart_bx;
         if (board.u_synth.cyc == 8'd0) begin
             if (board.u_synth.voice_busy || board.u_synth.drum_busy)
                 busy_at_tick = busy_at_tick + 1;
-            if (!got) n_nostrobe = n_nostrobe + 1;
+            if (!got) begin
+                n_nostrobe = n_nostrobe + 1;
+`ifdef UART_DBG
+                $display("NOSTROBE fr=%0d tcc=%0d", tcc >> 8, tcc);
+`endif
+            end
             if (samp_fd) $fdisplay(samp_fd, "%0d %0d", tcc >> 8, board.u_synth.sample);
             got <= 1'b0;
         end
@@ -133,6 +168,9 @@ module tb_uart_bx;
             if (txdiv == TXDIV - 1) txdiv <= 0;
             else txdiv <= txdiv + 8'd1;
             if (txdiv == ((TXDIV >> 1) - 1)) begin
+`ifdef UART_DBG
+                $display("TXCAP t=%0t busy=%b bit=%0d lvl=%b", $time, tx_busy, txbit, uart_txd);
+`endif
                 if (txbit == 4'd0) begin
                     if (uart_txd !== 1'b0) tx_busy <= 1'b0;      // glitch, not a start bit
                     txbit <= 4'd1;
@@ -141,7 +179,8 @@ module tb_uart_bx;
                     txbit <= txbit + 4'd1;
                 end else begin
                     tx_bytes = tx_bytes + 1;
-                    if (txd_fd) $fdisplay(txd_fd, "%0d %0d", tcc >> 8, {uart_txd, txsh[7:1]});
+                    // bit9's sample is the stop bit: the byte itself is txsh
+                    if (txd_fd) $fdisplay(txd_fd, "%0d %0d", tcc >> 8, txsh);
                     tx_busy <= 1'b0;
                 end
             end
@@ -163,6 +202,7 @@ module tb_uart_bx;
             $display("tb_uart_bx: SEG %0d origin_tcc %0d periods %0d strobes %0d",
                      seg_idx, tcc, nper, n_strobe);
             n_strobe = 0; n_nostrobe = 0; worst_cyc = 0; busy_at_tick = 0;
+            seg_ready = 1'b1;
         end
     endtask
 
@@ -191,6 +231,8 @@ module tb_uart_bx;
         seg_idx = seg_idx + 1;
         $display("tb_uart_bx: SEG %0d origin_tcc %0d periods %0d strobes %0d",
                  seg_idx, tcc, nper, n_strobe);
+        n_strobe = 0; n_nostrobe = 0; worst_cyc = 0; busy_at_tick = 0;
+        seg_ready = 1'b1;
         cmd_fd = $fopen(cmd_file, "r");
         if (cmd_fd == 0) begin $display("tb_uart_bx: cannot open %0s", cmd_file); $finish; end
         while (!$feof(cmd_fd)) begin

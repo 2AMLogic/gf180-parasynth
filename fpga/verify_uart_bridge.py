@@ -200,12 +200,13 @@ def _lay_out(items, *, start_frame=14, reset_pad=3):
             cur.append(it)
     if cur or not segs:
         segs.append(cur)
-    planned, reset_frames, t_frame = [], [], start_frame
+    planned, bodies, reset_frames, t_frame = [], [], [], start_frame
     for seg in segs:
         has_reset = bool(seg) and seg[-1][0] == "reset"
         body = seg[:-1] if has_reset else seg
         body, rows, _shift = _shift_until_plannable(body, start_frame=t_frame)
-        planned.append((body, rows))
+        bodies.append(body)
+        planned.append(rows)
         if has_reset:
             end_cyc = max((r.end_cycle for r in rows), default=t_frame * uh.CYC_PER_FRAME)
             r_frame = -(-int(end_cyc) // uh.CYC_PER_FRAME) + 1
@@ -213,7 +214,7 @@ def _lay_out(items, *, start_frame=14, reset_pad=3):
             t_frame = r_frame + reset_pad
         else:
             t_frame = max((r.send_frame for r in rows), default=t_frame) + 1
-    return planned, reset_frames
+    return bodies, planned, reset_frames
 
 
 def _corrupt_packet_bytes(packet: bytes, drop_index: int | None = None,
@@ -345,7 +346,7 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
         good = uh.pkt_event(due, flag, sec, addr, data)
         bad = _corrupt_packet_bytes(good, flip_index=5)
         items = items[:victim] + [("raw", bad)] + items[victim + 1:]
-    planned_segments, reset_frames = _lay_out(items)
+    bodies, planned_segments, reset_frames = _lay_out(items)
 
     cmd_path = outdir / "uart_cmds.txt"
     build_cmd_file(planned_segments, reset_frames, cmd_path)
@@ -373,7 +374,11 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
                f"+txd={files['txd']}", f"+samp={files['samp']}",
                "+frames=800"]
     try:
-        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=3600)
+        # cwd = rtl-sketch: the core's $readmemh ROM paths resolve from there,
+        # exactly as verify_synth_top.simulate runs it. From anywhere else the
+        # ROMs silently load as X and every downstream sample is X.
+        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=3600,
+                           cwd=str(ROOT / "rtl-sketch"))
     except subprocess.TimeoutExpired:
         print("verify_uart_bridge: simulation timed out")
         return None
@@ -382,9 +387,10 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
     if r.returncode != 0:
         print("verify_uart_bridge: vvp failed:\n" + r.stdout + r.stderr)
         return None
-    return {"outdir": outdir, "items": items, "planned": planned_segments,
-            "reset_frames": reset_frames, "report": report, "files": files,
-            "scenario": scenario, "inject": inject, "defines": defines}
+    return {"outdir": outdir, "items": items, "bodies": bodies,
+            "planned": planned_segments, "reset_frames": reset_frames,
+            "report": report, "files": files, "scenario": scenario,
+            "inject": inject, "defines": defines}
 
 
 # ---- analysis --------------------------------------------------------------
@@ -395,8 +401,8 @@ def _rows(path):
 def analyze(run):
     """Check a run against the contract. Returns (ok, comparison, detail)."""
     planned, reset_frames = run["planned"], run["reset_frames"]
-    items = [it for body, _rows in planned for it in body]      # shifted dues included
-    rows_flat = [r for _body, rows in planned for r in rows]
+    items = [it for body in run["bodies"] for it in body]       # shifted dues included
+    rows_flat = [r for rows in planned for r in rows]
     report = "\n".join(run["report"])
     comp = {"scenario": run["scenario"], "inject": run["inject"]}
     detail = []
@@ -407,7 +413,7 @@ def analyze(run):
         comp["segment_mismatch"] = (len(segs), len(planned))
         detail.append(f"bench reported {len(segs)} segments, planned {len(planned)}")
         return False, comp, detail
-    origins = [s[1] for s in segs]                       # absolute frames per segment
+    origins = [s[1] >> 8 for s in segs]                  # absolute frames per segment
 
     wr = _rows(run["files"]["wrs"])
     tx = _rows(run["files"]["txd"])
@@ -550,8 +556,17 @@ def analyze(run):
         p0 = segs[s][2]                                   # periods at segment origin
         periods = [r for r in i2s if p0 <= int(r[0]) < p0 + n]
         for r in periods:
-            p, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]),
-                                        int(r[3]), int(r[4]))
+            try:
+                p, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]),
+                                            int(r[3]), int(r[4]))
+            except ValueError:
+                # an X on the wire is a defect (or an X core upstream of it),
+                # never a pass: count it as both a mismatch and a width fault
+                comp["wire_mismatch"] += 1
+                comp["width"] += 1
+                if comp["wire_mismatch"] <= 3:
+                    detail.append(f"seg {s}: X on the I2S wire at row {r}")
+                continue
             mi = p - p0
             if mi >= len(exp_i2s):
                 break
@@ -566,9 +581,13 @@ def analyze(run):
             if right != left:
                 comp["swap"] += 1
         total_periods += len(periods)
-        # the core's own stream, as a diagnostic
+        # the core's own stream, as a diagnostic; X counts as bad, never as pass
         for r in samp:
-            fr, sval = int(r[0]), int(r[1])
+            try:
+                fr, sval = int(r[0]), int(r[1])
+            except ValueError:
+                comp["core_bad"] += 1
+                continue
             if origin <= fr < origin + n:
                 if sval != int(exp_s[fr - origin]):
                     comp["core_bad"] += 1

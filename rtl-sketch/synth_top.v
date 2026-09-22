@@ -92,16 +92,18 @@ module synth_top #(
     end
 
     // ---- the link and the write port (DR 0007 revision 2) ----------------------------
-    wire        spi_wr_valid, wr_flag, wr_sec;
-    wire [7:0]  wr_addr;
-    wire [31:0] wr_data;
-    wire        u_wr_valid;
+    wire        spi_wr_valid, spi_wr_flag, spi_wr_sec;
+    wire [7:0]  spi_wr_addr;
+    wire [31:0] spi_wr_data;
+    wire        u_wr_valid, u_wr_flag, u_wr_sec;
+    wire [7:0]  u_wr_addr;
+    wire [31:0] u_wr_data;
     wire        fresh, overflow;
     wire [2:0]  q_count;
     spi_ctl u_spi (.clk(clk), .rst_n(rst_n), .sck(sck), .mosi(mosi), .cs_n(cs_n), .miso(miso),
                    .tick(tick), .frame(frame), .overrun(overrun),
-                   .wr_valid(spi_wr_valid), .wr_flag(wr_flag), .wr_sec(wr_sec),
-                   .wr_addr(wr_addr), .wr_data(wr_data),
+                   .wr_valid(spi_wr_valid), .wr_flag(spi_wr_flag), .wr_sec(spi_wr_sec),
+                   .wr_addr(spi_wr_addr), .wr_data(spi_wr_data),
                    .fresh(fresh), .overflow(overflow), .q_count(q_count));
 
     generate if (WITH_UART) begin : g_uart
@@ -115,15 +117,23 @@ module synth_top #(
                       .EVQ_DEPTH(UART_EVQ_DEPTH), .WRQ_DEPTH(UART_WRQ_DEPTH)) u_uart (
             .clk(clk), .rst_n(rst_n), .rx(uart_rxd), .tx(uart_txd),
             .frame(frame), .grant(uart_grant),
-            .wr_valid(u_wr_valid), .wr_flag(wr_flag), .wr_sec(wr_sec),
-            .wr_addr(wr_addr), .wr_data(wr_data),
+            .wr_valid(u_wr_valid), .wr_flag(u_wr_flag), .wr_sec(u_wr_sec),
+            .wr_addr(u_wr_addr), .wr_data(u_wr_data),
             .evq_count(), .wrq_count(),
             .evq_overflow(), .wrq_overflow(), .late_seen(), .resync_seen());
     end else begin : g_no_uart
         assign uart_txd = 1'b1;
         assign u_wr_valid = 1'b0;
+        assign u_wr_flag = 1'b0;  assign u_wr_sec = 1'b0;
+        assign u_wr_addr = 8'h00; assign u_wr_data = 32'h0;
     end endgenerate
-    wire wr_valid = spi_wr_valid | u_wr_valid;
+    // the two sources are exclusive by construction (window vs drain); the
+    // data mux picks the live source, never the idle one's X
+    wire        wr_valid = spi_wr_valid | u_wr_valid;
+    wire        wr_flag  = u_wr_valid ? u_wr_flag  : spi_wr_flag;
+    wire        wr_sec   = u_wr_valid ? u_wr_sec   : spi_wr_sec;
+    wire [7:0]  wr_addr  = u_wr_valid ? u_wr_addr  : spi_wr_addr;
+    wire [31:0] wr_data  = u_wr_valid ? u_wr_data  : spi_wr_data;
 
     wire wr_voice = wr_valid && !wr_sec;                 // SEC = 0: the voice and master page
     wire wr_drum  = wr_valid &&  wr_sec;                 // SEC = 1: the drum section's page

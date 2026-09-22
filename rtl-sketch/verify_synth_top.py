@@ -465,6 +465,13 @@ def simulate(defines, outdir, frames, timeout_s=5400.0, rtl_dir=None,
         if os.path.exists(f): os.remove(f)
     resolved = resolve_sources(rtl_dir)
     srcs = [f for _, f in resolved]
+    uart_bridge = os.path.join(HERE, "uart_bridge.v")
+    if os.path.exists(uart_bridge) and not any(f.endswith("uart_bridge.v") for f in srcs):
+        # synth_top's optional UART front end: elaborated only with WITH_UART=1,
+        # which no bench in this file selects. Compiled so synth_top elaborates
+        # everywhere; deliberately NOT in SRCS, so the recorded SPI evidence
+        # file set (and build_selected.simulation_evidence) is unchanged.
+        srcs.append(uart_bridge)
     if simulator == "iverilog":
         iverilog, vvp = tool("iverilog"), tool("vvp")
         if not iverilog or not vvp:
