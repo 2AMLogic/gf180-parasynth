@@ -1,9 +1,9 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
-| Date         : Tue Sep 22 02:48:31 2026
+| Date         : Tue Sep 22 08:40:08 2026
 | Host         : omitted from public report
-| Command      : report_drc -file /home/ubuntu/parasynth-arty-attempt02/build/arty/drc.rpt
+| Command      : report_drc -file /home/ubuntu/ext-timing-rebuild/build/arty/drc.rpt
 | Design       : arty_a7_top
 | Device       : xc7a100tcsg324-1
 | Speed File   : -1
