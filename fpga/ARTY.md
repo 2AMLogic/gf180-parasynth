@@ -25,7 +25,7 @@ this baseline build does not establish its Artix fit.
 | Core clock | 12.288 MHz; reported period 81.380 ns |
 | Final setup / hold slack | +46.498 ns / +0.050 ns; zero failing endpoints |
 | Internal timing coverage | zero unclocked or unconstrained internal endpoints |
-| External timing | seven outputs without delay constraints; unqualified |
+| External timing | budgets derived and committed; proven against this routed checkpoint (below); publication regeneration pending build-host re-provisioning |
 | DRC | 268 warnings, including 13 DPREG-4 DSP feedback warnings; zero errors or critical warnings |
 
 The [bitstream](reports/arty/vivado-2025.1/arty.bit) is 3,825,912 bytes,
@@ -36,6 +36,76 @@ All warning classes remain recorded. Review DPREG-4 feedback behavior before
 claiming implementation correctness; the RTL simulation below does not model
 the mapped DSP primitives. Report host headers are omitted for privacy, with
 both original and published report hashes retained.
+
+## External I/O timing
+
+The seven outputs the routed baseline left unconstrained now carry committed
+constraints ([arty-a7-100.xdc](boards/arty-a7-100.xdc)); every budget number is
+derived in [ext_io_timing.py](ext_io_timing.py) with its citation, and the
+constraint set was proven against the published routed checkpoint
+([ext-io-checkpoint/analysis.json](reports/arty/ext-io-checkpoint/analysis.json)):
+
+- **i2s_bclk (G13)** is a forwarded clock: BCLK is a bit of the core-clock
+  frame counter (`i2s_tx.v`) = 12.288 MHz / 4 = 3.072 MHz, 50 % duty. Declared
+  with `create_generated_clock -divide_by 4` sourced from the MMCM, so SDATA
+  and LRCLK are analyzed as source-synchronous data against the clock that
+  actually reaches the DAC. The DAC's clock-input requirements — TI PCM5102
+  SLOS811 (SLAS764B) Table 7: tBCY ≥ 40 ns, tBCH/tBCL ≥ 16 ns, fBCK ≤
+  24.576 MHz — are met with ≥ 146 ns of margin and checked arithmetically.
+  A forwarded clock carries no output delay: adding one fails a
+  self-referential hold check (measured WHS −1.021 ns), and Vivado classifies
+  the port as "no output delay but with a timing clock defined on it" (LOW).
+  That classification is the one permitted exception in the publication
+  machinery, recorded as `output_delay_exceptions: ["i2s_bclk"]`.
+- **i2s_sdata (A11), i2s_lrclk (B11)**: setup −max 8.200 ns = tDS/tLB 8 ns
+  (SLOS811 Table 7) + 0.2 ns assumed flight imbalance. Hold is a skew budget:
+  the RTL switches these outputs only on BCLK-falling cycles (`i2s_tx.v:48`),
+  so the DAC's tDH/tBL is guaranteed by the half-period structure; `-min
+  154.560` (= 162.760 half period − 8.200 tDH budget) makes STA verify
+  clock-vs-data skew ≤ 154.56 ns (measured 1.4–4.9 ns). STA's worst
+  launch/capture pair is one core period (81.380 ns) — pessimistic against
+  the real half-BCLK window in the safe direction. Checkpoint slacks: setup
+  +71.8/+72.5 ns, hold +153.2/+152.9 ns.
+- **spi_miso (D15)**: the FPGA is the SPI slave (DR 0007 rev 2; mode 0,
+  48-bit frames). MISO is re-driven in the core-clock domain through the same
+  synchroniser that samples SCK (`spi_ctl.v:124-141`), so a bit leaves the
+  FPGA 3–4 core clocks (244.1–325.5 ns) after the SCK falling edge, plus
+  clock-to-out. A mode-0 controller samples on the SCK rising edge, so the
+  guarantee is T_sck/2 ≥ 4·T_core + CO + flight + t_su. **At the 2.0 MHz write
+  ceiling this is unsatisfiable for any clock-to-out: status readback is NOT
+  qualified at the write rate.** Qualified readback rate: 1.4 MHz, with CO
+  bounded to ≤ 26.422 ns by `-max 54.958` against the core clock (measured CO
+  7.853 ns → max guaranteed readback 1.4768 MHz). Writes (MOSI/SCK/CS_N in
+  through two-flop synchronisers) remain supported to the contract's 2.0 MHz.
+  The generic virtual-SCK output-delay recipe does not fit this RTL: with an
+  unrelated launch clock, Vivado analyzes an arbitrary core-to-SCK edge
+  alignment and fails regardless of real margins.
+- **led[1..3]** (reset release, heartbeat, LRCLK) are indicators with no
+  synchronous receiver. No receiver-derived budget exists to quote, so the
+  XDC applies a real, checkable constraint of one core period (any
+  clock-to-out below 81.38 ns is invisible on a human timescale) instead of a
+  false path. These are documented exceptions from receiver-derived
+  budgeting, not silent suppressions. Checkpoint slacks: setup ≈ +69 ns,
+  hold ≈ +3–4 ns.
+
+**Assumptions (recorded, not measured):** jumper flight ~0.2 ns per net,
+equal-length data/clock jumpers (short jumper wires on the Arty headers);
+external controller setup 5 ns — **no guaranteed spec exists** for "a Mac
+driving a Pmod jumper"; every SPI readback figure depends on that assumption.
+Nominal rates (48 kHz LRCLK, 3.072 MHz BCLK) rest on the existing simulation
+evidence and Vivado's clock report; no oscillator-error or signal-quality
+claim is made from arithmetic.
+
+A full rebuild with these constraints completed once on the build host
+(Vivado 2025.1: WNS +14.199 ns — now bounded by the spi_miso output path —
+WHS +0.032 ns, zero failing endpoints of 38,310, and the publisher produced
+`external_io_timing_qualified: true` through its own machinery). The shared
+build box was then re-imaged between calls (fresh boot, no `/tools/Xilinx`,
+work directories wiped), deleting the generated publication and raw
+checkpoint reports before they could be fetched; this document and the
+committed code carry the captured numbers, and the bitstream/publication
+regeneration reruns `python fpga/build_arty.py` +
+`python fpga/publish_arty.py` unchanged once Vivado is available again.
 
 | Digital check | Result |
 |---|---|
@@ -70,6 +140,21 @@ Fresh digital evidence hashes all six ROM inputs. The compiler error was not
 credited as a detected defect. The three intentional broken
 configurations above all failed numerically; there was no accepted sound
 measurement in this porting work.
+
+Wrong-then-right accounting for the external-timing session: five things were
+wrong before they were right, each caught by a control, a rehearsal or a
+refusal rather than by inspection — (1) a test's own expected readback rate
+was mis-derived (1.4851 MHz; recomputed 1.5118); (2) an experiment driver
+referenced its Tcl by the wrong filename, and the Tcl then referenced its
+XDCs by wrong names — both refused loudly instead of reporting data; (3)
+`set_output_delay` silently dropped every constraint written with combined
+`-max`/`-min` (Vivado Common 17-165), found only because the checkpoint
+rehearsal re-listed the unconstrained ports; (4) the I2S hold constraint
+`-min -8.2` produced two phantom hold violations (WHS −9.874 ns) from a
+launch/capture pair the RTL never creates, replaced by the skew-budget form
+after reading the failing paths; (5) a nominal output delay on the forwarded
+i2s_bclk port failed a self-referential hold check, so the exception
+classification — not a token constraint — is that port's disposition.
 
 ## Wiring
 
@@ -172,8 +257,12 @@ The publisher requires matching source, verification and artifact hashes,
 checks the actual routed reports, and refuses missing reports, timing failures,
 wrong clocks, resource overflow and DRC errors. Tests mutate the real report
 fixture to demonstrate those refusals. Its successful state is
-`BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED`; it retains the separate,
-unqualified external-timing, DSP-review and physical-playback fields.
+`BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED`. `external_io_timing_qualified`
+is computed from the routed report's own `check_timing` classification: it is
+true only when no output port is unconstrained and none is excused by a false
+path; ports carrying a timing clock (the forwarded i2s_bclk) are the one
+permitted remainder and are recorded as `output_delay_exceptions` data, while
+any remaining review items move to `remaining_review`.
 
 For first programming from the Mac, the upstream
 [openFPGALoader board database](https://github.com/trabucayre/openFPGALoader/blob/master/src/board.hpp)
@@ -213,3 +302,13 @@ The script now passes both macros explicitly to `synth_design`, following
 [AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
 This was a build-script error, not an RTL sound change. The corrected retry
 produced the published fit, timing and bitstream evidence above.
+
+2026-09-22: the runner came back **re-imaged** — fresh boot with no
+`/tools/Xilinx` and no retained volume attached (`lsblk` shows only the
+100 GB root device), while the "retained disk" note above is what the
+external-I/O session relied on. One full build and publication with the
+committed external constraints completed before the image swap; its numbers
+are captured in the External I/O timing section. Regenerating the published
+bitstream, reports and `publication.json` requires the operator to restore
+Vivado 2025.1 (or attach the retained volume); no code change is needed, and
+hand-editing the publication is not an option.
