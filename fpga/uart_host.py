@@ -303,6 +303,16 @@ def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
               which is how a phrase's inner timing is expressed -- the DEVICE
               still fires every event at its own due frame.
 
+    An event's `due` is RELATIVE TO THE ANCHOR (a performance whose anchor is
+    device frame N and whose first phrase due is 0 fires that event N frames
+    into the performance). This is deliberate: a fixture's dues are 0-based
+    musical frames, and a 16-bit due interpreted against the device's
+    free-running counter instead of the anchor silently means "the next
+    wrap" -- a schedule the device queues for 30 000 frames and overflows.
+    Absolute frames in the result are anchor + relative; the packet carries
+    the low 16 bits, and every check below runs in ABSOLUTE arithmetic, where
+    "30 000 frames behind" cannot masquerade as "30 000 frames ahead".
+
     Each packet starts at the first frame boundary at or after the previous
     packet's end, so the acceptance instant sits mid-frame by
     construction. `plan` REFUSES (raises ValueError) when the schedule asks
@@ -328,7 +338,9 @@ def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
         if kind == "write":
             packet = pkt_write(*cmd[1:5])
         elif kind == "event":
-            packet = pkt_event(*cmd[1:6])
+            # the wire carries the low 16 bits of anchor+due; checks below
+            # use the absolute value
+            packet = pkt_event((anchor_frame + cmd[1]) & 0xFFFF, *cmd[2:6])
         elif kind == "status":
             packet = pkt_status()
         elif kind == "abort":
@@ -355,17 +367,23 @@ def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
             row.apply_frame = anchor_frame + accept + 1
             last_apply = max(last_apply, row.apply_frame)
         elif kind == "event":
-            due = cmd[1]
-            rel = (due - (anchor_frame + accept)) % (1 << 16)
-            if rel >= WRAP_HALF:
-                raise ValueError(f"event {index}: due {due} is at or before its "
+            # absolute due: anchor + relative; the mask above only built the
+            # wire packet. Signed distance, no mod -- a due the device would
+            # queue past the wrap window is refused, not interpreted as
+            # "30155 frames ahead".
+            due = anchor_frame + cmd[1]
+            rel = due - (anchor_frame + accept)
+            if rel < 1:
+                raise ValueError(f"event {index}: due {cmd[1]} (+anchor "
+                                 f"{anchor_frame}) is at or before its "
                                  f"acceptance frame {anchor_frame + accept}")
             if rel > WRAP_HALF - 1 - (t_end - t) // CYC_PER_FRAME:
-                raise ValueError(f"event {index}: due {due} is inside the wrap guard")
+                raise ValueError(f"event {index}: due {cmd[1]} (+anchor "
+                                 f"{anchor_frame}) is inside the wrap guard")
             if last_due is not None and kind == "event":
-                span = (due - last_due) % (1 << 16)
-                if span == 0 or span >= WRAP_HALF:
-                    raise ValueError(f"event {index}: due {due} is not strictly "
+                if due <= last_due:
+                    raise ValueError(f"event {index}: due {cmd[1]} (+anchor "
+                                     f"{anchor_frame}) is not strictly "
                                      f"after the previous due {last_due}")
             last_due = due
             row.due = due
@@ -610,7 +628,7 @@ class Bridge:
         rows = None
         ahead = 0
         planned = list(commands)
-        for _ in range(6):
+        for _ in range(8):
             anchor = self.status()
             self.origin = origin = anchor.frame
             round_trip = self.status_round_trip_s or 0.0
@@ -632,10 +650,12 @@ class Bridge:
             # are BEHIND the device by 65536-ahead frames, and the correction
             # must add that, not subtract.
             behind = 0 if ahead < WRAP_HALF else (1 << 16) - ahead
-            deficit = max(0, SEND_GATE_FRAMES - ahead) + behind
+            # top up to the full plan margin, not just the send gate: a
+            # top-up to the gate leaves the next verify hovering at the gate
+            # and the loop coin-flipping against scheduling noise
+            deficit = max(0, PLAN_SLACK_FRAMES - ahead) + behind
             planned = [c if c[0] != "event" else
-                       ("event", (c[1] + deficit) & 0xFFFF, *c[2:])
-                       for c in planned]
+                       ("event", c[1] + deficit, *c[2:]) for c in planned]
         else:
             raise Refused("the device's frame counter kept outrunning "
                           f"planning (last first-due margin {ahead} frames); "
@@ -697,7 +717,7 @@ def plan_shifted(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int =
     otherwise arrives with none."""
     shift = PLAN_SLACK_FRAMES
     for _ in range(400):
-        shifted = [c if c[0] != "event" else ("event", (c[1] + shift) & 0xFFFF, *c[2:])
+        shifted = [c if c[0] != "event" else ("event", c[1] + shift, *c[2:])
                    for c in commands]
         try:
             rows = plan(shifted, baud=baud, start_frame=start_frame,
@@ -717,9 +737,10 @@ def plan_shifted(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int =
 
 
 def _min_event_slack(rows: list) -> int:
-    """The smallest (due - acceptance) margin over a plan's events, in the
-    contract's 16-bit wrap window."""
-    return min((((r.due - r.accept_frame) & 0xFFFF) for r in rows
+    """The smallest (due - acceptance) margin over a plan's events, in
+    absolute frames -- the plan's dues are anchor-relative and its checks run
+    in absolute arithmetic, so there is no mod window to hide behind."""
+    return min(((r.due - r.accept_frame) for r in rows
                 if r.kind == "event"), default=PLAN_SLACK_FRAMES)
 
 
@@ -763,14 +784,14 @@ def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
     if hold_frames <= 0:
         raise Refused(f"hold_frames {hold_frames} is not a hold: the note-off "
                       "must be scheduled after the note-on's gate lands")
-    gate_off_due = (gate_apply + int(hold_frames)) & 0xFFFF
-    if gate_off_due == gate_apply:
-        raise Refused(f"hold_frames {hold_frames} wraps the 16-bit due onto "
-                      "the gate frame itself")
+    gate_off_due = gate_apply + int(hold_frames)
+    if gate_off_due - gate_apply > (1 << 16) - 4096:
+        raise Refused(f"hold_frames {hold_frames} leaves the +-32768-frame "
+                      "wrap window the contract can reason about")
     # the gate-off's own packet must be accepted strictly before its due;
     # a hold shorter than the packet's upload time is refused, not bent
     try:
-        probe = plan(prefix + [("event", gate_off_due, *marker[1:5])],
+        probe = plan(prefix + [("event", gate_off_due - anchor_frame, *marker[1:5])],
                      baud=baud, start_frame=start_frame, anchor_frame=anchor_frame)
     except ValueError as exc:
         raise Refused(f"hold_frames {hold_frames} is shorter than the gate-off "
@@ -782,11 +803,10 @@ def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
         # the phrase starts after the note ends: one ordered due sequence,
         # carrying the same planning-slack margin as every scheduled batch
         offset = max(0, gate_off_due + 1 - first_phrase) + PLAN_SLACK_FRAMES
+    rel_gate_off = gate_off_due - anchor_frame
     for attempt in range(400):
-        if attempt == 0:
-            pass
-        ev_cmds = [("event", gate_off_due & 0xFFFF, *marker[1:5])]
-        ev_cmds += [("event", (c[1] + offset) & 0xFFFF, *c[2:]) for c in rest]
+        ev_cmds = [("event", rel_gate_off, *marker[1:5])]
+        ev_cmds += [("event", c[1] + offset, *c[2:]) for c in rest]
         # the gate-off event goes on the wire FIRST: its due is ~hold_frames
         # in the future, while the boot image ahead of it is live writes the
         # device applies whenever they arrive. Sending the event after 20-odd
@@ -808,14 +828,14 @@ def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
         for r in rows:
             if r.kind == "write" and decode_reg_frame(r.packet[1:7])[2] == stm.A_GATE_ON:
                 gate_apply_final = r.apply_frame
-        if gate_apply_final is not None and (gate_apply_final + int(hold_frames)) & 0xFFFF != (gate_off_due & 0xFFFF):
-            gate_off_due = (gate_apply_final + int(hold_frames)) & 0xFFFF
+        if gate_apply_final is not None and gate_apply_final + int(hold_frames) != gate_off_due:
+            gate_off_due = gate_apply_final + int(hold_frames)
+            rel_gate_off = gate_off_due - anchor_frame
             if attempt >= 398:
                 raise Refused("could not settle the gate-off due")
             continue
-        slack = min((((r.due - r.accept_frame) & 0xFFFF) for r in rows
-                     if r.kind == "event"
-                     and r.due != (gate_off_due & 0xFFFF)),
+        slack = min(((r.due - r.accept_frame) for r in rows
+                     if r.kind == "event" and r.due != gate_off_due),
                     default=PLAN_SLACK_FRAMES)
         if slack >= PLAN_SLACK_FRAMES:
             return rows
@@ -859,16 +879,9 @@ def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
     if not ev_rows:
         report["reason"] = "no scheduled events: nothing can queue"
         return report
-    # dues are 16-bit and strictly increasing in plan order: unwrap them so
-    # the arithmetic is ordinary integers
-    unwrapped, prev = [], None
-    for r in ev_rows:
-        d = r.due
-        if prev is not None:
-            while d <= prev:
-                d += 1 << 16
-        unwrapped.append(d)
-        prev = d
+    # dues are absolute (anchor-relative, checked in plan without mod) and
+    # strictly increasing in plan order
+    unwrapped = [r.due for r in ev_rows]
     acc = [r.accept_frame for r in ev_rows]
     span = unwrapped[-1] - unwrapped[0] + 1
     report["due_span_frames"] = span

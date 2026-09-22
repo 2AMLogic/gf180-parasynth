@@ -171,6 +171,9 @@ class UartDeviceSim:
             # the reply's frame is fresh at send time -- what the delay models
             # is link/host latency, which the host must absorb with lead.
             time.sleep(self.reply_delay_s)
+        # the frame REGISTER is a free-running counter: it reads WALL truth
+        # even while processing lags (a real UART's counter is crystal-driven
+        # and never stalls). Fires/accepts stay on the chronological cursor.
         f = (self.frame_now() + 1) & 0xFFFF     # the frame REGISTER: audio+1
         flags = self.flags_sticky
         self.flags_sticky = 0                    # sticky until the STATUS that reads them
@@ -219,8 +222,11 @@ class UartDeviceSim:
         return flag, sec, addr, data
 
     def _accept(self, op: int, pkt: bytes) -> None:
-        # the acceptance instant is the packet's last byte on the device's
-        # own timeline (the cursor), not post-stall wall time
+        # the acceptance instant is the packet's byte time on the device's
+        # chronological cursor: queue depth, ordering and the live
+        # accept+1 rule are all judged on the device's own timeline, which
+        # survives host/GIL stalls as catch-up instead of burst-stamping.
+        # (Event FIRES are logged on their scheduled device frames.)
         f = self._frame_at(self._cursor)
         if op == OP_STATUS:
             self.received.append(("status", f))

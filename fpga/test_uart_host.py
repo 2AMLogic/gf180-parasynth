@@ -120,9 +120,9 @@ def test_plan_refuses_dues_out_of_order_and_outside_the_wrap_window():
     with pytest.raises(ValueError, match="strictly after"):
         uh.plan([("event", 5001, 0, 0, 0, 0), ("event", 5000, 0, 0, 0, 1)],
                 start_frame=14)
-    # a due beyond the +-32768 wrap window is refused the same way: this host
-    # cannot reason about a span it plans in absolute frames
-    with pytest.raises(ValueError, match="acceptance"):
+    # a due beyond the +-32768 wrap window is refused: this host cannot
+    # reason about a span it plans in absolute frames
+    with pytest.raises(ValueError, match="wrap guard"):
         uh.plan([("event", 5000 + uh.WRAP_HALF, 0, 0, 0, 0)], start_frame=14)
 
 

@@ -2,23 +2,23 @@
     observed: note_writes(45, False) = [(0, 0, 33, 0)]
 [PASS] 2 note-off subcommand sends + verifies
     observed: exit 0; usage shown: False; gate-off writes executed: 1
-  send f59     write   57000400000001a4 -> applies f93
-  send f93     event   457a02004000000007f8 -> applies f634
+  send f50     write   57000400000001a4 -> applies f84
+  send f84     event   45710200400000000701 -> applies f625
 [PASS] 3 run() plans from the device origin
-    observed: planned after the origin: first send f59 = origin 34 + lead 25
+    observed: planned after the origin: first send f50 = origin 31 + lead 19
 [PASS] 4 --hold-frames reaches the gate-off
     observed: outputs differ; gate-off (0x21) row in plan: True
-  send f1046   write   57000400000001a4 -> applies f1080
+  send f1112   write   57000400000001a4 -> applies f1146
 [PASS] 5 device origin applied exactly once
-    observed: first send f1046 vs origin 1029 + lead 17 (a doubled origin would show ~2x origin)
+    observed: first send f1112 vs origin 1091 + lead 21 (a doubled origin would show ~2x origin)
 [PASS] 6 send() preserves a waited schedule
-    observed: second write applied 5948 frames after the first
+    observed: second write applied 5694 frames after the first
 [PASS] 7 STATUS fresh against a 0.6 s reply
-    observed: snapshot 156 frames old (device now 58152, snapshot 57996), took 1.21s
+    observed: snapshot 3 frames old (device now 58170, snapshot 58167), took 1.21s
 [PASS] 8 wait_until is wrap-safe
-    observed: reached the wrapped target in 0.03s
+    observed: reached the wrapped target in 0.01s
 [PASS] 9 bar808 preflighted honestly
-    observed: REFUSED before sending (0 event packets sent): uart_host: REFUSED -- event packet 51 cannot be delivered in time: earliest acceptance frame 8334 is at or after its due 8309. The wire carries one 10-byte event packet per 41.8 frames at 115200 baud but this fixture sch
+    observed: REFUSED before sending (0 event packets sent): uart_host: REFUSED -- event packet 51 cannot be delivered in time: earliest acceptance frame 9447 is at or after its due 9422. The wire carries one 10-byte event packet per 41.8 frames at 115200 baud but this fixture sch
 [PASS] 10 event packet golden bytes
     observed: payload bytes 014000000004 (want 014000000004)
 
