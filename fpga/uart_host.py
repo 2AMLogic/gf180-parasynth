@@ -526,6 +526,7 @@ class Bridge:
         self.origin = None
         self.lead_frames = None
         self.status_round_trip_s = None
+        self.acks_seen = 0
 
     def _take(self, kinds: set, deadline: float) -> DevicePacket | None:
         """Read bytes until one complete packet of `kinds` parses. The buffer
@@ -535,6 +536,8 @@ class Bridge:
             pkts, consumed = scan_packets(self.buf)
             self.buf = self.buf[consumed:]
             for p in pkts:
+                if p.kind == "ack":
+                    self.acks_seen += 1
                 if p.kind in kinds:
                     return p
             now = time.monotonic()
@@ -689,20 +692,35 @@ def plan_shifted(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int =
     the contract accepts it: a phrase rendered from absolute musical frames
     often starts before its own upload finishes, and the contract refuses
     what the device cannot deliver. The shift is whole frames; the schedule
-    stays the device's."""
-    shift = 0
+    stays the device's. EVERY event carries PLAN_SLACK_FRAMES of margin over
+    its acceptance -- the last packet of a dense phrase is the one that
+    otherwise arrives with none."""
+    shift = PLAN_SLACK_FRAMES
     for _ in range(400):
-        shifted = [c if c[0] != "event" else ("event", c[1] + shift, *c[2:])
+        shifted = [c if c[0] != "event" else ("event", (c[1] + shift) & 0xFFFF, *c[2:])
                    for c in commands]
         try:
-            return plan(shifted, baud=baud, start_frame=start_frame,
+            rows = plan(shifted, baud=baud, start_frame=start_frame,
                         anchor_frame=anchor_frame)
         except ValueError as exc:
             if "acceptance" not in str(exc):
                 raise
             shift += 256
+            continue
+        slack = _min_event_slack(rows)
+        if slack >= PLAN_SLACK_FRAMES:
+            return rows
+        shift += PLAN_SLACK_FRAMES - slack
     raise Refused("could not plan the phrase within 400 shifts of 256 frames: "
-                  "no schedule puts every due after its packet's acceptance")
+                  "no schedule puts every due far enough past its packet's "
+                  "acceptance")
+
+
+def _min_event_slack(rows: list) -> int:
+    """The smallest (due - acceptance) margin over a plan's events, in the
+    contract's 16-bit wrap window."""
+    return min((((r.due - r.accept_frame) & 0xFFFF) for r in rows
+                if r.kind == "event"), default=PLAN_SLACK_FRAMES)
 
 
 def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
@@ -764,7 +782,9 @@ def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
         # the phrase starts after the note ends: one ordered due sequence,
         # carrying the same planning-slack margin as every scheduled batch
         offset = max(0, gate_off_due + 1 - first_phrase) + PLAN_SLACK_FRAMES
-    for _ in range(400):
+    for attempt in range(400):
+        if attempt == 0:
+            pass
         ev_cmds = [("event", gate_off_due & 0xFFFF, *marker[1:5])]
         ev_cmds += [("event", (c[1] + offset) & 0xFFFF, *c[2:]) for c in rest]
         # the gate-off event goes on the wire FIRST: its due is ~hold_frames
@@ -780,6 +800,18 @@ def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
             if "acceptance" not in str(exc):
                 raise
             offset += 256
+            continue
+        # the gate-on's apply frame in THIS layout is what the hold is
+        # measured against; the leading event moved it by one packet
+        # position, so re-derive the due once from the final layout
+        gate_apply_final = None
+        for r in rows:
+            if r.kind == "write" and decode_reg_frame(r.packet[1:7])[2] == stm.A_GATE_ON:
+                gate_apply_final = r.apply_frame
+        if gate_apply_final is not None and (gate_apply_final + int(hold_frames)) & 0xFFFF != (gate_off_due & 0xFFFF):
+            gate_off_due = (gate_apply_final + int(hold_frames)) & 0xFFFF
+            if attempt >= 398:
+                raise Refused("could not settle the gate-off due")
             continue
         slack = min((((r.due - r.accept_frame) & 0xFFFF) for r in rows
                      if r.kind == "event"
@@ -1072,8 +1104,16 @@ def main(argv=None) -> int:
         return 2
     if a.capture:
         write_capture(a.capture, rows, origin=bridge.origin, baud=a.baud)
+    acked_before = bridge.acks_seen
     last = max(r.apply_frame for r in rows)
     end = bridge.wait_until(last + 64)
+    acked = bridge.acks_seen - acked_before
+    if acked < len(rows):
+        # the device ACKs every accepted packet; a packet with no ACK never
+        # arrived -- and nothing on the wire announces an absence
+        print(f"uart_host: FAIL -- {len(rows) - acked} of {len(rows)} packets "
+              "were never ACKed by the device", file=sys.stderr)
+        return 1
     st = bridge.status()
     print(f"uart_host: done; device frame {st.frame}, evq {st.evq}, wrq {st.wrq}, "
           f"drops {st.drops}, errs {st.errs}, flags 0x{st.flags:02x}")

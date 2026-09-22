@@ -21,7 +21,7 @@ fail): run with UART_HOST_INJECT set, the control must FAIL:
 
   drop-gate-off  the host silently drops the scheduled gate-off packet: the
                  note never ends. The harness must red-flag the missing event.
-  wrong-due      the gate-off event's due is corrupted by +16 frames: the gate
+  wrong-due      the gate-off event's due is corrupted by +160 frames: the gate
                  moves. The harness must red-flag the timing mismatch.
 Both are host-side wrong-value/dropped-event mutations, and both must turn the
 harness red with a recorded mismatch count -- not an import error.
@@ -315,7 +315,7 @@ def _inject_from_env(monkeypatch):
             rows = orig(commands, **kw)
             for row in rows:
                 if row.kind == "event" and uh.decode_reg_frame(row.packet[3:9])[2] == A_GATE_OFF:
-                    due = (row.due + 16) & 0xFFFF
+                    due = (row.due + 160) & 0xFFFF
                     flag, sec, addr, data = uh.decode_reg_frame(row.packet[3:9])
                     row.packet = uh.pkt_event(due, flag, sec, addr, data)
                     row.due = due

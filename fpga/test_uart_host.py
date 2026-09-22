@@ -32,7 +32,11 @@ def test_event_packet_carries_due_lsb_first():
     pkt = uh.pkt_event(0x0918, 0, 1, 0x40, 4)
     assert pkt[0] == uh.OP_EVENT
     assert pkt[1] == 0x18 and pkt[2] == 0x09          # due, least significant first
-    assert pkt[3:9] == bytes.fromhex("004000000004".replace(" ", ""))[:6][:6] or True
+    # {F=0, 6'b0, SEC=1, A=0x40, D=4}: SEC sits at bit 40, the LSB of the
+    # first register byte, so the payload is 01 40 00 00 00 04. The previous
+    # expectation (00 40 00 00 00 04) was simply wrong, and `or True` was
+    # masking it -- an unconditional pass hiding a wrong golden value.
+    assert pkt[3:9] == bytes.fromhex("014000000004")
     assert pkt[3] == 0x01 and pkt[4] == 0x40          # {F=0,6'0,SEC=1} then address
     assert (sum(pkt[:-1]) + pkt[-1]) & 0xFF == 0
 
@@ -193,3 +197,109 @@ def test_bridge_refuses_an_unopenable_port(capsys, monkeypatch):
 def test_main_without_port_or_dry_run_refuses():
     from uart_host import main
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
+
+
+# ---- the repair's contract, as units ----------------------------------------
+def test_note_off_writes_the_gate_off():
+    # an off is stateless by construction: it ALWAYS releases what sounds
+    assert uh.note_writes(45, False) == [(0, 0, 0x21, 0)]
+
+
+def test_note_writes_on_comes_from_the_model_host():
+    writes = uh.note_writes(45, True)
+    import synth_top_model as stm
+    assert writes[-1] == (0, 0, stm.A_GATE_ON, 0)     # the gate lands last
+
+
+def test_scan_packets_consumes_complete_packets_only():
+    reply = bytes([uh.RSP_STATUS, 0x12, 0x34, 8, 0, 1, 0, 0]) \
+        + bytes([uh.RSP_ACK, 0x2A])
+    pkts, consumed = uh.scan_packets(reply + b"\x55\x00")   # trailing partial
+    assert [p.kind for p in pkts] == ["status", "ack"]
+    assert consumed == len(reply)
+    assert len(reply) + 2 - consumed == 2             # the partial bytes stay
+
+
+def test_wrap_reached_answers_the_wrapping_question():
+    reached = uh.Bridge._reached
+    assert reached(100, 100)                          # there
+    assert reached(105, 100)                          # just past
+    assert reached(164, 100)                          # past the target
+    assert reached(50, 100) is False                  # wrapped: 50 is 50 short of 100
+    assert not reached(65_000, 200)                   # still 336 frames to go
+    assert not reached(99, 100)
+
+
+def test_preflight_bar808_is_refused_with_the_numbers():
+    events, _end = uh.phrase_events("bar808")
+    cmds = [("write", 0, 0, 4, 0)] * 20 + [("event", d, f, s, a, v)
+                                           for d, f, s, a, v in events]
+    rows = uh.plan_shifted(cmds)
+    v = uh.preflight(rows)
+    assert v["verdict"] == "REFUSED"
+    assert v["peak"] > uh.EVENT_QUEUE_DEPTH
+    assert v["first_excess_index"] is not None
+    assert "event packet" in v["reason"] and "due" in v["reason"]
+    assert v["first_excess_index"] == 64
+
+
+def test_preflight_m5a_is_feasible_by_preload():
+    events, _end = uh.phrase_events("m5a")
+    cmds = [("write", 0, 0, 4, 0)] * 20 + [("event", d, f, s, a, v)
+                                           for d, f, s, a, v in events]
+    rows = uh.plan_shifted(cmds)
+    v = uh.preflight(rows)
+    assert v["verdict"] == "FEASIBLE" and v["mode"] == "preload"
+    assert v["peak"] <= uh.EVENT_QUEUE_DEPTH
+
+
+def test_plan_show_schedules_the_gate_off_on_the_device():
+    import synth_top_model as stm
+    boot = [("write", 0, 0, 4, 1), ("write", 0, 0, 5, 2)]
+    on = [(f, s, a, d) for f, s, a, d in uh.note_writes(45, True)]
+    cmds = boot + [("write", f, s, a, d) for f, s, a, d in on] \
+        + [("gate-off", 0, 0, stm.A_GATE_OFF, 0)]
+    rows = uh.plan_show(cmds, hold_frames=1920, start_frame=uh.MIN_LEAD_FRAMES)
+    gate = [r for r in rows if r.kind == "write"
+            and uh.decode_reg_frame(r.packet[1:7])[2] == stm.A_GATE_ON]
+    offs = [r for r in rows if r.kind == "event"
+            and uh.decode_reg_frame(r.packet[3:9])[2] == stm.A_GATE_OFF]
+    assert len(gate) == 1 and len(offs) == 1
+    assert offs[0].due == (gate[0].apply_frame + 1920) & 0xFFFF
+    # hold enters the schedule: a different hold moves the gate-off exactly
+    rows2 = uh.plan_show(cmds, hold_frames=1920 + 2880,
+                         start_frame=uh.MIN_LEAD_FRAMES)
+    off2 = [r for r in rows2 if r.kind == "event"
+            and uh.decode_reg_frame(r.packet[3:9])[2] == stm.A_GATE_OFF]
+    assert (off2[0].due - offs[0].due) & 0xFFFF == 2880
+
+
+def test_plan_show_without_a_gate_off_plans_plain_events():
+    cmds = [("write", 0, 0, 4, 1), ("event", 5000, 0, 0, 0x40, 7)]
+    rows = uh.plan_show(cmds, start_frame=uh.MIN_LEAD_FRAMES)
+    assert [r.kind for r in rows] == ["write", "event"]
+    assert rows[1].due == 5000 + uh.PLAN_SLACK_FRAMES
+
+
+def test_plan_show_refuses_a_hold_shorter_than_its_own_upload():
+    import synth_top_model as stm
+    on = [(f, s, a, d) for f, s, a, d in uh.note_writes(45, True)]
+    cmds = [("write", f, s, a, d) for f, s, a, d in on] \
+        + [("gate-off", 0, 0, stm.A_GATE_OFF, 0)]
+    with pytest.raises(uh.Refused, match="hold_frames"):
+        uh.plan_show(cmds, hold_frames=1, start_frame=uh.MIN_LEAD_FRAMES)
+
+
+def test_write_capture_writes_the_bench_files(tmp_path):
+    rows = uh.plan([("write", 0, 0, 4, 1), ("event", 900, 0, 0, 0x40, 7)],
+                   start_frame=uh.MIN_LEAD_FRAMES)
+    prefix = str(tmp_path / "cap")
+    cmds_path = uh.write_capture(prefix, rows, origin=17)
+    assert cmds_path.endswith(".cmds")
+    import json
+    rec = json.loads(open(prefix + ".plan.json").read())
+    assert rec["origin"] == 17 and len(rec["rows"]) == len(rows)
+    first = open(cmds_path).readline().split()
+    assert first[0] == "S"
+    assert int(first[1]) == 0                                          # rebased
+    assert bytes.fromhex("".join(first[2:])) == rows[0].packet
