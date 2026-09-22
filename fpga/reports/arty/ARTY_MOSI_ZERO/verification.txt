@@ -8,6 +8,6 @@ verify_synth_top: simulator backend iverilog
   sim: tb_top_bx: transactions accepted at the pin 67, writes drained 67, landing frame differs from the pin prediction 0 times (must be 0)
   sim: tb_top_bx: sample strobed in 4822 frames, MISSING in 0, worst strobe cycle 154 of 256
   sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
-verify_synth_top: built from 1687b7e-dirty, outdir /private/tmp/wt-arty-bringup/build/arty-controls/ARTY_MOSI_ZERO; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; 2 source(s) taken from None: arty_a7_top.v, tb_top_bx.v
+verify_synth_top: built from ce32c9e-dirty, outdir /private/tmp/wt-arty-bringup/build/arty-rom-controls/ARTY_MOSI_ZERO; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; 2 source(s) taken from None: arty_a7_top.v, tb_top_bx.v
 verify_synth_top: NOTE -- the core strobes its sample as late as cycle 154 of 256, past the LRCLK transition at 128 (40 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
 verify_synth_top: FAIL -- 67 of 67 writes arrived corrupted (run verify_ctl.py: that is the link, not the datapath)

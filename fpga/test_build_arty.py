@@ -131,3 +131,19 @@ endmodule
                     str(bench), str(build.ROOT / "fpga/rtl/arty_a7_top.v")], check=True)
     result = subprocess.run(["vvp", str(executable)], text=True, capture_output=True, check=True)
     assert "RESET PASS" in result.stdout
+
+
+def test_prepared_build_resolves_the_actual_hdl_rom_filenames(tmp_path):
+    import re
+    proof = build.ROOT / "fpga/reports/arty/clean/verification.json"
+    assert build.main(["--prepare-only", "--out", str(tmp_path),
+                       "--verification", str(proof)]) == 0
+    voice = (build.ROOT / "rtl-sketch/voice_dp.v").read_text()
+    filenames = re.findall(r'parameter \w+\s*=\s*"([^"]+\.hex)"', voice)
+    assert len(filenames) == 5
+    run_directory = tmp_path / "inputs/rtl-sketch"
+    for name in filenames:
+        expected = build.ROOT / "rtl-sketch" / name
+        actual = run_directory / name
+        assert actual.is_file(), f"Vivado cannot resolve {name} from its snapshot"
+        assert actual.read_bytes() == expected.read_bytes()

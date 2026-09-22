@@ -25,15 +25,19 @@
     "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
     "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
     "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
-    "build/arty-controls/ARTY_MOSI_ZERO/tb_top_bx.v": "40407a896d3be6a78f76f73982a4675eed899f39a4c6fa5b995b9edb7f16b3fb",
+    "build/arty-rom-controls/ARTY_MOSI_ZERO/tb_top_bx.v": "40407a896d3be6a78f76f73982a4675eed899f39a4c6fa5b995b9edb7f16b3fb",
     "fpga/rtl/arty_a7_top.v": "1af5f47fa4212fdac3647b6d786af3d2dc578879a172ee6c141886ef1affae3d",
     "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
-    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036"
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
   },
-  "transcript_sha256": "822dff8af639e3eb0d2703fca81bbfd6869869cc53125edac17b52ca33f597cd",
+  "transcript_sha256": "271d849982af2fae46989dbc02468466ee4a31d0739968917f007679f4517437",
   "comparison": {
     "provenance": {
-      "commit": "1687b7e-dirty",
+      "commit": "ce32c9e-dirty",
       "files": {
         "synth_top.v": [
           "e476bfdfe93d",
@@ -101,7 +105,7 @@
         ],
         "tb_top_bx.v": [
           "40407a896d3b",
-          "/private/tmp/wt-arty-bringup/build/arty-controls/ARTY_MOSI_ZERO"
+          "/private/tmp/wt-arty-bringup/build/arty-rom-controls/ARTY_MOSI_ZERO"
         ],
         "arty_a7_top.v": [
           "1af5f47fa421",

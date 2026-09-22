@@ -38,9 +38,12 @@ checks button assertion, delayed release and loss/recovery of lock; it does
 not model MMCM analog behavior. Hardware synthesis explicitly forces
 `SIM_NO_MMCM=0`.
 
-Wrong-then-right accounting: one harness construction failure (a Verilog
-declaration-order error) was fixed before obtaining the numerical start-red
-result. It was not credited as a detected defect. The three intentional broken
+Wrong-then-right accounting: two setup errors were found and corrected: a
+Verilog declaration-order error before the numerical start-red run, and an
+incomplete Vivado snapshot that omitted the voice lookup tables. A regression
+test reproduces the missing-ROM failure using filenames from the actual HDL.
+Fresh digital evidence hashes all six ROM inputs. The compiler error was not
+credited as a detected defect. The three intentional broken
 configurations above all failed numerically; there was no accepted sound
 measurement in this porting work.
 

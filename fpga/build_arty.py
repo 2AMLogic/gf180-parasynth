@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -28,6 +29,18 @@ def sha(path):
 
 def sources():
     return [ROOT / "fpga/rtl/arty_a7_top.v"] + build_selected.sources()[1:]
+
+
+def roms():
+    """Resolve ROM defaults relative to the RTL working directory."""
+    paths = set((ROOT / "rtl-sketch").glob("*.hex"))
+    for source in sources():
+        for name in re.findall(r'parameter \w+\s*=\s*"([^"]+\.hex)"', source.read_text()):
+            path = (ROOT / "rtl-sketch" / name).resolve()
+            if not path.is_relative_to(ROOT):
+                raise ValueError("ROM path leaves the repository: " + name)
+            paths.add(path)
+    return sorted(paths)
 
 
 def tcl_word(value):
@@ -94,7 +107,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     directory = args.out.resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    files = sources() + sorted((ROOT / "rtl-sketch").glob("*.hex"))
+    files = sources() + roms()
     report = {"state": "REFUSED", "part": PART, "configuration": CONFIG,
               "hardware_playback_tested": False, "external_io_timing_qualified": False,
               "source_sha256": {str(p.relative_to(ROOT)): sha(p) for p in files + [XDC]}}
@@ -112,8 +125,9 @@ def main(argv=None):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, dest)
             snapshots.append(dest)
-        for path in (ROOT / "rtl-sketch").glob("*.hex"):
-            dest = directory / path.name
+        for path in roms():
+            dest = directory / "inputs" / path.relative_to(ROOT)
+            dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, dest)
             if sha(dest) != report["source_sha256"][str(path.relative_to(ROOT))]:
                 raise ValueError("ROM changed during snapshot")
@@ -144,7 +158,8 @@ def main(argv=None):
                "-log", str(directory / "vivado.log"), "-journal", str(directory / "vivado.jou")]
     report["command"] = command
     with (directory / "runner.log").open("w") as log:
-        process = subprocess.Popen(command, cwd=directory, stdout=log, stderr=subprocess.STDOUT,
+        process = subprocess.Popen(command, cwd=directory / "inputs/rtl-sketch",
+                                   stdout=log, stderr=subprocess.STDOUT,
                                    start_new_session=True)
         try:
             rc = process.wait(timeout=7200)

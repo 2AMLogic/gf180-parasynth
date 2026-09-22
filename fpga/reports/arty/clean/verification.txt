@@ -8,7 +8,7 @@ verify_synth_top: simulator backend iverilog
   sim: tb_top_bx: transactions accepted at the pin 67, writes drained 67, landing frame differs from the pin prediction 0 times (must be 0)
   sim: tb_top_bx: sample strobed in 4822 frames, MISSING in 0, worst strobe cycle 175 of 256
   sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
-verify_synth_top: built from 1687b7e-dirty, outdir /private/tmp/wt-arty-bringup/build/arty-controls/clean; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; 2 source(s) taken from None: arty_a7_top.v, tb_top_bx.v
+verify_synth_top: built from ce32c9e-dirty, outdir /private/tmp/wt-arty-bringup/build/arty-rom-controls/clean; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; 2 source(s) taken from None: arty_a7_top.v, tb_top_bx.v
 verify_synth_top: NOTE -- the core strobes its sample as late as cycle 175 of 256, past the LRCLK transition at 128 (32 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
 verify_synth_top: writes landed in frames 2..3863; modelling 4821 frames
 verify_synth_top: model peak |sample| 9063 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames

@@ -17,6 +17,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "rtl-sketch"))
 import verify_synth_top as top
+from build_arty import roms
 
 
 def adapted_bench():
@@ -75,7 +76,7 @@ def main(argv=None):
     print(content, end="")
     hashed = {str(Path(p).relative_to(ROOT)) if Path(p).is_relative_to(ROOT) else str(p):
               hashlib.sha256(Path(p).read_bytes()).hexdigest() for _, p in sources(None)}
-    for path in (ROOT / "rtl-sketch").glob("*.hex"):
+    for path in roms():
         hashed[str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
     record = {"state": "PASS" if rc == 0 else "FAIL" if rc == 1 else "REFUSED",
               "exit_code": rc, "configuration": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0},
