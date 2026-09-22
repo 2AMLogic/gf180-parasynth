@@ -154,8 +154,9 @@ module uart_bridge #(
                      P_W6=5'd6, P_WCK=5'd7,
                      P_F0=5'd8, P_F1=5'd9,
                      P_E1=5'd10, P_E2=5'd11, P_E3=5'd12, P_E4=5'd13, P_E5=5'd14,
-                     P_E6=5'd15, P_ECK=5'd16;
+                     P_E6=5'd15, P_ECK=5'd16, P_CK1=5'd17;
     reg [4:0]  pstate;
+    reg [7:0]  cmd_opcode;               // the opcode whose payload is in flight
     reg [47:0] pay;
     reg [15:0] due;
     reg [7:0]  cksum;
@@ -236,6 +237,7 @@ module uart_bridge #(
             evq_count <= 8'd0; wrq_count <= 8'd0; last_due <= 16'd0;
 `endif
             pstate <= P_OP; pay <= 48'd0; due <= 16'd0; cksum <= 8'd0;
+            cmd_opcode <= 8'd0;
             seq <= 8'd0; drops <= 8'd0; errs <= 8'd0;
             evq_overflow <= 1'b0; wrq_overflow <= 1'b0;
             late_seen <= 1'b0; resync_seen <= 1'b0;
@@ -260,25 +262,35 @@ module uart_bridge #(
                     case (rx_byte)
                     8'h57: pstate <= P_W1;
                     8'h45: begin pstate <= P_F0; due <= 16'd0; end
-                    8'h51: begin                       // STATUS reply
+                    8'h51: begin pstate <= P_CK1; cmd_opcode <= rx_byte; end
+                    8'h58: begin pstate <= P_CK1; cmd_opcode <= rx_byte; end
+                    default: begin                     // bad opcode
+                        ack_err_d <= 1'b1;
+                        err_code_d <= 8'd6; err_info_d <= rx_byte;
+                    end
+                    endcase
+                end
+                P_CK1: begin
+                    // Q and X carry one checksum byte. The abort fires only on
+                    // a valid checksum, so a corrupted abort never clears a
+                    // phrase the host did not ask to clear.
+                    pstate <= P_OP;
+                    if (cksum + rx_byte != 8'd0) begin
+                        ack_err_d <= 1'b1;
+                        err_code_d <= 8'd5; err_info_d <= 8'h00;
+                    end else if (cmd_opcode == 8'h58) begin
+                        evq_wp <= evq_rp; wrq_wp <= wrq_rp;
+                        evq_count <= 8'd0; wrq_count <= 8'd0;
+                        seq <= seq + 8'd1;
+                        resp_len   <= 4'd2;
+                        resp_bytes <= {8'h06, seq, 48'd0};
+                    end else begin
                         resp_len   <= 4'd8;
                         resp_bytes <= {8'h55, frame[15:8], frame[7:0],
                                        evq_count, wrq_count, drops, errs, flags};
                         evq_overflow <= 1'b0; wrq_overflow <= 1'b0;
                         late_seen <= 1'b0; resync_seen <= 1'b0;
                     end
-                    8'h58: begin                       // ABORT: queues cleared
-                        evq_wp <= evq_rp; wrq_wp <= wrq_rp;
-                        evq_count <= 8'd0; wrq_count <= 8'd0;
-                        seq <= seq + 8'd1;
-                        resp_len   <= 4'd2;
-                        resp_bytes <= {8'h06, seq, 48'd0};
-                    end
-                    default: begin                     // bad opcode
-                        ack_err_d <= 1'b1;
-                        err_code_d <= 8'd6; err_info_d <= rx_byte;
-                    end
-                    endcase
                 end
                 P_W1, P_W2, P_W3, P_W4, P_W5, P_W6: begin
                     pay <= {pay[39:0], rx_byte};   // MSB first: first byte ends at the top
@@ -418,13 +430,13 @@ module uart_bridge #(
             end else if (ack_err_d) begin
                 errs <= errs + 8'd1;
                 resp_len   <= 4'd4;
-                resp_bytes <= {8'h1C, err_code_d, seq, err_info_d, 24'd0};
+                resp_bytes <= {8'h1C, err_code_d, seq, err_info_d, 32'd0};
             end else if (ack_d) begin
                 resp_len   <= 4'd2;
                 resp_bytes <= {8'h06, seq, 48'd0};
             end else if (!booted) begin
                 resp_len   <= 4'd1;          // BOOT: the host SEES resets
-                resp_bytes <= {8'hA5, 48'd0};
+                resp_bytes <= {8'hA5, 56'd0};
                 booted <= 1'b1;
             end
         end

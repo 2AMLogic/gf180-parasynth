@@ -73,13 +73,15 @@ module tb_uart_bx;
                      board.u_synth.g_uart.u_uart.rx_byte,
                      board.u_synth.g_uart.u_uart.pstate);
         if (board.u_synth.g_uart.u_uart.wrq_push_d)
-            $display("PUSH t=%0t w=%h", $time,
+            $display("PUSH t=%0t cyc=%0d fr=%0d w=%h", $time,
+                     board.u_synth.cyc, board.u_synth.frame,
                      board.u_synth.g_uart.u_uart.wrq_push_w);
         if (board.u_synth.g_uart.u_uart.wrq_head_fire)
-            $display("FIRE t=%0t rp=%0d wp=%0d head=%h", $time,
-                     board.u_synth.g_uart.u_uart.wrq_rp,
-                     board.u_synth.g_uart.u_uart.wrq_wp,
-                     board.u_synth.g_uart.u_uart.wrq_head);
+            $display("FIRE t=%0t cyc=%0d fr=%0d dfr=%0d segb=%0d label=%0d stamp=%0d rp=%0d",
+                     $time, board.u_synth.cyc, board.u_synth.frame, dfr, seg_base,
+                     seg_base + dfr,
+                     board.u_synth.g_uart.u_uart.wrq_head_stamp,
+                     board.u_synth.g_uart.u_uart.wrq_rp);
         if (board.u_synth.g_uart.u_uart.evq_head_fire)
             $display("EFIRE t=%0t frame=%0d due=%0d cyc=%0d addr=%h", $time,
                      board.u_synth.g_uart.u_uart.frame,
