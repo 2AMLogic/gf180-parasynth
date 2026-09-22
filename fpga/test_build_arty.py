@@ -20,6 +20,10 @@ def test_freezes_selected_baseline_and_full_core_sources():
     assert "route_design" in text and "write_bitstream" in text
     assert "SIM_NO_MMCM=1" not in text
     assert "SIM_NO_MMCM=0" in text
+    # UG904: non-project defines belong to synth_design. read_verilog -define
+    # requires compile-unit mode and refused our first real Vivado build.
+    assert "read_verilog -define" not in text
+    assert "-verilog_define VOICE_OSC_2X -verilog_define VOICE_FILTER_2X" in text
 
 
 def test_verification_cannot_be_missing_stale_or_mutated(tmp_path):

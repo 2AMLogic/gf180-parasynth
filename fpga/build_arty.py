@@ -54,11 +54,12 @@ def tcl_word(value):
 def tcl_script(directory, paths, constraints=XDC):
     return "\n".join([
         "set_param general.maxThreads 4",
-        "read_verilog -define {VOICE_OSC_2X VOICE_FILTER_2X} [list "
+        "read_verilog [list "
         + " ".join(tcl_word(p) for p in paths) + "]",
         "read_xdc " + tcl_word(constraints),
         "synth_design -top arty_a7_top -part " + PART
-        + " -generic {SIM_NO_MMCM=0 POR_BITS=12} -flatten_hierarchy none",
+        + " -generic {SIM_NO_MMCM=0 POR_BITS=12} -flatten_hierarchy none"
+        + " -verilog_define VOICE_OSC_2X -verilog_define VOICE_FILTER_2X",
         "write_checkpoint -force " + tcl_word(directory / "synthesized.dcp"),
         "opt_design", "place_design", "phys_opt_design", "route_design",
         "report_utilization -file " + tcl_word(directory / "utilization.rpt"),
