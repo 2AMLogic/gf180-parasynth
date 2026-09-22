@@ -68,3 +68,17 @@ def test_filter2x_rtl_duty_encoding_matches_reported_effective_waveform():
     assert match, "selected RTL must declare its VOICE_FILTER_2X pulse-width encoding"
     assert int(match.group(1)) == scorer.vf.DUTY["pulse479"]
     assert 100 * int(match.group(1)) / scorer.vf.CYCLE == pytest.approx(47.9, abs=0.001)
+
+
+def test_case_and_pulse_configuration_must_match_requested_measurement():
+    text = _report().replace("M5A", "M5B").replace(
+        "VOICE_FILTER_2X", "VOICE_FILTER_2X, VOICE_PULSE_2X")
+    controls = validate_integration_report(text, _HASH, case_id="M5B", pulse_2x=True)
+    assert controls["oscillator_pulse_oversample_2x"] is True
+    with pytest.raises(ValueError, match="full filter-candidate"):
+        validate_integration_report(text, _HASH, case_id="M5A", pulse_2x=True)
+    with pytest.raises(ValueError, match="pulse 2x"):
+        validate_integration_report(_report(), _HASH, pulse_2x=True)
+    with pytest.raises(ValueError, match="mutation"):
+        validate_integration_report(text + "\nINJECT_BUG_VOICE_PULSE2X_OFF", _HASH,
+                                    case_id="M5B", pulse_2x=True)

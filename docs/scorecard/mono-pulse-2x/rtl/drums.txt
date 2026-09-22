@@ -1,0 +1,14 @@
+verify_synth_top: 501 writes over the pins (48 voice, 453 drum), 1500 frames after the last
+verify_synth_top: stimulus covers 11 of 11 circuits and 16 of 16 sounds (BD, SD, LT, HT, CH, OH, CP, CB, MT, CL, CY; swapped to LC, MC, HC, CL, MA), both pages reset while sounding
+verify_synth_top: selected 2x saw + causal 2x filter candidate; compile defines: VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 501 writes sent, 2848 frames, 2847 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 501, writes drained 501, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 2848 frames, MISSING in 0, worst strobe cycle 182 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 4fca147, outdir /private/tmp/wt-pulse-rtl/build/pulse-drums; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 182 of 256, past the LRCLK transition at 128 (29 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..1349; modelling 2850 frames
+verify_synth_top: model peak |sample| 32768 of 32768 (349 frames at the rail); drums |dmix| max 63962, |body| max 172487, DFILT engaged in 139 frames
+verify_synth_top: PASS -- 2847 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too

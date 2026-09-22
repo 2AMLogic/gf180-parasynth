@@ -318,11 +318,22 @@ module voice_dp #(
                                : two_edge ? osc_two
                                : $signed({{2{naive[15]}}, naive});
     wire signed [15:0] osc_raw_clamped = (osc_raw > 18'sd32767) ? 16'sd32767 : (osc_raw < -18'sd32768) ? -16'sd32768 : osc_raw[15:0];
+`ifdef VOICE_PULSE_2X
+`ifdef INJECT_BUG_VOICE_PULSE2X_OFF
+    wire use_pulse2x = 1'b0; // disabling control: model still expects pulse 2x
+`else
+    wire use_pulse2x = 1'b1;
+`endif
+`else
+    wire use_pulse2x = 1'b0;
+`endif
+    wire shape_osc2x = is_saw || (use_pulse2x && two_edge);
     wire osc2_valid;
     wire signed [15:0] osc2_sample;
 `ifdef VOICE_OSC_2X
     osc_2x_saw_bank osc2_path(
-        .clk(clk), .rst_n(rst_n), .frame_valid((state == S_MIX) && is_saw),
+        .clk(clk), .rst_n(rst_n), .frame_valid((state == S_MIX) && shape_osc2x),
+        .rectangular(two_edge), .duty(dutyv),
         .select(kk), .phase0(phase_os2[0]), .phase1(phase_os2[1]), .phase2(phase_os2[2]),
         .inc0(inc_mod[0]), .inc1(inc_mod[1]), .inc2(inc_mod[2]),
         .sh0(sh[0]), .sh1(sh[1]), .sh2(sh[2]), .r0(r[0]), .r1(r[1]), .r2(r[2]),
@@ -650,7 +661,7 @@ module voice_dp #(
 `endif
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
                 S_MIX: begin
-                    if (use_osc2x && is_saw) state <= S_OSCWAIT;
+                    if (use_osc2x && shape_osc2x) state <= S_OSCWAIT;
                     else begin
                         ma <= {{9{osc[15]}}, osc}; mb <= {5'b0, w[kk]};
                         osc_d2[kk] <= osc_d1[kk]; osc_d1[kk] <= osc_raw_clamped;

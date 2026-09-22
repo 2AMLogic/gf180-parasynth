@@ -698,6 +698,44 @@ def test_the_real_tree_this_batch_ran_on_was_checked():
     assert not st["problems"], st["problems"]
 
 
+def test_base_check_allows_branch_repair_when_main_only_changed_docs(monkeypatch):
+    """Divergence alone cannot turn a deliberate model repair into stale code."""
+    def fake_git(*args):
+        if args[0] in ("rev-parse", "merge-base"):
+            return "deadbeefcafe0000\n"
+        if args[0] == "rev-list":
+            return "2\n"
+        if args[0] == "diff":
+            return ""
+        if args[0] == "show":
+            return "unchanged upstream voice, different from our candidate\n"
+        return ""
+    monkeypatch.setattr(rc, "_git", fake_git)
+    monkeypatch.setattr(rc, "DEPENDENCIES", ("model/voice_fx.py",))
+    state = rc.base_check()
+    assert not state["problems"]
+    assert not state["stale_dependencies"]
+    assert "model/voice_fx.py" in state["ahead_dependencies"]
+
+
+def test_base_check_refuses_diverged_dependency_changed_upstream(monkeypatch):
+    def fake_git(*args):
+        if args[0] in ("rev-parse", "merge-base"):
+            return "deadbeefcafe0000\n"
+        if args[0] == "rev-list":
+            return "2\n"
+        if args[0] == "diff":
+            return "model/voice_fx.py\n"
+        if args[0] == "show":
+            return ("old voice at common ancestor\n" if args[1].startswith("deadbeef") else
+                    "a new voice fix on main missing from the candidate\n")
+        return ""
+    monkeypatch.setattr(rc, "_git", fake_git)
+    monkeypatch.setattr(rc, "DEPENDENCIES", ("model/voice_fx.py",))
+    with pytest.raises(rc.StaleBase, match="model/voice_fx.py"):
+        rc.base_check()
+
+
 def test_tolerances_are_frozen_in_one_place_and_named_by_every_metric():
     """A per-case tolerance is a tolerance fitted to an error. Every rule here
     names one of the frozen classes."""

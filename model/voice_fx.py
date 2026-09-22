@@ -877,7 +877,13 @@ _DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
 _OS2_SUBSTEP_GAIN_Q15 = 27853  # 0.85 headroom keeps the Q1.15 FIR output below its rail.
 
 def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple[np.ndarray, np.ndarray, int]:
-    """Render a saw oscillator at 2x, then apply the reference decimator."""
+    """Render saw or a rectangular waveform at 2x, then decimate.
+
+    Rectangular-wave use is selected explicitly by oversample_pulse_2x;
+    the RTL selects the same chain with VOICE_PULSE_2X.
+    """
+    if o.shape not in ("saw", *TWO_EDGE):
+        raise ValueError(f"unsupported 2x waveform {o.shape!r}")
     inc_a = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
     phase0 = int(o.phase)
     base_inc = np.repeat(inc_a // 2, 2)
@@ -893,7 +899,12 @@ def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple
         exp2 = np.repeat(er[:, 0] - 1, 2)
         recip2 = np.repeat(er[:, 1], 2)
         correction = blep_fx(phase, base_inc, exp2, recip2, o.MB, o.RB)
-        hi = sat16(_saw_fx(phase) - correction)
+        if o.shape == "saw":
+            hi = sat16(_saw_fx(phase) - correction)
+        else:
+            phase_edge = (phase + CYCLE - DUTY[o.shape]) & PHASE_MASK
+            hi = sat16(naive_fx(o.shape, phase) + correction - blep_fx(
+                phase_edge, base_inc, exp2, recip2, o.MB, o.RB))
         o.phase = int((int(phase2) + int(base_inc.sum())) & PHASE_MASK)
     else:
         hi = o.render(2 * n, base_inc)
@@ -922,7 +933,8 @@ class VoiceFx:
                  oversample_2x: bool = False, rate_converted_ladder: bool = False,
                  preserve_filter_headroom: bool = False,
                  causal_filter: bool = False,
-                 pulse479_filter_candidate: bool = False):
+                 pulse479_filter_candidate: bool = False,
+                 oversample_pulse_2x: bool = False):
         """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
@@ -932,6 +944,9 @@ class VoiceFx:
         self.ladder_cfg = dict(LADDER_CFG if ladder_cfg is None else ladder_cfg)
         self.g_exact, self.k_comp = g_exact, k_comp
         self.oversample_2x = oversample_2x
+        self.oversample_pulse_2x = bool(oversample_pulse_2x)
+        if self.oversample_pulse_2x and not self.oversample_2x:
+            raise ValueError("2x pulse experiment requires the 2x oscillator engine")
         self.rate_converted_ladder = bool(rate_converted_ladder)
         self.preserve_filter_headroom = bool(preserve_filter_headroom)
         self.causal_filter = bool(causal_filter)
@@ -1163,7 +1178,8 @@ class VoiceFx:
             phase2_start = self._os2_phase[k]
             ia = np.broadcast_to(np.asarray(inc, dtype=np.int64), (n,))
             phase2_step = (ia // 2) * 2
-            if self.oversample_2x and o.shape == "saw":
+            if self.oversample_2x and (o.shape == "saw" or
+                                      (self.oversample_pulse_2x and o.shape in TWO_EDGE)):
                 rendered, self._os2_history[k], self._os2_phase[k] = _render_2x(
                     o, n, inc, self._os2_history[k], self._os2_phase[k])
                 sig.append(rendered)

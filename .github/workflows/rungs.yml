@@ -9,6 +9,44 @@ name: nodes
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  pulse2x-rtl:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    concurrency:
+      group: pulse2x-short-${{ github.head_ref || github.ref_name }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install numpy scipy pytest
+      - run: sudo apt-get update && sudo apt-get install -y iverilog autoconf flex libfl-dev bison help2man
+      - uses: actions/cache@v4
+        with:
+          path: .tools/verilator-5.052
+          key: ubuntu24-verilator-ea338be98e1e838d3518809ce8899f85a009963c
+      - run: python tools/setup_ci_verilator.py
+      - name: simulator identity and independent converter diagnostic
+        run: |
+          verilator --version
+          python tools/verify_rate_conv_2x.py --simulator verilator
+      - name: pulse candidate, transport, deadlines and disabling control
+        run: >-
+          python tools/run_all.py --jobs 2 --timeout 900 --json build/pulse2x-ci.json
+          "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --outdir build/pulse-voice"
+          "python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --simulator verilator --outdir build/pulse-voice-verilator"
+          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --outdir build/pulse-smoke"
+          "python rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --pulse2x --simulator verilator --inject VOICE_PULSE2X_OFF --expect-fail --outdir build/pulse-off"
+          "python rtl-sketch/verify_synth_top.py --filter2x --pulse2x --simulator verilator --outdir build/pulse-drums"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pulse2x-ci
+          path: |
+            build/pulse2x-ci.json
+            build/pulse2x-phrases.json
+            build/pulse-evidence/
+
   reference-controls:
     runs-on: ubuntu-latest
     timeout-minutes: 15

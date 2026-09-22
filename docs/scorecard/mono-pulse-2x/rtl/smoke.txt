@@ -1,0 +1,16 @@
+verify_synth_top: 61 writes over the pins (61 voice, 0 drum), 957 frames after the last
+verify_synth_top: M5A controls: pulse=pulse29; effective pulse=pulse479 (47.90% duty); saw cutoff=14073 Hz; saw volume correction=+0.00000 dB
+verify_synth_top: M5A stimulus has 4 note events, smoke: envelope completion not claimed; selected filter drive 0.75; pulse pulse29; saw cutoff 14073 Hz; saw volume correction +0.00000 dB; reference sha256 a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a
+verify_synth_top: selected 2x saw + causal 2x filter candidate; compile defines: VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 61 writes sent, 4838 frames, 4837 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 61, writes drained 61, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 4838 frames, MISSING in 0, worst strobe cycle 175 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from f694882, outdir /private/tmp/wt-pulse-rtl/build/pulse-smoke; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 175 of 256, past the LRCLK transition at 128 (32 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..3879; modelling 4837 frames
+verify_synth_top: model peak |sample| 8535 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames
+verify_synth_top: PASS -- 4837 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+verify_synth_top: M5A path verified from SPI pins through the production voice and I2S pins

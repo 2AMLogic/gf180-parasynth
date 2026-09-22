@@ -94,7 +94,7 @@ STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2"
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
-BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF",
+BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
 
@@ -431,8 +431,9 @@ def coverage(v: vf.VoiceFx, regs: dict, writes: list, phases0: list, trig, gate)
 
 # ---- generate: run the model, write the writes and the expected taps -------------
 def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=False,
-             filter_2x=False):
+             filter_2x=False, pulse_2x=False):
     v = vf.VoiceFx(oversample_2x=oversample_2x,
+                   oversample_pulse_2x=pulse_2x,
                    rate_converted_ladder=filter_2x,
                    preserve_filter_headroom=filter_2x,
                    causal_filter=filter_2x,
@@ -528,39 +529,53 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
     return 1
 
 
-def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0) -> str | None:
+def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0,
+             simulator: str = "iverilog") -> str | None:
+    import shutil
     iverilog, vvp = tool("iverilog"), tool("vvp")
-    if not iverilog or not vvp:
+    if simulator == "iverilog" and (not iverilog or not vvp):
         print("verify_voice: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
     vvp_file = os.path.join(outdir, "tb_voice.vvp")
     out_file = os.path.join(outdir, "voice_rtl_out.txt")
     if os.path.exists(out_file): os.remove(out_file)
     files = [rtl if (f == "voice_dp.v" and rtl) else f for f in RTL_FILES]
-    r = subprocess.run([iverilog, "-g2012", "-o", vvp_file] + [f"-D{d}" for d in defines] + files,
+    if simulator == "verilator":
+        verilator = shutil.which("verilator")
+        if not verilator:
+            print("verify_voice: Verilator not on PATH"); return None
+        compiler = [verilator, "--binary", "--timing", "-Wno-fatal", "--top-module", "tb_voice",
+                    "--Mdir", os.path.join(outdir, "obj_voice"), "-o", vvp_file]
+        runner = [vvp_file]
+    else:
+        compiler = [iverilog, "-g2012", "-o", vvp_file]
+        runner = [vvp, "-n", vvp_file]
+    r = subprocess.run(compiler + [f"-D{d}" for d in defines] + files,
                        cwd=HERE, capture_output=True, text=True)
     if r.returncode != 0:
-        print("verify_voice: iverilog failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_voice: {simulator} compile failed:\n" + r.stdout + r.stderr); return None
     try:
-        r = subprocess.run([vvp, "-n", vvp_file, f"+wr={os.path.join(outdir, 'voice_writes.txt')}",
+        r = subprocess.run(runner + [f"+wr={os.path.join(outdir, 'voice_writes.txt')}",
                             f"+exp={os.path.join(outdir, 'voice_expected.txt')}", f"+out={out_file}"],
                            cwd=HERE, capture_output=True, text=True, timeout=timeout_s)
     except subprocess.TimeoutExpired:
         print("verify_voice: simulation timed out"); return None
     sys.stdout.write("".join("  sim: " + l + "\n" for l in r.stdout.splitlines() if l.startswith("tb_voice")))
     if r.returncode != 0 or not os.path.exists(out_file):
-        print("verify_voice: vvp failed:\n" + r.stdout + r.stderr); return None
+        print(f"verify_voice: {simulator} run failed:\n" + r.stdout + r.stderr); return None
     return out_file
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog")
     ap.add_argument("--set", default="full", choices=("full", "quick"))
     ap.add_argument("--only", default=None, help="comma-separated scenario keys")
     ap.add_argument("--inject", default=None, choices=BUGS, help="INJECT_BUG_VOICE_<NAME> to compile in")
     ap.add_argument("--define", action="append", default=[], help="additional Verilog define")
     ap.add_argument("--osc2x", action="store_true",
                     help="enable the integrated 2x voice model and RTL path")
+    ap.add_argument("--pulse2x", action="store_true", help="select 2x rectangular oscillators")
     ap.add_argument("--filter2x", action="store_true",
                     help="enable causal reconstructed 2x filter and the pulse-duty challenger")
     ap.add_argument("--expect-fail", action="store_true")
@@ -570,27 +585,29 @@ def main(argv=None) -> int:
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
     if "VOICE_OSC_2X" in a.define:
         ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")
-    if a.filter2x:
+    if a.filter2x or a.pulse2x:
         a.osc2x = True
     only = set(a.only.split(",")) if a.only else None
     print(f"verify_voice: model VoiceFx() (contract rev 4), scenario set '{a.set}'"
           + (f", only {sorted(only)}" if only else ""))
     expected, state, writes, report = generate(a.outdir, a.set, only,
                                                oversample_2x=a.osc2x,
-                                               filter_2x=a.filter2x)
+                                               filter_2x=a.filter2x, pulse_2x=a.pulse2x)
     if a.compare_only:
         status = compare(expected, state, report, a.compare_only)
     else:
         defines = list(a.define) + (["VOICE_OSC_2X"] if a.osc2x else [])
         if a.filter2x:
             defines.append("VOICE_FILTER_2X")
+        if a.pulse2x:
+            defines.append("VOICE_PULSE_2X")
         if a.inject:
             defines.append(f"INJECT_BUG_VOICE_{a.inject}")
         rtl = os.path.relpath(os.path.abspath(a.rtl), HERE) if a.rtl else None
         print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}; "
               f"defines {', '.join(defines) or '(none)'}), {len(expected)} frames, "
               f"{len(writes)} writes at the register port")
-        out = simulate(a.outdir, defines, rtl)
+        out = simulate(a.outdir, defines, rtl, simulator=a.simulator)
         status = 2 if out is None else compare(expected, state, report, out)
     if a.expect_fail:
         if status == 1:

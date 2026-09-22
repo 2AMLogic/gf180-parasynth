@@ -34,11 +34,20 @@ def _vectors(n: int = 512):
     return x, x_even, x_odd, y_even, y_odd, decim
 
 
-def run(*, inject_clamp: bool = False) -> int:
+def run(*, inject_clamp: bool = False, simulator: str = "iverilog") -> int:
     iverilog, vvp = shutil.which("iverilog"), shutil.which("vvp")
-    if not iverilog or not vvp:
+    verilator = shutil.which("verilator")
+    if simulator == "iverilog" and (not iverilog or not vvp):
         print("NO-VERDICT: iverilog/vvp unavailable")
         return 2
+    if simulator == "verilator" and not verilator:
+        print("NO-VERDICT: verilator unavailable")
+        return 2
+    if simulator not in ("iverilog", "verilator"):
+        raise ValueError("unknown simulator")
+    version = subprocess.run([verilator, "--version"] if simulator == "verilator" else
+                             [iverilog, "-V"], capture_output=True, text=True)
+    print(version.stdout.splitlines()[0])
     module = ROOT / "rtl-sketch/rate_conv_2x.v"
     bench = ROOT / "rtl-sketch/tb_rate_conv_2x.v"
     if not module.is_file() or not bench.is_file():
@@ -53,17 +62,24 @@ def run(*, inject_clamp: bool = False) -> int:
             for row in zip(x, x0, x1, y0, y1, yout):
                 f.write(" ".join(str(int(v)) for v in row) + "\n")
         sim = temp / "rate_conv.vvp"
-        compile_cmd = [iverilog, "-g2012", "-s", "tb_rate_conv_2x", "-o", str(sim)]
+        if simulator == "iverilog":
+            compile_cmd = [iverilog, "-g2012", "-s", "tb_rate_conv_2x", "-o", str(sim)]
+            run_cmd = [vvp, str(sim)]
+        else:
+            compile_cmd = [verilator, "--binary", "--timing", "-Wno-fatal",
+                           "--top-module", "tb_rate_conv_2x", "--Mdir", str(temp / "obj"),
+                           "-o", str(sim)]
+            run_cmd = [str(sim)]
         if inject_clamp:
             compile_cmd.append("-DINJECT_BUG_RATE_CONV_2X_CLAMP")
         compile_cmd.extend((str(module), str(bench)))
         try:
             built = subprocess.run(compile_cmd, cwd=ROOT, text=True,
-                                   capture_output=True, timeout=30)
+                                   capture_output=True, timeout=300)
             if built.returncode:
-                print(f"NO-VERDICT: iverilog failed: {built.stderr[-2000:]}")
+                print(f"NO-VERDICT: {simulator} failed: {built.stderr[-2000:]}")
                 return 2
-            result = subprocess.run([vvp, str(sim), f"+vectors={vectors}"], cwd=ROOT,
+            result = subprocess.run(run_cmd + [f"+vectors={vectors}"], cwd=ROOT,
                                     text=True, capture_output=True, timeout=30)
         except (OSError, subprocess.TimeoutExpired) as exc:
             print(f"NO-VERDICT: RTL simulator did not complete: {exc}")
@@ -81,12 +97,13 @@ def run(*, inject_clamp: bool = False) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--simulator", choices=("iverilog", "verilator"), default="iverilog")
     parser.add_argument("--inject-clamp", action="store_true",
                         help="negative control: clamp interpolator output to int16")
     parser.add_argument("--expect-fail", action="store_true",
                         help="control passes only when the injected defect is detected")
     args = parser.parse_args(argv)
-    result = run(inject_clamp=args.inject_clamp)
+    result = run(inject_clamp=args.inject_clamp, simulator=args.simulator)
     if args.expect_fail:
         if result == 1:
             print("verify_rate_conv_2x: PASS -- injected interpolation clamp was detected")
