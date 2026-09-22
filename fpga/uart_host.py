@@ -451,8 +451,9 @@ class Bridge:
             return plan_rows
         anchor = self.status()
         origin = anchor.frame
-        plan_rows = plan(commands, baud=baud, start_frame=origin + MIN_LEAD_FRAMES,
-                         anchor_frame=origin)
+        plan_rows = plan_shifted(commands, baud=baud,
+                                 start_frame=origin + MIN_LEAD_FRAMES,
+                                 anchor_frame=origin)
         self.send(plan_rows)
         if not quiet:
             for row in plan_rows:
@@ -485,6 +486,27 @@ def render_plan(plan_rows: list, *, anchor_frame: int = 0) -> str:
     return "\n".join(lines)
 
 
+def plan_shifted(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
+                 anchor_frame: int = 0) -> list:
+    """plan() with the whole phrase shifted later, dues' spacing intact, until
+    the contract accepts it: a phrase rendered from absolute musical frames
+    often starts before its own upload finishes, and the contract refuses
+    what the device cannot deliver. The shift is whole frames; the schedule
+    stays the device's."""
+    shift = 0
+    for _ in range(400):
+        shifted = [c if c[0] != "event" else ("event", c[1] + shift, *c[2:])
+                   for c in commands]
+        try:
+            return plan(shifted, baud=baud, start_frame=start_frame,
+                        anchor_frame=anchor_frame)
+        except ValueError as exc:
+            if "acceptance" not in str(exc):
+                raise
+            shift += 256
+    raise ValueError("could not plan within 400 shifts")
+
+
 def budget(baud: int = DEFAULT_BAUD) -> dict:
     """The link's numbers, from the contract. Quoted wherever a schedule is."""
     cyc = byte_cycles(baud)
@@ -513,12 +535,28 @@ def main(argv=None) -> int:
     ap.add_argument("--fixture", default=None, help="scripted phrase: bar808 (default fixture set)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
+    # the same flags on every subcommand, so `run --note 45` and
+    # `--note 45 run` both parse
+    common = argparse.ArgumentParser(add_help=False)
+    # SUPPRESS defaults: a subparser that does not see the flag must not
+    # clobber the value the top-level parser already parsed
+    common.add_argument("--port", default=argparse.SUPPRESS,
+                        help="serial device (or UART_BRIDGE_PORT)")
+    common.add_argument("--baud", type=int, default=argparse.SUPPRESS)
+    common.add_argument("--preset", default=argparse.SUPPRESS)
+    common.add_argument("--note", type=int, default=argparse.SUPPRESS)
+    common.add_argument("--hold-frames", type=int, default=argparse.SUPPRESS)
+    common.add_argument("--fixture", default=argparse.SUPPRESS)
+    common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
     sub = ap.add_subparsers(dest="cmd")
-    sub.add_parser("load", help="load the preset image")
-    sub.add_parser("note-on"); sub.add_parser("note-off")
-    sub.add_parser("play", help="replay a scripted phrase, scheduled on the device")
-    sub.add_parser("run", help="ONE command: preset, note on, hold, off, phrase")
-    sub.add_parser("status"); sub.add_parser("abort")
+    for name, help_text in (("load", "load the preset image"),
+                            ("note-on", "start a note"),
+                            ("note-off", "release a note"),
+                            ("play", "replay a scripted phrase, scheduled on the device"),
+                            ("run", "ONE command: preset, note on, hold, off, phrase"),
+                            ("status", "query the device"),
+                            ("abort", "clear both queues")):
+        sub.add_parser(name, parents=[common], help=help_text)
     a = ap.parse_args(argv)
 
     commands = []
@@ -550,7 +588,7 @@ def main(argv=None) -> int:
         ap.print_usage(); return 2
 
     if a.dry_run:
-        rows = plan(commands, baud=a.baud)
+        rows = plan_shifted(commands, baud=a.baud)
         b = budget(a.baud)
         print(f"uart_host: {len(rows)} packets, {sum(len(r.packet) for r in rows)} bytes "
               f"at {b['baud']} baud; device schedule (frames are device frames):")
