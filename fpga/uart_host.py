@@ -65,6 +65,27 @@ cannot deliver):
   * timestamps are 16-bit frames, wrap-safe within +-32768 frames (1.37 s
     modulo window). `plan()` refuses anything wider.
 
+FLOW CONTROL (the contract this module implements and the preflight enforces):
+
+  The device's event queue is 64 deep and the wire delivers one event packet
+  per `budget()["frames_per_event_packet"]` frames. A phrase the queue cannot
+  hold in flight is a phrase the device will DROP, and a dropped event is
+  music that silently does not happen. The host's answer, in order of
+  preference:
+
+  1. PRELOAD: if the whole phrase's peak in-flight demand (deterministically
+     computed by `preflight()` from the plan's ideal acceptance times) fits
+     the queue, send it all; the device fires each event at its own due.
+  2. WATERMARK BATCHING: otherwise the host must hold packets back, polling
+     STATUS (the device's own evq count, ACK/ERR codes) until the queue
+     drains below the watermark before sending more. That works only if the
+     wire's sustained event rate meets the fixture's due rate; if it does
+     not, the fixture is REFUSED with the exact packet index and reason.
+  3. REFUSE: the host never relies on the device dropping packets, and never
+     silently re-times a fixture to fit the wire. `preflight()` is the gate;
+     REFUSED exits 2 with the packet index, the queue peak and the bandwidth
+     numbers.
+
 `DeviceClock`/`plan()` are the timing model. They are derived from the device
 contract above -- NOT from USB sleeps -- and `--dry-run` prints exactly what
 would go down the wire and when it would land, before any hardware is opened.
@@ -76,8 +97,10 @@ fall through to a best-effort attempt.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -121,6 +144,28 @@ WRITE_QUEUE_DEPTH = 8
 WRITE_SLOTS = 2                    # register-write slots the UART path gets per frame
 WRAP_HALF = 32_768                 # 16-bit due arithmetic, wrap-safe window
 MIN_LEAD_FRAMES = 2                # due must be >= accept_frame + MIN_LEAD at send time
+PREFLIGHT_WATERMARK = 48           # batching threshold the preflight simulates
+PLAN_SLACK_FRAMES = 500            # minimum due-minus-acceptance margin (~10 ms):
+SEND_GATE_FRAMES = 120             # the send gate: send once the first due is at
+                                   # least this far ahead of the verify STATUS
+                                   # (2.5 ms -- beyond that we re-anchor, and a
+                                   # saturated host may take a few rounds to get
+                                   # there, but a schedule sent from a fresh
+                                   # anchor is never a stale one)
+                                   # covers USB/host arrival jitter. It is NOT
+                                   # the anchor-to-send latency budget -- that is
+                                   # re-anchored away by run()'s verify loop --
+                                   # because for a phrase whose dues run 1 frame
+                                   # apart, every frame of preload margin is a
+                                   # queued event: margin and queue depth are
+                                   # coupled, and the preflight holds both.
+
+
+class Refused(Exception):
+    """A first-class outcome, distinct from pass and fail: the link, the
+    device or the schedule cannot deliver this. main() prints the reason and
+    exits 2; it never falls through to a best-effort attempt."""
+    pass
 
 
 def checksum(payload: bytes) -> int:
@@ -191,28 +236,37 @@ class DevicePacket:
                 f" drops {self.drops} errs {self.errs} flags 0x{self.flags:02x}")
 
 
-def parse_device_stream(buf: bytes) -> list:
-    """Resynchronising scan for BOOT/ACK/ERR/STATUS packets. A byte stream that
-    lost sync still yields every parseable packet from the first valid header
-    on. BOOT (0xA5, one byte at reset release) is how a host SEES a device
-    reset on the wire rather than inferring it."""
-    out, i = [], 0
+def scan_packets(buf: bytes) -> tuple:
+    """Resynchronising scan for BOOT/ACK/ERR/STATUS packets, with consumption:
+    returns (packets, consumed) where `consumed` is the offset just past the
+    last COMPLETE packet. An incomplete tail stays buffered, so a caller that
+    drops `buf[:consumed]` can never serve a stale reply twice. BOOT (0xA5,
+    one byte at reset release) is how a host SEES a device reset on the wire
+    rather than inferring it."""
+    out, i, consumed = [], 0, 0
     while i < len(buf):
         b = buf[i]
         if b == RSP_ACK and i + 1 < len(buf):
-            out.append(DevicePacket("ack", seq=buf[i + 1])); i += 2
+            out.append(DevicePacket("ack", seq=buf[i + 1])); i += 2; consumed = i
         elif b == RSP_ERR and i + 3 < len(buf):
             out.append(DevicePacket("err", code=buf[i + 1], seq=buf[i + 2],
-                                    info=buf[i + 3])); i += 4
+                                    info=buf[i + 3])); i += 4; consumed = i
         elif b == RSP_STATUS and i + 7 < len(buf):
             out.append(DevicePacket("status", frame=(buf[i + 1] << 8) | buf[i + 2],
                                     evq=buf[i + 3], wrq=buf[i + 4], drops=buf[i + 5],
-                                    errs=buf[i + 6], flags=buf[i + 7])); i += 8
+                                    errs=buf[i + 6], flags=buf[i + 7])); i += 8; consumed = i
         elif b == 0xA5:
-            out.append(DevicePacket("boot")); i += 1
+            out.append(DevicePacket("boot")); i += 1; consumed = i
         else:
             i += 1
-    return out
+    return out, consumed
+
+
+def parse_device_stream(buf: bytes) -> list:
+    """The whole-buffer scan, for benches and logs: every parseable packet
+    from the first valid header on. The live link uses `scan_packets`, which
+    also says how many bytes it consumed."""
+    return scan_packets(buf)[0]
 
 
 # ---- the timing model: THE DEVICE CONTRACT, AS CODE -------------------------
@@ -295,7 +349,8 @@ def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
         accept = push // CYC_PER_FRAME
         row = Placed(index=index, kind=kind, packet=packet,
                      send_frame=anchor_frame + send_frame,
-                     end_cycle=t_end, accept_frame=anchor_frame + accept)
+                     end_cycle=anchor_frame * CYC_PER_FRAME + t_end,
+                     accept_frame=anchor_frame + accept)
         if kind == "write":
             row.apply_frame = anchor_frame + accept + 1
             last_apply = max(last_apply, row.apply_frame)
@@ -353,13 +408,20 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
                 held: bool = False) -> list:
     """One key event through the model's own KeyHost (contract 5.6): pitch
     increments, note track and the gate. `held` says a key is already down, so
-    a note-off of the last key is GATE_OFF and a note-on while held is TRIG."""
+    a note-off of the last key is GATE_OFF and a note-on while held is TRIG.
+
+    An OFF is stateless by construction -- this host is a command line, it
+    does not know which keys are down -- so an off ALWAYS means "release what
+    is sounding": the gate-off write. A gate-off addressed to a silent voice
+    is a no-op on the device; a gate-off that is not sent is a note that
+    never ends. The second failure is the one that matters."""
     import voice_fx as vf
     import synth_top_model as stm
     import spi_host as sh
+    if not on:
+        return [(0, sh.SEC_VOICE, stm.A_GATE_OFF, 0)]
     regs = preset_regs or vf.VoiceFx.patch_regs()
-    kind = "on" if on else "off"
-    events = [(0, kind, note)] + ([(1, "off", 45)] if kind == "on" and held else [])
+    events = [(0, "on", note)] + ([(1, "off", 45)] if held else [])
     out = vf.KeyHost().writes(events, regs, first_from_reset=not held)
     writes = []
     for f, op, *args in out:
@@ -376,7 +438,15 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
 def phrase_events(fixture: str = "bar808") -> tuple:
     """A scripted phrase as scheduled events: (due, flag, sec, addr, data),
     reusing the existing fixtures and the link's own spreading rules. Dues are
-    >= 1 frame apart, which the device's two write slots deliver exactly."""
+    >= 1 frame apart, which the device's two write slots deliver exactly.
+
+    bar808 is the full musical fixture; `m5a` is the short scripted M5A
+    phrase the UART bench (fpga/verify_uart_bridge.py scenario `phrase`)
+    already proves feasible end to end. Whether a fixture ACTUALLY fits the
+    queue and the wire is `preflight()`'s verdict, not this function's claim.
+    """
+    if fixture == "m5a":
+        return _phrase_events_m5a()
     import fixtures
     import spi_host as sh
     host, n_frames, _cover = fixtures.FIXTURES[fixture]()
@@ -391,6 +461,37 @@ def phrase_events(fixture: str = "bar808") -> tuple:
     return out, max(d for d, *_ in out) + 64
 
 
+def _phrase_events_m5a() -> tuple:
+    """The short M5A smoke phrase, as scheduled events. The same rendering the
+    RTL bench's `phrase` scenario runs, so the CLI and the bench exercise one
+    fixture -- and the bench's clean run is the evidence the CLI's phrase is
+    bit-exact against the integer model.
+
+    Dues are spread to the UART link's own event pacing (one 10-byte event
+    packet per wire round-up of the packet time). The SPI reference spread its
+    writes the same way through `feasible()` at the SPI budget; the smoke
+    fixture's claim -- register schedule and bit-exact audio -- is invariant
+    to that pacing, and the schedule the model is driven with is exactly the
+    schedule the device fires. (bar808's tempo, by contrast, is load-bearing:
+    that fixture is REFUSED rather than stretched.)"""
+    gap = -(-10 * byte_cycles(DEFAULT_BAUD) // CYC_PER_FRAME)   # one event packet
+    rtl = os.path.join(ROOT, "rtl-sketch")
+    if rtl not in sys.path:
+        sys.path.insert(0, rtl)
+    import verify_synth_top as top
+    cmds, tail, _info = top.m5a_script(
+        str(os.path.join(ROOT, "docs/scorecard/mono-m5a-miniv3/manifest.json")),
+        smoke=True, saw_cutoff_hz=20000, saw_volume_correction_db=-0.45428)
+    f, prev, out = 0, None, []
+    for wait, flag, sec, addr, data in cmds:
+        f += wait
+        due = f if prev is None else max(f, prev + gap)
+        out.append((due, flag, sec, addr, data & 0xFFFFFFFF))
+        prev = due
+        f += 1
+    return out, prev + 64
+
+
 # ---- the tool ---------------------------------------------------------------
 def _require_serial():
     try:
@@ -403,7 +504,14 @@ def _require_serial():
 
 
 class Bridge:
-    """The open link. REFUSES rather than guessing: no port, no answer, no play."""
+    """The open link. REFUSES rather than guessing: no port, no answer, no play.
+
+    STATE the apparatus asserts, in one place: `origin` is the device frame
+    the anchoring STATUS named, `lead_frames` is the send lead measured from
+    THIS link's own STATUS round trip (a constant two-frame lead is no
+    protection against USB/host delay), and every STATUS answer is read as
+    the framed 8-byte packet it is, consumed from the buffer, so a stale
+    snapshot can never be served twice."""
 
     def __init__(self, port: str, baud: int = DEFAULT_BAUD, timeout: float = 2.0):
         _require_serial()
@@ -415,62 +523,151 @@ class Bridge:
             raise SystemExit(2)
         self.baud = baud
         self.buf = b""
+        self.origin = None
+        self.lead_frames = None
+        self.status_round_trip_s = None
 
-    def _read_some(self) -> bytes:
-        chunk = self.ser.read(64)
-        if chunk:
-            self.buf += chunk
-        return chunk
+    def _take(self, kinds: set, deadline: float) -> DevicePacket | None:
+        """Read bytes until one complete packet of `kinds` parses. The buffer
+        is consumed only up to the last complete packet, so partial reads are
+        retried and stale replies are never re-served."""
+        while True:
+            pkts, consumed = scan_packets(self.buf)
+            self.buf = self.buf[consumed:]
+            for p in pkts:
+                if p.kind in kinds:
+                    return p
+            now = time.monotonic()
+            if now >= deadline:
+                return None
+            self.ser.timeout = min(0.05, max(0.005, deadline - now))
+            chunk = self.ser.read(8)          # a STATUS packet is 8 bytes
+            if chunk:
+                self.buf += chunk
 
-    def drain(self, seconds: float = 0.3):
-        self.ser.timeout = seconds
-        self._read_some()
-        self.ser.timeout = 2.0
+    def send(self, rows: list, *, paced: bool = True) -> None:
+        """Write the plan to the wire, preserving its timing semantics.
 
-    def send(self, packets: list) -> None:
-        self.ser.write(b"".join(p.packet for p in packets))
+        Contiguous packets -- each one the natural continuation of the
+        previous packet's last byte -- go as one serial write: the WIRE paces
+        them at exactly the spacing the plan assumed, so timing is preserved
+        byte for byte; per-packet write syscalls (each ~2-3 ms on USB/pty
+        drivers) would NOT preserve it, and would push scheduled dues into
+        the past. Where the plan says the wire must idle (an explicit wait
+        item), the burst is split and the device's own frame -- polled by
+        STATUS, never a host sleep -- must reach the next send window first.
+        Application timing is the device's throughout: live writes apply at
+        accept+1, events at their due."""
+        bursts: list[list] = []
+        prev_end = None
+        for row in rows:
+            natural = None if prev_end is None else -(-prev_end // CYC_PER_FRAME)
+            contiguous = (prev_end is not None
+                          and row.send_frame <= (natural or 0))
+            if bursts and contiguous:
+                bursts[-1].append(row)
+            else:
+                bursts.append([row])
+            prev_end = row.end_cycle
+        for i, burst in enumerate(bursts):
+            if i > 0 and paced:
+                window = burst[0].send_frame - MIN_LEAD_FRAMES
+                self.wait_until(window)
+            self.ser.write(b"".join(r.packet for r in burst))
         self.ser.flush()
 
-    def status(self, attempts: int = 3) -> DevicePacket:
+    def status(self, attempts: int = 3, timeout_s: float = 2.0) -> DevicePacket:
+        """One STATUS question, one fresh answer, framed. The round trip is
+        measured and carried in `status_round_trip_s` for the plan's lead."""
         for _ in range(attempts):
-            self.send([Placed(0, "status", pkt_status(), 0, 0)])
-            self.drain(0.5)
-            pkts = [p for p in parse_device_stream(self.buf) if p.kind == "status"]
-            if pkts:
-                self.buf = b""
-                return pkts[-1]
+            self.buf = b""
+            t0 = time.monotonic()
+            self.send([Placed(0, "status", pkt_status(), 0, 0)], paced=False)
+            pkt = self._take({"status"}, t0 + timeout_s)
+            if pkt is not None:
+                self.status_round_trip_s = time.monotonic() - t0
+                return pkt
         print("uart_host: REFUSED -- no STATUS reply from the device; check the "
               "bitstream, wiring (A9/D10) and baud", file=sys.stderr)
         raise SystemExit(2)
 
     def run(self, commands: list, *, dry_run: bool = False, baud: int = DEFAULT_BAUD,
-            quiet: bool = False) -> list:
-        """Plan, show, and (unless dry-run) execute. Returns the plan."""
-        plan_rows = plan(commands, baud=baud)
+            quiet: bool = False, hold_frames: int = 0) -> list:
+        """Origin FIRST, then the plan: the schedule is anchored to the
+        device's own frame counter and the origin is applied EXACTLY ONCE
+        (`start_frame` is relative to it). The plan is then preflighted; a
+        fixture the queue and wire cannot deliver is REFUSED before the first
+        packet leaves, with the packet index and the arithmetic.
+
+        Because a real host takes real milliseconds to plan (and USB takes
+        more to deliver), the anchor is VERIFIED before sending: a fresh
+        STATUS must still leave slack before the first event's due, or the
+        plan is re-anchored -- a plan whose dues died during planning is
+        re-planned, never sent late."""
+        rows = None
+        ahead = 0
+        planned = list(commands)
+        for _ in range(6):
+            anchor = self.status()
+            self.origin = origin = anchor.frame
+            round_trip = self.status_round_trip_s or 0.0
+            self.lead_frames = lead = (MIN_LEAD_FRAMES
+                                       + int(round_trip * SR) + 1)
+            rows = plan_show(planned, hold_frames=hold_frames, baud=baud,
+                             start_frame=lead, anchor_frame=origin)
+            dues = [r.due for r in rows if r.kind == "event"]
+            if not dues:
+                break
+            now = self.status()
+            ahead = (dues[0] - now.frame) & 0xFFFF
+            if WRAP_HALF > ahead >= SEND_GATE_FRAMES:
+                break               # the first due is comfortably ahead: send
+            # planning + the STATUS round trips consumed part of the margin:
+            # shift the dues by the deficit (spacing intact) and re-anchor,
+            # so the schedule is re-established rather than sent late. The
+            # deficit never goes negative: a wrapped `ahead` means the dues
+            # are BEHIND the device by 65536-ahead frames, and the correction
+            # must add that, not subtract.
+            behind = 0 if ahead < WRAP_HALF else (1 << 16) - ahead
+            deficit = max(0, SEND_GATE_FRAMES - ahead) + behind
+            planned = [c if c[0] != "event" else
+                       ("event", (c[1] + deficit) & 0xFFFF, *c[2:])
+                       for c in planned]
+        else:
+            raise Refused("the device's frame counter kept outrunning "
+                          f"planning (last first-due margin {ahead} frames); "
+                          "refusing to send a schedule whose dues are "
+                          "already dying")
+        verdict = preflight(rows, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            raise Refused(verdict["reason"])
         if dry_run:
-            return plan_rows
-        anchor = self.status()
-        origin = anchor.frame
-        plan_rows = plan_shifted(commands, baud=baud,
-                                 start_frame=origin + MIN_LEAD_FRAMES,
-                                 anchor_frame=origin)
-        self.send(plan_rows)
+            return rows
+        self.send(rows)
         if not quiet:
-            for row in plan_rows:
+            for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
                       f"{row.packet.hex()} -> applies f{row.apply_frame}")
-        return plan_rows
+        return rows
+
+    @staticmethod
+    def _reached(frame: int, target: int) -> bool:
+        """Wrap-safe 'has the 16-bit frame counter reached target': true iff
+        frame is at or after target within the +-32768-frame window the
+        contract defines. An ordinary integer compare answers the question
+        backwards for half the counter's range."""
+        return ((frame - target) & 0xFFFF) < WRAP_HALF
 
     def wait_until(self, due_frame: int, *, timeout_s: float = 30.0) -> DevicePacket:
-        import time
         deadline = time.monotonic() + timeout_s
+        target = due_frame & 0xFFFF
         last = self.status()
-        while last.frame < due_frame:
+        while not self._reached(last.frame, target):
             if time.monotonic() > deadline:
                 print(f"uart_host: REFUSED -- device frame {last.frame} did not "
                       f"reach {due_frame} within {timeout_s:.0f}s", file=sys.stderr)
                 raise SystemExit(2)
-            time.sleep(0.05)
+            time.sleep(0.02)
             last = self.status()
         return last
 
@@ -504,7 +701,243 @@ def plan_shifted(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int =
             if "acceptance" not in str(exc):
                 raise
             shift += 256
-    raise ValueError("could not plan within 400 shifts")
+    raise Refused("could not plan the phrase within 400 shifts of 256 frames: "
+                  "no schedule puts every due after its packet's acceptance")
+
+
+def plan_show(commands: list, *, hold_frames: int = 0, baud: int = DEFAULT_BAUD,
+              start_frame: int = 0, anchor_frame: int = 0) -> list:
+    """Plan a whole performance. A ("gate-off", flag, sec, addr, data) command
+    marks the note-off: it is scheduled ON THE DEVICE as an event due at the
+    note-on's gate apply frame + `hold_frames` -- the hold is the device's,
+    never a host sleep (host-side sleeps cannot honour an audio-frame
+    deadline over USB). Phrase events follow the gate-off, shifted later in
+    whole frames so their dues stay strictly increasing and each lands after
+    its packet can possibly be accepted; a shift never reorders or rescales
+    musical time inside the phrase.
+
+    `start_frame` is RELATIVE to `anchor_frame` (the device frame the STATUS
+    reply named); the caller's origin enters the arithmetic exactly once."""
+    import synth_top_model as stm
+    markers = [i for i, c in enumerate(commands) if c[0] == "gate-off"]
+    if not markers:
+        return plan_shifted(commands, baud=baud, start_frame=start_frame,
+                            anchor_frame=anchor_frame)
+    if len(markers) > 1:
+        raise Refused("more than one scheduled note-off in one plan: upload "
+                      "them as separate performances")
+    mi = markers[0]
+    prefix, marker, rest = commands[:mi], commands[mi], commands[mi + 1:]
+    for c in rest:
+        if c[0] != "event":
+            raise Refused(f"a ({c[0]!r} ...) command sits after the gate-off: "
+                          "the scheduled note-off must come after the live "
+                          "writes and before the phrase events")
+    live_rows = plan(prefix, baud=baud, start_frame=start_frame,
+                     anchor_frame=anchor_frame)
+    gate_apply = None
+    for r in live_rows:
+        if r.kind == "write" and decode_reg_frame(r.packet[1:7])[2] == stm.A_GATE_ON:
+            gate_apply = r.apply_frame
+    if gate_apply is None:
+        raise Refused("a gate-off was requested but the live writes carry no "
+                      "note-on gate (A_GATE_ON) write")
+    if hold_frames <= 0:
+        raise Refused(f"hold_frames {hold_frames} is not a hold: the note-off "
+                      "must be scheduled after the note-on's gate lands")
+    gate_off_due = (gate_apply + int(hold_frames)) & 0xFFFF
+    if gate_off_due == gate_apply:
+        raise Refused(f"hold_frames {hold_frames} wraps the 16-bit due onto "
+                      "the gate frame itself")
+    # the gate-off's own packet must be accepted strictly before its due;
+    # a hold shorter than the packet's upload time is refused, not bent
+    try:
+        probe = plan(prefix + [("event", gate_off_due, *marker[1:5])],
+                     baud=baud, start_frame=start_frame, anchor_frame=anchor_frame)
+    except ValueError as exc:
+        raise Refused(f"hold_frames {hold_frames} is shorter than the gate-off "
+                      f"packet's own upload time: {exc}") from exc
+    gate_off_row = probe[-1]
+    first_phrase = min((c[1] for c in rest), default=None)
+    offset = 0
+    if first_phrase is not None:
+        # the phrase starts after the note ends: one ordered due sequence,
+        # carrying the same planning-slack margin as every scheduled batch
+        offset = max(0, gate_off_due + 1 - first_phrase) + PLAN_SLACK_FRAMES
+    for _ in range(400):
+        ev_cmds = [("event", gate_off_due & 0xFFFF, *marker[1:5])]
+        ev_cmds += [("event", (c[1] + offset) & 0xFFFF, *c[2:]) for c in rest]
+        # the gate-off event goes on the wire FIRST: its due is ~hold_frames
+        # in the future, while the boot image ahead of it is live writes the
+        # device applies whenever they arrive. Sending the event after 20-odd
+        # live packets would tie its arrival to the whole upload and push it
+        # past its due on a slow host; sending it first makes the deliverable
+        # deadline the device's, not the host's.
+        try:
+            rows = plan(ev_cmds[:1] + prefix + ev_cmds[1:], baud=baud,
+                        start_frame=start_frame, anchor_frame=anchor_frame)
+        except ValueError as exc:
+            if "acceptance" not in str(exc):
+                raise
+            offset += 256
+            continue
+        slack = min((((r.due - r.accept_frame) & 0xFFFF) for r in rows
+                     if r.kind == "event"
+                     and r.due != (gate_off_due & 0xFFFF)),
+                    default=PLAN_SLACK_FRAMES)
+        if slack >= PLAN_SLACK_FRAMES:
+            return rows
+        offset += PLAN_SLACK_FRAMES - slack
+    raise Refused("could not plan the phrase within 400 shifts of 256 frames")
+
+
+def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
+              event_queue: int = EVENT_QUEUE_DEPTH,
+              watermark: int = PREFLIGHT_WATERMARK) -> dict:
+    """Queue AND bandwidth feasibility, deterministic from the plan's ideal
+    acceptance times. Nothing here is measured on a live link: the plan says
+    when each packet is accepted and each event is due, and arithmetic says
+    whether the device's 64-deep queue absorbs the difference.
+
+    In-flight demand at the moment packet i is accepted is every earlier
+    event whose due is still in the future. Peak demand over the whole plan
+    against the queue depth is the whole verdict:
+
+      * peak <= event_queue: FEASIBLE by preload -- send it all; the device
+        fires each event at its own due and nothing is dropped.
+      * peak >  event_queue: the watermark schedule (hold packets back until
+        STATUS shows the queue below the watermark) is simulated; it lands
+        every event before its due only if the wire's sustained event rate
+        meets the fixture's due rate. If it cannot, REFUSED -- naming the
+        first packet whose deadline fails, the peak, the index where the
+        queue first overflows, and the bandwidth arithmetic.
+
+    The host never relies on the device dropping packets and never silently
+    re-times a fixture to fit the wire."""
+    cyc = byte_cycles(baud)
+    packet_frames = {8: 8 * cyc / CYC_PER_FRAME, 10: 10 * cyc / CYC_PER_FRAME}
+    ev_rows = [r for r in rows if r.kind == "event"]
+    total_bytes = sum(len(r.packet) for r in rows)
+    report = {
+        "verdict": "FEASIBLE", "baud": baud, "packets": len(rows),
+        "events": len(ev_rows), "bytes": total_bytes,
+        "event_queue": event_queue, "watermark": watermark,
+        "frames_per_event_packet": round(packet_frames[10], 1),
+    }
+    if not ev_rows:
+        report["reason"] = "no scheduled events: nothing can queue"
+        return report
+    # dues are 16-bit and strictly increasing in plan order: unwrap them so
+    # the arithmetic is ordinary integers
+    unwrapped, prev = [], None
+    for r in ev_rows:
+        d = r.due
+        if prev is not None:
+            while d <= prev:
+                d += 1 << 16
+        unwrapped.append(d)
+        prev = d
+    acc = [r.accept_frame for r in ev_rows]
+    span = unwrapped[-1] - unwrapped[0] + 1
+    report["due_span_frames"] = span
+    report["wire_frames"] = -(-total_bytes * cyc // CYC_PER_FRAME)
+    in_seq = [unwrapped[i] - unwrapped[0] for i in range(len(ev_rows))]
+    avg_gap = in_seq[-1] / max(1, len(ev_rows) - 1)
+    report["avg_frames_between_dues"] = round(avg_gap, 1)
+
+    def inflight_curve():
+        peak, peak_i, first_excess = 0, 0, None
+        for i in range(len(ev_rows)):
+            n = sum(1 for j in range(i + 1) if unwrapped[j] > acc[i])
+            if n > peak:
+                peak, peak_i = n, i
+            if n > event_queue and first_excess is None:
+                first_excess = i
+        return peak, peak_i, first_excess
+
+    peak, peak_i, first_excess = inflight_curve()
+    report["peak"] = peak
+    report["peak_index"] = peak_i
+    report["first_excess_index"] = first_excess
+    if peak <= event_queue:
+        report["mode"] = "preload"
+        report["reason"] = (f"peak in-flight demand {peak} fits the "
+                            f"{event_queue}-deep event queue: preload the "
+                            "whole schedule, the device fires at each due")
+        return report
+
+    # watermark batching: hold packets back until the queue drains below the
+    # watermark, then resume. Send times slide; dues do not. A held packet
+    # still costs the wire its own transmission time -- the pacing constraint
+    # chains through the holds (accept_i >= prev_accept + packet wire time).
+    pace = [-(-len(r.packet) * cyc // CYC_PER_FRAME) for r in ev_rows]
+    queued, prev_acc, first_miss = [], None, None
+    for i, (a, d) in enumerate(zip(acc, unwrapped)):
+        if prev_acc is None:
+            earliest = a
+        else:
+            earliest = max(a, prev_acc + pace[i])
+        if len(queued) >= watermark:
+            need = len(queued) - watermark + 1
+            resume = sorted(queued)[need - 1] + 1     # fires free slots next frame
+            accept = max(earliest, resume)
+        else:
+            accept = earliest
+        prev_acc = accept
+        queued = [q for q in queued if q > accept]
+        queued.append(d)
+        if first_miss is None and accept >= d:
+            first_miss = {"index": i, "accept": accept, "due": d}
+    report["watermark_first_miss"] = first_miss
+    if first_miss is None:
+        report["verdict"] = "FEASIBLE"
+        report["mode"] = "watermark"
+        report["reason"] = (f"peak demand {peak} exceeds the queue; the "
+                            f"watermark-{watermark} schedule lands every "
+                            "event before its due")
+        return report
+    i = first_miss["index"]
+    report["verdict"] = "REFUSED"
+    report["mode"] = "none"
+    report["reason"] = (
+        f"event packet {i} cannot be delivered in time: earliest acceptance "
+        f"frame {first_miss['accept']} is at or after its due "
+        f"{first_miss['due']}. The wire carries one 10-byte event packet per "
+        f"{packet_frames[10]:.1f} frames at {baud} baud but this fixture "
+        f"schedules one every {avg_gap:.1f} frames; the queue's peak demand "
+        f"is {peak} against a depth of {event_queue} (first excess at packet "
+        f"index {first_excess}). The fixture cannot preload and flow control "
+        f"cannot keep up: REFUSED at {baud} baud. Musical dues are not "
+        "silently moved to fit the wire.")
+    return report
+
+
+def write_capture(prefix: str, rows: list, *, origin: int,
+                  baud: int = DEFAULT_BAUD) -> str:
+    """The exact bytes the tool emits, in plan order, with the schedule the
+    planner gave them: `<prefix>.cmds` in the RTL bench's S-line format and
+    `<prefix>.plan.json` with every row (rebased so frame 0 is the first
+    send). The bench path (fpga/verify_uart_bridge.py --replay) feeds these
+    bytes through the UART RX of the real wrapper -- what is verified there
+    is what this CLI emits, not a bench-scripted lookalike."""
+    base = rows[0].send_frame if rows else 0
+    cmds_path, plan_path = f"{prefix}.cmds", f"{prefix}.plan.json"
+    with open(cmds_path, "w") as fh:
+        for row in rows:
+            fh.write(f"S {row.send_frame - base} {row.packet.hex(' ')}\n")
+    record = {
+        "origin": origin, "baud": baud, "base_send_frame": base,
+        "rows": [{"index": r.index, "kind": r.kind,
+                  "packet": r.packet.hex(),
+                  "send_frame": r.send_frame - base,
+                  "accept_frame": r.accept_frame - base,
+                  "due": (r.due - base) if r.due >= 0 else -1,
+                  "apply_frame": r.apply_frame - base} for r in rows],
+    }
+    with open(plan_path, "w") as fh:
+        json.dump(record, fh, indent=2)
+        fh.write("\n")
+    return cmds_path
 
 
 def budget(baud: int = DEFAULT_BAUD) -> dict:
@@ -532,9 +965,16 @@ def main(argv=None) -> int:
     ap.add_argument("--preset", default=None, help="named selected preset to load")
     ap.add_argument("--note", type=int, default=None, help="MIDI note for on/off/run")
     ap.add_argument("--hold-frames", type=int, default=1920, help="note hold (40 ms default x48)")
-    ap.add_argument("--fixture", default=None, help="scripted phrase: bar808 (default fixture set)")
+    ap.add_argument("--fixture", default=None,
+                    help="scripted phrase: bar808 (full fixture; preflighted), "
+                         "m5a (the short phrase the UART bench proves), "
+                         "none (no phrase; run's note-only mode)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
+    ap.add_argument("--capture", default=None, metavar="PREFIX",
+                    help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
+                         "S-line format) and PREFIX.plan.json, for replay through "
+                         "the wrapper sim (fpga/verify_uart_bridge.py --replay)")
     # the same flags on every subcommand, so `run --note 45` and
     # `--note 45 run` both parse
     common = argparse.ArgumentParser(add_help=False)
@@ -560,6 +1000,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     commands = []
+    phrase = None
     if a.cmd in ("load", "run") or a.cmd is None:
         for flag, sec, addr, data in voice_image_writes(a.preset):
             commands.append(("write", flag, sec, addr, data))
@@ -567,14 +1008,23 @@ def main(argv=None) -> int:
         note = a.note if a.note is not None else 45
         for flag, sec, addr, data in note_writes(note, True):
             commands.append(("write", flag, sec, addr, data))
-    if a.cmd == "play" or a.cmd == "run":
-        events, _end = phrase_events(a.fixture or "bar808")
-        for due, flag, sec, addr, data in events:
-            commands.append(("event", due, flag, sec, addr, data))
-    if a.cmd == "note-off" or (a.cmd == "run" and a.note is not None):
+    if a.cmd == "note-off":
+        # a standalone off releases what is sounding: the live gate-off write
         note = a.note if a.note is not None else 45
         for flag, sec, addr, data in note_writes(note, False):
             commands.append(("write", flag, sec, addr, data))
+    if a.cmd == "run" and a.note is not None:
+        # the run's note-off is a DEVICE-side event: gate lands, the device
+        # counts hold_frames, the gate goes off -- no host sleep involved
+        note = a.note if a.note is not None else 45
+        for flag, sec, addr, data in note_writes(note, False):
+            commands.append(("gate-off", flag, sec, addr, data))
+    if a.cmd == "play" or a.cmd == "run":
+        fixture = a.fixture or "bar808"
+        if fixture != "none":
+            events, _end = phrase_events(fixture)
+            for due, flag, sec, addr, data in events:
+                commands.append(("event", due, flag, sec, addr, data))
     if a.cmd == "status":
         bridge = Bridge(a.port, a.baud)
         print(bridge.status().describe())
@@ -588,7 +1038,14 @@ def main(argv=None) -> int:
         ap.print_usage(); return 2
 
     if a.dry_run:
-        rows = plan_shifted(commands, baud=a.baud)
+        try:
+            rows = plan_show(commands, hold_frames=a.hold_frames, baud=a.baud)
+            verdict = preflight(rows, baud=a.baud)
+        except Refused as exc:
+            print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+            return 2
+        if a.capture:
+            write_capture(a.capture, rows, origin=0, baud=a.baud)
         b = budget(a.baud)
         print(f"uart_host: {len(rows)} packets, {sum(len(r.packet) for r in rows)} bytes "
               f"at {b['baud']} baud; device schedule (frames are device frames):")
@@ -596,14 +1053,25 @@ def main(argv=None) -> int:
         print(f"contract: {b['write_slots_per_frame']} write slots/frame, "
               f"event queue {b['event_queue']}, write queue {b['write_queue']}, "
               f"1 event packet per {1/b['frames_per_event_packet']:.1f} frames at this baud")
+        print(f"preflight: {verdict['verdict']} ({verdict.get('mode', 'none')}) -- "
+              f"{verdict['reason']}")
+        if verdict["verdict"] != "FEASIBLE":
+            print(f"uart_host: REFUSED -- {verdict['reason']}", file=sys.stderr)
+            return 2
         return 0
 
     if not a.port:
         print("uart_host: REFUSED -- no --port given (or UART_BRIDGE_PORT); "
               "use --dry-run for the schedule without hardware", file=sys.stderr)
         return 2
-    bridge = Bridge(a.port, a.baud)
-    rows = bridge.run(commands, baud=a.baud)
+    try:
+        bridge = Bridge(a.port, a.baud)
+        rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
+    except Refused as exc:
+        print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+        return 2
+    if a.capture:
+        write_capture(a.capture, rows, origin=bridge.origin, baud=a.baud)
     last = max(r.apply_frame for r in rows)
     end = bridge.wait_until(last + 64)
     st = bridge.status()

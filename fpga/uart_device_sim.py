@@ -60,6 +60,8 @@ BOOT = 0xA5
 SR = 48_000
 CYC_PER_FRAME = 256
 WRITE_SLOTS = 2
+DEFAULT_BAUD = 115_200
+BITS_PER_BYTE = 10
 ERR_WRQ_FULL = 1
 ERR_EVQ_FULL = 2
 ERR_DUE = 3
@@ -75,7 +77,8 @@ class UartDeviceSim:
 
     def __init__(self, *, epoch_frame: int = 0, evq_depth: int = 64,
                  wrq_depth: int = 8, reply_delay_s: float = 0.0,
-                 chunk_bytes: int = 0, chunk_gap_s: float = 0.0):
+                 chunk_bytes: int = 0, chunk_gap_s: float = 0.0,
+                 baud: int = DEFAULT_BAUD):
         self.master, slave = pty.openpty()
         self.port = os.ttyname(slave)
         self._slave = slave                     # held so the name stays valid
@@ -96,6 +99,10 @@ class UartDeviceSim:
         self.reply_delay_s = reply_delay_s
         self.chunk_bytes = chunk_bytes
         self.chunk_gap_s = chunk_gap_s
+        self.baud = baud
+        self._byte_time = BITS_PER_BYTE / baud
+        self._wire_buf = bytearray()            # received but not yet deserialised
+        self._wire_t = None                     # when the next byte completes
         self._t0 = 0.0
         self.buf = b""
         self._last_byte_t = None
@@ -132,8 +139,8 @@ class UartDeviceSim:
         return (self.epoch + elapsed) & 0xFFFF
 
     # ---- wire ----------------------------------------------------------------
-    def _send(self, data: bytes) -> None:
-        if self.reply_delay_s:
+    def _send(self, data: bytes, *, delay: bool = True) -> None:
+        if delay and self.reply_delay_s:
             time.sleep(self.reply_delay_s)
         if self.chunk_bytes:
             for i in range(0, len(data), self.chunk_bytes):
@@ -158,44 +165,45 @@ class UartDeviceSim:
 
     def _status(self) -> None:
         self.status_requests += 1
+        if self.reply_delay_s:
+            # the latency is before the device COMPOSES its answer: a real
+            # device samples the frame register when it builds the reply, so
+            # the reply's frame is fresh at send time -- what the delay models
+            # is link/host latency, which the host must absorb with lead.
+            time.sleep(self.reply_delay_s)
         f = (self.frame_now() + 1) & 0xFFFF     # the frame REGISTER: audio+1
         flags = self.flags_sticky
         self.flags_sticky = 0                    # sticky until the STATUS that reads them
         self._send(bytes([RSP_STATUS, (f >> 8) & 0xFF, f & 0xFF,
                           self.evq_count, self.wrq_count,
-                          self.drops & 0xFF, self.errs & 0xFF, flags]))
+                          self.drops & 0xFF, self.errs & 0xFF, flags]),
+                   delay=False)
 
     # ---- parser (mirrors the RTL's per-byte state machine) -------------------
-    def _feed(self, byte_time: float) -> None:
-        # a 40-byte-time gap mid-packet is a resync, like the RTL's GAP_CYCLES
-        if (self._partial or self.buf) and self._last_byte_t is not None:
-            gap_s = byte_time - self._last_byte_t
-            if gap_s > 40 * 10 / 115_200:
-                self._partial.clear()
-                self.buf = b""
-                self.flags_sticky |= 0x8        # resync
-                self._err(ERR_RESYNC, 0)
-        self._last_byte_t = byte_time
-        self.buf += self._partial
-        self._partial = bytearray()
-        buf = self.buf
-        self.buf = b""
-        i = 0
-        while i < len(buf):
-            op = buf[i]
+    def _rx_byte(self, b: int, t: float) -> None:
+        # a 40-byte-time gap while a packet is INCOMPLETE is a resync, like
+        # the RTL's GAP_CYCLES. A gap between packets is idle line, not an
+        # error -- that is the normal shape of a host that plans its sends.
+        if (self._partial and self._last_byte_t is not None
+                and t - self._last_byte_t > BYTE_TIMES_GAP * self._byte_time):
+            self._partial.clear()
+            self.flags_sticky |= 0x8        # resync
+            self._err(ERR_RESYNC, 0)
+        self._last_byte_t = t
+        self._partial.append(b)
+        while self._partial:
+            op = self._partial[0]
             need = {OP_WRITE: 8, OP_EVENT: 10, OP_STATUS: 2, OP_ABORT: 2}.get(op)
             if need is None:
+                del self._partial[0]
                 self._err(ERR_OPCODE, op)
-                i += 1
                 continue
-            if i + need > len(buf):              # incomplete: keep for later
-                self._partial = bytearray(buf[i:])
-                break
-            pkt = buf[i:i + need]
-            i += need
-            if (sum(pkt[:-1]) + pkt[-1]) & 0xFF != 0:
-                info = pkt[3] if len(pkt) > 3 else 0
-                self._err(ERR_CHECKSUM, info)
+            if len(self._partial) < need:
+                return                      # incomplete: more bytes at baud
+            pkt = bytes(self._partial[:need])
+            del self._partial[:need]
+            if (sum(pkt[:-1]) + pkt[-1]) & 0xFF:
+                self._err(ERR_CHECKSUM, pkt[3] if len(pkt) > 3 else 0)
                 continue
             self._accept(op, pkt)
 
@@ -211,7 +219,9 @@ class UartDeviceSim:
         return flag, sec, addr, data
 
     def _accept(self, op: int, pkt: bytes) -> None:
-        f = self.frame_now()
+        # the acceptance instant is the packet's last byte on the device's
+        # own timeline (the cursor), not post-stall wall time
+        f = self._frame_at(self._cursor)
         if op == OP_STATUS:
             self.received.append(("status", f))
             self._status()
@@ -265,40 +275,119 @@ class UartDeviceSim:
                 self._ack()
 
     # ---- execution -----------------------------------------------------------
-    def _fire(self) -> None:
-        f = self.frame_now()
-        if f != self._fire_frame:
-            self._fire_frame = f
+    def _rel_frames(self, frame: int) -> int:
+        """A device frame as frames-since-start (unwrapped)."""
+        return (frame - self.epoch) & 0xFFFF
+
+    def _frame_at(self, t: float) -> int:
+        return (self.epoch + int((t - self._t0) * SR)) & 0xFFFF
+
+    def _mono_of_frame(self, frame: int, *, mid: bool = True) -> float:
+        """The wall-clock instant a device frame occurs. A half-frame offset
+        lands the wakeup INSIDE the frame, so the execution cursor processes
+        the write IN its due frame."""
+        rel = self._rel_frames(frame)
+        t = self._t0 + (rel + (0.5 if mid else 0.0)) / SR
+        now = self._cursor
+        while t < now:                      # wrapped past: next occurrence
+            t += 65536 / SR
+        return t
+
+    def _next_fire_time(self) -> float | None:
+        """Earliest pending execution instant: due-scheduled before live."""
+        t = None
+        if self.evq_count:
+            t = self._mono_of_frame(self.evq[0][0])
+        if self.wrq_count:
+            w = self._mono_of_frame(self.wrq[0][0] + 1)
+            t = w if t is None else min(t, w)
+        return t
+
+    def _fire_one(self) -> bool:
+        """Execute at most one ready write. The write EXECUTES in its
+        scheduled device frame -- the due frame for events, accept+1 for live
+        -- which is what the contract and the RTL deliver. Wall-clock jitter
+        around that instant is apparatus noise below the device's frame
+        resolution and must not smear into the recorded schedule."""
+        f = self._frame_at(self._cursor)
+        ev_ready = bool(self.evq_count) and (((f - self.evq[0][0]) & 0xFFFF) < 0x8000)
+        wr_ready = (bool(self.wrq_count) and not ev_ready
+                    and (((f - self.wrq[0][0] - 1) & 0xFFFF) < 0x8000))
+        if ev_ready:
+            logged = self.evq[0][0]
+        elif wr_ready:
+            logged = self.wrq[0][0] + 1
+        else:
+            return False
+        if logged != self._fire_frame:      # the 2-slots-per-frame cap
+            self._fire_frame = logged
             self._fires_this_frame = 0
-        while self._fires_this_frame < WRITE_SLOTS:
-            # due-scheduled first, then live -- the contract's priority
-            if self.evq_count and ((f - self.evq[0][0]) & 0xFFFF) < 0x8000:
-                due, flag, sec, addr, data = self.evq.pop(0)
-                self.evq_count -= 1
-                self.writes.append((f, flag, sec, addr, data, "event"))
-            elif self.wrq_count and ((f - self.wrq[0][0]) & 0xFFFF) in range(1, 0x8000):
-                _acc, flag, sec, addr, data = self.wrq.pop(0)
-                self.wrq_count -= 1
-                self.writes.append((f, flag, sec, addr, data, "live"))
-            else:
+        if self._fires_this_frame >= WRITE_SLOTS:
+            return False
+        if ev_ready:
+            due, flag, sec, addr, data = self.evq.pop(0)
+            self.evq_count -= 1
+            self.writes.append((logged, flag, sec, addr, data, "event"))
+        else:
+            stamp, flag, sec, addr, data = self.wrq.pop(0)
+            self.wrq_count -= 1
+            self.writes.append((logged, flag, sec, addr, data, "live"))
+        self._fires_this_frame += 1
+        return True
+
+    def _advance(self, now: float) -> None:
+        """Process the device timeline in CHRONOLOGICAL order up to `now`:
+        wire bytes complete at their baud spacing, writes fire at their
+        scheduled frames, and a host/GIL stall is absorbed as catch-up rather
+        than corrupting acceptance stamps and dues with post-stall time."""
+        while self._cursor < now:
+            fire_t = self._next_fire_time()
+            byte_t = self._wire_next_t if self._wire_buf else None
+            t = min(fire_t or now, byte_t or now, now)
+            if t > now:
+                t = now
+            self._cursor = t
+            did = False
+            if fire_t is not None and fire_t <= t:
+                did = self._fire_one() or did
+            if byte_t is not None and byte_t <= t:
+                b = self._wire_buf.pop(0)
+                if self._wire_buf:
+                    self._wire_next_t = t + self._byte_time
+                else:
+                    self._wire_next_t = None
+                self._rx_byte(b, t)
+                did = True
+            if not did:
+                self._cursor = now
                 break
-            self._fires_this_frame += 1
 
     def _loop(self) -> None:
         self._t0 = time.monotonic()
+        self._cursor = self._t0
         self._last_byte_t = self._t0
         self._send(bytes([BOOT]))
         while not self._stop.is_set():
-            r, _, _ = select.select([self.master], [], [], 0.001)
+            now = time.monotonic()
+            self._advance(now)
+            next_t = self._next_fire_time()
+            if self._wire_buf and self._wire_next_t is not None:
+                next_t = (self._wire_next_t if next_t is None
+                          else min(next_t, self._wire_next_t))
+            timeout = 0.05 if next_t is None else min(0.05, max(0.0, next_t - now))
+            r, _, _ = select.select([self.master], [], [], timeout)
             if r:
                 try:
                     chunk = os.read(self.master, 4096)
                 except OSError:
                     chunk = b""
                 if chunk:
-                    self.buf = chunk                # the device's RX bytes
-                    self._feed(time.monotonic())
-            self._fire()
+                    rt = time.monotonic()
+                    first = not self._wire_buf
+                    self._wire_buf += chunk
+                    if first:
+                        # the first buffered byte completes one byte-time out
+                        self._wire_next_t = max(rt, self._cursor) + self._byte_time
         os.close(self.master)
         os.close(self._slave)
 

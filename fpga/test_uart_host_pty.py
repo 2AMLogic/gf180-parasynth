@@ -115,20 +115,17 @@ def test_note_off_command_sends_gate_off_through_the_pty(sim, capsys):
 
 
 # ---- finding 3: run() must plan against the device origin, not plan() blind -
-def test_run_plans_from_the_device_origin(sim, capsys):
+def test_run_plans_from_the_device_origin(sim):
     bridge = uh.Bridge(sim.port)
-    commands = [("write", 0, 0, 4, 1)]      # the boot image's first write
-    with pytest.raises(ValueError) as exc:
-        # the OLD code called unshifted plan() first and died on event 0
-        bridge.run([("write", 0, 0, 4, 1), ("event", 0, 0, 0, 0x40, 7)])
-    assert not isinstance(exc.value, uh.Refused) or "due 0" not in str(exc.value)
-    # a plan with an unshiftable due 0 is refused BY THE PLANNER, after the
-    # origin was taken -- never a raw ValueError from a plan that never looked
-    # at the device
-    rows = bridge.run([("write", 0, 0, 4, 1)], hold_frames=0)
-    origin = bridge.origin
-    assert rows[0].send_frame == origin + rows[0].send_frame - origin
-    assert rows[0].send_frame >= origin, rows[0].send_frame
+    # the OLD code called unshifted plan() first and died on event 0 before
+    # the device had answered STATUS
+    rows = bridge.run([("write", 0, 0, 4, 1), ("event", 0, 0, 0, 0x40, 7)],
+                      hold_frames=0)
+    assert bridge.origin is not None and bridge.lead_frames is not None
+    assert rows[0].send_frame == bridge.origin + bridge.lead_frames, \
+        (rows[0].send_frame, bridge.origin, bridge.lead_frames)
+    bad = check_contract(sim)
+    assert not bad, "; ".join(bad)
 
 
 # ---- finding 4: --hold-frames must reach the device-side gate ---------------
@@ -156,26 +153,23 @@ def test_hold_frames_changes_the_dry_run_schedule(capsys):
     for hold in (1920, 4800):
         rc, out, _ = run_main(["run", "--fixture", "none", "--note", "45",
                                "--hold-frames", str(hold), "--dry-run"], capsys)
-        assert rc == 0
+        assert rc == 0, f"hold {hold}: exit {rc}"
         outs[hold] = out
     assert outs[1920] != outs[4800], "dry-run output identical for hold 1920 and 4800"
-    due = {}
-    for hold, out in outs.items():
-        m = re.findall(r"^\s*\d+\s+\d+\s+\S+\s+\d+\s+(\d+)\s+(\d+)\s+45", out, re.M)
-        rows = re.findall(r"event.*", out)
-        assert rows, f"no event row in dry-run for hold {hold}"
-    # the gate-off event's due differs by exactly the hold delta
-    def offs(text):
-        vals = []
+
+    def gate_off_due(text):
+        # render_plan rows: '# send accept due applies bytes' (6 columns)
         for line in text.splitlines():
             parts = line.split()
-            if len(parts) > 6 and parts[0].isdigit() and "45" not in parts[0]:
-                pass
-        return vals
-    d1920 = [ln for ln in outs[1920].splitlines() if " 21 " in ln]
-    d4800 = [ln for ln in outs[4800].splitlines() if " 21 " in ln]
-    assert d1920 and d4800, "no gate-off (0x21) row in the dry-run plan"
-    assert d1920 != d4800, "gate-off row identical for both holds"
+            if len(parts) == 6 and parts[5].startswith("45"):
+                pkt = bytes.fromhex(parts[5])
+                if uh.decode_reg_frame(pkt[3:9])[2] == A_GATE_OFF:
+                    return int(parts[3])
+        return None
+
+    d1920, d4800 = gate_off_due(outs[1920]), gate_off_due(outs[4800])
+    assert d1920 is not None and d4800 is not None, "no gate-off event in the plans"
+    assert d4800 - d1920 == 4800 - 1920, (d1920, d4800)
 
 
 # ---- finding 5: the device origin is applied exactly once -------------------
@@ -197,11 +191,11 @@ def test_origin_applied_once(sim, capsys):
 # ---- finding 6: send() must preserve the plan's timing semantics ------------
 def test_send_preserves_a_waited_schedule(sim):
     bridge = uh.Bridge(sim.port)
-    origin = bridge.origin
-    lead = bridge.lead_frames
+    anchor = bridge.status()
+    lead = uh.MIN_LEAD_FRAMES + int((bridge.status_round_trip_s or 0) * uh.SR) + 1
     rows = uh.plan([("write", 0, 0, 4, 0xAAAA), ("wait", 4800),
                     ("write", 0, 0, 5, 0xBBBB)],
-                   start_frame=lead, anchor_frame=origin)
+                   start_frame=lead, anchor_frame=anchor.frame)
     bridge.send(rows)
     writes = [w for w in sim.writes if w[3] in (4, 5)]
     deadline = threading.Event()
@@ -241,7 +235,12 @@ def test_status_survives_partial_reads():
         pkt = bridge.status(timeout_s=3.0)
         now = s.frame_now()
         stale = (now - pkt.frame) & 0xFFFF
-        assert stale < 1600, f"snapshot {stale} frames old with chunked replies"
+        # the reply's frame is sampled when the device composes it, so the
+        # snapshot may be old by the chunk window (4 x 0.02 s) -- what must
+        # hold is that the host PARSED the framed packet promptly and moved on
+        chunk_window = int(4 * 0.02 * uh.SR) + 1600
+        assert stale < chunk_window, \
+            f"snapshot {stale} frames old with chunked replies (window {chunk_window})"
         assert uh.time.monotonic() - t0 < 2.5, "status took longer than the deadline"
     finally:
         s.stop()
@@ -252,7 +251,8 @@ def test_wait_until_is_wrap_safe():
     s = dev.UartDeviceSim(epoch_frame=65300).start()
     try:
         bridge = uh.Bridge(s.port)
-        target = (bridge.origin + 400) & 0xFFFF
+        origin = bridge.status().frame
+        target = (origin + 400) & 0xFFFF
         pkt = bridge.wait_until(target, timeout_s=5.0)
         arrived = (pkt.frame - target) & 0xFFFF
         assert arrived < uh.WRAP_HALF // 2, \
@@ -261,7 +261,7 @@ def test_wait_until_is_wrap_safe():
         s.stop()
 
 
-def test_run_completes_across_the_counter_wrap(sim):
+def test_run_completes_across_the_counter_wrap(sim, capsys):
     sim.stop()
     s = dev.UartDeviceSim(epoch_frame=65300).start()
     try:
@@ -347,10 +347,14 @@ def test_control_held_note_catches_mutations(sim, capsys, monkeypatch, inject_na
         if rc == 0:
             problems.append("MISMATCH: main returned 0 with the gate-off dropped")
     elif inject == "wrong-due":
+        if rc != 0:
+            problems.append(f"MISMATCH: main reported failure (exit {rc})")
         if ons and offs:
             delta = (offs[0][0] - ons[0][0]) & 0xFFFF
             if abs(delta - 1920) >= 8:
                 problems.append(f"MISMATCH: gate interval {delta} frames (want 1920+-8)")
+        elif ons or offs:
+            problems.append(f"MISMATCH: gate on {len(ons)}, gate off {len(offs)}")
     else:
         problems.append("no mutation was applied")
     assert problems, \

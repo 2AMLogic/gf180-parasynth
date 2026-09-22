@@ -62,18 +62,23 @@ def probe_2(sim):
 
 
 def probe_3(sim):
-    """run() must plan from the device origin; an impossible due is refused,
-    never a raw ValueError from an unshifted plan that never saw the device."""
+    """run() must take the device origin BEFORE planning, and no raw
+    ValueError from a blind unshifted plan may ever escape."""
     try:
         bridge = uh.Bridge(sim.port)
-        bridge.run([("write", 0, 0, 4, 1), ("event", 0, 0, 0, 0x40, 7)])
-        return False, "planned rows with an unshiftable due 0"
+        rows = bridge.run([("write", 0, 0, 4, 1), ("event", 0, 0, 0, 0x40, 7)])
     except SystemExit as exc:
         return False, f"hard exit {exc.code} mid-run"
     except getattr(uh, "Refused", ()) as exc:
         return True, f"Refused (first-class): {exc}"
     except ValueError as exc:
         return False, f"raw ValueError from the unshifted plan: {exc}"
+    lead = getattr(bridge, "lead_frames", None)
+    if lead is None:
+        return False, "bridge exposes no origin/lead; the plan ran before the device origin"
+    ok = rows[0].send_frame == bridge.origin + lead
+    return ok, (f"planned after the origin: first send f{rows[0].send_frame} "
+                f"= origin {bridge.origin} + lead {lead}")
 
 
 def probe_4():
@@ -85,14 +90,13 @@ def probe_4():
                                        "--hold-frames", str(hold), "--dry-run"])
         except KeyError:
             outs[hold] = None
-    if any(v is None or v[0] != 0 for v in outs.values()):
+    if any(v is None for v in outs.values()):
         # a host without a phrase-free fixture: fall back to the default
         # fixture for the before/after comparison (the holds still apply)
         for hold in (1920, 4800):
-            rc, out, err = main_capture(["run", "--note", "45",
-                                         "--hold-frames", str(hold), "--dry-run"])
-            outs[hold] = (rc, out, err)
-        (rc1, out1, e1), (rc2, out2, e2) = outs[1920], outs[4800]
+            outs[hold] = main_capture(["run", "--note", "45",
+                                       "--hold-frames", str(hold), "--dry-run"])
+    (rc1, out1, e1), (rc2, out2, e2) = outs[1920], outs[4800]
     if rc1 != 0 or rc2 != 0:
         return False, (f"dry-run exits {rc1}/{rc2}; stderr1: {e1.strip()[:160]}; "
                        f"stderr2: {e2.strip()[:160]}")
@@ -117,7 +121,10 @@ def probe_5():
         except SystemExit as exc:
             return False, f"REFUSED (exit {exc.code}) mid-run"
         first = rows[0].send_frame
-        return first < 2000, f"first send planned at device frame {first}"
+        ok = first == bridge.origin + bridge.lead_frames
+        return ok, (f"first send f{first} vs origin {bridge.origin} + lead "
+                    f"{bridge.lead_frames} (a doubled origin would show "
+                    f"~2x origin)")
     except getattr(uh, "Refused", ()) as exc:
         return False, f"Refused: {exc}"
     finally:
@@ -127,8 +134,9 @@ def probe_5():
 def probe_6(sim):
     """send() preserves a waited schedule."""
     bridge = uh.Bridge(sim.port)
-    lead = getattr(bridge, "lead_frames", 20)
-    origin = getattr(bridge, "origin", 0)
+    anchor = bridge.status()
+    origin = anchor.frame
+    lead = uh.MIN_LEAD_FRAMES + int((bridge.status_round_trip_s or 0) * uh.SR) + 1
     rows = uh.plan([("write", 0, 0, 4, 0xAAAA), ("wait", 4800),
                     ("write", 0, 0, 5, 0xBBBB)],
                    start_frame=lead, anchor_frame=origin)
