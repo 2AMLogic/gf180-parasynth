@@ -25,3 +25,9 @@ python3 -m pytest -q tools/test_verify_attack_context_model.py
 `report.json` binds all 12 WAV hashes, production source commit and source hashes, reference report, envelope calibration and complete timing data. `ci-import.json` records publication checks. All attack/release crossings and six history contrasts reproduce exactly on macOS; five original local WAVs match Linux byte-for-byte. One held RMS value differs by 5.55e-17 between platforms; only that diagnostic allows 1e-14 relative rounding noise. Sound limits and timing reproduction remain unchanged.
 
 The verifier refuses a one-sample timing mutation, changed contrast, missing row, changed audio digest, and invalid timing. **Wrong-then-right: zero sound measurement corrections; one publication precondition corrected** (exact dictionary equality rejected the one-ulp RMS difference). The prior reference qualification record remains in the parent report.
+
+## Historical source identity after pulse 2× landed
+
+These WAVs still belong to source `1ae5071b038d93df507efb50b76cb3c83eb6d228`, with pulse oversampling disabled. Merging #192 changes engine source files; it does not change these recordings or their original provenance. The verifier checks every recorded source hash against that historical Git commit and lists differences from today's checkout. It separately requires the actual audio-analysis modules to retain their recorded hashes; changed analysis refuses. It reproduces the audio measurements without rendering today's engine. Re-rendering the original experiment requires the recorded checkout.
+
+After the merge, the old current-file hash check failed as expected. Eight tests now pass, retaining the numerical controls and adding historical-source tampering and changed-analysis refusal. Original WAVs, source hashes, score values and report bytes remain unchanged.
