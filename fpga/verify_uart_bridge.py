@@ -91,11 +91,11 @@ RE_STRB = re.compile(r"sample strobed in (\d+) frames, MISSING in (\d+), worst s
 RE_BUSY = re.compile(r"busy at a tick: (\d+); core overrun (\d+); link overflow (\d+)")
 RE_TXB = re.compile(r"TX bytes captured (\d+)")
 
-INJECTS = ("UART_SKIP_BYTE", "UART_CORRUPT_ADDR", "UART_EVQ_OVF_SILENT",
+INJECTS = ("UART_NO_CHECKSUM", "UART_CORRUPT_ADDR", "UART_EVQ_OVF_SILENT",
            "UART_NOFF_BLOCKED", "UART_RESET_LEAK")
 INJECT_SCENARIO = {
-    "UART_SKIP_BYTE": "held",
-    "UART_CORRUPT_ADDR": "held",
+    "UART_NO_CHECKSUM": "drop-byte",
+    "UART_CORRUPT_ADDR": "corrupt-byte",
     "UART_EVQ_OVF_SILENT": "overflow",
     "UART_NOFF_BLOCKED": "noff-full",
     "UART_RESET_LEAK": "reset-mid",
@@ -794,7 +794,7 @@ def main(argv=None) -> int:
             print(f"verify_uart_bridge: NEGATIVE CONTROL NOT CAUGHT ({a.inject})")
             return 1
         # a control must fail for ITS recorded reason, not any failure
-        reasons = {"UART_SKIP_BYTE": lambda c: c.get("writes_seen", 1) == 0,
+        reasons = {"UART_NO_CHECKSUM": lambda c: c.get("writes_bad", 0) > 0,
                    "UART_CORRUPT_ADDR": lambda c: c.get("writes_bad", 0) > 0,
                    "UART_EVQ_OVF_SILENT":
                        lambda c: c.get("err_codes", {}).get(uh.ERR_EVQ_FULL, 0) == 0
