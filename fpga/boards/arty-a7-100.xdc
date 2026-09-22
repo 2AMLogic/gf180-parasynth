@@ -61,14 +61,34 @@ create_generated_clock -name i2s_bclk_ext \
 # a BCLK period before the sampling edge. Jumpers are short (~0.2 ns) and of
 # similar length; 0.2 ns is added to both budgets for the residual
 # data-minus-clock flight imbalance (recorded assumption, not a measurement).
+#
+# SETUP: -max = tDS + flight = 8.200 ns. The analyzed worst launch/capture
+# pair is one core period (81.380 ns) -- STA cannot see that SDATA/LRCLK only
+# launch on BCLK-falling cycles, so this is pessimistic against the real
+# half-BCLK-period window (162.76 ns) in the safe direction.
+#
+# HOLD: the RTL never switches these outputs on rising-edge cycles, so the
+# DAC's tDH is guaranteed by the half-period structure, not by output skew;
+# a plain "-min -8.200" would instead demand data arrive >= 8.2 ns AFTER the
+# BCLK edge at the ports (a pair the RTL never creates) and fails on the
+# routed design by 9.9 ns. The real requirement is a bound on clock-vs-data
+# skew: 162.760 - (CO_bclk - CO_data) >= 8.200. "-min 154.560" states that
+# window minus requirement and makes Vivado check exactly that skew bound
+# (measured on the routed design: 1.4-4.9 ns, so the DAC's tDH margin is
+# ~158 ns; checkpoint evidence in fpga/ext_io_checkpoint_experiments.py).
 set_output_delay -clock i2s_bclk_ext -max 8.200 [get_ports i2s_sdata]
-set_output_delay -clock i2s_bclk_ext -min -8.200 [get_ports i2s_sdata]
+set_output_delay -clock i2s_bclk_ext -min 154.560 [get_ports i2s_sdata]
 set_output_delay -clock i2s_bclk_ext -max 8.200 [get_ports i2s_lrclk]
-set_output_delay -clock i2s_bclk_ext -min -8.200 [get_ports i2s_lrclk]
+set_output_delay -clock i2s_bclk_ext -min 154.560 [get_ports i2s_lrclk]
 # BCLK's own receiver requirements (tBCY >= 40 ns, tBCH/tBCL >= 16 ns, fBCK <=
 # 24.576 MHz) are met by construction at 3.072 MHz / 50 % duty and are checked
 # arithmetically in fpga/ext_io_timing.py::bclk_checks. The generated clock
-# above is this port's constraint; a forwarded clock carries no output delay.
+# above is this port's constraint: a forwarded clock carries no output delay,
+# and adding one fails on a self-referential hold check against the clock's
+# own port arrival (measured: WHS -1.021 ns). Vivado classifies the port as
+# "no output delay but with a timing clock defined on it" (LOW); the
+# publisher reads that classification and records i2s_bclk as the one
+# output-delay exception.
 
 # spi_miso: the FPGA is the SPI SLAVE (DR 0007 rev 2; mode 0, MSB first,
 # 48-bit frames; controller SCK <= 2.0 MHz for writes). MISO is NOT launched
@@ -88,7 +108,10 @@ set_output_delay -clock i2s_bclk_ext -min -8.200 [get_ports i2s_lrclk]
 #     ASSUMED: no guaranteed spec for the external controller exists)
 # => CO <= 26.422 ns, enforced below against the core clock (period 81.380 ns:
 # the setup check becomes CO <= 81.380 - 54.958).
-set_output_delay -clock hardware_clock.clock_raw -max 54.958 -min 0.000 [get_ports spi_miso]
+# set_output_delay takes one value per command: -max and -min are separate
+# commands (combined they abort with Common 17-165 and drop the constraint).
+set_output_delay -clock hardware_clock.clock_raw -max 54.958 [get_ports spi_miso]
+set_output_delay -clock hardware_clock.clock_raw -min 0.000 [get_ports spi_miso]
 
 # led[1..3] are indicators with no synchronous receiver: LED1 reset release,
 # LED2 heartbeat, LED3 LRCLK (fpga/ARTY.md wiring table). No receiver-derived
@@ -97,5 +120,5 @@ set_output_delay -clock hardware_clock.clock_raw -max 54.958 -min 0.000 [get_por
 # a real, checkable output delay so the endpoints stay counted and the
 # internal STA of their drivers is unchanged. These are documented exceptions
 # from receiver-derived budgeting, NOT false paths.
-set_output_delay -clock hardware_clock.clock_raw -max 0.000 -min 0.000 \
-    [get_ports {led[1] led[2] led[3]}]
+set_output_delay -clock hardware_clock.clock_raw -max 0.000 [get_ports {led[1] led[2] led[3]}]
+set_output_delay -clock hardware_clock.clock_raw -min 0.000 [get_ports {led[1] led[2] led[3]}]

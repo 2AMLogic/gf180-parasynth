@@ -35,6 +35,30 @@ def inspect_reports(directory):
             if not counts or any(int(n) for n in counts):
                 raise ValueError("internal timing is incomplete: " + kind)
         missing = int(re.search(r"checking no_output_delay \((\d+)\)", timing)[1])
+        # The check_timing verbose block classifies the unconstrained output
+        # ports: unconstrained (HIGH), excused by false paths, and ports that
+        # carry a timing clock -- the forwarded-clock class. Only that last
+        # class is a justified exception; the sentences must be present and
+        # are refused if the tool stops reporting them.
+        def no_output_delay_sentence(marker):
+            match = re.search(r"There (?:are|is) (\d+) ports? " + marker, timing)
+            if match is None:
+                raise ValueError("report does not classify no_output_delay ports: " + marker)
+            return int(match[1])
+        unconstrained = no_output_delay_sentence("with no output delay specified")
+        false_pathed = no_output_delay_sentence(
+            "with no output delay but user has a false path constraint")
+        clock_carriers = no_output_delay_sentence(
+            "with no output delay but with a timing clock defined on it")
+        if unconstrained + false_pathed + clock_carriers != missing:
+            raise ValueError("no_output_delay classes do not sum to the count")
+        exceptions = []
+        if clock_carriers:
+            listed = re.search(r"with no output delay but with a timing clock defined on it"
+                               r"[^\n]*\n\n(.*?\n)\n", timing, re.DOTALL)
+            if listed is None or len(listed[1].split()) != clock_carriers:
+                raise ValueError("forwarded-clock exception ports are not listed")
+            exceptions = listed[1].split()
         match = re.search(r"^hardware_clock\.clock_raw\s+([\d.]+)\s+.*P,G,A\s+"
                           r"\{hardware_clock\.mmcm/CLKOUT0\}", texts["clocks.rpt"], re.MULTILINE)
         period = float(match[1])
@@ -67,9 +91,13 @@ def inspect_reports(directory):
     return {"internal_timing_pass": True, "timing": metrics, "core_period_ns": period,
             "resources": resources, "missing_output_delays": missing, "drc": drc,
             # External I/O timing counts as qualified only when the routed
-            # report itself shows every output port carrying an output delay;
-            # the timing metrics above already exclude any failing endpoint.
-            "external_io_timing_qualified": missing == 0,
+            # report itself shows no unconstrained output port and no output
+            # port excused by a false path. The one permitted remainder is the
+            # forwarded-clock class (a port carrying a timing clock), recorded
+            # here as data; the timing metrics above already exclude any
+            # failing endpoint.
+            "external_io_timing_qualified": unconstrained == 0 and false_pathed == 0,
+            "output_delay_exceptions": exceptions,
             "dsp_feedback_review_complete": False,
             "hardware_playback_tested": False}
 

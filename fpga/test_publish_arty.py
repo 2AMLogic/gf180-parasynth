@@ -19,7 +19,8 @@ def test_published_artifacts_match_recorded_hashes_and_build_identity():
     assert record["verification"] == build["verification"]
     assert record["configuration"] == build["configuration"] == publish.build.CONFIG
     for key, value in publish.inspect_reports(FIXTURE).items():
-        assert record[key] == value, key
+        if key in record:  # older publications predate newer summary fields
+            assert record[key] == value, key
 
 
 def test_real_vivado_report_preserves_scope_and_final_not_estimated_timing():
@@ -59,19 +60,49 @@ def test_missing_timing_report_refuses(tmp_path):
         publish.inspect_reports(tmp_path)
 
 
-def test_external_io_timing_flag_is_refused_true_without_constrained_outputs(tmp_path):
-    # Red-first: external_io_timing_qualified must be true only when the routed
-    # report itself shows every output port carrying an output delay. A report
-    # with zero missing output delays but otherwise identical evidence qualifies;
-    # anything less must keep the flag false.
+def _no_output_delay(tmp_path, unconstrained, false_path=0, timing_clock=0):
     for p in FIXTURE.glob("*.rpt"):
         shutil.copyfile(p, tmp_path / p.name)
     p = tmp_path / "timing.rpt"
     text = p.read_text()
-    assert "checking no_output_delay (7)" in text
-    p.write_text(text.replace("checking no_output_delay (7)",
-                              "checking no_output_delay (0)"))
-    assert publish.inspect_reports(tmp_path)["external_io_timing_qualified"] is True
+    assert "There are 7 ports with no output delay specified" in text
+    text = text.replace("There are 7 ports with no output delay specified",
+                        f"There are {unconstrained} ports with no output delay specified")
+    text = text.replace("There are 0 ports with no output delay but user has a false path constraint",
+                        f"There are {false_path} ports with no output delay but user has a false path constraint")
+    clock_sentence = (f"There are {timing_clock} ports with no output delay but "
+                      "with a timing clock defined on it or propagating through it")
+    if timing_clock == 1:
+        clock_sentence = clock_sentence.replace("There are 1 ports", "There is 1 port")
+    text = text.replace(
+        "There are 0 ports with no output delay but with a timing clock defined on it or propagating through it",
+        clock_sentence + "\n\ni2s_bclk\n" if timing_clock else clock_sentence)
+    text = text.replace("checking no_output_delay (7)",
+                        f"checking no_output_delay ({unconstrained + false_path + timing_clock})")
+    p.write_text(text)
+    return publish.inspect_reports(tmp_path)
+
+
+def test_external_io_timing_flag_is_refused_true_without_constrained_outputs(tmp_path):
+    # Red-first: external_io_timing_qualified must be true only when the routed
+    # report itself shows no unconstrained output ports and no output port
+    # excused by a false path. A report doctored to that state qualifies;
+    # anything less must keep the flag false.
+    assert _no_output_delay(tmp_path, unconstrained=0)[
+        "external_io_timing_qualified"] is True
+
+
+def test_forwarded_clock_exception_is_reported_as_data(tmp_path):
+    r = _no_output_delay(tmp_path, unconstrained=0, timing_clock=1)
+    assert r["external_io_timing_qualified"] is True
+    assert r["output_delay_exceptions"] == ["i2s_bclk"]
+
+
+def test_false_path_excuses_do_not_qualify_external_io(tmp_path):
+    # A false path is not a budget: excusing outputs with false paths must
+    # keep the flag false even when no unconstrained port remains.
+    assert _no_output_delay(tmp_path, unconstrained=0, false_path=3)[
+        "external_io_timing_qualified"] is False
 
 
 def test_external_io_timing_flag_is_false_while_outputs_remain_unconstrained():
@@ -82,5 +113,9 @@ def test_external_io_timing_flag_is_false_while_outputs_remain_unconstrained():
 
 def test_published_flag_cannot_disagree_with_the_routed_report():
     record = json.loads((FIXTURE / "publication.json").read_text())
-    computed = publish.inspect_reports(FIXTURE)["external_io_timing_qualified"]
-    assert record["external_io_timing_qualified"] == computed is False
+    computed = publish.inspect_reports(FIXTURE)
+    for key, value in computed.items():
+        if key in record:
+            assert record[key] == value, key
+    assert record["external_io_timing_qualified"] is False
+    assert "output_delay_exceptions" not in record  # predates the exception class
