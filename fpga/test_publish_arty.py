@@ -57,3 +57,30 @@ def test_real_report_mutations_cannot_publish_a_timing_or_fit_pass(tmp_path, fil
 def test_missing_timing_report_refuses(tmp_path):
     with pytest.raises(ValueError):
         publish.inspect_reports(tmp_path)
+
+
+def test_external_io_timing_flag_is_refused_true_without_constrained_outputs(tmp_path):
+    # Red-first: external_io_timing_qualified must be true only when the routed
+    # report itself shows every output port carrying an output delay. A report
+    # with zero missing output delays but otherwise identical evidence qualifies;
+    # anything less must keep the flag false.
+    for p in FIXTURE.glob("*.rpt"):
+        shutil.copyfile(p, tmp_path / p.name)
+    p = tmp_path / "timing.rpt"
+    text = p.read_text()
+    assert "checking no_output_delay (7)" in text
+    p.write_text(text.replace("checking no_output_delay (7)",
+                              "checking no_output_delay (0)"))
+    assert publish.inspect_reports(tmp_path)["external_io_timing_qualified"] is True
+
+
+def test_external_io_timing_flag_is_false_while_outputs_remain_unconstrained():
+    r = publish.inspect_reports(FIXTURE)
+    assert r["missing_output_delays"] == 7
+    assert r["external_io_timing_qualified"] is False
+
+
+def test_published_flag_cannot_disagree_with_the_routed_report():
+    record = json.loads((FIXTURE / "publication.json").read_text())
+    computed = publish.inspect_reports(FIXTURE)["external_io_timing_qualified"]
+    assert record["external_io_timing_qualified"] == computed is False

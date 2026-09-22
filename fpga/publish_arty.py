@@ -66,7 +66,11 @@ def inspect_reports(directory):
         raise ValueError("DRC error or critical warning")
     return {"internal_timing_pass": True, "timing": metrics, "core_period_ns": period,
             "resources": resources, "missing_output_delays": missing, "drc": drc,
-            "external_io_timing_qualified": False, "dsp_feedback_review_complete": False,
+            # External I/O timing counts as qualified only when the routed
+            # report itself shows every output port carrying an output delay;
+            # the timing metrics above already exclude any failing endpoint.
+            "external_io_timing_qualified": missing == 0,
+            "dsp_feedback_review_complete": False,
             "hardware_playback_tested": False}
 
 
@@ -92,15 +96,20 @@ def publish(artifact, output):
     if build.sha(artifact / "build.tcl") != record["script_sha256"]:
         raise ValueError("build script changed")
     summary = inspect_reports(artifact)
+    remaining = ["physical programming, control and audio capture",
+                 f"{summary['drc'].get('DPREG-4', {}).get('count', 0)} DPREG-4 DSP feedback warnings"]
+    if summary["external_io_timing_qualified"]:
+        remaining.insert(0, "spi_miso status readback is qualified only at SCK <= 1.4 MHz, "
+                            "not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)")
+    else:
+        remaining.insert(0, "DAC/controller output timing")
     summary.update(state="BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED", configuration=build.CONFIG,
                    part=build.PART, bitstream_sha256=record["artifact_sha256"]["arty.bit"],
                    source_sha256=expected, verification=proof,
                    tool=record["vivado_version"], build_seconds=record["seconds"],
                    original_artifact_sha256=record["artifact_sha256"],
                    report_transformation="Host header omitted; numerical report contents unchanged",
-                   remaining_review=["DAC/controller output timing",
-                                     f"{summary['drc'].get('DPREG-4', {}).get('count', 0)} DPREG-4 DSP feedback warnings",
-                                     "physical programming, control and audio capture"])
+                   remaining_review=remaining)
     manifest = artifact.parent / "input-bundle.json"
     if manifest.is_file():
         summary["input_bundle"] = json.loads(manifest.read_text())
