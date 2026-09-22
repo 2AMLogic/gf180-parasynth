@@ -1,0 +1,14 @@
+34:| DPREG-4 | Warning  | DSP48E1_PregDynOpmodeZmuxP: | 13     |
+1314:DPREG-4#1 Warning
+1319:DPREG-4#2 Warning
+1324:DPREG-4#3 Warning
+1329:DPREG-4#4 Warning
+1334:DPREG-4#5 Warning
+1339:DPREG-4#6 Warning
+1344:DPREG-4#7 Warning
+1349:DPREG-4#8 Warning
+1354:DPREG-4#9 Warning
+1359:DPREG-4#10 Warning
+1364:DPREG-4#11 Warning
+1369:DPREG-4#12 Warning
+1374:DPREG-4#13 Warning
