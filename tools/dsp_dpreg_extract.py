@@ -34,11 +34,20 @@ EVIDENCE = pathlib.Path(__file__).resolve().parents[1] / (
     "fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence")
 
 # The 13 DPREG-4 instances exactly as printed by the published drc.rpt
-# (DPREG-4#1 .. #13).
+# (DPREG-4#1 .. #13), plus the un-flagged siblings of the same decimator
+# product stage (prod0, acc0) whose mapping carries the rest of the
+# accumulate: acc0's P is the C-port feedback of every prod0__0, so acc0's
+# PREG is load-bearing for the no-combinational-loop argument.
 CELLS = [
     "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
     "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0",
     "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0",
+    "u_synth/u_voice/osc2_path/p0/pair/dec/prod0",
+    "u_synth/u_voice/osc2_path/p1/pair/dec/prod0",
+    "u_synth/u_voice/osc2_path/p2/pair/dec/prod0",
+    "u_synth/u_voice/osc2_path/p0/pair/dec/acc0",
+    "u_synth/u_voice/osc2_path/p1/pair/dec/acc0",
+    "u_synth/u_voice/osc2_path/p2/pair/dec/acc0",
     "u_synth/u_voice/voice_rate_converter/p_1_out",
     "u_synth/u_voice/voice_rate_converter/p_1_out__0",
     "u_synth/u_voice/voice_rate_converter/p_1_out__1",
