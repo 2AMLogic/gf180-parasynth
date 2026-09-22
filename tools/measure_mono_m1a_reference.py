@@ -90,8 +90,11 @@ def event_measurements(audio):
         env = ref.envelope_timing(envelope, ref.SR, e["on_s"], e["on_s"] + e["gate_s"])
         if not env.get("valid") or not env.get("release_complete_40db"):
             raise ref.Refused(f"incomplete bass envelope: {env}")
-        env.update(valid=False, attack_valid=False, release_valid=True,
-                   why="40 ms RMS window qualified for release only; fast bass attack is unresolved")
+        attack = attack_fit(audio, ref.SR, pitch.value, e["on_s"], e["on_s"] + e["gate_s"])
+        env.update(attack_valid=attack["valid"], release_valid=True,
+                   attack=attack, valid=True,
+                   why="attack by waveform-domain fit (qualified against known "
+                       "signals); release by the 40 ms RMS window")
         shape = ref.am.harmonic_signature(steady, ref.SR, f0=pitch.value, kmax=12)
         trajectory = []
         for offset in (.02, .16, .30):
@@ -106,26 +109,269 @@ def event_measurements(audio):
 
 
 
+def saw_bass(t, hz, lp_hz=1056.0, nharm=48):
+    """Band-limited saw through a 12 dB/oct low-pass: the known-signal carrier.
+
+    This builds TEST SIGNALS only; it is not a model of either synthesizer."""
+    x = np.zeros_like(t)
+    k = 1
+    while k * hz < min(ref.SR / 2, nharm * hz):
+        r = k * hz / lp_hz
+        x += np.sin(2 * np.pi * k * hz * t) / (k * (1 + r * r))
+        k += 1
+    return x
+
+
+def fold_waveform(audio, sr, f0, a, b, min_folds=3, upsample=8):
+    """One carrier period of the steady waveform, energy-normalized, at 8x
+    upsampling.
+
+    Folding at the INTEGER sample period near 1/f0 misaligns successive rows
+    by the fractional remainder (0.19 samples/cycle at MIDI 43), and the row
+    mean smears the template enough to bias the fit by half a millisecond
+    (recorded in wrong-then-right). Upsampling the steady segment first
+    shrinks the remainder 8x, to under 0.01 original samples."""
+    n0_true = sr / f0
+    n0_up = max(2, round(n0_true * upsample))
+    seg = np.asarray(audio[a:b], dtype=np.float64)
+    if len(seg) < min_folds * n0_true:
+        raise ref.Refused(f"steady region too short to fold: "
+                          f"{len(seg) / n0_true:.1f} carrier periods")
+    from scipy.signal import resample_poly
+    seg_up = resample_poly(seg, upsample, 1)
+    nfold = len(seg_up) // n0_up
+    s_up = seg_up[:nfold * n0_up].reshape(nfold, n0_up).mean(axis=0)
+    energy = math.sqrt(float(np.sum(s_up * s_up)))
+    if not math.isfinite(energy) or energy <= 0:
+        raise ref.Refused("empty or non-finite waveform fold")
+    return s_up / energy, n0_up, upsample
+
+
+def aligned_template(s_up, n0_up, upsample, a_fold, start, nfit):
+    """The fold template sampled at absolute time: s[(t - a_fold) mod 1/f0]
+    for t = start .. start+nfit, linearly interpolated on the upsampled grid.
+    The template is phase-locked to ABSOLUTE sample time: fold index k is the
+    waveform at (t - a_fold) mod 1/f0. Getting this sign wrong twice is
+    recorded in the session's wrong-then-right list."""
+    t_up = (np.arange(nfit) + start - a_fold) * upsample
+    k = np.mod(t_up, n0_up)
+    lo = np.floor(k).astype(int)
+    frac = k - lo
+    return s_up[lo] * (1 - frac) + s_up[(lo + 1) % n0_up] * frac
+
+
+#: The waveform-domain fit models the whole analysis window, so a wrong fit
+#: cannot hide by explaining only the sustain. Below this fraction of window
+#: energy explained, the periodic-carrier model does not describe the signal
+#: (noise, drums, heavy modulation) and there is no attack estimate. Known
+#: signals fit at >= 0.99; frozen reference and model audio measured
+#: 0.79-0.98, so the threshold sits well under the worst legitimate case.
+MIN_EXPLAINED_RATIO = 0.6
+
+
+def _sliding_dot(y, w):
+    """Valid-mode correlation of y with w, FFT-based (the T loop dominates
+    the fit's cost; a direct convolution per candidate is ~10x slower).
+
+    (y ⋆ w)[j] = sum_k y[k+j] w[k]; zero-padded to N >= len(y)+len(w) so the
+    non-negative lags are wrap-free, valid output is full[0:len(y)-len(w)+1].
+    The first version read the wrong offset and the known-signal suite caught
+    it on the canonical 8 ms case (wrong-then-right)."""
+    from numpy.fft import rfft, irfft
+    n = 1 << int(math.ceil(math.log2(len(y) + len(w))))
+    full = irfft(rfft(y, n) * np.conj(rfft(w, n)), n)
+    return full[:len(y) - len(w) + 1]
+
+
+def attack_fit(audio, sr, f0, on_s, off_s, *, fold_ms=280.0, guard_ms=20.0,
+               fit_ms=150.0, pre_ms=2.0, t_max_ms=25.0, step_ms=0.25):
+    """10-90% attack from a waveform-domain fit; resolves fast attacks on
+    low carriers where no RMS window can.
+
+    Why this shape: an 8 ms attack needs ~125 Hz of envelope bandwidth, which
+    overlaps the 65 Hz harmonic spacing of the bass -- envelope and carrier
+    ripple are entangled in ANY pointwise envelope (analytic included). But
+    during the attack the signal is the steady waveform scaled by the
+    envelope, so the fit can use the full bandwidth: fold the steady gate
+    into a one-period template s, then least-squares
+        x(t) = A * s_aligned(t) * (0 before t0; ((t-t0)/T)^p inside; 1 after)
+    over the window. A short-T-in-sustain solution must leave the true
+    transition unexplained, so the full-window residual cannot prefer it.
+
+    The ramp length T is refined to single samples around the coarse winner:
+    a 0.25 ms grid alone quantized T by 12 samples and cost up to 1.9 ms of
+    span error on quadratic shapes (recorded in wrong-then-right).
+
+    Known-signal qualification: spans 0.5-20 ms, shapes p in {0.5, 1, 2},
+    MIDI 36/43, four carrier phases, dull/bright carriers and a bright
+    attack transient. Demonstrated worst error 0.50 ms over 56 cases; the
+    qualification refuses at 1.0 ms (see qualify_attack_basis)."""
+    audio = np.asarray(audio, dtype=np.float64)
+    if not np.isfinite(audio).all() or ref.am.is_silent(audio):
+        raise ref.Refused("attack fit input is silent or non-finite")
+    on, off = round(on_s * sr), round(off_s * sr)
+    start = on - round(pre_ms * 1e-3 * sr)
+    nfit = round(fit_ms * 1e-3 * sr)
+    b_fold = off - round(guard_ms * 1e-3 * sr)
+    if start < 0 or start + nfit > len(audio) or b_fold > len(audio):
+        raise ref.Refused("attack fit window truncates the audio")
+    a_fold = off - round((fold_ms + guard_ms) * 1e-3 * sr)
+    s_up, n0_up, upsample = fold_waveform(audio, sr, f0, a_fold, b_fold)
+    s_aligned = aligned_template(s_up, n0_up, upsample, a_fold, start, nfit)
+    window = audio[start:start + nfit]
+    y = window * s_aligned
+    y2 = s_aligned * s_aligned
+    x2 = float(np.sum(window * window))
+    if x2 <= 0:
+        raise ref.Refused("attack fit window is silent")
+    suffix_y = np.concatenate(([0.], np.cumsum(y[::-1])))[::-1]
+    suffix_y2 = np.concatenate(([0.], np.cumsum(y2[::-1])))[::-1]
+
+    def best_over(p, n_spans):
+        rows = []
+        for n_span in n_spans:
+            u = np.arange(n_span) / n_span
+            ramp = u ** p
+            bw = _sliding_dot(y, ramp)
+            bw2 = _sliding_dot(y2, ramp * ramp)
+            num = bw + suffix_y[np.arange(len(bw)) + n_span]
+            den = bw2 + suffix_y2[np.arange(len(bw2)) + n_span]
+            resid = x2 - num ** 2 / np.maximum(den, 1e-30)
+            i = int(np.argmin(resid))
+            rows.append((float(resid[i]), n_span, i))
+        return min(rows)
+
+    coarse = np.unique(np.maximum(2, np.round(
+        np.arange(1.0, t_max_ms + step_ms, step_ms) * 1e-3 * sr))).astype(int)
+    # Refine EVERY shape: a linear ramp is close enough to quadratic that the
+    # coarse stage can hand the wrong p to a p-only refinement (recorded in
+    # wrong-then-right as a -0.55 ms bias on MIDI 43 cases).
+    best = (math.inf, None)
+    for p in (0.5, 1.0, 2.0, 3.0, 4.0):
+        resid, n_coarse, _ = best_over(p, coarse)
+        fine = np.unique(np.maximum(2, np.arange(n_coarse - 16, n_coarse + 17))).astype(int)
+        resid_f, n_span, i = best_over(p, fine)
+        if resid_f < best[0]:
+            best = (resid_f, (p, n_span, i))
+    resid_best, (p_best, n_span, i) = best
+    kfrac = 0.9 ** (1 / p_best) - 0.1 ** (1 / p_best)
+    explained = 1.0 - resid_best / x2
+    if not math.isfinite(explained) or explained < MIN_EXPLAINED_RATIO:
+        raise ref.Refused(
+            f"waveform-fit attack model explains only {explained:.2f} of the "
+            f"window; the periodic-carrier model does not describe this audio "
+            f"(threshold {MIN_EXPLAINED_RATIO})")
+    return {"t0_ms": i * 1000 / sr - pre_ms, "ramp_ms": n_span * 1000 / sr,
+            "shape_p": p_best, "attack_10_90_ms": n_span * kfrac * 1000 / sr,
+            "explained_ratio": round(explained, 4), "valid": True}
+
+
 def qualify_attack_basis():
-    """Known 8 ms 10–90% linear rise, independent of either synthesizer."""
-    t = np.arange(round(1.8 * ref.SR)) / ref.SR
-    envelope = np.clip((t - .1) / .01, 0, 1)
-    envelope[t >= .7] = np.exp(-(t[t >= .7] - .7) / .1)
-    rows = []
+    """Closed-form ground truth for the attack estimator, plus the control
+    that keeps the rejected RMS-window basis red.
+
+    Every signal here has an exactly known 10-90% attack span by
+    construction -- independent of both synthesizers. The estimator may not
+    gate a scorecard case unless this suite passes (docs/failure-modes.md)."""
+    cases = []
     for note in (36, 43):
         hz = 440 * 2 ** ((note - 69) / 12)
         for phase in (0., .25, .5, .75):
-            audio = envelope * np.sin(2 * np.pi * (hz * t + phase))
-            rms = ref.am.rms_envelope(audio, ms=ENVELOPE_WINDOW_MS, sr=ref.SR)
-            timing = ref.envelope_timing(rms, ref.SR, .1, .7)
-            if not timing.get("valid"):
-                raise ref.Refused("known-signal attack probe produced no measurement")
-            rows.append({"note": note, "phase_cycles": phase,
-                         "observed_ms": timing["attack_10_90_ms"]})
-    return {"valid": False, "known_attack_10_90_ms": 8.0,
-            "window_ms": ENVELOPE_WINDOW_MS, "observations": rows,
-            "max_error_ms": max(abs(r["observed_ms"] - 8.) for r in rows),
-            "why": "release-window qualification does not qualify fast bass attacks"}
+            cases.append((note, hz, phase, 8., 1.0, 1056., 0.))     # canonical
+        for phase in (0., .5):
+            for span in (0.5, 1., 2., 4., 16., 20.):                # span sweep
+                cases.append((note, hz, phase, span, 1.0, 1056., 0.))
+            for shape in (0.5, 2.0):                                # shape sweep
+                cases.append((note, hz, phase, 8., shape, 1056., 0.))
+            for lp in (400., 3000.):                                # spectral
+                cases.append((note, hz, phase, 8., 1.0, lp, 0.))
+            for bright in (0.3, 0.6):                               # fenv stand-in
+                cases.append((note, hz, phase, 8., 1.0, 1056., bright))
+
+    def render_known(note, hz, phase, span_ms, shape, lp, bright):
+        sr = ref.SR
+        t = np.arange(round(1.8 * sr)) / sr
+        on = .1
+        kfrac = 0.9 ** (1 / shape) - 0.1 ** (1 / shape)
+        env = np.clip((t - on) / ((span_ms / 1000.) / kfrac), 0, 1) ** shape
+        off = on + .6
+        rel = t >= off
+        env[rel] = np.exp(-(t[rel] - off) / .1)
+        car = saw_bass(t - phase / hz, hz, lp) + .535 * saw_bass(t - phase / hz, 2 * hz, lp)
+        if bright:
+            car = car + bright * np.sin(2 * np.pi * 20 * hz * t) * (t >= on) \
+                * np.exp(-np.maximum(t - on, 0) / .010)
+        return env * car
+
+    observations = []
+    for note, hz, phase, span_ms, shape, lp, bright in cases:
+        audio = render_known(note, hz, phase, span_ms, shape, lp, bright)
+        row = attack_fit(audio, ref.SR, hz, .1, .7)
+        observations.append({"midi": note, "phase_cycles": phase,
+                             "known_10_90_ms": span_ms, "shape_p": shape,
+                             "carrier_lp_hz": lp, "bright_transient": bright,
+                             "measured_ms": row["attack_10_90_ms"],
+                             "error_ms": row["attack_10_90_ms"] - span_ms,
+                             "explained_ratio": row["explained_ratio"]})
+    max_known_error = max(abs(o["error_ms"]) for o in observations)
+    # The gate sits at twice the demonstrated worst error (0.50 ms across the
+    # 56 cases below, concentrated at MIDI 43 phase 0.5): above legitimate
+    # variance, far below any broken estimator, fixed before model comparison.
+    if max_known_error >= 1.0:
+        raise ref.Refused(
+            f"attack estimator failed its known-signal suite: worst error "
+            f"{max_known_error:.2f} ms over {len(observations)} cases")
+
+    # The rejected basis must stay red on the same canonical signals.
+    window_rows = []
+    for note, hz, phase, *_ in (c for c in cases if c[3] == 8. and c[4] == 1.0
+                                and c[5] == 1056. and c[6] == 0.):
+        audio = render_known(note, hz, phase, 8., 1.0, 1056., 0.)
+        env = ref.am.rms_envelope(audio, ms=ENVELOPE_WINDOW_MS, sr=ref.SR)
+        timing = ref.envelope_timing(env, ref.SR, .1, .7)
+        if not timing.get("valid"):
+            raise ref.Refused("40 ms window control produced no attack measurement")
+        window_rows.append({"midi": note, "phase_cycles": phase,
+                            "observed_ms": timing["attack_10_90_ms"],
+                            "error_ms": timing["attack_10_90_ms"] - 8.})
+    min_window_error = min(abs(r["error_ms"]) for r in window_rows)
+    if min_window_error <= 5.0:
+        raise ref.Refused(
+            "the 40 ms RMS window control no longer fails the known attack; "
+            "it cannot catch the defect it exists for")
+    lead_rows = []
+    for note, hz, phase, *_ in (c for c in cases if c[3] == 8. and c[4] == 1.0):
+        audio = render_known(note, hz, phase, 8., 1.0, 1056., 0.)
+        env = ref.am.rms_envelope(audio, ms=5.0, sr=ref.SR)
+        timing = ref.envelope_timing(env, ref.SR, .1, .7)
+        lead_rows.append({"midi": note, "phase_cycles": phase,
+                          "observed_ms": timing.get("attack_10_90_ms"),
+                          "error_ms": (timing.get("attack_10_90_ms") - 8.)
+                          if timing.get("valid") else None})
+    lead_errors = [abs(r["error_ms"]) for r in lead_rows if r["error_ms"] is not None]
+    if lead_errors and max(lead_errors) <= 5.0:
+        raise ref.Refused(
+            "the 5 ms lead window measures the known bass attack within 5 ms "
+            "on every phase; the two-window control premise is stale")
+    return {"valid": True,
+            "estimator": "waveform-domain fit: steady-period fold template, "
+                         "piecewise power-ramp least squares over the note window",
+            "known_signal_count": len(observations),
+            "max_known_error_ms": round(max_known_error, 3),
+            "min_explained_ratio": min(o["explained_ratio"] for o in observations),
+            "observations": observations,
+            "window_control": {"window_ms": ENVELOPE_WINDOW_MS,
+                               "min_error_ms": round(min_window_error, 2),
+                               "observations": window_rows,
+                               "why": "the basis that made attack unqualified; "
+                                      "must stay red on these signals"},
+            "lead_window_observations": lead_rows,
+            "refusals": ["silent or non-finite input",
+                         "steady region under 3 carrier periods",
+                         "fit window past end of audio",
+                         f"explained energy under {MIN_EXPLAINED_RATIO}"],
+            "scope": "10-90% span of the audio attack, both sides measured by "
+                     "the same fit; not an internal VCA-time claim"}
 
 
 def qualify_envelope_basis():
@@ -149,7 +395,8 @@ def qualify_envelope_basis():
     if rows["bass_window"]["max_error_ms"] >= 10 or rows["lead_window"]["max_error_ms"] <= 10:
         raise ref.Refused("bass envelope qualification or wrong-window control failed")
     return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
-            "scope": "40 ms audio-envelope window qualified for release ONLY; not internal VCA timing",
+            "scope": "40 ms RMS window qualified for release ONLY; attack is "
+                     "measured by the waveform-domain fit, not by any RMS window",
             "attack": qualify_attack_basis(),
             "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release; early h4 window could not resolve the short filter transient"}
 
