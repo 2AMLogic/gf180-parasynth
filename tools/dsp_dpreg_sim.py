@@ -109,10 +109,14 @@ def build_stimulus():
     for f, pat in enumerate(patterns):
         rows.append((0, 0, 0, 0, 15, 0, 0))         # idle: tap holds 15
         for tap in range(16):
-            mid_rst = 1 if (f == 3 and tap < 3) else 0
-            rows.append((1, 0, pat[tap % len(pat)],
+            # frame 3: D1 accumulate reset mid-stream (rst1)
+            # frame 5: D2 A-pipeline reset mid-stream (rsta2) -- the RTL's
+            #          rst_n falls on a RESET register write, any cycle
+            mid_rst1 = 1 if (f == 3 and tap < 3) else 0
+            mid_rst2 = 1 if (f == 5 and 4 <= tap < 7) else 0
+            rows.append((1, mid_rst2, pat[tap % len(pat)],
                          c2pat[(tap + f) % len(c2pat)], tap,
-                         1 if tap < 15 else 0, mid_rst))
+                         1 if tap < 15 else 0, mid_rst1))
         rows.append((0, 0, 0, 0, 15, 0, 0))
     return rows
 
@@ -394,13 +398,14 @@ def main():
     loop_evidence = vlog2.exists() and re.search(
         r"iteration limit|INFINITE|stopped|abort", vlog2.read_text(),
         re.I) is not None
-    red1 = verdict[1]["wrong_cycles"] > 0
-    red2 = (verdict[2]["x_cycles"] > 0 or verdict[2]["sim_aborted"])
+    red1 = verdict[1]["wrong_cycles"] > 0 or verdict[1]["x_cycles"] > 0
+    red2 = (verdict[2]["wrong_cycles"] > 0 or verdict[2]["x_cycles"] > 0
+            or verdict[2]["sim_aborted"])
     clean0 = (not verdict[0]["sim_aborted"] and
               verdict[0]["x_cycles"] == 0 and verdict[0]["wrong_cycles"] == 0)
     iver = subprocess.run(["iverilog", "-V"], capture_output=True, text=True)
     version_line = iver.stdout.splitlines()[0] if iver.stdout else "unknown"
-    commit = (EVIDENCE / "unisim_source_commit.txt").read_text().split()[0]
+    commit = (EVIDENCE / "unisim_source_commit.txt").read_text().split("=")[-1].split()[0]
     print(json.dumps(verdict, indent=2))
     print(f"pregflip control red : {'yes' if red1 else 'NO'} "
           f"(wrong={verdict[1]['wrong_cycles']}, x={verdict[1]['x_cycles']})")
