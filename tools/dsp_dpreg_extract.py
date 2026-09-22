@@ -255,8 +255,8 @@ def main():
         f"cd {REMOTE_DIR}\n"
         "rm -f dsp_cells_dump.txt vivado_extract.log vivado_extract.jou\n"
         "flock -w 7200 /home/ubuntu/vivado.lock "
-        "vivado -mode batch -nolog -nojournal -source dsp_dpreg_extract.tcl "
-        "-log vivado_extract.log\n"
+        "vivado -mode batch -source dsp_dpreg_extract.tcl "
+        "-log vivado_extract.log -journal vivado_extract.jou\n"
     )
     r = sh(["ssh", BOX, "bash -s"], input=run)
     if r.returncode != 0:
