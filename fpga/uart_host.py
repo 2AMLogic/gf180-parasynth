@@ -944,6 +944,17 @@ def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
     return report
 
 
+def _row_expect(r):
+    """The decoded intent of one planned row: what the device should do."""
+    if r.kind == "write":
+        flag, sec, addr, data = decode_reg_frame(r.packet[1:7])
+    elif r.kind == "event":
+        flag, sec, addr, data = decode_reg_frame(r.packet[3:9])
+    else:
+        return None
+    return {"flag": flag, "sec": sec, "addr": addr, "data": data}
+
+
 def write_capture(prefix: str, rows: list, *, origin: int,
                   baud: int = DEFAULT_BAUD) -> str:
     """The exact bytes the tool emits, in plan order, with the schedule the
@@ -953,14 +964,23 @@ def write_capture(prefix: str, rows: list, *, origin: int,
     bytes through the UART RX of the real wrapper -- what is verified there
     is what this CLI emits, not a bench-scripted lookalike."""
     base = rows[0].send_frame if rows else 0
+    parent = os.path.dirname(os.path.abspath(prefix))
+    os.makedirs(parent, exist_ok=True)
     cmds_path, plan_path = f"{prefix}.cmds", f"{prefix}.plan.json"
     with open(cmds_path, "w") as fh:
         for row in rows:
             fh.write(f"S {row.send_frame - base} {row.packet.hex(' ')}\n")
+    # "packet" is what the tool EMITS (the stimulus); "expect" is the decoded
+    # schedule the tool INTENDED (the expectation). Keeping them separate lets
+    # a replay mutate the emitted bytes and still know what should have
+    # happened -- a stimulus-only mutation is otherwise invisible by
+    # construction, which is exactly the kind of self-consistent pass this
+    # repository does not trust.
     record = {
         "origin": origin, "baud": baud, "base_send_frame": base,
         "rows": [{"index": r.index, "kind": r.kind,
                   "packet": r.packet.hex(),
+                  "expect": _row_expect(r),
                   "send_frame": r.send_frame - base,
                   "accept_frame": r.accept_frame - base,
                   "due": (r.due - base) if r.due >= 0 else -1,
@@ -1020,6 +1040,10 @@ def main(argv=None) -> int:
     common.add_argument("--hold-frames", type=int, default=argparse.SUPPRESS)
     common.add_argument("--fixture", default=argparse.SUPPRESS)
     common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
+    common.add_argument("--capture", default=argparse.SUPPRESS, metavar="PREFIX",
+                        help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
+                             "S-line format) and PREFIX.plan.json, for replay through "
+                             "the wrapper sim (fpga/verify_uart_bridge.py --replay)")
     sub = ap.add_subparsers(dest="cmd")
     for name, help_text in (("load", "load the preset image"),
                             ("note-on", "start a note"),

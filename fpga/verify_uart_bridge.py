@@ -343,6 +343,92 @@ def build_cmd_file(planned_segments, reset_frames, path):
                 fh.write(f"R {reset_frames[i]}\n")
 
 
+def rows_from_capture(prefix):
+    """Rebuild (items, planned_rows, origin, baud) from a CLI capture written
+    by uart_host.write_capture: <prefix>.cmds (bench S-lines) and
+    <prefix>.plan.json (the planner's own rows, rebased). The bytes replayed
+    are the bytes the CLI emitted -- the expectation is re-derived from the
+    same packets, so the bench checks the CLI's schedule, not a lookalike."""
+    import struct
+    plan = json.loads(Path(prefix + ".plan.json").read_text())
+    items, rows = [], []
+    for r in plan["rows"]:
+        pkt = bytes.fromhex(r["packet"])
+        accept = r["accept_frame"]
+        # the EXPECTATION comes from the captured intent, the STIMULUS from
+        # the emitted bytes -- so a wrong-value mutation of the bytes is
+        # visible as a mismatch instead of cancelling itself out
+        exp = r.get("expect") or {}
+        if r["kind"] == "write":
+            items.append(("write", exp["flag"], exp["sec"], exp["addr"],
+                          exp["data"]))
+            rows.append(uh.Placed(r["index"], "write", pkt, r["send_frame"],
+                                  (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
+                                  accept, -1, r["apply_frame"]))
+        elif r["kind"] == "event":
+            due = r["due"] if r["due"] >= 0 else (pkt[1] | (pkt[2] << 8))
+            items.append(("event", due, exp["flag"], exp["sec"], exp["addr"],
+                          exp["data"]))
+            rows.append(uh.Placed(r["index"], "event", pkt, r["send_frame"],
+                                  (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
+                                  accept, due, due))
+        else:
+            raise ValueError(f"capture row kind {r['kind']!r} not replayable")
+    return items, [rows], plan.get("origin", 0), plan.get("baud", uh.DEFAULT_BAUD)
+
+
+def simulate_replay(prefix, outdir, inject=None):
+    """Run the wrapper bench on a CLI capture (see rows_from_capture)."""
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    items, planned_segments, _origin, _baud = rows_from_capture(prefix)
+    cmd_path = outdir / "uart_cmds.txt"
+    build_cmd_file(planned_segments, [], cmd_path)
+    last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
+                   + [0])
+    last_send = max([r.send_frame for rows in planned_segments for r in rows]
+                    + [0])
+    tail_frames = max(800, last_due - last_send + 800)
+
+    resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
+    srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
+        + [str(BRIDGE), str(WRAPPER)]
+    defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
+    if inject:
+        defines.append(f"INJECT_BUG_{inject}")
+    iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
+    if not iverilog or not vvp:
+        print("verify_uart_bridge: REFUSED -- iverilog/vvp not on PATH")
+        return None
+    exe = outdir / "tb_uart_bx.vvp"
+    compile_cmd = [iverilog, "-g2012", "-o", str(exe)] + [f"-D{d}" for d in defines] + srcs
+    r = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print("verify_uart_bridge: compile failed:\n" + r.stdout + r.stderr)
+        return None
+    files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+    run_cmd = [vvp, "-n", str(exe), f"+uart={cmd_path}",
+               f"+i2s={files['i2s']}", f"+wrs={files['wrs']}",
+               f"+txd={files['txd']}", f"+samp={files['samp']}",
+               f"+frames={tail_frames}"]
+    try:
+        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=3600,
+                           cwd=str(ROOT / "rtl-sketch"))
+    except subprocess.TimeoutExpired:
+        print("verify_uart_bridge: simulation timed out")
+        return None
+    report = [l for l in r.stdout.splitlines() if l.startswith("tb_uart_bx")]
+    (outdir / "transcript.txt").write_text("\n".join(report) + "\n")
+    if r.returncode != 0:
+        print("verify_uart_bridge: vvp failed:\n" + r.stdout + r.stderr)
+        return None
+    return {"outdir": outdir, "items": items, "bodies": [items],
+            "planned": planned_segments, "reset_frames": [],
+            "report": report, "files": files,
+            "scenario": "replay", "inject": None,
+            "defines": defines}
+
+
 def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -725,6 +811,11 @@ def main(argv=None) -> int:
     ap.add_argument("--inject", choices=INJECTS, default=None)
     ap.add_argument("--start-red", action="store_true",
                     help="run the held scenario against the ported stub; must FAIL")
+    ap.add_argument("--replay", type=Path, default=None, metavar="PREFIX",
+                    help="replay a CLI capture (<PREFIX>.cmds + <PREFIX>.plan.json "
+                         "from uart_host --capture) through the wrapper sim")
+    ap.add_argument("--replay-name", default=None,
+                    help="scenario label for the replay record (default: replay)")
     ap.add_argument("--rtl", type=Path, default=None,
                     help="wrapper file to compile (default: fpga/rtl/arty_a7_top.v)")
     ap.add_argument("--jobs", type=int, default=3)
@@ -753,6 +844,25 @@ def main(argv=None) -> int:
         print("verify_uart_bridge: start red confirmed -- the bench fails against "
               "a behaviour-free stub, as it must")
         return 0
+
+    if a.replay:
+        name = a.replay_name or "replay"
+        run = simulate_replay(str(a.replay), outdir / name)
+        if run is None:
+            return 2
+        ok, comp, detail = analyze(run)
+        rec = record_for(run, comp, ok)
+        rec["capture"] = str(a.replay)
+        (outdir / name / "verification.json").write_text(
+            json.dumps(rec, indent=2) + "\n")
+        print(f"verify_uart_bridge[{name}]: {rec['state']} -- "
+              f"writes {comp.get('writes_seen')}/{comp.get('writes_sent')}, "
+              f"timing bad {comp.get('frame_pred_bad')}, corrupt {comp.get('writes_bad')}, "
+              f"I2S mismatch {comp.get('wire_mismatch')} over {comp.get('periods')} periods, "
+              f"errs {comp.get('errs_seen')} {comp.get('err_codes')}")
+        for d in detail[:6]:
+            print(f"verify_uart_bridge[{name}]:   {d}")
+        return 0 if rec["state"] == "PASS" else 1
 
     work = []
     if a.scenario == "all":
