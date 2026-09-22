@@ -52,3 +52,5 @@ was retained, its hash matches the initial observation, and reanalysis from
 that bound audio reproduces all metrics. A reporting-path regression test now
 checks both DSP source paths. The record distinguishes analysis provenance
 from the original render worktree and records audio reuse explicitly.
+
+The v2 scorer treats Model D as a separate corroboration milestone, following the declared required-measurement list. Unqualified attack and filter-envelope evidence still keep M1A at NO VERDICT. See [the fixed volume challenger and oscillator diagnosis](volume-mapping/README.md) for the next measured component improvement.
