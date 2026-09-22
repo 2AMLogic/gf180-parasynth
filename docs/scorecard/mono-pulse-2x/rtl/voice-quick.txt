@@ -1,0 +1,19 @@
+verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['waves3']
+  [waves3] shark / revsaw / wide / narrow ('shark', 'revsaw', 'pulse29') at note 33: frames 0..575 (576), 5 writes; blep windows 3; gate on 576/576, trig 1
+  [waves3] shark / revsaw / wide / narrow ('pulse15', 'shark', 'revsaw') at note 96: frames 576..1151 (576), 4 writes; blep windows 124; gate on 576/576, trig 0
+  [waves3] shark / revsaw / wide / narrow ('revsaw', 'pulse29', 'pulse15') at note 69: frames 1152..1727 (576), 4 writes; blep windows 30; gate on 576/576, trig 0
+  [waves3] shark / revsaw / wide / narrow ('pulse29', 'pulse15', 'shark') at note 21: frames 1728..2303 (576), 4 writes; blep windows 0; gate on 576/576, trig 0
+  [waves3] shark / revsaw / wide / narrow ('shark', 'shark', 'shark') at note 108: frames 2304..2879 (576), 4 writes; blep windows 250; gate on 576/576, trig 0
+  2880 frames, 166 register writes; final amp level 15853215, filt level 14427903
+verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X), 2880 frames, 166 writes at the register port
+  sim: tb_voice: 166 writes, 2880 frames, 0 sample mismatches, worst |error| 0 LSB
+  sim: tb_voice: cycles from go to sample_valid: best 94, mean 115, worst 189 (chip: go at cycle 8 of 256)
+  sim: tb_voice: PASS
+  sim: tb_voice.v:174: $finish called at 14745711000 (1ps)
+verify_voice: cycles from go to sample_valid: best 94, mean 115.4, worst 189 (of 256 - 8 in the chip)
+  [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+  [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+  [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+  [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+  [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+verify_voice: PASS -- 2880 frames, every sample and every tap identical to the model; final state identical

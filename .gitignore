@@ -23,3 +23,6 @@ build/
 
 # the frozen reference profile: hashes and provenance are committed, audio is not
 refprofile/cache/
+
+# Pinned CI simulator source and release binary cache.
+.tools/verilator-5.052/

@@ -1,0 +1,4537 @@
+{
+  "schema": "mono-pulse-2x-experiment-v1",
+  "case_id": "M5A",
+  "evidence": "model-only; rectangular 2x rendering is not implemented in RTL",
+  "source_commit": "916243ed9eef89d05478335a696353c7191fa374",
+  "source_dirty": false,
+  "source_sha256": {
+    "tools/measure_mono_pulse_2x.py": "cbbc6d72b31b0ab67377b631780b3056226933a61375b68cf6bc134e18b55310",
+    "model/voice_fx.py": "3ff5fdbf9ffe07db262862370b05ccc9865d3a31de93baa2b357852cde6a9c56",
+    "tools/mono_m5a_score.py": "a27fbddee20a0827514978dc4a7951b8c4893e39d4e5c81c642b0b7d9f952d0a",
+    "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36",
+    "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
+    "model/fixed.py": "f5687bec088f7fd950c4a9a17027fb0e1d0e59dfe11fec61c3d77eab3a700da9",
+    "tools/measure_m5a_filter_oversample.py": "e37b8780ee45af0063e0fc53ad8b9c16fdfcc7e724561f66be00c4055aca9b31",
+    "tools/compare_m5a_i2s_candidate.py": "7f52f76a11a81a5e639890dd84c34d1e05892317b0917454a69ffde66dc92269"
+  },
+  "fixed_duty_percent": 47.89999723434448,
+  "headroom_control": "baseline pulse multiplied by the candidate's exact 27853/32768 gain before mixing",
+  "wrong_then_right": {
+    "reported_sound_measurements_corrected": 0,
+    "complete_phrase_measurements": 4,
+    "start_red": "Fourier/DC test rejected saw-only renderer; optional-flag test rejected absent implementation"
+  },
+  "controls": {
+    "disabled_bit_identical_to_baseline": true,
+    "disabled_not_promoted": true,
+    "candidate_changes_audio": true
+  },
+  "rows": {
+    "baseline": {
+      "analysis_version": "m5a-score-v3",
+      "metrics": {
+        "Pitch": {
+          "value": -0.14813,
+          "reference": 0.0,
+          "error": -0.14813,
+          "units": "cents",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+        },
+        "Harmonic shape": {
+          "value": 7.56136,
+          "reference": 0.0,
+          "error": 7.56136,
+          "units": "dB",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "dB per measured partial; fixed screening limit"
+        },
+        "Foldback energy": {
+          "value": 10.27447,
+          "reference": 0.0,
+          "error": 10.27447,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+        },
+        "Envelope attack": {
+          "value": 8.64583,
+          "reference": 3.33333,
+          "error": 5.3125,
+          "units": "ms",
+          "tolerance": 5.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+        },
+        "Envelope release": {
+          "value": 1234.29167,
+          "reference": 1243.22917,
+          "error": -8.9375,
+          "units": "ms",
+          "tolerance": 125.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+        },
+        "Gain": {
+          "value": -17.76626,
+          "reference": -19.18712,
+          "error": 1.42087,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB; fixed half/double amplitude screening range"
+        },
+        "Clipping": {
+          "value": 0.0,
+          "reference": 0.0,
+          "error": 0.0,
+          "units": "%",
+          "tolerance": 0.01,
+          "valid": true,
+          "tolerance_basis": "% samples at full-scale rail"
+        }
+      },
+      "audio": "build/mono-pulse-2x/M5A-baseline.wav",
+      "model_configuration": {
+        "name": "selected-m5a-reconstructed-filter2x",
+        "oscillator_oversample_2x": true,
+        "filter_rate_converted": true,
+        "filter_preserve_headroom": true,
+        "filter_causal": true,
+        "pulse479_filter_candidate": true,
+        "filter_g_exact": false,
+        "filter_k_comp": true,
+        "filter_oversample_factor": 2,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse479",
+        "pulse_effective_duty_percent": 47.89999723434448,
+        "saw_cutoff_hz": 20000,
+        "saw_volume_correction_db": -0.45428,
+        "oscillator_pulse_oversample_2x": false,
+        "label": "pulse-rate-experiment/baseline",
+        "engine_profile": "custom",
+        "control_defaults_profile": "selected",
+        "pulse_shape_input": "pulse29",
+        "envelope_calibration_source": "frozen M5A Mini V3 measurements",
+        "injection": null,
+        "saw_cutoff_override_hz": 20000
+      },
+      "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+      "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+      "cutoff_calibration": {
+        "block_size_samples": 16,
+        "emphasis": 0.98,
+        "f0_hz": 14072.862206739199,
+        "f0_hz_repeats": [
+          14072.862206739199,
+          14072.862206739199,
+          14072.862206739199
+        ],
+        "knob": 1.0,
+        "method": "measured self-oscillation ring; dominant frequency",
+        "parameter_readbacks": [
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          }
+        ],
+        "prominence_db_repeats": [
+          10.350361942445932,
+          10.350361942445932,
+          10.350361942445932
+        ],
+        "repeat_count": 3,
+        "repeat_range_hz": 0.0,
+        "wrong_block_control": {
+          "block_size_samples": 512,
+          "caught": true,
+          "f0_hz": 14494.795083545734,
+          "separation_from_pinned_hz": 421.9328768065352
+        }
+      },
+      "model_segments": [
+        {
+          "wave": "saw",
+          "samples": 647956,
+          "offset_samples": 0,
+          "trimmed_candidate_tail_samples": 44
+        },
+        {
+          "wave": "pulse",
+          "samples": 647956,
+          "offset_samples": 657556,
+          "trimmed_candidate_tail_samples": 44
+        }
+      ],
+      "event_diagnostics": [
+        {
+          "wave": "saw",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937498864519547,
+                "h3": -14.812974077355774,
+                "h4": -17.589176394236215,
+                "h5": -19.067396900611527,
+                "h6": -21.60399433236696,
+                "h7": -23.644678254276364,
+                "h8": -24.866969030685738,
+                "h9": -26.351457721385948,
+                "h10": -28.474626257547513,
+                "h11": -29.776230759857643,
+                "h12": -30.40170523433425
+              },
+              "foldback_db": -48.21283,
+              "alias_band_power_dbfs": -58.58824,
+              "total_signal_power_dbfs": -10.37584,
+              "rms_dbfs": -10.37573
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937124150256666,
+                "h3": -14.813197774406008,
+                "h4": -17.58883726687744,
+                "h5": -19.067667542173645,
+                "h6": -21.60358435570911,
+                "h7": -23.64513246382161,
+                "h8": -24.866529386647347,
+                "h9": -26.35188152501094,
+                "h10": -28.47427076269846,
+                "h11": -29.776855211019473,
+                "h12": -30.4009451549064
+              },
+              "foldback_db": -48.2114,
+              "alias_band_power_dbfs": -65.97734,
+              "total_signal_power_dbfs": -17.76637,
+              "rms_dbfs": -17.76626
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00498,
+            "reference": 0.14315,
+            "model_minus_reference": -0.14813
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.7681,
+            "h3": -5.1166,
+            "h4": -5.5636,
+            "h5": -4.6617,
+            "h6": -5.6897,
+            "h7": -5.9621,
+            "h8": -5.1495,
+            "h9": -5.3112,
+            "h10": -5.1394,
+            "h11": -4.3443,
+            "h12": -3.2533
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -48.2114,
+            "reference": -50.1287,
+            "excess_over_reference_db": 1.9173
+          },
+          "envelope_ms": {
+            "attack_model": 8.7292,
+            "attack_reference": 7.3333,
+            "release_model": 1234.2917,
+            "release_reference": 1243.2292
+          },
+          "gain_dbfs": {
+            "model": -17.7663,
+            "reference": -19.1871
+          }
+        },
+        {
+          "wave": "saw",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.18508799237366,
+                "h3": -17.34277525723917,
+                "h4": -18.23009236544963,
+                "h5": -22.52996857892423,
+                "h6": -24.854859824180213,
+                "h7": -27.14672144315893,
+                "h8": -30.174874727945177,
+                "h9": -31.479969815379345,
+                "h10": -34.48706145670735,
+                "h11": -40.14929766869659,
+                "h12": null
+              },
+              "foldback_db": -47.1927,
+              "alias_band_power_dbfs": -58.71506,
+              "total_signal_power_dbfs": -11.52258,
+              "rms_dbfs": -11.52316
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.184676428559085,
+                "h3": -17.343510888334613,
+                "h4": -18.229713568858568,
+                "h5": -22.53080015786911,
+                "h6": -24.854344291229175,
+                "h7": -27.14743407204413,
+                "h8": -30.174539933862278,
+                "h9": -31.48104181878919,
+                "h10": -34.48656884318777,
+                "h11": -40.151953904412764,
+                "h12": null
+              },
+              "foldback_db": -47.18786,
+              "alias_band_power_dbfs": -66.1008,
+              "total_signal_power_dbfs": -18.91318,
+              "rms_dbfs": -18.91376
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14352
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -4.26,
+            "h3": -7.5614,
+            "h4": -4.6031,
+            "h5": -5.2717,
+            "h6": -3.5746,
+            "h7": -2.1439,
+            "h8": -2.7394,
+            "h9": -2.7023,
+            "h10": -2.8007,
+            "h11": 1.8192
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -47.1879,
+            "reference": -49.3938,
+            "excess_over_reference_db": 2.2059
+          },
+          "envelope_ms": {
+            "attack_model": 8.5625,
+            "attack_reference": 3.4167,
+            "release_model": 1240.125,
+            "release_reference": 1243.0208
+          },
+          "gain_dbfs": {
+            "model": -18.9138,
+            "reference": -19.5125
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659686781450873,
+                "h3": -9.803587050871368,
+                "h4": -23.89901104565353,
+                "h5": -14.769201751230348,
+                "h6": -24.299882139866686,
+                "h7": -18.501350531598398,
+                "h8": -24.865323340175678,
+                "h9": -21.797404727950443,
+                "h10": -25.59975037270712,
+                "h11": -24.992778868655062,
+                "h12": -26.509123627394825
+              },
+              "foldback_db": -33.5884,
+              "alias_band_power_dbfs": -33.76364,
+              "total_signal_power_dbfs": -0.18057,
+              "rms_dbfs": -0.18059
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659686781450873,
+                "h3": -9.803587050871368,
+                "h4": -23.89901104565353,
+                "h5": -14.769201751230348,
+                "h6": -24.299882139866686,
+                "h7": -18.501350531598398,
+                "h8": -24.865323340175678,
+                "h9": -21.797404727950443,
+                "h10": -25.59975037270712,
+                "h11": -24.992778868655062,
+                "h12": -26.509123627394825
+              },
+              "foldback_db": -33.5884,
+              "alias_band_power_dbfs": -33.76364,
+              "total_signal_power_dbfs": -0.18057,
+              "rms_dbfs": -0.18059
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.67554794589138,
+                "h3": -11.771355114614266,
+                "h4": -26.16732302117768,
+                "h5": -17.992964621246447,
+                "h6": -27.71777872485059,
+                "h7": -22.718895440778994,
+                "h8": -29.29608204784555,
+                "h9": -27.228124308128955,
+                "h10": -31.15716706240018,
+                "h11": -31.50488956410577,
+                "h12": -33.00614287818685
+              },
+              "foldback_db": -44.67323,
+              "alias_band_power_dbfs": -51.05331,
+              "total_signal_power_dbfs": -6.38912,
+              "rms_dbfs": -6.38957
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.675595566379876,
+                "h3": -11.77143953041011,
+                "h4": -26.167411337179622,
+                "h5": -17.993065330486015,
+                "h6": -27.71804329026815,
+                "h7": -22.719049856137175,
+                "h8": -29.296140924708514,
+                "h9": -27.22822569773303,
+                "h10": -31.157423192454885,
+                "h11": -31.505071746223678,
+                "h12": -33.00620012294167
+              },
+              "foldback_db": -44.6754,
+              "alias_band_power_dbfs": -57.99117,
+              "total_signal_power_dbfs": -13.32484,
+              "rms_dbfs": -13.32529
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 290336,
+            "would_clip_fraction": 0.2240246913580247,
+            "max_abs_q15": 39113,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 24573,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00025,
+            "reference": 0.14316,
+            "model_minus_reference": -0.1434
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -0.4801,
+            "h3": -1.9675,
+            "h4": -2.0755,
+            "h5": -3.2094,
+            "h6": -3.192,
+            "h7": -4.1815,
+            "h8": -3.3939,
+            "h9": -4.7351,
+            "h10": -3.3462,
+            "h11": -4.0791,
+            "h12": -2.7173
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -44.6754,
+            "reference": -53.5263,
+            "excess_over_reference_db": 8.8509
+          },
+          "envelope_ms": {
+            "attack_model": 8.75,
+            "attack_reference": 7.4583,
+            "release_model": 1242.4167,
+            "release_reference": 1247.5208
+          },
+          "gain_dbfs": {
+            "model": -13.3253,
+            "reference": -14.3201
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.782407284589226,
+                "h3": -10.132150684980026,
+                "h4": -24.518532042228006,
+                "h5": -15.767685346523947,
+                "h6": -25.769306021989145,
+                "h7": -20.53879234118898,
+                "h8": -27.574488507698582,
+                "h9": -25.290315258680387,
+                "h10": -29.999116494079047,
+                "h11": -30.434778714284704,
+                "h12": null
+              },
+              "foldback_db": -30.44394,
+              "alias_band_power_dbfs": -30.80722,
+              "total_signal_power_dbfs": -0.36884,
+              "rms_dbfs": -0.36861
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.782407284589226,
+                "h3": -10.132150684980026,
+                "h4": -24.518532042228006,
+                "h5": -15.767685346523947,
+                "h6": -25.769306021989145,
+                "h7": -20.53879234118898,
+                "h8": -27.574488507698582,
+                "h9": -25.290315258680387,
+                "h10": -29.999116494079047,
+                "h11": -30.434778714284704,
+                "h12": null
+              },
+              "foldback_db": -30.44394,
+              "alias_band_power_dbfs": -30.80722,
+              "total_signal_power_dbfs": -0.36884,
+              "rms_dbfs": -0.36861
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.867875469889466,
+                "h3": -13.049909960029725,
+                "h4": -27.787809944283907,
+                "h5": -21.005949253656063,
+                "h6": -31.045084751673468,
+                "h7": -27.855789372339036,
+                "h8": -35.05777858863616,
+                "h9": -35.01839494954872,
+                "h10": -40.067033585451604,
+                "h11": -45.42076461804437,
+                "h12": null
+              },
+              "foldback_db": -40.56375,
+              "alias_band_power_dbfs": -49.28371,
+              "total_signal_power_dbfs": -8.73156,
+              "rms_dbfs": -8.73153
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.867959884696198,
+                "h3": -13.050078108094592,
+                "h4": -27.787997594700936,
+                "h5": -21.006176007390607,
+                "h6": -31.0453318777491,
+                "h7": -27.85609126409996,
+                "h8": -35.05779173618529,
+                "h9": -35.01747217226657,
+                "h10": -40.06539499105797,
+                "h11": -45.41992641136096,
+                "h12": null
+              },
+              "foldback_db": -40.56031,
+              "alias_band_power_dbfs": -56.21601,
+              "total_signal_power_dbfs": -15.66735,
+              "rms_dbfs": -15.66732
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 290336,
+            "would_clip_fraction": 0.2240246913580247,
+            "max_abs_q15": 39113,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 24573,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00025,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14354
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.0246,
+            "h3": -3.2636,
+            "h4": -2.4035,
+            "h5": -3.6503,
+            "h6": -1.6671,
+            "h7": -2.7989,
+            "h8": -2.0946,
+            "h9": -5.3156,
+            "h10": -4.1128,
+            "h11": -2.9733
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -40.5603,
+            "reference": -50.8348,
+            "excess_over_reference_db": 10.2745
+          },
+          "envelope_ms": {
+            "attack_model": 8.6458,
+            "attack_reference": 3.3333,
+            "release_model": 1246.6875,
+            "release_reference": 1247.4792
+          },
+          "gain_dbfs": {
+            "model": -15.6673,
+            "reference": -14.6197
+          }
+        }
+      ],
+      "wrong_then_right": {
+        "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
+        "attempts": 2,
+        "cutoff_calibration": {
+          "accepted": {
+            "host_block_size_samples": 16,
+            "measured_hz": 14072.862206739199,
+            "repeat_count": 3,
+            "repeat_range_hz": 0.0
+          },
+          "discarded": {
+            "host_block_size_samples": 512,
+            "injected_control_caught": true,
+            "measured_hz": 14494.795083545734,
+            "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+          }
+        },
+        "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
+        "discarded_measurements": 1,
+        "overall_attempts": 6,
+        "overall_discarded_measurements": 2,
+        "overall_wrong_then_right_rate": "2/6"
+      },
+      "duration_s": 27.198166666666665,
+      "candidate_i2s_sha256": null,
+      "note": "Fixed integer model comparison; M5A also has a separate SPI-to-I2S smoke.",
+      "audio_sha256": "7a518fdd5008383fba83e9974279abd438f3acb38861f9090ee6604152febe70",
+      "pulse_oscillator_gain_q15": 32768
+    },
+    "pulse2x": {
+      "analysis_version": "m5a-score-v3",
+      "metrics": {
+        "Pitch": {
+          "value": -0.14813,
+          "reference": 0.0,
+          "error": -0.14813,
+          "units": "cents",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+        },
+        "Harmonic shape": {
+          "value": 7.56136,
+          "reference": 0.0,
+          "error": 7.56136,
+          "units": "dB",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "dB per measured partial; fixed screening limit"
+        },
+        "Foldback energy": {
+          "value": 2.20593,
+          "reference": 0.0,
+          "error": 2.20593,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+        },
+        "Envelope attack": {
+          "value": 8.60417,
+          "reference": 3.33333,
+          "error": 5.27083,
+          "units": "ms",
+          "tolerance": 5.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+        },
+        "Envelope release": {
+          "value": 1234.29167,
+          "reference": 1243.22917,
+          "error": -8.9375,
+          "units": "ms",
+          "tolerance": 125.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+        },
+        "Gain": {
+          "value": -17.76626,
+          "reference": -19.18712,
+          "error": 1.42087,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB; fixed half/double amplitude screening range"
+        },
+        "Clipping": {
+          "value": 0.0,
+          "reference": 0.0,
+          "error": 0.0,
+          "units": "%",
+          "tolerance": 0.01,
+          "valid": true,
+          "tolerance_basis": "% samples at full-scale rail"
+        }
+      },
+      "audio": "docs/scorecard/mono-pulse-2x/M5A-pulse2x.wav",
+      "model_configuration": {
+        "name": "selected-m5a-reconstructed-filter2x",
+        "oscillator_oversample_2x": true,
+        "filter_rate_converted": true,
+        "filter_preserve_headroom": true,
+        "filter_causal": true,
+        "pulse479_filter_candidate": true,
+        "filter_g_exact": false,
+        "filter_k_comp": true,
+        "filter_oversample_factor": 2,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse479",
+        "pulse_effective_duty_percent": 47.89999723434448,
+        "saw_cutoff_hz": 20000,
+        "saw_volume_correction_db": -0.45428,
+        "oscillator_pulse_oversample_2x": true,
+        "label": "pulse-rate-experiment/pulse2x",
+        "engine_profile": "custom",
+        "control_defaults_profile": "selected",
+        "pulse_shape_input": "pulse29",
+        "envelope_calibration_source": "frozen M5A Mini V3 measurements",
+        "injection": null,
+        "saw_cutoff_override_hz": 20000
+      },
+      "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+      "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+      "cutoff_calibration": {
+        "block_size_samples": 16,
+        "emphasis": 0.98,
+        "f0_hz": 14072.862206739199,
+        "f0_hz_repeats": [
+          14072.862206739199,
+          14072.862206739199,
+          14072.862206739199
+        ],
+        "knob": 1.0,
+        "method": "measured self-oscillation ring; dominant frequency",
+        "parameter_readbacks": [
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          }
+        ],
+        "prominence_db_repeats": [
+          10.350361942445932,
+          10.350361942445932,
+          10.350361942445932
+        ],
+        "repeat_count": 3,
+        "repeat_range_hz": 0.0,
+        "wrong_block_control": {
+          "block_size_samples": 512,
+          "caught": true,
+          "f0_hz": 14494.795083545734,
+          "separation_from_pinned_hz": 421.9328768065352
+        }
+      },
+      "model_segments": [
+        {
+          "wave": "saw",
+          "samples": 647956,
+          "offset_samples": 0,
+          "trimmed_candidate_tail_samples": 44
+        },
+        {
+          "wave": "pulse",
+          "samples": 647956,
+          "offset_samples": 657556,
+          "trimmed_candidate_tail_samples": 44
+        }
+      ],
+      "event_diagnostics": [
+        {
+          "wave": "saw",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937498864519547,
+                "h3": -14.812974077355774,
+                "h4": -17.589176394236215,
+                "h5": -19.067396900611527,
+                "h6": -21.60399433236696,
+                "h7": -23.644678254276364,
+                "h8": -24.866969030685738,
+                "h9": -26.351457721385948,
+                "h10": -28.474626257547513,
+                "h11": -29.776230759857643,
+                "h12": -30.40170523433425
+              },
+              "foldback_db": -48.21283,
+              "alias_band_power_dbfs": -58.58824,
+              "total_signal_power_dbfs": -10.37584,
+              "rms_dbfs": -10.37573
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937124150256666,
+                "h3": -14.813197774406008,
+                "h4": -17.58883726687744,
+                "h5": -19.067667542173645,
+                "h6": -21.60358435570911,
+                "h7": -23.64513246382161,
+                "h8": -24.866529386647347,
+                "h9": -26.35188152501094,
+                "h10": -28.47427076269846,
+                "h11": -29.776855211019473,
+                "h12": -30.4009451549064
+              },
+              "foldback_db": -48.2114,
+              "alias_band_power_dbfs": -65.97734,
+              "total_signal_power_dbfs": -17.76637,
+              "rms_dbfs": -17.76626
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00498,
+            "reference": 0.14315,
+            "model_minus_reference": -0.14813
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.7681,
+            "h3": -5.1166,
+            "h4": -5.5636,
+            "h5": -4.6617,
+            "h6": -5.6897,
+            "h7": -5.9621,
+            "h8": -5.1495,
+            "h9": -5.3112,
+            "h10": -5.1394,
+            "h11": -4.3443,
+            "h12": -3.2533
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -48.2114,
+            "reference": -50.1287,
+            "excess_over_reference_db": 1.9173
+          },
+          "envelope_ms": {
+            "attack_model": 8.7292,
+            "attack_reference": 7.3333,
+            "release_model": 1234.2917,
+            "release_reference": 1243.2292
+          },
+          "gain_dbfs": {
+            "model": -17.7663,
+            "reference": -19.1871
+          }
+        },
+        {
+          "wave": "saw",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.18508799237366,
+                "h3": -17.34277525723917,
+                "h4": -18.23009236544963,
+                "h5": -22.52996857892423,
+                "h6": -24.854859824180213,
+                "h7": -27.14672144315893,
+                "h8": -30.174874727945177,
+                "h9": -31.479969815379345,
+                "h10": -34.48706145670735,
+                "h11": -40.14929766869659,
+                "h12": null
+              },
+              "foldback_db": -47.1927,
+              "alias_band_power_dbfs": -58.71506,
+              "total_signal_power_dbfs": -11.52258,
+              "rms_dbfs": -11.52316
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.184676428559085,
+                "h3": -17.343510888334613,
+                "h4": -18.229713568858568,
+                "h5": -22.53080015786911,
+                "h6": -24.854344291229175,
+                "h7": -27.14743407204413,
+                "h8": -30.174539933862278,
+                "h9": -31.48104181878919,
+                "h10": -34.48656884318777,
+                "h11": -40.151953904412764,
+                "h12": null
+              },
+              "foldback_db": -47.18786,
+              "alias_band_power_dbfs": -66.1008,
+              "total_signal_power_dbfs": -18.91318,
+              "rms_dbfs": -18.91376
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14352
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -4.26,
+            "h3": -7.5614,
+            "h4": -4.6031,
+            "h5": -5.2717,
+            "h6": -3.5746,
+            "h7": -2.1439,
+            "h8": -2.7394,
+            "h9": -2.7023,
+            "h10": -2.8007,
+            "h11": 1.8192
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -47.1879,
+            "reference": -49.3938,
+            "excess_over_reference_db": 2.2059
+          },
+          "envelope_ms": {
+            "attack_model": 8.5625,
+            "attack_reference": 3.4167,
+            "release_model": 1240.125,
+            "release_reference": 1243.0208
+          },
+          "gain_dbfs": {
+            "model": -18.9138,
+            "reference": -19.5125
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.648051962613415,
+                "h3": -9.751626148509239,
+                "h4": -23.765132521361423,
+                "h5": -14.522089793207853,
+                "h6": -23.92960533606636,
+                "h7": -18.007649631130565,
+                "h8": -24.235383411343673,
+                "h9": -20.999285376903927,
+                "h10": -24.591316343347437,
+                "h11": -23.74221234348137,
+                "h12": -25.00114111827322
+              },
+              "foldback_db": -53.53923,
+              "alias_band_power_dbfs": -55.0772,
+              "total_signal_power_dbfs": -1.54324,
+              "rms_dbfs": -1.54341
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.648051962613415,
+                "h3": -9.751626148509239,
+                "h4": -23.765132521361423,
+                "h5": -14.522089793207853,
+                "h6": -23.92960533606636,
+                "h7": -18.007649631130565,
+                "h8": -24.235383411343673,
+                "h9": -20.999285376903927,
+                "h10": -24.591316343347437,
+                "h11": -23.74221234348137,
+                "h12": -25.00114111827322
+              },
+              "foldback_db": -53.53923,
+              "alias_band_power_dbfs": -55.0772,
+              "total_signal_power_dbfs": -1.54324,
+              "rms_dbfs": -1.54341
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.93196398591907,
+                "h3": -11.809858527207775,
+                "h4": -26.5076326007007,
+                "h5": -18.119034815447502,
+                "h6": -27.93326214607665,
+                "h7": -22.877766616439704,
+                "h8": -29.64289819120237,
+                "h9": -27.381153743621486,
+                "h10": -31.43326603021595,
+                "h11": -31.536357230922803,
+                "h12": -33.28304170431734
+              },
+              "foldback_db": -57.05005,
+              "alias_band_power_dbfs": -63.76397,
+              "total_signal_power_dbfs": -6.72234,
+              "rms_dbfs": -6.72274
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.932061854983715,
+                "h3": -11.80991094057106,
+                "h4": -26.507637643712876,
+                "h5": -18.119214056038494,
+                "h6": -27.93322421843287,
+                "h7": -22.877986092182574,
+                "h8": -29.643018698521825,
+                "h9": -27.38118596448154,
+                "h10": -31.433528331535683,
+                "h11": -31.536502587132226,
+                "h12": -33.2833368348531
+              },
+              "foldback_db": -57.04585,
+              "alias_band_power_dbfs": -70.69548,
+              "total_signal_power_dbfs": -13.65807,
+              "rms_dbfs": -13.65848
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 31805,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20887,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00498,
+            "reference": 0.14316,
+            "model_minus_reference": -0.14813
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -0.7365,
+            "h3": -2.006,
+            "h4": -2.4157,
+            "h5": -3.3356,
+            "h6": -3.4072,
+            "h7": -4.3404,
+            "h8": -3.7408,
+            "h9": -4.888,
+            "h10": -3.6223,
+            "h11": -4.1105,
+            "h12": -2.9945
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -57.0459,
+            "reference": -53.5263,
+            "excess_over_reference_db": 0.0
+          },
+          "envelope_ms": {
+            "attack_model": 8.5833,
+            "attack_reference": 7.4583,
+            "release_model": 1242.5625,
+            "release_reference": 1247.5208
+          },
+          "gain_dbfs": {
+            "model": -13.6585,
+            "reference": -14.3201
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.6584012194637,
+                "h3": -9.772682148058749,
+                "h4": -23.899157899955746,
+                "h5": -14.769750214296506,
+                "h6": -24.271806582354536,
+                "h7": -18.47856081172888,
+                "h8": -24.93676408129552,
+                "h9": -22.82025968933395,
+                "h10": -29.858414239501133,
+                "h11": -36.32657627803099,
+                "h12": null
+              },
+              "foldback_db": -50.4124,
+              "alias_band_power_dbfs": -52.08579,
+              "total_signal_power_dbfs": -1.67883,
+              "rms_dbfs": -1.67876
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.6584012194637,
+                "h3": -9.772682148058749,
+                "h4": -23.899157899955746,
+                "h5": -14.769750214296506,
+                "h6": -24.271806582354536,
+                "h7": -18.47856081172888,
+                "h8": -24.93676408129552,
+                "h9": -22.82025968933395,
+                "h10": -29.858414239501133,
+                "h11": -36.32657627803099,
+                "h12": null
+              },
+              "foldback_db": -50.4124,
+              "alias_band_power_dbfs": -52.08579,
+              "total_signal_power_dbfs": -1.67883,
+              "rms_dbfs": -1.67876
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -25.070522461689503,
+                "h3": -13.063721692795799,
+                "h4": -28.048176000710153,
+                "h5": -21.02561145696697,
+                "h6": -31.250256141706302,
+                "h7": -27.962123412310575,
+                "h8": -35.332257381259794,
+                "h9": -34.930288544719204,
+                "h10": -40.307835349192594,
+                "h11": -45.56157297531739,
+                "h12": null
+              },
+              "foldback_db": -52.24759,
+              "alias_band_power_dbfs": -61.17666,
+              "total_signal_power_dbfs": -8.94014,
+              "rms_dbfs": -8.93971
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -25.070637843188052,
+                "h3": -13.063929638464678,
+                "h4": -28.048364157449512,
+                "h5": -21.025772610862727,
+                "h6": -31.25055458676304,
+                "h7": -27.962495839459894,
+                "h8": -35.33164444724247,
+                "h9": -34.93012779085517,
+                "h10": -40.30753319904992,
+                "h11": -45.560592421862765,
+                "h12": null
+              },
+              "foldback_db": -52.24151,
+              "alias_band_power_dbfs": -68.10632,
+              "total_signal_power_dbfs": -15.87593,
+              "rms_dbfs": -15.8755
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 31805,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20887,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14353
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.2273,
+            "h3": -3.2775,
+            "h4": -2.6638,
+            "h5": -3.6699,
+            "h6": -1.8723,
+            "h7": -2.9053,
+            "h8": -2.3684,
+            "h9": -5.2282,
+            "h10": -4.3549,
+            "h11": -3.114
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -52.2415,
+            "reference": -50.8348,
+            "excess_over_reference_db": 0.0
+          },
+          "envelope_ms": {
+            "attack_model": 8.6042,
+            "attack_reference": 3.3333,
+            "release_model": 1246.6667,
+            "release_reference": 1247.4792
+          },
+          "gain_dbfs": {
+            "model": -15.8755,
+            "reference": -14.6197
+          }
+        }
+      ],
+      "wrong_then_right": {
+        "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
+        "attempts": 2,
+        "cutoff_calibration": {
+          "accepted": {
+            "host_block_size_samples": 16,
+            "measured_hz": 14072.862206739199,
+            "repeat_count": 3,
+            "repeat_range_hz": 0.0
+          },
+          "discarded": {
+            "host_block_size_samples": 512,
+            "injected_control_caught": true,
+            "measured_hz": 14494.795083545734,
+            "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+          }
+        },
+        "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
+        "discarded_measurements": 1,
+        "overall_attempts": 6,
+        "overall_discarded_measurements": 2,
+        "overall_wrong_then_right_rate": "2/6"
+      },
+      "duration_s": 27.198166666666665,
+      "candidate_i2s_sha256": null,
+      "note": "Fixed integer model comparison; M5A also has a separate SPI-to-I2S smoke.",
+      "audio_sha256": "24b6f1bd176b5f43afe7c860a958a947493981c9e872563eab9284bed98cd40c",
+      "pulse_oscillator_gain_q15": 27853
+    },
+    "gain_only": {
+      "analysis_version": "m5a-score-v3",
+      "metrics": {
+        "Pitch": {
+          "value": -0.14813,
+          "reference": 0.0,
+          "error": -0.14813,
+          "units": "cents",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+        },
+        "Harmonic shape": {
+          "value": 7.56136,
+          "reference": 0.0,
+          "error": 7.56136,
+          "units": "dB",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "dB per measured partial; fixed screening limit"
+        },
+        "Foldback energy": {
+          "value": 9.4128,
+          "reference": 0.0,
+          "error": 9.4128,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+        },
+        "Envelope attack": {
+          "value": 8.625,
+          "reference": 3.33333,
+          "error": 5.29167,
+          "units": "ms",
+          "tolerance": 5.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+        },
+        "Envelope release": {
+          "value": 1234.29167,
+          "reference": 1243.22917,
+          "error": -8.9375,
+          "units": "ms",
+          "tolerance": 125.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+        },
+        "Gain": {
+          "value": -17.76626,
+          "reference": -19.18712,
+          "error": 1.42087,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB; fixed half/double amplitude screening range"
+        },
+        "Clipping": {
+          "value": 0.0,
+          "reference": 0.0,
+          "error": 0.0,
+          "units": "%",
+          "tolerance": 0.01,
+          "valid": true,
+          "tolerance_basis": "% samples at full-scale rail"
+        }
+      },
+      "audio": "build/mono-pulse-2x/M5A-gain_only.wav",
+      "model_configuration": {
+        "name": "selected-m5a-reconstructed-filter2x",
+        "oscillator_oversample_2x": true,
+        "filter_rate_converted": true,
+        "filter_preserve_headroom": true,
+        "filter_causal": true,
+        "pulse479_filter_candidate": true,
+        "filter_g_exact": false,
+        "filter_k_comp": true,
+        "filter_oversample_factor": 2,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse479",
+        "pulse_effective_duty_percent": 47.89999723434448,
+        "saw_cutoff_hz": 20000,
+        "saw_volume_correction_db": -0.45428,
+        "oscillator_pulse_oversample_2x": false,
+        "label": "pulse-rate-experiment/gain_only",
+        "engine_profile": "custom",
+        "control_defaults_profile": "selected",
+        "pulse_shape_input": "pulse29",
+        "envelope_calibration_source": "frozen M5A Mini V3 measurements",
+        "injection": null,
+        "saw_cutoff_override_hz": 20000
+      },
+      "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+      "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+      "cutoff_calibration": {
+        "block_size_samples": 16,
+        "emphasis": 0.98,
+        "f0_hz": 14072.862206739199,
+        "f0_hz_repeats": [
+          14072.862206739199,
+          14072.862206739199,
+          14072.862206739199
+        ],
+        "knob": 1.0,
+        "method": "measured self-oscillation ring; dominant frequency",
+        "parameter_readbacks": [
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          }
+        ],
+        "prominence_db_repeats": [
+          10.350361942445932,
+          10.350361942445932,
+          10.350361942445932
+        ],
+        "repeat_count": 3,
+        "repeat_range_hz": 0.0,
+        "wrong_block_control": {
+          "block_size_samples": 512,
+          "caught": true,
+          "f0_hz": 14494.795083545734,
+          "separation_from_pinned_hz": 421.9328768065352
+        }
+      },
+      "model_segments": [
+        {
+          "wave": "saw",
+          "samples": 647956,
+          "offset_samples": 0,
+          "trimmed_candidate_tail_samples": 44
+        },
+        {
+          "wave": "pulse",
+          "samples": 647956,
+          "offset_samples": 657556,
+          "trimmed_candidate_tail_samples": 44
+        }
+      ],
+      "event_diagnostics": [
+        {
+          "wave": "saw",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937498864519547,
+                "h3": -14.812974077355774,
+                "h4": -17.589176394236215,
+                "h5": -19.067396900611527,
+                "h6": -21.60399433236696,
+                "h7": -23.644678254276364,
+                "h8": -24.866969030685738,
+                "h9": -26.351457721385948,
+                "h10": -28.474626257547513,
+                "h11": -29.776230759857643,
+                "h12": -30.40170523433425
+              },
+              "foldback_db": -48.21283,
+              "alias_band_power_dbfs": -58.58824,
+              "total_signal_power_dbfs": -10.37584,
+              "rms_dbfs": -10.37573
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937124150256666,
+                "h3": -14.813197774406008,
+                "h4": -17.58883726687744,
+                "h5": -19.067667542173645,
+                "h6": -21.60358435570911,
+                "h7": -23.64513246382161,
+                "h8": -24.866529386647347,
+                "h9": -26.35188152501094,
+                "h10": -28.47427076269846,
+                "h11": -29.776855211019473,
+                "h12": -30.4009451549064
+              },
+              "foldback_db": -48.2114,
+              "alias_band_power_dbfs": -65.97734,
+              "total_signal_power_dbfs": -17.76637,
+              "rms_dbfs": -17.76626
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00498,
+            "reference": 0.14315,
+            "model_minus_reference": -0.14813
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.7681,
+            "h3": -5.1166,
+            "h4": -5.5636,
+            "h5": -4.6617,
+            "h6": -5.6897,
+            "h7": -5.9621,
+            "h8": -5.1495,
+            "h9": -5.3112,
+            "h10": -5.1394,
+            "h11": -4.3443,
+            "h12": -3.2533
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -48.2114,
+            "reference": -50.1287,
+            "excess_over_reference_db": 1.9173
+          },
+          "envelope_ms": {
+            "attack_model": 8.7292,
+            "attack_reference": 7.3333,
+            "release_model": 1234.2917,
+            "release_reference": 1243.2292
+          },
+          "gain_dbfs": {
+            "model": -17.7663,
+            "reference": -19.1871
+          }
+        },
+        {
+          "wave": "saw",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.18508799237366,
+                "h3": -17.34277525723917,
+                "h4": -18.23009236544963,
+                "h5": -22.52996857892423,
+                "h6": -24.854859824180213,
+                "h7": -27.14672144315893,
+                "h8": -30.174874727945177,
+                "h9": -31.479969815379345,
+                "h10": -34.48706145670735,
+                "h11": -40.14929766869659,
+                "h12": null
+              },
+              "foldback_db": -47.1927,
+              "alias_band_power_dbfs": -58.71506,
+              "total_signal_power_dbfs": -11.52258,
+              "rms_dbfs": -11.52316
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.184676428559085,
+                "h3": -17.343510888334613,
+                "h4": -18.229713568858568,
+                "h5": -22.53080015786911,
+                "h6": -24.854344291229175,
+                "h7": -27.14743407204413,
+                "h8": -30.174539933862278,
+                "h9": -31.48104181878919,
+                "h10": -34.48656884318777,
+                "h11": -40.151953904412764,
+                "h12": null
+              },
+              "foldback_db": -47.18786,
+              "alias_band_power_dbfs": -66.1008,
+              "total_signal_power_dbfs": -18.91318,
+              "rms_dbfs": -18.91376
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14352
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -4.26,
+            "h3": -7.5614,
+            "h4": -4.6031,
+            "h5": -5.2717,
+            "h6": -3.5746,
+            "h7": -2.1439,
+            "h8": -2.7394,
+            "h9": -2.7023,
+            "h10": -2.8007,
+            "h11": 1.8192
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -47.1879,
+            "reference": -49.3938,
+            "excess_over_reference_db": 2.2059
+          },
+          "envelope_ms": {
+            "attack_model": 8.5625,
+            "attack_reference": 3.4167,
+            "release_model": 1240.125,
+            "release_reference": 1243.0208
+          },
+          "gain_dbfs": {
+            "model": -18.9138,
+            "reference": -19.5125
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659415548795092,
+                "h3": -9.803595131750134,
+                "h4": -23.89874743919103,
+                "h5": -14.769225953308569,
+                "h6": -24.29963101632223,
+                "h7": -18.501398801079077,
+                "h8": -24.865089196033693,
+                "h9": -21.797484830511458,
+                "h10": -25.599537154492392,
+                "h11": -24.992898231457133,
+                "h12": -26.50893449008724
+              },
+              "foldback_db": -33.58832,
+              "alias_band_power_dbfs": -35.17514,
+              "total_signal_power_dbfs": -1.59215,
+              "rms_dbfs": -1.59217
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659415548795092,
+                "h3": -9.803595131750134,
+                "h4": -23.89874743919103,
+                "h5": -14.769225953308569,
+                "h6": -24.29963101632223,
+                "h7": -18.501398801079077,
+                "h8": -24.865089196033693,
+                "h9": -21.797484830511458,
+                "h10": -25.599537154492392,
+                "h11": -24.992898231457133,
+                "h12": -26.50893449008724
+              },
+              "foldback_db": -33.58832,
+              "alias_band_power_dbfs": -35.17514,
+              "total_signal_power_dbfs": -1.59215,
+              "rms_dbfs": -1.59217
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.934751379271148,
+                "h3": -11.813121681803946,
+                "h4": -26.51189821988361,
+                "h5": -18.124918332224844,
+                "h6": -27.94142716088432,
+                "h7": -22.88632095724983,
+                "h8": -29.654594375423112,
+                "h9": -27.394001158553007,
+                "h10": -31.451046144308773,
+                "h11": -31.555150363536097,
+                "h12": -33.30496198651116
+              },
+              "foldback_db": -45.5079,
+              "alias_band_power_dbfs": -52.22018,
+              "total_signal_power_dbfs": -6.72069,
+              "rms_dbfs": -6.72106
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.934813337516797,
+                "h3": -11.81318946146552,
+                "h4": -26.51190263847426,
+                "h5": -18.125126592218532,
+                "h6": -27.94158627243529,
+                "h7": -22.886479552569853,
+                "h8": -29.654832685825507,
+                "h9": -27.394234726499768,
+                "h10": -31.451222797782307,
+                "h11": -31.55552873115116,
+                "h12": -33.30524640563538
+              },
+              "foldback_db": -45.50708,
+              "alias_band_power_dbfs": -59.15507,
+              "total_signal_power_dbfs": -13.65643,
+              "rms_dbfs": -13.6568
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 2,
+            "would_clip_fraction": 1.5432098765432098e-06,
+            "max_abs_q15": 33246,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20887,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00025,
+            "reference": 0.14316,
+            "model_minus_reference": -0.1434
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -0.7393,
+            "h3": -2.0093,
+            "h4": -2.42,
+            "h5": -3.3415,
+            "h6": -3.4155,
+            "h7": -4.3489,
+            "h8": -3.7526,
+            "h9": -4.9011,
+            "h10": -3.64,
+            "h11": -4.1296,
+            "h12": -3.0164
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -45.5071,
+            "reference": -53.5263,
+            "excess_over_reference_db": 8.0193
+          },
+          "envelope_ms": {
+            "attack_model": 8.75,
+            "attack_reference": 7.4583,
+            "release_model": 1242.4167,
+            "release_reference": 1247.5208
+          },
+          "gain_dbfs": {
+            "model": -13.6568,
+            "reference": -14.3201
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.78186150834327,
+                "h3": -10.132163513435536,
+                "h4": -24.51802911494019,
+                "h5": -15.767718983546853,
+                "h6": -25.768874582136583,
+                "h7": -20.538843080316894,
+                "h8": -27.574157486540095,
+                "h9": -25.290355491020392,
+                "h10": -29.998915780956615,
+                "h11": -30.434731562181845,
+                "h12": null
+              },
+              "foldback_db": -30.44385,
+              "alias_band_power_dbfs": -32.21871,
+              "total_signal_power_dbfs": -1.78042,
+              "rms_dbfs": -1.78019
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.78186150834327,
+                "h3": -10.132163513435536,
+                "h4": -24.51802911494019,
+                "h5": -15.767718983546853,
+                "h6": -25.768874582136583,
+                "h7": -20.538843080316894,
+                "h8": -27.574157486540095,
+                "h9": -25.290355491020392,
+                "h10": -29.998915780956615,
+                "h11": -30.434731562181845,
+                "h12": null
+              },
+              "foldback_db": -30.44385,
+              "alias_band_power_dbfs": -32.21871,
+              "total_signal_power_dbfs": -1.78042,
+              "rms_dbfs": -1.78019
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -25.076976354104012,
+                "h3": -13.073743904991188,
+                "h4": -28.066208156736437,
+                "h5": -21.050330343807744,
+                "h6": -31.28636405377509,
+                "h7": -28.00413051737559,
+                "h8": -35.39061680126273,
+                "h9": -34.992755360426855,
+                "h10": -40.38205515108689,
+                "h11": -45.61905928083143,
+                "h12": null
+              },
+              "foldback_db": -41.42574,
+              "alias_band_power_dbfs": -50.35457,
+              "total_signal_power_dbfs": -8.93988,
+              "rms_dbfs": -8.93983
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -25.077069998036528,
+                "h3": -13.073918219655027,
+                "h4": -28.066312782284438,
+                "h5": -21.05055616629615,
+                "h6": -31.286546025866258,
+                "h7": -28.00460345640948,
+                "h8": -35.390258682638134,
+                "h9": -34.992880203393305,
+                "h10": -40.38137878429385,
+                "h11": -45.61891533182656,
+                "h12": null
+              },
+              "foldback_db": -41.42198,
+              "alias_band_power_dbfs": -57.28655,
+              "total_signal_power_dbfs": -15.87567,
+              "rms_dbfs": -15.87562
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 2,
+            "would_clip_fraction": 1.5432098765432098e-06,
+            "max_abs_q15": 33246,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20887,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14352
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.2337,
+            "h3": -3.2875,
+            "h4": -2.6818,
+            "h5": -3.6947,
+            "h6": -1.9083,
+            "h7": -2.9475,
+            "h8": -2.4271,
+            "h9": -5.291,
+            "h10": -4.4288,
+            "h11": -3.1723
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -41.422,
+            "reference": -50.8348,
+            "excess_over_reference_db": 9.4128
+          },
+          "envelope_ms": {
+            "attack_model": 8.625,
+            "attack_reference": 3.3333,
+            "release_model": 1246.6667,
+            "release_reference": 1247.4792
+          },
+          "gain_dbfs": {
+            "model": -15.8756,
+            "reference": -14.6197
+          }
+        }
+      ],
+      "wrong_then_right": {
+        "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
+        "attempts": 2,
+        "cutoff_calibration": {
+          "accepted": {
+            "host_block_size_samples": 16,
+            "measured_hz": 14072.862206739199,
+            "repeat_count": 3,
+            "repeat_range_hz": 0.0
+          },
+          "discarded": {
+            "host_block_size_samples": 512,
+            "injected_control_caught": true,
+            "measured_hz": 14494.795083545734,
+            "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+          }
+        },
+        "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
+        "discarded_measurements": 1,
+        "overall_attempts": 6,
+        "overall_discarded_measurements": 2,
+        "overall_wrong_then_right_rate": "2/6"
+      },
+      "duration_s": 27.198166666666665,
+      "candidate_i2s_sha256": null,
+      "note": "Fixed integer model comparison; M5A also has a separate SPI-to-I2S smoke.",
+      "audio_sha256": "edbea371e2caeec7d70777d8285379a450e15bbc3bfd640eec57e2d255187b66",
+      "pulse_oscillator_gain_q15": 27853
+    },
+    "disabled_control": {
+      "analysis_version": "m5a-score-v3",
+      "metrics": {
+        "Pitch": {
+          "value": -0.14813,
+          "reference": 0.0,
+          "error": -0.14813,
+          "units": "cents",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "cents; fixed screening limit for this frozen software-synth patch"
+        },
+        "Harmonic shape": {
+          "value": 7.56136,
+          "reference": 0.0,
+          "error": 7.56136,
+          "units": "dB",
+          "tolerance": 1.0,
+          "valid": true,
+          "tolerance_basis": "dB per measured partial; fixed screening limit"
+        },
+        "Foldback energy": {
+          "value": 10.27447,
+          "reference": 0.0,
+          "error": 10.27447,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB excess alias energy above the reference; cleaner output is not penalized"
+        },
+        "Envelope attack": {
+          "value": 8.64583,
+          "reference": 3.33333,
+          "error": 5.3125,
+          "units": "ms",
+          "tolerance": 5.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed limit above the 5 ms RMS measurement hop"
+        },
+        "Envelope release": {
+          "value": 1234.29167,
+          "reference": 1243.22917,
+          "error": -8.9375,
+          "units": "ms",
+          "tolerance": 125.0,
+          "valid": true,
+          "tolerance_basis": "ms; fixed 10% of the measured reference T20"
+        },
+        "Gain": {
+          "value": -17.76626,
+          "reference": -19.18712,
+          "error": 1.42087,
+          "units": "dB",
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "dB; fixed half/double amplitude screening range"
+        },
+        "Clipping": {
+          "value": 0.0,
+          "reference": 0.0,
+          "error": 0.0,
+          "units": "%",
+          "tolerance": 0.01,
+          "valid": true,
+          "tolerance_basis": "% samples at full-scale rail"
+        }
+      },
+      "audio": "build/mono-pulse-2x/M5A-disabled_control.wav",
+      "model_configuration": {
+        "name": "selected-m5a-reconstructed-filter2x",
+        "oscillator_oversample_2x": true,
+        "filter_rate_converted": true,
+        "filter_preserve_headroom": true,
+        "filter_causal": true,
+        "pulse479_filter_candidate": true,
+        "filter_g_exact": false,
+        "filter_k_comp": true,
+        "filter_oversample_factor": 2,
+        "ladder_coefficient_oversample": 2,
+        "filter_drive": 0.75,
+        "pulse_control_label": "pulse29",
+        "pulse_effective_waveform": "pulse479",
+        "pulse_effective_duty_percent": 47.89999723434448,
+        "saw_cutoff_hz": 20000,
+        "saw_volume_correction_db": -0.45428,
+        "oscillator_pulse_oversample_2x": false,
+        "label": "pulse-rate-experiment/disabled_control",
+        "engine_profile": "custom",
+        "control_defaults_profile": "selected",
+        "pulse_shape_input": "pulse29",
+        "envelope_calibration_source": "frozen M5A Mini V3 measurements",
+        "injection": null,
+        "saw_cutoff_override_hz": 20000
+      },
+      "reference_sha256": "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a",
+      "manifest_sha256": "b5545a6b5e2a308e1d470ce154e8cf5330f3cb52d23dc26a87ae4b289a2dbff8",
+      "cutoff_calibration": {
+        "block_size_samples": 16,
+        "emphasis": 0.98,
+        "f0_hz": 14072.862206739199,
+        "f0_hz_repeats": [
+          14072.862206739199,
+          14072.862206739199,
+          14072.862206739199
+        ],
+        "knob": 1.0,
+        "method": "measured self-oscillation ring; dominant frequency",
+        "parameter_readbacks": [
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          },
+          {
+            "cutoff": {
+              "index": 23,
+              "name": "CutOff",
+              "readback": "1.00",
+              "written": 1.0
+            },
+            "emphasis": {
+              "index": 24,
+              "name": "Emphasis",
+              "readback": "0.980",
+              "written": 0.98
+            }
+          }
+        ],
+        "prominence_db_repeats": [
+          10.350361942445932,
+          10.350361942445932,
+          10.350361942445932
+        ],
+        "repeat_count": 3,
+        "repeat_range_hz": 0.0,
+        "wrong_block_control": {
+          "block_size_samples": 512,
+          "caught": true,
+          "f0_hz": 14494.795083545734,
+          "separation_from_pinned_hz": 421.9328768065352
+        }
+      },
+      "model_segments": [
+        {
+          "wave": "saw",
+          "samples": 647956,
+          "offset_samples": 0,
+          "trimmed_candidate_tail_samples": 44
+        },
+        {
+          "wave": "pulse",
+          "samples": 647956,
+          "offset_samples": 657556,
+          "trimmed_candidate_tail_samples": 44
+        }
+      ],
+      "event_diagnostics": [
+        {
+          "wave": "saw",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.05083336543807,
+                "h3": -9.599309233588274,
+                "h4": -12.111188090209344,
+                "h5": -14.059639513611014,
+                "h6": -15.67116755358107,
+                "h7": -17.065300829689352,
+                "h8": -18.296754172229427,
+                "h9": -19.387662113162868,
+                "h10": -20.358097278879626,
+                "h11": -21.239506113037976,
+                "h12": -22.064181311040297
+              },
+              "foldback_db": -46.94354,
+              "alias_band_power_dbfs": -53.32054,
+              "total_signal_power_dbfs": -6.377,
+              "rms_dbfs": -6.37786
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937498864519547,
+                "h3": -14.812974077355774,
+                "h4": -17.589176394236215,
+                "h5": -19.067396900611527,
+                "h6": -21.60399433236696,
+                "h7": -23.644678254276364,
+                "h8": -24.866969030685738,
+                "h9": -26.351457721385948,
+                "h10": -28.474626257547513,
+                "h11": -29.776230759857643,
+                "h12": -30.40170523433425
+              },
+              "foldback_db": -48.21283,
+              "alias_band_power_dbfs": -58.58824,
+              "total_signal_power_dbfs": -10.37584,
+              "rms_dbfs": -10.37573
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -7.937124150256666,
+                "h3": -14.813197774406008,
+                "h4": -17.58883726687744,
+                "h5": -19.067667542173645,
+                "h6": -21.60358435570911,
+                "h7": -23.64513246382161,
+                "h8": -24.866529386647347,
+                "h9": -26.35188152501094,
+                "h10": -28.47427076269846,
+                "h11": -29.776855211019473,
+                "h12": -30.4009451549064
+              },
+              "foldback_db": -48.2114,
+              "alias_band_power_dbfs": -65.97734,
+              "total_signal_power_dbfs": -17.76637,
+              "rms_dbfs": -17.76626
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00498,
+            "reference": 0.14315,
+            "model_minus_reference": -0.14813
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.7681,
+            "h3": -5.1166,
+            "h4": -5.5636,
+            "h5": -4.6617,
+            "h6": -5.6897,
+            "h7": -5.9621,
+            "h8": -5.1495,
+            "h9": -5.3112,
+            "h10": -5.1394,
+            "h11": -4.3443,
+            "h12": -3.2533
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -48.2114,
+            "reference": -50.1287,
+            "excess_over_reference_db": 1.9173
+          },
+          "envelope_ms": {
+            "attack_model": 8.7292,
+            "attack_reference": 7.3333,
+            "release_model": 1234.2917,
+            "release_reference": 1243.2292
+          },
+          "gain_dbfs": {
+            "model": -17.7663,
+            "reference": -19.1871
+          }
+        },
+        {
+          "wave": "saw",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -6.06035815047067,
+                "h3": -9.6203428907959,
+                "h4": -12.245901307995855,
+                "h5": -14.307224981941056,
+                "h6": -16.013360055666688,
+                "h7": -17.536252405816995,
+                "h8": -18.998089656874722,
+                "h9": -21.208518322827807,
+                "h10": -25.625467206054623,
+                "h11": -33.823578037293345,
+                "h12": null
+              },
+              "foldback_db": -48.56373,
+              "alias_band_power_dbfs": -55.13444,
+              "total_signal_power_dbfs": -6.57071,
+              "rms_dbfs": -6.57131
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.18508799237366,
+                "h3": -17.34277525723917,
+                "h4": -18.23009236544963,
+                "h5": -22.52996857892423,
+                "h6": -24.854859824180213,
+                "h7": -27.14672144315893,
+                "h8": -30.174874727945177,
+                "h9": -31.479969815379345,
+                "h10": -34.48706145670735,
+                "h11": -40.14929766869659,
+                "h12": null
+              },
+              "foldback_db": -47.1927,
+              "alias_band_power_dbfs": -58.71506,
+              "total_signal_power_dbfs": -11.52258,
+              "rms_dbfs": -11.52316
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -10.184676428559085,
+                "h3": -17.343510888334613,
+                "h4": -18.229713568858568,
+                "h5": -22.53080015786911,
+                "h6": -24.854344291229175,
+                "h7": -27.14743407204413,
+                "h8": -30.174539933862278,
+                "h9": -31.48104181878919,
+                "h10": -34.48656884318777,
+                "h11": -40.151953904412764,
+                "h12": null
+              },
+              "foldback_db": -47.18786,
+              "alias_band_power_dbfs": -66.1008,
+              "total_signal_power_dbfs": -18.91318,
+              "rms_dbfs": -18.91376
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_q15": 30330,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 20888,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00024,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14352
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -4.26,
+            "h3": -7.5614,
+            "h4": -4.6031,
+            "h5": -5.2717,
+            "h6": -3.5746,
+            "h7": -2.1439,
+            "h8": -2.7394,
+            "h9": -2.7023,
+            "h10": -2.8007,
+            "h11": 1.8192
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -47.1879,
+            "reference": -49.3938,
+            "excess_over_reference_db": 2.2059
+          },
+          "envelope_ms": {
+            "attack_model": 8.5625,
+            "attack_reference": 3.4167,
+            "release_model": 1240.125,
+            "release_reference": 1243.0208
+          },
+          "gain_dbfs": {
+            "model": -18.9138,
+            "reference": -19.5125
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 84,
+          "model_midi": 84,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659686781450873,
+                "h3": -9.803587050871368,
+                "h4": -23.89901104565353,
+                "h5": -14.769201751230348,
+                "h6": -24.299882139866686,
+                "h7": -18.501350531598398,
+                "h8": -24.865323340175678,
+                "h9": -21.797404727950443,
+                "h10": -25.59975037270712,
+                "h11": -24.992778868655062,
+                "h12": -26.509123627394825
+              },
+              "foldback_db": -33.5884,
+              "alias_band_power_dbfs": -33.76364,
+              "total_signal_power_dbfs": -0.18057,
+              "rms_dbfs": -0.18059
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.659686781450873,
+                "h3": -9.803587050871368,
+                "h4": -23.89901104565353,
+                "h5": -14.769201751230348,
+                "h6": -24.299882139866686,
+                "h7": -18.501350531598398,
+                "h8": -24.865323340175678,
+                "h9": -21.797404727950443,
+                "h10": -25.59975037270712,
+                "h11": -24.992778868655062,
+                "h12": -26.509123627394825
+              },
+              "foldback_db": -33.5884,
+              "alias_band_power_dbfs": -33.76364,
+              "total_signal_power_dbfs": -0.18057,
+              "rms_dbfs": -0.18059
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.67554794589138,
+                "h3": -11.771355114614266,
+                "h4": -26.16732302117768,
+                "h5": -17.992964621246447,
+                "h6": -27.71777872485059,
+                "h7": -22.718895440778994,
+                "h8": -29.29608204784555,
+                "h9": -27.228124308128955,
+                "h10": -31.15716706240018,
+                "h11": -31.50488956410577,
+                "h12": -33.00614287818685
+              },
+              "foldback_db": -44.67323,
+              "alias_band_power_dbfs": -51.05331,
+              "total_signal_power_dbfs": -6.38912,
+              "rms_dbfs": -6.38957
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.675595566379876,
+                "h3": -11.77143953041011,
+                "h4": -26.167411337179622,
+                "h5": -17.993065330486015,
+                "h6": -27.71804329026815,
+                "h7": -22.719049856137175,
+                "h8": -29.296140924708514,
+                "h9": -27.22822569773303,
+                "h10": -31.157423192454885,
+                "h11": -31.505071746223678,
+                "h12": -33.00620012294167
+              },
+              "foldback_db": -44.6754,
+              "alias_band_power_dbfs": -57.99117,
+              "total_signal_power_dbfs": -13.32484,
+              "rms_dbfs": -13.32529
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 290336,
+            "would_clip_fraction": 0.2240246913580247,
+            "max_abs_q15": 39113,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 24573,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00025,
+            "reference": 0.14316,
+            "model_minus_reference": -0.1434
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -0.4801,
+            "h3": -1.9675,
+            "h4": -2.0755,
+            "h5": -3.2094,
+            "h6": -3.192,
+            "h7": -4.1815,
+            "h8": -3.3939,
+            "h9": -4.7351,
+            "h10": -3.3462,
+            "h11": -4.0791,
+            "h12": -2.7173
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured",
+            "h12": "measured"
+          },
+          "foldback_db": {
+            "model": -44.6754,
+            "reference": -53.5263,
+            "excess_over_reference_db": 8.8509
+          },
+          "envelope_ms": {
+            "attack_model": 8.75,
+            "attack_reference": 7.4583,
+            "release_model": 1242.4167,
+            "release_reference": 1247.5208
+          },
+          "gain_dbfs": {
+            "model": -13.3253,
+            "reference": -14.3201
+          }
+        },
+        {
+          "wave": "pulse",
+          "midi": 96,
+          "model_midi": 96,
+          "stages": {
+            "oscillator": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.782407284589226,
+                "h3": -10.132150684980026,
+                "h4": -24.518532042228006,
+                "h5": -15.767685346523947,
+                "h6": -25.769306021989145,
+                "h7": -20.53879234118898,
+                "h8": -27.574488507698582,
+                "h9": -25.290315258680387,
+                "h10": -29.999116494079047,
+                "h11": -30.434778714284704,
+                "h12": null
+              },
+              "foldback_db": -30.44394,
+              "alias_band_power_dbfs": -30.80722,
+              "total_signal_power_dbfs": -0.36884,
+              "rms_dbfs": -0.36861
+            },
+            "mixer": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -23.782407284589226,
+                "h3": -10.132150684980026,
+                "h4": -24.518532042228006,
+                "h5": -15.767685346523947,
+                "h6": -25.769306021989145,
+                "h7": -20.53879234118898,
+                "h8": -27.574488507698582,
+                "h9": -25.290315258680387,
+                "h10": -29.999116494079047,
+                "h11": -30.434778714284704,
+                "h12": null
+              },
+              "foldback_db": -30.44394,
+              "alias_band_power_dbfs": -30.80722,
+              "total_signal_power_dbfs": -0.36884,
+              "rms_dbfs": -0.36861
+            },
+            "ladder": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.867875469889466,
+                "h3": -13.049909960029725,
+                "h4": -27.787809944283907,
+                "h5": -21.005949253656063,
+                "h6": -31.045084751673468,
+                "h7": -27.855789372339036,
+                "h8": -35.05777858863616,
+                "h9": -35.01839494954872,
+                "h10": -40.067033585451604,
+                "h11": -45.42076461804437,
+                "h12": null
+              },
+              "foldback_db": -40.56375,
+              "alias_band_power_dbfs": -49.28371,
+              "total_signal_power_dbfs": -8.73156,
+              "rms_dbfs": -8.73153
+            },
+            "output": {
+              "harmonics_db": {
+                "h1": 0.0,
+                "h2": -24.867959884696198,
+                "h3": -13.050078108094592,
+                "h4": -27.787997594700936,
+                "h5": -21.006176007390607,
+                "h6": -31.0453318777491,
+                "h7": -27.85609126409996,
+                "h8": -35.05779173618529,
+                "h9": -35.01747217226657,
+                "h10": -40.06539499105797,
+                "h11": -45.41992641136096,
+                "h12": null
+              },
+              "foldback_db": -40.56031,
+              "alias_band_power_dbfs": -56.21601,
+              "total_signal_power_dbfs": -15.66735,
+              "rms_dbfs": -15.66732
+            }
+          },
+          "filter_reconstruction": {
+            "preserved": true,
+            "would_clip_count": 290336,
+            "would_clip_fraction": 0.2240246913580247,
+            "max_abs_q15": 39113,
+            "samples": 1296000
+          },
+          "filter_decimation": {
+            "output_bits": 19,
+            "would_clip_count": 0,
+            "would_clip_fraction": 0.0,
+            "max_abs_output": 24573,
+            "samples": 648000
+          },
+          "pitch_cents_from_midi": {
+            "model": -0.00025,
+            "reference": 0.14328,
+            "model_minus_reference": -0.14354
+          },
+          "harmonic_error_db_model_minus_reference": {
+            "h2": -1.0246,
+            "h3": -3.2636,
+            "h4": -2.4035,
+            "h5": -3.6503,
+            "h6": -1.6671,
+            "h7": -2.7989,
+            "h8": -2.0946,
+            "h9": -5.3156,
+            "h10": -4.1128,
+            "h11": -2.9733
+          },
+          "harmonic_comparison": {
+            "h2": "measured",
+            "h3": "measured",
+            "h4": "measured",
+            "h5": "measured",
+            "h6": "measured",
+            "h7": "measured",
+            "h8": "measured",
+            "h9": "measured",
+            "h10": "measured",
+            "h11": "measured"
+          },
+          "foldback_db": {
+            "model": -40.5603,
+            "reference": -50.8348,
+            "excess_over_reference_db": 10.2745
+          },
+          "envelope_ms": {
+            "attack_model": 8.6458,
+            "attack_reference": 3.3333,
+            "release_model": 1246.6875,
+            "release_reference": 1247.4792
+          },
+          "gain_dbfs": {
+            "model": -15.6673,
+            "reference": -14.6197
+          }
+        }
+      ],
+      "wrong_then_right": {
+        "accepted": "smooth-waveform transient detector: 0 events; injected-click control: 5 events",
+        "attempts": 2,
+        "cutoff_calibration": {
+          "accepted": {
+            "host_block_size_samples": 16,
+            "measured_hz": 14072.862206739199,
+            "repeat_count": 3,
+            "repeat_range_hz": 0.0
+          },
+          "discarded": {
+            "host_block_size_samples": 512,
+            "injected_control_caught": true,
+            "measured_hz": 14494.795083545734,
+            "reason": "host automation block size was not pinned to the 16-sample qualification setting"
+          }
+        },
+        "discarded": "saw transient detector: 2172 events from waveform edges; detector domain invalid for a saw",
+        "discarded_measurements": 1,
+        "overall_attempts": 6,
+        "overall_discarded_measurements": 2,
+        "overall_wrong_then_right_rate": "2/6"
+      },
+      "duration_s": 27.198166666666665,
+      "candidate_i2s_sha256": null,
+      "note": "Fixed integer model comparison; M5A also has a separate SPI-to-I2S smoke.",
+      "audio_sha256": "7a518fdd5008383fba83e9974279abd438f3acb38861f9090ee6604152febe70",
+      "pulse_oscillator_gain_q15": 32768
+    }
+  },
+  "comparisons": {
+    "pulse2x": {
+      "accepts_incremental_improvement": false,
+      "case_passes": false,
+      "improved_components": [
+        "metric:Foldback energy",
+        "partial:3:pulse:96:h9"
+      ],
+      "regressed_components": [
+        "partial:2:pulse:84:h10",
+        "partial:2:pulse:84:h11",
+        "partial:2:pulse:84:h12",
+        "partial:2:pulse:84:h2",
+        "partial:2:pulse:84:h3",
+        "partial:2:pulse:84:h4",
+        "partial:2:pulse:84:h5",
+        "partial:2:pulse:84:h6",
+        "partial:2:pulse:84:h7",
+        "partial:2:pulse:84:h8",
+        "partial:2:pulse:84:h9",
+        "partial:3:pulse:96:h10",
+        "partial:3:pulse:96:h11",
+        "partial:3:pulse:96:h2",
+        "partial:3:pulse:96:h3",
+        "partial:3:pulse:96:h4",
+        "partial:3:pulse:96:h5",
+        "partial:3:pulse:96:h6",
+        "partial:3:pulse:96:h7",
+        "partial:3:pulse:96:h8"
+      ],
+      "non_regression_deadbands": {
+        "metrics": {
+          "Pitch": 0.01,
+          "Harmonic shape": 0.01,
+          "Foldback energy": 0.01,
+          "Envelope attack": 5.0,
+          "Envelope release": 5.0,
+          "Gain": 0.01,
+          "Clipping": 0.01
+        },
+        "per_partial_db": 0.01
+      },
+      "components": {
+        "metric:Pitch": {
+          "baseline_error": 0.14813,
+          "candidate_error": 0.14813,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Harmonic shape": {
+          "baseline_error": 7.56136,
+          "candidate_error": 7.56136,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Foldback energy": {
+          "baseline_error": 10.27447,
+          "candidate_error": 2.20593,
+          "delta_error": -8.06854,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Envelope attack": {
+          "baseline_error": 5.3125,
+          "candidate_error": 5.27083,
+          "delta_error": -0.04167,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Envelope release": {
+          "baseline_error": 8.9375,
+          "candidate_error": 8.9375,
+          "delta_error": 0.0,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Gain": {
+          "baseline_error": 1.42087,
+          "candidate_error": 1.42087,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Clipping": {
+          "baseline_error": 0.0,
+          "candidate_error": 0.0,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h10": {
+          "baseline_error": 5.1394,
+          "candidate_error": 5.1394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h11": {
+          "baseline_error": 4.3443,
+          "candidate_error": 4.3443,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h12": {
+          "baseline_error": 3.2533,
+          "candidate_error": 3.2533,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h2": {
+          "baseline_error": 1.7681,
+          "candidate_error": 1.7681,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h3": {
+          "baseline_error": 5.1166,
+          "candidate_error": 5.1166,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h4": {
+          "baseline_error": 5.5636,
+          "candidate_error": 5.5636,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h5": {
+          "baseline_error": 4.6617,
+          "candidate_error": 4.6617,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h6": {
+          "baseline_error": 5.6897,
+          "candidate_error": 5.6897,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h7": {
+          "baseline_error": 5.9621,
+          "candidate_error": 5.9621,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h8": {
+          "baseline_error": 5.1495,
+          "candidate_error": 5.1495,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h9": {
+          "baseline_error": 5.3112,
+          "candidate_error": 5.3112,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h10": {
+          "baseline_error": 2.8007,
+          "candidate_error": 2.8007,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h11": {
+          "baseline_error": 1.8192,
+          "candidate_error": 1.8192,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h2": {
+          "baseline_error": 4.26,
+          "candidate_error": 4.26,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h3": {
+          "baseline_error": 7.5614,
+          "candidate_error": 7.5614,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h4": {
+          "baseline_error": 4.6031,
+          "candidate_error": 4.6031,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h5": {
+          "baseline_error": 5.2717,
+          "candidate_error": 5.2717,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h6": {
+          "baseline_error": 3.5746,
+          "candidate_error": 3.5746,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h7": {
+          "baseline_error": 2.1439,
+          "candidate_error": 2.1439,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h8": {
+          "baseline_error": 2.7394,
+          "candidate_error": 2.7394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h9": {
+          "baseline_error": 2.7023,
+          "candidate_error": 2.7023,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h10": {
+          "baseline_error": 3.3462,
+          "candidate_error": 3.6223,
+          "delta_error": 0.2761,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h11": {
+          "baseline_error": 4.0791,
+          "candidate_error": 4.1105,
+          "delta_error": 0.0314,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h12": {
+          "baseline_error": 2.7173,
+          "candidate_error": 2.9945,
+          "delta_error": 0.2772,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h2": {
+          "baseline_error": 0.4801,
+          "candidate_error": 0.7365,
+          "delta_error": 0.2564,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h3": {
+          "baseline_error": 1.9675,
+          "candidate_error": 2.006,
+          "delta_error": 0.0385,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h4": {
+          "baseline_error": 2.0755,
+          "candidate_error": 2.4157,
+          "delta_error": 0.3402,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h5": {
+          "baseline_error": 3.2094,
+          "candidate_error": 3.3356,
+          "delta_error": 0.1262,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h6": {
+          "baseline_error": 3.192,
+          "candidate_error": 3.4072,
+          "delta_error": 0.2152,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h7": {
+          "baseline_error": 4.1815,
+          "candidate_error": 4.3404,
+          "delta_error": 0.1589,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h8": {
+          "baseline_error": 3.3939,
+          "candidate_error": 3.7408,
+          "delta_error": 0.3469,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h9": {
+          "baseline_error": 4.7351,
+          "candidate_error": 4.888,
+          "delta_error": 0.1529,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h10": {
+          "baseline_error": 4.1128,
+          "candidate_error": 4.3549,
+          "delta_error": 0.2421,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h11": {
+          "baseline_error": 2.9733,
+          "candidate_error": 3.114,
+          "delta_error": 0.1407,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h2": {
+          "baseline_error": 1.0246,
+          "candidate_error": 1.2273,
+          "delta_error": 0.2027,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h3": {
+          "baseline_error": 3.2636,
+          "candidate_error": 3.2775,
+          "delta_error": 0.0139,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h4": {
+          "baseline_error": 2.4035,
+          "candidate_error": 2.6638,
+          "delta_error": 0.2603,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h5": {
+          "baseline_error": 3.6503,
+          "candidate_error": 3.6699,
+          "delta_error": 0.0196,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h6": {
+          "baseline_error": 1.6671,
+          "candidate_error": 1.8723,
+          "delta_error": 0.2052,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h7": {
+          "baseline_error": 2.7989,
+          "candidate_error": 2.9053,
+          "delta_error": 0.1064,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h8": {
+          "baseline_error": 2.0946,
+          "candidate_error": 2.3684,
+          "delta_error": 0.2738,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h9": {
+          "baseline_error": 5.3156,
+          "candidate_error": 5.2282,
+          "delta_error": -0.0874,
+          "non_regression_deadband": 0.01
+        }
+      },
+      "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+      "lost_per_note_passes": []
+    },
+    "gain_only": {
+      "accepts_incremental_improvement": false,
+      "case_passes": false,
+      "improved_components": [
+        "metric:Foldback energy",
+        "partial:3:pulse:96:h9"
+      ],
+      "regressed_components": [
+        "partial:2:pulse:84:h10",
+        "partial:2:pulse:84:h11",
+        "partial:2:pulse:84:h12",
+        "partial:2:pulse:84:h2",
+        "partial:2:pulse:84:h3",
+        "partial:2:pulse:84:h4",
+        "partial:2:pulse:84:h5",
+        "partial:2:pulse:84:h6",
+        "partial:2:pulse:84:h7",
+        "partial:2:pulse:84:h8",
+        "partial:2:pulse:84:h9",
+        "partial:3:pulse:96:h10",
+        "partial:3:pulse:96:h11",
+        "partial:3:pulse:96:h2",
+        "partial:3:pulse:96:h3",
+        "partial:3:pulse:96:h4",
+        "partial:3:pulse:96:h5",
+        "partial:3:pulse:96:h6",
+        "partial:3:pulse:96:h7",
+        "partial:3:pulse:96:h8"
+      ],
+      "non_regression_deadbands": {
+        "metrics": {
+          "Pitch": 0.01,
+          "Harmonic shape": 0.01,
+          "Foldback energy": 0.01,
+          "Envelope attack": 5.0,
+          "Envelope release": 5.0,
+          "Gain": 0.01,
+          "Clipping": 0.01
+        },
+        "per_partial_db": 0.01
+      },
+      "components": {
+        "metric:Pitch": {
+          "baseline_error": 0.14813,
+          "candidate_error": 0.14813,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Harmonic shape": {
+          "baseline_error": 7.56136,
+          "candidate_error": 7.56136,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Foldback energy": {
+          "baseline_error": 10.27447,
+          "candidate_error": 9.4128,
+          "delta_error": -0.86167,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Envelope attack": {
+          "baseline_error": 5.3125,
+          "candidate_error": 5.29167,
+          "delta_error": -0.02083,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Envelope release": {
+          "baseline_error": 8.9375,
+          "candidate_error": 8.9375,
+          "delta_error": 0.0,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Gain": {
+          "baseline_error": 1.42087,
+          "candidate_error": 1.42087,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Clipping": {
+          "baseline_error": 0.0,
+          "candidate_error": 0.0,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h10": {
+          "baseline_error": 5.1394,
+          "candidate_error": 5.1394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h11": {
+          "baseline_error": 4.3443,
+          "candidate_error": 4.3443,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h12": {
+          "baseline_error": 3.2533,
+          "candidate_error": 3.2533,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h2": {
+          "baseline_error": 1.7681,
+          "candidate_error": 1.7681,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h3": {
+          "baseline_error": 5.1166,
+          "candidate_error": 5.1166,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h4": {
+          "baseline_error": 5.5636,
+          "candidate_error": 5.5636,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h5": {
+          "baseline_error": 4.6617,
+          "candidate_error": 4.6617,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h6": {
+          "baseline_error": 5.6897,
+          "candidate_error": 5.6897,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h7": {
+          "baseline_error": 5.9621,
+          "candidate_error": 5.9621,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h8": {
+          "baseline_error": 5.1495,
+          "candidate_error": 5.1495,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h9": {
+          "baseline_error": 5.3112,
+          "candidate_error": 5.3112,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h10": {
+          "baseline_error": 2.8007,
+          "candidate_error": 2.8007,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h11": {
+          "baseline_error": 1.8192,
+          "candidate_error": 1.8192,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h2": {
+          "baseline_error": 4.26,
+          "candidate_error": 4.26,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h3": {
+          "baseline_error": 7.5614,
+          "candidate_error": 7.5614,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h4": {
+          "baseline_error": 4.6031,
+          "candidate_error": 4.6031,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h5": {
+          "baseline_error": 5.2717,
+          "candidate_error": 5.2717,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h6": {
+          "baseline_error": 3.5746,
+          "candidate_error": 3.5746,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h7": {
+          "baseline_error": 2.1439,
+          "candidate_error": 2.1439,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h8": {
+          "baseline_error": 2.7394,
+          "candidate_error": 2.7394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h9": {
+          "baseline_error": 2.7023,
+          "candidate_error": 2.7023,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h10": {
+          "baseline_error": 3.3462,
+          "candidate_error": 3.64,
+          "delta_error": 0.2938,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h11": {
+          "baseline_error": 4.0791,
+          "candidate_error": 4.1296,
+          "delta_error": 0.0505,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h12": {
+          "baseline_error": 2.7173,
+          "candidate_error": 3.0164,
+          "delta_error": 0.2991,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h2": {
+          "baseline_error": 0.4801,
+          "candidate_error": 0.7393,
+          "delta_error": 0.2592,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h3": {
+          "baseline_error": 1.9675,
+          "candidate_error": 2.0093,
+          "delta_error": 0.0418,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h4": {
+          "baseline_error": 2.0755,
+          "candidate_error": 2.42,
+          "delta_error": 0.3445,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h5": {
+          "baseline_error": 3.2094,
+          "candidate_error": 3.3415,
+          "delta_error": 0.1321,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h6": {
+          "baseline_error": 3.192,
+          "candidate_error": 3.4155,
+          "delta_error": 0.2235,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h7": {
+          "baseline_error": 4.1815,
+          "candidate_error": 4.3489,
+          "delta_error": 0.1674,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h8": {
+          "baseline_error": 3.3939,
+          "candidate_error": 3.7526,
+          "delta_error": 0.3587,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h9": {
+          "baseline_error": 4.7351,
+          "candidate_error": 4.9011,
+          "delta_error": 0.166,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h10": {
+          "baseline_error": 4.1128,
+          "candidate_error": 4.4288,
+          "delta_error": 0.316,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h11": {
+          "baseline_error": 2.9733,
+          "candidate_error": 3.1723,
+          "delta_error": 0.199,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h2": {
+          "baseline_error": 1.0246,
+          "candidate_error": 1.2337,
+          "delta_error": 0.2091,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h3": {
+          "baseline_error": 3.2636,
+          "candidate_error": 3.2875,
+          "delta_error": 0.0239,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h4": {
+          "baseline_error": 2.4035,
+          "candidate_error": 2.6818,
+          "delta_error": 0.2783,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h5": {
+          "baseline_error": 3.6503,
+          "candidate_error": 3.6947,
+          "delta_error": 0.0444,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h6": {
+          "baseline_error": 1.6671,
+          "candidate_error": 1.9083,
+          "delta_error": 0.2412,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h7": {
+          "baseline_error": 2.7989,
+          "candidate_error": 2.9475,
+          "delta_error": 0.1486,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h8": {
+          "baseline_error": 2.0946,
+          "candidate_error": 2.4271,
+          "delta_error": 0.3325,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h9": {
+          "baseline_error": 5.3156,
+          "candidate_error": 5.291,
+          "delta_error": -0.0246,
+          "non_regression_deadband": 0.01
+        }
+      },
+      "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+      "lost_per_note_passes": []
+    },
+    "disabled_control": {
+      "accepts_incremental_improvement": false,
+      "case_passes": false,
+      "improved_components": [],
+      "regressed_components": [],
+      "non_regression_deadbands": {
+        "metrics": {
+          "Pitch": 0.01,
+          "Harmonic shape": 0.01,
+          "Foldback energy": 0.01,
+          "Envelope attack": 5.0,
+          "Envelope release": 5.0,
+          "Gain": 0.01,
+          "Clipping": 0.01
+        },
+        "per_partial_db": 0.01
+      },
+      "components": {
+        "metric:Pitch": {
+          "baseline_error": 0.14813,
+          "candidate_error": 0.14813,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Harmonic shape": {
+          "baseline_error": 7.56136,
+          "candidate_error": 7.56136,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Foldback energy": {
+          "baseline_error": 10.27447,
+          "candidate_error": 10.27447,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Envelope attack": {
+          "baseline_error": 5.3125,
+          "candidate_error": 5.3125,
+          "delta_error": 0.0,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Envelope release": {
+          "baseline_error": 8.9375,
+          "candidate_error": 8.9375,
+          "delta_error": 0.0,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Gain": {
+          "baseline_error": 1.42087,
+          "candidate_error": 1.42087,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Clipping": {
+          "baseline_error": 0.0,
+          "candidate_error": 0.0,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h10": {
+          "baseline_error": 5.1394,
+          "candidate_error": 5.1394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h11": {
+          "baseline_error": 4.3443,
+          "candidate_error": 4.3443,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h12": {
+          "baseline_error": 3.2533,
+          "candidate_error": 3.2533,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h2": {
+          "baseline_error": 1.7681,
+          "candidate_error": 1.7681,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h3": {
+          "baseline_error": 5.1166,
+          "candidate_error": 5.1166,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h4": {
+          "baseline_error": 5.5636,
+          "candidate_error": 5.5636,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h5": {
+          "baseline_error": 4.6617,
+          "candidate_error": 4.6617,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h6": {
+          "baseline_error": 5.6897,
+          "candidate_error": 5.6897,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h7": {
+          "baseline_error": 5.9621,
+          "candidate_error": 5.9621,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h8": {
+          "baseline_error": 5.1495,
+          "candidate_error": 5.1495,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h9": {
+          "baseline_error": 5.3112,
+          "candidate_error": 5.3112,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h10": {
+          "baseline_error": 2.8007,
+          "candidate_error": 2.8007,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h11": {
+          "baseline_error": 1.8192,
+          "candidate_error": 1.8192,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h2": {
+          "baseline_error": 4.26,
+          "candidate_error": 4.26,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h3": {
+          "baseline_error": 7.5614,
+          "candidate_error": 7.5614,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h4": {
+          "baseline_error": 4.6031,
+          "candidate_error": 4.6031,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h5": {
+          "baseline_error": 5.2717,
+          "candidate_error": 5.2717,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h6": {
+          "baseline_error": 3.5746,
+          "candidate_error": 3.5746,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h7": {
+          "baseline_error": 2.1439,
+          "candidate_error": 2.1439,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h8": {
+          "baseline_error": 2.7394,
+          "candidate_error": 2.7394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h9": {
+          "baseline_error": 2.7023,
+          "candidate_error": 2.7023,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h10": {
+          "baseline_error": 3.3462,
+          "candidate_error": 3.3462,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h11": {
+          "baseline_error": 4.0791,
+          "candidate_error": 4.0791,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h12": {
+          "baseline_error": 2.7173,
+          "candidate_error": 2.7173,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h2": {
+          "baseline_error": 0.4801,
+          "candidate_error": 0.4801,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h3": {
+          "baseline_error": 1.9675,
+          "candidate_error": 1.9675,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h4": {
+          "baseline_error": 2.0755,
+          "candidate_error": 2.0755,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h5": {
+          "baseline_error": 3.2094,
+          "candidate_error": 3.2094,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h6": {
+          "baseline_error": 3.192,
+          "candidate_error": 3.192,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h7": {
+          "baseline_error": 4.1815,
+          "candidate_error": 4.1815,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h8": {
+          "baseline_error": 3.3939,
+          "candidate_error": 3.3939,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h9": {
+          "baseline_error": 4.7351,
+          "candidate_error": 4.7351,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h10": {
+          "baseline_error": 4.1128,
+          "candidate_error": 4.1128,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h11": {
+          "baseline_error": 2.9733,
+          "candidate_error": 2.9733,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h2": {
+          "baseline_error": 1.0246,
+          "candidate_error": 1.0246,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h3": {
+          "baseline_error": 3.2636,
+          "candidate_error": 3.2636,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h4": {
+          "baseline_error": 2.4035,
+          "candidate_error": 2.4035,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h5": {
+          "baseline_error": 3.6503,
+          "candidate_error": 3.6503,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h6": {
+          "baseline_error": 1.6671,
+          "candidate_error": 1.6671,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h7": {
+          "baseline_error": 2.7989,
+          "candidate_error": 2.7989,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h8": {
+          "baseline_error": 2.0946,
+          "candidate_error": 2.0946,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h9": {
+          "baseline_error": 5.3156,
+          "candidate_error": 5.3156,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        }
+      },
+      "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+      "lost_per_note_passes": []
+    },
+    "pulse2x_vs_gain_only": {
+      "accepts_incremental_improvement": true,
+      "case_passes": false,
+      "improved_components": [
+        "metric:Foldback energy",
+        "partial:2:pulse:84:h10",
+        "partial:2:pulse:84:h11",
+        "partial:2:pulse:84:h12",
+        "partial:2:pulse:84:h8",
+        "partial:2:pulse:84:h9",
+        "partial:3:pulse:96:h10",
+        "partial:3:pulse:96:h11",
+        "partial:3:pulse:96:h3",
+        "partial:3:pulse:96:h4",
+        "partial:3:pulse:96:h5",
+        "partial:3:pulse:96:h6",
+        "partial:3:pulse:96:h7",
+        "partial:3:pulse:96:h8",
+        "partial:3:pulse:96:h9"
+      ],
+      "regressed_components": [],
+      "non_regression_deadbands": {
+        "metrics": {
+          "Pitch": 0.01,
+          "Harmonic shape": 0.01,
+          "Foldback energy": 0.01,
+          "Envelope attack": 5.0,
+          "Envelope release": 5.0,
+          "Gain": 0.01,
+          "Clipping": 0.01
+        },
+        "per_partial_db": 0.01
+      },
+      "components": {
+        "metric:Pitch": {
+          "baseline_error": 0.14813,
+          "candidate_error": 0.14813,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Harmonic shape": {
+          "baseline_error": 7.56136,
+          "candidate_error": 7.56136,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Foldback energy": {
+          "baseline_error": 9.4128,
+          "candidate_error": 2.20593,
+          "delta_error": -7.20687,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Envelope attack": {
+          "baseline_error": 5.29167,
+          "candidate_error": 5.27083,
+          "delta_error": -0.02084,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Envelope release": {
+          "baseline_error": 8.9375,
+          "candidate_error": 8.9375,
+          "delta_error": 0.0,
+          "non_regression_deadband": 5.0
+        },
+        "metric:Gain": {
+          "baseline_error": 1.42087,
+          "candidate_error": 1.42087,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "metric:Clipping": {
+          "baseline_error": 0.0,
+          "candidate_error": 0.0,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h10": {
+          "baseline_error": 5.1394,
+          "candidate_error": 5.1394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h11": {
+          "baseline_error": 4.3443,
+          "candidate_error": 4.3443,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h12": {
+          "baseline_error": 3.2533,
+          "candidate_error": 3.2533,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h2": {
+          "baseline_error": 1.7681,
+          "candidate_error": 1.7681,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h3": {
+          "baseline_error": 5.1166,
+          "candidate_error": 5.1166,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h4": {
+          "baseline_error": 5.5636,
+          "candidate_error": 5.5636,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h5": {
+          "baseline_error": 4.6617,
+          "candidate_error": 4.6617,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h6": {
+          "baseline_error": 5.6897,
+          "candidate_error": 5.6897,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h7": {
+          "baseline_error": 5.9621,
+          "candidate_error": 5.9621,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h8": {
+          "baseline_error": 5.1495,
+          "candidate_error": 5.1495,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:0:saw:84:h9": {
+          "baseline_error": 5.3112,
+          "candidate_error": 5.3112,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h10": {
+          "baseline_error": 2.8007,
+          "candidate_error": 2.8007,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h11": {
+          "baseline_error": 1.8192,
+          "candidate_error": 1.8192,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h2": {
+          "baseline_error": 4.26,
+          "candidate_error": 4.26,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h3": {
+          "baseline_error": 7.5614,
+          "candidate_error": 7.5614,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h4": {
+          "baseline_error": 4.6031,
+          "candidate_error": 4.6031,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h5": {
+          "baseline_error": 5.2717,
+          "candidate_error": 5.2717,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h6": {
+          "baseline_error": 3.5746,
+          "candidate_error": 3.5746,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h7": {
+          "baseline_error": 2.1439,
+          "candidate_error": 2.1439,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h8": {
+          "baseline_error": 2.7394,
+          "candidate_error": 2.7394,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:1:saw:96:h9": {
+          "baseline_error": 2.7023,
+          "candidate_error": 2.7023,
+          "delta_error": 0.0,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h10": {
+          "baseline_error": 3.64,
+          "candidate_error": 3.6223,
+          "delta_error": -0.0177,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h11": {
+          "baseline_error": 4.1296,
+          "candidate_error": 4.1105,
+          "delta_error": -0.0191,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h12": {
+          "baseline_error": 3.0164,
+          "candidate_error": 2.9945,
+          "delta_error": -0.0219,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h2": {
+          "baseline_error": 0.7393,
+          "candidate_error": 0.7365,
+          "delta_error": -0.0028,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h3": {
+          "baseline_error": 2.0093,
+          "candidate_error": 2.006,
+          "delta_error": -0.0033,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h4": {
+          "baseline_error": 2.42,
+          "candidate_error": 2.4157,
+          "delta_error": -0.0043,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h5": {
+          "baseline_error": 3.3415,
+          "candidate_error": 3.3356,
+          "delta_error": -0.0059,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h6": {
+          "baseline_error": 3.4155,
+          "candidate_error": 3.4072,
+          "delta_error": -0.0083,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h7": {
+          "baseline_error": 4.3489,
+          "candidate_error": 4.3404,
+          "delta_error": -0.0085,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h8": {
+          "baseline_error": 3.7526,
+          "candidate_error": 3.7408,
+          "delta_error": -0.0118,
+          "non_regression_deadband": 0.01
+        },
+        "partial:2:pulse:84:h9": {
+          "baseline_error": 4.9011,
+          "candidate_error": 4.888,
+          "delta_error": -0.0131,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h10": {
+          "baseline_error": 4.4288,
+          "candidate_error": 4.3549,
+          "delta_error": -0.0739,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h11": {
+          "baseline_error": 3.1723,
+          "candidate_error": 3.114,
+          "delta_error": -0.0583,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h2": {
+          "baseline_error": 1.2337,
+          "candidate_error": 1.2273,
+          "delta_error": -0.0064,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h3": {
+          "baseline_error": 3.2875,
+          "candidate_error": 3.2775,
+          "delta_error": -0.01,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h4": {
+          "baseline_error": 2.6818,
+          "candidate_error": 2.6638,
+          "delta_error": -0.018,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h5": {
+          "baseline_error": 3.6947,
+          "candidate_error": 3.6699,
+          "delta_error": -0.0248,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h6": {
+          "baseline_error": 1.9083,
+          "candidate_error": 1.8723,
+          "delta_error": -0.036,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h7": {
+          "baseline_error": 2.9475,
+          "candidate_error": 2.9053,
+          "delta_error": -0.0422,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h8": {
+          "baseline_error": 2.4271,
+          "candidate_error": 2.3684,
+          "delta_error": -0.0587,
+          "non_regression_deadband": 0.01
+        },
+        "partial:3:pulse:96:h9": {
+          "baseline_error": 5.291,
+          "candidate_error": 5.2282,
+          "delta_error": -0.0628,
+          "non_regression_deadband": 0.01
+        }
+      },
+      "meaning": "incremental acceptance permits unchanged failing properties; case_passes requires every fixed limit",
+      "lost_per_note_passes": []
+    }
+  }
+}

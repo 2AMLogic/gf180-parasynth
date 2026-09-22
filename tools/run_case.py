@@ -1887,16 +1887,12 @@ def base_check(allow_stale: bool = False) -> dict:
     which then stamped every record with a staleness warning that was false.
     An ignored gate and a lying record are both worse than no gate.
 
-    So the refusal now needs BOTH a differing dependency and `HEAD` actually
-    being behind `origin/main`. When `behind_commits` is 0, `origin/main` is an
-    ancestor of `HEAD`: every difference is this branch's own work, the tree
-    cannot be missing anything `origin/main` has, and the failure this guard
-    was written for -- a worktree two commits behind, reporting a landed kit as
-    a capability gap -- cannot occur. A branch that is ahead AND behind is
-    still refused, because then it IS missing something. The differing files
-    are recorded either way, under `stale_dependencies` when behind and
-    `ahead_dependencies` when not, so the record never loses the fact that
-    these inputs are not `origin/main`'s."""
+    Compare differing dependencies against the common ancestor: a repair on
+    this branch stays measurable when main gains an unrelated documentation
+    commit. A differing dependency that changed upstream still refuses, even
+    when this branch also changed it. All differences remain in provenance.
+    If the common ancestor is unavailable, retain the conservative refusal.
+    """
     ref = "origin/main"
     have = _git("rev-parse", "--verify", f"{ref}^{{commit}}").strip()
     if not have:
@@ -1906,8 +1902,10 @@ def base_check(allow_stale: bool = False) -> dict:
     import drums_fx as dx
 
     stale_deps = {}
+    upstream_text = {}
     for rel in DEPENDENCIES:
         theirs = _git("show", f"{ref}:{rel}")
+        upstream_text[rel] = theirs
         ours = ""
         try:
             ours = (ROOT / rel).read_text()
@@ -1928,30 +1926,41 @@ def base_check(allow_stale: bool = False) -> dict:
 
     ahead = int(_git("rev-list", "--count", f"{ref}..HEAD").strip() or 0)
     is_ahead_only = behind == 0
+    upstream_changed = set(DEPENDENCIES)
+    if not is_ahead_only:
+        common = _git("merge-base", "HEAD", ref).strip()
+        if common:
+            for rel in DEPENDENCIES:
+                previous = _git("show", f"{common}:{rel}")
+                # Empty/failed reads retain the conservative refusal.
+                if previous and previous == upstream_text[rel]:
+                    upstream_changed.discard(rel)
+    stale = {rel: detail for rel, detail in stale_deps.items()
+             if not is_ahead_only and rel in upstream_changed}
+    ahead_deps = {rel: detail for rel, detail in stale_deps.items() if rel not in stale}
     state = {"checked": True, "origin_main": have[:12], "behind_commits": behind,
              "ahead_commits": ahead,
              "n_stops_here": dx.N_STOPS, "n_stops_origin_main": theirs_stops,
-             "stale_dependencies": {} if is_ahead_only else stale_deps,
-             "ahead_dependencies": stale_deps if is_ahead_only else {},
+             "stale_dependencies": stale,
+             "ahead_dependencies": ahead_deps,
              "allow_stale": allow_stale}
     problems = []
-    if stale_deps and not is_ahead_only:
-        problems.append("these inputs differ from origin/main: " + ", ".join(sorted(stale_deps)))
-    if theirs_stops is not None and theirs_stops != dx.N_STOPS and not is_ahead_only:
+    if stale:
+        problems.append("these inputs differ from origin/main: " + ", ".join(sorted(stale)))
+    if theirs_stops is not None and theirs_stops != dx.N_STOPS and "model/drums_fx.py" in stale:
         problems.append(f"the kit here has {dx.N_STOPS} drum circuits, {ref} has {theirs_stops}")
     state["problems"] = problems
-    if is_ahead_only and stale_deps:
+    if ahead_deps:
         state["ahead_note"] = (
-            f"{ahead} commit(s) ahead of {ref} and 0 behind, so these inputs differ "
-            f"because this branch changed them: {', '.join(sorted(stale_deps))}. That is "
-            f"not a stale premise -- the tree contains everything {ref} has.")
+            f"These inputs differ because this branch changed them, while {ref} "
+            f"has no missing changes to these dependencies: {', '.join(sorted(ahead_deps))}.")
     if problems and not allow_stale:
         raise StaleBase("; ".join(problems) +
                         f" -- rebase onto {ref} and re-run. Refusing the whole batch: "
                         f"per-case refusals from a stale checkout describe our tooling, "
                         f"not the instrument, and read like capability gaps. "
                         f"--allow-stale overrides and records that it did.")
-    if behind:
+    if behind and not problems:
         state["note"] = (f"{behind} commit(s) behind {ref}, none of them touching an "
                          f"input this measurement depends on")
     return state
