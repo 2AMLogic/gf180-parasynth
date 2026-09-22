@@ -28,12 +28,21 @@ set_property IOSTANDARD LVCMOS33 [get_ports {spi_sck spi_mosi spi_miso spi_cs_n}
 set_property PULLUP TRUE [get_ports spi_cs_n]
 set_property PULLDOWN TRUE [get_ports {spi_sck spi_mosi}]
 
+# USB-UART (FTDI): A9 carries the FTDI's TX into the FPGA (uart_rxd), D10
+# carries the FPGA's TX to the FTDI (uart_txd). The pullup holds the idle
+# level when USB is disconnected.
+set_property PACKAGE_PIN A9 [get_ports uart_rxd]
+set_property PACKAGE_PIN D10 [get_ports uart_txd]
+set_property IOSTANDARD LVCMOS33 [get_ports {uart_rxd uart_txd}]
+set_property PULLUP TRUE [get_ports uart_rxd]
+
 # The link samples asynchronous inputs through two flops. Only the paths to
 # the first stages are asynchronous; do not exempt the engine's timing.
 set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_spi/(sck_q|mosi_q|csn_q)_reg\[[01]\]}]
 set_false_path -from [get_ports spi_sck] -to [get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_mosi] -to [get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_cs_n] -to [get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]
+set_false_path -from [get_ports uart_rxd] -to [get_pins -hier -regexp {.*g_uart/u_uart/rx_q_reg\[0\]/D}]
 set_false_path -from [get_ports btn_reset]
 
 # External DAC and controller timing are still unqualified. Do not suppress
