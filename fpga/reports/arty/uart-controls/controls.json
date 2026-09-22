@@ -1,0 +1,49 @@
+{
+  "UART_CORRUPT_ADDR": {
+    "state": "CAUGHT",
+    "scenario": "corrupt-byte",
+    "writes_seen": 37,
+    "writes_sent": 37,
+    "writes_bad": 37,
+    "frame_pred_bad": 0,
+    "errs": {
+      "5": 1
+    }
+  },
+  "UART_NO_CHECKSUM": {
+    "state": "CAUGHT",
+    "scenario": "drop-byte",
+    "writes_seen": 27,
+    "writes_sent": 26,
+    "writes_bad": 20,
+    "frame_pred_bad": 20,
+    "errs": {}
+  },
+  "UART_NOFF_BLOCKED": {
+    "state": "CAUGHT",
+    "scenario": "noff-full",
+    "writes_seen": 90,
+    "writes_sent": 90,
+    "writes_bad": 69,
+    "frame_pred_bad": 69,
+    "errs": {}
+  },
+  "UART_EVQ_OVF_SILENT": {
+    "state": "CAUGHT",
+    "scenario": "overflow",
+    "writes_seen": 84,
+    "writes_sent": 84,
+    "writes_bad": 64,
+    "frame_pred_bad": 64,
+    "errs": {}
+  },
+  "UART_RESET_LEAK": {
+    "state": "CAUGHT",
+    "scenario": "reset-mid",
+    "writes_seen": 0,
+    "writes_sent": 76,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "errs": {}
+  }
+}
