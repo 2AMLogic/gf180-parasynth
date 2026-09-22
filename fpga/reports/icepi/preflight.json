@@ -1,0 +1,75 @@
+{
+  "state": "INCOMPATIBLE",
+  "ready_to_program": false,
+  "scope": "identity and two resource limits only; no IcePi build, timing, audio or playback qualification",
+  "target": {
+    "board": "icepi-zero",
+    "device": "25k",
+    "package": "CABGA256",
+    "oscillator_mhz": 50,
+    "capacity": {
+      "MULT18X18D": 28,
+      "TRELLIS_COMB": 24288
+    }
+  },
+  "recorded_build": {
+    "commit": "11217322f588b80d890b5dc7b9444e8d20c48c3f",
+    "configuration": {
+      "OSC2X": 1,
+      "FILTER2X": 1,
+      "PULSE2X": 0
+    },
+    "device": "85k",
+    "package": "CABGA381",
+    "used": {
+      "MULT18X18D": 104,
+      "TRELLIS_COMB": 30806
+    },
+    "simulation_evidence": {
+      "commit": "36137df",
+      "transcript": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt",
+      "sha256": "62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448",
+      "core_files_and_roms_identical": true,
+      "scope": "reused complete-phrase SPI-to-I2S core simulation; FPGA wrapper is not covered"
+    }
+  },
+  "identity_mismatches": [
+    "device",
+    "package",
+    "board_constraints"
+  ],
+  "resource_excess": {
+    "MULT18X18D": 76,
+    "TRELLIS_COMB": 6518
+  },
+  "publication_sha256": "74edabcceae5414979d91bf7e5128c351a7b94a2f6be8b96de84bac5f249c868",
+  "bitstream_sha256": "e15314dc81ce61e88a5da5a56c072927bc967d82d7d3d4fb57c18738fd69f096",
+  "sources": [
+    "https://github.com/cheyao/icepi-zero/blob/e01faa2bd35dcb7269827f8420b845d46c78c869/gateware/README.md",
+    "https://github.com/cheyao/icepi-zero/blob/e01faa2bd35dcb7269827f8420b845d46c78c869/gateware/Makefile",
+    "https://www.crowdsupply.com/icy-electronics/icepi-zero"
+  ],
+  "pcb_revision_confirmed": false,
+  "pin_plan": null,
+  "historical_dsp": {
+    "netlist_sha256": "786baaa0b5b828ebc316388faa6531a6e6f4da4dc80d79fda26a97fa3f2a5ed6",
+    "total": 104,
+    "by_block": {
+      "drums": 6,
+      "ladder": 4,
+      "oscillator_2x": 12,
+      "other_voice": 6,
+      "rate_converter": 76
+    },
+    "rate_converter_source_spans": {
+      "rate_conv_2x.v:122.36-122.76": 2,
+      "rate_conv_2x.v:124.38-124.80": 38,
+      "rate_conv_2x.v:144.38-144.78": 2,
+      "rate_conv_2x.v:147.42-147.84": 34
+    },
+    "scope": "cell count from historical synthesis; neither timing nor sound correctness",
+    "source_commit": "dc7bae4ff9dc03823ad0a2acf6922d7b50220a8a",
+    "yosys_version": "Yosys 0.69+post (git sha1 143eb14f9cc55d6f8927e68523b0c9d2166ed02c, Release, AppleClang clang++ 21.0.0.21000101)",
+    "synthesis_report_sha256": "7cc761fb2938dceba5197c1eca9c4143358c41aa34f130ff30c226f9436fd397"
+  }
+}

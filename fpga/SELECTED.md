@@ -1,5 +1,11 @@
 # Selected Mono FPGA checkpoint
 
+The ordered hardware is **IcePi Zero (ECP5-25F, CABGA256)**. This document's
+published bitstream targets **ULX3S 85F, CABGA381** and cannot program that
+board. The selected engine also exceeds the IcePi's resources. See
+[the IcePi first-audio plan](ICEPI.md) for the hardware-specific path and
+remaining work. Preserve this 85F artifact as historical build evidence.
+
 `m5a-saw` and `m5a-pulse` carry the measured M5A patch, current envelope
 encoding, and explicit `OSC2X=1 FILTER2X=1` requirement. The saw uses 20 kHz
 cutoff and −0.45428 dB correction. Pulse uses control code 7 (`pulse29`),
