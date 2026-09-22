@@ -171,13 +171,14 @@ mid-phrase, dropped byte, corrupted byte) all bit-exact against the integer
 model with exact device-frame timing, plus 5 injected-bug controls each
 demonstrated to turn the bench red. The evidence lives in
 [reports/arty/uart-clean](reports/arty/uart-clean). No physical playback has
-been attempted. The UART-bridge bitstream is PREPARED but NOT built: this
-box's Vivado 2025.1 runner is stopped (see Remote build status), so the build
-inputs, Tcl script and validated wrapper evidence stand ready in
-`build/arty-prepared` / [reports/arty/uart-clean](reports/arty/uart-clean);
-running `fpga/build_arty.py --verification
-fpga/reports/arty/uart-clean/verification.json` on a Vivado host produces the
-bitstream, labelled BUILT_REQUIRES_TIMING_REVIEW like every build here. The
+been attempted. The UART-bridge bitstream is BUILT but NOT published as the
+baseline: Vivado 2025.1 (SW Build 6140274) routed it from this branch with
+`fpga/build_arty.py --verification
+fpga/reports/arty/uart-clean/verification.json`; the state is
+BUILT_REQUIRES_TIMING_REVIEW and the artifacts are bound in
+[reports/arty/uart-bridge-2025.1](reports/arty/uart-bridge-2025.1). The
+bitstream is 3,825,912 bytes, SHA-256
+`1d54701662149bd7118351dfbc78126e23ad0343a8da32d0a5a06eaf9cd204a5`. The
 published baseline bitstream above predates the bridge and does not contain
 it. The SPI path on the modified wrapper is re-verified unchanged
 ([reports/arty/spi-smoke-uart](reports/arty/spi-smoke-uart): 67/67 writes,
