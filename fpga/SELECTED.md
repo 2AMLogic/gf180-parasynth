@@ -51,7 +51,7 @@ separately verified pulse 2× candidate from #192.
 The selected baseline synthesized successfully, but placement on the 25F
 failed: 30,803 / 24,288 logic cells and 104 / 28 multipliers. No bitstream or
 timing pass is claimed for that device. See `reports/selected/build-25k.json`
-and its placement log. The unchanged netlist is being evaluated on 85F;
+and its placement log. The unchanged baseline has now built and met timing on 85F;
 that is a different hardware target, not evidence of a 25F fit.
 
 Reproduce placement without repeating the 824-second synthesis only when
@@ -100,3 +100,5 @@ or captured physical line output.
 
 See [the recorded 85F result](reports/selected/linux-85f/README.md) and its
 hash-bound publication record. Physical playback remains unverified.
+
+The published 85F baseline achieves **12.886930 MHz** against **12.288183 MHz** reported required. Use the pinned historical bitstream linked above; current source changes are explicitly recorded separately. The publication quantization repair required no routing rerun.

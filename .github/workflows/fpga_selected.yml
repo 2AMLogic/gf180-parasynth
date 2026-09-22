@@ -2,15 +2,8 @@ name: fpga-selected-85f
 
 on:
   workflow_dispatch:
-  push:
-    branches: [feature/fpga-selected-preset]
-    paths:
-      - '.github/workflows/fpga_selected.yml'
-      - 'tools/setup_ci_oss_cad.py'
-      - 'fpga/build_selected.py'
-      - 'fpga/rtl/**'
-      - 'fpga/boards/**'
-      - 'rtl-sketch/**'
+  # Routing is explicitly dispatched. Republishing a frozen build or merging
+  # unrelated candidate RTL must not rerun the expensive 85F route.
 
 permissions:
   contents: read
