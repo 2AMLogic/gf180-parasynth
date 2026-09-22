@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 import measure_m1a_volume_mapping as probe
+import diagnose_m1a_oscillator_mapping as diagnosis
 
 
 @pytest.mark.parametrize("offset", [0., -3.49, 3.49])
@@ -23,3 +24,15 @@ def test_isolated_octave_mapping_known_answer(tmp_path, monkeypatch, offset):
     monkeypatch.setattr(probe.bass, "MANIFEST", tmp_path / "manifest.json")
     result = probe.oscillator_mapping({"controls": controls})
     assert result["octave_offset_cents"] == pytest.approx([offset] * 3, abs=.03)
+
+
+@pytest.mark.parametrize("phase", [0., math.pi])
+def test_interference_power_known_constructive_and_destructive_signals(phase):
+    t = np.arange(probe.SR // 4) / probe.SR
+    first = np.sin(2 * np.pi * 800 * t)
+    second = .8 * np.sin(2 * np.pi * 800 * t + phase)
+    measured = diagnosis.interference(first, second, 800)
+    expected = 1 + .8**2 + 2 * .8 * math.cos(phase)
+    assert measured["sum_power"] == pytest.approx(expected, abs=1e-10)
+    assert measured["coherent_vs_incoherent_db"] == pytest.approx(10 * math.log10(expected / (1 + .8**2)), abs=1e-9)
+    assert measured["linearity_residual"] < 1e-12
