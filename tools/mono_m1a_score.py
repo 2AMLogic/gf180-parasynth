@@ -1,4 +1,5 @@
-"""First M1A comparison. Bass attack and Model D cross-check remain NO VERDICT.
+"""First M1A comparison. Attack now qualified; Model D cross-check remains
+unavailable through the qualified host (docs/scorecard/mono-m5a-policy.md).
 
 The mapping is fixed before rendering. Uncalibrated envelope controls are
 explicit hypotheses, never inferred from the Mini V3 normalized knob numbers.
@@ -72,7 +73,8 @@ def compare_audio(ours, ref):
         raise Refused("bass comparison audio is silent or non-finite")
     am = lead.am
     envelopes = [am.rms_envelope(x, ms=reference.ENVELOPE_WINDOW_MS, sr=SR) for x in (ours, ref)]
-    values = {name: [] for name in ("Pitch", "Harmonic shape", "Envelope release", "Gain")}
+    values = {name: [] for name in ("Pitch", "Harmonic shape", "Envelope attack",
+                                    "Envelope release", "Gain")}
     rows = []
     for event in reference.EVENTS:
         on, off = event["on_s"], event["on_s"] + event["gate_s"]
@@ -96,14 +98,21 @@ def compare_audio(ours, ref):
         if not all(t.get("valid") and t.get("release_complete_40db") for t in timing):
             raise Refused("bass release incomplete or unmeasurable")
         values["Envelope release"].append(tuple(t["release_t20_ms"] for t in timing))
+        # Qualified 10-90% attack on BOTH sides by the same waveform-domain
+        # fit, each measured with its own steady-state template.
+        attacks = [reference.attack_fit(x, SR, p.value, on, off)
+                   for x, p in zip((ours, ref), pitches)]
+        values["Envelope attack"].append(tuple(a["attack_10_90_ms"] for a in attacks))
         rows.append({**event, "pitch_error_cents": pitch_error,
                      "harmonics_db": dict(zip(("model", "reference"), spectra)),
                      "harmonic_error_db_model_minus_reference": {k: v[0] for k, v in partials.items()},
                      "harmonic_comparison": {k: v[1] for k, v in partials.items()},
                      "rms_dbfs": dict(zip(("model", "reference"), levels)),
                      "release_t20_ms": dict(zip(("model", "reference"), values["Envelope release"][-1])),
-                     "attack_observation_UNQUALIFIED_ms": dict(zip(("model", "reference"),
-                                                           (t["attack_10_90_ms"] for t in timing)))})
+                     "attack_10_90_ms": dict(zip(("model", "reference"), values["Envelope attack"][-1])),
+                     "attack_fit": {side: {k: a[k] for k in ("t0_ms", "ramp_ms", "shape_p",
+                                                            "explained_ratio")}
+                                    for side, a in zip(("model", "reference"), attacks)}})
     properties = {}
     for name, pairs in values.items():
         ours_value, reference_value = max(pairs, key=lambda p: abs(p[0] - p[1]))
@@ -111,8 +120,11 @@ def compare_audio(ours, ref):
         units = "cents" if name == "Pitch" else ("ms" if name == "Envelope release" else "dB")
         if name == "Envelope release":
             tolerance, basis = 20., "ms; fixed bass screening limit, above known-signal release error (<10 ms)"
+        if name == "Envelope attack":
+            tolerance, basis = 5.0, ("ms; the M5A screening limit for the same 10-90% "
+                                     "measurement; the waveform-fit estimator's known-signal "
+                                     "error is under 1 ms (qualification in the manifest)")
         properties[name] = lead._metric(name, ours_value, reference_value, units, tolerance, basis)
-    properties["Envelope attack"] = invalid("40 ms RMS window fails known 8 ms bass attack; no qualified attack estimate")
     properties["Filter envelope"] = invalid("output-difference control does not identify cutoff trajectory; mapping provisional")
     clips = [100 * np.count_nonzero(np.abs(x) >= 32767 / 32768) / len(x) for x in (ours, ref)]
     properties["Clipping"] = lead._metric("Clipping", *clips, "%", .01, "% samples at output rail")
@@ -122,11 +134,14 @@ def compare_audio(ours, ref):
 def required_metrics(measured):
     props = measured["properties"]
     distance = max(abs(props[n]["error"]) / props[n]["tolerance"] for n in ("Pitch", "Harmonic shape"))
+    envelope = max(abs(props[n]["error"]) / props[n]["tolerance"]
+                   for n in ("Envelope attack", "Envelope release"))
     return {"Fundamental/harmonics": lead._metric("Fundamental/harmonics", distance, 0., "normalized maximum", 1.,
                 "maximum of pitch / 1 cent and harmonic error / 1 dB; no averaging"),
-            "envelope": invalid("attack estimator and filter-envelope mapping unqualified; qualified release reported separately"),
-            "bass level": props["Gain"],
-            "Model D cross-check": invalid("case requires a Model D cross-check; only Mini V3 frozen reference exists", "")}
+            "envelope": lead._metric("envelope", envelope, 0., "normalized maximum", 1.,
+                "maximum of envelope attack / 5 ms (waveform-fit, qualified) and "
+                "envelope release / 20 ms (40 ms RMS window); no averaging"),
+            "bass level": props["Gain"]}
 
 
 def load_model_cache(record, patch, engine):
@@ -207,7 +222,9 @@ def run(case, inject="", keep_audio=True, cached_record=None):
     provenance["worktree"] = source_tree
     return {"engine": "fixed-model", "case_id": "M1A", "subject": case["subject"],
             "source_commit": source_commit, "analysis_run": run_case.analysis_run(),
-            "analysis_version": "m1a-partial-score-v1", "reference_profile": "frozen Mini V3; Model D cross-check unavailable",
+            "analysis_version": "m1a-envelope-score-v1",
+            "reference_profile": "frozen Mini V3 software reference (screening policy: "
+                                 "docs/scorecard/mono-m5a-policy.md); Model D cross-check unavailable",
             "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
             "audio": artifacts.get("ours", ""), "metrics": required_metrics(measured),
             "diagnostics": {**measured, "qualification": qualification, "configuration": config,
@@ -215,7 +232,20 @@ def run(case, inject="", keep_audio=True, cached_record=None):
                             "render_worktree": (cached_record["provenance"]["worktree"] if cached_record else source_tree),
                             "audio_reused": cached_record is not None,
                             "model_audio_sha256": sha(output) if keep_audio else None,
-                            "wrong_then_right": {"apparatus_corrections": 4,
-                                "latest": "release qualification had been extended to attack; known 8 ms signal rejects it"}},
+                            "missing_evidence": {
+                                "Model D cross-check": "renders exact digital silence under the "
+                                "qualified host (dawdreamer); tracked upstream (#123). The case's "
+                                "required_measurements do not include it; the screening policy "
+                                "accepts the frozen Mini V3 software reference alone."},
+                            "filter_envelope_scope": "the model's filter-envelope mapping stays "
+                                "provisional and the reference cutoff trajectory is not measurable "
+                                "from frozen audio; recorded as an unqualified property, not a metric",
+                            "wrong_then_right": {"apparatus_corrections": 5,
+                                "session_estimator_iterations": 6,
+                                "latest": "six ground-truth-caught defects while building the "
+                                "waveform-fit attack estimator (objective, template phase twice, "
+                                "FFT offset, fold smear, shape refinement); all listed in the "
+                                "estimator commit"}},
             "provenance": provenance,
-            "note": "NO VERDICT: first model comparison, with qualified component measurements and explicit missing evidence"}
+            "note": "envelope attack qualified by waveform-domain fit with closed-form "
+                    "ground truth; envelope metric = worst of attack/release normalized errors"}

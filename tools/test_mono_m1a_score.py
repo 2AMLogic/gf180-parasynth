@@ -27,12 +27,17 @@ def test_known_bass_and_pitch_mutation():
     assert abs(clean["properties"]["Pitch"]["error"]) < .01
     assert changed["properties"]["Pitch"]["error"] == pytest.approx(25, abs=.5)
     assert clean["properties"]["Envelope release"]["valid"]
-    assert not clean["properties"]["Envelope attack"]["valid"]
-    assert "error" not in clean["properties"]["Envelope attack"]
+    # identical audio on both sides: the qualified attack must read the same
+    # 8 ms 10-90 span it was built with, within the estimator's own bound
+    assert clean["properties"]["Envelope attack"]["valid"]
+    assert abs(clean["properties"]["Envelope attack"]["error"]) < 1.0
+    assert abs(changed["properties"]["Envelope attack"]["error"]) < 1.0
     for event in clean["events"]:
         assert event["harmonics_db"]["model"]["h2"] == pytest.approx(20 * np.log10(.2), abs=.05)
         assert event["harmonics_db"]["model"]["h3"] == pytest.approx(-20., abs=.05)
         assert event["release_t20_ms"]["model"] == pytest.approx(50 * np.log(10), abs=10)
+        assert event["attack_10_90_ms"]["model"] == pytest.approx(8., abs=1.0)
+        assert event["attack_10_90_ms"]["reference"] == pytest.approx(8., abs=1.0)
 
 
 def test_missing_or_corrupt_reference_refuses(tmp_path):
@@ -55,17 +60,18 @@ def test_silent_and_truncated_candidates_refuse():
         bass.compare_audio(clean[:100], clean)
 
 
-def test_runner_executes_bass_and_preserves_required_no_verdict():
+def test_runner_executes_bass_with_qualified_envelope():
     assert run_case.plan_for("M1A") == "mono-bass"
     measured = bass.compare_audio(signal(), signal())
     metrics = bass.required_metrics(measured)
     case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
     required = {x.strip() for x in case["required_measurements"].split(";")}
     assert required <= metrics.keys()
+    assert all(m["valid"] for m in metrics.values()), \
+        f"an invalid metric makes the case no-verdict: {[m for m in metrics if not m['valid']]}"
+    assert metrics["envelope"]["valid"]
     assert metrics["Fundamental/harmonics"]["valid"]
     assert metrics["bass level"]["valid"]
-    assert not metrics["envelope"]["valid"]
-    assert not metrics["Model D cross-check"]["valid"]
 
 
 def test_render_provenance_uses_existing_dsp_sources(monkeypatch):
