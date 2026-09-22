@@ -190,22 +190,27 @@ foreach c $cells {
         emit "PIN $pn dir=$dir net=$netname driver=$drv"
     }
     emit "---- P/PCOUT fanout ----"
-    foreach pn {P PCOUT} {
-        foreach p [get_pins -quiet -of_objects $cell -filter "REF_PIN_NAME == $pn"] {
-            foreach n [get_nets -quiet -of_objects $p] {
-                set loads [get_pins -quiet -leaf -of_objects $n -filter {DIRECTION == IN}]
-                emit "FANOUT $pn net [get_property NAME $n] loads=[llength $loads]"
-                foreach l [lrange $loads 0 7] {
-                    set lc [get_cells -quiet -of_objects $l]
-                    set lref "-"
-                    if {[llength $lc]} { set lref [get_property REF_NAME [lindex $lc 0]] }
-                    emit "  load [get_property NAME $l] ($lref)"
-                }
+    # REF_NAME == P does not match indexed bus pins (P[37] etc.), so select
+    # per-bit pins by name pattern instead.
+    foreach p [get_pins -quiet -of_objects $cell -filter {REF_PIN_NAME =~ "^P\\[*|^PCOUT\\[*"}] {
+        set pn [get_property REF_PIN_NAME $p]
+        foreach n [get_nets -quiet -of_objects $p] {
+            set loads [get_pins -quiet -leaf -of_objects $n -filter {DIRECTION == IN}]
+            emit "FANOUT $pn net [get_property NAME $n] loads=[llength $loads]"
+            foreach l [lrange $loads 0 7] {
+                set lc [get_cells -quiet -of_objects $l]
+                set lref "-"
+                if {[llength $lc]} { set lref [get_property REF_NAME [lindex $lc 0]] }
+                emit "  load [get_property NAME $l] ($lref)"
             }
         }
     }
     emit "---- control cones (OPMODE/ALUMODE/CARRYINSEL/CARRYIN/CE/RST) ----"
-    set cone_pins [get_pins -quiet -of_objects $cell -filter {REF_PIN_NAME == OPMODE || REF_PIN_NAME == ALUMODE || REF_PIN_NAME == CARRYIN || REF_PIN_NAME == CARRYINSEL || REF_PIN_NAME == CEA || REF_PIN_NAME == CEB || REF_PIN_NAME == CEC || REF_PIN_NAME == CED || REF_PIN_NAME == CEADREG || REF_PIN_NAME == CEM || REF_PIN_NAME == CEP || REF_PIN_NAME == CECARRYIN || REF_PIN_NAME == CECTRL || REF_PIN_NAME == CEOPMODE || REF_PIN_NAME == RSTA || REF_PIN_NAME == RSTB || REF_PIN_NAME == RSTC || REF_PIN_NAME == RSTD || REF_PIN_NAME == RSTM || REF_PIN_NAME == RSTP || REF_PIN_NAME == RSTCARRYIN || REF_PIN_NAME == RSTCTRL || REF_PIN_NAME == RSTOPMODE}]
+    # Bus pins are indexed (OPMODE[6]), so match by prefix; scalar pins are
+    # matched exactly.
+    set cone_pins [concat \
+        [get_pins -quiet -of_objects $cell -filter {REF_PIN_NAME =~ "OPMODE\\[*" || REF_PIN_NAME =~ "ALUMODE\\[*" || REF_PIN_NAME =~ "CARRYINSEL\\[*"}] \
+        [get_pins -quiet -of_objects $cell -filter {REF_PIN_NAME == CARRYIN || REF_PIN_NAME == CEA1 || REF_PIN_NAME == CEA2 || REF_PIN_NAME == CEB1 || REF_PIN_NAME == CEB2 || REF_PIN_NAME == CEC || REF_PIN_NAME == CED || REF_PIN_NAME == CEADREG || REF_PIN_NAME == CEM || REF_PIN_NAME == CEP || REF_PIN_NAME == CECARRYIN || REF_PIN_NAME == CECTRL || REF_PIN_NAME == CEOPMODE || REF_PIN_NAME == RSTA || REF_PIN_NAME == RSTB || REF_PIN_NAME == RSTC || REF_PIN_NAME == RSTD || REF_PIN_NAME == RSTM || REF_PIN_NAME == RSTP || REF_PIN_NAME == RSTCARRYIN || REF_PIN_NAME == RSTCTRL || REF_PIN_NAME == RSTOPMODE}]]
     trace_cone $cone_pins $c
     emit "==== END CELL $c ===="
 }
