@@ -32,7 +32,7 @@
     "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
     "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
     "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
-    "fpga/boards/arty-a7-100.xdc": "8c6e60a53aaa1c3195144169bbd3a37a1f4f2d76a13715dd6ef2646ee334bbd7"
+    "fpga/boards/arty-a7-100.xdc": "8d20f4b54c8b768b9b983d89d05afae13f2c200122e79dcd2e8949e6ad023ef2"
   },
   "verification": {
     "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
@@ -40,27 +40,27 @@
     "periods": 4821,
     "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
   },
-  "script_sha256": "1b8be1da84abd0aa862820c9ee08e77348c43bf670c61640bd02028639c420f4",
+  "script_sha256": "0b4c27e539a4b93583f840dd8db97bf8a63d22432089aa272ab75bd53bf078cc",
   "vivado_version": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
   "command": [
     "/tools/Xilinx/2025.1/Vivado/bin/vivado",
     "-mode",
     "batch",
     "-source",
-    "/home/ubuntu/parasynth-arty-attempt02/build/arty/build.tcl",
+    "/home/ubuntu/ext-timing-rebuild/build/arty/build.tcl",
     "-log",
-    "/home/ubuntu/parasynth-arty-attempt02/build/arty/vivado.log",
+    "/home/ubuntu/ext-timing-rebuild/build/arty/vivado.log",
     "-journal",
-    "/home/ubuntu/parasynth-arty-attempt02/build/arty/vivado.jou"
+    "/home/ubuntu/ext-timing-rebuild/build/arty/vivado.jou"
   ],
   "exit_code": 0,
-  "seconds": 413.066,
+  "seconds": 351.942,
   "artifact_sha256": {
-    "arty.bit": "fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439",
-    "utilization.rpt": "9bbca3fb5266dccb7e4ee6ae4c6a9d22ff1bea9694bf8faa782382c7adc9812b",
-    "timing.rpt": "fdf910cbeba31a52e812050601875bca24bc1feb91668291696daf4039fdb17f",
-    "clocks.rpt": "709cfe267f739c7c8ff1830e5ec05311a53074ad1db6d5a8042cb9559076c00d",
-    "drc.rpt": "1c06b86f770da9e1fea2b70de8a04a77193dfc78def994a10eb9de77dc9c981f",
-    "routed.dcp": "fdb3b45d7d7b108bf3246a5013f7ac6171f126956a4d0fcc2af1a20e499945fe"
+    "arty.bit": "1a562b422cdaed7bfb8432f003551bd17deb89e6c8339958f60fc94bca2e5fc3",
+    "utilization.rpt": "463bacdefa5abab250535c4b57861a7f1bb0ba13fec067e62a1a7786cd55659e",
+    "timing.rpt": "6c048d362f8fb112d4f578e574f76625621adebd2a51beb75542831d778df404",
+    "clocks.rpt": "cad0efcd73920c8c97a500d787fa90b661c2f93b6258025a32b320d66e6b758a",
+    "drc.rpt": "d1ead912c5abdc37217f33cbcb4826c184357670c234c407c7573c0d583427fa",
+    "routed.dcp": "7d7be9ea6f5a499671ecea8f35df339e67d33c3487eaf0c784a0fcd9123a81d1"
   }
 }
