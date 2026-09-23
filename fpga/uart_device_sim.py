@@ -131,6 +131,16 @@ class UartDeviceSim:
     def frame_now(self) -> int:
         return (self.epoch + int((time.monotonic() - self._t0) * SR)) & 0xFFFF
 
+    def lag_s(self) -> float:
+        """How far the device's processing timeline lags wall clock right now."""
+        return max(0.0, time.monotonic() - self._cursor)
+
+    def max_lag_s(self) -> float:
+        """The worst cursor lag observed in this sim's life: a run whose sim
+        stalled 300 ms mid-flight has device-frame deltas no assertion can
+        trust, even if the cursor has caught up by the time it is read."""
+        return self._max_lag
+
     def frames_elapsed(self) -> int:
         """Frames since start, UNwrapped: for assertions about ordering."""
         return int((time.monotonic() - self._t0) * SR)
@@ -171,10 +181,12 @@ class UartDeviceSim:
             # the reply's frame is fresh at send time -- what the delay models
             # is link/host latency, which the host must absorb with lead.
             time.sleep(self.reply_delay_s)
-        # the frame REGISTER is a free-running counter: it reads WALL truth
-        # even while processing lags (a real UART's counter is crystal-driven
-        # and never stalls). Fires/accepts stay on the chronological cursor.
-        f = (self.frame_now() + 1) & 0xFFFF     # the frame REGISTER: audio+1
+        # the frame REGISTER reads the device's own timeline (the cursor):
+        # one time authority everywhere -- fires, accepts and STATUS all
+        # speak the same frame numbers, so contract relationships hold in
+        # device frames even when the host machine stalls the cursor. A real
+        # device's counter is crystal-driven; this is the sim's equivalent.
+        f = (self._frame_at(self._cursor) + 1) & 0xFFFF     # frame REG: audio+1
         flags = self.flags_sticky
         self.flags_sticky = 0                    # sticky until the STATUS that reads them
         self._send(bytes([RSP_STATUS, (f >> 8) & 0xFF, f & 0xFF,
@@ -346,6 +358,7 @@ class UartDeviceSim:
         wire bytes complete at their baud spacing, writes fire at their
         scheduled frames, and a host/GIL stall is absorbed as catch-up rather
         than corrupting acceptance stamps and dues with post-stall time."""
+        self._max_lag = max(getattr(self, "_max_lag", 0.0), now - self._cursor)
         while self._cursor < now:
             fire_t = self._next_fire_time()
             byte_t = self._wire_next_t if self._wire_buf else None

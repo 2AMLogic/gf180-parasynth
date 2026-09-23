@@ -721,15 +721,16 @@ class Bridge:
             # leave the loop waiting out a long read deadline -- every extra
             # millisecond here is added to the musician's hold
             self._take({"status"}, min(deadline, time.monotonic() + 0.02))
+        # the gate's frame, sampled on the device's own timeline: one STATUS
+        # right after the gate's ACK, minus that STATUS's own round trip
         fresh = self.status()
         rtt_frames = int((self.status_round_trip_s or 0.0) * SR)
-        gate_frame = fresh.frame - rtt_frames      # undo the STATUS round trip
+        gate_frame = fresh.frame - rtt_frames
         if hold_frames <= 0:
             raise Refused(f"hold_frames {hold_frames} is not a hold")
         gate_off_due = gate_frame + int(hold_frames)
         origin2 = fresh.frame
-        self.origin = self.origin or origin2
-        lead2 = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
+        lead2 = MIN_LEAD_FRAMES + 1
         min_phrase = min((c[1] for c in rest), default=None)
         offset = 0
         if min_phrase is not None:
