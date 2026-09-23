@@ -21,7 +21,9 @@ Output: fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence/
   MANIFEST.sha256      sha256 of the three artifacts, computed on the box
 """
 
+import argparse
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -33,12 +35,23 @@ REMOTE_DIR = "/home/ubuntu/dsp-review"
 EVIDENCE = pathlib.Path(__file__).resolve().parents[1] / (
     "fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence")
 
-# The 13 DPREG-4 instances exactly as printed by the published drc.rpt
-# (DPREG-4#1 .. #13), plus the un-flagged siblings of the same decimator
-# product stage (prod0, acc0) whose mapping carries the rest of the
-# accumulate: acc0's P is the C-port feedback of every prod0__0, so acc0's
-# PREG is load-bearing for the no-combinational-loop argument.
-CELLS = [
+# The DPREG-4 instances exactly as printed by the bound drc.rpt are the
+# required targets; since the 96aa987 hardening the list is DERIVED from
+# that report at run time (see cell_targets) -- a hardcoded list could dump
+# the wrong build's cells. The historical 5533d2b-era list is kept here as
+# the shape reference the derivation must reproduce:
+#   u_synth/u_voice/osc2_path/p{0,1,2}/pair/dec/prod0__0   (flagged)
+#   u_synth/u_voice/osc2_path/p{0,1,2}/pair/dec/prod0      (sibling)
+#   u_synth/u_voice/osc2_path/p{0,1,2}/pair/dec/acc0       (sibling)
+#   u_synth/u_voice/voice_rate_converter/p_1_out__{0..8}   (flagged)
+
+# The un-flagged siblings of the same decimator product stage (prod0,
+# acc0) are dumped as context: acc0's P is the C-port feedback of every
+# prod0__0, so acc0's PREG is load-bearing for the no-combinational-loop
+# argument. CELLS is derived at run time; this constant stays empty.
+
+# Historical 5533d2b-era target list, kept for the derivation test:
+HISTORICAL_CELLS = [
     "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
     "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0",
     "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0",
@@ -60,10 +73,10 @@ CELLS = [
     "u_synth/u_voice/voice_rate_converter/p_1_out__8",
 ]
 
-TCL = r"""
+TCL_TEMPLATE = r"""
 # dsp_dpreg_extract.tcl -- READ-ONLY interrogation of the published routed
 # checkpoint. No write_checkpoint, no generated reports, nothing written
-# outside /home/ubuntu/dsp-review.
+# outside the session's remote directory.
 
 if {![string match "2025.1*" [version -short]]} {
     puts "REFUSED: expected Vivado 2025.1, got [version -short]"
@@ -232,8 +245,56 @@ emit "MISSING_COUNT $missing"
 close $out
 if {$missing > 0} { puts "REFUSED: $missing of [llength $cells] cells not found"; exit 43 }
 puts "EXTRACT_OK"
-""".replace("%DCP%", DCP).replace("%REMOTE_DIR%", REMOTE_DIR).replace(
-    "%CELLS%", "\n".join("    " + c for c in CELLS))
+"""
+
+
+def make_tcl(dcp, remote_dir, cells):
+    return TCL_TEMPLATE.replace("%DCP%", dcp).replace(
+        "%REMOTE_DIR%", remote_dir).replace(
+        "%CELLS%", "\n".join("    " + c for c in cells))
+
+
+def flagged_from_drc(drc_text):
+    """DPREG-4 instance names from the DRC body, with the summary-table
+    cross-check the analyser applies (same regex, same refusals)."""
+    table = re.search(
+        r"^\|\s*DPREG-4\s*\|\s*Warning\s*\|.*?\|\s*(\d+)\s*\|",
+        drc_text, re.M)
+    blocks = re.findall(
+        r"^DPREG-4#(\d+) Warning\n.*?^The DSP48E1 cell (\S+) "
+        r"with the given dynamic OPMODE",
+        drc_text, re.M | re.S)
+    if not table or not blocks:
+        raise SystemExit("REFUSED: drc.rpt has no parsable DPREG-4 findings")
+    ids = [int(i) for i, _ in blocks]
+    names = [n for _, n in blocks]
+    if ids != list(range(1, len(ids) + 1)):
+        raise SystemExit(f"REFUSED: DPREG-4 ids not contiguous: {ids}")
+    if int(table.group(1)) != len(names):
+        raise SystemExit(
+            f"REFUSED: summary says {table.group(1)} DPREG-4 violations, "
+            f"body lists {len(names)}")
+    return names
+
+
+def cell_targets(flagged):
+    """Flagged instances plus the dumped siblings, refusing unknown shapes.
+
+    A drc.rpt that flags instances outside the two known families means
+    the netlist mapping changed in a way this tool cannot assume: STOP,
+    never guess."""
+    cells = list(flagged)
+    for name in flagged:
+        if name.endswith("/prod0__0"):
+            base = name[:-len("prod0__0")]
+            cells += [base + "prod0", base + "acc0"]
+        elif re.search(r"/p_1_out(__\d+)?$", name):
+            pass
+        else:
+            raise SystemExit(
+                "REFUSED: drc.rpt flags an instance shape this derivation "
+                "does not know: " + name)
+    return cells
 
 
 def sh(cmd, **kw):
@@ -241,28 +302,63 @@ def sh(cmd, **kw):
     return subprocess.run(cmd, text=True, **kw)
 
 
-def main():
-    EVIDENCE.mkdir(parents=True, exist_ok=True)
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--box", default=BOX,
+                    help="remote Vivado host (default: the historical one)")
+    ap.add_argument("--dcp", default=DCP, help="routed checkpoint on the box")
+    ap.add_argument("--dcp-sha256", default=DCP_SHA256,
+                    help="expected SHA-256 of the DCP, asserted on the box")
+    ap.add_argument("--drc-rpt", default=DRC_RPT, help="drc.rpt on the box")
+    ap.add_argument("--remote-dir", default=REMOTE_DIR,
+                    help="session directory on the box")
+    ap.add_argument("--evidence", type=pathlib.Path, default=EVIDENCE,
+                    help="local evidence output directory")
+    a = ap.parse_args(argv)
+    evidence = a.evidence
+    evidence.mkdir(parents=True, exist_ok=True)
 
-    # ---- phase 1: assert preconditions on the box, stage the Tcl ----
+    # ---- phase 1: assert preconditions on the box ----
     stage = (
         "set -euo pipefail\n"
-        f"actual=$(sha256sum {DCP} | awk '{{print $1}}')\n"
-        f'if [ "$actual" != "{DCP_SHA256}" ]; then '
+        f"actual=$(sha256sum {a.dcp} | awk '{{print $1}}')\n"
+        f'if [ "$actual" != "{a.dcp_sha256}" ]; then '
         'echo "REFUSED: DCP hash mismatch: $actual"; exit 42; fi\n'
-        f'mkdir -p {REMOTE_DIR}\n'
-        f"sha256sum {DRC_RPT} | tee {REMOTE_DIR}/drc_rpt.sha256\n"
-        f"grep -n 'DPREG-4' {DRC_RPT} > {REMOTE_DIR}/drc_dpreg_names.txt || true\n"
+        f'mkdir -p {a.remote_dir}\n'
+        f"sha256sum {a.drc_rpt} | tee {a.remote_dir}/drc_rpt.sha256\n"
+        f"grep -n 'DPREG-4' {a.drc_rpt} > {a.remote_dir}/drc_dpreg_names.txt || true\n"
         "echo PRECONDITIONS_OK\n"
     )
-    r = sh(["ssh", BOX, "bash -s"], input=stage)
+    r = sh(["ssh", a.box, "bash -s"], input=stage)
     if r.returncode != 0:
         print("REFUSED: box preconditions failed")
         return 1
 
-    tcl_local = EVIDENCE / "dsp_dpreg_extract.tcl"
-    tcl_local.write_text(TCL)
-    r = sh(["scp", str(tcl_local), f"{BOX}:{REMOTE_DIR}/dsp_dpreg_extract.tcl"])
+    # ---- phase 1.5: bind the targets to THIS build's drc.rpt ----
+    # the DRC body is fetched and kept as evidence: the analyser re-parses
+    # it and hash-binds it through the box manifest's drc_rpt.sha256 plus
+    # the grep-identity check (report_drc embeds a timestamp, so the bytes
+    # are bound box-side, the DPREG body both sides)
+    r = sh(["ssh", a.box, f"cat {a.drc_rpt}"],
+           capture_output=True)
+    if r.returncode != 0:
+        print("REFUSED: could not fetch drc.rpt")
+        return 1
+    drc_local = evidence.parent / "drc.rpt"
+    drc_local.write_text(r.stdout)
+    # the bytes just fetched must be the bytes the box hashed in phase 1
+    # (re-checked against drc_rpt.sha256 after the pull in phase 4)
+    import hashlib
+    fetched = hashlib.sha256(r.stdout.encode()).hexdigest()
+    # derive the target cells from THIS report, refusing unknown shapes
+    flagged = flagged_from_drc(r.stdout)
+    cells = cell_targets(flagged)
+    print(f"DPREG-4 flagged  : {len(flagged)}")
+    print(f"cells to dump    : {len(cells)} (flagged + siblings)")
+
+    tcl_local = evidence / "dsp_dpreg_extract.tcl"
+    tcl_local.write_text(make_tcl(a.dcp, a.remote_dir, cells))
+    r = sh(["scp", str(tcl_local), f"{a.box}:{a.remote_dir}/dsp_dpreg_extract.tcl"])
     if r.returncode != 0:
         print("REFUSED: could not stage Tcl")
         return 1
@@ -271,21 +367,21 @@ def main():
     run = (
         "set -euo pipefail\n"
         "source /tools/Xilinx/2025.1/Vivado/settings64.sh >/dev/null 2>&1\n"
-        f"cd {REMOTE_DIR}\n"
+        f"cd {a.remote_dir}\n"
         "rm -f dsp_cells_dump.txt vivado_extract.log vivado_extract.jou\n"
         "flock -w 7200 /home/ubuntu/vivado.lock "
         "vivado -mode batch -source dsp_dpreg_extract.tcl "
         "-log vivado_extract.log -journal vivado_extract.jou\n"
     )
-    r = sh(["ssh", BOX, "bash -s"], input=run)
+    r = sh(["ssh", a.box, "bash -s"], input=run)
     if r.returncode != 0:
         print(f"REFUSED: vivado batch failed rc={r.returncode}")
-        sh(["ssh", BOX, f"tail -40 {REMOTE_DIR}/vivado_extract.log || true"])
+        sh(["ssh", a.box, f"tail -40 {a.remote_dir}/vivado_extract.log || true"])
         return 1
 
     # ---- phase 3: manifest + pull back ----
-    r = sh(["ssh", BOX,
-            f"cd {REMOTE_DIR} && sha256sum dsp_cells_dump.txt vivado_extract.log "
+    r = sh(["ssh", a.box,
+            f"cd {a.remote_dir} && sha256sum dsp_cells_dump.txt vivado_extract.log "
             "drc_dpreg_names.txt drc_rpt.sha256 > MANIFEST.sha256 && cat MANIFEST.sha256 && "
             "grep -c '^ERROR' vivado_extract.log || true"])
     if r.returncode != 0:
@@ -294,18 +390,17 @@ def main():
 
     for f in ("dsp_cells_dump.txt", "vivado_extract.log", "drc_dpreg_names.txt",
               "MANIFEST.sha256", "drc_rpt.sha256"):
-        r = sh(["scp", f"{BOX}:{REMOTE_DIR}/{f}", str(EVIDENCE / f)])
+        r = sh(["scp", f"{a.box}:{a.remote_dir}/{f}", str(evidence / f)])
         if r.returncode != 0:
             print(f"REFUSED: could not pull {f}")
             return 1
 
     # ---- phase 4: verify locally against the box manifest ----
     bad = []
-    for line in (EVIDENCE / "MANIFEST.sha256").read_text().splitlines():
+    for line in (evidence / "MANIFEST.sha256").read_text().splitlines():
         h, name = line.split(None, 1)
         name = name.strip().lstrip("*")
-        local = EVIDENCE / name
-        import hashlib
+        local = evidence / name
         got = hashlib.sha256(local.read_bytes()).hexdigest()
         status = "OK" if got == h else "MISMATCH"
         print(f"{status} {name} {got}")
@@ -314,11 +409,18 @@ def main():
     if bad:
         print(f"REFUSED: local copies differ from box manifest: {bad}")
         return 1
+    # and the drc.rpt the targets were derived from is the box's bytes
+    box_hash = next((l.split()[0]
+                     for l in (evidence / "drc_rpt.sha256").read_text().splitlines()
+                     if l.endswith("drc.rpt")), None)
+    if box_hash != fetched:
+        print(f"REFUSED: fetched drc.rpt {fetched} != box drc.rpt {box_hash}")
+        return 1
 
-    dump = (EVIDENCE / "dsp_cells_dump.txt").read_text()
+    dump = (evidence / "dsp_cells_dump.txt").read_text()
     print(f"cells dumped      : {dump.count('==== CELL ')}")
     print(f"missing instances : {dump.count('MISSING ')}")
-    print(f"extraction OK, evidence in {EVIDENCE}")
+    print(f"extraction OK, evidence in {evidence}")
     return 0
 
 

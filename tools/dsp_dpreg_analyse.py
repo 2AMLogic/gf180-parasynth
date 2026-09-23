@@ -344,10 +344,10 @@ def refuse_extra_dynamic_cells(cells, required):
                 f"DPREG-4 in drc.rpt: {name}")
 
 
-def run():
-    evidence = EVIDENCE
-    dump = DUMP
-    drc = DRC_RPT
+def run(evidence=None, drc=None):
+    evidence = evidence or EVIDENCE
+    dump = evidence / DUMP.name
+    drc = drc or evidence.parent / DRC_RPT.name
     verify_manifest(evidence)
     verify_drc_identity(evidence, drc)
     if not dump.exists():
@@ -419,9 +419,18 @@ def run():
     return 0 if all_clear else 2
 
 
-def main():
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--evidence", type=pathlib.Path, default=None,
+                    help="evidence directory (default: the 5533d2b-era "
+                         "vivado-2025.1 dsp-dpreg-evidence); the bound DRC "
+                         "is expected at its parent as drc.rpt")
+    ap.add_argument("--drc", type=pathlib.Path, default=None,
+                    help="bound drc.rpt (default: <evidence>/../drc.rpt)")
+    a = ap.parse_args(argv)
     try:
-        return run()
+        return run(a.evidence, a.drc)
     except Refused as e:
         print(f"NO VERDICT: {e}")
         return 3

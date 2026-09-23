@@ -43,10 +43,9 @@ spec = importlib.util.spec_from_file_location("dsp_dpreg_analyse", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
 sys.modules["dsp_dpreg_analyse"] = mod
 spec.loader.exec_module(mod)
-mod.EVIDENCE = pathlib.Path(sys.argv[2])
-mod.DUMP = mod.EVIDENCE / "dsp_cells_dump.txt"
-mod.DRC_RPT = mod.EVIDENCE / "drc.rpt"
-sys.exit(mod.main())
+d = pathlib.Path(sys.argv[2])
+# the case layout keeps drc.rpt inside the evidence directory
+sys.exit(mod.main(["--evidence", str(d), "--drc", str(d / "drc.rpt")]))
 """
 
 # child that runs the simulator classification against a DSIM copy in which
