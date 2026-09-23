@@ -1,0 +1,25 @@
+uart_host: REFUSED -- no STATUS reply from the device; check the bitstream, wiring (A9/D10) and baud
+uart_host: REFUSED -- no STATUS reply from the device; check the bitstream, wiring (A9/D10) and baud
+[FAIL] 1 isolated note-off emits the gate-off write
+    observed: note_writes(45, False) = []
+[FAIL] 2 note-off subcommand sends + verifies
+    observed: exit 2; usage shown: True; gate-off writes executed: 0
+[FAIL] 3 run() plans from the device origin
+    observed: raw ValueError from the unshifted plan: event 1: due 0 is at or before its acceptance frame 75
+[FAIL] 4 --hold-frames reaches the gate-off
+    observed: dry-run output identical for hold 1920 and 4800 (hold ignored)
+  send f2044   write   57000400000001a4 -> applies f2078
+[FAIL] 5 device origin applied exactly once
+    observed: first send planned at device frame 2044
+[FAIL] 6 send() preserves a waited schedule
+    observed: second write applied 61 frames after the first
+[FAIL] 7 STATUS fresh against a 0.6 s reply
+    observed: REFUSED (exit 2) after 2.31s -- the 64-byte/0.5 s read never sees an 8-byte packet
+[FAIL] 8 wait_until is wrap-safe
+    observed: REFUSED (exit 2) after 2.07s -- integer compare against a wrapping counter
+[FAIL] 9 bar808 preflighted honestly
+    observed: raw ValueError before any preflight: event 0: due 0 is at or before its acceptance frame 41; the shifted schedule it would then send peaks at 178 queued events against a 64-deep queue (first excess at packet index 64)
+[FAIL] 10 event packet golden bytes
+    observed: payload bytes 014000000004 (want 000140000004)
+
+0/10 probes show the required behaviour

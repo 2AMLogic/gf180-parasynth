@@ -218,21 +218,82 @@ heartbeat, and LED3 carries LRCLK. These lights do not prove correct audio.
 
 ## USB and timed controls
 
-Arty's USB programming/UART connector does not directly provide this design's
-SPI controller. The current wrapper accepts external SPI on JB. It does not
-yet implement a USB-UART-to-timed-SPI bridge. Reserve the board UART pins:
-**A9 is FPGA RX** (`UART_TXD_IN`); **D10 is FPGA TX** (`UART_RXD_OUT`).
+Arty's USB programming/UART connector is now a control link. The reserved
+pins are in use: **A9 is FPGA RX** (`uart_rxd`, the FTDI's TX) and **D10 is
+FPGA TX** (`uart_txd`, the FTDI's RX), 3.3 V, pulled up. The bridge
+(`rtl-sketch/uart_bridge.v`, instantiated by the wrapper through `synth_top`'s
+`WITH_UART=1`) feeds the SAME register-write port the SPI slave drains, in the
+two window cycles after the SPI drain's last possible write — the SPI path
+keeps priority by construction and the two sources cannot collide.
 
-The existing [spi_host.py](spi_host.py) supplies the six-byte, MSB-first,
-mode-0 register framing and schedules. The bridge must execute queued events
-on the device; host-side USB sleeps cannot guarantee audio-frame deadlines.
-Preserve kick/tom coefficient writes and note-off events, report queue errors,
-and test disconnect/reset behavior. `play.py` and the named preset renderers
-produce model audio; they are not physical playback commands.
+THE WIRE. 115200 8N1 (the `UART_BAUD` parameter accepts any baud with
+`CLK_HZ/BAUD >= 16`). Packets are `opcode payload... checksum`, checksum =
+two's complement of the byte sum, so a corrupted or shortened packet is
+rejected whole and reported, never half-applied. Write payloads are the
+`spi_host.py` framing's six bytes, MSB first: `{F, 6'b0, SEC, A[7:0],
+D[31:0]}`. Opcodes: `W` write-now (live path), `E` scheduled write (16-bit
+due frame, LSB first — the device fires it from its own event queue),
+`Q` status, `X` abort queues. The device answers on TX: `BOOT` 0xA5 after any
+reset, `ACK`, `ERR` (overflow, late due, resync, bad checksum, bad opcode —
+a dropped event is reported with its register address, never silently), and
+`STATUS`.
+
+THE CONTRACT (host side: `fpga/uart_host.py`; device side: the RTL — the
+bench `fpga/verify_uart_bridge.py` checks the RTL against the host module):
+
+* accepted commands are ordered; each queue is FIFO, never reordered;
+* the UART path gets 2 register-write slots per frame, due-scheduled events
+  before live writes;
+* a scheduled event accepted with `due >= frame+1` fires in EXACTLY its due
+  frame — the deadline the SPI host could only predict;
+* a live write applies at acceptance+1, ±1 from window-phase quantisation;
+  a note-off is a live write and is never blocked by a full event queue;
+* queues: 64 scheduled events, 8 live writes; overflow drops the arriving
+  packet, counts it, and REPORTS it;
+* BTN0 reset or clock unlock clears both queues and counters — a queued
+  phrase dies with the reset, and the host SEES the reset (BOOT byte, empty
+  STATUS queues, frame counter restart). After a reset the host re-reads
+  STATUS and re-anchors; its schedules are device-frame-relative from there.
+
+ONE-COMMAND PLAYBACK. From a host with pyserial installed:
+
+```text
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45
+```
+
+`run` loads the patch image, starts the note, holds it, releases it and
+replays the scripted phrase — all as device-scheduled events, no host-side
+sleeps in the timing path (host sleeps pace BYTES onto the link; the musical
+deadlines are enforced by the device). Subcommands: `load`, `note-on`,
+`note-off`, `play`, `run`, `status`, `abort`. `--dry-run` renders the exact
+byte schedule and landing frames from the device contract without hardware.
+Without pyserial, or without a port or a STATUS answer, the tool REFUSES
+(exit 2).
+
+QUALIFICATION. Digital only, so far: `fpga/verify_uart_bridge.py` runs the
+real wrapper at the pins — 7 scenarios (held note to envelope floor, the
+scripted phrase, queue overflow, note-off during queue-full, reset
+mid-phrase, dropped byte, corrupted byte) all bit-exact against the integer
+model with exact device-frame timing, plus 5 injected-bug controls each
+demonstrated to turn the bench red. The evidence lives in
+[reports/arty/uart-clean](reports/arty/uart-clean). No physical playback has
+been attempted. The UART-bridge bitstream is BUILT but NOT published as the
+baseline: Vivado 2025.1 (SW Build 6140274) routed it from this branch with
+`fpga/build_arty.py --verification
+fpga/reports/arty/uart-clean/verification.json`; the state is
+BUILT_REQUIRES_TIMING_REVIEW and the artifacts are bound in
+[reports/arty/uart-bridge-2025.1](reports/arty/uart-bridge-2025.1). The
+bitstream is 3,825,912 bytes, SHA-256
+`1d54701662149bd7118351dfbc78126e23ad0343a8da32d0a5a06eaf9cd204a5`. The
+published baseline bitstream above predates the bridge and does not contain
+it. The SPI path on the modified wrapper is re-verified unchanged
+([reports/arty/spi-smoke-uart](reports/arty/spi-smoke-uart): 67/67 writes,
+4,821 I2S periods bit-exact). External I/O timing is unqualified.
 
 First exercise a held note, then the complete scripted phrase, then drums
-and simultaneous voice. Decode/record what actually leaves the device and
-compare against the same named configuration, preserving raw gain and timing.
+and simultaneous voice — on hardware, decode/record what actually leaves
+the device and compare against the same named configuration, preserving raw
+gain and timing.
 
 ## Build and verify
 

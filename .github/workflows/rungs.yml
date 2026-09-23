@@ -13,7 +13,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     concurrency:
-      group: pulse2x-short-${{ github.head_ref || github.ref_name }}
+      # push and pull_request events of the same branch share github.head_ref;
+      # one group for both meant the PR run CANCELLED the push run's job
+      # (35715612528: 'Canceling since a higher priority waiting request
+      # exists'), which read as a red pulse2x-rtl with no defect behind it.
+      # Key by PR number / full ref so the two event kinds queue separately.
+      group: pulse2x-short-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4

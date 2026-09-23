@@ -1,0 +1,1 @@
+verify_uart_bridge[replay-held]: PASS -- writes 26/26, timing bad 0, corrupt 0, I2S mismatch 0 over 3412 periods, errs 0 {}

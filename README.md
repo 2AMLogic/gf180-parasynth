@@ -509,7 +509,7 @@ locks it.
 ## Playing it
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install numpy sounddevice mido python-rtmidi
+python3 -m venv .venv && .venv/bin/pip install numpy sounddevice mido python-rtmidi pyserial
 .venv/bin/python audition/play.py
 ```
 

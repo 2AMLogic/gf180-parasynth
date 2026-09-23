@@ -1,0 +1,17 @@
+    write 0: intended f/sec/a/d 0/0/0x4/0x0, got 0/0/0x5/0x0
+    write 0 (a=0x4): contract frame 76, landed 110
+    write 1: intended f/sec/a/d 0/0/0x5/0x0, got 0/0/0x6/0x1
+    write 1 (a=0x5): contract frame 110, landed 144
+    write 2: intended f/sec/a/d 0/0/0x6/0x1, got 0/0/0x10/0x11112
+    write 2 (a=0x6): contract frame 144, landed 178
+    write 3 (a=0x10): contract frame 178, landed 212
+    write 4 (a=0x11): contract frame 212, landed 246
+    25 writes drained, 26 expected
+    unexpected device errors: {5: 1}
+verify_uart_bridge[replay-mutated]: FAIL -- writes 25/26, timing bad 25, corrupt 25, I2S mismatch 0 over 3412 periods, errs 1 {5: 1}
+verify_uart_bridge[replay-mutated]:   write 0: intended f/sec/a/d 0/0/0x4/0x0, got 0/0/0x5/0x0
+verify_uart_bridge[replay-mutated]:   write 0 (a=0x4): contract frame 76, landed 110
+verify_uart_bridge[replay-mutated]:   write 1: intended f/sec/a/d 0/0/0x5/0x0, got 0/0/0x6/0x1
+verify_uart_bridge[replay-mutated]:   write 1 (a=0x5): contract frame 110, landed 144
+verify_uart_bridge[replay-mutated]:   write 2: intended f/sec/a/d 0/0/0x6/0x1, got 0/0/0x10/0x11112
+verify_uart_bridge[replay-mutated]:   write 2 (a=0x6): contract frame 144, landed 178
