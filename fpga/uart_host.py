@@ -545,6 +545,8 @@ class Bridge:
         self.lead_frames = None
         self.status_round_trip_s = None
         self.acks_seen = 0
+        self._run_ack_base = 0
+        self._run_acks_expected = 0
 
     def _take(self, kinds: set, deadline: float) -> DevicePacket | None:
         """Read bytes until one complete packet of `kinds` parses. The buffer
@@ -601,6 +603,10 @@ class Bridge:
         """One STATUS question, one fresh answer, framed. The round trip is
         measured and carried in `status_round_trip_s` for the plan's lead."""
         for _ in range(attempts):
+            # a fresh question deserves a fresh answer -- but packets already
+            # in the buffer are still deliveries: count them before the discard
+            for p, _n in [scan_packets(self.buf)]:
+                self.acks_seen += sum(1 for q in p if q.kind == "ack")
             self.buf = b""
             t0 = time.monotonic()
             self.send([Placed(0, "status", pkt_status(), 0, 0)], paced=False)
@@ -625,6 +631,11 @@ class Bridge:
         STATUS must still leave slack before the first event's due, or the
         plan is re-anchored -- a plan whose dues died during planning is
         re-planned, never sent late."""
+        markers = [c for c in commands if c[0] == "gate-off"]
+        if markers:
+            return self._run_with_hold(commands, baud=baud, quiet=quiet,
+                                       hold_frames=hold_frames)
+        self._run_ack_base = self.acks_seen
         rows = None
         ahead = 0
         planned = list(commands)
@@ -666,7 +677,73 @@ class Bridge:
             raise Refused(verdict["reason"])
         if dry_run:
             return rows
+        self._run_acks_expected = len(rows)
         self.send(rows)
+        if not quiet:
+            for row in rows:
+                print(f"  send f{row.send_frame:<6} {row.kind:<7} "
+                      f"{row.packet.hex()} -> applies f{row.apply_frame}")
+        return rows
+
+    def _run_with_hold(self, commands: list, *, baud: int, quiet: bool,
+                       hold_frames: int) -> list:
+        """A scheduled note-off anchors to the OBSERVED gate, not a
+        prediction: the live writes go first, the gate-on's ACK is waited for
+        (the device ACKs every accepted packet), a fresh STATUS names the
+        frame the gate actually landed in, and only then is the gate-off
+        event -- and the phrase behind it -- planned and sent. A hold
+        measured from reality survives exactly the host/USB jitter that
+        breaks a predicted schedule."""
+        import synth_top_model as stm
+        anchor = self.status()
+        self.origin = origin = anchor.frame
+        round_trip = self.status_round_trip_s or 0.0
+        self.lead_frames = lead = (MIN_LEAD_FRAMES + int(round_trip * SR) + 1)
+        mi = next(i for i, c in enumerate(commands) if c[0] == "gate-off")
+        live_cmds, markers, rest = commands[:mi], commands[mi], commands[mi + 1:]
+        rows_live = plan(live_cmds, baud=baud, start_frame=lead,
+                         anchor_frame=origin)
+        verdict = preflight(rows_live, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            raise Refused(verdict["reason"])
+        acked_before = self.acks_seen
+        self.send(rows_live)
+        # the note-on's GATE_ON write is the last live packet: its ACK is the
+        # gate landing, loud on the wire
+        want = acked_before + len(live_cmds)
+        deadline = time.monotonic() + 10.0
+        while self.acks_seen < want:
+            if time.monotonic() > deadline:
+                raise Refused(f"the note-on's gate write was never ACKed "
+                              f"({self.acks_seen - acked_before} of "
+                              f"{len(live_cmds)} packets acknowledged)")
+            # short sub-windows: the ACK that satisfies the count must not
+            # leave the loop waiting out a long read deadline -- every extra
+            # millisecond here is added to the musician's hold
+            self._take({"status"}, min(deadline, time.monotonic() + 0.02))
+        fresh = self.status()
+        rtt_frames = int((self.status_round_trip_s or 0.0) * SR)
+        gate_frame = fresh.frame - rtt_frames      # undo the STATUS round trip
+        if hold_frames <= 0:
+            raise Refused(f"hold_frames {hold_frames} is not a hold")
+        gate_off_due = gate_frame + int(hold_frames)
+        origin2 = fresh.frame
+        self.origin = self.origin or origin2
+        lead2 = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
+        min_phrase = min((c[1] for c in rest), default=None)
+        offset = 0
+        if min_phrase is not None:
+            offset = max(0, (gate_off_due + 1) - (origin2 + min_phrase))
+        ev_cmds = [("event", gate_off_due - origin2, *markers[1:5])]
+        ev_cmds += [("event", c[1] + offset, *c[2:]) for c in rest]
+        rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
+                               anchor_frame=origin2)
+        rows = rows_live + rows_ev
+        verdict = preflight(rows, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            raise Refused(verdict["reason"])
+        self._run_acks_expected = len(rows)
+        self.send(rows_ev)
         if not quiet:
             for row in rows:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
@@ -1141,14 +1218,14 @@ def main(argv=None) -> int:
         return 2
     if a.capture:
         write_capture(a.capture, rows, origin=bridge.origin, baud=a.baud)
-    acked_before = bridge.acks_seen
     last = max(r.apply_frame for r in rows)
     end = bridge.wait_until(last + 64)
-    acked = bridge.acks_seen - acked_before
-    if acked < len(rows):
+    acked = bridge.acks_seen - bridge._run_ack_base
+    if acked < bridge._run_acks_expected:
         # the device ACKs every accepted packet; a packet with no ACK never
         # arrived -- and nothing on the wire announces an absence
-        print(f"uart_host: FAIL -- {len(rows) - acked} of {len(rows)} packets "
+        print(f"uart_host: FAIL -- {bridge._run_acks_expected - acked} of "
+              f"{bridge._run_acks_expected} packets "
               "were never ACKed by the device", file=sys.stderr)
         return 1
     st = bridge.status()

@@ -208,7 +208,7 @@ class UartDeviceSim:
             if (sum(pkt[:-1]) + pkt[-1]) & 0xFF:
                 self._err(ERR_CHECKSUM, pkt[3] if len(pkt) > 3 else 0)
                 continue
-            self._accept(op, pkt)
+            self._accept(op, pkt, t)
 
     @staticmethod
     def _reg(pkt: bytes, off: int):
@@ -221,13 +221,13 @@ class UartDeviceSim:
         data = int.from_bytes(pkt[off + 2:off + 6], "big")
         return flag, sec, addr, data
 
-    def _accept(self, op: int, pkt: bytes) -> None:
-        # the acceptance instant is the packet's byte time on the device's
-        # chronological cursor: queue depth, ordering and the live
-        # accept+1 rule are all judged on the device's own timeline, which
-        # survives host/GIL stalls as catch-up instead of burst-stamping.
-        # (Event FIRES are logged on their scheduled device frames.)
-        f = self._frame_at(self._cursor)
+    def _accept(self, op: int, pkt: bytes, t: float) -> None:
+        # the acceptance instant is the LAST BYTE's scheduled completion time
+        # on the chronological cursor: baud-true spacing regardless of host or
+        # scheduler stalls (a stall is catch-up, never a time jump), so queue
+        # depth, ordering and the live accept+1 rule stay exact. Event fires
+        # are logged on their scheduled device frames.
+        f = self._frame_at(t)
         if op == OP_STATUS:
             self.received.append(("status", f))
             self._status()
