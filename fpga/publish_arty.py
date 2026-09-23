@@ -29,9 +29,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # wrapper top -> the digital proof bound to it. Not a free-form argument:
 # a wrapper absent from this map has NO evidence and publication refuses.
+# Since the UART bridge merged, arty_a7_top IS the UART wrapper (uart_rxd/
+# uart_txd ports, uart_bridge.v in the compiled set), so its proof is the
+# UART-bridge clean run; the pre-uart clean run's source set no longer
+# matches the compiled tree and cannot bind. No arty_a7_uart_top module
+# exists in this tree -- a build.tcl claiming it has no evidence.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/clean/verification.json",
-    "arty_a7_uart_top": ROOT / "fpga/reports/arty/uart-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/uart-clean/verification.json",
 }
 
 

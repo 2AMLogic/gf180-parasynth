@@ -39,6 +39,7 @@ set_property PULLUP TRUE [get_ports uart_rxd]
 # The link samples asynchronous inputs through two flops. Only the paths to
 # the first stages are asynchronous; do not exempt the engine's timing.
 set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_spi/(sck_q|mosi_q|csn_q)_reg\[[01]\]}]
+set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*g_uart/u_uart/rx_q_reg\[[01]\]}]
 set_false_path -from [get_ports spi_sck] -to [get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_mosi] -to [get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_cs_n] -to [get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]
@@ -132,3 +133,15 @@ set_output_delay -clock hardware_clock.clock_raw -min 0.000 [get_ports spi_miso]
 # from receiver-derived budgeting, NOT false paths.
 set_output_delay -clock hardware_clock.clock_raw -max 0.000 [get_ports {led[1] led[2] led[3]}]
 set_output_delay -clock hardware_clock.clock_raw -min 0.000 [get_ports {led[1] led[2] led[3]}]
+
+# uart_txd (D10) is a core-clock-domain launch into the FTDI's USB-UART
+# bridge at 115200 8N1 (fpga/ext_io_timing.py::UART_TX_DISPOSITION). The
+# receiver resynchronises each bit against its own oversampling clock, so --
+# as for the LEDs -- no receiver-derived setup figure exists to quote; the
+# budget is the full core period, applied as a real output delay: any
+# clock-to-out below 81.38 ns is 0.94% of the 8.681 us bit period. uart_rxd
+# carries no output delay by design: it enters the two-flop synchroniser
+# above under a false path (the async_input_delay class of endpoint), which
+# the publication machinery records as the RX synchronizer disposition.
+set_output_delay -clock hardware_clock.clock_raw -max 0.000 [get_ports uart_txd]
+set_output_delay -clock hardware_clock.clock_raw -min 0.000 [get_ports uart_txd]

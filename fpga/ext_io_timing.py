@@ -117,14 +117,26 @@ MAX_GUARANTEED_READBACK_MHZ = 1000.0 / (2.0 * (MISO_LATENCY_NS + FLIGHT_NS + T_S
 # WHS -1.021). This is the ONLY output-delay exception publication permits.
 PERMITTED_OUTPUT_DELAY_EXCEPTIONS = ["i2s_bclk"]
 
-# Upcoming integrated tree: UART pins (gated -- these checks activate only
-# when the ports exist in the compiled XDC/netlist).
-UART_TX_PORT, UART_TX_PIN = "uart_tx", "D10"
-UART_RX_PORT, UART_RX_PIN = "uart_rx", "A9"
-# Receiver/baud disposition for uart_tx: None until the integrated tree
-# records it. A build whose netlist drives uart_tx while this is None is
-# REFUSED at publication -- an unconstrained new output must not slip in.
-UART_TX_DISPOSITION = None
+# Integrated tree: the UART bridge ports exist on arty_a7_top (uart_txd D10,
+# uart_rxd A9), so these checks are ACTIVE, not gated off. The port names are
+# the wrapper's -- an earlier revision anticipated "uart_tx"/"uart_rx", which
+# would have left this gate silently inert against the real ports.
+UART_TX_PORT, UART_TX_PIN = "uart_txd", "D10"
+UART_RX_PORT, UART_RX_PIN = "uart_rxd", "A9"
+# Receiver/baud disposition for uart_txd, recorded now that the port ships.
+# A build whose netlist drives the port while this is None is REFUSED at
+# publication -- an unconstrained new output must not slip in.
+UART_TX_DISPOSITION = {
+    "receiver": "FTDI FT2232H USB-UART bridge (the Arty's programming cable)",
+    "baud": 115200, "framing": "8N1",
+    "budget": "one core period (81.380 ns) as a real output delay, not a "
+              "false path: any clock-to-out below it is 0.94% of the "
+              "8.681 us bit period, invisible to a receiver that tolerates "
+              "several percent of baud error",
+    "assumption": "FTDI resynchronises each bit against its own oversampling "
+                  "clock; no per-receiver setup spec exists -- ASSUMED, not "
+                  "measured",
+}
 
 
 class Infeasible(ValueError):
@@ -236,6 +248,8 @@ def expected_output_delay_constraints() -> list:
          "ports": ["led[1]", "led[2]", "led[3]"]},
         {"clock": core_clock, "dir": "min", "ns": 0.0,
          "ports": ["led[1]", "led[2]", "led[3]"]},
+        {"clock": core_clock, "dir": "max", "ns": 0.0, "ports": ["uart_txd"]},
+        {"clock": core_clock, "dir": "min", "ns": 0.0, "ports": ["uart_txd"]},
     ]
 
 

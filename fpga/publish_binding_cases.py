@@ -44,29 +44,57 @@ def sha(path):
 
 
 def make_artifact(tmp):
-    """Internally consistent copy of the published fixture.
+    """Internally consistent copy of the published fixture, re-bound to the
+    CURRENT build script.
 
     The published *.rpt are the sanitized copies (Host line omitted), so
     the build record's artifact hashes cannot match them; the record is
-    re-bound to the files actually present. The result is an internally
-    consistent artifact whose ONLY defect is the one the case adds.
+    re-bound to the files actually present. The publisher demands an
+    artifact of the CURRENT build_arty.sources(): since the UART bridge
+    merged, that set includes rtl-sketch/uart_bridge.v and the bound proof
+    is the UART-wrapper clean run -- the fixture (an earlier, pre-uart
+    publication) is brought to that state, so the ONLY defect is the one
+    the case adds.
     """
+    import build_arty as build
+    import publish_arty
     art = tmp / "artifact"
     shutil.copytree(FIXTURE, art)
     (art / "routed.dcp").write_bytes(b"publication-binding-case\n")
     # an honest build snapshots its inputs; the fixture predates that copy
-    snap = art / "inputs/fpga/boards/arty-a7-100.xdc"
-    snap.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(ROOT / "fpga/boards/arty-a7-100.xdc", snap)
+    for rel in [str(p.relative_to(ROOT)) for p in build.sources()] \
+            + [str(build.XDC.relative_to(ROOT))]:
+        dest = art / "inputs" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, dest)
     record = json.loads((art / "report.json").read_text())
     record["artifact_sha256"] = {name: sha(art / name) for name in
                                  record["artifact_sha256"]}
     # re-bind sources to the CURRENT tree: the committed fixture predates
-    # later comment-level edits (e.g. the SLAS764B citation fix), and the
-    # publisher must refuse artifacts that are not tree-current
-    record["source_sha256"] = {rel: sha(ROOT / rel)
-                               for rel in record["source_sha256"]}
+    # later source-set changes (e.g. uart_bridge.v joining the compiled
+    # set), and the publisher must refuse artifacts that are not
+    # tree-current
+    record["source_sha256"] = {str(p.relative_to(ROOT)): build.sha(p)
+                               for p in build.sources() + build.roms()
+                               + [build.XDC]}
+    # re-bind the wrapper proof to the CURRENT wrapper's evidence
+    top = "arty_a7_top"
+    record["verification"] = build.validate_verification(
+        publish_arty.VERIFICATION_BY_WRAPPER[top],
+        build.sources() + build.roms())
+    # the compiled set must show the CURRENT script's read_verilog list:
+    # add the bridge to the snapshot list the same way build.tcl carries it
+    tcl = (art / "build.tcl").read_text()
+    bridge = str(art / "inputs/rtl-sketch/uart_bridge.v")
+    # append INSIDE the list: keep the last path's closing brace, then the
+    # new word, then close the list (replacing "}" ate the brace on an
+    # earlier revision and the appended path merged into the previous entry)
+    tcl, n = re.subn(r"\}\]$", "} {" + bridge + "}]", tcl, count=1,
+                     flags=re.M)
+    assert n == 1, "build.tcl read_verilog list not found"
+    (art / "build.tcl").write_text(tcl)
     (art / "report.json").write_text(json.dumps(record, indent=2) + "\n")
+    rehash_script(art)
     return art
 
 
@@ -81,12 +109,15 @@ def rehash_script(art):
 def case_extra_compiled_source(tmp):
     art = make_artifact(tmp)
     stub = art / "inputs/rtl-sketch/uart_tx_stub.v"
-    stub.parent.mkdir(parents=True)
+    stub.parent.mkdir(parents=True, exist_ok=True)
     stub.write_text("module uart_tx_stub(input clk);\nendmodule\n")
     tcl = (art / "build.tcl").read_text()
     # an extra source, snapshotted under the build's inputs/ tree, that no
-    # verification run ever saw
-    tcl = tcl.replace("}]", " {" + str(stub) + "}]", 1)
+    # verification run ever saw (append inside the read_verilog list,
+    # keeping the previous word's closing brace)
+    tcl, n = re.subn(r"\}\]$", "} {" + str(stub) + "}]", tcl, count=1,
+                     flags=re.M)
+    assert n == 1, "build.tcl read_verilog list not found"
     (art / "build.tcl").write_text(tcl)
     rehash_script(art)
     return art
@@ -140,11 +171,16 @@ def case_xdc_value_drift(tmp):
 def case_uart_ports_without_disposition(tmp):
     art = make_artifact(tmp)
     xdc = art / "inputs/fpga/boards/arty-a7-100.xdc"
-    xdc.parent.mkdir(parents=True, exist_ok=True)
-    text = (ROOT / "fpga/boards/arty-a7-100.xdc").read_text()
-    text += ("\n# upcoming integrated tree: uart pins appear with no "
-             "constraints\nset_property PACKAGE_PIN D10 [get_ports uart_tx]"
-             "\nset_property PACKAGE_PIN A9 [get_ports uart_rx]\n")
+    text = xdc.read_text()
+    # the integrated XDC constrains the UART ports; strip that evidence and
+    # publication must notice the ports it now demands evidence for
+    for line in text.splitlines():
+        if "uart_rxd" in line and "false_path" in line:
+            text = text.replace(line + "\n", "")
+        elif "ASYNC_REG TRUE" in line and "uart" in line:
+            text = text.replace(line + "\n", "")
+        elif "set_output_delay" in line and "uart_txd" in line:
+            text = text.replace(line + "\n", "")
     xdc.write_text(text)
     return art
 

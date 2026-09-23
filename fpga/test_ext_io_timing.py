@@ -81,33 +81,45 @@ def test_exception_list_must_be_exactly_the_permitted_one():
     assert any("permitted" in r for r in drift)
 
 
-def test_uart_gate_is_inert_without_uart_ports():
+def test_shipped_uart_gate_is_active_and_satisfied():
+    # the integrated XDC carries the UART ports, so the gate must be ACTIVE
+    # and closed by the shipped evidence: pins, TX output delay + recorded
+    # disposition, RX ASYNC_REG + false path
+    assert {x.UART_TX_PORT, x.UART_RX_PORT} <= x.xdc_ports(XDC_TEXT)
     assert x.uart_gate_drift(XDC_TEXT) == []
 
 
+def test_uart_gate_is_inert_without_uart_ports():
+    text = "\n".join(l for l in XDC_TEXT.splitlines()
+                     if "uart" not in l)
+    assert x.uart_gate_drift(text) == []
+
+
 def test_uart_ports_require_constraints_and_disposition(monkeypatch):
-    text = XDC_TEXT + (
-        "set_property PACKAGE_PIN D10 [get_ports uart_tx]\n"
-        "set_property IOSTANDARD LVCMOS33 [get_ports uart_tx]\n"
-        "set_property PACKAGE_PIN A9 [get_ports uart_rx]\n"
-        "set_property IOSTANDARD LVCMOS33 [get_ports uart_rx]\n")
+    # strip the shipped UART evidence and the gate must name every missing
+    # piece (port names are the wrapper's: uart_txd / uart_rxd)
+    text = "\n".join(l for l in XDC_TEXT.splitlines()
+                     if not (("uart_rxd" in l and "false_path" in l)
+                             or ("ASYNC_REG" in l and "uart" in l)
+                             or ("set_output_delay" in l and "uart_txd" in l)))
+    monkeypatch.setattr(x, "UART_TX_DISPOSITION", None)
     drift = x.uart_gate_drift(text)
-    assert any("uart_tx" in r and "output-delay" in r for r in drift)
-    assert any("uart_tx" in r and "disposition" in r for r in drift)
-    assert any("uart_rx" in r and "ASYNC_REG" in r for r in drift)
-    assert any("uart_rx" in r and "false path" in r for r in drift)
+    assert any(x.UART_TX_PORT in r and "output-delay" in r for r in drift)
+    assert any(x.UART_TX_PORT in r and "disposition" in r for r in drift)
+    assert any(x.UART_RX_PORT in r and "ASYNC_REG" in r for r in drift)
+    assert any(x.UART_RX_PORT in r and "false path" in r for r in drift)
     # with the full evidence present the gate closes: pin, delay and a
     # recorded disposition for TX; pin, ASYNC_REG sync and false path for RX
     monkeypatch.setattr(x, "UART_TX_DISPOSITION",
                         {"receiver": "example 16550", "baud_assumed": 1e6,
                          "assumption": "receiver setup 10 ns -- ASSUMED"})
     text += ("set_output_delay -clock hardware_clock.clock_raw -max 10.000 "
-             "[get_ports uart_tx]\n"
+             f"[get_ports {x.UART_TX_PORT}]\n"
              "set_output_delay -clock hardware_clock.clock_raw -min 0.000 "
-             "[get_ports uart_tx]\n"
+             f"[get_ports {x.UART_TX_PORT}]\n"
              "set_property ASYNC_REG TRUE [get_cells -hier -regexp "
              "{.*u_uart/rx_q_reg\\[[01]\\]}]\n"
-             "set_false_path -from [get_ports uart_rx] -to [get_pins -hier "
+             "set_false_path -from [get_ports uart_rxd] -to [get_pins -hier "
              "-regexp {.*u_uart/rx_q_reg\\[0\\]/D}]\n")
     assert x.uart_gate_drift(text) == []
 
