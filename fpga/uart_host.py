@@ -453,15 +453,19 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     return writes
 
 
-def phrase_events(fixture: str = "bar808") -> tuple:
+def phrase_events(fixture: str) -> tuple:
     """A scripted phrase as scheduled events: (due, flag, sec, addr, data),
     reusing the existing fixtures and the link's own spreading rules. Dues are
     >= 1 frame apart, which the device's two write slots deliver exactly.
 
-    bar808 is the full musical fixture; `m5a` is the short scripted M5A
-    phrase the UART bench (fpga/verify_uart_bridge.py scenario `phrase`)
-    already proves feasible end to end. Whether a fixture ACTUALLY fits the
-    queue and the wire is `preflight()`'s verdict, not this function's claim.
+    bar808 is the full musical fixture (its preflight verdict is REFUSED --
+    peak demand 189 against a queue of 64 at 115200 baud, so it exists here
+    as the documented over-budget case, not as a default); `m5a` is the
+    short scripted M5A phrase the UART bench (fpga/verify_uart_bridge.py
+    scenario `phrase`) already proves feasible end to end. Whether a fixture
+    ACTUALLY fits the queue and the wire is `preflight()`'s verdict, not
+    this function's claim. Callers NAME the fixture; there is no default,
+    because the last default here was the refused one.
     """
     if fixture == "m5a":
         return _phrase_events_m5a()
@@ -1109,9 +1113,10 @@ def main(argv=None) -> int:
     ap.add_argument("--note", type=int, default=None, help="MIDI note for on/off/run")
     ap.add_argument("--hold-frames", type=int, default=1920, help="note hold (40 ms default x48)")
     ap.add_argument("--fixture", default=None,
-                    help="scripted phrase: bar808 (full fixture; preflighted), "
-                         "m5a (the short phrase the UART bench proves), "
-                         "none (no phrase; run's note-only mode)")
+                    help="scripted phrase: none (no phrase; run's note-only "
+                         "mode -- the DEFAULT), m5a (the short phrase the "
+                         "UART bench proves), bar808 (full musical fixture; "
+                         "preflight REFUSES it: over queue and wire budget)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
     ap.add_argument("--capture", default=None, metavar="PREFIX",
@@ -1167,7 +1172,11 @@ def main(argv=None) -> int:
         for flag, sec, addr, data in note_writes(note, False):
             commands.append(("gate-off", flag, sec, addr, data))
     if a.cmd == "play" or a.cmd == "run":
-        fixture = a.fixture or "bar808"
+        # the default is the FEASIBLE mode: a bare `run` is the held note and
+        # nothing else. bar808 was the default once; preflight refused it
+        # every time, so the advertised first playback failed by construction.
+        # The first phrase is `--fixture m5a` (bench-proven), never a default.
+        fixture = a.fixture or "none"
         if fixture != "none":
             events, _end = phrase_events(fixture)
             for due, flag, sec, addr, data in events:

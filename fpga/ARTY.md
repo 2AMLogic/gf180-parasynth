@@ -306,16 +306,25 @@ bench `fpga/verify_uart_bridge.py` checks the RTL against the host module):
   STATUS queues, frame counter restart). After a reset the host re-reads
   STATUS and re-anchors; its schedules are device-frame-relative from there.
 
-ONE-COMMAND PLAYBACK. From a host with pyserial installed:
+ONE-COMMAND PLAYBACK. From a host with pyserial installed. The FIRST
+playback is the held note alone; the second adds the bench-proven smoke
+phrase:
 
 ```text
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a
 ```
 
-`run` loads the patch image, starts the note, holds it, releases it and
-replays the scripted phrase — all as device-scheduled events, no host-side
-sleeps in the timing path (host sleeps pace BYTES onto the link; the musical
-deadlines are enforced by the device). Subcommands: `load`, `note-on`,
+`run` loads the patch image, starts the note, holds it, releases it and —
+with `--fixture m5a` — replays the scripted phrase, all as device-scheduled
+events, no host-side sleeps in the timing path (host sleeps pace BYTES onto
+the link; the musical deadlines are enforced by the device). The default
+fixture is `none` (note only, always within budget). `--fixture bar808`,
+the full two-bar musical fixture, is REFUSED by preflight at 115200 baud
+(the fixture schedules one event packet every 46.9 frames while the wire
+carries one per 41.8; peak in-flight demand 189 against the 64-event
+queue, first excess at packet index 65) — it is the documented over-budget
+case, named explicitly, never a default. Subcommands: `load`, `note-on`,
 `note-off`, `play`, `run`, `status`, `abort`. `--dry-run` renders the exact
 byte schedule and landing frames from the device contract without hardware.
 Without pyserial, or without a port or a STATUS answer, the tool REFUSES

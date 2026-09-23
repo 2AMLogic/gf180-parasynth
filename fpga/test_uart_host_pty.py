@@ -338,18 +338,40 @@ def test_send_preserves_a_waited_schedule(sim):
 
 # ---- finding 7: STATUS is framed 8 bytes; a slow/partial device must not ----
 # ---- yield a stale snapshot -----------------------------------------------
+# BOTH tests here build the delay INTO the sim: reply_delay_s/chunk_gap_s are
+# this test's own stimulus, not machine noise. The old logic measured STATUS
+# RTT THROUGH that same slowed sim and skipped when it exceeded DEGRADED_S --
+# which is always, by construction: the guard measured the stimulus and
+# classified it as an overloaded machine, so these tests NEVER executed their
+# verdicts (126-pass audit: the only two skips). The precondition that
+# matters -- status() answering within its timeout at all -- is asserted by
+# the call returning instead of raising; the verdicts below then RUN.
 def test_status_is_fresh_against_a_slow_reply():
     s = dev.UartDeviceSim(reply_delay_s=0.6).start()
     try:
         bridge = uh.Bridge(s.port)
+        t0 = uh.time.monotonic()
         pkt = bridge.status(timeout_s=3.0)
-        if _rtt(s.port) > DEGRADED_S:
-            pytest.skip("apparatus degraded mid-run")
-        now = s.frame_now()
-        stale = (now - pkt.frame) & 0xFFFF
-        assert stale < 1600, \
-            f"STATUS snapshot is {stale} frames old (device at {now}, snapshot " \
-            f"{pkt.frame}) -- a two-frame lead is no protection against this"
+        # executed verdict 1: the reply came back inside the deadline despite
+        # the 0.6 s device latency -- and the host did not give up early
+        assert 0.55 <= uh.time.monotonic() - t0 < 2.5, \
+            "status() did not absorb the deliberate reply delay"
+        # executed verdict 2: the snapshot's age equals the latency the DEVICE
+        # itself imposed, and nothing more. The sim parks its wire cursor at
+        # the query's arrival frame while it "composes" (that sleep IS the
+        # device latency), so the frame register reads the query-time frame
+        # and max_lag_s() records exactly how old the reply is entitled to
+        # be. A host that parsed a truncated or garbled stream gets a frame
+        # number with no relationship to that age; a host that returned a
+        # cached pre-query snapshot is older still. (The old flat bound,
+        # stale < 1600, was only ever valid for a no-delay device -- which
+        # this test deliberately is not.)
+        expected_age = int(s.max_lag_s() * uh.SR)
+        stale = (s.frame_now() - pkt.frame) & 0xFFFF
+        assert abs(stale - expected_age) < 3200 + expected_age // 10, \
+            f"STATUS snapshot {stale} frames old; the device's own latency " \
+            f"entitles it to {expected_age} -- the host added staleness or " \
+            f"parsed the wrong bytes"
     finally:
         s.stop()
 
@@ -360,8 +382,6 @@ def test_status_survives_partial_reads():
         bridge = uh.Bridge(s.port)
         t0 = uh.time.monotonic()
         pkt = bridge.status(timeout_s=3.0)
-        if _rtt(s.port) > DEGRADED_S:
-            pytest.skip("apparatus degraded mid-run")
         now = s.frame_now()
         stale = (now - pkt.frame) & 0xFFFF
         # the reply's frame is sampled when the device composes it, so the
@@ -372,6 +392,10 @@ def test_status_survives_partial_reads():
         chunk_window = int(4 * 0.02 * uh.SR) * 3 + 3200
         assert stale < chunk_window, \
             f"snapshot {stale} frames old with chunked replies (window {chunk_window})"
+        # executed verdict: the chunked reply was reassembled within the
+        # deadline -- the deliberate chunk gaps are ~0.08 s total, so this
+        # can only fail if the host stalled, re-synced, or waited on a
+        # packet that never came
         assert uh.time.monotonic() - t0 < 2.5, "status took longer than the deadline"
     finally:
         s.stop()
@@ -406,9 +430,12 @@ def test_run_completes_across_the_counter_wrap(sim, capsys):
         s.stop()
 
 
-# ---- finding 9: the default fixture is preflighted, honestly ----------------
+# ---- finding 9: the default fixture is the feasible one; bar808 is named ----
 def test_bar808_is_refused_with_the_packet_index(sim, capsys):
-    rc, out, err = run_main(["play", "--port", sim.port], capsys)   # default bar808
+    # bar808 is named EXPLICITLY now: it is the documented over-budget case,
+    # not a default. A default that preflight refuses made the advertised
+    # first playback fail by construction.
+    rc, out, err = run_main(["play", "--fixture", "bar808", "--port", sim.port], capsys)
     assert rc == 2, f"bar808 played without a preflight (exit {rc})"
     assert "REFUSED" in err, err
     for needle in ("event", "due", "queue"):
@@ -416,6 +443,16 @@ def test_bar808_is_refused_with_the_packet_index(sim, capsys):
     sent_events = [r for r in sim.received if r[0] == "event"]
     assert not sent_events, \
         f"{len(sent_events)} event packets went down the wire before the refusal"
+
+
+def test_bare_run_defaults_to_the_note_only_mode(capsys):
+    # the advertised first playback is a bare `run`: it must preflight
+    # FEASIBLE (fixture none) and execute, not die on a refused default.
+    # A 26-write note-only schedule preloads whole (peak demand 1).
+    rc, out, err = run_main(["--dry-run", "run", "--note", "45"], capsys)
+    assert rc == 0, f"bare run refused: {err}"
+    assert "FEASIBLE" in out, out
+    assert "(preload)" in out, out
 
 
 def test_m5a_phrase_is_feasible_end_to_end(sim, capsys):
