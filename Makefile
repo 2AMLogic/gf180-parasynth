@@ -23,8 +23,12 @@ help:
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
 
 ## Everything a push should run.
+## The 7200s per-job cap is a runaway kill, not a schedule: measured on the
+## 2026-09-22 M2 (2026-09-23), the broad pytest job alone runs 2631s solo and
+## exceeded the old 3600s cap under this target's parallel fan-out, reporting
+## NO-VERDICT twice. verify-full already used 7200.
 verify:
-	@$(RUN) --timeout 3600 --json build/verification/verify.json \
+	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
