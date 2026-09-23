@@ -2,7 +2,7 @@ Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanc
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
 | Date         : Wed Sep 23 10:23:55 2026
-| Host         : ip-172-31-72-198 running 64-bit Ubuntu 22.04.5 LTS
+| Host         : omitted from public report
 | Command      : report_drc -file /home/ubuntu/integrated-baseline/build/arty/drc.rpt
 | Design       : arty_a7_top
 | Device       : xc7a100tcsg324-1

@@ -7,18 +7,22 @@ cannot program this board; this is a separate Xilinx port.
 ## What is implemented and measured
 
 **Vivado 2025.1 produced a routed bitstream and passing internal timing.**
-The [published build](reports/arty/vivado-2025.1/publication.json) binds the
-bitstream to its source inputs, digital verification and implementation reports.
-External I/O timing, DSP feedback warnings and physical playback remain under
-review; this is not yet a qualified hardware audio result.
+The head of the bring-up state is the integrated baseline
+([published build](reports/arty/integrated-baseline-2025.1/publication.json)):
+the UART control bridge merged into the wrapper, the external-I/O
+constraints shipped in the compiled XDC, and the DSP DPREG-4 disposition
+re-bound to this image's routed checkpoint. The publication binds the
+bitstream to its source inputs, digital verification and implementation
+reports. Physical playback remains under review; this is not yet a
+qualified hardware audio result.
 
 Since 2026-09-22 the publisher additionally binds, at publication time and
 refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 
 - the digital verification record is **derived from the wrapper the build
   compiled** (`build.tcl` `-top` → `VERIFICATION_BY_WRAPPER`:
-  `arty_a7_top` → `reports/arty/clean/verification.json`,
-  `arty_a7_uart_top` → `reports/arty/uart-clean/verification.json`; an
+  `arty_a7_top` — which, since the bridge merged, IS the UART wrapper —
+  → `reports/arty/uart-clean/verification.json`; an
   unlisted wrapper has no evidence and is refused), and the proof is
   hash-validated against the wrapper's compiled source set;
 - the compiled `read_verilog`/`read_xdc` set must equal the build record's
@@ -27,35 +31,70 @@ refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 - the compiled XDC must carry **exactly** the approved external-I/O
   constraints (`ext_io_timing.py::xdc_contract_drift`), the routed
   report's output-delay exception list must be exactly
-  `["i2s_bclk"]`, and UART ports (TX D10 / RX A9, upcoming in the
-  integrated tree) may appear only with pin, constraint and — for TX — a
-  recorded receiver/baud disposition (`uart_gate_drift`; inert until the
-  ports exist).
+  `["i2s_bclk"]`, and the UART ports (TX D10 / RX A9, present in this
+  wrapper) must appear with pin, constraint and — for TX — the recorded
+  receiver/baud disposition (`uart_gate_drift`; ACTIVE since the bridge
+  merged: the gate constants name the real `uart_txd`/`uart_rxd` ports,
+  and the first integrated publication exercised them).
 
 The fixed first-playback configuration is `OSC2X=1 FILTER2X=1 PULSE2X=0`.
 It uses the selected reconstructed filter and near-47.9% pulse, addressed by
 the existing `pulse29` register label. Pulse 2x remains a separate upgrade;
 this baseline build does not establish its Artix fit.
 
-| Routed implementation | Result |
+| Routed implementation (integrated baseline) | Result |
 |---|---|
-| Slice LUTs | 12,695 / 63,400 (20.02%) |
-| Registers | 12,171 / 126,800 (9.60%) |
+| Slice LUTs | 13,226 / 63,400 (20.86%) — +531 over the pre-uart baseline: the bridge |
+| Registers | 12,612 / 126,800 (9.95%) |
 | DSP blocks | 100 / 240 (41.67%) |
 | Core clock | 12.288 MHz; reported period 81.380 ns |
-| Final setup / hold slack | +46.498 ns / +0.050 ns; zero failing endpoints |
+| Final setup / hold slack | +16.190 ns / +0.024 ns; zero failing endpoints |
 | Internal timing coverage | zero unclocked or unconstrained internal endpoints |
-| External timing | budgets derived and committed; proven against this routed checkpoint (below); publication regeneration pending build-host re-provisioning |
-| DRC | 268 warnings, including 13 DPREG-4 DSP feedback warnings; zero errors or critical warnings |
+| External timing | QUALIFIED at publication: every output budgeted except the forwarded i2s_bclk clock, recorded as `output_delay_exceptions: ["i2s_bclk"]` |
+| DRC | 268 warnings (64 DPIP-1, 97 DPOP-1, 94 DPOP-2, 13 DPREG-4), zero errors or critical warnings; the 13 DPREG-4 re-extracted and dismissed on THIS image (below) |
 
-The [bitstream](reports/arty/vivado-2025.1/arty.bit) is 3,825,912 bytes,
-SHA-256 `fe6c8d7e2349c45dcfb99cbbb7696c2f7ab5fdb5bcc5ada1bccdbb59586c7439`.
-It was built from `602f7a09adb33d36b1fbc82de00f3e10d0890498` in 413 seconds.
-Final timing comes from `timing.rpt`, not the router's intermediate estimate.
-All warning classes remain recorded. Review DPREG-4 feedback behavior before
-claiming implementation correctness; the RTL simulation below does not model
-the mapped DSP primitives. Report host headers are omitted for privacy, with
-both original and published report hashes retained.
+The [bitstream](reports/arty/integrated-baseline-2025.1/arty.bit) is
+3,825,912 bytes, SHA-256
+`a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95`;
+routed checkpoint SHA-256
+`6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8`.
+It was built in 420.7 seconds on Vivado 2025.1, its digital proof is the
+UART-wrapper clean run (6,734 I2S periods, hash-validated against the
+compiled source set), and the publisher set
+`external_io_timing_qualified=true`. Final timing comes from `timing.rpt`,
+not the router's intermediate estimate. Report host headers are omitted for
+privacy, with both original and published report hashes retained.
+
+Earlier images, kept as history with their hashes:
+
+- `fe6c8d7e…` — [vivado-2025.1](reports/arty/vivado-2025.1): the first
+  routed baseline, pre-UART, seven outputs unconstrained;
+- `1a562b42…` — the same directory's regenerated publication with external
+  I/O constraints (Vivado 2025.1 re-provisioned);
+- `1d547016…` — [uart-bridge-2025.1](reports/arty/uart-bridge-2025.1): the
+  UART-bridge bitstream, BUILT but never published as the baseline.
+
+## DSP DPREG-4 disposition on this image
+
+The three prior checkpoints are not this build, so the disposition was
+re-derived: `tools/dsp_dpreg_extract.py` ran read-only against THIS routed
+checkpoint (DCP hash asserted on the box before Vivado opened it) and THIS
+drc.rpt, with the dumped cell set derived from that report at run time;
+the hardened analyser (`tools/dsp_dpreg_analyse.py --evidence
+reports/arty/integrated-baseline-2025.1/dsp-dpreg-evidence`) re-parsed the
+required set from the new DRC and hash-bound the dump, manifest and names
+file. Verdict: **13/13 flagged instances dismissed** — P-feedback
+unreachable on every reachable OPMODE — with per-instance structural facts
+(PREG/MREG/OPMODEREG, dynamic-net counts, reachable OPMODE value sets, P
+fanout counts) identical to the dismissed structures of the earlier
+checkpoint. The prior reasoning carries with new evidence hashes; the
+record is
+[dsp-opmode-analysis.json](reports/arty/integrated-baseline-2025.1/dsp-dpreg-evidence/dsp-opmode-analysis.json),
+the full argument in the original
+[disposition](reports/arty/vivado-2025.1/dsp-dpreg-disposition.md).
+`dsp_feedback_review_complete` stays `false` in the publication: the
+publish machinery has no evidence-gated path that sets it, and hand-editing
+it is not an option.
 
 ## External I/O timing
 
@@ -108,6 +147,17 @@ constraint set was proven against the published routed checkpoint
   false path. These are documented exceptions from receiver-derived
   budgeting, not silent suppressions. Checkpoint slacks: setup ≈ +69 ns,
   hold ≈ +3–4 ns.
+- **uart_txd (D10), uart_rxd (A9)** — ACTIVE since the bridge merged; the
+  gate constants name the wrapper's real port names (an earlier revision
+  anticipated `uart_tx`/`uart_rx`, which would have left the gate silently
+  inert against the actual ports). TX: core-clock launch into the FTDI's
+  USB-UART bridge at 115200 8N1; no receiver-derived setup figure exists,
+  so the budget is one core period as a real output delay (0.94 % of the
+  8.681 µs bit period), with the receiver/baud disposition recorded as
+  `UART_TX_DISPOSITION` in `ext_io_timing.py` — publication refuses when
+  the port ships and the record does not. RX: two-flop synchroniser with
+  `ASYNC_REG` on both stages and a false path into the first stage only,
+  mirroring the SPI input pattern; the engine behind it stays timed.
 
 **Assumptions (recorded, not measured):** jumper flight ~0.2 ns per net,
 equal-length data/clock jumpers (short jumper wires on the Arty headers);
@@ -123,10 +173,11 @@ WHS +0.032 ns, zero failing endpoints of 38,310, and the publisher produced
 `external_io_timing_qualified: true` through its own machinery). The shared
 build box was then re-imaged between calls (fresh boot, no `/tools/Xilinx`,
 work directories wiped), deleting the generated publication and raw
-checkpoint reports before they could be fetched; this document and the
-committed code carry the captured numbers, and the bitstream/publication
-regeneration reruns `python fpga/build_arty.py` +
-`python fpga/publish_arty.py` unchanged once Vivado is available again.
+checkpoint reports before they could be fetched. The integrated baseline
+publication at the head of this document is that regeneration, produced by
+the unchanged `python fpga/build_arty.py` +
+`python fpga/publish_arty.py` once Vivado was restored (WNS +16.190 ns,
+WHS +0.024 ns on this image).
 
 | Digital check | Result |
 |---|---|
@@ -277,18 +328,19 @@ mid-phrase, dropped byte, corrupted byte) all bit-exact against the integer
 model with exact device-frame timing, plus 5 injected-bug controls each
 demonstrated to turn the bench red. The evidence lives in
 [reports/arty/uart-clean](reports/arty/uart-clean). No physical playback has
-been attempted. The UART-bridge bitstream is BUILT but NOT published as the
-baseline: Vivado 2025.1 (SW Build 6140274) routed it from this branch with
+been attempted. The integrated baseline bitstream above CONTAINS the bridge
+and is published: Vivado 2025.1 routed it from the merged tree with
 `fpga/build_arty.py --verification
-fpga/reports/arty/uart-clean/verification.json`; the state is
-BUILT_REQUIRES_TIMING_REVIEW and the artifacts are bound in
-[reports/arty/uart-bridge-2025.1](reports/arty/uart-bridge-2025.1). The
-bitstream is 3,825,912 bytes, SHA-256
-`1d54701662149bd7118351dfbc78126e23ad0343a8da32d0a5a06eaf9cd204a5`. The
-published baseline bitstream above predates the bridge and does not contain
-it. The SPI path on the modified wrapper is re-verified unchanged
+fpga/reports/arty/uart-clean/verification.json`, and the publication passed
+the publisher's active UART disposition gates. The bridge-only build remains
+as history in
+[reports/arty/uart-bridge-2025.1](reports/arty/uart-bridge-2025.1)
+(bitstream 3,825,912 bytes, SHA-256
+`1d54701662149bd7118351dfbc78126e23ad0343a8da32d0a5a06eaf9cd204a5`, never
+published as the baseline). The SPI path on the modified wrapper is
+re-verified unchanged
 ([reports/arty/spi-smoke-uart](reports/arty/spi-smoke-uart): 67/67 writes,
-4,821 I2S periods bit-exact). External I/O timing is unqualified.
+4,821 I2S periods bit-exact).
 
 First exercise a held note, then the complete scripted phrase, then drums
 and simultaneous voice — on hardware, decode/record what actually leaves
@@ -319,8 +371,12 @@ To reuse the committed digital evidence on that host, without rerunning the
 same unchanged RTL smoke:
 
 ```text
-python fpga/build_arty.py --verification fpga/reports/arty/clean/verification.json
+python fpga/build_arty.py --verification fpga/reports/arty/uart-clean/verification.json
 ```
+
+(the wrapper's compiled source set includes `rtl-sketch/uart_bridge.v`, so
+the pre-uart `clean/verification.json` no longer binds and the preparer
+refuses it).
 
 This produces a batch Tcl script, tool log, input hashes, utilization, clock,
 DRC and timing reports, checkpoints and `arty.bit`. Missing Vivado returns
@@ -355,7 +411,7 @@ names this board `arty_a7_100t`. Use that exact identifier (`arty` is the
 brew install openfpgaloader
 openFPGALoader --list-boards
 openFPGALoader -b arty_a7_100t --detect
-openFPGALoader -b arty_a7_100t fpga/reports/arty/vivado-2025.1/arty.bit
+openFPGALoader -b arty_a7_100t fpga/reports/arty/integrated-baseline-2025.1/arty.bit
 ```
 
 The final command loads volatile FPGA configuration; the board returns to

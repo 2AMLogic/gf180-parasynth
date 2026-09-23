@@ -1,0 +1,131 @@
+{
+  "internal_timing_pass": true,
+  "timing": {
+    "wns_ns": 16.19,
+    "tns_ns": 0.0,
+    "setup_failing": 0.0,
+    "setup_endpoints": 40517.0,
+    "whs_ns": 0.024,
+    "ths_ns": 0.0,
+    "hold_failing": 0.0,
+    "hold_endpoints": 40517.0,
+    "wpws_ns": 3.0,
+    "tpws_ns": 0.0,
+    "pulse_failing": 0.0,
+    "pulse_endpoints": 12866.0
+  },
+  "core_period_ns": 81.38,
+  "resources": {
+    "Slice LUTs": {
+      "used": 13226.0,
+      "available": 63400.0
+    },
+    "Slice Registers": {
+      "used": 12612.0,
+      "available": 126800.0
+    },
+    "DSPs": {
+      "used": 100.0,
+      "available": 240.0
+    },
+    "Block RAM Tile": {
+      "used": 0.0,
+      "available": 135.0
+    },
+    "Bonded IOB": {
+      "used": 15.0,
+      "available": 210.0
+    }
+  },
+  "missing_output_delays": 1,
+  "drc": {
+    "DPIP-1": {
+      "severity": "Warning",
+      "count": 64
+    },
+    "DPOP-1": {
+      "severity": "Warning",
+      "count": 97
+    },
+    "DPOP-2": {
+      "severity": "Warning",
+      "count": 94
+    },
+    "DPREG-4": {
+      "severity": "Warning",
+      "count": 13
+    }
+  },
+  "external_io_timing_qualified": true,
+  "output_delay_exceptions": [
+    "i2s_bclk"
+  ],
+  "dsp_feedback_review_complete": false,
+  "hardware_playback_tested": false,
+  "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "part": "xc7a100tcsg324-1",
+  "bitstream_sha256": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
+  "source_sha256": {
+    "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
+    "rtl-sketch/synth_top.v": "e4f8d97b9785f283439782c6bfc6a2f3981788a92723ac1329f09e94719fedd0",
+    "rtl-sketch/voice_dp.v": "a1575257054328dbc460f81cb4e3c1d901a81b565a332c00da0df9c8aa29c097",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+    "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+    "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+    "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
+  },
+  "verification": {
+    "record_sha256": "ae9cedc8a2045cdaf9d83fce81ab356f04ca5f535845dc713b36ba0d129c3fcb",
+    "transcript_sha256": "9a96ebb387e26e61de9cc09a5d68c044c4d6f743f88bac4db004c206f493977e",
+    "periods": 6734,
+    "scope": "Arty wrapper UART-bridge digital check: device-scheduled events and live writes through the reserved UART pins vs the device contract and the integer model; MMCM bypassed; no physical timing claim"
+  },
+  "tool": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
+  "build_seconds": 420.737,
+  "original_artifact_sha256": {
+    "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
+    "utilization.rpt": "3a1c3898dbbe8c7a29d1356c7fef8a834a6688eb3065409d8cafaeda78b9273b",
+    "timing.rpt": "8d65cbd14b8cae76db6935531fb1c373030d1f7b1710c7ff6d5d09ec5c9fa54d",
+    "clocks.rpt": "f20875192df192efeb97f0fce106ebdb98894a5ae87a68faa9c44ca5da1dca2e",
+    "drc.rpt": "c5747e65bc9ff5750932e81b639aadad7914d5cc7bdf9af4647afa8b41678b5e",
+    "routed.dcp": "6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8"
+  },
+  "report_transformation": "Host header omitted; numerical report contents unchanged",
+  "remaining_review": [
+    "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
+    "physical programming, control and audio capture",
+    "13 DPREG-4 DSP feedback warnings"
+  ],
+  "published_sha256": {
+    "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
+    "timing.rpt": "c7d3e81d2a656a8530f4d416076d33487c916b99f9b043dc2683164308b93fe9",
+    "utilization.rpt": "9d96d2f53e4eff596f0217a94aa71128437add24eb2e4029d1293d33f181e705",
+    "build.tcl": "b05ff3b7db14e6da7c8f63ff08974010bb532c9a771d2b756c3466995b44dcb6",
+    "report.json": "d1810188634b5c8643045db4b78be0ce246d1bc5cd0cc433ea05388b7b7144bb",
+    "clocks.rpt": "0f94dce6263ae3477d8f7cb5c6111e4f57829be1a467b4ca003edd0d65a0e9d1",
+    "drc.rpt": "bbb1d497c4dd778f08c38bf99e260de068dbd320830832bbbd1d8740726a955d"
+  }
+}
