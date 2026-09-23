@@ -1,0 +1,42 @@
+{
+  "source_commit": "c323b40665239b1b84e23a413a2a4489d2894ba5",
+  "evidence": "selected integer model driven by host SPI schedule; no new RTL or hardware audio claim",
+  "required_build": {
+    "OSC2X": 1,
+    "FILTER2X": 1
+  },
+  "tests": "46 host, preset and build-result tests passed",
+  "jobs": [
+    {
+      "cmd": "python3 fpga/play.py --preset m5a-saw --keys 72,84,96 --pattern none --bars 1 --out build/m5a-saw-play.wav",
+      "state": "PASS",
+      "rc": 0,
+      "out": "play: 200 transactions, 1200 bytes over 3.73 s -- 0 strikes, 6 gate/trigger events, 0 knob turns\nplay: link DR 0007 maximum 2.0 MHz: one write every 1.168 frames (24.33 us), 0.13 % busy\nplay: the timed sequences of 15.7.1: 0 BD attack window(s), 0 tom pitch drop(s) -- 0 of the transactions above\nplay: build/m5a-saw-play.wav -- 3.73 s, peak 7347 of 32768 (0.224 x FS), 0 samples at the rail\nplay: every sample above came out of the register port. Nothing was poked.\n",
+      "secs": 161.59254097938538
+    },
+    {
+      "cmd": "python3 fpga/play.py --preset m5a-pulse --keys 72,84,96 --pattern none --bars 1 --out build/m5a-pulse-play.wav",
+      "state": "PASS",
+      "rc": 0,
+      "out": "play: 200 transactions, 1200 bytes over 3.73 s -- 0 strikes, 6 gate/trigger events, 0 knob turns\nplay: link DR 0007 maximum 2.0 MHz: one write every 1.168 frames (24.33 us), 0.13 % busy\nplay: the timed sequences of 15.7.1: 0 BD attack window(s), 0 tom pitch drop(s) -- 0 of the transactions above\nplay: build/m5a-pulse-play.wav -- 3.73 s, peak 10377 of 32768 (0.317 x FS), 0 samples at the rail\nplay: every sample above came out of the register port. Nothing was poked.\n",
+      "secs": 160.15066123008728
+    }
+  ],
+  "audio": {
+    "m5a-saw": {
+      "path": "fpga/reports/selected/m5a-saw-play.wav",
+      "sha256": "e9ca1a3c7e8541907481b17dc81df039f72e94aa3114ed78a955c792621100cb"
+    },
+    "m5a-pulse": {
+      "path": "fpga/reports/selected/m5a-pulse-play.wav",
+      "sha256": "0e3a593766fcdfc0ee2f26b824bee9a1f74097fbb6bf8e1e9a6db7bbaf140ada"
+    }
+  },
+  "source_sha256": {
+    "fpga/play.py": "be24954b7c97bf85ef82ad5419c3e55c426066848c66c0ccb9ecc1fe628a4897",
+    "fpga/spi_host.py": "086c8e7e520feabe7dca5b6136b92390791fb891d819f57bcec195c8163e5eb1",
+    "fpga/selected_preset.py": "22a9c04087492333d540627a14a9865d3618cb614bc3aa27be7fe499f2899ad1",
+    "model/voice_fx.py": "6442bb9effb7fa70356f092c29a7de0c316d618d24ddf72c347d92beb1042f19",
+    "model/synth_top_model.py": "07a986694d580a8e98f26ed192e26f42708a84d4abbf4bd25cf3710765895557"
+  }
+}

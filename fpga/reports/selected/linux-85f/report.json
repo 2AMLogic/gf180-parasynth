@@ -1,0 +1,92 @@
+{
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "pulse_duty_percent": 47.9
+  },
+  "source_commit": "11217322f588b80d890b5dc7b9444e8d20c48c3f",
+  "source_sha256": {
+    "fpga/rtl/ulx3s_top.v": "49a04c29781b0dddca435a98f446d948bfa70e62ad895b5fc2119f460c9e276e",
+    "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
+    "rtl-sketch/voice_dp.v": "7e659245dcadc3b19f562354838be66a66a48ac9dc0f367613c96760d2d01235",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+    "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+    "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "2a7782b254e4e08678225bc8f88d0746ee3c894bd4c46d7f60185b0ec7ea929b",
+    "rtl-sketch/osc_2x_saw_path.v": "c29f1b6f78876fa1da6bb3f6fd82fb5d98e22208e04bc0a20ea807b616e2bb3d",
+    "rtl-sketch/polyblep_saw_pair.v": "bcd40382198a616935ae8313b36ba53eef2d323f69c2bbda1efd31ac75489dbe",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3"
+  },
+  "device": "85k",
+  "package": "CABGA381",
+  "stages": {
+    "synthesis": {
+      "state": "PASS",
+      "exit_code": 0,
+      "command": [
+        "yosys",
+        "-p",
+        "read_verilog -defer -DVOICE_OSC_2X -DVOICE_FILTER_2X \"/home/runner/work/gf180-parasynth/gf180-parasynth/fpga/rtl/ulx3s_top.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/synth_top.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/voice_dp.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/spi_ctl.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/drum_regs.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/drum_kit.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/drum_dp.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/modal_dp.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/i2s_tx.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/ladder_dp_n.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/recip_div.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/osc_2x_saw_bank.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/osc_2x_saw_path.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/polyblep_saw_pair.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/osc_substep_pair.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/decimate_2x_tm_sym.v\" \"/home/runner/work/gf180-parasynth/gf180-parasynth/rtl-sketch/rate_conv_2x.v\"; synth_ecp5 -top ulx3s_top -json \"/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.json\"; stat -top ulx3s_top"
+      ],
+      "seconds": 84.277,
+      "log": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/synthesis.log",
+      "artifact": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.json",
+      "artifact_sha256": "f04ee6608852adaa5d3ad3e178de21598bedffede8505146075438558563d34d"
+    },
+    "place_route": {
+      "state": "PASS",
+      "exit_code": 0,
+      "command": [
+        "nextpnr-ecp5",
+        "--85k",
+        "--package",
+        "CABGA381",
+        "--json",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.json",
+        "--lpf",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/fpga/boards/ulx3s.lpf",
+        "--seed",
+        "1",
+        "--textcfg",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.config",
+        "--report",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/timing.json"
+      ],
+      "seconds": 1575.761,
+      "log": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/place_route.log",
+      "artifact": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.config",
+      "artifact_sha256": "5bbbdec63128c49a4873deb1cda2d7850af5d9a4866db136e99872201f457d36"
+    },
+    "bitstream": {
+      "state": "PASS",
+      "exit_code": 0,
+      "command": [
+        "ecppack",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.config",
+        "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.bit"
+      ],
+      "seconds": 1.148,
+      "log": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/bitstream.log",
+      "artifact": "/home/runner/work/gf180-parasynth/gf180-parasynth/build/fpga-selected-85k/ecp5.bit",
+      "artifact_sha256": "e15314dc81ce61e88a5da5a56c072927bc967d82d7d3d4fb57c18738fd69f096"
+    }
+  },
+  "bitstream_built": true,
+  "hardware_playback_tested": false,
+  "simulation_evidence": {
+    "commit": "36137df",
+    "transcript": "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt",
+    "sha256": "62ea951d3b8c8b0dd07e46e3abdcd33c274e54136f189b086d1b37dd2a9f6448",
+    "core_files_and_roms_identical": true,
+    "scope": "reused complete-phrase SPI-to-I2S core simulation; FPGA wrapper is not covered"
+  },
+  "yosys_version": "Yosys 0.69+77 (git sha1 9ff27d29c-dirty, Release, Clang /usr/bin/clang++ 21.1.8)",
+  "state": "BUILT"
+}

@@ -74,7 +74,7 @@ SCK_MAX_HZ      = 2_000_000        # "SCK MUST be <= 2.0 MHz"
 CS_GAP_CYCLES   = 4                # "CS_N MUST be high for >= 4 core cycles"
 PIN_TO_ACCEPT   = 3                # informative, DR 0007 section 5
 FRAME_PS        = round(1e12 * CYC_PER_FRAME / F_CORE_HZ)      # 20_833_333 ps
-WAVE_CODE       = dict(saw=0, square=1, pulse25=2, tri=3, sine=4)
+WAVE_CODE       = dict(vf.WAVE_CODE)
 
 
 def encode_tx(flag: int, sec: int, addr: int, data: int) -> int:

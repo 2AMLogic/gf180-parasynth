@@ -1,0 +1,9 @@
+{
+  "release": "2026-09-21",
+  "url": "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-09-21/oss-cad-suite-linux-x64-20260921.tgz",
+  "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c",
+  "versions": {
+    "yosys": "Yosys 0.69+77 (git sha1 9ff27d29c-dirty, Release, Clang /usr/bin/clang++ 21.1.8)",
+    "nextpnr-ecp5": "\"nextpnr-ecp5\" -- Next Generation Place and Route (Version nextpnr-0.11.1-30-g3e53a0bf)"
+  }
+}
