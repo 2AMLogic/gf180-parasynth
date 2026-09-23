@@ -117,7 +117,12 @@ def compare_audio(ours, ref):
     for name, pairs in values.items():
         ours_value, reference_value = max(pairs, key=lambda p: abs(p[0] - p[1]))
         tolerance, basis = lead.TOLERANCES[name]
-        units = "cents" if name == "Pitch" else ("ms" if name == "Envelope release" else "dB")
+        # units follow the measurement, not the majority branch: attack and
+        # release are 10-90% spans and T20 in MILLISECONDS (the published
+        # record once carried "dB" here while its basis and values said ms)
+        units = ("cents" if name == "Pitch"
+                 else "ms" if name in ("Envelope attack", "Envelope release")
+                 else "dB")
         if name == "Envelope release":
             tolerance, basis = 20., "ms; fixed bass screening limit, above known-signal release error (<10 ms)"
         if name == "Envelope attack":

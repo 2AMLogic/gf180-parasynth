@@ -32,6 +32,14 @@ def test_known_bass_and_pitch_mutation():
     assert clean["properties"]["Envelope attack"]["valid"]
     assert abs(clean["properties"]["Envelope attack"]["error"]) < 1.0
     assert abs(changed["properties"]["Envelope attack"]["error"]) < 1.0
+    # the attack fit measures 10-90% spans in MILLISECONDS: its values are
+    # attack_10_90_ms and its tolerance basis says ms. The published record
+    # once labelled this diagnostic "dB" -- arithmetic right, metadata wrong.
+    assert clean["properties"]["Envelope attack"]["units"] == "ms", \
+        clean["properties"]["Envelope attack"]
+    assert clean["properties"]["Envelope release"]["units"] == "ms"
+    assert clean["properties"]["Harmonic shape"]["units"] == "dB"
+    assert clean["properties"]["Gain"]["units"] == "dB"
     for event in clean["events"]:
         assert event["harmonics_db"]["model"]["h2"] == pytest.approx(20 * np.log10(.2), abs=.05)
         assert event["harmonics_db"]["model"]["h3"] == pytest.approx(-20., abs=.05)
