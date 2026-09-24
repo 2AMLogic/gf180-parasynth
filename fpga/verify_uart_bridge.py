@@ -372,23 +372,65 @@ def rows_from_capture(prefix):
             rows.append(uh.Placed(r["index"], "event", pkt, r["send_frame"],
                                   (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
                                   accept, due, due))
+        elif r["kind"] == "status":
+            # a STATUS poll the host really sent: it occupies the RX wire and
+            # draws a reply, and executes nothing
+            items.append(("status",))
+            rows.append(uh.Placed(r["index"], "status", pkt, r["send_frame"],
+                                  (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
+                                  accept, -1, -1))
         else:
             raise ValueError(f"capture row kind {r['kind']!r} not replayable")
     return items, [rows], plan.get("origin", 0), plan.get("baud", uh.DEFAULT_BAUD)
 
 
-def simulate_replay(prefix, outdir, inject=None):
-    """Run the wrapper bench on a CLI capture (see rows_from_capture)."""
+def _sha(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _rel(p) -> str:
+    p = Path(p).resolve()
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+
+
+def replay_identity(srcs, defines, cmd_path, tail_frames) -> dict:
+    """Everything a replay's outputs depend on: the compiled sources, the
+    ROM images the RTL $readmemh's (they shape the sound as much as the
+    Verilog does), the defines (so an injection is part of the identity),
+    the stimulus and the frames run. A reused run must match ALL of it."""
+    return {"sources": {_rel(p): _sha(p) for p in srcs},
+            "roms": {_rel(p): _sha(p) for p in roms()},
+            "defines": list(defines), "stimulus": _sha(cmd_path),
+            "tail_frames": int(tail_frames)}
+
+
+def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
+                    timeout_s=3600, reuse=False):
+    """Run the wrapper bench on a CLI capture (see rows_from_capture).
+    `tail_frames` extends the run (and the model comparison) past the last
+    due, so decay and release tails are on the wire, not cut off.
+
+    `reuse=True` re-ANALYSES an earlier run instead of re-simulating (a
+    musical-length replay is ~50 minutes) -- only when the stimulus file
+    the bench consumed is byte-identical to this capture's and the run
+    reached the frames this analysis needs; otherwise it REFUSES (None).
+    Expectations may change between the two; the stimulus may not."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     items, planned_segments, _origin, _baud = rows_from_capture(prefix)
     cmd_path = outdir / "uart_cmds.txt"
+    previous = cmd_path.read_bytes() if (reuse and cmd_path.exists()) else None
     build_cmd_file(planned_segments, [], cmd_path)
+    if reuse and previous != cmd_path.read_bytes():
+        print("verify_uart_bridge: REFUSED -- reuse asked, but the stimulus "
+              "differs from the run on disk (or there is none)")
+        return None
     last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
                    + [0])
     last_send = max([r.send_frame for rows in planned_segments for r in rows]
                     + [0])
-    tail_frames = max(800, last_due - last_send + 800)
+    model_tail = max(600, int(tail_frames or 0))
+    tail_frames = max(800, last_due - last_send + 200 + model_tail)
 
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
     srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
@@ -396,6 +438,35 @@ def simulate_replay(prefix, outdir, inject=None):
     defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
+    identity = replay_identity(srcs, defines, cmd_path, tail_frames)
+    id_path = outdir / "run_identity.json"
+    files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+    if reuse:
+        # the run on disk is evidence only if it is the run THIS call would
+        # make: same sources, defines (injection included), stimulus and
+        # length -- and its outputs are the ones that run wrote
+        rec = json.loads(id_path.read_text()) if id_path.exists() else None
+        why = None
+        if rec is None:
+            why = "no run identity on disk (not a fresh run of this tool)"
+        elif rec.get("identity") != identity:
+            diff = [k for k in identity if rec["identity"].get(k) != identity[k]]
+            why = f"the run on disk differs in {diff}"
+        else:
+            bad = [k for k, f in files.items()
+                   if not Path(f).exists() or _sha(f) != rec["outputs"].get(k)]
+            if bad or not (outdir / "transcript.txt").exists() or \
+                    _sha(outdir / "transcript.txt") != rec["outputs"].get("transcript"):
+                why = f"outputs changed since that run wrote them: {bad or ['transcript']}"
+        if why:
+            print(f"verify_uart_bridge: REFUSED -- reuse asked, but {why}")
+            return None
+        report = (outdir / "transcript.txt").read_text().splitlines()
+        return {"outdir": outdir, "items": items, "bodies": [items],
+                "planned": planned_segments, "reset_frames": [],
+                "report": report, "files": files,
+                "scenario": "replay", "inject": inject,
+                "defines": defines, "model_tail": model_tail, "reused": True}
     iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
     if not iverilog or not vvp:
         print("verify_uart_bridge: REFUSED -- iverilog/vvp not on PATH")
@@ -406,27 +477,31 @@ def simulate_replay(prefix, outdir, inject=None):
     if r.returncode != 0:
         print("verify_uart_bridge: compile failed:\n" + r.stdout + r.stderr)
         return None
-    files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+    id_path.unlink(missing_ok=True)       # a failed run leaves no identity
     run_cmd = [vvp, "-n", str(exe), f"+uart={cmd_path}",
                f"+i2s={files['i2s']}", f"+wrs={files['wrs']}",
                f"+txd={files['txd']}", f"+samp={files['samp']}",
                f"+frames={tail_frames}"]
     try:
-        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=3600,
+        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_s,
                            cwd=str(ROOT / "rtl-sketch"))
     except subprocess.TimeoutExpired:
-        print("verify_uart_bridge: simulation timed out")
+        print(f"verify_uart_bridge: simulation timed out after {timeout_s}s")
         return None
     report = [l for l in r.stdout.splitlines() if l.startswith("tb_uart_bx")]
     (outdir / "transcript.txt").write_text("\n".join(report) + "\n")
     if r.returncode != 0:
         print("verify_uart_bridge: vvp failed:\n" + r.stdout + r.stderr)
         return None
+    outputs = {k: _sha(f) for k, f in files.items() if Path(f).exists()}
+    outputs["transcript"] = _sha(outdir / "transcript.txt")
+    id_path.write_text(json.dumps({"identity": identity, "outputs": outputs},
+                                  indent=1) + "\n")
     return {"outdir": outdir, "items": items, "bodies": [items],
             "planned": planned_segments, "reset_frames": [],
             "report": report, "files": files,
-            "scenario": "replay", "inject": None,
-            "defines": defines}
+            "scenario": "replay", "inject": inject,
+            "defines": defines, "model_tail": model_tail}
 
 
 def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
@@ -600,6 +675,8 @@ def analyze(run):
     acks = errs = boots = 0
     err_codes = Counter()
     status_bad = 0
+    status_rows = [r for rows in planned for r in rows if r.kind == "status"]
+    status_k = 0
     for s in range(len(origins)):
         for pkt in uh.parse_device_stream(seg_bytes(s)):
             if pkt.kind == "ack":
@@ -611,12 +688,17 @@ def analyze(run):
                 boots += 1
             elif pkt.kind == "status":
                 # the device frame must match the contract's clock, ±0
-                acc = [r for rows in planned for r in rows if r.kind == "status"]
-                if acc:
+                # replies pair with the polls IN ORDER (a replayed host
+                # capture polls many times); a lone poll pairs with itself
+                acc = status_rows[min(status_k, len(status_rows) - 1)] \
+                    if status_rows else None
+                status_k += 1
+                if acc is not None:
                     # the STATUS reply carries the device's frame REGISTER,
-                    # which reads audio_frame+1 during the frame
-                    want = ((acc[-1].accept_frame - origins[s]) + 1)
-                    if pkt.frame < want - 1 or pkt.frame > want + 1:
+                    # which reads audio_frame+1 during the frame; 16 bits
+                    want = ((acc.accept_frame - origins[s]) + 1)
+                    d = (pkt.frame - want) & 0xFFFF
+                    if min(d, 0x10000 - d) > 1:
                         status_bad += 1
                         detail.append(f"STATUS frame {pkt.frame}, contract {want}")
     comp["acks_seen"] = acks
@@ -679,7 +761,7 @@ def analyze(run):
             continue
         origin = origins[s]
         model_writes = [(e[0] - origin, e[1], e[2], e[3], e[4]) for e in exp]
-        n = max(f for f, *_ in model_writes) + 600
+        n = max(f for f, *_ in model_writes) + run.get("model_tail", 600)
         if s + 1 < len(origins):
             # a segment ends where the next one's audio begins (the reset)
             n = min(n, origins[s + 1] - origin)

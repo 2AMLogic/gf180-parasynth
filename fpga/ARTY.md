@@ -343,12 +343,38 @@ phrase:
 with `--fixture m5a` — replays the scripted phrase, all as device-scheduled
 events, no host-side sleeps in the timing path (host sleeps pace BYTES onto
 the link; the musical deadlines are enforced by the device). The default
-fixture is `none` (note only, always within budget). `--fixture bar808`,
-the full two-bar musical fixture, is REFUSED by preflight at 115200 baud
-(the fixture schedules one event packet every 46.9 frames while the wire
-carries one per 41.8; peak in-flight demand 189 against the 64-event
-queue, first excess at packet index 65) — it is the documented over-budget
-case, named explicitly, never a default. Subcommands: `load`, `note-on`,
+fixture is `none` (note only, always within budget).
+
+MUSICAL-LENGTH PLAYBACK. `--fixture bar808-full` (two bars at tempo,
+4.2 s) and `--fixture demo` (4.0 s) span three wraps of the 16-bit frame
+counter, so no single schedule can hold them. The host delivers them in
+ROLLING WINDOWS at the existing 115200 baud: the fixture's `load()` image
+(patch, kit, initial accents: 182 writes) goes first as live setup, then
+the timed writes (192 and 306 — every hit's accent, the BD attack/restore
+pairs and tom pitch drops included) go in batches, each planned from a
+fresh STATUS with every due inside the wrap-safe horizon and the queue
+bounded against everything still in flight. Music t=0 lands 50 ms after
+setup completes. Tempo is never stretched; an event the wire cannot reach
+is REFUSED. `fpga/verify_rolling_playback.py` runs the shipped CLI against
+the device contract on simulated time and checks every executed write
+against the fixture itself: both patterns land every timed write on its
+frame from counter epochs 0, 32000 and 65300, peak queue 55 and 60 of 64,
+minimum deadline slack ~9000 frames; five injected controls (queue-unaware
+cut, tag-based setup split, missing wrap unwrap, corrupted packet, reset
+mid-phrase, watermark schedule sent unthrottled) each turn it red for their
+reason. The host's ACTUAL bytes (STATUS polls included) were then replayed
+through the UART RTL wrapper: `demo` 508/508 writes, 0 off-frame, 0 I2S
+mismatches over 257,185 periods; `bar808-full` 394/394, 0, 0 over 266,695
+periods, each with 1 s of decay tail, against the model driven by the
+fixture's schedule; moving one intended event by one frame is caught.
+Records: [reports/arty/rolling-playback](reports/arty/rolling-playback)
+(`--rtl` is ~50 minutes a fixture). No physical playback yet.
+
+`--fixture bar808` is the COMPRESSED regression fixture (rests removed,
+157 ms of events), not the musical two bars. It is the stress case: once
+its load image is setup rather than 182 events due at t=0 it preloads at
+115200 (peak demand 36 of 64) and remains feasible down to 38400; at
+19200 preflight refuses it with the packet index. Subcommands: `load`, `note-on`,
 `note-off`, `play`, `run`, `status`, `abort`. `--dry-run` renders the exact
 byte schedule and landing frames from the device contract without hardware.
 Without pyserial, or without a port or a STATUS answer, the tool REFUSES

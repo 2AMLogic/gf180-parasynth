@@ -78,21 +78,29 @@ class UartDeviceSim:
     def __init__(self, *, epoch_frame: int = 0, evq_depth: int = 64,
                  wrq_depth: int = 8, reply_delay_s: float = 0.0,
                  chunk_bytes: int = 0, chunk_gap_s: float = 0.0,
-                 baud: int = DEFAULT_BAUD):
-        self.master, slave = pty.openpty()
-        self.port = os.ttyname(slave)
-        self._slave = slave                     # held so the name stays valid
-        # The device owns its side of the line: raw, no echo. Without this a
-        # BSD pty echoes the slave's input queue back to the master, and the
-        # sim reads its own replies as if the host had sent them.
-        attrs = termios.tcgetattr(slave)
-        attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.ISIG
-                      | termios.IEXTEN | termios.ECHOE | termios.ECHOK
-                      | termios.ECHONL)
-        attrs[1] &= ~(termios.OPOST)
-        attrs[6][termios.VMIN] = 1
-        attrs[6][termios.VTIME] = 0
-        termios.tcsetattr(slave, termios.TCSANOW, attrs)
+                 baud: int = DEFAULT_BAUD, clock=None):
+        # clock=None: a pty and a thread on wall time (the OS boundary).
+        # clock=SimClock: no pty, no thread -- SimSerial drives the same
+        # contract logic on simulated time, so a test is reproducible.
+        self._clock = clock
+        self.outbox: list = []                  # sim mode: (t_available, bytes)
+        self._tx_free_t = 0.0
+        if clock is None:
+            self.master, slave = pty.openpty()
+            self.port = os.ttyname(slave)
+            self._slave = slave                 # held so the name stays valid
+            # The device owns its side of the line: raw, no echo. Without
+            # this a BSD pty echoes the slave's input queue back to the
+            # master, and the sim reads its own replies as if the host had
+            # sent them.
+            attrs = termios.tcgetattr(slave)
+            attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.ISIG
+                          | termios.IEXTEN | termios.ECHOE | termios.ECHOK
+                          | termios.ECHONL)
+            attrs[1] &= ~(termios.OPOST)
+            attrs[6][termios.VMIN] = 1
+            attrs[6][termios.VTIME] = 0
+            termios.tcsetattr(slave, termios.TCSANOW, attrs)
         self.epoch = epoch_frame & 0xFFFF
         self.evq_depth = evq_depth
         self.wrq_depth = wrq_depth
@@ -122,6 +130,9 @@ class UartDeviceSim:
         self.received: list = []                # ("write"|"event"|"status"|"abort", detail)
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
+        self.evq_peak = 0                       # most events ever held at once
+        self.frame_freeze_t = None              # test knob: audio clock stops
+        self.resets = 0
         self._fires_this_frame = 0
         self._fire_frame = -1
         self._stop = threading.Event()
@@ -150,6 +161,14 @@ class UartDeviceSim:
 
     # ---- wire ----------------------------------------------------------------
     def _send(self, data: bytes, *, delay: bool = True) -> None:
+        if self._clock is not None:
+            # sim mode: the reply occupies the TX line at baud after any
+            # modelled latency; the host can read it once it has arrived
+            start = max(self._cursor + (self.reply_delay_s if delay else 0.0),
+                        self._tx_free_t)
+            self._tx_free_t = start + len(data) * self._byte_time
+            self.outbox.append((self._tx_free_t, bytes(data)))
+            return
         if delay and self.reply_delay_s:
             time.sleep(self.reply_delay_s)
         if self.chunk_bytes:
@@ -175,7 +194,7 @@ class UartDeviceSim:
 
     def _status(self) -> None:
         self.status_requests += 1
-        if self.reply_delay_s:
+        if self.reply_delay_s and self._clock is None:
             # the latency is before the device COMPOSES its answer: a real
             # device samples the frame register when it builds the reply, so
             # the reply's frame is fresh at send time -- what the delay models
@@ -192,7 +211,7 @@ class UartDeviceSim:
         self._send(bytes([RSP_STATUS, (f >> 8) & 0xFF, f & 0xFF,
                           self.evq_count, self.wrq_count,
                           self.drops & 0xFF, self.errs & 0xFF, flags]),
-                   delay=False)
+                   delay=self._clock is not None)
 
     # ---- parser (mirrors the RTL's per-byte state machine) -------------------
     def _rx_byte(self, b: int, t: float) -> None:
@@ -228,7 +247,12 @@ class UartDeviceSim:
         D[31:0]} -- flag and sec share the first byte."""
         b0 = pkt[off]
         flag = (b0 >> 7) & 1
-        sec = (b0 >> 6) & 1
+        # SEC is the LOW bit of the first byte ({F, 6'b0, SEC}: word bit 40,
+        # as uart_host.reg_frame encodes and uart_bridge.v slices it). This
+        # read bit 6 until the rolling verifier sent drum writes: every
+        # SEC=1 write was logged as a voice write, invisible to tests that
+        # only ever sent SEC=0.
+        sec = b0 & 1
         addr = pkt[off + 1]
         data = int.from_bytes(pkt[off + 2:off + 6], "big")
         return flag, sec, addr, data
@@ -290,6 +314,7 @@ class UartDeviceSim:
                 self.evq.append([due, flag, sec, addr, data])
                 self.last_due = due
                 self.evq_count += 1
+                self.evq_peak = max(self.evq_peak, self.evq_count)
                 self._ack()
 
     # ---- execution -----------------------------------------------------------
@@ -298,6 +323,10 @@ class UartDeviceSim:
         return (frame - self.epoch) & 0xFFFF
 
     def _frame_at(self, t: float) -> int:
+        if self.frame_freeze_t is not None:
+            # the audio clock stopped (the counter and the queue with it);
+            # the UART parser runs on its own clock and still answers
+            t = min(t, self.frame_freeze_t)
         return (self.epoch + int((t - self._t0) * SR)) & 0xFFFF
 
     def _mono_of_frame(self, frame: int, *, mid: bool = True) -> float:
@@ -423,3 +452,104 @@ class UartDeviceSim:
 
     def __exit__(self, *exc):
         self.stop()
+
+
+# ---- simulated time: the same contract, no pty, no thread ---------------------
+class SimClock:
+    """Simulated wall time for host AND device. It moves only when the host
+    sleeps or blocks in a read -- so a scheduling decision depends on the
+    contract, never on how busy the machine running the test is."""
+
+    def __init__(self, t: float = 0.0):
+        self.t = t
+
+    def monotonic(self) -> float:
+        return self.t
+
+    def sleep(self, seconds: float) -> None:
+        self.t += max(0.0, seconds)
+
+
+class SimSerial:
+    """A pyserial-shaped endpoint in front of a clock-driven UartDeviceSim.
+
+    write() puts bytes on the wire (the device deserialises them at baud);
+    read(n) advances simulated time to the next reply byte or the read
+    timeout, whichever comes first. The host code under test is the real
+    Bridge -- only the transport and the clock are substituted."""
+
+    def __init__(self, sim: UartDeviceSim, *, boot: bool = True):
+        if sim._clock is None:
+            raise ValueError("SimSerial needs a UartDeviceSim built with clock=")
+        self.sim = sim
+        self.clock = sim._clock
+        self.timeout = 1.0
+        self.tx_log: list = []                  # (t_written, bytes): the host's bytes
+        self.mutate = None                      # optional fn(bytes) -> bytes on the wire
+        sim._t0 = sim._cursor = sim._last_byte_t = self.clock.t
+        sim._wire_next_t = None
+        if boot:
+            sim._send(bytes([BOOT]), delay=False)
+
+    def _advance(self) -> None:
+        self.sim._advance(self.clock.t)
+
+    def write(self, data: bytes) -> int:
+        self._advance()
+        self.tx_log.append((self.clock.t, bytes(data)))
+        wire = self.mutate(bytes(data)) if self.mutate else bytes(data)
+        sim = self.sim
+        if not sim._wire_buf:
+            sim._wire_next_t = max(self.clock.t, sim._cursor) + sim._byte_time
+        sim._wire_buf += wire
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def _available(self) -> bytes:
+        out = b"".join(b for t, b in self.sim.outbox if t <= self.clock.t)
+        self.sim.outbox = [(t, b) for t, b in self.sim.outbox if t > self.clock.t]
+        return out
+
+    def read(self, n: int = 1) -> bytes:
+        deadline = self.clock.t + (self.timeout or 0.0)
+        pending = b""
+        while True:
+            self._advance()
+            pending += self._available()
+            if pending or self.clock.t >= deadline:
+                break
+            # next instant anything can change for the host: a reply
+            # completing, or the device consuming a wire byte (which may
+            # produce one)
+            cands = [t for t, _b in self.sim.outbox]
+            if self.sim._wire_buf and self.sim._wire_next_t is not None:
+                cands.append(self.sim._wire_next_t)
+            nxt = min([deadline] + [t for t in cands if t > self.clock.t])
+            self.clock.t = max(self.clock.t, nxt)
+        out, rest = pending[:n], pending[n:]
+        if rest:                                # unread bytes stay available
+            self.sim.outbox.insert(0, (self.clock.t, rest))
+        return out
+
+    def reset(self) -> None:
+        """BTN0 now: both queues, counters and flags die with the core, the
+        frame counter restarts at 0, and BOOT goes out on the TX line."""
+        self._advance()
+        sim = self.sim
+        sim.evq.clear(); sim.wrq.clear()
+        sim.evq_count = sim.wrq_count = 0
+        sim.last_due = None
+        sim.drops = sim.errs = sim.flags_sticky = 0
+        sim._partial.clear()
+        sim.epoch = 0
+        sim._t0 = sim._cursor
+        sim.resets += 1
+        sim._send(bytes([BOOT]), delay=False)
+
+    def run_until(self, t: float) -> None:
+        """Let the device timeline reach `t` with the host idle (after the
+        run: let the queued phrase finish firing)."""
+        self.clock.t = max(self.clock.t, t)
+        self._advance()
