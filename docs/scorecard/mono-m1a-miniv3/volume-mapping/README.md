@@ -1,17 +1,18 @@
 # M1A fixed volume candidate and oscillator diagnosis
 
-The fixed **−4 dB patch output-volume challenger** improves M1A from **3 passing / 2 failing / 2 unqualified** components to **4 / 1 / 2**. It changes only `vol`: 0.45 to 0.283930804. No DSP implementation or scoring tolerance changes. All evidence here is **model-only** and the complete case remains **NO VERDICT**.
+The fixed **−4 dB patch output-volume challenger** improves M1A from **3 passing / 3 failing / 1 unqualified** components to **4 / 2 / 1**. It changes only `vol`: 0.45 to 0.283930804. No DSP implementation or scoring tolerance changes. All evidence here is **model-only**. The complete case remains a **valid fail**: the qualified envelope metric (attack 10–90%, waveform-fit) and harmonic shape still fail; this candidate moves the GAIN component inside tolerance and preserves every other verdict.
 
 | Property | Baseline | Volume −4 dB | Outcome |
 | --- | ---: | ---: | --- |
 | Pitch error | −0.05026 cents | −0.05059 cents | pass preserved |
 | Worst harmonic error | 19.82259 dB | 19.82331 dB | failure preserved |
-| Release error | +8.47917 ms | +8.47917 ms | pass preserved |
+| Envelope attack (10–90%) | +8.10889 ms | +8.10889 ms | failure preserved (provisional 10 ms amp attack is the finding) |
+| Envelope release (T20) | +8.47917 ms | +8.47917 ms | pass preserved |
 | Worst signed gain error | +4.97474 dB | −1.04361 dB | new pass |
 | Output clipping | 0% | 0% | pass preserved |
-| Attack / filter envelope | unqualified | unqualified | no verdict preserved |
+| Filter envelope | unqualified mapping | unqualified mapping | unqualified property, not a metric |
 
-The three candidate gain errors are **+0.97465, −1.04361 and −0.83170 dB**. No per-note harmonic pass is lost. The tiny aggregate harmonic change remains visible; it does not cross a pass boundary. The default/baseline patch stays unchanged, and its newly rendered WAV exactly reproduces the earlier committed SHA-256 `50add9b962caa5f37716f030c7254141664ddd238ab13300708ae6f40ddd8c05`. Candidate WAV SHA-256: `628a6a312288ed8dc817be0152329cc9de2fe3ff6e239d987c7f80423a2ba61c`.
+The three candidate gain errors are **+0.97465, −1.04361 and −0.83170 dB**. No per-note harmonic pass is lost. The tiny aggregate harmonic change remains visible; it does not cross a pass boundary. The default/baseline patch stays unchanged, and its newly rendered WAV exactly reproduces the committed model-audio SHA-256. Candidate WAV SHA-256: `628a6a312288ed8dc817be0152329cc9de2fe3ff6e239d987c7f80423a2ba61c`. The rescore was rerun under the qualified estimator (`m1a-envelope-score-v1`, 2026-09-23 build host): attack is unchanged by construction — output volume cannot touch a timing measurement — and the harmonic vector moves only in the seventh digit.
 
 ## What the isolated recordings establish
 
@@ -32,9 +33,9 @@ The bounded model counterfactual uses the measured median octave offset and the 
 
 ## Envelope and corroboration status
 
-The independently defined 8 ms rise still measures 19.04–20.79 ms with the 40 ms bass window. That window remains qualified only for release. Attack and internal filter-envelope mapping explicitly retain no verdict; a response to disabling a control is not a calibrated time trajectory. No global envelope adjustment was made.
+The 10–90% attack is now measured on both sides by the waveform-domain fit qualified against 56 known signals (worst error 0.50 ms, `tools/measure_mono_m1a_reference.py: attack_fit`); the RMS windows stay in the suite as controls that must remain red. The model's provisional 10 ms amplitude attack measures **+8.11 ms** against the reference's 0.27–1.64 ms — inside the envelope finding, unchanged by the volume candidate (a gain change cannot move a timing measurement, and the rescore confirms it does not). The isolated-recording interference diagnosis below stands as recorded; it is a hypothesis for the harmonic-shape failure, not a fix. No global envelope adjustment was made, by the candidate or otherwise.
 
-Analysis version `m1a-partial-score-v2` uses the case's declared measurements: fundamental/harmonics, envelope and bass level. Model D is a **separate, currently unmeasured corroboration milestone**, not an extra mandatory metric. Removing that accidental extra gate cannot turn this case valid while envelope evidence is missing. The official board remains 20 valid / six fully passing.
+Analysis version `m1a-envelope-score-v1` scores the case: required metrics are fundamental/harmonics, envelope (worst-normalized attack/release) and bass level. M1A is a **valid fail** — 21 valid cases on the board, six whole-case passes. The volume candidate is a component improvement; it does not turn the case green while harmonic shape and attack fail.
 
 Reproduce the fixed candidates and diagnostic (no plugin needed):
 

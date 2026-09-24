@@ -98,7 +98,12 @@ def main():
               "source_sha256": {name: bass.sha(ROOT / name) for name in files},
               "reference_sha256": bass.sha(bass.MANIFEST),
               "engine_configuration": {**engine, "oscillator_pulse_oversample_2x": False},
-              "evidence_level": "model only", "case_state": "NO VERDICT",
+              "evidence_level": "model only",
+              "case_state": "valid fail (harmonic shape and envelope attack); "
+                            "volume accepted as component improvement, not a whole-case pass",
+              "baseline_reproduction": {
+                  "recorded_model_audio_sha256": baseline_record["diagnostics"]["model_audio_sha256"],
+                  "reproduced": bass.sha(OUT / "baseline.wav") == baseline_record["diagnostics"]["model_audio_sha256"]},
               "oscillator_mapping": mapping, "runs": rows,
               "volume_acceptance": {"lost_harmonic_passes": lost, "gain_errors_db": gains,
                                     "existing_property_passes_preserved": True},
