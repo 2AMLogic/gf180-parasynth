@@ -435,7 +435,14 @@ def test_bar808_is_refused_with_the_packet_index(sim, capsys):
     # bar808 is named EXPLICITLY now: it is the documented over-budget case,
     # not a default. A default that preflight refuses made the advertised
     # first playback fail by construction.
-    rc, out, err = run_main(["play", "--fixture", "bar808", "--port", sim.port], capsys)
+    #
+    # 2026-09-24: once the fixture's load() image is delivered as live setup
+    # rather than 182 events due at t=0, compressed bar808 FITS at 115200
+    # (peak demand 36 of 64; feasible down to 38400). The refusal this test
+    # guards -- preflight refuses before one event leaves -- is exercised
+    # at 19200, where the fixture's burst genuinely outruns the wire.
+    rc, out, err = run_main(["play", "--fixture", "bar808", "--baud", "19200",
+                             "--port", sim.port], capsys)
     assert rc == 2, f"bar808 played without a preflight (exit {rc})"
     assert "REFUSED" in err, err
     for needle in ("event", "due", "queue"):

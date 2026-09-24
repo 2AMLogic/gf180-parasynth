@@ -280,6 +280,8 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
 
 
 def rtl_replay(fixture: str, outdir: Path) -> dict:
+    """The capture (the evidence of what was replayed) lands in `outdir`;
+    the bench's bulky wave/I2S dumps stay under build/."""
     import verify_uart_bridge as vub
     run = run_cli(fixture)
     sim_res = check(run)
@@ -287,7 +289,8 @@ def rtl_replay(fixture: str, outdir: Path) -> dict:
         return {"state": "REFUSED", "reason": "the sim run is not clean; "
                 "replaying it would test nothing", "sim": sim_res}
     cap = write_rtl_capture(run, outdir / fixture)
-    rr = vub.simulate_replay(str(outdir / fixture), outdir / "rtl",
+    rr = vub.simulate_replay(str(outdir / fixture),
+                             ROOT / "build/rolling-rtl" / fixture,
                              tail_frames=int(TAIL_S * SR))
     if rr is None:
         return {"state": "REFUSED", "reason": "RTL replay did not run",
