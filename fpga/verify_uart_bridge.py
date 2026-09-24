@@ -384,6 +384,20 @@ def rows_from_capture(prefix):
     return items, [rows], plan.get("origin", 0), plan.get("baud", uh.DEFAULT_BAUD)
 
 
+def _sha(path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def replay_identity(srcs, defines, cmd_path, tail_frames) -> dict:
+    """Everything a replay's outputs depend on: the compiled sources, the
+    defines (so an injection is part of the identity), the stimulus and
+    the frames run. A reused run must match ALL of it."""
+    return {"sources": {str(Path(p).relative_to(ROOT)) if str(p).startswith(str(ROOT))
+                        else str(p): _sha(p) for p in srcs},
+            "defines": list(defines), "stimulus": _sha(cmd_path),
+            "tail_frames": int(tail_frames)}
+
+
 def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
                     timeout_s=3600, reuse=False):
     """Run the wrapper bench on a CLI capture (see rows_from_capture).
@@ -418,20 +432,34 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
+    identity = replay_identity(srcs, defines, cmd_path, tail_frames)
+    id_path = outdir / "run_identity.json"
+    files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
     if reuse:
-        files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
-        report = (outdir / "transcript.txt").read_text().splitlines() \
-            if (outdir / "transcript.txt").exists() else []
-        ran = [int(m.group(1)) for m in map(RE_RAN.search, report) if m]
-        if not ran or ran[0] < tail_frames:
-            print(f"verify_uart_bridge: REFUSED -- reuse asked, but the run on "
-                  f"disk covered {ran[0] if ran else 0} of {tail_frames} frames")
+        # the run on disk is evidence only if it is the run THIS call would
+        # make: same sources, defines (injection included), stimulus and
+        # length -- and its outputs are the ones that run wrote
+        rec = json.loads(id_path.read_text()) if id_path.exists() else None
+        why = None
+        if rec is None:
+            why = "no run identity on disk (not a fresh run of this tool)"
+        elif rec.get("identity") != identity:
+            diff = [k for k in identity if rec["identity"].get(k) != identity[k]]
+            why = f"the run on disk differs in {diff}"
+        else:
+            bad = [k for k, f in files.items()
+                   if not Path(f).exists() or _sha(f) != rec["outputs"].get(k)]
+            if bad or not (outdir / "transcript.txt").exists() or \
+                    _sha(outdir / "transcript.txt") != rec["outputs"].get("transcript"):
+                why = f"outputs changed since that run wrote them: {bad or ['transcript']}"
+        if why:
+            print(f"verify_uart_bridge: REFUSED -- reuse asked, but {why}")
             return None
-        defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
+        report = (outdir / "transcript.txt").read_text().splitlines()
         return {"outdir": outdir, "items": items, "bodies": [items],
                 "planned": planned_segments, "reset_frames": [],
                 "report": report, "files": files,
-                "scenario": "replay", "inject": None,
+                "scenario": "replay", "inject": inject,
                 "defines": defines, "model_tail": model_tail, "reused": True}
     iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
     if not iverilog or not vvp:
@@ -443,7 +471,7 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     if r.returncode != 0:
         print("verify_uart_bridge: compile failed:\n" + r.stdout + r.stderr)
         return None
-    files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+    id_path.unlink(missing_ok=True)       # a failed run leaves no identity
     run_cmd = [vvp, "-n", str(exe), f"+uart={cmd_path}",
                f"+i2s={files['i2s']}", f"+wrs={files['wrs']}",
                f"+txd={files['txd']}", f"+samp={files['samp']}",
@@ -459,10 +487,14 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     if r.returncode != 0:
         print("verify_uart_bridge: vvp failed:\n" + r.stdout + r.stderr)
         return None
+    outputs = {k: _sha(f) for k, f in files.items() if Path(f).exists()}
+    outputs["transcript"] = _sha(outdir / "transcript.txt")
+    id_path.write_text(json.dumps({"identity": identity, "outputs": outputs},
+                                  indent=1) + "\n")
     return {"outdir": outdir, "items": items, "bodies": [items],
             "planned": planned_segments, "reset_frames": [],
             "report": report, "files": files,
-            "scenario": "replay", "inject": None,
+            "scenario": "replay", "inject": inject,
             "defines": defines, "model_tail": model_tail}
 
 
