@@ -92,9 +92,16 @@ record is
 [dsp-opmode-analysis.json](reports/arty/integrated-baseline-2025.1/dsp-dpreg-evidence/dsp-opmode-analysis.json),
 the full argument in the original
 [disposition](reports/arty/vivado-2025.1/dsp-dpreg-disposition.md).
-`dsp_feedback_review_complete` stays `false` in the publication: the
-publish machinery has no evidence-gated path that sets it, and hand-editing
-it is not an option.
+`dsp_feedback_review_complete` is now DERIVED in the publication, not
+flipped: `publish_arty.dsp_disposition()` requires this artifact's
+`dsp-dpreg-evidence/` to name — by sha256 — the `drc.rpt` of the very
+artifact being published, and requires the hardened analyser to answer
+with a complete verdict against that same report. Anything less records
+its refusal as data in `publication.json` (`dsp_disposition.reason`) and
+keeps the flag false. Re-publishing THIS image from its existing routed
+artifact (no new routing run) derives **true**, with the binding hash
+c5747e65… in the record; committed fixtures whose reports are
+host-stripped republications refuse honestly and stay false.
 
 ## External I/O timing
 

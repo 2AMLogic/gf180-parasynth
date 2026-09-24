@@ -60,7 +60,6 @@
   "output_delay_exceptions": [
     "i2s_bclk"
   ],
-  "dsp_feedback_review_complete": false,
   "hardware_playback_tested": false,
   "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
   "configuration": {
@@ -116,9 +115,15 @@
   "report_transformation": "Host header omitted; numerical report contents unchanged",
   "remaining_review": [
     "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
-    "physical programming, control and audio capture",
-    "13 DPREG-4 DSP feedback warnings"
+    "physical programming, control and audio capture"
   ],
+  "dsp_feedback_review_complete": true,
+  "dsp_disposition": {
+    "complete": true,
+    "reason": "",
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE",
+    "drc_rpt_sha256": "c5747e65bc9ff5750932e81b639aadad7914d5cc7bdf9af4647afa8b41678b5e"
+  },
   "published_sha256": {
     "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
     "timing.rpt": "c7d3e81d2a656a8530f4d416076d33487c916b99f9b043dc2683164308b93fe9",
