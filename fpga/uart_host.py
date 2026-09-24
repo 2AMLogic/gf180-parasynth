@@ -151,6 +151,10 @@ ROLLING_HORIZON_FRAMES = WRAP_HALF - 2048   # a window's dues all sit within thi
 ROLLING_BATCH_CAP = 48             # events per window: the 64-event queue minus
                                    # in-flight margin, since a batch is accepted
                                    # far faster than its dues pass
+ROLLING_QUEUE_MARGIN = 4           # queue slots never planned into: the
+                                   # occupancy bound is computed at the
+                                   # earliest acceptance, and a late STATUS
+                                   # can only make the real queue emptier
 ROLLING_START_FRAMES = 2400         # the phrase's musical t=0 lands this far
                                     # (50 ms) after the static image completes:
                                     # the first window accepts up to BATCH_CAP
@@ -172,7 +176,8 @@ SEND_GATE_FRAMES = 120             # the send gate: send once the first due is a
                                    # there, but a schedule sent from a fresh
                                    # anchor is never a stale one)
                                    # covers USB/host arrival jitter. It is NOT
-                                   # the anchor-to-send latency budget -- that is                                   # re-anchored away by run()'s verify loop --
+                                   # the anchor-to-send latency budget -- that is
+                                   # re-anchored away by run()'s verify loop --
                                    # because for a phrase whose dues run 1 frame
                                    # apart, every frame of preload margin is a
                                    # queued event: margin and queue depth are
@@ -593,6 +598,20 @@ class Bridge:
         except (OSError, serial.SerialException) as exc:
             print(f"uart_host: REFUSED -- cannot open {port}: {exc}", file=sys.stderr)
             raise SystemExit(2)
+        self._init_state(baud, time)
+
+    @classmethod
+    def on_serial(cls, ser, baud: int = DEFAULT_BAUD, clock=None) -> "Bridge":
+        """A Bridge on an already-open endpoint and an injected clock: the
+        seam deterministic tests use (uart_device_sim.SimSerial/SimClock).
+        Every method is the production one; only transport and time differ."""
+        self = cls.__new__(cls)
+        self.ser = ser
+        self._init_state(baud, clock if clock is not None else time)
+        return self
+
+    def _init_state(self, baud: int, clock) -> None:
+        self.clock = clock                # anything with monotonic()/sleep()
         self.baud = baud
         self.buf = b""
         self.origin = None
@@ -614,7 +633,7 @@ class Bridge:
                     self.acks_seen += 1
                 if p.kind in kinds:
                     return p
-            now = time.monotonic()
+            now = self.clock.monotonic()
             if now >= deadline:
                 return None
             self.ser.timeout = min(0.05, max(0.005, deadline - now))
@@ -662,11 +681,11 @@ class Bridge:
             for p, _n in [scan_packets(self.buf)]:
                 self.acks_seen += sum(1 for q in p if q.kind == "ack")
             self.buf = b""
-            t0 = time.monotonic()
+            t0 = self.clock.monotonic()
             self.send([Placed(0, "status", pkt_status(), 0, 0)], paced=False)
             pkt = self._take({"status"}, t0 + timeout_s)
             if pkt is not None:
-                self.status_round_trip_s = time.monotonic() - t0
+                self.status_round_trip_s = self.clock.monotonic() - t0
                 return pkt
         print("uart_host: REFUSED -- no STATUS reply from the device; check the "
               "bitstream, wiring (A9/D10) and baud", file=sys.stderr)
@@ -769,16 +788,16 @@ class Bridge:
         # the note-on's GATE_ON write is the last live packet: its ACK is the
         # gate landing, loud on the wire
         want = acked_before + len(live_cmds)
-        deadline = time.monotonic() + 10.0
+        deadline = self.clock.monotonic() + 10.0
         while self.acks_seen < want:
-            if time.monotonic() > deadline:
+            if self.clock.monotonic() > deadline:
                 raise Refused(f"the note-on's gate write was never ACKed "
                               f"({self.acks_seen - acked_before} of "
                               f"{len(live_cmds)} packets acknowledged)")
             # short sub-windows: the ACK that satisfies the count must not
             # leave the loop waiting out a long read deadline -- every extra
             # millisecond here is added to the musician's hold
-            self._take({"status"}, min(deadline, time.monotonic() + 0.02))
+            self._take({"status"}, min(deadline, self.clock.monotonic() + 0.02))
         # the gate's frame, sampled on the device's own timeline: one STATUS
         # right after the gate's ACK, minus that STATUS's own round trip
         fresh = self.status()
@@ -870,89 +889,80 @@ class Bridge:
         """The window loop, shared by the plain and the hold paths.
 
         `ev_abs` is [(absolute_due, ("event", due_rel, flag, sec, addr,
-        data)), ...] in due order. Each iteration takes a fresh STATUS,
-        packs every event whose due sits within ROLLING_HORIZON_FRAMES of
-        that anchor (capped at ROLLING_BATCH_CAP), plans the batch, demands
-        preflight FEASIBLE, and sends it. An event whose due died while the
-        host was between windows is REFUSED: P0 belongs to the performance,
-        and moving it would be a musical edit, not scheduling."""
+        data)), ...] in due order, on an UNWRAPPED timeline whose zero is
+        the device frame the first anchor named. Each iteration takes a
+        fresh STATUS and asks `rolling_batch` what is deliverable from it:
+        a batch (planned, preflighted FEASIBLE, sent), or the frame the
+        device must reach first (horizon entry, or a queue slot freeing),
+        which the host waits for on the device's own counter. An event
+        whose due died is REFUSED: P0 belongs to the performance, and
+        moving it would be a musical edit, not scheduling."""
         all_rows: list = []
+        sent_dues: list = []
         i = 0
-        # the performance timeline is UNWRAPPED: due_abs values were built on
-        # the scale of the first anchor, and the device's 16-bit counter will
-        # wrap several times during a musical phrase. Progress is accumulated
-        # per STATUS as a forward step (wrap-safe within the window the
-        # counter can reason about) and COUNTED across revolutions -- a bare
-        # 16-bit difference resets every wrap and the roller would circle
-        # forever.
+        # the device's 16-bit counter wraps several times during a musical
+        # phrase: progress is accumulated per STATUS as a signed step
+        # (wrap-safe because consecutive answers are far less than half a
+        # revolution apart) and COUNTED across revolutions
         anchor = self.status()
-        origin0 = anchor.frame
-        prev16, progress = origin0, 0
+        # place this anchor on ev_abs's own scale: the callers built it from
+        # an earlier STATUS a few frames ago, so the signed 16-bit distance
+        # to the first due is exact even if the counter wrapped in between
+        ref = ev_abs[0][0]
+        d = (anchor.frame - ref) & 0xFFFF
+        origin0 = ref + (d if d < 0x8000 else d - 0x10000)
+        prev16, progress = anchor.frame, 0
+
+        def unwrap(frame16: int) -> int:
+            nonlocal prev16, progress
+            step = (frame16 - prev16) & 0xFFFF
+            progress += step if step < 0x8000 else step - 0x10000
+            prev16 = frame16
+            return origin0 + progress
+
         while i < len(ev_abs):
             anchor = self.status()
-            step16 = (anchor.frame - prev16) & 0xFFFF
-            progress += step16 if step16 < 0x8000 else step16 - 0x10000
-            prev16 = anchor.frame
-            origin = origin0 + progress
+            before = progress
+            origin = unwrap(anchor.frame)
+            if all_rows and progress == before:
+                raise Refused("the device's frame counter is not advancing; "
+                              "the phrase's dues will die -- refusing to "
+                              "re-time the phrase")
             lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
             try:
-                batch, next_rel = rolling_batch(ev_abs, i, origin, lead, baud)
+                batch, wait = rolling_batch(ev_abs, i, origin, lead, baud,
+                                            inflight=sent_dues[-EVENT_QUEUE_DEPTH:])
             except ValueError as exc:
-                raise Refused(str(exc) + " -- refusing to re-time the phrase")
+                raise Refused(f"{exc} -- refusing to re-time the phrase") from None
             if not batch:
-                # nothing deliverable from this anchor yet: the device must
-                # advance until the next event ENTERS the horizon. The wait
-                # bridges in steps that stay inside the +-32768-frame window
-                # the 16-bit counter can reason about -- a target further
-                # ahead than that makes wait_until answer wrongly. This is
-                # the one place the host waits on the device, polled by
-                # STATUS -- never a host sleep.
-                rel = ev_abs[i][0] - origin
-                while rel > ROLLING_HORIZON_FRAMES:
-                    # the device must advance or the phrase's dues die: a
-                    # bridge step that ends without the counter moving (or a
-                    # wait that times out) is a stalled device, refused --
-                    # re-timing the phrase would be a musical edit, and
-                    # waiting forever is not an answer
-                    before16 = anchor.frame
-                    step = min(rel - ROLLING_HORIZON_FRAMES, 27_000)
-                    try:
-                        self.wait_until((anchor.frame + step) & 0xFFFF,
-                                        timeout_s=5.0)
-                    except SystemExit:
-                        raise Refused("the device's frame counter did not "
-                                      "advance while a window waited on it; "
-                                      "the phrase's dues will die -- refusing "
-                                      "to re-time the phrase") from None
-                    anchor = self.status()
-                    if anchor.frame == before16:
-                        raise Refused("the device's frame counter is not "
-                                      "advancing; the phrase's dues will die "
-                                      "-- refusing to re-time the phrase")
-                    step16 = (anchor.frame - prev16) & 0xFFFF
-                    progress += step16 if step16 < 0x8000 else step16 - 0x10000
-                    prev16 = anchor.frame
-                    origin = origin0 + progress
-                    rel = ev_abs[i][0] - origin
+                # wait on the DEVICE for the frame the cut named, in steps
+                # inside the +-32768 window the 16-bit compare can answer
+                step = min(wait - origin, ROLLING_HORIZON_FRAMES)
+                try:
+                    self.wait_until((anchor.frame + max(1, step)) & 0xFFFF,
+                                    timeout_s=5.0)
+                except SystemExit:
+                    raise Refused("the device's frame counter did not reach "
+                                  "the next window; the phrase's dues will "
+                                  "die -- refusing to re-time the phrase") from None
                 continue
             rows = plan([("event", due_abs - origin, *c[2:])
                          for due_abs, c in batch],
                         baud=baud, start_frame=lead, anchor_frame=origin)
-            # `plan` restores the absolute due (anchor + relative) itself;
-            # the rows' dues are already device frames
+            # `plan` restores the absolute due (anchor + relative) itself
             verdict = preflight(rows, baud=baud)
             if verdict["verdict"] != "FEASIBLE":
                 raise Refused(f"window at device frame {origin} cannot deliver "
                               f"its {len(batch)} events: {verdict['reason']}")
             self.send(rows)
             all_rows += rows
+            sent_dues += [d for d, _c in batch]
             self._run_acks_expected += len(rows)
             i += len(batch)
             if not quiet:
                 print(f"  window f{origin:<6}: {len(batch)} events, dues "
                       f"f{rows[0].due}-f{rows[-1].due}")
-        last_due = all_rows[-1].due
-        self.wait_until(last_due + 64)
+        self.wait_until(all_rows[-1].due + 64)
         return all_rows
 
     @staticmethod
@@ -964,15 +974,15 @@ class Bridge:
         return ((frame - target) & 0xFFFF) < WRAP_HALF
 
     def wait_until(self, due_frame: int, *, timeout_s: float = 30.0) -> DevicePacket:
-        deadline = time.monotonic() + timeout_s
+        deadline = self.clock.monotonic() + timeout_s
         target = due_frame & 0xFFFF
         last = self.status()
         while not self._reached(last.frame, target):
-            if time.monotonic() > deadline:
+            if self.clock.monotonic() > deadline:
                 print(f"uart_host: REFUSED -- device frame {last.frame} did not "
                       f"reach {due_frame} within {timeout_s:.0f}s", file=sys.stderr)
                 raise SystemExit(2)
-            time.sleep(0.02)
+            self.clock.sleep(0.02)
             last = self.status()
         return last
 
@@ -1254,7 +1264,7 @@ def event_packet_frames(baud: int = DEFAULT_BAUD) -> int:
 
 
 def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
-                  baud: int = DEFAULT_BAUD) -> tuple:
+                  baud: int = DEFAULT_BAUD, inflight: list = ()) -> tuple:
     """The window cut, shared by the live roller and the virtual planner.
 
     From event `i`, take the events deliverable from a STATUS anchor named
@@ -1267,27 +1277,58 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
     window's first-packet requirement, so the phrase neither starves the
     queue nor dies under the wire, whatever the local density of the music.
 
-    Returns (batch, next_rel): `next_rel` is the relative due of the first
-    event NOT taken -- 0 when there is none -- so the caller can tell a
-    deliverability wait from the end of the phrase."""
+    `inflight` is the absolute dues of events ALREADY sent by earlier
+    windows: they occupy the queue until their dues pass, so the queue
+    bound is checked at each packet's acceptance against everything the
+    device will still hold then -- earlier windows plus this one -- not
+    against the batch alone (a batch cap alone overflowed `demo` four
+    times on the contract device).
+
+    Returns (batch, wait_until): when the batch is EMPTY, `wait_until` is
+    the absolute frame the anchor must reach before the next event can be
+    taken -- its horizon entry, or the due that frees a queue slot. None
+    when the batch is not empty or the phrase is done. An event that can
+    never be accepted before its due (the wire cannot reach it from this
+    anchor) raises: waiting would only make it later."""
     F = event_packet_frames(baud)
     batch = []
-    next_rel = 0
+    wait = None
     for j, (due_abs, c) in enumerate(ev_abs[i:]):
         rel = due_abs - origin
         if rel <= 0:
             raise ValueError(f"event due f{due_abs} is behind the anchor "
                              f"f{origin}: its due died before the window "
                              "could deliver it")
-        next_rel = rel
-        if (rel > ROLLING_HORIZON_FRAMES or len(batch) >= ROLLING_BATCH_CAP
-                or rel < lead + (len(batch) + 1) * F
-                + ROLLING_PACKET_SLACK_FRAMES):
+        if rel > ROLLING_HORIZON_FRAMES:
+            if not batch:
+                wait = due_abs - ROLLING_HORIZON_FRAMES
+            break
+        if len(batch) >= ROLLING_BATCH_CAP:
+            break
+        if rel < lead + (len(batch) + 1) * F + ROLLING_PACKET_SLACK_FRAMES:
+            if not batch:
+                raise ValueError(
+                    f"event due f{due_abs} is {rel} frames from the anchor "
+                    f"f{origin}; one packet needs {lead + F} frames of wire "
+                    f"plus {ROLLING_PACKET_SLACK_FRAMES} of slack -- it "
+                    "cannot be accepted before its due")
+            break
+        # queue occupancy when this packet lands: the EARLIEST it can be
+        # accepted is origin + lead + (j+1) packets; anything due after that
+        # instant (fires strictly later) is still queued. Earliest acceptance
+        # is the conservative instant -- fewer events have fired by then.
+        accept = origin + lead + (len(batch) + 1) * F
+        held = (sum(1 for d in inflight if d >= accept)
+                + sum(1 for d, _c in batch if d >= accept) + 1)
+        if held > EVENT_QUEUE_DEPTH - ROLLING_QUEUE_MARGIN:
+            if not batch:
+                # the queue is full of earlier windows' events: the next
+                # slot frees when the earliest of them fires
+                pending = sorted(d for d in inflight if d >= accept)
+                wait = pending[0] + 1 - lead - F
             break
         batch.append((due_abs, c))
-    else:
-        next_rel = 0
-    return batch, next_rel
+    return batch, wait
 
 
 def plan_rolling_virtual(commands: list, *, baud: int = DEFAULT_BAUD,
@@ -1318,18 +1359,18 @@ def plan_rolling_virtual(commands: list, *, baud: int = DEFAULT_BAUD,
     p0 = origin + lead + ROLLING_START_FRAMES
     ev_abs = [(p0 + c[1], c) for c in events]
     i = 0
+    sent_dues: list = []
     while i < len(ev_abs):
         try:
-            batch, next_rel = rolling_batch(ev_abs, i, origin, lead, baud)
+            batch, wait = rolling_batch(ev_abs, i, origin, lead, baud,
+                                        inflight=sent_dues[-EVENT_QUEUE_DEPTH:])
         except ValueError as exc:
             raise ValueError(f"{exc} (virtual anchor f{origin})") from None
         if not batch:
             # nothing deliverable from this anchor yet: advance the virtual
-            # anchor until the next event enters the horizon, in steps that
-            # stay inside the wrap window (the bridge the live roller makes
-            # with wait_until)
-            origin += min((ev_abs[i][0] - origin) - ROLLING_HORIZON_FRAMES,
-                          WRAP_HALF - 768)
+            # anchor to the frame the cut named (the wait the live roller
+            # makes with wait_until)
+            origin = max(origin + 1, wait)
             continue
         wrows = plan([("event", due_abs - origin, *c[2:])
                       for due_abs, c in batch],
@@ -1340,6 +1381,7 @@ def plan_rolling_virtual(commands: list, *, baud: int = DEFAULT_BAUD,
                              f"deliver its {len(batch)} events: "
                              f"{verdict['reason']}")
         rows += wrows
+        sent_dues += [d for d, _c in batch]
         i += len(batch)
         origin = wrows[-1].end_cycle // CYC_PER_FRAME
         windows += 1
