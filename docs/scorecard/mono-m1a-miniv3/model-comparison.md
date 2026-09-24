@@ -75,3 +75,11 @@ distinct outcomes. `--inject MONO_PITCH_UP_25_CENTS --expect changed`
 demonstrates the verdict moves on a real defect (worst 19.82 → 25.07).
 Per-note signed partials, attack-fit diagnostics, all settings and hashes
 are in `../results/M1A.json`.
+
+The next measured component improvement is the fixed −4 dB output-volume
+candidate: it moves the Gain property inside tolerance (worst signed gain
+error +4.97 → −1.04 dB) while preserving every other verdict, including the
+envelope attack failure unchanged by construction. The case remains a valid
+fail. See [the fixed volume challenger and oscillator
+diagnosis](volume-mapping/README.md); the attack sweep that follows it holds
+the reference, estimator and every other patch setting fixed.
