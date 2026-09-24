@@ -1,0 +1,1156 @@
+{
+  "schema": "m1a-attack-sweep-v1",
+  "grid_sha256": "2a4e4efb7e50edb5ef008e3efa7a0b630d23920012252006d6c73f11156cacac",
+  "grid_commit": "4020bfe173d6ada1d45b507350df8f5f88067690",
+  "source_commit": "88f3ffded452d1d1dbf7bb755557f3b6093cdf70",
+  "base_patch": "m1a-gain-minus4db-v2",
+  "reference_sha256": "681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d",
+  "evidence_level": "model only",
+  "control_reproduced": {
+    "value_ms": 10.0,
+    "sha256": "628a6a312288ed8dc817be0152329cc9de2fe3ff6e239d987c7f80423a2ba61c"
+  },
+  "table": [
+    {
+      "attack_ms": 0.25,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=0.25ms",
+      "sha256": "4d65434d33851494347b6807e8b9673ddeb07cbc5cbf60d7d9a261acfeb03635",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": -1.3653269003301025,
+          "fit_explained": 0.9229,
+          "model_fit": {
+            "t0_ms": 0.7291666666666665,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9229
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.07444161415663172
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 0.0,
+          "fit_explained": 0.9715,
+          "model_fit": {
+            "t0_ms": -0.45833333333333326,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9715
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.07444161415663172
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 0.29159421504142125,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": -0.8417391182919123,
+          "fit_explained": 0.9676,
+          "model_fit": {
+            "t0_ms": -0.4375,
+            "ramp_ms": 0.7083333333333334,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9676
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": 0.0915942150414212
+        }
+      ],
+      "attack_property_error_ms": -1.36533,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 0.017152600884789482,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": -1.36533,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": false,
+      "nominal_vca_10_90_ms": 0.20000000000000004,
+      "candidate": false,
+      "refused_reason": "model attack fit outside the estimator's qualified domain (shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)"
+    },
+    {
+      "attack_ms": 0.5,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=0.5ms",
+      "sha256": "56c17229b217eea79223aa2ba378ca4c5cc3c317f6b9acb316a1beac9cdc045c",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": -1.3653269003301025,
+          "fit_explained": 0.9289,
+          "model_fit": {
+            "t0_ms": 0.7291666666666665,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9289
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.12555838584336831
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 0.3864422613758545,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 0.11200064721922276,
+          "fit_explained": 0.9716,
+          "model_fit": {
+            "t0_ms": -0.39583333333333326,
+            "ramp_ms": 0.7708333333333334,
+            "shape_p": 3.0,
+            "explained_ratio": 0.9716
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.013557738624145554
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 0.42163702135578385,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": -0.7116963119775497,
+          "fit_explained": 0.9676,
+          "model_fit": {
+            "t0_ms": -0.1875,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 2.0,
+            "explained_ratio": 0.9676
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": 0.02163702135578377
+        }
+      ],
+      "attack_property_error_ms": -1.36533,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 0.14719540719915208,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": -1.36533,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": false,
+      "nominal_vca_10_90_ms": 0.4000000000000001,
+      "candidate": false,
+      "refused_reason": "model attack fit outside the estimator's qualified domain (shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)"
+    },
+    {
+      "attack_ms": 1.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=1ms",
+      "sha256": "57aeca56086e440506889da1aa5a98ffb691f772f6b970ab0764c9c5d1dece3f",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": -1.3653269003301025,
+          "fit_explained": 0.9411,
+          "model_fit": {
+            "t0_ms": 0.7291666666666665,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9411
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.5255583858433683
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 0.7333333333333333,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 0.4588917191767015,
+          "fit_explained": 0.9716,
+          "model_fit": {
+            "t0_ms": -0.04166666666666674,
+            "ramp_ms": 0.9166666666666666,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9716
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.06666666666666687
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 0.7166666666666667,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": -0.41666666666666685,
+          "fit_explained": 0.9676,
+          "model_fit": {
+            "t0_ms": 0.04166666666666652,
+            "ramp_ms": 0.8958333333333334,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9676
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": -0.08333333333333348
+        }
+      ],
+      "attack_property_error_ms": -1.36533,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 0.4422250525100349,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": -1.36533,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": false,
+      "nominal_vca_10_90_ms": 0.8000000000000002,
+      "candidate": false,
+      "refused_reason": "model attack fit outside the estimator's qualified domain (shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)"
+    },
+    {
+      "attack_ms": 2.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=2ms",
+      "sha256": "412fcd32fea450a9896dc9a3b395469fcd993e7d9422ef5c676921b488e495b6",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": -1.3653269003301025,
+          "fit_explained": 0.9632,
+          "model_fit": {
+            "t0_ms": 0.7083333333333335,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9632
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -1.3255583858433686
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 1.4833333333333334,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 1.2088917191767017,
+          "fit_explained": 0.9715,
+          "model_fit": {
+            "t0_ms": -0.04166666666666674,
+            "ramp_ms": 1.8541666666666667,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9715
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.11666666666666692
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 1.3333333333333333,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 0.19999999999999973,
+          "fit_explained": 0.9675,
+          "model_fit": {
+            "t0_ms": 0.08333333333333348,
+            "ramp_ms": 1.6666666666666667,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9675
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": -0.26666666666666705
+        }
+      ],
+      "attack_property_error_ms": -1.36533,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 1.0588917191767016,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": -1.36533,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": false,
+      "nominal_vca_10_90_ms": 1.6000000000000003,
+      "candidate": false,
+      "refused_reason": "model attack fit outside the estimator's qualified domain (shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)"
+    },
+    {
+      "attack_ms": 3.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=3ms",
+      "sha256": "b603a4c740f2b90e5e6c2f0d91acffc2fff67e5a93c3b6a6ca76a178fa00d309",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 0.27444161415663176,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": -1.3653269003301025,
+          "fit_explained": 0.9724,
+          "model_fit": {
+            "t0_ms": 0.7291666666666665,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.9724
+          },
+          "model_fit_in_qualified_domain": false,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -2.125558385843368
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 2.3,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 2.025558385843368,
+          "fit_explained": 0.9715,
+          "model_fit": {
+            "t0_ms": 0.4583333333333335,
+            "ramp_ms": 2.875,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9715
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.10000000000000009
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 1.9666666666666666,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 0.833333333333333,
+          "fit_explained": 0.9675,
+          "model_fit": {
+            "t0_ms": 0.10416666666666652,
+            "ramp_ms": 2.4583333333333335,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9675
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": -0.43333333333333335
+        }
+      ],
+      "attack_property_error_ms": 2.02556,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 1.6922250525100349,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 2.02556,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": false,
+      "nominal_vca_10_90_ms": 2.4,
+      "candidate": false,
+      "refused_reason": "model attack fit outside the estimator's qualified domain (shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)"
+    },
+    {
+      "attack_ms": 4.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=4ms",
+      "sha256": "d71775036264a70012171c90ee8c9576aa22d41cd687adfa6e4551060551283c",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 2.4166666666666665,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": 0.7768981521799323,
+          "fit_explained": 0.9725,
+          "model_fit": {
+            "t0_ms": 1.0416666666666665,
+            "ramp_ms": 3.0208333333333335,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9725
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.7833333333333341
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 3.2413346016725884,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 2.9668929875159566,
+          "fit_explained": 0.9731,
+          "model_fit": {
+            "t0_ms": -1.7083333333333333,
+            "ramp_ms": 5.125,
+            "shape_p": 2.0,
+            "explained_ratio": 0.9731
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.041334601672587734
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 3.3,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 2.166666666666666,
+          "fit_explained": 0.9677,
+          "model_fit": {
+            "t0_ms": 0.5416666666666665,
+            "ramp_ms": 4.125,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9677
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": 0.0999999999999992
+        }
+      ],
+      "attack_property_error_ms": 2.96689,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 0.8833333333333333,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 2.96689,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": true,
+      "nominal_vca_10_90_ms": 3.2000000000000006,
+      "candidate": true,
+      "refused_reason": null
+    },
+    {
+      "attack_ms": 5.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=5ms",
+      "sha256": "1689d72372ed7a872d147faf9cdc7b952ff80362ba814fcc2fb68a398ba236b9",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 4.0,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": 2.360231485513266,
+          "fit_explained": 0.9737,
+          "model_fit": {
+            "t0_ms": 1.0208333333333335,
+            "ramp_ms": 5.0,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9737
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.0
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 2.9382829925731184,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 2.6638413784164867,
+          "fit_explained": 0.9743,
+          "model_fit": {
+            "t0_ms": -1.0208333333333335,
+            "ramp_ms": 4.645833333333333,
+            "shape_p": 2.0,
+            "explained_ratio": 0.9743
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -1.0617170074268816
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 3.983333333333334,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 2.8500000000000005,
+          "fit_explained": 0.9701,
+          "model_fit": {
+            "t0_ms": -0.16666666666666674,
+            "ramp_ms": 4.979166666666667,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9701
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": -0.016666666666666163
+        }
+      ],
+      "attack_property_error_ms": 2.85,
+      "attack_pass": true,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": -0.016666666666666163,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 2.85,
+          "state": "pass"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 5,
+        "failing": 1,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": true,
+      "nominal_vca_10_90_ms": 4.0,
+      "candidate": true,
+      "refused_reason": null
+    },
+    {
+      "attack_ms": 6.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=6ms",
+      "sha256": "b213cc51517c1da98af33164e2ae0dc8abf12181f1ed625c31be77828a045657",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 5.5,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": 3.860231485513266,
+          "fit_explained": 0.9743,
+          "model_fit": {
+            "t0_ms": 1.0416666666666665,
+            "ramp_ms": 6.875,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9743
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.7000000000000002
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 5.416666666666667,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 5.142225052510035,
+          "fit_explained": 0.9745,
+          "model_fit": {
+            "t0_ms": 0.8125,
+            "ramp_ms": 6.770833333333333,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9745
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.6166666666666671
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 4.374484096566258,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 3.241150763232924,
+          "fit_explained": 0.9734,
+          "model_fit": {
+            "t0_ms": -2.0,
+            "ramp_ms": 6.916666666666667,
+            "shape_p": 2.0,
+            "explained_ratio": 0.9734
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": -0.4255159034337419
+        }
+      ],
+      "attack_property_error_ms": 5.14223,
+      "attack_pass": false,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": -1.125515903433742,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 5.14223,
+          "state": "fail"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 4,
+        "failing": 2,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": true,
+      "nominal_vca_10_90_ms": 4.8,
+      "candidate": false,
+      "refused_reason": null
+    },
+    {
+      "attack_ms": 8.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=8ms",
+      "sha256": "e01cceb526955e9465d2a18f0e7a94ca6eab688cdb09be0fc9b8185c1cb746be",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 8.633333333333335,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": 6.9935648188466,
+          "fit_explained": 0.9748,
+          "model_fit": {
+            "t0_ms": 1.0833333333333335,
+            "ramp_ms": 10.791666666666666,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9748
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 2.2333333333333334
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 6.966666666666668,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 6.692225052510036,
+          "fit_explained": 0.9749,
+          "model_fit": {
+            "t0_ms": -0.4375,
+            "ramp_ms": 8.708333333333334,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9749
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.5666666666666664
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 7.316666666666668,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 6.1833333333333345,
+          "fit_explained": 0.9755,
+          "model_fit": {
+            "t0_ms": 1.0833333333333335,
+            "ramp_ms": 9.145833333333334,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9755
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": 0.916666666666667
+        }
+      ],
+      "attack_property_error_ms": 6.99356,
+      "attack_pass": false,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": -1.3166666666666664,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 6.99356,
+          "state": "fail"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 4,
+        "failing": 2,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": true,
+      "nominal_vca_10_90_ms": 6.400000000000001,
+      "candidate": false,
+      "refused_reason": null
+    },
+    {
+      "attack_ms": 10.0,
+      "patch_id": "m1a-gain-minus4db-v2+amp_attack=10ms",
+      "sha256": "628a6a312288ed8dc817be0152329cc9de2fe3ff6e239d987c7f80423a2ba61c",
+      "per_event": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model_ms": 7.416666666666667,
+          "reference_ms": 1.6397685144867342,
+          "error_ms": 5.776898152179933,
+          "fit_explained": 0.9753,
+          "model_fit": {
+            "t0_ms": 0.4166666666666665,
+            "ramp_ms": 9.270833333333334,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9753
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": -0.583333333333333
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model_ms": 8.383333333333335,
+          "reference_ms": 0.27444161415663176,
+          "error_ms": 8.108891719176702,
+          "fit_explained": 0.9755,
+          "model_fit": {
+            "t0_ms": -0.3125,
+            "ramp_ms": 10.479166666666666,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9755
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": false,
+          "model_minus_nominal_vca_ms": 0.38333333333333464
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model_ms": 9.0,
+          "reference_ms": 1.1333333333333335,
+          "error_ms": 7.866666666666666,
+          "fit_explained": 0.9766,
+          "model_fit": {
+            "t0_ms": -0.6666666666666667,
+            "ramp_ms": 11.25,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9766
+          },
+          "model_fit_in_qualified_domain": true,
+          "reference_fit_in_qualified_domain": true,
+          "model_minus_nominal_vca_ms": 1.0
+        }
+      ],
+      "attack_property_error_ms": 8.10889,
+      "attack_pass": false,
+      "history_effect_ms": {
+        "with_history": "event 3: MIDI 36 after 43",
+        "without_history": "event 1: MIDI 36 from silence",
+        "model": 1.583333333333333,
+        "reference": -0.5064351811534007
+      },
+      "properties": {
+        "Pitch": {
+          "error": -0.05059,
+          "state": "pass"
+        },
+        "Harmonic shape": {
+          "error": 19.82331,
+          "state": "fail"
+        },
+        "Envelope attack": {
+          "error": 8.10889,
+          "state": "fail"
+        },
+        "Envelope release": {
+          "error": 8.47917,
+          "state": "pass"
+        },
+        "Gain": {
+          "error": -1.04361,
+          "state": "pass"
+        },
+        "Filter envelope": {
+          "error": null,
+          "state": "unqualified"
+        },
+        "Clipping": {
+          "error": 0.0,
+          "state": "pass"
+        }
+      },
+      "lost_property_passes": [],
+      "lost_per_note_harmonic_passes": [],
+      "gain_errors_db": [
+        0.9746462951476786,
+        -1.0436110879774851,
+        -0.8316994952433525
+      ],
+      "preserved": true,
+      "components": {
+        "passing": 4,
+        "failing": 2,
+        "unqualified": 1
+      },
+      "model_fits_in_qualified_domain": true,
+      "nominal_vca_10_90_ms": 8.0,
+      "candidate": false,
+      "refused_reason": null
+    }
+  ],
+  "conclusion": "candidate",
+  "candidates": [
+    "m1a-gain-minus4db-v2+amp_attack=4ms",
+    "m1a-gain-minus4db-v2+amp_attack=5ms"
+  ],
+  "scope": "patch-only; no envelope implementation change; harmonic shape remains an independent failure, so no point is a whole-case pass",
+  "reference_fits_in_qualified_domain": [
+    false,
+    false,
+    true
+  ]
+}
