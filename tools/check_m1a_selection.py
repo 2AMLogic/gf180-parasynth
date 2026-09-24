@@ -89,20 +89,38 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
         problems.append(f"record audio {record['diagnostics']['model_audio_sha256'][:12]} != "
                         f"candidate {candidate['sha256'][:12]}")
     measured = candidate["measurements"]
-    if _norm(record["diagnostics"]["properties"]) != _norm(measured["properties"]):
-        differs = [k for k in measured["properties"]
-                   if record["diagnostics"]["properties"].get(k) != measured["properties"][k]]
+    # The candidate evidence was scored by m1a-envelope-score-v1, before the
+    # two-sided attack qualification rule. Every other property must match
+    # exactly; the attack must carry the SAME raw reading, and be graded only
+    # if both sides' fits are inside the estimator's domain.
+    rp, cp = record["diagnostics"]["properties"], measured["properties"]
+    differs = [k for k in cp if k != "Envelope attack" and _norm(rp.get(k)) != _norm(cp[k])]
+    if differs or set(rp) != set(cp):
         problems.append(f"record properties differ from the candidate's: {', '.join(differs)}")
+    ra, ca = rp["Envelope attack"], cp["Envelope attack"]
+    raw = ((ra["value"], ra["reference"], ra["error"]) if ra.get("valid") else
+           (ra.get("unqualified_value"), ra.get("unqualified_reference"), ra.get("unqualified_error")))
+    if raw != (ca["value"], ca["reference"], ca["error"]):
+        problems.append("record attack reading differs from the candidate's")
+    out_of_domain = any(bass.attack_fit_qualified(e["attack_fit"][side])
+                        for e in record["diagnostics"]["events"] for side in ("model", "reference"))
+    if bool(ra.get("valid")) == out_of_domain:
+        problems.append("record attack graded against the two-sided qualification rule")
     # Per-event diagnostics are raw floats from an FFT. The same audio analysed
     # on two hosts differs in the last bits (observed: 7.5e-11 dB on a -99 dB
     # floor, on the REFERENCE side as well, so it is the library, not the
     # render). Equal structure and non-numeric fields, numbers within 1e-6 dB,
     # which is four orders below the published 5-decimal property vector.
-    worst = event_deviation(record["diagnostics"]["events"], measured["events"])
+    added = ("attack_out_of_domain", "attack_state")        # v2 scorer fields
+    worst = event_deviation([{k: v for k, v in e.items() if k not in added}
+                             for e in record["diagnostics"]["events"]], measured["events"])
     if worst is None or worst > EVENT_ATOL:
         problems.append(f"record events differ from the candidate's (max deviation {worst})")
-    if _norm(record["metrics"]) != _norm(candidate["metrics"]):
-        problems.append("record required metrics differ from the candidate's")
+    for name in ("Fundamental/harmonics", "bass level"):
+        if _norm(record["metrics"][name]) != _norm(candidate["metrics"][name]):
+            problems.append(f"record required metric {name} differs from the candidate's")
+    if record["metrics"]["envelope"].get("valid") != ra.get("valid"):
+        problems.append("record envelope metric validity disagrees with its attack property")
     # the declared preservation policy, against the pre-selection baseline
     base = baseline["measurements"]
     lost = sorted(_passes(base) - _passes(measured))
@@ -142,7 +160,9 @@ def main(argv=None) -> int:
     for name, p in props.items():
         state = ("unqualified" if not p.get("valid") else
                  "pass" if abs(p["error"]) <= p["tolerance"] else "fail")
-        value = f"{p['error']:+.5f} {p['units']}" if p.get("valid") else p.get("why", "")
+        value = (f"{p['error']:+.5f} {p['units']}" if p.get("valid") else
+                 f"[unqualified reading {p['unqualified_error']:+.5f} {p['units']}] {p['why']}"
+                 if "unqualified_error" in p else p.get("why", ""))
         print(f"  {name:<18} {value:<24} {state}")
     return 0
 

@@ -101,3 +101,54 @@ def test_changed_cached_audio_refuses(tmp_path):
                               "model_audio_sha256": "original"}}
     with pytest.raises(bass.Refused, match="hash mismatch"):
         bass.load_model_cache(record, {}, {})
+
+
+# --- attack qualification on BOTH sides ---------------------------------------
+# A reading outside attack_fit's known-signal domain (p in {0.5,1,2}, ramp
+# 0.5-20 ms, above the 32-sample search minimum) is UNQUALIFIED, not a grade.
+
+def _patched_fits(monkeypatch, side, **fit):
+    real = bass.reference.attack_fit
+    calls = {"n": 0}
+
+    def fake(*args, **kwargs):
+        out = dict(real(*args, **kwargs))
+        which = ("model", "reference")[calls["n"] % 2]     # compare_audio calls model first
+        calls["n"] += 1
+        if which == side:
+            out.update(fit)
+        return out
+    monkeypatch.setattr(bass.reference, "attack_fit", fake)
+
+
+@pytest.mark.parametrize("side", ["model", "reference"])
+@pytest.mark.parametrize("fit", [dict(shape_p=4.0, ramp_ms=0.6666666666666666),
+                                 dict(shape_p=3.0, ramp_ms=3.27),
+                                 dict(shape_p=1.0, ramp_ms=25.)])
+def test_out_of_domain_attack_on_either_side_is_unqualified(monkeypatch, side, fit):
+    _patched_fits(monkeypatch, side, **fit)
+    measured = bass.compare_audio(signal(), signal())
+    attack = measured["properties"]["Envelope attack"]
+    assert attack["valid"] is False and attack["state"] == "no verdict"
+    assert side in attack["why"]
+    assert all(e["attack_state"] == "unqualified" for e in measured["events"])
+    metrics = bass.required_metrics(measured)
+    assert metrics["envelope"]["valid"] is False           # no partial maximum
+    assert metrics["Fundamental/harmonics"]["valid"] and metrics["bass level"]["valid"]
+
+
+def test_control_pre_rule_scorer_would_have_graded_it(monkeypatch):
+    """The same out-of-domain reference fit, with the rule off, is GRADED --
+    which is what the published board did with M1A's p=3 / p=4 reference fits."""
+    _patched_fits(monkeypatch, "reference", shape_p=4.0, ramp_ms=0.6666666666666666)
+    old = bass.compare_audio(signal(), signal(), attack_domain_rule=False)
+    assert old["properties"]["Envelope attack"]["valid"] is True
+    assert bass.required_metrics(old)["envelope"]["valid"] is True
+
+
+def test_in_domain_fits_still_grade():
+    measured = bass.compare_audio(signal(), signal())
+    assert measured["properties"]["Envelope attack"]["valid"]
+    assert all(e["attack_state"] == "pass" for e in measured["events"])
+    assert bass.attack_fit_qualified({"shape_p": 1.0, "ramp_ms": 10.}) is None
+    assert bass.attack_fit_qualified({"shape_p": 4.0, "ramp_ms": 10.})
