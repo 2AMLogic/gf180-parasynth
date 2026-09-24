@@ -115,14 +115,13 @@
   "report_transformation": "Host header omitted; numerical report contents unchanged",
   "remaining_review": [
     "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
-    "physical programming, control and audio capture"
+    "physical programming, control and audio capture",
+    "13 DPREG-4 DSP feedback warnings (evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it)"
   ],
-  "dsp_feedback_review_complete": true,
+  "dsp_feedback_review_complete": false,
   "dsp_disposition": {
-    "complete": true,
-    "reason": "",
-    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE",
-    "drc_rpt_sha256": "c5747e65bc9ff5750932e81b639aadad7914d5cc7bdf9af4647afa8b41678b5e"
+    "complete": false,
+    "reason": "evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it"
   },
   "published_sha256": {
     "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",

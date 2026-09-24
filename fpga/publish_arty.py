@@ -22,8 +22,6 @@ import math
 from pathlib import Path
 import re
 import shutil
-import subprocess
-import sys
 import build_arty as build
 import ext_io_timing as iotime
 
@@ -57,41 +55,192 @@ def compiled_inputs(build_tcl_text):
     return top.group(1), sources, [rel(xdc.group(1))]
 
 
-def dsp_disposition(artifact: Path) -> dict:
-    """Derive the DSP feedback review state from evidence bound to THIS
-    implementation's routed checkpoint. There is no manual flip: the flag is
-    true only when the disposition evidence names, by hash, the drc.rpt of
-    this very artifact (the DPREG-4 interrogation was extracted from the
-    routed checkpoint this publication certifies) AND the analyser answers
-    with a complete verdict against that same drc.rpt. Anything else is a
-    refusal recorded as data -- never a crash, never a silent true, and
-    never a new routing run: the checker connects to the existing
-    implementation's evidence."""
+# the evidence set a DSP disposition must carry, beside the analysis
+DSP_EVIDENCE_FILES = ("MANIFEST.sha256", "dsp_cells_dump.txt",
+                      "drc_dpreg_names.txt", "drc_rpt.sha256",
+                      "dsp-opmode-analysis.json")
+# the files the extraction host's manifest must pin (routed_dcp.sha256 is
+# checked separately so its absence refuses for its own reason)
+DSP_MANIFEST_PINNED = ("dsp_cells_dump.txt", "drc_dpreg_names.txt",
+                       "drc_rpt.sha256", "routed_dcp.sha256")
+
+
+def _analyser():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "dsp_dpreg_analyse", ROOT / "tools" / "dsp_dpreg_analyse.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _p_selecting(rec):
+    """First reachable OPMODE of an analysed cell that selects P, or None."""
+    for v in rec.get("reachable_opmode_values", []):
+        if v["x"] == "P" or v["z"].startswith("P"):
+            return v
+    return None
+
+
+def dsp_disposition(artifact: Path, record: dict | None = None) -> dict:
+    """Derive the DPREG-4 DSP feedback review state for THIS implementation.
+
+    There is no manual flip. The review is complete only when, in order:
+
+      1. the evidence set is present (dsp-dpreg-evidence/ with the dump,
+         names file, DRC digest, manifest and the accepted analysis);
+      2. the extraction host's manifest validates and pins the dump, the
+         names file and BOTH digest records;
+      3. the evidence names -- by sha256 -- the routed.dcp this publication
+         names (report.json artifact_sha256["routed.dcp"]), the dump opened
+         that same checkpoint path, and a routed.dcp present beside the
+         artifact hashes to it; its drc.rpt digest is this build's;
+      4. the accepted analysis (dsp-opmode-analysis.json) covers exactly the
+         target set DERIVED from this artifact's drc.rpt DPREG-4 findings,
+         and is of this dump;
+      5. a fresh structural derivation (tools/dsp_dpreg_analyse.derive)
+         answers, agrees with the accepted analysis cell by cell, and finds
+         no reachable OPMODE that selects P.
+
+    Anything else is REFUSED, recorded as data with its reason -- never a
+    crash, never a silent true, and never a new routing run."""
     ev = artifact / "dsp-dpreg-evidence"
 
     def refused(reason: str) -> dict:
         return {"complete": False, "reason": reason}
 
+    if record is None:
+        rp = artifact / "report.json"
+        if not rp.is_file():
+            return refused("no build record (report.json) names the routed checkpoint")
+        record = json.loads(rp.read_text())
+    named = record.get("artifact_sha256", {})
+    dcp_named, drc_named = named.get("routed.dcp"), named.get("drc.rpt")
+    if not dcp_named or not drc_named:
+        return refused("the build record names no routed.dcp/drc.rpt digest to bind to")
+
+    # 1. evidence present
     if not ev.is_dir():
-        return refused("no dsp-dpreg-evidence directory bound to this artifact")
-    rec = ev / "drc_rpt.sha256"
-    if not rec.is_file():
-        return refused("evidence does not record the drc.rpt it was extracted against")
-    want = rec.read_text().split()[0].strip()
-    have = build.sha(artifact / "drc.rpt")
-    if want != have:
-        return refused("evidence was extracted against a different routed "
-                       f"checkpoint (drc.rpt {want[:12]} vs this artifact's {have[:12]})")
-    r = subprocess.run([sys.executable, str(ROOT / "tools" / "dsp_dpreg_analyse.py"),
-                        "--evidence", str(ev), "--drc", str(artifact / "drc.rpt")],
-                       capture_output=True, text=True)
-    lines = (r.stdout + r.stderr).strip().splitlines()
-    verdict = lines[-1] if lines else ""
-    if r.returncode != 0:
-        return refused(f"analyser would not answer (exit {r.returncode}): {verdict[:160]}")
-    if "VERDICT: all" not in verdict:
-        return refused(f"analyser verdict incomplete: {verdict[:160]}")
-    return {"complete": True, "reason": "", "verdict": verdict, "drc_rpt_sha256": want}
+        return refused("missing evidence: no dsp-dpreg-evidence directory bound to this artifact")
+    missing = [n for n in DSP_EVIDENCE_FILES if not (ev / n).is_file()]
+    if missing:
+        return refused(f"missing evidence file(s): {missing}")
+    # the checkpoint digest is required before anything else is trusted
+    dcp_rec = ev / "routed_dcp.sha256"
+    if not dcp_rec.is_file():
+        return refused(
+            "evidence records no routed.dcp digest (dsp-dpreg-evidence/"
+            "routed_dcp.sha256): the extraction names its checkpoint by path "
+            "only, so it cannot be bound to the routed.dcp this publication "
+            f"names ({dcp_named}); a bounded read-only re-extraction on the "
+            "build host must record it")
+    an = _analyser()
+    # 2. manifest validates and pins what is bound
+    try:
+        an.verify_manifest(ev)
+    except an.Refused as exc:
+        return refused(f"evidence manifest refused: {exc}")
+    pinned = {line.split(None, 1)[1].strip().lstrip("*")
+              for line in (ev / "MANIFEST.sha256").read_text().splitlines()
+              if line.strip()}
+    # 3. the routed checkpoint, by digest
+    unpinned = [n for n in DSP_MANIFEST_PINNED if n not in pinned]
+    if unpinned:
+        return refused(f"evidence manifest does not pin {unpinned}")
+    words = dcp_rec.read_text().split()
+    if len(words) != 2 or not re.fullmatch(r"[0-9a-f]{64}", words[0]):
+        return refused("malformed routed_dcp.sha256 (want '<sha256>  <path>')")
+    dcp_have, dcp_path = words
+    if dcp_have != dcp_named:
+        return refused(
+            f"wrong routed checkpoint: evidence was extracted from routed.dcp "
+            f"{dcp_have[:16]}, this publication names {dcp_named[:16]}")
+    head = (ev / "dsp_cells_dump.txt").read_text().splitlines()[:3]
+    if f"DCP {dcp_path}" not in head:
+        return refused(
+            "wrong routed checkpoint: the dump did not open the checkpoint "
+            f"the digest record names ({dcp_path})")
+    local = artifact / "routed.dcp"
+    if local.is_file() and build.sha(local) != dcp_named:
+        return refused("wrong routed checkpoint: routed.dcp beside this artifact "
+                       "does not hash to the digest the build record names")
+    drc_have = (ev / "drc_rpt.sha256").read_text().split()[0].strip()
+    if drc_have != drc_named:
+        return refused(
+            f"evidence DRC is not this build's: drc.rpt {drc_have[:16]} vs "
+            f"the build record's {drc_named[:16]}")
+    # 4. the accepted analysis covers the DRC-derived target set, this dump
+    drc = artifact / "drc.rpt"
+    try:
+        an.verify_drc_identity(ev, drc)
+        targets = an.parse_drc_targets(drc.read_text())
+    except an.Refused as exc:
+        return refused(f"DRC-derived target set refused: {exc}")
+    try:
+        accepted = json.loads((ev / "dsp-opmode-analysis.json").read_text())
+        acc_targets = list(accepted["required_instances"])
+        acc_cells = {c["name"]: c for c in accepted["cells"]}
+    except (ValueError, KeyError, TypeError) as exc:
+        return refused(f"accepted analysis unreadable: {exc!r}")
+    covered = [t for t in targets if t in acc_cells and t in acc_targets]
+    if len(covered) != len(targets) or set(acc_targets) != set(targets):
+        absent = [t for t in targets if t not in covered]
+        return refused(
+            f"incomplete target set: accepted analysis covers {len(covered)} of "
+            f"{len(targets)} DRC-derived DPREG-4 targets (missing {absent[:3]})")
+    if accepted.get("dump_sha256") != build.sha(ev / "dsp_cells_dump.txt"):
+        return refused("accepted analysis is not of this dump (dump_sha256 differs)")
+    # 5. re-derive, agree, and look for a counterexample
+    try:
+        fresh_targets, fresh, _ = an.derive(ev, drc)
+    except an.Refused as exc:
+        return refused(f"analyser refused (NO VERDICT): {exc}")
+    if fresh_targets != targets:
+        return refused("analyser derived a different target set")
+    for rec in fresh:
+        acc = acc_cells[rec["name"]]
+        if acc.get("p_feedback_reachable") != rec["p_feedback_reachable"]:
+            return refused(
+                f"accepted analysis disagrees with re-derivation on {rec['name']}")
+        hit = _p_selecting(rec)
+        if rec["p_feedback_reachable"] or hit:
+            hit = hit or {"opmode": "?", "x": "?", "z": "?"}
+            return refused(
+                f"reachable P-feedback counterexample: {rec['name']} OPMODE "
+                f"{hit['opmode']} (X={hit['x']}, Z={hit['z']}) selects P")
+    verdict = (f"VERDICT: all {len(fresh)} cells: P-feedback unreachable on "
+               f"every reachable OPMODE")
+    return {"complete": True, "reason": "", "verdict": verdict,
+            "targets": len(fresh), "routed_dcp_sha256": dcp_named,
+            "drc_rpt_sha256": drc_have,
+            "analysis_dump_sha256": accepted["dump_sha256"]}
+
+
+def apply_dsp(summary: dict, dsp: dict) -> None:
+    """Carry a derived disposition into a publication summary: the flag,
+    the disposition record, and -- when refused -- the DPREG-4 line in
+    remaining_review with its reason. The only writer of the flag."""
+    review = [r for r in summary.get("remaining_review", [])
+              if "DPREG-4 DSP feedback warnings" not in r]
+    if not dsp["complete"]:
+        n = summary["drc"].get("DPREG-4", {}).get("count", 0)
+        review.append(f"{n} DPREG-4 DSP feedback warnings ({dsp['reason']})")
+    summary["remaining_review"] = review
+    summary["dsp_feedback_review_complete"] = dsp["complete"]
+    summary["dsp_disposition"] = dsp
+
+
+def rederive_dsp(publication: Path) -> dict:
+    """Re-derive the DSP disposition of a COMMITTED publication from its own
+    committed evidence and rewrite only those fields. This is how a record
+    is reconciled with its checker without re-publishing (the committed
+    directory carries no routed.dcp): what it says is what it derives."""
+    path = publication / "publication.json"
+    summary = json.loads(path.read_text())
+    record = {"artifact_sha256": summary["original_artifact_sha256"]}
+    apply_dsp(summary, dsp_disposition(publication, record))
+    path.write_text(json.dumps(summary, indent=2) + "\n")
+    return summary
 
 
 def publish(artifact, output):
@@ -142,12 +291,7 @@ def publish(artifact, output):
         if drift:
             raise ValueError("external-I/O constraint drift: " + "; ".join(drift))
     remaining = ["physical programming, control and audio capture"]
-    dsp = dsp_disposition(artifact)
-    if dsp["complete"]:
-        pass    # the DPREG-4 review is complete; it leaves the review list
-    else:
-        n = summary["drc"].get("DPREG-4", {}).get("count", 0)
-        remaining.append(f"{n} DPREG-4 DSP feedback warnings ({dsp['reason']})")
+    dsp = dsp_disposition(artifact, record)
     if summary["external_io_timing_qualified"]:
         remaining.insert(0, "spi_miso status readback is qualified only at SCK <= 1.4 MHz, "
                             "not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)")
@@ -160,11 +304,8 @@ def publish(artifact, output):
                    original_artifact_sha256=record["artifact_sha256"],
                    report_transformation="Host header omitted; numerical report contents unchanged",
                    remaining_review=remaining)
-    # derived, never flipped: the DSP review is complete only when the
-    # disposition evidence binds THIS artifact's routed checkpoint and the
-    # analyser answers completely against it (dsp_disposition above)
-    summary["dsp_feedback_review_complete"] = dsp["complete"]
-    summary["dsp_disposition"] = dsp
+    # derived, never flipped (dsp_disposition above)
+    apply_dsp(summary, dsp)
     manifest = artifact.parent / "input-bundle.json"
     if manifest.is_file():
         summary["input_bundle"] = json.loads(manifest.read_text())
@@ -276,6 +417,14 @@ def inspect_reports(directory):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--rederive-dsp", action="store_true",
+                        help="re-derive the DSP disposition of the committed "
+                             "publication directory ARTIFACT in place")
     args = parser.parse_args()
-    print(json.dumps(publish(args.artifact, args.out), indent=2))
+    if args.rederive_dsp:
+        print(json.dumps(rederive_dsp(args.artifact)["dsp_disposition"], indent=2))
+    elif args.out is None:
+        parser.error("--out is required to publish")
+    else:
+        print(json.dumps(publish(args.artifact, args.out), indent=2))

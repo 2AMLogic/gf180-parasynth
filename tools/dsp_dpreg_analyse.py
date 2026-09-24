@@ -344,7 +344,11 @@ def refuse_extra_dynamic_cells(cells, required):
                 f"DPREG-4 in drc.rpt: {name}")
 
 
-def run(evidence=None, drc=None):
+def derive(evidence=None, drc=None):
+    """The structural analysis, with nothing written: (required, records,
+    payload). Raises Refused when the apparatus cannot answer. The
+    publisher (fpga/publish_arty.py) calls this to re-derive the verdict
+    it consumes; run() below is the same derivation plus the report."""
     evidence = evidence or EVIDENCE
     dump = evidence / DUMP.name
     drc = drc or evidence.parent / DRC_RPT.name
@@ -371,22 +375,30 @@ def run(evidence=None, drc=None):
         validate_required_cell(n, cells[n])
 
     recs = [analyse(n, cells[n]) for n in required]
-    out = evidence / "dsp-opmode-analysis.json"
-    out.write_text(json.dumps(
-        {"cells": recs, "source_dump": dump.name,
-         "required_source": "drc.rpt DPREG-4 violations (parsed at "
-                            "analysis time)",
-         "required_instances": required,
-         "dump_sha256": sha256(dump),
-         "drc_identity": {
-             "grep_identity": "drc_dpreg_names.txt == grep -n DPREG "
-                              "drc.rpt",
-             "box_rpt_sha256_recorded": (evidence / "drc_rpt.sha256")
-             .read_text().split()[0],
-             "note": "report_drc embeds a run timestamp, so box bytes are "
-                     "not reproducible; the DPREG-4 body is bound via the "
-                     "manifest-pinned names file"},
-         "mux_tables": {"X": X_MUX, "Y": Y_MUX, "Z": Z_MUX}}, indent=2))
+    payload = {
+        "cells": recs, "source_dump": dump.name,
+        "required_source": "drc.rpt DPREG-4 violations (parsed at "
+                           "analysis time)",
+        "required_instances": required,
+        "dump_sha256": sha256(dump),
+        "drc_identity": {
+            "grep_identity": "drc_dpreg_names.txt == grep -n DPREG "
+                             "drc.rpt",
+            "box_rpt_sha256_recorded": (evidence / "drc_rpt.sha256")
+            .read_text().split()[0],
+            "note": "report_drc embeds a run timestamp, so box bytes are "
+                    "not reproducible; the DPREG-4 body is bound via the "
+                    "manifest-pinned names file"},
+        "mux_tables": {"X": X_MUX, "Y": Y_MUX, "Z": Z_MUX}}
+    return required, recs, payload
+
+
+def run(evidence=None, drc=None):
+    evidence = evidence or EVIDENCE
+    drc = drc or evidence.parent / DRC_RPT.name
+    required, recs, payload = derive(evidence, drc)
+    (evidence / "dsp-opmode-analysis.json").write_text(
+        json.dumps(payload, indent=2))
 
     print(f"required set: {len(required)} DPREG-4 instance(s) from "
           f"{drc.name} (identity: drc_dpreg_names.txt)")
