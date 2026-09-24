@@ -45,4 +45,4 @@ python3 tools/diagnose_m1a_oscillator_mapping.py
 python3 -m pytest -q tools/test_mono_m1a_score.py tools/test_measure_mono_m1a_reference.py tools/test_measure_m1a_volume_mapping.py
 ```
 
-`report.json` binds all three complete phrases, configurations, source/reference hashes, component vectors, signed per-note partial errors and preservation checks. `oscillator-diagnosis.json` binds the isolated controls and reports the cross terms. Twenty-three focused tests pass. **Wrong-then-right: one scoring-contract correction (the undeclared Model D gate); zero discarded sound measurements.** The earlier four reference-apparatus corrections remain recorded in the baseline evidence.
+`report.json` binds all three complete phrases, configurations, source/reference hashes, component vectors, signed per-note partial errors and preservation checks. `oscillator-diagnosis.json` binds the isolated controls and reports the cross terms. Twenty-five focused tests pass. **Wrong-then-right: one scoring-contract correction (the undeclared Model D gate); zero discarded sound measurements.** The earlier four reference-apparatus corrections remain recorded in the baseline evidence.
