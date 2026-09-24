@@ -2,10 +2,10 @@
   "engine": "fixed-model",
   "case_id": "M1A",
   "subject": "Round bass / anchor",
-  "source_commit": "d99559b",
-  "analysis_run": "run_case@e79a1bbd0a34 + audio_measure@cd27a0a67dfd + mono_m5a_score@b4210e59eb8f + scorecard@2094d43f15e9 at 2026-09-21T22:59:46Z",
-  "analysis_version": "m1a-partial-score-v1",
-  "reference_profile": "frozen Mini V3; Model D cross-check unavailable",
+  "source_commit": "63f08e1",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-23T22:54:34Z",
+  "analysis_version": "m1a-envelope-score-v1",
+  "reference_profile": "frozen Mini V3 software reference (screening policy: docs/scorecard/mono-m5a-policy.md); Model D cross-check unavailable",
   "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
   "audio": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav",
   "metrics": {
@@ -19,10 +19,13 @@
       "tolerance_basis": "maximum of pitch / 1 cent and harmonic error / 1 dB; no averaging"
     },
     "envelope": {
-      "valid": false,
-      "state": "no verdict",
-      "why": "attack estimator and filter-envelope mapping unqualified; qualified release reported separately",
-      "units": "ms"
+      "value": 1.62178,
+      "reference": 0.0,
+      "error": 1.62178,
+      "units": "normalized maximum",
+      "tolerance": 1.0,
+      "valid": true,
+      "tolerance_basis": "maximum of envelope attack / 5 ms (waveform-fit, qualified) and envelope release / 20 ms (40 ms RMS window); no averaging"
     },
     "bass level": {
       "value": -21.4495,
@@ -32,12 +35,6 @@
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "dB; fixed half/double amplitude screening range"
-    },
-    "Model D cross-check": {
-      "valid": false,
-      "state": "no verdict",
-      "why": "case requires a Model D cross-check; only Mini V3 frozen reference exists",
-      "units": ""
     }
   },
   "diagnostics": {
@@ -60,6 +57,15 @@
         "valid": true,
         "tolerance_basis": "dB per measured partial; fixed screening limit"
       },
+      "Envelope attack": {
+        "value": 8.38333,
+        "reference": 0.27444,
+        "error": 8.10889,
+        "units": "ms",
+        "tolerance": 5.0,
+        "valid": true,
+        "tolerance_basis": "ms; the M5A screening limit for the same 10-90% measurement; the waveform-fit estimator's known-signal error is under 1 ms (qualification in the manifest)"
+      },
       "Envelope release": {
         "value": 126.10417,
         "reference": 117.625,
@@ -77,12 +83,6 @@
         "tolerance": 3.0,
         "valid": true,
         "tolerance_basis": "dB; fixed half/double amplitude screening range"
-      },
-      "Envelope attack": {
-        "valid": false,
-        "state": "no verdict",
-        "why": "40 ms RMS window fails known 8 ms bass attack; no qualified attack estimate",
-        "units": "ms"
       },
       "Filter envelope": {
         "valid": false,
@@ -113,28 +113,28 @@
             "f0_zc_ok": true,
             "f0_given": true,
             "drift_db": 0.10143989448854562,
-            "floor2": -96.33408017645665,
-            "h2": -0.045294888423725664,
-            "floor3": -99.32887017120228,
+            "floor2": -96.33408017649919,
+            "h2": -0.04529488842372276,
+            "floor3": -99.32887017120537,
             "h3": -10.946458784789678,
-            "floor4": -99.32887017120228,
-            "h4": -8.2325584575408,
-            "floor5": -102.74378775982694,
-            "h5": -20.048018393011994,
-            "floor6": -102.22067453686515,
-            "h6": -14.033580812252735,
-            "floor7": -104.93891486908745,
-            "h7": -26.811457108751604,
-            "floor8": -104.68813487681295,
-            "h8": -17.1443876754389,
-            "floor9": -108.05594607463185,
+            "floor4": -99.32887017120537,
+            "h4": -8.232558457540797,
+            "floor5": -102.74378775982468,
+            "h5": -20.048018393011986,
+            "floor6": -102.22067453688055,
+            "h6": -14.033580812252733,
+            "floor7": -104.93891486911748,
+            "h7": -26.8114571087516,
+            "floor8": -104.68813487683374,
+            "h8": -17.144387675438896,
+            "floor9": -108.05594607463944,
             "h9": -28.460979549207863,
-            "floor10": -102.41498471754589,
-            "h10": -20.800886109172488,
-            "floor11": -108.06384078593807,
+            "floor10": -102.41498471753546,
+            "h10": -20.80088610917248,
+            "floor11": -108.06384078595173,
             "h11": -31.57531455177366,
-            "floor12": -104.67078241590553,
-            "h12": -24.0193794708345,
+            "floor12": -104.67078241590468,
+            "h12": -24.019379470834497,
             "n_valid": 11
           },
           "reference": {
@@ -143,43 +143,43 @@
             "f0_zc_ok": true,
             "f0_given": true,
             "drift_db": 0.04359616397849035,
-            "floor2": -93.7293109814,
+            "floor2": -93.72931098139786,
             "h2": -13.483788171264873,
-            "floor3": -91.97343205602364,
+            "floor3": -91.97343205603406,
             "h3": -9.338777948009088,
-            "floor4": -93.65731914017846,
-            "h4": -6.680237253445796,
-            "floor5": -99.638645718796,
+            "floor4": -93.65731914017027,
+            "h4": -6.680237253445794,
+            "floor5": -99.63864571879685,
             "h5": -14.44531493164982,
-            "floor6": -96.02408385142382,
+            "floor6": -96.02408385142078,
             "h6": -15.066847965526687,
-            "floor7": -95.36899037730319,
+            "floor7": -95.36899037730211,
             "h7": -18.554036521933842,
-            "floor8": -98.86700991031718,
+            "floor8": -98.86700991031908,
             "h8": -17.720706148050184,
-            "floor9": -101.21561856423405,
+            "floor9": -101.21561856423823,
             "h9": -22.49565037419702,
-            "floor10": -100.18208533131639,
+            "floor10": -100.18208533131948,
             "h10": -19.965453694899267,
-            "floor11": -100.85270512385877,
-            "h11": -27.267061022677268,
-            "floor12": -103.40130738115919,
+            "floor11": -100.85270512386286,
+            "h11": -27.267061022677265,
+            "floor12": -103.40130738115903,
             "h12": -33.17774927544049,
             "n_valid": 11
           }
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": 13.438493282841147,
+          "h2": 13.43849328284115,
           "h3": -1.60768083678059,
-          "h4": -1.552321204095005,
-          "h5": -5.602703461362173,
-          "h6": 1.0332671532739521,
-          "h7": -8.257420586817762,
-          "h8": 0.576318472611284,
+          "h4": -1.5523212040950032,
+          "h5": -5.602703461362166,
+          "h6": 1.033267153273954,
+          "h7": -8.257420586817759,
+          "h8": 0.5763184726112875,
           "h9": -5.965329175010844,
-          "h10": -0.835432414273221,
-          "h11": -4.30825352909639,
-          "h12": 9.15836980460599
+          "h10": -0.8354324142732139,
+          "h11": -4.308253529096394,
+          "h12": 9.158369804605993
         },
         "harmonic_comparison": {
           "h2": "measured",
@@ -202,9 +202,23 @@
           "model": 124.95833333333333,
           "reference": 121.64583333333333
         },
-        "attack_observation_UNQUALIFIED_ms": {
-          "model": 25.979166666666668,
-          "reference": 14.229166666666666
+        "attack_10_90_ms": {
+          "model": 7.416666666666667,
+          "reference": 1.6397685144867342
+        },
+        "attack_fit": {
+          "model": {
+            "t0_ms": 0.4166666666666665,
+            "ramp_ms": 9.270833333333334,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9753
+          },
+          "reference": {
+            "t0_ms": -1.1041666666666665,
+            "ramp_ms": 3.2708333333333335,
+            "shape_p": 3.0,
+            "explained_ratio": 0.7755
+          }
         }
       },
       {
@@ -218,28 +232,28 @@
             "h1": 0.0,
             "f0_zc_ok": true,
             "f0_given": true,
-            "drift_db": -0.11621851263058994,
-            "floor2": -93.39087335822016,
-            "h2": -0.38638593803195076,
-            "floor3": -102.31779696210117,
+            "drift_db": -0.11621851263058992,
+            "floor2": -93.39087335820268,
+            "h2": -0.38638593803195176,
+            "floor3": -102.31779696208605,
             "h3": -11.770687997813027,
-            "floor4": -103.7120488450828,
-            "h4": -10.35430764627911,
-            "floor5": -107.79461685141754,
-            "h5": -24.410934936686797,
-            "floor6": -100.64542203494197,
+            "floor4": -103.71204884507225,
+            "h4": -10.354307646279109,
+            "floor5": -107.79461685145073,
+            "h5": -24.4109349366868,
+            "floor6": -100.64542203493599,
             "h6": -15.644273334937484,
-            "floor7": -103.50127317252272,
-            "h7": -26.238697793768637,
-            "floor8": -101.948024643044,
+            "floor7": -103.50127317251724,
+            "h7": -26.23869779376864,
+            "floor8": -101.94802464304107,
             "h8": -20.315666566965835,
-            "floor9": -101.948024643044,
-            "h9": -29.858885267659993,
-            "floor10": -107.61268952797023,
-            "h10": -25.397197532347334,
-            "floor11": -102.35418096898596,
+            "floor9": -101.94802464304107,
+            "h9": -29.85888526766,
+            "floor10": -107.61268952798022,
+            "h10": -25.39719753234733,
+            "floor11": -102.35418096898648,
             "h11": -32.378954537855925,
-            "floor12": -106.2086773067496,
+            "floor12": -106.20867730674706,
             "h12": -29.649237462802066,
             "n_valid": 11
           },
@@ -249,42 +263,42 @@
             "f0_zc_ok": true,
             "f0_given": true,
             "drift_db": -0.3908996651546582,
-            "floor2": -98.46651471008016,
-            "h2": -0.8111550116739399,
-            "floor3": -93.76675307064083,
-            "h3": -10.047333448187102,
-            "floor4": -99.4791096912607,
-            "h4": -11.040451843419953,
-            "floor5": -97.6592628376392,
+            "floor2": -98.46651471002617,
+            "h2": -0.811155011673941,
+            "floor3": -93.76675307064856,
+            "h3": -10.047333448187103,
+            "floor4": -99.47910969126865,
+            "h4": -11.040451843419955,
+            "floor5": -97.65926283763878,
             "h5": -15.514033338132831,
-            "floor6": -99.17302991270876,
-            "h6": -27.68991342799042,
-            "floor7": -99.91023008762498,
-            "h7": -19.99244091585179,
-            "floor8": -100.96440181272769,
-            "h8": -27.72582488160908,
-            "floor9": -99.06527196315707,
+            "floor6": -99.17302991270483,
+            "h6": -27.68991342799041,
+            "floor7": -99.91023008761333,
+            "h7": -19.992440915851795,
+            "floor8": -100.96440181272861,
+            "h8": -27.725824881609086,
+            "floor9": -99.06527196315903,
             "h9": -25.100575791886605,
-            "floor10": -105.04609053726807,
-            "h10": -26.043397878580272,
-            "floor11": -101.58299956755044,
-            "h11": -30.86475201664649,
-            "floor12": -108.14594479282252,
+            "floor10": -105.0460905372635,
+            "h10": -26.043397878580276,
+            "floor11": -101.5829995675544,
+            "h11": -30.864752016646495,
+            "floor12": -108.14594479282725,
             "h12": -28.647028558640688,
             "n_valid": 11
           }
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": 0.4247690736419891,
-          "h3": -1.7233545496259257,
-          "h4": 0.6861441971408428,
-          "h5": -8.896901598553965,
-          "h6": 12.045640093052935,
+          "h2": 0.42476907364198924,
+          "h3": -1.723354549625924,
+          "h4": 0.6861441971408464,
+          "h5": -8.896901598553969,
+          "h6": 12.045640093052928,
           "h7": -6.246256877916846,
-          "h8": 7.410158314643244,
-          "h9": -4.7583094757733875,
-          "h10": 0.6462003462329378,
-          "h11": -1.5142025212094339,
+          "h8": 7.410158314643251,
+          "h9": -4.758309475773395,
+          "h10": 0.6462003462329449,
+          "h11": -1.5142025212094303,
           "h12": -1.0022089041613782
         },
         "harmonic_comparison": {
@@ -308,9 +322,23 @@
           "model": 126.10416666666667,
           "reference": 117.625
         },
-        "attack_observation_UNQUALIFIED_ms": {
-          "model": 21.25,
-          "reference": 11.645833333333334
+        "attack_10_90_ms": {
+          "model": 8.383333333333335,
+          "reference": 0.27444161415663176
+        },
+        "attack_fit": {
+          "model": {
+            "t0_ms": -0.3125,
+            "ramp_ms": 10.479166666666666,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9755
+          },
+          "reference": {
+            "t0_ms": 1.1458333333333335,
+            "ramp_ms": 0.6666666666666666,
+            "shape_p": 4.0,
+            "explained_ratio": 0.737
+          }
         }
       },
       {
@@ -325,28 +353,28 @@
             "f0_zc_ok": true,
             "f0_given": true,
             "drift_db": -0.0022005318948496847,
-            "floor2": -104.40494974357817,
-            "h2": -0.104689888830298,
-            "floor3": -97.8863727036476,
-            "h3": -10.464168214726575,
-            "floor4": -98.9574304918461,
-            "h4": -8.445962269843887,
-            "floor5": -100.84816373138777,
+            "floor2": -104.40494974354485,
+            "h2": -0.10468988883029606,
+            "floor3": -97.88637270366978,
+            "h3": -10.464168214726573,
+            "floor4": -98.95743049183474,
+            "h4": -8.445962269843882,
+            "floor5": -100.8481637314015,
             "h5": -18.320874563165926,
-            "floor6": -102.06430977980912,
-            "h6": -14.378207785766318,
-            "floor7": -105.09616703652411,
-            "h7": -24.1698233288544,
-            "floor8": -107.58662399826106,
+            "floor6": -102.06430977980918,
+            "h6": -14.378207785766314,
+            "floor7": -105.09616703651973,
+            "h7": -24.169823328854406,
+            "floor8": -107.58662399826548,
             "h8": -17.585485845968766,
-            "floor9": -106.1169781962404,
+            "floor9": -106.11697819621334,
             "h9": -25.87348565313494,
-            "floor10": -105.38829137050502,
+            "floor10": -105.38829137050107,
             "h10": -21.457392090972796,
-            "floor11": -107.18547213526186,
-            "h11": -28.425034939752187,
-            "floor12": -106.32953054163151,
-            "h12": -24.887048605216563,
+            "floor11": -107.1854721352755,
+            "h11": -28.425034939752184,
+            "floor12": -106.3295305416299,
+            "h12": -24.88704860521656,
             "n_valid": 11
           },
           "reference": {
@@ -355,43 +383,43 @@
             "f0_zc_ok": true,
             "f0_given": true,
             "drift_db": 0.3491133844962568,
-            "floor2": -95.07782459404564,
+            "floor2": -95.0778245940275,
             "h2": -0.32797755601116246,
-            "floor3": -89.12890943242004,
+            "floor3": -89.12890943241248,
             "h3": -9.355248791346991,
-            "floor4": -97.40988102936274,
-            "h4": -8.764918069659878,
-            "floor5": -92.02265604910895,
+            "floor4": -97.40988102936912,
+            "h4": -8.76491806965988,
+            "floor5": -92.02265604910505,
             "h5": -14.261675549824984,
-            "floor6": -98.60702473457664,
-            "h6": -17.894699529133465,
-            "floor7": -96.80726945132335,
-            "h7": -18.58762239370837,
-            "floor8": -103.6612939755618,
+            "floor6": -98.6070247345755,
+            "h6": -17.89469952913346,
+            "floor7": -96.80726945132238,
+            "h7": -18.587622393708372,
+            "floor8": -103.66129397557238,
             "h8": -37.408074007678074,
-            "floor9": -102.38977775622224,
+            "floor9": -102.38977775622072,
             "h9": -23.194760434549924,
-            "floor10": -105.74173998188758,
-            "h10": -29.44940034317886,
-            "floor11": -99.55761128946862,
+            "floor10": -105.74173998190068,
+            "h10": -29.449400343178862,
+            "floor11": -99.55761128947232,
             "h11": -27.987709998249244,
-            "floor12": -107.6222338823467,
+            "floor12": -107.62223388235171,
             "h12": -27.673552998830566,
             "n_valid": 11
           }
         },
         "harmonic_error_db_model_minus_reference": {
-          "h2": 0.22328766718086446,
-          "h3": -1.108919423379584,
-          "h4": 0.3189557998159902,
+          "h2": 0.2232876671808664,
+          "h3": -1.1089194233795823,
+          "h4": 0.3189557998159973,
           "h5": -4.059199013340942,
           "h6": 3.5164917433671476,
-          "h7": -5.58220093514603,
+          "h7": -5.582200935146034,
           "h8": 19.82258816170931,
           "h9": -2.678725218585015,
-          "h10": 7.9920082522060625,
-          "h11": -0.43732494150294343,
-          "h12": 2.7865043936140026
+          "h10": 7.992008252206066,
+          "h11": -0.4373249415029399,
+          "h12": 2.786504393614006
         },
         "harmonic_comparison": {
           "h2": "measured",
@@ -414,9 +442,23 @@
           "model": 126.8125,
           "reference": 123.10416666666667
         },
-        "attack_observation_UNQUALIFIED_ms": {
-          "model": 28.916666666666668,
-          "reference": 13.9375
+        "attack_10_90_ms": {
+          "model": 9.0,
+          "reference": 1.1333333333333335
+        },
+        "attack_fit": {
+          "model": {
+            "t0_ms": -0.6666666666666667,
+            "ramp_ms": 11.25,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9766
+          },
+          "reference": {
+            "t0_ms": 0.4166666666666665,
+            "ramp_ms": 1.4166666666666667,
+            "shape_p": 1.0,
+            "explained_ratio": 0.8287
+          }
         }
       }
     ],
@@ -441,55 +483,839 @@
         "max_error_ms": 3.3039907005954205
       },
       "spectral_window_s": 0.25,
-      "scope": "40 ms audio-envelope window qualified for release ONLY; not internal VCA timing",
+      "scope": "40 ms RMS window qualified for release ONLY; attack is measured by the waveform-domain fit, not by any RMS window",
       "attack": {
-        "valid": false,
-        "known_attack_10_90_ms": 8.0,
-        "window_ms": 40.0,
+        "valid": true,
+        "estimator": "waveform-domain fit: steady-period fold template, piecewise power-ramp least squares over the note window",
+        "known_signal_count": 56,
+        "max_known_error_ms": 0.5,
+        "min_explained_ratio": 0.9888,
         "observations": [
           {
-            "note": 36,
+            "midi": 36,
             "phase_cycles": 0.0,
-            "observed_ms": 20.791666666666668
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
           },
           {
-            "note": 36,
+            "midi": 36,
             "phase_cycles": 0.25,
-            "observed_ms": 19.416666666666668
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
           },
           {
-            "note": 36,
+            "midi": 36,
             "phase_cycles": 0.5,
-            "observed_ms": 20.791666666666668
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
           },
           {
-            "note": 36,
+            "midi": 36,
             "phase_cycles": 0.75,
-            "observed_ms": 19.416666666666668
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
           },
           {
-            "note": 43,
+            "midi": 36,
             "phase_cycles": 0.0,
-            "observed_ms": 19.958333333333332
+            "known_10_90_ms": 0.5,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.5333333333333333,
+            "error_ms": 0.033333333333333326,
+            "explained_ratio": 1.0
           },
           {
-            "note": 43,
-            "phase_cycles": 0.25,
-            "observed_ms": 19.041666666666668
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 1.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 1.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
           },
           {
-            "note": 43,
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 2.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 2.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 4.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 4.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 16.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 16.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 20.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 20.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 0.5,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 2.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.997927248842524,
+            "error_ms": -0.0020727511574758495,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 400.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 3000.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.3,
+            "measured_ms": 8.066666666666668,
+            "error_ms": 0.0666666666666682,
+            "explained_ratio": 0.9996
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.6,
+            "measured_ms": 8.116666666666667,
+            "error_ms": 0.11666666666666714,
+            "explained_ratio": 0.9986
+          },
+          {
+            "midi": 36,
             "phase_cycles": 0.5,
-            "observed_ms": 19.958333333333332
+            "known_10_90_ms": 0.5,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.5333333333333333,
+            "error_ms": 0.033333333333333326,
+            "explained_ratio": 1.0
           },
           {
-            "note": 43,
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 1.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 1.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 2.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 2.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 4.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 4.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 16.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 16.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 20.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 20.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 0.5,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 2.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.997927248842524,
+            "error_ms": -0.0020727511574758495,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 400.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 3000.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.0,
+            "error_ms": 0.0,
+            "explained_ratio": 1.0
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.3,
+            "measured_ms": 7.883333333333335,
+            "error_ms": -0.11666666666666536,
+            "explained_ratio": 0.9996
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.6,
+            "measured_ms": 7.833333333333333,
+            "error_ms": -0.16666666666666696,
+            "explained_ratio": 0.9985
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.900000000000001,
+            "error_ms": -0.09999999999999876,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.25,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.333333333333334,
+            "error_ms": 0.3333333333333339,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.433333333333334,
+            "error_ms": 0.43333333333333357,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
             "phase_cycles": 0.75,
-            "observed_ms": 19.041666666666668
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.966666666666668,
+            "error_ms": -0.03333333333333233,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 0.5,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.5333333333333333,
+            "error_ms": 0.033333333333333326,
+            "explained_ratio": 0.9953
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 1.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.9833333333333333,
+            "error_ms": -0.01666666666666672,
+            "explained_ratio": 0.9953
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 2.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 1.9833333333333334,
+            "error_ms": -0.016666666666666607,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 4.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 4.116666666666667,
+            "error_ms": 0.11666666666666714,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 16.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 16.033333333333335,
+            "error_ms": 0.03333333333333499,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 20.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 20.066666666666666,
+            "error_ms": 0.06666666666666643,
+            "explained_ratio": 0.9956
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 0.5,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.05,
+            "error_ms": 0.05000000000000071,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 2.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.971574935007788,
+            "error_ms": -0.02842506499221198,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 400.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.833333333333333,
+            "error_ms": -0.16666666666666696,
+            "explained_ratio": 0.998
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 3000.0,
+            "bright_transient": 0.0,
+            "measured_ms": 7.916666666666667,
+            "error_ms": -0.08333333333333304,
+            "explained_ratio": 0.9888
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.3,
+            "measured_ms": 7.966666666666668,
+            "error_ms": -0.03333333333333233,
+            "explained_ratio": 0.9951
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.6,
+            "measured_ms": 7.983333333333334,
+            "error_ms": -0.01666666666666572,
+            "explained_ratio": 0.9939
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 0.5,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.6333333333333334,
+            "error_ms": 0.13333333333333341,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 1.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 0.7378647873726216,
+            "error_ms": -0.2621352126273784,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 2.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 1.9833333333333334,
+            "error_ms": -0.016666666666666607,
+            "explained_ratio": 0.9954
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 4.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 3.733333333333334,
+            "error_ms": -0.26666666666666616,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 16.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 16.116666666666667,
+            "error_ms": 0.11666666666666714,
+            "explained_ratio": 0.9956
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 20.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 20.066666666666666,
+            "error_ms": 0.06666666666666643,
+            "explained_ratio": 0.9956
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 0.5,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.116666666666667,
+            "error_ms": 0.11666666666666714,
+            "explained_ratio": 0.9955
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 2.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.18239344568568,
+            "error_ms": 0.18239344568567972,
+            "explained_ratio": 0.9956
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 400.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.383333333333335,
+            "error_ms": 0.38333333333333464,
+            "explained_ratio": 0.998
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 3000.0,
+            "bright_transient": 0.0,
+            "measured_ms": 8.4,
+            "error_ms": 0.40000000000000036,
+            "explained_ratio": 0.989
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.3,
+            "measured_ms": 8.483333333333334,
+            "error_ms": 0.4833333333333343,
+            "explained_ratio": 0.9951
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "known_10_90_ms": 8.0,
+            "shape_p": 1.0,
+            "carrier_lp_hz": 1056.0,
+            "bright_transient": 0.6,
+            "measured_ms": 8.5,
+            "error_ms": 0.5,
+            "explained_ratio": 0.9939
           }
         ],
-        "max_error_ms": 12.791666666666668,
-        "why": "release-window qualification does not qualify fast bass attacks"
+        "window_control": {
+          "window_ms": 40.0,
+          "min_error_ms": 10.62,
+          "observations": [
+            {
+              "midi": 36,
+              "phase_cycles": 0.0,
+              "observed_ms": 20.020833333333332,
+              "error_ms": 12.020833333333332
+            },
+            {
+              "midi": 36,
+              "phase_cycles": 0.25,
+              "observed_ms": 21.229166666666668,
+              "error_ms": 13.229166666666668
+            },
+            {
+              "midi": 36,
+              "phase_cycles": 0.5,
+              "observed_ms": 24.645833333333332,
+              "error_ms": 16.645833333333332
+            },
+            {
+              "midi": 36,
+              "phase_cycles": 0.75,
+              "observed_ms": 28.395833333333332,
+              "error_ms": 20.395833333333332
+            },
+            {
+              "midi": 43,
+              "phase_cycles": 0.0,
+              "observed_ms": 21.625,
+              "error_ms": 13.625
+            },
+            {
+              "midi": 43,
+              "phase_cycles": 0.25,
+              "observed_ms": 20.6875,
+              "error_ms": 12.6875
+            },
+            {
+              "midi": 43,
+              "phase_cycles": 0.5,
+              "observed_ms": 18.625,
+              "error_ms": 10.625
+            },
+            {
+              "midi": 43,
+              "phase_cycles": 0.75,
+              "observed_ms": 19.75,
+              "error_ms": 11.75
+            }
+          ],
+          "why": "the basis that made attack unqualified; must stay red on these signals"
+        },
+        "lead_window_observations": [
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "observed_ms": 19.083333333333332,
+            "error_ms": 11.083333333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.25,
+            "observed_ms": 5.416666666666667,
+            "error_ms": -2.583333333333333
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "observed_ms": 12.208333333333334,
+            "error_ms": 4.208333333333334
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.75,
+            "observed_ms": 16.895833333333332,
+            "error_ms": 8.895833333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "observed_ms": 19.083333333333332,
+            "error_ms": 11.083333333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "observed_ms": 19.083333333333332,
+            "error_ms": 11.083333333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "observed_ms": 19.083333333333332,
+            "error_ms": 11.083333333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.0,
+            "observed_ms": 19.083333333333332,
+            "error_ms": 11.083333333333332
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "observed_ms": 12.208333333333334,
+            "error_ms": 4.208333333333334
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "observed_ms": 12.208333333333334,
+            "error_ms": 4.208333333333334
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "observed_ms": 12.208333333333334,
+            "error_ms": 4.208333333333334
+          },
+          {
+            "midi": 36,
+            "phase_cycles": 0.5,
+            "observed_ms": 12.208333333333334,
+            "error_ms": 4.208333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "observed_ms": 10.833333333333334,
+            "error_ms": 2.833333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.25,
+            "observed_ms": 12.6875,
+            "error_ms": 4.6875
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "observed_ms": 13.5,
+            "error_ms": 5.5
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.75,
+            "observed_ms": 6.125,
+            "error_ms": -1.875
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "observed_ms": 10.833333333333334,
+            "error_ms": 2.833333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "observed_ms": 10.833333333333334,
+            "error_ms": 2.833333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "observed_ms": 10.833333333333334,
+            "error_ms": 2.833333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.0,
+            "observed_ms": 10.833333333333334,
+            "error_ms": 2.833333333333334
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "observed_ms": 13.5,
+            "error_ms": 5.5
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "observed_ms": 13.5,
+            "error_ms": 5.5
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "observed_ms": 13.5,
+            "error_ms": 5.5
+          },
+          {
+            "midi": 43,
+            "phase_cycles": 0.5,
+            "observed_ms": 13.5,
+            "error_ms": 5.5
+          }
+        ],
+        "refusals": [
+          "silent or non-finite input",
+          "steady region under 3 carrier periods",
+          "fit window past end of audio",
+          "explained energy under 0.6"
+        ],
+        "scope": "10-90% span of the audio attack, both sides measured by the same fit; not an internal VCA-time claim"
       },
       "initial_failures": "100 ms spectral window refused below 12 periods; 5 ms envelope window failed known release; early h4 window could not resolve the short filter transient"
     },
@@ -564,34 +1390,39 @@
         "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"
       }
     },
-    "render_source_commit": "bfaa71e",
+    "render_source_commit": "8329daa",
     "render_worktree": {
-      "commit": "bfaa71e",
-      "described": "node/D-drums-bitexact-213-gbfaa71e-dirty",
-      "branch": "measure/mono-m1a-reference",
-      "dirty": true,
-      "uncommitted_sha256": "b5cae6b52fa57209",
+      "commit": "8329daa",
+      "described": "node/D-drums-bitexact-258-g8329daa",
+      "branch": "measure/m1a-envelope-qual",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
     "audio_reused": true,
     "model_audio_sha256": "50add9b962caa5f37716f030c7254141664ddd238ab13300708ae6f40ddd8c05",
+    "missing_evidence": {
+      "Model D cross-check": "renders exact digital silence under the qualified host (dawdreamer); tracked upstream (#123). The case's required_measurements do not include it; the screening policy accepts the frozen Mini V3 software reference alone."
+    },
+    "filter_envelope_scope": "the model's filter-envelope mapping stays provisional and the reference cutoff trajectory is not measurable from frozen audio; recorded as an unqualified property, not a metric",
     "wrong_then_right": {
-      "apparatus_corrections": 4,
-      "latest": "release qualification had been extended to attack; known 8 ms signal rejects it"
+      "apparatus_corrections": 5,
+      "session_estimator_iterations": 6,
+      "latest": "six ground-truth-caught defects while building the waveform-fit attack estimator (objective, template phase twice, FFT offset, fold smear, shape refinement); all listed in the estimator commit"
     }
   },
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "d99559b",
-      "described": "node/D-drums-bitexact-215-gd99559b",
-      "branch": "measure/mono-m1a-reference",
+      "commit": "63f08e1",
+      "described": "63f08e1",
+      "branch": "fix/m1a-attack-units",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
     "base_check": {},
-    "command": "-",
+    "command": "tools/regen_m1a_units.py (cached-audio reanalysis)",
     "config": {
       "engine": {
         "name": "selected-m5a-reconstructed-filter2x",
@@ -663,35 +1494,33 @@
         "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"
       }
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-21T22:59:46Z",
+    "python": "3.10.12",
+    "run_at": "2026-09-23T22:54:34Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:6442bb9effb7fa70",
+      "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
       "model/audio_measure.py": "sha256:cd27a0a67dfde218",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:e79a1bbd0a34f17f",
+      "tools/run_case.py": "sha256:77739a9434f2605e",
       "tools/refprofile.py": "sha256:a5c5196a1ecc952b",
-      "tools/mono_m5a_score.py": "sha256:b4210e59eb8fec07",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
       "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
       "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
       "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:M1A:manifest": "sha256:681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d",
       "frozen:M1A:audio": "sha256:a66700fc66287bfb9023e986d35ec76ca6fabbe1c600368181de8270a55248f9",
-      "tools/mono_m1a_score.py": "sha256:6035ef006efe819ae966b9150ce52bc08cd3ec98281141a9a7e1d6037bc75bd9",
+      "tools/mono_m1a_score.py": "sha256:52f62d3dc20506473e76f0fccb0a0e7bd691558bd778ba58a1a43590272f7862",
       "model/filter_rate_chain.py": "sha256:134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
-      "tools/measure_mono_m1a_reference.py": "sha256:45947c736ccb4460b3427c0d1cbeaeca5139bfe67a067c80523d4558e5e5dc36",
+      "tools/measure_mono_m1a_reference.py": "sha256:d9b4122e75f9dfa62f71c688b917787591d59e4fb45811641ebc93c9d6bfd953",
       "audition/dsp.py": "sha256:7bd8e2dcce3934908a3175af0032aabe5031139baf0873bcc2a26f4cfea880fe",
       "model/fixed.py": "sha256:f5687bec088f7fd950c4a9a17027fb0e1d0e59dfe11fec61c3d77eab3a700da9"
     },
     "artefacts": {
       "ours": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav"
     },
-    "outcome_code": 2,
+    "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
-  "note": "NO VERDICT: first model comparison, with qualified component measurements and explicit missing evidence",
-  "scorecard_state": "no verdict",
-  "scorecard_reason": "invalid: envelope, Model D cross-check"
+  "note": "envelope attack qualified by waveform-domain fit with closed-form ground truth; envelope metric = worst of attack/release normalized errors"
 }

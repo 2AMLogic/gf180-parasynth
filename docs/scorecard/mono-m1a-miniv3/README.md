@@ -1,7 +1,9 @@
 # M1A frozen round-bass reference
 
-This is frozen Mini V3 software reference audio. Its release measurement is
-qualified; its fast attack measurement is not. It is not a Model D cross-check. The official scorecard coverage is unchanged.
+This is frozen Mini V3 software reference audio. Its release measurement was
+qualified at capture; its fast attack is now measured by a waveform-domain
+fit qualified against known signals (see `model-comparison.md`). It is not a
+Model D cross-check.
 
 The dry phrase plays MIDI 36, 43, 36 over 4.6 seconds, then finishes the
 release. It uses a saw plus a quieter octave saw, low resonance, and a short
@@ -33,17 +35,17 @@ qualified (spectral window, envelope window, transient control). No refused
 attempt was published as a valid reference. The final phrase was rendered
 three times, with all three identical.
 
-The 40 ms RMS window is **not qualified for attack**: an independent 8 ms
-10–90% linear rise at MIDI 36/43 measures about 19–21 ms, depending on carrier
-phase. `qualify_attack_basis()` preserves all eight observations. Historical
-attack observations in the capture manifest are unqualified; the current
-analysis marks `attack_valid=false` and `release_valid=true`. Neither changing
-the synth attack nor reporting a passing attack follows from these numbers.
-This is the fourth corrected apparatus claim (release qualification had been
-extended to attack without testing it).
+**Attack (qualified 2026-09-22, lane F).** The 40 ms RMS window is not
+capable of fast bass attacks: a known 8 ms 10–90% linear rise measured
+19–21 ms on it, depending on carrier phase — the historical reason the case
+was no-verdict. The 10–90% attack is now measured on both sides by a
+waveform-domain fit (`tools/measure_mono_m1a_reference.py: attack_fit`),
+qualified against 56 known signals with worst error 0.50 ms and a 1.0 ms
+refusal gate; the RMS windows stay in the suite as controls that must remain
+red. The reference's own attacks measure 0.27–1.64 ms.
 
 The first model mapping is fixed in `tools/mono_m1a_score.py` before rendering.
 It uses the shared selected engine, the measured quieter-octave level ratio,
 and measured release. Attack/decay/sustain, resonance, and filter-envelope
-shape remain explicitly provisional. The runner reports component measurements
-but keeps the required envelope and Model D cross-check at **NO VERDICT**.
+shape remain explicitly provisional — the model's provisional 10 ms amplitude
+attack is the envelope finding of the first valid comparison (a fail).
