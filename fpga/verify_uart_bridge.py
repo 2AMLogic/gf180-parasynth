@@ -372,13 +372,22 @@ def rows_from_capture(prefix):
             rows.append(uh.Placed(r["index"], "event", pkt, r["send_frame"],
                                   (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
                                   accept, due, due))
+        elif r["kind"] == "status":
+            # a STATUS poll the host really sent: it occupies the RX wire and
+            # draws a reply, and executes nothing
+            items.append(("status",))
+            rows.append(uh.Placed(r["index"], "status", pkt, r["send_frame"],
+                                  (r["send_frame"] + len(pkt)) * uh.CYC_PER_FRAME,
+                                  accept, -1, -1))
         else:
             raise ValueError(f"capture row kind {r['kind']!r} not replayable")
     return items, [rows], plan.get("origin", 0), plan.get("baud", uh.DEFAULT_BAUD)
 
 
-def simulate_replay(prefix, outdir, inject=None):
-    """Run the wrapper bench on a CLI capture (see rows_from_capture)."""
+def simulate_replay(prefix, outdir, inject=None, tail_frames=None):
+    """Run the wrapper bench on a CLI capture (see rows_from_capture).
+    `tail_frames` extends the run (and the model comparison) past the last
+    due, so decay and release tails are on the wire, not cut off."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     items, planned_segments, _origin, _baud = rows_from_capture(prefix)
@@ -388,7 +397,8 @@ def simulate_replay(prefix, outdir, inject=None):
                    + [0])
     last_send = max([r.send_frame for rows in planned_segments for r in rows]
                     + [0])
-    tail_frames = max(800, last_due - last_send + 800)
+    model_tail = max(600, int(tail_frames or 0))
+    tail_frames = max(800, last_due - last_send + 200 + model_tail)
 
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
     srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
@@ -426,7 +436,7 @@ def simulate_replay(prefix, outdir, inject=None):
             "planned": planned_segments, "reset_frames": [],
             "report": report, "files": files,
             "scenario": "replay", "inject": None,
-            "defines": defines}
+            "defines": defines, "model_tail": model_tail}
 
 
 def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
@@ -600,6 +610,8 @@ def analyze(run):
     acks = errs = boots = 0
     err_codes = Counter()
     status_bad = 0
+    status_rows = [r for rows in planned for r in rows if r.kind == "status"]
+    status_k = 0
     for s in range(len(origins)):
         for pkt in uh.parse_device_stream(seg_bytes(s)):
             if pkt.kind == "ack":
@@ -611,12 +623,17 @@ def analyze(run):
                 boots += 1
             elif pkt.kind == "status":
                 # the device frame must match the contract's clock, ±0
-                acc = [r for rows in planned for r in rows if r.kind == "status"]
-                if acc:
+                # replies pair with the polls IN ORDER (a replayed host
+                # capture polls many times); a lone poll pairs with itself
+                acc = status_rows[min(status_k, len(status_rows) - 1)] \
+                    if status_rows else None
+                status_k += 1
+                if acc is not None:
                     # the STATUS reply carries the device's frame REGISTER,
-                    # which reads audio_frame+1 during the frame
-                    want = ((acc[-1].accept_frame - origins[s]) + 1)
-                    if pkt.frame < want - 1 or pkt.frame > want + 1:
+                    # which reads audio_frame+1 during the frame; 16 bits
+                    want = ((acc.accept_frame - origins[s]) + 1)
+                    d = (pkt.frame - want) & 0xFFFF
+                    if min(d, 0x10000 - d) > 1:
                         status_bad += 1
                         detail.append(f"STATUS frame {pkt.frame}, contract {want}")
     comp["acks_seen"] = acks
@@ -679,7 +696,7 @@ def analyze(run):
             continue
         origin = origins[s]
         model_writes = [(e[0] - origin, e[1], e[2], e[3], e[4]) for e in exp]
-        n = max(f for f, *_ in model_writes) + 600
+        n = max(f for f, *_ in model_writes) + run.get("model_tail", 600)
         if s + 1 < len(origins):
             # a segment ends where the next one's audio begins (the reset)
             n = min(n, origins[s + 1] - origin)

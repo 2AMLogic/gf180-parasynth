@@ -130,6 +130,8 @@ class UartDeviceSim:
         self.received: list = []                # ("write"|"event"|"status"|"abort", detail)
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
+        self.evq_peak = 0                       # most events ever held at once
+        self.resets = 0
         self._fires_this_frame = 0
         self._fire_frame = -1
         self._stop = threading.Event()
@@ -244,7 +246,12 @@ class UartDeviceSim:
         D[31:0]} -- flag and sec share the first byte."""
         b0 = pkt[off]
         flag = (b0 >> 7) & 1
-        sec = (b0 >> 6) & 1
+        # SEC is the LOW bit of the first byte ({F, 6'b0, SEC}: word bit 40,
+        # as uart_host.reg_frame encodes and uart_bridge.v slices it). This
+        # read bit 6 until the rolling verifier sent drum writes: every
+        # SEC=1 write was logged as a voice write, invisible to tests that
+        # only ever sent SEC=0.
+        sec = b0 & 1
         addr = pkt[off + 1]
         data = int.from_bytes(pkt[off + 2:off + 6], "big")
         return flag, sec, addr, data
@@ -306,6 +313,7 @@ class UartDeviceSim:
                 self.evq.append([due, flag, sec, addr, data])
                 self.last_due = due
                 self.evq_count += 1
+                self.evq_peak = max(self.evq_peak, self.evq_count)
                 self._ack()
 
     # ---- execution -----------------------------------------------------------
@@ -519,6 +527,21 @@ class SimSerial:
         if rest:                                # unread bytes stay available
             self.sim.outbox.insert(0, (self.clock.t, rest))
         return out
+
+    def reset(self) -> None:
+        """BTN0 now: both queues, counters and flags die with the core, the
+        frame counter restarts at 0, and BOOT goes out on the TX line."""
+        self._advance()
+        sim = self.sim
+        sim.evq.clear(); sim.wrq.clear()
+        sim.evq_count = sim.wrq_count = 0
+        sim.last_due = None
+        sim.drops = sim.errs = sim.flags_sticky = 0
+        sim._partial.clear()
+        sim.epoch = 0
+        sim._t0 = sim._cursor
+        sim.resets += 1
+        sim._send(bytes([BOOT]), delay=False)
 
     def run_until(self, t: float) -> None:
         """Let the device timeline reach `t` with the host idle (after the

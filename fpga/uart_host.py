@@ -145,6 +145,14 @@ WRITE_SLOTS = 2                    # register-write slots the UART path gets per
 WRAP_HALF = 32_768                 # 16-bit due arithmetic, wrap-safe window
 MIN_LEAD_FRAMES = 2                # due must be >= accept_frame + MIN_LEAD at send time
 PREFLIGHT_WATERMARK = 48           # batching threshold the preflight simulates
+# Injected host defects (the Python side of the INJECT_BUG_* convention):
+# fpga/verify_rolling_playback.py sets one and must turn red for its reason.
+#   ROLL_QUEUE_UNAWARE  the window cut ignores earlier windows' queued events
+#   ROLL_TAG_SPLIT      setup/performance split by tag (in-pattern accents
+#                       and glides play at t=0) -- the defect the WIP had
+#   ROLL_NO_UNWRAP      the roller reads each anchor as a signed distance
+#                       from the first one: right for 0.68 s, then wrong
+INJECT_BUGS: set = set()
 ROLLING_HORIZON_FRAMES = WRAP_HALF - 2048   # a window's dues all sit within this
                                    # distance of ITS OWN anchor (~0.64 s): the
                                    # whole batch stays wrap-safe by construction
@@ -491,10 +499,15 @@ def fixture_split(fixture: str) -> tuple:
                          "deliver as static configuration")
     first, end, load_frame = host.load_span
     load_ids = {id(w) for w in host.w[first:end]}
+    if "ROLL_TAG_SPLIT" in INJECT_BUGS:
+        tags = {w.tag for w in host.w[first:end]}
+        load_ids = {id(w) for w in host.w if w.tag in tags}
     raw = sorted(host.w, key=lambda w: w.frame)      # stable: load order kept
     # a timed write at or before the load frame would be ambiguous: it is
     # music scheduled into the setup. Refuse rather than guess.
     early = [w for w in raw if id(w) not in load_ids and w.frame <= load_frame]
+    if "ROLL_TAG_SPLIT" in INJECT_BUGS:
+        early = []
     if early:
         raise ValueError(f"fixture {fixture!r} schedules {len(early)} timed "
                          f"writes at or before its load frame {load_frame}")
@@ -633,6 +646,7 @@ class Bridge:
         self.origin = None
         self.performance_origin = None   # device frame of a rolled phrase's t=0
         self.boots_seen = 0              # BOOT packets: the device reset
+        self.device_errors: list = []    # (code, info) of every ERR packet read
         self.lead_frames = None
         self.status_round_trip_s = None
         self.acks_seen = 0
@@ -651,6 +665,8 @@ class Bridge:
                     self.acks_seen += 1
                 elif p.kind == "boot":
                     self.boots_seen += 1
+                elif p.kind == "err":
+                    self.device_errors.append((p.code, p.info))
                 if p.kind in kinds:
                     return p
             now = self.clock.monotonic()
@@ -701,6 +717,7 @@ class Bridge:
             for p, _n in [scan_packets(self.buf)]:
                 self.acks_seen += sum(1 for q in p if q.kind == "ack")
                 self.boots_seen += sum(1 for q in p if q.kind == "boot")
+                self.device_errors += [(q.code, q.info) for q in p if q.kind == "err"]
             self.buf = b""
             t0 = self.clock.monotonic()
             self.send([Placed(0, "status", pkt_status(), 0, 0)], paced=False)
@@ -929,6 +946,7 @@ class Bridge:
         # revolution apart) and COUNTED across revolutions
         anchor = self.status()
         boots0 = self.boots_seen
+        errs0 = len(self.device_errors)
         # place this anchor on ev_abs's own scale: the callers built it from
         # an earlier STATUS a few frames ago, so the signed 16-bit distance
         # to the first due is exact even if the counter wrapped in between
@@ -939,6 +957,10 @@ class Bridge:
 
         def unwrap(frame16: int) -> int:
             nonlocal prev16, progress
+            if "ROLL_NO_UNWRAP" in INJECT_BUGS:
+                d = (frame16 - (origin0 & 0xFFFF)) & 0xFFFF
+                progress = d if d < 0x8000 else d - 0x10000
+                return origin0 + progress
             step = (frame16 - prev16) & 0xFFFF
             progress += step if step < 0x8000 else step - 0x10000
             prev16 = frame16
@@ -963,10 +985,13 @@ class Bridge:
             # event due at the anchor frame may fire as STATUS is answered.
             owed = sum(1 for d in sent_dues if d >= origin + 2)
             if anchor.evq < owed:
+                errs = self.device_errors[errs0:]
+                why = (f"the device reported ERR {sorted({c for c, _ in errs})}"
+                       if errs else "no ERR was read, so the queue itself was lost")
                 raise Refused(f"the device holds {anchor.evq} queued events "
-                              f"but {owed} sent events are not yet due -- "
-                              "the queue was lost (reset?); refusing to "
-                              "continue a phrase with a hole in it")
+                              f"but {owed} sent events are not yet due: "
+                              f"{owed - anchor.evq} never queued ({why}) -- "
+                              "refusing to continue a phrase with a hole in it")
             lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
             try:
                 batch, wait = rolling_batch(ev_abs, i, origin, lead, baud,
@@ -1352,11 +1377,16 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
                     f"plus {ROLLING_PACKET_SLACK_FRAMES} of slack -- it "
                     "cannot be accepted before its due")
             break
-        # queue occupancy when this packet lands: the EARLIEST it can be
-        # accepted is origin + lead + (j+1) packets; anything due after that
-        # instant (fires strictly later) is still queued. Earliest acceptance
-        # is the conservative instant -- fewer events have fired by then.
-        accept = origin + lead + (len(batch) + 1) * F
+        # queue occupancy when this packet lands, bounded at its EARLIEST
+        # possible acceptance -- fewer events have fired by then. That is
+        # origin + (j+1) packets and NOT + lead: `lead` is mostly STATUS
+        # round trip already spent when the anchor is read, and a poll queued
+        # behind the previous window's bytes measures that backlog as round
+        # trip (628 frames observed). With lead included the bound predicted
+        # acceptances up to 600 frames late and demo reached 62 of 64.
+        accept = origin + (len(batch) + 1) * F
+        if "ROLL_QUEUE_UNAWARE" in INJECT_BUGS:
+            inflight = ()
         held = (sum(1 for d in inflight if d >= accept)
                 + sum(1 for d, _c in batch if d >= accept) + 1)
         if held > EVENT_QUEUE_DEPTH - ROLLING_QUEUE_MARGIN:
@@ -1364,7 +1394,7 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
                 # the queue is full of earlier windows' events: the next
                 # slot frees when the earliest of them fires
                 pending = sorted(d for d in inflight if d >= accept)
-                wait = pending[0] + 1 - lead - F
+                wait = pending[0] + 1 - F
             break
         batch.append((due_abs, c))
     return batch, wait
