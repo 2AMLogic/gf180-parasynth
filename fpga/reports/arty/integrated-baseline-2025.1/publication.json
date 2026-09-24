@@ -60,7 +60,6 @@
   "output_delay_exceptions": [
     "i2s_bclk"
   ],
-  "dsp_feedback_review_complete": false,
   "hardware_playback_tested": false,
   "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
   "configuration": {
@@ -117,8 +116,13 @@
   "remaining_review": [
     "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
     "physical programming, control and audio capture",
-    "13 DPREG-4 DSP feedback warnings"
+    "13 DPREG-4 DSP feedback warnings (evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it)"
   ],
+  "dsp_feedback_review_complete": false,
+  "dsp_disposition": {
+    "complete": false,
+    "reason": "evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it"
+  },
   "published_sha256": {
     "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
     "timing.rpt": "c7d3e81d2a656a8530f4d416076d33487c916b99f9b043dc2683164308b93fe9",

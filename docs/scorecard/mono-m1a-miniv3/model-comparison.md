@@ -1,5 +1,25 @@
 # M1A model comparison
 
+> **Selected patch: `m1a-gain-minus4db-v2`** (`tools/mono_m1a_score.py:
+> PATCH_VERSIONS`) — the provisional mapping with the fixed −4 dB output
+> volume of [the volume candidate](volume-mapping/README.md), applied in the
+> patch before rendering. Promoted through `tools/run_case.py M1A`. The audio
+> reproduces the candidate exactly (`628a6a31…a2ba61c`), checked by
+> `tools/check_m1a_selection.py`.
+>
+> **Scored by `m1a-envelope-score-v2`, M1A is NO VERDICT.** The attack is
+> graded only when BOTH sides' fits are inside `attack_fit`'s validated domain
+> (p ∈ {0.5, 1, 2}, ramp 0.5–20 ms, above the 32-sample search minimum). The
+> reference fits for MIDI 36 (p = 3) and MIDI 43 (p = 4) are not. Current vector:
+> Pitch −0.05059 cents **pass** · Harmonic shape 19.82331 dB **fail** · Envelope
+> attack **unqualified** (raw reading +8.10889 ms, not a grade) · Envelope
+> release +8.47917 ms **pass** · Gain −1.04361 dB **pass** · Clipping 0 %
+> **pass** · Filter envelope **unqualified**. That is 4 passing, 1 failing and
+> 2 unqualified. The required `envelope` metric has no distance, so the case
+> has no verdict. This is an honest loss of coverage: the earlier "valid fail"
+> graded out-of-domain reference readings. The table below is the v1
+> (pre-selection, pre-rule) record, kept as history.
+
 This is a fixed-point **model** observation against frozen Mini V3 audio.
 It has no SPI → I²S or physical-board evidence. The complete 7.5 s phrase
 uses MIDI 36, 43, 36, the shared selected engine, saw plus quieter octave saw,

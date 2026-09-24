@@ -92,9 +92,33 @@ record is
 [dsp-opmode-analysis.json](reports/arty/integrated-baseline-2025.1/dsp-dpreg-evidence/dsp-opmode-analysis.json),
 the full argument in the original
 [disposition](reports/arty/vivado-2025.1/dsp-dpreg-disposition.md).
-`dsp_feedback_review_complete` stays `false` in the publication: the
-publish machinery has no evidence-gated path that sets it, and hand-editing
-it is not an option.
+`dsp_feedback_review_complete` is DERIVED in the publication, never
+flipped: `publish_arty.dsp_disposition()` refuses (recording the reason as
+data in `dsp_disposition.reason` and in `remaining_review`) unless the
+evidence set is present and manifest-valid, `routed_dcp.sha256` names the
+**routed.dcp digest the publication names** (and the dump opened that
+checkpoint), the accepted analysis covers exactly the DPREG-4 target set
+derived from this artifact's `drc.rpt`, and a fresh
+`dsp_dpreg_analyse.derive()` agrees with it and finds no reachable OPMODE
+that selects P. `fpga/test_publish_arty.py` runs the true path and every
+refusal through `publish()` in CI on a self-contained digest-bound fixture.
+Publication ships the evidence bundle as `dsp-dpreg-evidence/` beside the
+reports (every file hash-checked against the artifact after copying, digests
+in `published_evidence_sha256`), and refuses to publish a true verdict the
+published directory cannot reproduce on its own.
+
+**This baseline's committed flag is `false`, and that is the derived
+answer.** Its extraction names the checkpoint by path only
+(`DCP /home/ubuntu/integrated-baseline/build/arty/routed.dcp`), never by
+digest, so it cannot be bound to routed.dcp `6c3c22c5…`. The structural
+verdict itself (13/13 dismissed) stands; the binding is what is missing.
+Closing it is a bounded, read-only task on the build host, no new routing:
+record `sha256sum routed.dcp` (must equal `6c3c22c5…`) as
+`dsp-dpreg-evidence/routed_dcp.sha256`, re-run `dsp_dpreg_extract.tcl`,
+confirm the checkpoint hash is unchanged afterwards, re-pin
+`MANIFEST.sha256`, then `python fpga/publish_arty.py <dir> --rederive-dsp`.
+If that checkpoint no longer exists, the flag stays false until a
+re-implementation is extracted.
 
 ## External I/O timing
 

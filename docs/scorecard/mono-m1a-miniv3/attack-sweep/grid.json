@@ -1,0 +1,50 @@
+{
+  "schema": "m1a-attack-sweep-grid-v1",
+  "stated_before_evaluation": true,
+  "base_patch": "m1a-gain-minus4db-v2",
+  "varied": "patch['amp'][0] -- the amplitude-envelope attack time in seconds; every other patch field, the engine, the reference, the estimator, the tolerances and the note sequence are fixed",
+  "grid_ms": [
+    0.25,
+    0.5,
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    6.0,
+    8.0,
+    10.0
+  ],
+  "grid_frames_at_48k": [
+    12,
+    24,
+    48,
+    96,
+    144,
+    192,
+    240,
+    288,
+    384,
+    480
+  ],
+  "control": {
+    "value_ms": 10.0,
+    "why": "the selected patch's own setting; its render must reproduce the promoted record's audio hash and property vector or the sweep refuses"
+  },
+  "range_basis": [
+    "Units (model/voice_fx.py AdsrFx.regs_from): attack seconds -> frames = max(1, int(a_s * 48000)); a_inc = ceil(2^24 / frames); the level rises LINEARLY and reaches full scale in `frames` frames. The 10-90% span of a linear ramp is 0.8 * a_s, so the envelope alone contributes 0.8 * a_s ms to the measured 10-90% attack.",
+    "Consistency check on the current setting: 0.8 * 10 ms = 8 ms against the measured model 7.42 / 8.38 / 9.00 ms (the waveform-fit ramp is linear, shape_p = 1).",
+    "Reference 10-90% attacks are 1.64 / 0.27 / 1.13 ms (MIDI 36 / 43 / 36). With a 5 ms screening limit, the envelope term alone can pass every event only while 0.8 * a_s <= 0.27 + 5, i.e. a_s <= 6.6 ms. The grid is densest across that crossing (4, 5, 6, 8 ms).",
+    "Lower end 0.25 ms (12 frames): below 0.27 / 0.8 = 0.34 ms the envelope is faster than the fastest reference attack, so shorter settings can only move the error negative; 0.25 ms brackets it. The hardware floor is one frame (20.8 us).",
+    "Upper end 10 ms: the current provisional value, which is the control."
+  ],
+  "evaluated_on": "every M1A event (MIDI 36 @0.1 s, 43 @2.1 s, 36 @4.1 s), complete 7.5 s phrase; repeated-note context = event 3 (MIDI 36 re-struck after 43) against event 1 (MIDI 36 from silence), reported as a history contrast in the form of PR #195's history_effect_ms",
+  "attack_pass": "every event |model - reference| <= 5 ms (the property's own worst-event rule)",
+  "preservation_criteria": [
+    "no property that passes for the selected patch (Pitch, Envelope release, Gain, Clipping) may fail",
+    "no per-note harmonic partial that passes (|error| <= 1 dB) for the selected patch may fail",
+    "every per-note gain stays inside the 3 dB tolerance",
+    "Filter envelope stays unqualified (not a metric); Harmonic shape is an independent failure and is reported, not gated -- an attack improvement is never called a whole-case pass"
+  ],
+  "publication_rule": "a grid point that passes attack AND every preservation criterion is published as a candidate with its complete property vector, not promoted; if none does, publish the sensitivity (attack error vs setting and what breaks) and do not change envelope code"
+}
