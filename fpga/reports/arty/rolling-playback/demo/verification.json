@@ -595,6 +595,10 @@
       },
       "detail": [],
       "reused_rtl_run": false,
+      "run_receipt": {
+        "path": "demo.run_identity.json",
+        "sha256": "04e3587423939bb49457157968e267d51f94b2289b544e9c5a7772ab95fcdacb"
+      },
       "control": {
         "caught": true,
         "victim_index": 495,

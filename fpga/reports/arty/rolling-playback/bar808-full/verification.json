@@ -595,6 +595,10 @@
       },
       "detail": [],
       "reused_rtl_run": false,
+      "run_receipt": {
+        "path": "bar808-full.run_identity.json",
+        "sha256": "b46f71dbd7c28b9c739b8d0ed0396d94c4ad135e241fe6eba040d68b285e9fdb"
+      },
       "control": {
         "caught": true,
         "victim_index": 427,
