@@ -34,6 +34,7 @@ CONTROLS (each must turn the run red for its recorded reason):
   ROLL_QUEUE_UNAWARE  window cut ignores queued events -> device drops (demo)
   ROLL_TAG_SPLIT      setup split by tag -> in-pattern accents play at t=0
   ROLL_NO_UNWRAP      anchors not counted across wraps -> refused or late
+  WATERMARK_PRELOAD   watermark verdict sent unthrottled -> device drops, FAIL
   corrupt-byte        one payload bit flipped on the wire -> checksum ERR, FAIL
   reset-mid           device reset mid-phrase -> host REFUSES, never continues
 
@@ -63,18 +64,27 @@ ANCHOR_TAGS = {"stops-on", "gate", "trig"}        # the audible instants
 
 
 # ---- the intended schedule, from the fixture ---------------------------------
-def intended(fixture: str, preset: str | None = None) -> dict:
+def intended(fixture: str, preset: str | None = None,
+             note: int | None = None) -> dict:
     """What must happen, derived from the fixture and the preset image
     alone. `static` is in send order; `timed` is (rel_frame, flag, sec,
-    addr, data) with rel_frame measured from the music's t=0."""
+    addr, data) with rel_frame measured from the music's t=0. With `note`,
+    the held note's on-writes follow the setup and its gate-off is the
+    first timed write (`held` names it); the phrase's frames are then
+    fixed RELATIVE to each other -- the host places the whole phrase after
+    the hold, spacing intact."""
     static_w, timed_w, _n, _host = uh.fixture_split(fixture)
     static = [tuple(w) for w in uh.voice_image_writes(preset)]
     static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static_w]
+    held = []
+    if note is not None:
+        static += [tuple(w) for w in uh.note_writes(note, True)]
+        held = [tuple(w) for w in uh.note_writes(note, False)]
     timed = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed_w]
     moved = [w for w in timed_w if w.frame != w.nominal]
     anchors = [w for w in timed_w if w.tag in ANCHOR_TAGS]
     worst = max((w.frame - w.nominal for w in anchors), default=0)
-    return {"static": static, "timed": timed,
+    return {"static": static, "timed": timed, "held": held,
             "spreading": {"timed_writes": len(timed_w),
                           "moved": len(moved),
                           "anchors": len(anchors),
@@ -98,7 +108,8 @@ class Harness:
 
 
 def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
-            wire_fault=None, reset_after_events: int | None = None) -> dict:
+            wire_fault=None, reset_after_events: int | None = None,
+            note: int | None = None) -> dict:
     """uart_host.main on the scripted device; returns everything observed."""
     h = Harness(epoch)
     if wire_fault:
@@ -113,7 +124,7 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
             if op == dev.OP_EVENT and n == reset_after_events and not h.sim.resets:
                 h.ser.reset()
         h.sim._accept = accept
-    want = intended(fixture)                    # the fixture's intent, uninjected
+    want = intended(fixture, note=note)         # the fixture's intent, uninjected
     saved = set(uh.INJECT_BUGS)
     uh.INJECT_BUGS.clear()
     if inject:
@@ -122,8 +133,10 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
-                rc = uh.main(["run", "--fixture", fixture, "--port", "sim"],
-                             bridge_factory=h.factory)
+                argv = ["run", "--fixture", fixture, "--port", "sim"]
+                if note is not None:
+                    argv += ["--note", str(note)]
+                rc = uh.main(argv, bridge_factory=h.factory)
             except SystemExit as exc:          # a Bridge REFUSED path
                 rc = exc.code if isinstance(exc.code, int) else 2
     finally:
@@ -181,6 +194,20 @@ def check(run: dict) -> dict:
     got_frames = _unwrap([w[0] for w in ev], p0)
     got = [(f - p0, w[1], w[2], w[3], w[4]) for f, w in zip(got_frames, ev)]
     exp = list(want["timed"])
+    if want["held"]:
+        # the gate-off(s) first, then the phrase: the phrase is checked
+        # relative to its own first write (the host shifts it past the hold
+        # whole), the gate-off against the requested hold
+        nh = len(want["held"])
+        if [g[1:] for g in got[:nh]] != want["held"]:
+            res["reasons"].append("the held note's gate-off is not the first "
+                                  "timed write")
+        res["hold_frames_observed"] = got[0][0] if got else None
+        got = got[nh:]
+        if got:
+            base_g, base_e = got[0][0], exp[0][0]
+            got = [(g[0] - base_g, *g[1:]) for g in got]
+            exp = [(e[0] - base_e, *e[1:]) for e in exp]
     timing_bad = sum(1 for g, e in zip(got, exp) if g[0] != e[0])
     value_bad = sum(1 for g, e in zip(got, exp) if g[1:] != e[1:])
     res["timing_bad"], res["value_bad"] = timing_bad, value_bad
@@ -337,6 +364,10 @@ CONTROLS = {
                        lambda r: r["rc"] != 0 and r["timing_bad"] + abs(
                            r["timed_executed"] - r["timed_intended"]) > 0,
                        "phrase not delivered past the first half-revolution"),
+    "WATERMARK_PRELOAD": ("bar808", {"inject": "WATERMARK_PRELOAD", "note": 45},
+                          lambda r: r["drops"] > 0 and r["rc"] == 1,
+                          "a held-back schedule sent as preload overflows "
+                          "the queue; the CLI exits FAIL"),
     "corrupt-byte": ("bar808-full", {"wire_fault": "flip"},
                      lambda r: r["rc"] == 2 and any(
                          e[0] == dev.ERR_CHECKSUM for e in r["device_errors"])
@@ -378,13 +409,15 @@ def main(argv=None) -> int:
     a.outdir.mkdir(parents=True, exist_ok=True)
     ok = True
     clean = {}
-    for fx in FIXTURES:
-        for ep in epochs:
-            r = check(run_cli(fx, epoch=ep))
-            clean[f"{fx}@{ep}"] = r
+    cases = [(fx, ep, None) for fx in FIXTURES for ep in epochs]
+    cases += [(fx, ep, 45) for fx in FIXTURES + ("bar808",) for ep in (0, 65300)]
+    for fx, ep, note in cases:
+            r = check(run_cli(fx, epoch=ep, note=note))
+            key = f"{fx}@{ep}" + (f"+note{note}" if note is not None else "")
+            clean[key] = r
             ok &= r["ok"]
             m = r.get("metrics", {})
-            print(f"rolling[{fx} epoch {ep}]: {'PASS' if r['ok'] else 'FAIL'} -- "
+            print(f"rolling[{key}]: {'PASS' if r['ok'] else 'FAIL'} -- "
                   f"timed {r['timed_executed']}/{r['timed_intended']}, static "
                   f"{r['static_executed']}/{r['static_intended']}, peak queue "
                   f"{m.get('peak_queue')}, min slack "

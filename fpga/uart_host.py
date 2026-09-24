@@ -152,6 +152,8 @@ PREFLIGHT_WATERMARK = 48           # batching threshold the preflight simulates
 #                       and glides play at t=0) -- the defect the WIP had
 #   ROLL_NO_UNWRAP      the roller reads each anchor as a signed distance
 #                       from the first one: right for 0.68 s, then wrong
+#   WATERMARK_PRELOAD   a watermark preflight verdict is sent as preload
+#                       (the latent defect on main: nothing held back)
 INJECT_BUGS: set = set()
 ROLLING_HORIZON_FRAMES = WRAP_HALF - 2048   # a window's dues all sit within this
                                    # distance of ITS OWN anchor (~0.64 s): the
@@ -792,6 +794,14 @@ class Bridge:
             raise Refused(verdict["reason"])
         if dry_run:
             return rows
+        if (verdict.get("mode") == "watermark"
+                and "WATERMARK_PRELOAD" not in INJECT_BUGS):
+            # preflight proved a HELD-BACK schedule lands every due; `send`
+            # holds nothing back (it lays the plan down as preload), so a
+            # watermark verdict sent that way overflows the queue -- 7 drops
+            # on `run --note 45 --fixture bar808`. The roller is the sender
+            # that bounds the queue against STATUS: deliver through it.
+            return self.run_rolling(commands, baud=baud, quiet=quiet)
         self._run_acks_expected = len(rows)
         self.send(rows)
         if not quiet:
@@ -853,7 +863,16 @@ class Bridge:
         ev_cmds = [("event", gate_off_due - origin2, *markers[1:5])]
         ev_cmds += [("event", c[1] + offset, *c[2:]) for c in rest]
         rows = rows_live
-        if rolling_needed(ev_cmds):
+        needs_flow = False
+        if not rolling_needed(ev_cmds):
+            # short enough for one window -- but can it PRELOAD? A watermark
+            # verdict needs a sender that holds packets back (see run())
+            probe = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
+                                 anchor_frame=origin2)
+            needs_flow = (preflight(rows_live + probe,
+                                    baud=baud).get("mode") == "watermark"
+                          and "WATERMARK_PRELOAD" not in INJECT_BUGS)
+        if needs_flow or rolling_needed(ev_cmds):
             # the phrase behind the gate-off is a musical-length one: the
             # gate-off event is musical t=0 (it IS the hold's deadline), and
             # the rest rolls from there. Live rows are already counted; the
@@ -1574,9 +1593,27 @@ def main(argv=None, *, bridge_factory=None) -> int:
 
     commands = []
     phrase = None
+    # the phrase, split BEFORE assembly: a fixture's setup image belongs
+    # with the preset (ahead of any held note -- loading a patch under a
+    # sounding key changes the note), its timed writes after the note-off
+    fx_static, fx_events = [], []
+    if a.cmd in ("play", "run"):
+        # the default is the FEASIBLE mode: a bare `run` is the held note and
+        # nothing else. bar808 was the default once; preflight refused it
+        # every time, so the advertised first playback failed by construction.
+        # The first phrase is `--fixture m5a` (bench-proven), never a default.
+        fixture = a.fixture or "none"
+        if fixture == "m5a":
+            fx_events, _end = phrase_events(fixture)
+        elif fixture != "none":
+            # the fixture's own structure: its load() image as live setup,
+            # everything after it as scheduled events
+            fx_static, fx_events, _end = phrase_static_and_events(fixture)
     if a.cmd in ("load", "run") or a.cmd is None:
         for flag, sec, addr, data in voice_image_writes(a.preset):
             commands.append(("write", flag, sec, addr, data))
+    for flag, sec, addr, data in fx_static:
+        commands.append(("write", flag, sec, addr, data))
     if a.cmd == "note-on" or (a.cmd == "run" and a.note is not None):
         note = a.note if a.note is not None else 45
         for flag, sec, addr, data in note_writes(note, True):
@@ -1592,24 +1629,8 @@ def main(argv=None, *, bridge_factory=None) -> int:
         note = a.note if a.note is not None else 45
         for flag, sec, addr, data in note_writes(note, False):
             commands.append(("gate-off", flag, sec, addr, data))
-    if a.cmd == "play" or a.cmd == "run":
-        # the default is the FEASIBLE mode: a bare `run` is the held note and
-        # nothing else. bar808 was the default once; preflight refused it
-        # every time, so the advertised first playback failed by construction.
-        # The first phrase is `--fixture m5a` (bench-proven), never a default.
-        fixture = a.fixture or "none"
-        if fixture == "m5a":
-            events, _end = phrase_events(fixture)
-            for due, flag, sec, addr, data in events:
-                commands.append(("event", due, flag, sec, addr, data))
-        elif fixture != "none":
-            # the fixture's own structure: its configuration image as live
-            # writes (static init), its timed events as scheduled events
-            static, events, _end = phrase_static_and_events(fixture)
-            for flag, sec, addr, data in static:
-                commands.append(("write", flag, sec, addr, data))
-            for due, flag, sec, addr, data in events:
-                commands.append(("event", due, flag, sec, addr, data))
+    for due, flag, sec, addr, data in fx_events:
+        commands.append(("event", due, flag, sec, addr, data))
     if a.cmd == "status":
         bridge = open_bridge(a.port, a.baud)
         print(bridge.status().describe())
