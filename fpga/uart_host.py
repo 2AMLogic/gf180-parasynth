@@ -755,7 +755,7 @@ class Bridge:
         self._run_ack_base = self.acks_seen
         rows = None
         ahead = 0
-        planned = list(commands)
+        planned = commands
         for _ in range(8):
             anchor = self.status()
             self.origin = origin = anchor.frame
@@ -764,6 +764,14 @@ class Bridge:
                                        + int(round_trip * SR) + 1)
             rows = plan_show(planned, hold_frames=hold_frames, baud=baud,
                              start_frame=lead, anchor_frame=origin)
+            if planned is commands:
+                # the first plan: a schedule the queue and wire cannot carry
+                # is refused NOW, for that reason -- not after the verify
+                # loop has had a chance to fail first on host timing noise
+                # (preflight is anchor-relative, so this verdict holds)
+                early = preflight(rows, baud=baud)
+                if early["verdict"] != "FEASIBLE":
+                    raise Refused(early["reason"])
             dues = [r.due for r in rows if r.kind == "event"]
             if not dues:
                 break
@@ -1346,6 +1354,17 @@ def event_packet_frames(baud: int = DEFAULT_BAUD) -> int:
     return -(-10 * byte_cycles(baud) // CYC_PER_FRAME)
 
 
+def event_packet_frames_min(baud: int = DEFAULT_BAUD) -> int:
+    """The FASTEST a 10-byte event packet can arrive, rounded down: the
+    sender's true baud (10*CLK/baud cycles a byte, 1066.7 at 115200), not
+    the receiver's 10*div (1070). Back-to-back bytes arrive at the sender's
+    rate -- measured: a 202-packet burst lands 21 frames ahead of the
+    receiver-rate model on the RTL bench. Use this where EARLIER is the
+    unsafe direction (queue occupancy), `event_packet_frames` where LATER
+    is (deadlines)."""
+    return (10 * 10 * CLK_HZ) // (baud * CYC_PER_FRAME)
+
+
 def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
                   baud: int = DEFAULT_BAUD, inflight: list = ()) -> tuple:
     """The window cut, shared by the live roller and the virtual planner.
@@ -1374,6 +1393,7 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
     never be accepted before its due (the wire cannot reach it from this
     anchor) raises: waiting would only make it later."""
     F = event_packet_frames(baud)
+    F_min = event_packet_frames_min(baud)
     batch = []
     wait = None
     for j, (due_abs, c) in enumerate(ev_abs[i:]):
@@ -1403,7 +1423,7 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
         # behind the previous window's bytes measures that backlog as round
         # trip (628 frames observed). With lead included the bound predicted
         # acceptances up to 600 frames late and demo reached 62 of 64.
-        accept = origin + (len(batch) + 1) * F
+        accept = origin + (len(batch) + 1) * F_min
         if "ROLL_QUEUE_UNAWARE" in INJECT_BUGS:
             inflight = ()
         held = (sum(1 for d in inflight if d >= accept)
@@ -1413,7 +1433,7 @@ def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
                 # the queue is full of earlier windows' events: the next
                 # slot frees when the earliest of them fires
                 pending = sorted(d for d in inflight if d >= accept)
-                wait = pending[0] + 1 - F
+                wait = pending[0] + 1 - F_min
             break
         batch.append((due_abs, c))
     return batch, wait

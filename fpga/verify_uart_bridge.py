@@ -385,15 +385,26 @@ def rows_from_capture(prefix):
 
 
 def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
-                    timeout_s=3600):
+                    timeout_s=3600, reuse=False):
     """Run the wrapper bench on a CLI capture (see rows_from_capture).
     `tail_frames` extends the run (and the model comparison) past the last
-    due, so decay and release tails are on the wire, not cut off."""
+    due, so decay and release tails are on the wire, not cut off.
+
+    `reuse=True` re-ANALYSES an earlier run instead of re-simulating (a
+    musical-length replay is ~50 minutes) -- only when the stimulus file
+    the bench consumed is byte-identical to this capture's and the run
+    reached the frames this analysis needs; otherwise it REFUSES (None).
+    Expectations may change between the two; the stimulus may not."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     items, planned_segments, _origin, _baud = rows_from_capture(prefix)
     cmd_path = outdir / "uart_cmds.txt"
+    previous = cmd_path.read_bytes() if (reuse and cmd_path.exists()) else None
     build_cmd_file(planned_segments, [], cmd_path)
+    if reuse and previous != cmd_path.read_bytes():
+        print("verify_uart_bridge: REFUSED -- reuse asked, but the stimulus "
+              "differs from the run on disk (or there is none)")
+        return None
     last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
                    + [0])
     last_send = max([r.send_frame for rows in planned_segments for r in rows]
@@ -407,6 +418,21 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
+    if reuse:
+        files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+        report = (outdir / "transcript.txt").read_text().splitlines() \
+            if (outdir / "transcript.txt").exists() else []
+        ran = [int(m.group(1)) for m in map(RE_RAN.search, report) if m]
+        if not ran or ran[0] < tail_frames:
+            print(f"verify_uart_bridge: REFUSED -- reuse asked, but the run on "
+                  f"disk covered {ran[0] if ran else 0} of {tail_frames} frames")
+            return None
+        defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
+        return {"outdir": outdir, "items": items, "bodies": [items],
+                "planned": planned_segments, "reset_frames": [],
+                "report": report, "files": files,
+                "scenario": "replay", "inject": None,
+                "defines": defines, "model_tail": model_tail, "reused": True}
     iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
     if not iverilog or not vvp:
         print("verify_uart_bridge: REFUSED -- iverilog/vvp not on PATH")

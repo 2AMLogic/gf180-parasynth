@@ -265,7 +265,14 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
     if h.sim.epoch != 0 or h.sim.resets:
         raise ValueError("RTL capture needs an epoch-0 run with no reset")
     p0 = h.bridge.performance_origin
-    bc = uh.byte_cycles(uh.DEFAULT_BAUD)
+    # the wire at the TRUE baud (the bench serialises bits of 1e9/baud ns):
+    # 10*CLK/baud = 1066.7 cycles a byte, not the receiver's 10*div = 1070.
+    # Across a 202-packet back-to-back setup burst the difference is 21
+    # frames -- a receiver re-syncs per start bit, but a continuous burst's
+    # bytes arrive at the SENDER's rate. Acceptance is the planner's rule:
+    # the last byte's stop-bit centre as the receiver samples it.
+    bc = 10 * uh.CLK_HZ / uh.DEFAULT_BAUD
+    div = (uh.CLK_HZ + uh.DEFAULT_BAUD // 2) // uh.DEFAULT_BAUD
     rows, static_i, timed_i = [], 0, 0
     wire_free = 0
     first_event_t = next(t for t, b in h.ser.tx_log if b and b[0] == dev.OP_EVENT)
@@ -277,7 +284,8 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
             start = max(send * uh.CYC_PER_FRAME + 1, wire_free)
             end = start + len(pkt) * bc
             wire_free = end
-            accept = end // uh.CYC_PER_FRAME
+            push = start + (len(pkt) - 1) * bc + 4 + 9 * div + div // 2
+            accept = int(push // uh.CYC_PER_FRAME)
             row = {"index": len(rows), "packet": pkt.hex(), "send_frame": send,
                    "accept_frame": accept}
             if pkt[0] == dev.OP_WRITE:
@@ -307,7 +315,7 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
             "last_due": max((r["due"] for r in rows), default=0)}
 
 
-def rtl_replay(fixture: str, outdir: Path) -> dict:
+def rtl_replay(fixture: str, outdir: Path, reuse: bool = False) -> dict:
     """The capture (the evidence of what was replayed) lands in `outdir`;
     the bench's bulky wave/I2S dumps stay under build/."""
     import verify_uart_bridge as vub
@@ -322,13 +330,43 @@ def rtl_replay(fixture: str, outdir: Path) -> dict:
                              tail_frames=int(TAIL_S * SR),
                              # ~258k frames of the full wrapper: 3600 s
                              # reached 87% on a loaded machine (62 fr/s)
-                             timeout_s=RTL_TIMEOUT_S)
+                             timeout_s=RTL_TIMEOUT_S, reuse=reuse)
     if rr is None:
         return {"state": "REFUSED", "reason": "RTL replay did not run",
                 "capture": cap}
     ok, comp, detail = vub.analyze(rr)
-    return {"state": "PASS" if ok else "FAIL", "capture": cap,
-            "comparison": comp, "detail": detail[:10]}
+    out = {"state": "PASS" if ok else "FAIL", "capture": cap,
+           "comparison": comp, "detail": detail[:10],
+           "reused_rtl_run": bool(rr.get("reused"))}
+    out["control"] = rtl_control(fixture, outdir, vub)
+    if not out["control"]["caught"]:
+        out["state"] = "FAIL"
+    return out
+
+
+def rtl_control(fixture: str, outdir: Path, vub) -> dict:
+    """The comparison must be able to fail: move ONE intended event a single
+    frame later in the expectation (stimulus untouched) and re-analyse the
+    same RTL run. It must report that event off its frame."""
+    import shutil
+    src = outdir / fixture
+    ctl = outdir / f"{fixture}-control-due+1"
+    shutil.copyfile(f"{src}.cmds", f"{ctl}.cmds")
+    rec = json.loads(Path(f"{src}.plan.json").read_text())
+    evs = [r for r in rec["rows"] if r["kind"] == "event"]
+    victim = evs[len(evs) // 2]
+    victim["due"] += 1
+    victim["apply_frame"] += 1
+    Path(f"{ctl}.plan.json").write_text(json.dumps(rec, indent=1) + "\n")
+    rr = vub.simulate_replay(str(ctl), ROOT / "build/rolling-rtl" / fixture,
+                             tail_frames=int(TAIL_S * SR), reuse=True)
+    if rr is None:
+        return {"caught": False, "reason": "control could not re-analyse"}
+    ok, comp, detail = vub.analyze(rr)
+    caught = (not ok) and comp.get("frame_pred_bad") == 1
+    return {"caught": caught, "victim_index": victim["index"],
+            "frame_pred_bad": comp.get("frame_pred_bad"),
+            "wire_mismatch": comp.get("wire_mismatch"), "detail": detail[:3]}
 
 
 # ---- controls ---------------------------------------------------------------
@@ -406,6 +444,9 @@ def main(argv=None) -> int:
                     default=ROOT / "fpga/reports/arty/rolling-playback")
     ap.add_argument("--rtl", nargs="*", default=None, metavar="FIXTURE",
                     help="also replay the host bytes through the UART RTL")
+    ap.add_argument("--reuse-rtl", action="store_true",
+                    help="re-analyse the RTL run on disk (refused unless its "
+                         "stimulus is byte-identical to this capture's)")
     ap.add_argument("--epochs", default="0,32000,65300",
                     help="device frame counter at the host's first STATUS")
     a = ap.parse_args(argv)
@@ -441,7 +482,7 @@ def main(argv=None) -> int:
     if a.rtl is not None:
         rtl = {}
         for fx in (a.rtl or ["demo"]):
-            rr = rtl_replay(fx, a.outdir / "rtl-replay")
+            rr = rtl_replay(fx, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
             rtl[fx] = rr
             ok &= rr["state"] == "PASS"
             comp = rr.get("comparison", {})
@@ -449,6 +490,9 @@ def main(argv=None) -> int:
                   f"{comp.get('writes_seen')}/{comp.get('writes_sent')}, timing bad "
                   f"{comp.get('frame_pred_bad')}, I2S mismatch "
                   f"{comp.get('wire_mismatch')} over {comp.get('periods')} periods"
+                  + (f"; control due+1 "
+                     f"{'CAUGHT' if rr.get('control', {}).get('caught') else 'MISSED'}"
+                     f" ({rr.get('control', {}).get('frame_pred_bad')} off-frame)")
                   + (f" -- {rr.get('detail') or rr.get('reason')}"
                      if rr["state"] != "PASS" else ""))
         record["rtl"] = rtl
