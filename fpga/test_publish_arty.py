@@ -226,6 +226,61 @@ def test_publisher_derives_dsp_review_complete_from_bound_evidence(tmp_path):
     assert s["hardware_playback_tested"] is False
 
 
+def test_published_output_alone_reproduces_the_dsp_verdict(tmp_path):
+    # publish -> REOPEN the published directory -> re-derive: the verdict must
+    # be reproducible from the publication alone, not only from the build
+    # host's artifact directory (which carries routed.dcp and is not shipped)
+    art = _bound_artifact(tmp_path)
+    s = _publish(art, tmp_path)
+    assert s["dsp_feedback_review_complete"] is True, s["dsp_disposition"]
+    out = tmp_path / "publication"
+    assert not (out / "routed.dcp").exists()
+    reopened = publish.dsp_disposition(out)
+    assert reopened == s["dsp_disposition"]
+    rec = json.loads((out / "publication.json").read_text())
+    assert rec["dsp_disposition"] == reopened
+    # the shipped bundle is recorded by digest in the publication
+    ev = out / "dsp-dpreg-evidence"
+    assert rec["published_evidence_sha256"] == {
+        f.name: _sha(f) for f in sorted(ev.iterdir())}
+
+
+@pytest.mark.parametrize("damage,reason", [
+    (lambda ev: __import__("shutil").rmtree(ev),
+     "missing evidence: no dsp-dpreg-evidence directory"),
+    (lambda ev: (ev / "dsp_cells_dump.txt").write_text(
+        (ev / "dsp_cells_dump.txt").read_text() + "\n# tampered\n"),
+     "evidence manifest refused: hash mismatch for dsp_cells_dump.txt"),
+    (lambda ev: (ev / "routed_dcp.sha256").unlink(),
+     "evidence records no routed.dcp digest"),
+], ids=["bundle-omitted", "dump-corrupted", "dcp-digest-omitted"])
+def test_reopen_refuses_a_damaged_published_bundle(tmp_path, damage, reason):
+    art = _bound_artifact(tmp_path)
+    assert _publish(art, tmp_path)["dsp_feedback_review_complete"] is True
+    out = tmp_path / "publication"
+    damage(out / "dsp-dpreg-evidence")
+    d = publish.dsp_disposition(out)
+    assert d["complete"] is False
+    assert reason in d["reason"], d["reason"]
+
+
+def test_publication_refuses_a_corrupted_evidence_copy(tmp_path, monkeypatch):
+    # the copy is integrity-checked after copying: a copy that differs from
+    # the artifact's bundle refuses PUBLICATION, it does not ship
+    art = _bound_artifact(tmp_path)
+    real = publish.shutil.copyfile
+
+    def corrupting(src, dst, *a, **k):
+        real(src, dst, *a, **k)
+        if Path(src).name == "dsp_cells_dump.txt":
+            with open(dst, "ab") as f:
+                f.write(b"\n")
+        return dst
+    monkeypatch.setattr(publish.shutil, "copyfile", corrupting)
+    with pytest.raises(ValueError, match="evidence copy differs from the artifact: dsp_cells_dump.txt"):
+        _publish(art, tmp_path)
+
+
 def _drop(name):
     def mutate(art):
         (art / "dsp-dpreg-evidence" / name).unlink()

@@ -102,6 +102,10 @@ derived from this artifact's `drc.rpt`, and a fresh
 `dsp_dpreg_analyse.derive()` agrees with it and finds no reachable OPMODE
 that selects P. `fpga/test_publish_arty.py` runs the true path and every
 refusal through `publish()` in CI on a self-contained digest-bound fixture.
+Publication ships the evidence bundle as `dsp-dpreg-evidence/` beside the
+reports (every file hash-checked against the artifact after copying, digests
+in `published_evidence_sha256`), and refuses to publish a true verdict the
+published directory cannot reproduce on its own.
 
 **This baseline's committed flag is `false`, and that is the derived
 answer.** Its extraction names the checkpoint by path only

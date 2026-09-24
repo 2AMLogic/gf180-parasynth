@@ -230,6 +230,36 @@ def apply_dsp(summary: dict, dsp: dict) -> None:
     summary["dsp_disposition"] = dsp
 
 
+def copy_evidence(src: Path, dst: Path) -> dict:
+    """Ship the DSP evidence bundle with the publication, so the verdict can
+    be re-derived from the published directory alone. Integrity-checked
+    after copying: every copied file must hash to its source, and the copy's
+    own manifest must validate. Any difference refuses publication."""
+    dst.mkdir()
+    files = sorted(f for f in src.iterdir() if f.is_file())
+    for f in files:
+        shutil.copyfile(f, dst / f.name)
+    digests = {}
+    for f in files:
+        have = build.sha(dst / f.name)
+        if have != build.sha(f):
+            raise ValueError("evidence copy differs from the artifact: " + f.name)
+        digests[f.name] = have
+    # a source bundle that fails its own manifest is already a DSP refusal
+    # (recorded by dsp_disposition) and must not block the publication; a
+    # source that validates must still validate once copied
+    an = _analyser()
+    try:
+        an.verify_manifest(src)
+    except an.Refused:
+        return digests
+    try:
+        an.verify_manifest(dst)
+    except an.Refused as exc:
+        raise ValueError(f"published evidence manifest refused: {exc}") from exc
+    return digests
+
+
 def rederive_dsp(publication: Path) -> dict:
     """Re-derive the DSP disposition of a COMMITTED publication from its own
     committed evidence and rewrite only those fields. This is how a record
@@ -319,7 +349,15 @@ def publish(artifact, output):
         content = re.sub(r"^\| Host\s*:.*$", "| Host         : omitted from public report",
                          content, flags=re.MULTILINE)
         (output / name).write_text(content)
-    summary["published_sha256"] = {p.name: build.sha(p) for p in output.iterdir()}
+    evidence = artifact / "dsp-dpreg-evidence"
+    if evidence.is_dir():
+        summary["published_evidence_sha256"] = copy_evidence(
+            evidence, output / "dsp-dpreg-evidence")
+        # the publication must reproduce its own verdict from what it ships
+        if dsp["complete"] and dsp_disposition(output, record) != dsp:
+            raise ValueError("published evidence does not reproduce the DSP disposition")
+    summary["published_sha256"] = {p.name: build.sha(p) for p in output.iterdir()
+                                   if p.is_file()}
     (output / "publication.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
