@@ -145,6 +145,25 @@ WRITE_SLOTS = 2                    # register-write slots the UART path gets per
 WRAP_HALF = 32_768                 # 16-bit due arithmetic, wrap-safe window
 MIN_LEAD_FRAMES = 2                # due must be >= accept_frame + MIN_LEAD at send time
 PREFLIGHT_WATERMARK = 48           # batching threshold the preflight simulates
+ROLLING_HORIZON_FRAMES = WRAP_HALF - 2048   # a window's dues all sit within this
+                                   # distance of ITS OWN anchor (~0.64 s): the
+                                   # whole batch stays wrap-safe by construction
+ROLLING_BATCH_CAP = 48             # events per window: the 64-event queue minus
+                                   # in-flight margin, since a batch is accepted
+                                   # far faster than its dues pass
+ROLLING_START_FRAMES = 2400         # the phrase's musical t=0 lands this far
+                                    # (50 ms) after the static image completes:
+                                    # the first window accepts up to BATCH_CAP
+                                    # packets (~2006 frames of wire at the
+                                    # contract's 41.8 frames/packet), and its
+                                    # earliest dues must trail that acceptance
+ROLLING_PACKET_SLACK_FRAMES = 64    # per-packet safety in the window cut: the
+                                    # contract needs due >= accept+1; this adds
+                                    # a frame of STATUS slop per hop. It is NOT
+                                    # PLAN_SLACK -- that margin is for planning
+                                    # jitter inside one window, and requiring
+                                    # it per packet would split every musical
+                                    # cluster across dozens of windows
 PLAN_SLACK_FRAMES = 500            # minimum due-minus-acceptance margin (~10 ms):
 SEND_GATE_FRAMES = 120             # the send gate: send once the first due is at
                                    # least this far ahead of the verify STATUS
@@ -153,8 +172,7 @@ SEND_GATE_FRAMES = 120             # the send gate: send once the first due is a
                                    # there, but a schedule sent from a fresh
                                    # anchor is never a stale one)
                                    # covers USB/host arrival jitter. It is NOT
-                                   # the anchor-to-send latency budget -- that is
-                                   # re-anchored away by run()'s verify loop --
+                                   # the anchor-to-send latency budget -- that is                                   # re-anchored away by run()'s verify loop --
                                    # because for a phrase whose dues run 1 frame
                                    # apart, every frame of preload margin is a
                                    # queued event: margin and queue depth are
@@ -453,6 +471,38 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     return writes
 
 
+LOAD_TAGS = {"wave", "weight", "amp", "fenv", "cut_lo", "cut_hi", "k", "gain",
+             "ogain", "glide", "vol", "dvol", "bvol", "kit", "accent"}
+
+
+def phrase_static_and_events(fixture: str) -> tuple:
+    """A scripted phrase SPLIT the way the link delivers it: the fixture's
+    configuration image (the `MusicHost.load()` writes -- patch, kit,
+    accents) as live writes carrying no due, and its timed events (keys,
+    hits, knobs, the timed coefficient sequences) as scheduled events.
+
+    The split is not a convenience: the load image is 60-90 writes due at
+    musical t=0, and the UART wire delivers one event packet per 41.8 frames
+    at 115200 -- a due'd load image would die under the wire no matter how
+    the phrase rolled. As live writes it applies over the first ~60 ms
+    (wire-paced, the device drains 2 slots/frame) while the music is still
+    ROLLING_START_FRAMES away. The tags are the fixture's own structure,
+    not a heuristic."""
+    import fixtures
+    import spi_host as sh
+    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    link = sh.LinkTiming.contract_max()
+    ws = sh.feasible(sorted(host.w, key=lambda w: w.frame), link)
+    static, events = [], []
+    for w in ws:
+        if w.tag in LOAD_TAGS:
+            static.append((w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF))
+        else:
+            events.append((w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF))
+    end = (max(d for d, *_ in events) + 64) if events else n_frames
+    return static, events, end
+
+
 def phrase_events(fixture: str) -> tuple:
     """A scripted phrase as scheduled events: (due, flag, sec, addr, data),
     reusing the existing fixtures and the link's own spreading rules. Dues are
@@ -639,6 +689,10 @@ class Bridge:
         if markers:
             return self._run_with_hold(commands, baud=baud, quiet=quiet,
                                        hold_frames=hold_frames)
+        if rolling_needed(commands):
+            # a phrase longer than one planning window: roll it. (A marker
+            # path that also needs rolling is handled inside the hold.)
+            return self.run_rolling(commands, baud=baud, quiet=quiet)
         self._run_ack_base = self.acks_seen
         rows = None
         ahead = 0
@@ -741,6 +795,21 @@ class Bridge:
             offset = max(0, (gate_off_due + 1) - (origin2 + min_phrase))
         ev_cmds = [("event", gate_off_due - origin2, *markers[1:5])]
         ev_cmds += [("event", c[1] + offset, *c[2:]) for c in rest]
+        rows = rows_live
+        if rolling_needed(ev_cmds):
+            # the phrase behind the gate-off is a musical-length one: the
+            # gate-off event is musical t=0 (it IS the hold's deadline), and
+            # the rest rolls from there. Live rows are already counted; the
+            # roller adds its own windows to the expected-ACK total.
+            self._run_acks_expected = len(rows_live)
+            ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
+            rows_ev = self._roll_events(ev_abs, baud=baud, quiet=quiet)
+            rows += rows_ev
+            if not quiet:
+                for row in rows:
+                    print(f"  send f{row.send_frame:<6} {row.kind:<7} "
+                          f"{row.packet.hex()} -> applies f{row.apply_frame}")
+            return rows
         rows_ev = plan_shifted(ev_cmds, baud=baud, start_frame=lead2,
                                anchor_frame=origin2)
         rows = rows_live + rows_ev
@@ -754,6 +823,137 @@ class Bridge:
                 print(f"  send f{row.send_frame:<6} {row.kind:<7} "
                       f"{row.packet.hex()} -> applies f{row.apply_frame}")
         return rows
+
+    # ---- rolling scheduling --------------------------------------------------
+    #
+    # A MUSICAL-length phrase (bar808-full, demo: four seconds, three counter
+    # wraps) cannot be planned in one window: `plan` refuses any due beyond
+    # the +-32768-frame horizon its anchor can reason about, and even if it
+    # did not, 200+ events would overrun the 64-event queue. The phrase is
+    # delivered in ROLLING WINDOWS instead: static initialization first (the
+    # patch image and note-on are live writes -- no dues, no horizon), then
+    # successive batches of scheduled events, each planned against a FRESH
+    # STATUS anchor with every due inside one wrap-safe horizon, each
+    # preflighted against the queue and the wire before its first packet
+    # leaves. The device is unchanged: its queue fires each event at its own
+    # due; the host merely keeps the queue topped up. The wire needs one
+    # event packet per ~500 frames at musical tempo and delivers one per
+    # 41.8 -- the existing baud is not the constraint, the queue is, and the
+    # batch cap leaves it margin.
+
+    def run_rolling(self, commands: list, *, baud: int = DEFAULT_BAUD,
+                    quiet: bool = False) -> list:
+        """Deliver a phrase too long for one planning window.
+
+        Static initialization goes first through the ordinary planned path
+        (live writes: no dues, no horizon). The timed events then roll via
+        `_roll_events`, each batch planned from a FRESH STATUS anchor with
+        every due inside one wrap-safe horizon and preflighted against the
+        queue and the wire before its first packet leaves. The performance's
+        musical t=0 lands ROLLING_START_FRAMES after the static image
+        completes."""
+        static = [c for c in commands if c[0] != "event"]
+        events = [c for c in commands if c[0] == "event"]
+        static_rows = self.run(static, baud=baud, quiet=True)
+        if not events:
+            return static_rows
+        anchor = self.status()
+        origin = anchor.frame
+        lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
+        p0 = origin + lead + ROLLING_START_FRAMES   # musical t=0 on the device
+        ev_rows = self._roll_events([(p0 + c[1], c) for c in events],
+                                    baud=baud, quiet=quiet)
+        return static_rows + ev_rows
+
+    def _roll_events(self, ev_abs: list, *, baud: int = DEFAULT_BAUD,
+                     quiet: bool = False) -> list:
+        """The window loop, shared by the plain and the hold paths.
+
+        `ev_abs` is [(absolute_due, ("event", due_rel, flag, sec, addr,
+        data)), ...] in due order. Each iteration takes a fresh STATUS,
+        packs every event whose due sits within ROLLING_HORIZON_FRAMES of
+        that anchor (capped at ROLLING_BATCH_CAP), plans the batch, demands
+        preflight FEASIBLE, and sends it. An event whose due died while the
+        host was between windows is REFUSED: P0 belongs to the performance,
+        and moving it would be a musical edit, not scheduling."""
+        all_rows: list = []
+        i = 0
+        # the performance timeline is UNWRAPPED: due_abs values were built on
+        # the scale of the first anchor, and the device's 16-bit counter will
+        # wrap several times during a musical phrase. Progress is accumulated
+        # per STATUS as a forward step (wrap-safe within the window the
+        # counter can reason about) and COUNTED across revolutions -- a bare
+        # 16-bit difference resets every wrap and the roller would circle
+        # forever.
+        anchor = self.status()
+        origin0 = anchor.frame
+        prev16, progress = origin0, 0
+        while i < len(ev_abs):
+            anchor = self.status()
+            step16 = (anchor.frame - prev16) & 0xFFFF
+            progress += step16 if step16 < 0x8000 else step16 - 0x10000
+            prev16 = anchor.frame
+            origin = origin0 + progress
+            lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
+            try:
+                batch, next_rel = rolling_batch(ev_abs, i, origin, lead, baud)
+            except ValueError as exc:
+                raise Refused(str(exc) + " -- refusing to re-time the phrase")
+            if not batch:
+                # nothing deliverable from this anchor yet: the device must
+                # advance until the next event ENTERS the horizon. The wait
+                # bridges in steps that stay inside the +-32768-frame window
+                # the 16-bit counter can reason about -- a target further
+                # ahead than that makes wait_until answer wrongly. This is
+                # the one place the host waits on the device, polled by
+                # STATUS -- never a host sleep.
+                rel = ev_abs[i][0] - origin
+                while rel > ROLLING_HORIZON_FRAMES:
+                    # the device must advance or the phrase's dues die: a
+                    # bridge step that ends without the counter moving (or a
+                    # wait that times out) is a stalled device, refused --
+                    # re-timing the phrase would be a musical edit, and
+                    # waiting forever is not an answer
+                    before16 = anchor.frame
+                    step = min(rel - ROLLING_HORIZON_FRAMES, 27_000)
+                    try:
+                        self.wait_until((anchor.frame + step) & 0xFFFF,
+                                        timeout_s=5.0)
+                    except SystemExit:
+                        raise Refused("the device's frame counter did not "
+                                      "advance while a window waited on it; "
+                                      "the phrase's dues will die -- refusing "
+                                      "to re-time the phrase") from None
+                    anchor = self.status()
+                    if anchor.frame == before16:
+                        raise Refused("the device's frame counter is not "
+                                      "advancing; the phrase's dues will die "
+                                      "-- refusing to re-time the phrase")
+                    step16 = (anchor.frame - prev16) & 0xFFFF
+                    progress += step16 if step16 < 0x8000 else step16 - 0x10000
+                    prev16 = anchor.frame
+                    origin = origin0 + progress
+                    rel = ev_abs[i][0] - origin
+                continue
+            rows = plan([("event", due_abs - origin, *c[2:])
+                         for due_abs, c in batch],
+                        baud=baud, start_frame=lead, anchor_frame=origin)
+            # `plan` restores the absolute due (anchor + relative) itself;
+            # the rows' dues are already device frames
+            verdict = preflight(rows, baud=baud)
+            if verdict["verdict"] != "FEASIBLE":
+                raise Refused(f"window at device frame {origin} cannot deliver "
+                              f"its {len(batch)} events: {verdict['reason']}")
+            self.send(rows)
+            all_rows += rows
+            self._run_acks_expected += len(rows)
+            i += len(batch)
+            if not quiet:
+                print(f"  window f{origin:<6}: {len(batch)} events, dues "
+                      f"f{rows[0].due}-f{rows[-1].due}")
+        last_due = all_rows[-1].due
+        self.wait_until(last_due + 64)
+        return all_rows
 
     @staticmethod
     def _reached(frame: int, target: int) -> bool:
@@ -1039,6 +1239,113 @@ def preflight(rows: list, *, baud: int = DEFAULT_BAUD,
     return report
 
 
+def rolling_needed(commands: list) -> bool:
+    """True when the phrase cannot be planned in one window: any event due
+    beyond ROLLING_HORIZON_FRAMES from the performance's start would die in
+    plan()'s wrap guard. Static-only command lists never roll."""
+    events = [c[1] for c in commands if c[0] == "event"]
+    return bool(events) and (events[-1] - events[0]) > ROLLING_HORIZON_FRAMES
+
+
+def event_packet_frames(baud: int = DEFAULT_BAUD) -> int:
+    """Wire frames one 10-byte event packet occupies, rounded up: the pacing
+    unit the device's own acceptance rate runs at."""
+    return -(-10 * byte_cycles(baud) // CYC_PER_FRAME)
+
+
+def rolling_batch(ev_abs: list, i: int, origin: int, lead: int,
+                  baud: int = DEFAULT_BAUD) -> tuple:
+    """The window cut, shared by the live roller and the virtual planner.
+
+    From event `i`, take the events deliverable from a STATUS anchor named
+    `origin`: each must sit within ROLLING_HORIZON_FRAMES of the anchor
+    (wrap safety), the batch caps at ROLLING_BATCH_CAP (queue), and -- the
+    rule that orders the whole phrase -- event j of the batch must leave the
+    wire time to accept it: due >= origin + lead + (j+1) packets + slack.
+    That last bound is what makes consecutive windows chain: the cut event's
+    relative due minus the previous window's wire time is exactly the next
+    window's first-packet requirement, so the phrase neither starves the
+    queue nor dies under the wire, whatever the local density of the music.
+
+    Returns (batch, next_rel): `next_rel` is the relative due of the first
+    event NOT taken -- 0 when there is none -- so the caller can tell a
+    deliverability wait from the end of the phrase."""
+    F = event_packet_frames(baud)
+    batch = []
+    next_rel = 0
+    for j, (due_abs, c) in enumerate(ev_abs[i:]):
+        rel = due_abs - origin
+        if rel <= 0:
+            raise ValueError(f"event due f{due_abs} is behind the anchor "
+                             f"f{origin}: its due died before the window "
+                             "could deliver it")
+        next_rel = rel
+        if (rel > ROLLING_HORIZON_FRAMES or len(batch) >= ROLLING_BATCH_CAP
+                or rel < lead + (len(batch) + 1) * F
+                + ROLLING_PACKET_SLACK_FRAMES):
+            break
+        batch.append((due_abs, c))
+    else:
+        next_rel = 0
+    return batch, next_rel
+
+
+def plan_rolling_virtual(commands: list, *, baud: int = DEFAULT_BAUD,
+                         origin0: int = 0) -> tuple:
+    """The rolling schedule WITHOUT a device: (rows, windows) -- the window
+    structure the real run produces, under the EARLIEST anchors the contract
+    allows (the device frame advances no slower than the wire). Conservative
+    by construction -- smaller relative dues split windows sooner -- so a
+    schedule this function accepts, a real run accepts with room to spare;
+    and the rows are a complete, replayable byte schedule (origin0 stands in
+    for the anchoring STATUS). This is what --dry-run renders and --capture
+    writes for the RTL bench before any hardware exists; a real run
+    re-anchors from live STATUS and its capture is the one the board
+    hears."""
+    static = [c for c in commands if c[0] != "event"]
+    events = [c for c in commands if c[0] == "event"]
+    windows = 0
+    rows = plan(static, baud=baud, start_frame=MIN_LEAD_FRAMES + 1,
+                anchor_frame=origin0) if static else []
+    if not events:
+        return rows, 0
+    lead = MIN_LEAD_FRAMES + 1
+    # the first window's anchor is the static image's wire end (the real run
+    # STATUSes after the init completes); musical t=0 clears it by the start
+    # margin, so no timed event is ever due while the config is still in
+    # flight
+    origin = (max((r.end_cycle for r in rows), default=0) // CYC_PER_FRAME)
+    p0 = origin + lead + ROLLING_START_FRAMES
+    ev_abs = [(p0 + c[1], c) for c in events]
+    i = 0
+    while i < len(ev_abs):
+        try:
+            batch, next_rel = rolling_batch(ev_abs, i, origin, lead, baud)
+        except ValueError as exc:
+            raise ValueError(f"{exc} (virtual anchor f{origin})") from None
+        if not batch:
+            # nothing deliverable from this anchor yet: advance the virtual
+            # anchor until the next event enters the horizon, in steps that
+            # stay inside the wrap window (the bridge the live roller makes
+            # with wait_until)
+            origin += min((ev_abs[i][0] - origin) - ROLLING_HORIZON_FRAMES,
+                          WRAP_HALF - 768)
+            continue
+        wrows = plan([("event", due_abs - origin, *c[2:])
+                      for due_abs, c in batch],
+                     baud=baud, start_frame=lead, anchor_frame=origin)
+        verdict = preflight(wrows, baud=baud)
+        if verdict["verdict"] != "FEASIBLE":
+            raise ValueError(f"window at virtual anchor {origin} cannot "
+                             f"deliver its {len(batch)} events: "
+                             f"{verdict['reason']}")
+        rows += wrows
+        i += len(batch)
+        origin = wrows[-1].end_cycle // CYC_PER_FRAME
+        windows += 1
+    return rows, windows
+
+
 def _row_expect(r):
     """The decoded intent of one planned row: what the device should do."""
     if r.kind == "write":
@@ -1177,8 +1484,16 @@ def main(argv=None) -> int:
         # every time, so the advertised first playback failed by construction.
         # The first phrase is `--fixture m5a` (bench-proven), never a default.
         fixture = a.fixture or "none"
-        if fixture != "none":
+        if fixture == "m5a":
             events, _end = phrase_events(fixture)
+            for due, flag, sec, addr, data in events:
+                commands.append(("event", due, flag, sec, addr, data))
+        elif fixture != "none":
+            # the fixture's own structure: its configuration image as live
+            # writes (static init), its timed events as scheduled events
+            static, events, _end = phrase_static_and_events(fixture)
+            for flag, sec, addr, data in static:
+                commands.append(("write", flag, sec, addr, data))
             for due, flag, sec, addr, data in events:
                 commands.append(("event", due, flag, sec, addr, data))
     if a.cmd == "status":
@@ -1195,9 +1510,25 @@ def main(argv=None) -> int:
 
     if a.dry_run:
         try:
-            rows = plan_show(commands, hold_frames=a.hold_frames, baud=a.baud)
-            verdict = preflight(rows, baud=a.baud)
+            if rolling_needed(commands):
+                # the window structure the device will see, under the
+                # earliest anchors the contract allows; every window is
+                # preflighted inside, and the rows are a complete,
+                # replayable byte schedule
+                rows, windows = plan_rolling_virtual(commands, baud=a.baud)
+                n_events = sum(1 for r in rows if r.kind == "event")
+                verdict = {"verdict": "FEASIBLE", "mode": "rolling",
+                           "reason": f"{n_events} scheduled events delivered "
+                                     f"in {windows} wrap-safe windows, each "
+                                     f"preflighted against the queue and the "
+                                     f"wire before its first packet"}
+            else:
+                rows = plan_show(commands, hold_frames=a.hold_frames, baud=a.baud)
+                verdict = preflight(rows, baud=a.baud)
         except Refused as exc:
+            print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+            return 2
+        except ValueError as exc:
             print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
             return 2
         if a.capture:
