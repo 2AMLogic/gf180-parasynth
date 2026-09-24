@@ -1,0 +1,41 @@
+{
+  "verdict": {
+    "1": {
+      "cycles": 148,
+      "x_cycles": 0,
+      "wrong_cycles": 142,
+      "sim_aborted": false,
+      "first_mismatch": {
+        "cycle": 6,
+        "expected": "000000bc614e 000000bc614e",
+        "actual": "000000000000 000000000000"
+      }
+    },
+    "2": {
+      "cycles": 148,
+      "x_cycles": 0,
+      "wrong_cycles": 130,
+      "sim_aborted": false,
+      "first_mismatch": {
+        "cycle": 12,
+        "expected": "ffffffff539a 000000bb0880",
+        "actual": "fffffe1b9776 fffffed7f8c4"
+      }
+    },
+    "0": {
+      "cycles": 148,
+      "x_cycles": 0,
+      "wrong_cycles": 0,
+      "sim_aborted": false,
+      "first_mismatch": null
+    }
+  },
+  "pregflip_red": true,
+  "opmodep_red": true,
+  "loop_evidence_in_log": false,
+  "clean_pass": true,
+  "stimulus_rows": 148,
+  "simulator": "Icarus Verilog version 13.0 (stable) (v13_0)",
+  "unisim_commit": "1c8e05fd1e9a79ceb8b996a0996674122eed086f",
+  "run_order": "controls (1=pregflip, 2=opmodep) before clean (0)"
+}

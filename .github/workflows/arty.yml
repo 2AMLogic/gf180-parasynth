@@ -1,0 +1,27 @@
+name: Arty digital wrapper
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  spi-i2s:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install numpy scipy pytest
+      - run: sudo apt-get update && sudo apt-get install -y iverilog tcl
+      - run: python -m pytest fpga/test_build_arty.py fpga/test_publish_arty.py -q
+      - name: SPI writes and decoded I2S, clean and mutated
+        run: python fpga/verify_arty_controls.py
+      - name: prepare the exact source/configuration package
+        run: python fpga/build_arty.py --prepare-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: arty-digital-evidence
+          path: |
+            build/arty-controls/**/verification.*
+            build/arty-controls/**/runner.txt
+            build/arty-controls/controls.json
+            build/arty/report.json
+            build/arty/build.tcl

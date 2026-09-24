@@ -1,0 +1,146 @@
+{
+  "state": "FAIL",
+  "exit_code": 1,
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim",
+  "inject": "ARTY_SDATA_ZERO",
+  "source_sha256": {
+    "rtl-sketch/synth_top.v": "e476bfdfe93d3dbf5ab99ebad72958e8e4476681e9fcdc3d7d1c4d9a9061f9d7",
+    "rtl-sketch/voice_dp.v": "a1575257054328dbc460f81cb4e3c1d901a81b565a332c00da0df9c8aa29c097",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+    "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+    "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "build/arty-rom-controls/ARTY_SDATA_ZERO/tb_top_bx.v": "40407a896d3be6a78f76f73982a4675eed899f39a4c6fa5b995b9edb7f16b3fb",
+    "fpga/rtl/arty_a7_top.v": "1af5f47fa4212fdac3647b6d786af3d2dc578879a172ee6c141886ef1affae3d",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
+  },
+  "transcript_sha256": "7db54d90ffc4ff4773b2887856a640eb619c1b86e452d9f5c845a3e4dabcf57e",
+  "comparison": {
+    "provenance": {
+      "commit": "ce32c9e-dirty",
+      "files": {
+        "synth_top.v": [
+          "e476bfdfe93d",
+          "rtl-sketch"
+        ],
+        "voice_dp.v": [
+          "a15752570543",
+          "rtl-sketch"
+        ],
+        "spi_ctl.v": [
+          "8892b72cde65",
+          "rtl-sketch"
+        ],
+        "drum_regs.v": [
+          "c20808c86b23",
+          "rtl-sketch"
+        ],
+        "drum_kit.v": [
+          "41bdf7a73aaa",
+          "rtl-sketch"
+        ],
+        "drum_dp.v": [
+          "debc3ed0d64e",
+          "rtl-sketch"
+        ],
+        "modal_dp.v": [
+          "dd4906617919",
+          "rtl-sketch"
+        ],
+        "i2s_tx.v": [
+          "2cdb2112a11e",
+          "rtl-sketch"
+        ],
+        "ladder_dp_n.v": [
+          "22e2be19863b",
+          "rtl-sketch"
+        ],
+        "recip_div.v": [
+          "bf081a1b780d",
+          "rtl-sketch"
+        ],
+        "osc_2x_saw_bank.v": [
+          "05869337f593",
+          "rtl-sketch"
+        ],
+        "osc_2x_saw_path.v": [
+          "9e61079d40fa",
+          "rtl-sketch"
+        ],
+        "polyblep_saw_pair.v": [
+          "1576461daa91",
+          "rtl-sketch"
+        ],
+        "osc_substep_pair.v": [
+          "6dc5cfb922cb",
+          "rtl-sketch"
+        ],
+        "decimate_2x_tm_sym.v": [
+          "0575e80ef33c",
+          "rtl-sketch"
+        ],
+        "rate_conv_2x.v": [
+          "0e28468820bd",
+          "rtl-sketch"
+        ],
+        "tb_top_bx.v": [
+          "40407a896d3b",
+          "/private/tmp/wt-arty-bringup/build/arty-rom-controls/ARTY_SDATA_ZERO"
+        ],
+        "arty_a7_top.v": [
+          "1af5f47fa421",
+          "/private/tmp/wt-arty-bringup/fpga/rtl"
+        ]
+      },
+      "generated": {
+        "tanh16.hex": "a5c4862a7e90",
+        "tanh256.hex": "c6e81324b225"
+      }
+    },
+    "cover": {},
+    "rtl_dir": null,
+    "oscillator_config": "2x saw + causal 2x filter candidate",
+    "compile_defines": [
+      "VOICE_OSC_2X",
+      "VOICE_FILTER_2X",
+      "INJECT_BUG_ARTY_SDATA_ZERO"
+    ],
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 175,
+    "writes_bad": 0,
+    "writes_seen": 67,
+    "writes_sent": 67,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "model_peak": 9063,
+    "model_clipped": 0,
+    "wire_mismatch": 4527,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 4821
+  }
+}

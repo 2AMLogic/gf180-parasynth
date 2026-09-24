@@ -1,0 +1,52 @@
+[
+  {
+    "case": "empty_dump",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "truncated_dump",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "missing_opmode_pins",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "wrong_hash",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "missing_manifest",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "missing_drc_rpt",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "extra_flagged_cell",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "duplicate_cell",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "drc_dump_mismatch",
+    "exit": 0,
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE"
+  },
+  {
+    "case": "sim_short_trace",
+    "exit": 0,
+    "verdict": "clean sequence       : PASS (x=0, wrong=0, cycles=100)"
+  }
+]

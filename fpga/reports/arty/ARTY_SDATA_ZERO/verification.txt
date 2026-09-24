@@ -1,0 +1,18 @@
+verify_synth_top: 67 writes over the pins (67 voice, 0 drum), 957 frames after the last
+verify_synth_top: M5A controls: pulse=pulse29; effective pulse=pulse479 (47.90% duty); saw cutoff=20000 Hz; saw volume correction=-0.45428 dB
+verify_synth_top: M5A stimulus has 4 note events, smoke: envelope completion not claimed; selected filter drive 0.75; pulse pulse29; saw cutoff 20000 Hz; saw volume correction -0.45428 dB; reference sha256 a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a
+verify_synth_top: selected 2x saw + causal 2x filter candidate; compile defines: VOICE_OSC_2X, VOICE_FILTER_2X, INJECT_BUG_ARTY_SDATA_ZERO
+verify_synth_top: simulator backend iverilog
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 67 writes sent, 4822 frames, 4821 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 67, writes drained 67, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 4822 frames, MISSING in 0, worst strobe cycle 175 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from ce32c9e-dirty, outdir /private/tmp/wt-arty-bringup/build/arty-rom-controls/ARTY_SDATA_ZERO; synth_top.v e476bfdfe93d, drum_kit.v 41bdf7a73aaa, drum_regs.v c20808c86b23; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; 2 source(s) taken from None: arty_a7_top.v, tb_top_bx.v
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 175 of 256, past the LRCLK transition at 128 (32 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..3863; modelling 4821 frames
+verify_synth_top: model peak |sample| 9063 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames
+verify_synth_top: FAIL -- of 4821 decoded I2S periods: 4527 differ from the model, 0 have L != R, 0 have a slot that is not 32 BCLK
+  first wire mismatch at period 294: model -21, wire 0, error +21 LSB
+  the core's own sample stream: 0 of 4822 frames differ from the model
+  the core is right and the wire is wrong: the defect is in i2s_tx or its timing

@@ -1,0 +1,65 @@
+{
+  "provenance": {
+    "instrument": "fpga/ext_io_checkpoint_experiments.py + .tcl @ d277e53",
+    "checkpoint": "/home/ubuntu/parasynth-arty-attempt02/build/arty/routed.dcp",
+    "checkpoint_sha256": "fdb3b45d7d7b108bf3246a5013f7ac6171f126956a4d0fcc2af1a20e499945fe",
+    "tool": "AMD Vivado v2025.1 (64-bit) SW Build 6140274, host repo-remote-wt-arty-bringup",
+    "session": "2026-09-22, run once in full; raw per-variant timing.rpt files were regenerated from the same committed inputs on a second session and deleted with the shared box directory before they could be fetched (the box was re-imaged between calls: uptime 5 min, /tools/Xilinx absent). This record is the first session's tool output, captured verbatim from the session log; regenerate the raw reports when the box is re-provisioned."
+  },
+  "variants": {
+    "A_baseline": {
+      "constraint_state": "committed routed checkpoint, no new constraints",
+      "wns_ns": 46.498, "whs_ns": 0.05, "setup_failing": 0, "hold_failing": 0,
+      "no_output_delay": 7,
+      "no_output_delay_ports": ["i2s_bclk", "i2s_lrclk", "i2s_sdata", "led[1]", "led[2]", "led[3]", "spi_miso"]
+    },
+    "B_impossible_budgets": {
+      "purpose": "red-first: prove the analysis reacts to the constraints",
+      "constraints": "i2s output delay +200 ns; spi_miso output delay +81.0 ns",
+      "wns_ns": -119.996, "setup_failing": 3
+    },
+    "C1_committed_i2s_min_minus_8_2": {
+      "purpose": "diagnose the phantom hold violations of -min -8.2",
+      "whs_ns": -9.874, "hold_failing": 2,
+      "failing_paths": [
+        {"destination": "i2s_lrclk", "slack_ns": -9.874, "data_delay_ns": 7.993},
+        {"destination": "i2s_sdata", "slack_ns": -9.577, "data_delay_ns": 4.755}
+      ],
+      "finding": "the check demands data arrive >= 8.2 ns AFTER the i2s_bclk port arrival (~9.667 ns): a minimum-skew demand at the coincident launch/capture pair. The RTL never switches SDATA/LRCLK on rising-edge cycles (rtl-sketch/i2s_tx.v:48), so the pair is a phantom and the demand is not the DAC's requirement."
+    },
+    "C2_committed_candidate": {
+      "constraints": "i2s_bclk_ext generated clock /4; i2s -max 8.200, -min 154.560; spi_miso -max 54.958/-min 0; led[*] 0/0 (all as separate -max and -min commands)",
+      "wns_ns": 14.954, "whs_ns": 0.05, "setup_failing": 0, "hold_failing": 0,
+      "no_output_delay": 1,
+      "no_output_delay_classification": "0 unconstrained (HIGH); 0 excused by false paths; 1 port with a timing clock defined on it (LOW): i2s_bclk",
+      "paths": {
+        "setup": [
+          {"source": "u_synth/u_spi/miso_reg/C", "destination": "spi_miso", "slack_ns": 14.954, "requirement_ns": 81.38, "data_delay_ns": 7.853},
+          {"source": "u_synth/u_i2s/sdata_reg/C", "destination": "i2s_sdata", "slack_ns": 71.804, "requirement_ns": 81.38, "data_delay_ns": 9.528},
+          {"source": "u_synth/cyc_reg[7]/C", "destination": "i2s_lrclk", "slack_ns": 72.476, "requirement_ns": 81.38, "data_delay_ns": 5.494},
+          {"destination": "led[1]", "slack_ns": 69.812}, {"destination": "led[2]", "slack_ns": 68.836}, {"destination": "led[3]", "slack_ns": 69.958}
+        ],
+        "hold": [
+          {"destination": "i2s_sdata", "slack_ns": 153.183},
+          {"destination": "i2s_lrclk", "slack_ns": 152.886},
+          {"destination": "spi_miso", "slack_ns": 3.661},
+          {"destination": "led[1]", "slack_ns": 3.086}, {"destination": "led[2]", "slack_ns": 4.18}, {"destination": "led[3]", "slack_ns": 3.694}
+        ]
+      }
+    },
+    "D_candidate_plus_bclk_output_delay": {
+      "purpose": "test putting a nominal output delay on the forwarded-clock port itself",
+      "whs_ns": -1.021, "hold_failing": 1, "setup_failing": 0,
+      "finding": "an output delay on i2s_bclk against its own generated clock fails a self-referential hold check (the data path IS the clock path). The generated clock stays the port's only constraint; Vivado classifies the port as 'no output delay but with a timing clock defined on it' (LOW)."
+    }
+  },
+  "derived_numbers": {
+    "miso_measured_clock_to_out_ns": 7.853,
+    "miso_max_guaranteed_readback_mhz_at_measured_co": 1.4768,
+    "i2s_setup_requirement_used_by_sta_ns": 81.38,
+    "i2s_setup_real_window_ns": 162.76,
+    "i2s_hold_skew_bound_ns": 154.56,
+    "i2s_hold_measured_skew_ns": "1.4-4.9",
+    "bclk_port_arrival_ns": "approx 9.667 (C1 hold analysis)"
+  }
+}
