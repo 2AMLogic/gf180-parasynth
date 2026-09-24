@@ -337,8 +337,14 @@ against the fixture itself: both patterns land every timed write on its
 frame from counter epochs 0, 32000 and 65300, peak queue 55 and 60 of 64,
 minimum deadline slack ~9000 frames; five injected controls (queue-unaware
 cut, tag-based setup split, missing wrap unwrap, corrupted packet, reset
-mid-phrase) each turn it red for their reason. Record:
-[reports/arty/rolling-playback](reports/arty/rolling-playback).
+mid-phrase, watermark schedule sent unthrottled) each turn it red for their
+reason. The host's ACTUAL bytes (STATUS polls included) were then replayed
+through the UART RTL wrapper: `demo` 508/508 writes, 0 off-frame, 0 I2S
+mismatches over 257,185 periods; `bar808-full` 394/394, 0, 0 over 266,695
+periods, each with 1 s of decay tail, against the model driven by the
+fixture's schedule; moving one intended event by one frame is caught.
+Records: [reports/arty/rolling-playback](reports/arty/rolling-playback)
+(`--rtl` is ~50 minutes a fixture). No physical playback yet.
 
 `--fixture bar808` is the COMPRESSED regression fixture (rests removed,
 157 ms of events), not the musical two bars. It is the stress case: once

@@ -1,0 +1,611 @@
+{
+  "tool": "fpga/verify_rolling_playback.py",
+  "baud": 115200,
+  "clean": {
+    "bar808-full@0": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 15962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": true
+    },
+    "bar808-full@32000": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 47962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": true
+    },
+    "bar808-full@65300": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 15726,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": true
+    },
+    "demo@0": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 15962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": true
+    },
+    "demo@32000": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 47962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": true
+    },
+    "demo@65300": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 202,
+      "static_intended": 202,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 15726,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": true
+    },
+    "bar808-full@0+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 193,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7786,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1523,
+        "event_packets": 193,
+        "status_polls": 289,
+        "phrase_span_frames": 202334,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.44,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": true
+    },
+    "bar808-full@65300+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 193,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7550,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1523,
+        "event_packets": 193,
+        "status_polls": 289,
+        "phrase_span_frames": 202334,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.44,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": true
+    },
+    "demo@0+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 307,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7786,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1245,
+        "event_packets": 307,
+        "status_polls": 322,
+        "phrase_span_frames": 192824,
+        "phrase_span_s": 4.0172,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.227,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": true
+    },
+    "demo@65300+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 307,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7550,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1245,
+        "event_packets": 307,
+        "status_polls": 322,
+        "phrase_span_frames": 192824,
+        "phrase_span_s": 4.0172,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.227,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": true
+    },
+    "bar808@0+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 107,
+      "timed_intended": 106,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7786,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1514,
+        "event_packets": 107,
+        "status_polls": 15,
+        "phrase_span_frames": 7083,
+        "phrase_span_s": 0.1476,
+        "counter_wraps_crossed": 0,
+        "host_sim_seconds": 1.367,
+        "spreading": {
+          "timed_writes": 106,
+          "moved": 68,
+          "anchors": 15,
+          "anchors_moved": 13,
+          "worst_anchor_shift_frames": 10,
+          "worst_anchor_shift_ms": 0.208
+        }
+      },
+      "ok": true
+    },
+    "bar808@65300+note45": {
+      "rc": 0,
+      "reasons": [],
+      "static_executed": 207,
+      "static_intended": 207,
+      "timed_executed": 107,
+      "timed_intended": 106,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "performance_origin": 7550,
+      "hold_frames_observed": 1879,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 1514,
+        "event_packets": 107,
+        "status_polls": 15,
+        "phrase_span_frames": 7083,
+        "phrase_span_s": 0.1476,
+        "counter_wraps_crossed": 0,
+        "host_sim_seconds": 1.367,
+        "spreading": {
+          "timed_writes": 106,
+          "moved": 68,
+          "anchors": 15,
+          "anchors_moved": 13,
+          "worst_anchor_shift_frames": 10,
+          "worst_anchor_shift_ms": 0.208
+        }
+      },
+      "ok": true
+    }
+  },
+  "controls": {
+    "ROLL_QUEUE_UNAWARE": {
+      "control": "ROLL_QUEUE_UNAWARE",
+      "fixture": "demo",
+      "intended_reason": "event-queue overflow reported by the device",
+      "caught": true,
+      "reasons": [
+        "cli rc 2: uart_host: REFUSED -- the device holds 64 queued events but 65 sent events are not yet due: 1 never queued (the device reported ERR [2]) -- refusing to continue a phrase with a hole in it",
+        "device errors [2], drops 1",
+        "119 timed writes executed, 306 intended",
+        "queue peaked at 64, above the planned bound 60: the cut's occupancy model is not conservative"
+      ],
+      "rc": 2,
+      "timed": [
+        119,
+        306
+      ],
+      "static": [
+        202,
+        202
+      ],
+      "device_errors": [
+        2
+      ]
+    },
+    "ROLL_TAG_SPLIT": {
+      "control": "ROLL_TAG_SPLIT",
+      "fixture": "bar808-full",
+      "intended_reason": "in-pattern writes executed as setup, missing from the music",
+      "caught": true,
+      "reasons": [
+        "static image not executed exactly, in order",
+        "150 timed writes executed, 192 intended",
+        "143 timed writes off their frame (first: at 16808, intended 16804)",
+        "140 timed writes with wrong values/order"
+      ],
+      "rc": 0,
+      "timed": [
+        150,
+        192
+      ],
+      "static": [
+        244,
+        202
+      ],
+      "device_errors": []
+    },
+    "ROLL_NO_UNWRAP": {
+      "control": "ROLL_NO_UNWRAP",
+      "fixture": "bar808-full",
+      "intended_reason": "phrase not delivered past the first half-revolution",
+      "caught": true,
+      "reasons": [
+        "cli rc 2: uart_host: REFUSED -- the device's frame counter did not advance (STATUS f47305); the phrase's dues will die -- refusing to re-time the phrase",
+        "36 timed writes executed, 192 intended"
+      ],
+      "rc": 2,
+      "timed": [
+        36,
+        192
+      ],
+      "static": [
+        202,
+        202
+      ],
+      "device_errors": []
+    },
+    "WATERMARK_PRELOAD": {
+      "control": "WATERMARK_PRELOAD",
+      "fixture": "bar808",
+      "intended_reason": "a held-back schedule sent as preload overflows the queue; the CLI exits FAIL",
+      "caught": true,
+      "reasons": [
+        "cli rc 1: uart_host: FAIL -- 7 of 314 packets were never ACKed by the device",
+        "device errors [2], drops 7",
+        "host recorded no performance origin"
+      ],
+      "rc": 1,
+      "timed": [
+        100,
+        106
+      ],
+      "static": [
+        207,
+        207
+      ],
+      "device_errors": [
+        2
+      ]
+    },
+    "corrupt-byte": {
+      "control": "corrupt-byte",
+      "fixture": "bar808-full",
+      "intended_reason": "checksum ERR; the host sees the missing event at its next window and REFUSES rather than play on with a hole",
+      "caught": true,
+      "reasons": [
+        "cli rc 2: uart_host: REFUSED -- the device holds 20 queued events but 21 sent events are not yet due: 1 never queued (the device reported ERR [5]) -- refusing to continue a phrase with a hole in it",
+        "device errors [5], drops 0",
+        "125 timed writes executed, 192 intended",
+        "6 timed writes off their frame (first: at 138840, intended 138838)",
+        "6 timed writes with wrong values/order"
+      ],
+      "rc": 2,
+      "timed": [
+        125,
+        192
+      ],
+      "static": [
+        202,
+        202
+      ],
+      "device_errors": [
+        5
+      ]
+    },
+    "reset-mid": {
+      "control": "reset-mid",
+      "fixture": "demo",
+      "intended_reason": "host REFUSES after the reset instead of continuing",
+      "caught": true,
+      "reasons": [
+        "cli rc 2: uart_host: REFUSED -- the device reset mid-phrase (BOOT on the wire): its queue and patch are gone -- refusing to continue a phrase with a hole in it",
+        "57 timed writes executed, 306 intended",
+        "2 timed writes off their frame (first: at 68959, intended 46775)",
+        "2 timed writes with wrong values/order"
+      ],
+      "rc": 2,
+      "timed": [
+        57,
+        306
+      ],
+      "static": [
+        202,
+        202
+      ],
+      "device_errors": []
+    }
+  },
+  "state": "PASS",
+  "rtl": {
+    "bar808-full": {
+      "state": "PASS",
+      "capture": {
+        "rows": 698,
+        "writes": 202,
+        "events": 192,
+        "last_due": 218695
+      },
+      "comparison": {
+        "scenario": "replay",
+        "inject": null,
+        "writes_sent": 394,
+        "writes_seen": 394,
+        "writes_bad": 0,
+        "frame_pred_bad": 0,
+        "frame_no_pred": 0,
+        "live_phase_jitter": 34,
+        "x_bad": 0,
+        "acks_seen": 394,
+        "errs_seen": 0,
+        "err_codes": {},
+        "boots_seen": 1,
+        "ack_missing": 0,
+        "status_bad": 0,
+        "wire_mismatch": 0,
+        "swap": 0,
+        "width": 0,
+        "core_bad": 0,
+        "periods": 266695,
+        "collisions": 0,
+        "busy_at_tick": 0,
+        "overrun": 0,
+        "overflow": 0,
+        "frames_no_sample": 0,
+        "worst_strobe_cycle": 195
+      },
+      "detail": [],
+      "reused_rtl_run": false,
+      "control": {
+        "caught": true,
+        "victim_index": 427,
+        "frame_pred_bad": 1,
+        "wire_mismatch": 21341,
+        "detail": [
+          "write 298 (a=0xdd): contract frame 119149, landed 119148",
+          "seg 0 period 119155: model 762, wire 763, error +1 LSB",
+          "seg 0 period 119158: model 2410, wire 2411, error +1 LSB"
+        ]
+      }
+    }
+  }
+}
