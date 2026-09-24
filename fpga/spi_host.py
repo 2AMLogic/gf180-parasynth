@@ -438,6 +438,7 @@ class MusicHost:
         self.w: list = []
         self.events: list = []                     # (frame, what) for the report
         self._bd_decay = 5.0
+        self.load_span = None                      # (first, end, frame) of load()
 
     # -- primitives
     def _put(self, frame, flag, sec, addr, data, tag="", anchor=False):
@@ -455,6 +456,7 @@ class MusicHost:
     # -- boot: the patch image and the kit
     def load(self, frame: int = 0, *, dvol: float = 0.45, bvol: float = 0.45,
              accents=None) -> "MusicHost":
+        first = len(self.w)
         r = self.regs
         for k, s in enumerate(r["waves"]):
             self.voice(frame, stm.A_WAVE + k, WAVE_CODE[s], tag="wave")
@@ -474,6 +476,11 @@ class MusicHost:
         for st, lvl in enumerate(accents or [1.0] * dx.N_STOPS):
             self.drum(frame, dx.A_ACCENT + st, dx.accent_reg(lvl), tag="accent")
         self.events.append((frame, f"load: patch + kit ({len(self.w)} writes)"))
+        # which writes ARE the configuration image, by position: the tags
+        # cannot say (a hit writes "accent" and a key writes "glide" too),
+        # and a link that delivers setup separately from the performance
+        # needs to know exactly what setup was
+        self.load_span = (first, len(self.w), int(frame))
         return self
 
     # -- the keyboard

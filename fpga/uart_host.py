@@ -476,36 +476,52 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     return writes
 
 
-LOAD_TAGS = {"wave", "weight", "amp", "fenv", "cut_lo", "cut_hi", "k", "gain",
-             "ogain", "glide", "vol", "dvol", "bvol", "kit", "accent"}
+def fixture_split(fixture: str) -> tuple:
+    """(static, timed, n_frames, host): a scripted fixture's writes, spread
+    by the link's own rules, split into the configuration image its
+    `MusicHost.load()` emitted and everything after it. The split is by
+    POSITION (`load_span`), never by tag: a hit writes an "accent" and a
+    key writes a "glide" too, and treating those as setup would play every
+    accent of the pattern at t=0 and none on its step."""
+    import fixtures
+    import spi_host as sh
+    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    if host.load_span is None:
+        raise ValueError(f"fixture {fixture!r} has no load(): nothing to "
+                         "deliver as static configuration")
+    first, end, load_frame = host.load_span
+    load_ids = {id(w) for w in host.w[first:end]}
+    raw = sorted(host.w, key=lambda w: w.frame)      # stable: load order kept
+    # a timed write at or before the load frame would be ambiguous: it is
+    # music scheduled into the setup. Refuse rather than guess.
+    early = [w for w in raw if id(w) not in load_ids and w.frame <= load_frame]
+    if early:
+        raise ValueError(f"fixture {fixture!r} schedules {len(early)} timed "
+                         f"writes at or before its load frame {load_frame}")
+    is_load = [id(w) in load_ids for w in raw]
+    ws = sh.feasible(raw, sh.LinkTiming.contract_max())    # 1:1, order kept
+    static = [w for w, s in zip(ws, is_load) if s]
+    timed = [w for w, s in zip(ws, is_load) if not s]
+    return static, timed, n_frames, host
 
 
 def phrase_static_and_events(fixture: str) -> tuple:
     """A scripted phrase SPLIT the way the link delivers it: the fixture's
-    configuration image (the `MusicHost.load()` writes -- patch, kit,
-    accents) as live writes carrying no due, and its timed events (keys,
-    hits, knobs, the timed coefficient sequences) as scheduled events.
+    configuration image (`MusicHost.load()`: patch, kit, initial accents)
+    as live writes carrying no due, and everything after it (keys, hits,
+    their accents, knobs, the timed coefficient sequences) as scheduled
+    events at their frames.
 
-    The split is not a convenience: the load image is 60-90 writes due at
-    musical t=0, and the UART wire delivers one event packet per 41.8 frames
-    at 115200 -- a due'd load image would die under the wire no matter how
-    the phrase rolled. As live writes it applies over the first ~60 ms
-    (wire-paced, the device drains 2 slots/frame) while the music is still
-    ROLLING_START_FRAMES away. The tags are the fixture's own structure,
-    not a heuristic."""
-    import fixtures
-    import spi_host as sh
-    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
-    link = sh.LinkTiming.contract_max()
-    ws = sh.feasible(sorted(host.w, key=lambda w: w.frame), link)
-    static, events = [], []
-    for w in ws:
-        if w.tag in LOAD_TAGS:
-            static.append((w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF))
-        else:
-            events.append((w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF))
-    end = (max(d for d, *_ in events) + 64) if events else n_frames
-    return static, events, end
+    The split is not a convenience: the load image is 224 writes due at
+    musical t=0, and the UART wire delivers one event packet per 41.8
+    frames at 115200 -- a due'd load image would die under the wire no
+    matter how the phrase rolled. As live writes it applies ahead of the
+    music, which starts ROLLING_START_FRAMES after the image completes."""
+    static, timed, n_frames, _host = fixture_split(fixture)
+    st = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static]
+    ev = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed]
+    end = (max(d for d, *_ in ev) + 64) if ev else n_frames
+    return st, ev, end
 
 
 def phrase_events(fixture: str) -> tuple:
@@ -615,6 +631,8 @@ class Bridge:
         self.baud = baud
         self.buf = b""
         self.origin = None
+        self.performance_origin = None   # device frame of a rolled phrase's t=0
+        self.boots_seen = 0              # BOOT packets: the device reset
         self.lead_frames = None
         self.status_round_trip_s = None
         self.acks_seen = 0
@@ -631,6 +649,8 @@ class Bridge:
             for p in pkts:
                 if p.kind == "ack":
                     self.acks_seen += 1
+                elif p.kind == "boot":
+                    self.boots_seen += 1
                 if p.kind in kinds:
                     return p
             now = self.clock.monotonic()
@@ -680,6 +700,7 @@ class Bridge:
             # in the buffer are still deliveries: count them before the discard
             for p, _n in [scan_packets(self.buf)]:
                 self.acks_seen += sum(1 for q in p if q.kind == "ack")
+                self.boots_seen += sum(1 for q in p if q.kind == "boot")
             self.buf = b""
             t0 = self.clock.monotonic()
             self.send([Placed(0, "status", pkt_status(), 0, 0)], paced=False)
@@ -822,6 +843,7 @@ class Bridge:
             # roller adds its own windows to the expected-ACK total.
             self._run_acks_expected = len(rows_live)
             ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
+            self.performance_origin = origin2 & 0xFFFF
             rows_ev = self._roll_events(ev_abs, baud=baud, quiet=quiet)
             rows += rows_ev
             if not quiet:
@@ -880,6 +902,7 @@ class Bridge:
         origin = anchor.frame
         lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
         p0 = origin + lead + ROLLING_START_FRAMES   # musical t=0 on the device
+        self.performance_origin = p0 & 0xFFFF       # recorded for replay checks
         ev_rows = self._roll_events([(p0 + c[1], c) for c in events],
                                     baud=baud, quiet=quiet)
         return static_rows + ev_rows
@@ -905,6 +928,7 @@ class Bridge:
         # (wrap-safe because consecutive answers are far less than half a
         # revolution apart) and COUNTED across revolutions
         anchor = self.status()
+        boots0 = self.boots_seen
         # place this anchor on ev_abs's own scale: the callers built it from
         # an earlier STATUS a few frames ago, so the signed 16-bit distance
         # to the first due is exact even if the counter wrapped in between
@@ -924,10 +948,25 @@ class Bridge:
             anchor = self.status()
             before = progress
             origin = unwrap(anchor.frame)
-            if all_rows and progress == before:
-                raise Refused("the device's frame counter is not advancing; "
-                              "the phrase's dues will die -- refusing to "
-                              "re-time the phrase")
+            if self.boots_seen != boots0:
+                raise Refused("the device reset mid-phrase (BOOT on the wire): "
+                              "its queue and patch are gone -- refusing to "
+                              "continue a phrase with a hole in it")
+            if all_rows and progress <= before:
+                raise Refused("the device's frame counter did not advance "
+                              f"(STATUS f{anchor.frame}); the phrase's dues "
+                              "will die -- refusing to re-time the phrase")
+            # every event sent and due after this anchor must still be
+            # queued: fewer means the device lost them (a reset clears the
+            # queue by construction) and the music has a hole the host
+            # cannot see any other way. Only dues >= origin + 2 count: an
+            # event due at the anchor frame may fire as STATUS is answered.
+            owed = sum(1 for d in sent_dues if d >= origin + 2)
+            if anchor.evq < owed:
+                raise Refused(f"the device holds {anchor.evq} queued events "
+                              f"but {owed} sent events are not yet due -- "
+                              "the queue was lost (reset?); refusing to "
+                              "continue a phrase with a hole in it")
             lead = MIN_LEAD_FRAMES + int((self.status_round_trip_s or 0.0) * SR) + 1
             try:
                 batch, wait = rolling_batch(ev_abs, i, origin, lead, baud,
@@ -1453,7 +1492,10 @@ def budget(baud: int = DEFAULT_BAUD) -> dict:
     }
 
 
-def main(argv=None) -> int:
+def main(argv=None, *, bridge_factory=None) -> int:
+    """`bridge_factory(port, baud)` replaces `Bridge` for tests and replay
+    capture (uart_device_sim.SimSerial): everything else is the CLI as shipped."""
+    open_bridge = bridge_factory or Bridge
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", default=os.environ.get("UART_BRIDGE_PORT", ""))
@@ -1539,11 +1581,11 @@ def main(argv=None) -> int:
             for due, flag, sec, addr, data in events:
                 commands.append(("event", due, flag, sec, addr, data))
     if a.cmd == "status":
-        bridge = Bridge(a.port, a.baud)
+        bridge = open_bridge(a.port, a.baud)
         print(bridge.status().describe())
         return 0
     if a.cmd == "abort":
-        bridge = Bridge(a.port, a.baud)
+        bridge = open_bridge(a.port, a.baud)
         bridge.send([Placed(0, "abort", pkt_abort(), 0, 0)])
         print("sent abort (queued events discarded)")
         return 0
@@ -1594,7 +1636,7 @@ def main(argv=None) -> int:
               "use --dry-run for the schedule without hardware", file=sys.stderr)
         return 2
     try:
-        bridge = Bridge(a.port, a.baud)
+        bridge = open_bridge(a.port, a.baud)
         rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
     except Refused as exc:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
