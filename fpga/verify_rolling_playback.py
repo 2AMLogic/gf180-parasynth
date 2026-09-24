@@ -59,6 +59,7 @@ import uart_host as uh                            # noqa: E402
 
 SR = uh.SR
 FIXTURES = ("bar808-full", "demo")
+RTL_TIMEOUT_S = 10_800
 TAIL_S = 1.0          # simulated time after the host returns: decay tails
 ANCHOR_TAGS = {"stops-on", "gate", "trig"}        # the audible instants
 
@@ -318,7 +319,10 @@ def rtl_replay(fixture: str, outdir: Path) -> dict:
     cap = write_rtl_capture(run, outdir / fixture)
     rr = vub.simulate_replay(str(outdir / fixture),
                              ROOT / "build/rolling-rtl" / fixture,
-                             tail_frames=int(TAIL_S * SR))
+                             tail_frames=int(TAIL_S * SR),
+                             # ~258k frames of the full wrapper: 3600 s
+                             # reached 87% on a loaded machine (62 fr/s)
+                             timeout_s=RTL_TIMEOUT_S)
     if rr is None:
         return {"state": "REFUSED", "reason": "RTL replay did not run",
                 "capture": cap}

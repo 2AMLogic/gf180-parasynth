@@ -384,7 +384,8 @@ def rows_from_capture(prefix):
     return items, [rows], plan.get("origin", 0), plan.get("baud", uh.DEFAULT_BAUD)
 
 
-def simulate_replay(prefix, outdir, inject=None, tail_frames=None):
+def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
+                    timeout_s=3600):
     """Run the wrapper bench on a CLI capture (see rows_from_capture).
     `tail_frames` extends the run (and the model comparison) past the last
     due, so decay and release tails are on the wire, not cut off."""
@@ -422,10 +423,10 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None):
                f"+txd={files['txd']}", f"+samp={files['samp']}",
                f"+frames={tail_frames}"]
     try:
-        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=3600,
+        r = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_s,
                            cwd=str(ROOT / "rtl-sketch"))
     except subprocess.TimeoutExpired:
-        print("verify_uart_bridge: simulation timed out")
+        print(f"verify_uart_bridge: simulation timed out after {timeout_s}s")
         return None
     report = [l for l in r.stdout.splitlines() if l.startswith("tb_uart_bx")]
     (outdir / "transcript.txt").write_text("\n".join(report) + "\n")
