@@ -92,6 +92,30 @@ def render_point(ms):
     return row
 
 
+# attack_fit's KNOWN-SIGNAL domain (measure_mono_m1a_reference.attack_fit
+# docstring): spans 0.5-20 ms, shapes p in {0.5, 1, 2}. The fit also searches
+# p = 3, 4 and has a minimum span of 32 samples (coarse 1.0 ms grid, -16
+# samples of refinement), so its smallest reportable 10-90% attack is
+# 0.667 ms * (0.9**.25 - 0.1**.25) = 0.2745 ms -- a FLOOR, not a measurement.
+QUALIFIED_SHAPES = (0.5, 1.0, 2.0)
+QUALIFIED_RAMP_MS = (0.5, 20.0)
+FIT_FLOOR_RAMP_MS = 32 * 1000 / 48000
+
+
+def fit_in_domain(fit):
+    return (fit["shape_p"] in QUALIFIED_SHAPES
+            and QUALIFIED_RAMP_MS[0] <= fit["ramp_ms"] <= QUALIFIED_RAMP_MS[1]
+            and fit["ramp_ms"] > FIT_FLOOR_RAMP_MS + 1e-9)
+
+
+def nominal_vca_10_90_ms(attack_ms):
+    """Known answer for the model's AMPLITUDE envelope alone: a linear ramp
+    over max(1, int(a_s*48000)) frames, 10-90% = 0.8 of it. The output also
+    carries the unchanged filter envelope, so this bounds plausibility; it is
+    not the output's exact 10-90%."""
+    return 0.8 * max(1, int(attack_ms / 1000 * 48000)) * 1000 / 48000
+
+
 def evaluate(row, selected):
     """Attack pass, preservation against the selected patch, and context."""
     m, s = row["measurements"], selected["diagnostics"]
@@ -100,8 +124,14 @@ def evaluate(row, selected):
                   "model_ms": e["attack_10_90_ms"]["model"],
                   "reference_ms": e["attack_10_90_ms"]["reference"],
                   "error_ms": e["attack_10_90_ms"]["model"] - e["attack_10_90_ms"]["reference"],
-                  "fit_explained": e["attack_fit"]["model"]["explained_ratio"]}
+                  "fit_explained": e["attack_fit"]["model"]["explained_ratio"],
+                  "model_fit": e["attack_fit"]["model"],
+                  "model_fit_in_qualified_domain": fit_in_domain(e["attack_fit"]["model"]),
+                  "reference_fit_in_qualified_domain": fit_in_domain(e["attack_fit"]["reference"]),
+                  "model_minus_nominal_vca_ms": e["attack_10_90_ms"]["model"]
+                                                - nominal_vca_10_90_ms(row["attack_ms"])}
                  for e in events]
+    model_in_domain = all(e["model_fit_in_qualified_domain"] for e in per_event)
     lost_props = sorted(n for n, p in s["properties"].items()
                         if passes(p) and not passes(m["properties"][n]))
     lost_partials = sorted(volume.passed_partials(s) - volume.passed_partials(m))
@@ -127,7 +157,13 @@ def evaluate(row, selected):
             "lost_per_note_harmonic_passes": [list(x) for x in lost_partials],
             "gain_errors_db": gains, "preserved": preserved,
             "components": row["components"],
-            "candidate": attack_pass and preserved}
+            "model_fits_in_qualified_domain": model_in_domain,
+            "nominal_vca_10_90_ms": nominal_vca_10_90_ms(row["attack_ms"]),
+            # a pass read from out-of-domain model fits is REFUSED, not a pass
+            "candidate": attack_pass and preserved and model_in_domain,
+            "refused_reason": (None if model_in_domain else
+                               "model attack fit outside the estimator's qualified domain "
+                               "(shape p in {0.5,1,2}, span 0.5-20 ms, above the 0.667 ms fit floor)")}
 
 
 def summarize():
@@ -162,13 +198,17 @@ def summarize():
               "scope": "patch-only; no envelope implementation change; harmonic shape "
                        "remains an independent failure, so no point is a whole-case pass"}
     (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    print(f"{'attack':>7} {'ev1':>7} {'ev2':>7} {'ev3':>7} {'worst':>7} {'hist m/r':>12}  attack preserved  lost")
+    report["reference_fits_in_qualified_domain"] = [
+        e["reference_fit_in_qualified_domain"] for e in table[0]["per_event"]]
+    (OUT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(f"{'attack':>7} {'ev1':>7} {'ev2':>7} {'ev3':>7} {'worst':>7} {'hist m/r':>12}  attack preserved domain lost")
     for r in table:
         e = [x["error_ms"] for x in r["per_event"]]
         h = r["history_effect_ms"]
         print(f"{r['attack_ms']:>7g} {e[0]:>+7.2f} {e[1]:>+7.2f} {e[2]:>+7.2f} "
               f"{r['attack_property_error_ms']:>+7.2f} {h['model']:>+6.2f}/{h['reference']:+.2f}  "
               f"{'PASS' if r['attack_pass'] else 'fail':<6} {'yes' if r['preserved'] else 'NO':<9} "
+              f"{'in' if r['model_fits_in_qualified_domain'] else 'OUT':<6} "
               f"{r['lost_property_passes'] + r['lost_per_note_harmonic_passes']}")
     print("conclusion:", report["conclusion"], report["candidates"])
 

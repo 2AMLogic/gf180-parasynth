@@ -27,6 +27,7 @@ def test_controls_turn_gates_red_and_green():
     fast = copy.deepcopy(row)
     for e in fast["measurements"]["events"]:
         e["attack_10_90_ms"]["model"] = e["attack_10_90_ms"]["reference"] + 4.9
+        e["attack_fit"]["model"].update(shape_p=1.0, ramp_ms=3.0)
     assert sweep.evaluate(fast, record)["candidate"]
     # ...but losing the Pitch pass or one partial pass must block the candidate
     lossy = copy.deepcopy(fast)
@@ -48,3 +49,17 @@ def test_controls_turn_gates_red_and_green():
 def test_off_grid_value_refuses():
     with pytest.raises(sweep.bass.Refused, match="grid"):
         sweep.render_point(7.0)
+
+
+def test_out_of_domain_fit_refuses_a_gate_pass():
+    """The fit's 0.2745 ms floor (32 samples at p=4) read as a model attack
+    passed the gate at 3 ms, where the VCA alone gives 2.4 ms."""
+    record, row = _selected_as_row()
+    floor = copy.deepcopy(row)
+    for e in floor["measurements"]["events"]:
+        e["attack_10_90_ms"]["model"] = e["attack_10_90_ms"]["reference"]
+        e["attack_fit"]["model"].update(shape_p=4.0, ramp_ms=sweep.FIT_FLOOR_RAMP_MS)
+    out = sweep.evaluate(floor, record)
+    assert out["attack_pass"] and out["preserved"] and not out["candidate"]
+    assert out["refused_reason"]
+    assert sweep.nominal_vca_10_90_ms(10.0) == pytest.approx(8.0)
