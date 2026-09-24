@@ -131,6 +131,7 @@ class UartDeviceSim:
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
         self.evq_peak = 0                       # most events ever held at once
+        self.frame_freeze_t = None              # test knob: audio clock stops
         self.resets = 0
         self._fires_this_frame = 0
         self._fire_frame = -1
@@ -322,6 +323,10 @@ class UartDeviceSim:
         return (frame - self.epoch) & 0xFFFF
 
     def _frame_at(self, t: float) -> int:
+        if self.frame_freeze_t is not None:
+            # the audio clock stopped (the counter and the queue with it);
+            # the UART parser runs on its own clock and still answers
+            t = min(t, self.frame_freeze_t)
         return (self.epoch + int((t - self._t0) * SR)) & 0xFFFF
 
     def _mono_of_frame(self, frame: int, *, mid: bool = True) -> float:

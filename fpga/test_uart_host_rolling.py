@@ -189,3 +189,51 @@ def test_compressed_bar808_fits_once_setup_is_separated(capsys):
     assert "FEASIBLE (preload)" in out, out
     assert uh.main(["--dry-run", "play", "--fixture", "bar808",
                     "--baud", "19200"]) == 2
+
+
+# ---- occupancy across windows, not per window ---------------------------------
+def _schedule_peak(rows):
+    """Most events the device holds at once over the WHOLE schedule: each
+    event occupies the queue from its acceptance to its due."""
+    ev = [r for r in rows if r.kind == "event"]
+    return max(sum(1 for q in ev if q.accept_frame <= r.accept_frame <= q.due)
+               for r in ev)
+
+
+def _dense_far_stream(n=240, spacing=45, first=20_000):
+    # every due far out and inside the horizon, spaced just wider than one
+    # packet: each window alone fits, and windows pile up unless the cut
+    # counts what earlier windows left queued (the reviewer's 100-slot case)
+    return [("event", first + j * spacing, 0, 0, 0x20, j) for j in range(n)]
+
+
+def test_whole_schedule_occupancy_stays_within_the_bound():
+    bound = uh.EVENT_QUEUE_DEPTH - uh.ROLLING_QUEUE_MARGIN
+    for name in ("bar808-full", "demo"):
+        rows, _w = uh.plan_rolling_virtual(fixture_commands(name))
+        assert _schedule_peak(rows) <= bound, name
+    rows, _w = uh.plan_rolling_virtual(_dense_far_stream())
+    assert _schedule_peak(rows) <= bound
+
+
+def test_queue_unaware_cut_overfills_across_windows(monkeypatch):
+    # the control for the test above: per-window checks alone pass every
+    # window and still ask the device for more than 64 slots
+    monkeypatch.setattr(uh, "INJECT_BUGS", {"ROLL_QUEUE_UNAWARE"})
+    rows, _w = uh.plan_rolling_virtual(_dense_far_stream())
+    assert _schedule_peak(rows) > uh.EVENT_QUEUE_DEPTH
+
+
+# ---- the WIP's musical control, on the faithful device ------------------------
+def test_frozen_device_refuses_rather_than_retimes():
+    """The device's counter stops 1.5 s into the phrase (host clock runs
+    on). The roller must REFUSE -- shifting t=0 to rescue the remaining
+    dues would be a musical edit -- and nothing after the freeze fires."""
+    h = vrp.Harness()
+    h.sim.frame_freeze_t = 1.5
+    br = uh.Bridge.on_serial(h.ser, clock=h.clock)
+    with pytest.raises(uh.Refused, match="frame counter"):
+        quiet(br.run_rolling, _run_commands("bar808-full"), quiet=True)
+    assert h.sim.status_requests > 0 and not h.sim.errors
+    fired = [w for w in h.sim.writes if w[5] == "event"]
+    assert 0 < len(fired) < len(vrp.intended("bar808-full")["timed"])
