@@ -1,0 +1,6 @@
+tb_uart_bx: SEG 0 origin_tcc 20 periods 0 strobes 0
+tb_uart_bx: ran 7942 frames in 1 segments; 7941 I2S periods decoded
+tb_uart_bx: writes drained 93, spi+uart slot collisions 0 (must be 0)
+tb_uart_bx: sample strobed in 7942 frames, MISSING in 0, worst strobe cycle 175 of 256
+tb_uart_bx: datapath busy at a tick: 0; core overrun 0; link overflow 0
+tb_uart_bx: TX bytes captured 187

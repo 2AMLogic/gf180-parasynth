@@ -1,0 +1,2419 @@
+{
+  "cells": [
+    {
+      "name": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
+      "site": "DSP48_X1Y14",
+      "AREG": "2",
+      "BREG": "0",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT PCOUT[47] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_106 loads=1",
+        "FANOUT PCOUT[46] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_107 loads=1",
+        "FANOUT PCOUT[45] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_108 loads=1",
+        "FANOUT PCOUT[44] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_109 loads=1",
+        "FANOUT PCOUT[43] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_110 loads=1",
+        "FANOUT PCOUT[42] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_111 loads=1",
+        "FANOUT PCOUT[41] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_112 loads=1",
+        "FANOUT PCOUT[40] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_113 loads=1",
+        "FANOUT PCOUT[39] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_114 loads=1",
+        "FANOUT PCOUT[38] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_115 loads=1",
+        "FANOUT PCOUT[37] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_116 loads=1",
+        "FANOUT PCOUT[36] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_117 loads=1",
+        "FANOUT PCOUT[35] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_118 loads=1",
+        "FANOUT PCOUT[34] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_119 loads=1",
+        "FANOUT PCOUT[33] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_120 loads=1",
+        "FANOUT PCOUT[32] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_121 loads=1",
+        "FANOUT PCOUT[31] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_122 loads=1",
+        "FANOUT PCOUT[30] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_123 loads=1",
+        "FANOUT PCOUT[29] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_124 loads=1",
+        "FANOUT PCOUT[28] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_125 loads=1",
+        "FANOUT PCOUT[27] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_126 loads=1",
+        "FANOUT PCOUT[26] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_127 loads=1",
+        "FANOUT PCOUT[25] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_128 loads=1",
+        "FANOUT PCOUT[24] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_129 loads=1",
+        "FANOUT PCOUT[23] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_130 loads=1",
+        "FANOUT PCOUT[22] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_131 loads=1",
+        "FANOUT PCOUT[21] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_132 loads=1",
+        "FANOUT PCOUT[20] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_133 loads=1",
+        "FANOUT PCOUT[19] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_134 loads=1",
+        "FANOUT PCOUT[18] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_135 loads=1",
+        "FANOUT PCOUT[17] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_136 loads=1",
+        "FANOUT PCOUT[16] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_137 loads=1",
+        "FANOUT PCOUT[15] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_138 loads=1",
+        "FANOUT PCOUT[14] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_139 loads=1",
+        "FANOUT PCOUT[13] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_140 loads=1",
+        "FANOUT PCOUT[12] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_141 loads=1",
+        "FANOUT PCOUT[11] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_142 loads=1",
+        "FANOUT PCOUT[10] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_143 loads=1",
+        "FANOUT PCOUT[9] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_144 loads=1",
+        "FANOUT PCOUT[8] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_145 loads=1",
+        "FANOUT PCOUT[7] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_146 loads=1",
+        "FANOUT PCOUT[6] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_147 loads=1",
+        "FANOUT PCOUT[5] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_148 loads=1",
+        "FANOUT PCOUT[4] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_149 loads=1",
+        "FANOUT PCOUT[3] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_150 loads=1",
+        "FANOUT PCOUT[2] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_151 loads=1",
+        "FANOUT PCOUT[1] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_152 loads=1",
+        "FANOUT PCOUT[0] net u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_n_153 loads=1"
+      ],
+      "p_fanout_count": 48,
+      "dynamic_nets": {
+        "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0_i_2_n_0": [
+          2,
+          0
+        ],
+        "u_synth/u_voice/osc2_path/p0/pair/dec/prod1": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000000",
+          "x": "0",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110000",
+          "x": "0",
+          "y": "0",
+          "z": "C"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p0/pair/dec/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "logic Q (FDRE)",
+      "B_source": "CONST 000111101001110000",
+      "C_source": "logic P[0] (DSP48E1),P[10] (DSP48E1),P[11] (DSP48E1),P[12] (DSP48E1)",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "n_0_418",
+      "RSTA_driver": "O (LUT6)",
+      "RSTB_net": "<const0>",
+      "RSTB_driver": "G (GND)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "out_valid0",
+      "CEA1_driver": "O (LUT2)",
+      "CEA2_net": "out_valid0",
+      "CEA2_driver": "O (LUT2)",
+      "CEB1_net": "<const0>",
+      "CEB1_driver": "G (GND)",
+      "CEB2_net": "<const0>",
+      "CEB2_driver": "G (GND)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0",
+      "site": "DSP48_X1Y21",
+      "AREG": "2",
+      "BREG": "0",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT PCOUT[47] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_106 loads=1",
+        "FANOUT PCOUT[46] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_107 loads=1",
+        "FANOUT PCOUT[45] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_108 loads=1",
+        "FANOUT PCOUT[44] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_109 loads=1",
+        "FANOUT PCOUT[43] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_110 loads=1",
+        "FANOUT PCOUT[42] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_111 loads=1",
+        "FANOUT PCOUT[41] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_112 loads=1",
+        "FANOUT PCOUT[40] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_113 loads=1",
+        "FANOUT PCOUT[39] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_114 loads=1",
+        "FANOUT PCOUT[38] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_115 loads=1",
+        "FANOUT PCOUT[37] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_116 loads=1",
+        "FANOUT PCOUT[36] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_117 loads=1",
+        "FANOUT PCOUT[35] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_118 loads=1",
+        "FANOUT PCOUT[34] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_119 loads=1",
+        "FANOUT PCOUT[33] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_120 loads=1",
+        "FANOUT PCOUT[32] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_121 loads=1",
+        "FANOUT PCOUT[31] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_122 loads=1",
+        "FANOUT PCOUT[30] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_123 loads=1",
+        "FANOUT PCOUT[29] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_124 loads=1",
+        "FANOUT PCOUT[28] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_125 loads=1",
+        "FANOUT PCOUT[27] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_126 loads=1",
+        "FANOUT PCOUT[26] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_127 loads=1",
+        "FANOUT PCOUT[25] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_128 loads=1",
+        "FANOUT PCOUT[24] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_129 loads=1",
+        "FANOUT PCOUT[23] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_130 loads=1",
+        "FANOUT PCOUT[22] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_131 loads=1",
+        "FANOUT PCOUT[21] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_132 loads=1",
+        "FANOUT PCOUT[20] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_133 loads=1",
+        "FANOUT PCOUT[19] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_134 loads=1",
+        "FANOUT PCOUT[18] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_135 loads=1",
+        "FANOUT PCOUT[17] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_136 loads=1",
+        "FANOUT PCOUT[16] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_137 loads=1",
+        "FANOUT PCOUT[15] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_138 loads=1",
+        "FANOUT PCOUT[14] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_139 loads=1",
+        "FANOUT PCOUT[13] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_140 loads=1",
+        "FANOUT PCOUT[12] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_141 loads=1",
+        "FANOUT PCOUT[11] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_142 loads=1",
+        "FANOUT PCOUT[10] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_143 loads=1",
+        "FANOUT PCOUT[9] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_144 loads=1",
+        "FANOUT PCOUT[8] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_145 loads=1",
+        "FANOUT PCOUT[7] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_146 loads=1",
+        "FANOUT PCOUT[6] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_147 loads=1",
+        "FANOUT PCOUT[5] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_148 loads=1",
+        "FANOUT PCOUT[4] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_149 loads=1",
+        "FANOUT PCOUT[3] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_150 loads=1",
+        "FANOUT PCOUT[2] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_151 loads=1",
+        "FANOUT PCOUT[1] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_152 loads=1",
+        "FANOUT PCOUT[0] net u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_n_153 loads=1"
+      ],
+      "p_fanout_count": 48,
+      "dynamic_nets": {
+        "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0_i_2_n_0": [
+          2,
+          0
+        ],
+        "u_synth/u_voice/osc2_path/p1/pair/dec/prod1": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000000",
+          "x": "0",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110000",
+          "x": "0",
+          "y": "0",
+          "z": "C"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p1/pair/dec/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "logic Q (FDRE)",
+      "B_source": "CONST 000111101001110000",
+      "C_source": "logic P[0] (DSP48E1),P[10] (DSP48E1),P[11] (DSP48E1),P[12] (DSP48E1)",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "rst_n",
+      "RSTA_driver": "O (LUT6)",
+      "RSTB_net": "<const0>",
+      "RSTB_driver": "G (GND)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "out_valid0",
+      "CEA1_driver": "O (LUT2)",
+      "CEA2_net": "out_valid0",
+      "CEA2_driver": "O (LUT2)",
+      "CEB1_net": "<const0>",
+      "CEB1_driver": "G (GND)",
+      "CEB2_net": "<const0>",
+      "CEB2_driver": "G (GND)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0",
+      "site": "DSP48_X2Y14",
+      "AREG": "2",
+      "BREG": "0",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/prod1",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_1/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_2_n_0",
+          "driver": "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_2/O (LUT5)",
+          "const": null
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT PCOUT[47] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_106 loads=1",
+        "FANOUT PCOUT[46] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_107 loads=1",
+        "FANOUT PCOUT[45] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_108 loads=1",
+        "FANOUT PCOUT[44] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_109 loads=1",
+        "FANOUT PCOUT[43] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_110 loads=1",
+        "FANOUT PCOUT[42] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_111 loads=1",
+        "FANOUT PCOUT[41] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_112 loads=1",
+        "FANOUT PCOUT[40] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_113 loads=1",
+        "FANOUT PCOUT[39] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_114 loads=1",
+        "FANOUT PCOUT[38] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_115 loads=1",
+        "FANOUT PCOUT[37] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_116 loads=1",
+        "FANOUT PCOUT[36] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_117 loads=1",
+        "FANOUT PCOUT[35] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_118 loads=1",
+        "FANOUT PCOUT[34] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_119 loads=1",
+        "FANOUT PCOUT[33] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_120 loads=1",
+        "FANOUT PCOUT[32] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_121 loads=1",
+        "FANOUT PCOUT[31] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_122 loads=1",
+        "FANOUT PCOUT[30] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_123 loads=1",
+        "FANOUT PCOUT[29] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_124 loads=1",
+        "FANOUT PCOUT[28] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_125 loads=1",
+        "FANOUT PCOUT[27] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_126 loads=1",
+        "FANOUT PCOUT[26] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_127 loads=1",
+        "FANOUT PCOUT[25] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_128 loads=1",
+        "FANOUT PCOUT[24] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_129 loads=1",
+        "FANOUT PCOUT[23] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_130 loads=1",
+        "FANOUT PCOUT[22] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_131 loads=1",
+        "FANOUT PCOUT[21] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_132 loads=1",
+        "FANOUT PCOUT[20] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_133 loads=1",
+        "FANOUT PCOUT[19] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_134 loads=1",
+        "FANOUT PCOUT[18] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_135 loads=1",
+        "FANOUT PCOUT[17] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_136 loads=1",
+        "FANOUT PCOUT[16] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_137 loads=1",
+        "FANOUT PCOUT[15] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_138 loads=1",
+        "FANOUT PCOUT[14] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_139 loads=1",
+        "FANOUT PCOUT[13] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_140 loads=1",
+        "FANOUT PCOUT[12] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_141 loads=1",
+        "FANOUT PCOUT[11] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_142 loads=1",
+        "FANOUT PCOUT[10] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_143 loads=1",
+        "FANOUT PCOUT[9] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_144 loads=1",
+        "FANOUT PCOUT[8] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_145 loads=1",
+        "FANOUT PCOUT[7] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_146 loads=1",
+        "FANOUT PCOUT[6] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_147 loads=1",
+        "FANOUT PCOUT[5] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_148 loads=1",
+        "FANOUT PCOUT[4] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_149 loads=1",
+        "FANOUT PCOUT[3] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_150 loads=1",
+        "FANOUT PCOUT[2] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_151 loads=1",
+        "FANOUT PCOUT[1] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_152 loads=1",
+        "FANOUT PCOUT[0] net u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_n_153 loads=1"
+      ],
+      "p_fanout_count": 48,
+      "dynamic_nets": {
+        "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0_i_2_n_0": [
+          2,
+          0
+        ],
+        "u_synth/u_voice/osc2_path/p2/pair/dec/prod1": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000000",
+          "x": "0",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110000",
+          "x": "0",
+          "y": "0",
+          "z": "C"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/osc2_path/p2/pair/dec/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "logic Q (FDRE)",
+      "B_source": "CONST 000111101001110000",
+      "C_source": "logic P[0] (DSP48E1),P[10] (DSP48E1),P[11] (DSP48E1),P[12] (DSP48E1)",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "rst_n",
+      "RSTA_driver": "O (LUT6)",
+      "RSTB_net": "<const0>",
+      "RSTB_driver": "G (GND)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "out_valid0",
+      "CEA1_driver": "O (LUT2)",
+      "CEA2_net": "out_valid0",
+      "CEA2_driver": "O (LUT2)",
+      "CEB1_net": "<const0>",
+      "CEB1_driver": "G (GND)",
+      "CEB2_net": "<const0>",
+      "CEB2_driver": "G (GND)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out",
+      "site": "DSP48_X0Y22",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[1][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[1][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[1][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[1][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out25__0[38] loads=6",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out25__0[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out25__0[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out25__0[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out25__0[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out25__0[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out25__0[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out25__0[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out25__0[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out25__0[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out25__0[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out25__0[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out25__0[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out25__0[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out25__0[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out25__0[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out25__0[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out25__0[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out25__0[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out25__0[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out25__0[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out25__0[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out25__0[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out25__0[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out25__0[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out25__0[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out25__0[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out25__0[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out25__0[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out25__0[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out25__0[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out25__0[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out25__0[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out25__0[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out25__0[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out25__0[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out25__0[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out25__0[1] loads=2"
+      ],
+      "p_fanout_count": 80,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y1hist_reg[1][0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 010101110110101011100000000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 101011101101010111000000000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__0",
+      "site": "DSP48_X0Y24",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[2][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[2][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[2][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[2][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out24[40] loads=3",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out24[39] loads=5",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out24[38] loads=6",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out24[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out24[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out24[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out24[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out24[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out24[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out24[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out24[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out24[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out24[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out24[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out24[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out24[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out24[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out24[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out24[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out24[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out24[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out24[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out24[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out24[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out24[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out24[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out24[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out24[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out24[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out24[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out24[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out24[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out24[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out24[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out24[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out24[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out24[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out24[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out24[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out24[1] loads=2"
+      ],
+      "p_fanout_count": 88,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y1hist_reg[2][0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 000010010101000100010111111111",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 000100101010001000101111111111111111111111111111",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__1",
+      "site": "DSP48_X0Y23",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out23[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[3][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out23[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[3][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out23[41] loads=1",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out23[40] loads=3",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out23[39] loads=5",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out23[38] loads=4",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out23[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out23[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out23[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out23[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out23[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out23[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out23[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out23[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out23[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out23[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out23[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out23[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out23[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out23[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out23[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out23[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out23[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out23[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out23[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out23[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out23[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out23[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out23[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out23[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out23[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out23[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out23[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out23[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out23[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out23[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out23[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out23[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out23[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out23[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out23[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out23[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out23[1] loads=2"
+      ],
+      "p_fanout_count": 87,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out23[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 100001111100110101011100000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 000011111001101010111000000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__2",
+      "site": "DSP48_X0Y21",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out22[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[4][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out22[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[4][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[41] net u_synth/u_voice/voice_rate_converter/y_out22[42] loads=6",
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out22[41] loads=2",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out22[40] loads=2",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out22[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out22[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out22[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out22[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out22[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out22[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out22[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out22[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out22[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out22[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out22[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out22[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out22[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out22[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out22[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out22[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out22[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out22[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out22[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out22[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out22[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out22[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out22[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out22[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out22[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out22[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out22[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out22[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out22[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out22[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out22[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out22[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out22[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out22[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out22[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out22[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out22[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out22[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out22[1] loads=2"
+      ],
+      "p_fanout_count": 88,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out22[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 110111100000011110000001111111",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 101111000000111100000011111111111111111111111111",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__3",
+      "site": "DSP48_X0Y20",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out21[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[5][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out21[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[5][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[42] net u_synth/u_voice/voice_rate_converter/y_out21[43] loads=3",
+        "FANOUT P[41] net u_synth/u_voice/voice_rate_converter/y_out21[42] loads=6",
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out21[41] loads=2",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out21[40] loads=2",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out21[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out21[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out21[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out21[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out21[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out21[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out21[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out21[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out21[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out21[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out21[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out21[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out21[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out21[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out21[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out21[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out21[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out21[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out21[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out21[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out21[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out21[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out21[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out21[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out21[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out21[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out21[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out21[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out21[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out21[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out21[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out21[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out21[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out21[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out21[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out21[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out21[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out21[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out21[1] loads=2"
+      ],
+      "p_fanout_count": 91,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out21[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 100110101111101100101111000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 001101011111011001011110000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__4",
+      "site": "DSP48_X2Y8",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out11[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[14][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out11[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[14][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[42] net u_synth/u_voice/voice_rate_converter/y_out11[43] loads=4",
+        "FANOUT P[41] net u_synth/u_voice/voice_rate_converter/y_out11[42] loads=2",
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out11[41] loads=2",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out11[40] loads=2",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out11[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out11[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out11[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out11[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out11[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out11[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out11[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out11[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out11[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out11[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out11[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out11[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out11[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out11[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out11[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out11[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out11[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out11[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out11[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out11[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out11[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out11[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out11[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out11[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out11[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out11[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out11[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out11[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out11[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out11[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out11[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out11[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out11[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out11[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out11[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out11[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out11[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out11[2] loads=2",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out11[1] loads=2"
+      ],
+      "p_fanout_count": 88,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out11[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 100110101111101100101111000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 001101011111011001011110000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__5",
+      "site": "DSP48_X2Y6",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out10[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[15][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out10[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[15][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[41] net u_synth/u_voice/voice_rate_converter/y_out10[42] loads=1",
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out10[41] loads=3",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out10[40] loads=6",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out10[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out10[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out10[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out10[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out10[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out10[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out10[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out10[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out10[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out10[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out10[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out10[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out10[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out10[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out10[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out10[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out10[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out10[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out10[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out10[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out10[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out10[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out10[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out10[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out10[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out10[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out10[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out10[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out10[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out10[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out10[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out10[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out10[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out10[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out10[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out10[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out10[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out10[2] loads=3",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out10[1] loads=2"
+      ],
+      "p_fanout_count": 89,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out10[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 110111100000011110000001111111",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 101111000000111100000011111111111111111111111111",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__6",
+      "site": "DSP48_X2Y5",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out9[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[16][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y_out9[0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[16][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[40] net u_synth/u_voice/voice_rate_converter/y_out9[41] loads=3",
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out9[40] loads=6",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out9[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out9[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out9[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out9[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out9[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out9[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out9[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out9[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out9[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out9[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out9[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out9[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out9[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out9[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out9[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out9[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out9[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out9[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out9[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out9[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out9[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out9[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out9[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out9[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out9[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out9[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out9[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out9[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out9[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out9[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out9[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out9[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out9[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out9[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out9[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out9[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out9[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out9[2] loads=3",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out9[1] loads=2"
+      ],
+      "p_fanout_count": 88,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y_out9[0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 100001111100110101011100000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 000011111001101010111000000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__7",
+      "site": "DSP48_X2Y4",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[17][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[17][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[17][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[17][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[39] net u_synth/u_voice/voice_rate_converter/y_out8[40] loads=4",
+        "FANOUT P[38] net u_synth/u_voice/voice_rate_converter/y_out8[39] loads=2",
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out8[38] loads=2",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out8[37] loads=2",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out8[36] loads=2",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out8[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out8[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out8[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out8[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out8[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out8[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out8[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out8[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out8[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out8[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out8[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out8[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out8[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out8[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out8[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out8[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out8[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out8[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out8[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out8[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out8[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out8[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out8[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out8[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out8[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out8[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out8[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out8[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out8[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out8[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out8[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out8[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out8[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out8[2] loads=3",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out8[1] loads=2"
+      ],
+      "p_fanout_count": 83,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y1hist_reg[17][0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 000010010101000100010111111111",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 000100101010001000101111111111111111111111111111",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    },
+    {
+      "name": "u_synth/u_voice/voice_rate_converter/p_1_out__8",
+      "site": "DSP48_X2Y3",
+      "AREG": "0",
+      "BREG": "2",
+      "CREG": "0",
+      "DREG": "1",
+      "MREG": "0",
+      "PREG": "0",
+      "OPMODEREG": "0",
+      "USE_DPORT": "0",
+      "opmode_pins": [
+        {
+          "bit": 6,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 5,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[18][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[18][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 4,
+          "net": "u_synth/u_voice/voice_rate_converter/y1hist_reg[18][0]",
+          "driver": "u_synth/u_voice/voice_rate_converter/y1hist_reg[18][0]/Q (FDRE)",
+          "const": null
+        },
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "driver": "u_synth/u_voice/voice_rate_converter/GND/G (GND)",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const1>",
+          "driver": "u_synth/u_voice/voice_rate_converter/VCC/P (VCC)",
+          "const": 1
+        }
+      ],
+      "p_fanout_lines": [
+        "FANOUT P[37] net u_synth/u_voice/voice_rate_converter/y_out7[38] loads=1",
+        "FANOUT P[36] net u_synth/u_voice/voice_rate_converter/y_out7[37] loads=3",
+        "FANOUT P[35] net u_synth/u_voice/voice_rate_converter/y_out7[36] loads=3",
+        "FANOUT P[34] net u_synth/u_voice/voice_rate_converter/y_out7[35] loads=2",
+        "FANOUT P[33] net u_synth/u_voice/voice_rate_converter/y_out7[34] loads=2",
+        "FANOUT P[32] net u_synth/u_voice/voice_rate_converter/y_out7[33] loads=2",
+        "FANOUT P[31] net u_synth/u_voice/voice_rate_converter/y_out7[32] loads=2",
+        "FANOUT P[30] net u_synth/u_voice/voice_rate_converter/y_out7[31] loads=2",
+        "FANOUT P[29] net u_synth/u_voice/voice_rate_converter/y_out7[30] loads=2",
+        "FANOUT P[28] net u_synth/u_voice/voice_rate_converter/y_out7[29] loads=2",
+        "FANOUT P[27] net u_synth/u_voice/voice_rate_converter/y_out7[28] loads=2",
+        "FANOUT P[26] net u_synth/u_voice/voice_rate_converter/y_out7[27] loads=2",
+        "FANOUT P[25] net u_synth/u_voice/voice_rate_converter/y_out7[26] loads=2",
+        "FANOUT P[24] net u_synth/u_voice/voice_rate_converter/y_out7[25] loads=2",
+        "FANOUT P[23] net u_synth/u_voice/voice_rate_converter/y_out7[24] loads=2",
+        "FANOUT P[22] net u_synth/u_voice/voice_rate_converter/y_out7[23] loads=2",
+        "FANOUT P[21] net u_synth/u_voice/voice_rate_converter/y_out7[22] loads=2",
+        "FANOUT P[20] net u_synth/u_voice/voice_rate_converter/y_out7[21] loads=2",
+        "FANOUT P[19] net u_synth/u_voice/voice_rate_converter/y_out7[20] loads=2",
+        "FANOUT P[18] net u_synth/u_voice/voice_rate_converter/y_out7[19] loads=2",
+        "FANOUT P[17] net u_synth/u_voice/voice_rate_converter/y_out7[18] loads=2",
+        "FANOUT P[16] net u_synth/u_voice/voice_rate_converter/y_out7[17] loads=2",
+        "FANOUT P[15] net u_synth/u_voice/voice_rate_converter/y_out7[16] loads=2",
+        "FANOUT P[14] net u_synth/u_voice/voice_rate_converter/y_out7[15] loads=2",
+        "FANOUT P[13] net u_synth/u_voice/voice_rate_converter/y_out7[14] loads=2",
+        "FANOUT P[12] net u_synth/u_voice/voice_rate_converter/y_out7[13] loads=2",
+        "FANOUT P[11] net u_synth/u_voice/voice_rate_converter/y_out7[12] loads=2",
+        "FANOUT P[10] net u_synth/u_voice/voice_rate_converter/y_out7[11] loads=2",
+        "FANOUT P[9] net u_synth/u_voice/voice_rate_converter/y_out7[10] loads=2",
+        "FANOUT P[8] net u_synth/u_voice/voice_rate_converter/y_out7[9] loads=2",
+        "FANOUT P[7] net u_synth/u_voice/voice_rate_converter/y_out7[8] loads=2",
+        "FANOUT P[6] net u_synth/u_voice/voice_rate_converter/y_out7[7] loads=2",
+        "FANOUT P[5] net u_synth/u_voice/voice_rate_converter/y_out7[6] loads=2",
+        "FANOUT P[4] net u_synth/u_voice/voice_rate_converter/y_out7[5] loads=2",
+        "FANOUT P[3] net u_synth/u_voice/voice_rate_converter/y_out7[4] loads=2",
+        "FANOUT P[2] net u_synth/u_voice/voice_rate_converter/y_out7[3] loads=2",
+        "FANOUT P[1] net u_synth/u_voice/voice_rate_converter/y_out7[2] loads=3",
+        "FANOUT P[0] net u_synth/u_voice/voice_rate_converter/y_out7[1] loads=2"
+      ],
+      "p_fanout_count": 78,
+      "dynamic_nets": {
+        "u_synth/u_voice/voice_rate_converter/y1hist_reg[18][0]": [
+          5,
+          4
+        ]
+      },
+      "reachable_opmode_values": [
+        {
+          "opmode": "0000101",
+          "x": "M",
+          "y": "0",
+          "z": "0"
+        },
+        {
+          "opmode": "0110101",
+          "x": "M",
+          "y": "0",
+          "z": "C"
+        }
+      ],
+      "p_feedback_reachable": false,
+      "alumode_consts": [
+        {
+          "bit": 3,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 2,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 1,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        },
+        {
+          "bit": 0,
+          "net": "u_synth/u_voice/voice_rate_converter/<const0>",
+          "const": 0
+        }
+      ],
+      "alumode_dynamic": false,
+      "carryinsel_dynamic": false,
+      "A_source": "CONST 010101110110101011100000000000",
+      "B_source": "logic Q (FDRE)",
+      "C_source": "CONST 101011101101010111000000000000000000000000000000",
+      "D_source": "CONST 0000000000000000000000000",
+      "RSTA_net": "<const0>",
+      "RSTA_driver": "G (GND)",
+      "RSTB_net": "rst_n",
+      "RSTB_driver": "O (LUT6)",
+      "RSTC_net": "<const0>",
+      "RSTC_driver": "G (GND)",
+      "RSTD_net": "<const0>",
+      "RSTD_driver": "G (GND)",
+      "RSTM_net": "<const0>",
+      "RSTM_driver": "G (GND)",
+      "RSTP_net": "<const0>",
+      "RSTP_driver": "G (GND)",
+      "RSTCTRL_net": "<const0>",
+      "RSTCTRL_driver": "G (GND)",
+      "CEA1_net": "<const0>",
+      "CEA1_driver": "G (GND)",
+      "CEA2_net": "<const0>",
+      "CEA2_driver": "G (GND)",
+      "CEB1_net": "decim_valid",
+      "CEB1_driver": "O (LUT3)",
+      "CEB2_net": "decim_valid",
+      "CEB2_driver": "O (LUT3)",
+      "CEC_net": "<const0>",
+      "CEC_driver": "G (GND)",
+      "CEM_net": "<const0>",
+      "CEM_driver": "G (GND)",
+      "CEP_net": "<const0>",
+      "CEP_driver": "G (GND)"
+    }
+  ],
+  "source_dump": "dsp_cells_dump.txt",
+  "required_source": "drc.rpt DPREG-4 violations (parsed at analysis time)",
+  "required_instances": [
+    "u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0",
+    "u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0",
+    "u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0",
+    "u_synth/u_voice/voice_rate_converter/p_1_out",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__0",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__1",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__2",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__3",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__4",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__5",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__6",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__7",
+    "u_synth/u_voice/voice_rate_converter/p_1_out__8"
+  ],
+  "dump_sha256": "3a8f8b83d124f1be09c229134e6cdfd8e6eaceeb05e0d1b9f39579597832208d",
+  "drc_identity": {
+    "grep_identity": "drc_dpreg_names.txt == grep -n DPREG drc.rpt",
+    "box_rpt_sha256_recorded": "1c06b86f770da9e1fea2b70de8a04a77193dfc78def994a10eb9de77dc9c981f",
+    "note": "report_drc embeds a run timestamp, so box bytes are not reproducible; the DPREG-4 body is bound via the manifest-pinned names file"
+  },
+  "mux_tables": {
+    "X": {
+      "0": "0",
+      "1": "M",
+      "2": "P",
+      "3": "A:B"
+    },
+    "Y": {
+      "0": "0",
+      "1": "0",
+      "2": "ones",
+      "3": "C"
+    },
+    "Z": {
+      "0": "0",
+      "1": "PCIN",
+      "2": "P",
+      "3": "C",
+      "4": "P",
+      "5": "PCIN>>17",
+      "6": "P>>17",
+      "7": "P>>17"
+    }
+  }
+}

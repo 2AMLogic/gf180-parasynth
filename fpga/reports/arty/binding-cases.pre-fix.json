@@ -1,0 +1,67 @@
+[
+  {
+    "case": "extra_compiled_source",
+    "published": true,
+    "exceptions": [
+      "i2s_bclk"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  {
+    "case": "uart_top_with_clean_proof",
+    "published": true,
+    "exceptions": [
+      "i2s_bclk"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  {
+    "case": "foreign_exception",
+    "published": true,
+    "exceptions": [
+      "some_other_port"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  {
+    "case": "xdc_value_drift",
+    "published": true,
+    "exceptions": [
+      "i2s_bclk"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  {
+    "case": "uart_ports_without_disposition",
+    "published": true,
+    "exceptions": [
+      "i2s_bclk"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  }
+]

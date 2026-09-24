@@ -9,6 +9,15 @@
 //                        drum engine of DR 0008
 //            -> i2s_tx  (BCLK / LRCLK / SDATA)
 //
+//   WITH_UART=1 adds a second front end for the SAME register-write port:
+//   uart_bridge (rtl-sketch/uart_bridge.v), fed from the reserved UART pins.
+//   The mux gives the SPI drain strict priority -- the bridge may present a
+//   write only in window cycles [UART_WIN_LO, GO_CYCLE), which begin after the
+//   SPI drain's last possible write (the snapshot at the tick pops at most the
+//   queue's four entries, so spi wr_valid cannot assert past cycle 5) -- so
+//   the two sources can never collide, whatever either link does. The bridge
+//   gets two write slots per frame, due-scheduled events before live writes.
+//
 // WHAT IS REAL AND WHAT IS A PLACEHOLDER -- read this before quoting a number:
 //   There is no placeholder left in this file. drum_section_placeholder is
 //   gone; `drum_kit` is the engine verify_drums.py shows bit-exact against
@@ -20,6 +29,9 @@
 //                                              models' images arrives intact), this file and
 //                                              i2s_tx (verify_synth_top.py, which decodes the
 //                                              I2S wire and compares it against the MODEL)
+//   REAL, verified through the pins:           uart_bridge (fpga/verify_uart_bridge.py: the Arty
+//                                              wrapper's UART pins, device-scheduled events vs
+//                                              the contract and the model) -- WITH_UART=1 only
 //
 // One clock (12.288 MHz, 256 cycles per 48 kHz frame), one reset (the pad,
 // synchronised), synchronous resets throughout; no derived clocks -- BCLK and
@@ -37,7 +49,11 @@ module synth_top #(
     parameter PATHS = 23,
     parameter MODES = 16,
     parameter NUMS  = 11,
-    parameter STOPS = 11
+    parameter STOPS = 11,
+    parameter WITH_UART = 0,          // second control front end on the UART pins
+    parameter UART_BAUD = 115_200,
+    parameter UART_EVQ_DEPTH = 64,
+    parameter UART_WRQ_DEPTH = 8
 )(
     input  wire clk,          // 12.288 MHz
     input  wire rst_n_pad,    // active-low reset from the MCU
@@ -46,6 +62,9 @@ module synth_top #(
     input  wire mosi,
     input  wire cs_n,
     output wire miso,
+    // control link (USB-UART bridge; unused when WITH_UART = 0)
+    input  wire uart_rxd,
+    output wire uart_txd,
     // audio (contract 13)
     output wire bclk,
     output wire lrclk,
@@ -73,16 +92,48 @@ module synth_top #(
     end
 
     // ---- the link and the write port (DR 0007 revision 2) ----------------------------
-    wire        wr_valid, wr_flag, wr_sec;
-    wire [7:0]  wr_addr;
-    wire [31:0] wr_data;
+    wire        spi_wr_valid, spi_wr_flag, spi_wr_sec;
+    wire [7:0]  spi_wr_addr;
+    wire [31:0] spi_wr_data;
+    wire        u_wr_valid, u_wr_flag, u_wr_sec;
+    wire [7:0]  u_wr_addr;
+    wire [31:0] u_wr_data;
     wire        fresh, overflow;
     wire [2:0]  q_count;
     spi_ctl u_spi (.clk(clk), .rst_n(rst_n), .sck(sck), .mosi(mosi), .cs_n(cs_n), .miso(miso),
                    .tick(tick), .frame(frame), .overrun(overrun),
-                   .wr_valid(wr_valid), .wr_flag(wr_flag), .wr_sec(wr_sec),
-                   .wr_addr(wr_addr), .wr_data(wr_data),
+                   .wr_valid(spi_wr_valid), .wr_flag(spi_wr_flag), .wr_sec(spi_wr_sec),
+                   .wr_addr(spi_wr_addr), .wr_data(spi_wr_data),
                    .fresh(fresh), .overflow(overflow), .q_count(q_count));
+
+    generate if (WITH_UART) begin : g_uart
+        // The bridge may present writes only in the window cycles after the
+        // SPI drain's last possible write: the drain pops at most the queue's
+        // four entries, so spi_wr_valid cannot assert past cycle 1 + 4 = 5.
+        // Two slots per frame, due-scheduled events before live writes.
+        localparam integer UART_WIN_LO = GO_CYCLE - 2;
+        wire uart_grant = (cyc >= UART_WIN_LO) && (cyc < GO_CYCLE);
+        uart_bridge #(.CLK_HZ(12_288_000), .BAUD(UART_BAUD),
+                      .EVQ_DEPTH(UART_EVQ_DEPTH), .WRQ_DEPTH(UART_WRQ_DEPTH)) u_uart (
+            .clk(clk), .rst_n(rst_n), .rx(uart_rxd), .tx(uart_txd),
+            .frame(frame), .grant(uart_grant),
+            .wr_valid(u_wr_valid), .wr_flag(u_wr_flag), .wr_sec(u_wr_sec),
+            .wr_addr(u_wr_addr), .wr_data(u_wr_data),
+            .evq_count(), .wrq_count(),
+            .evq_overflow(), .wrq_overflow(), .late_seen(), .resync_seen());
+    end else begin : g_no_uart
+        assign uart_txd = 1'b1;
+        assign u_wr_valid = 1'b0;
+        assign u_wr_flag = 1'b0;  assign u_wr_sec = 1'b0;
+        assign u_wr_addr = 8'h00; assign u_wr_data = 32'h0;
+    end endgenerate
+    // the two sources are exclusive by construction (window vs drain); the
+    // data mux picks the live source, never the idle one's X
+    wire        wr_valid = spi_wr_valid | u_wr_valid;
+    wire        wr_flag  = u_wr_valid ? u_wr_flag  : spi_wr_flag;
+    wire        wr_sec   = u_wr_valid ? u_wr_sec   : spi_wr_sec;
+    wire [7:0]  wr_addr  = u_wr_valid ? u_wr_addr  : spi_wr_addr;
+    wire [31:0] wr_data  = u_wr_valid ? u_wr_data  : spi_wr_data;
 
     wire wr_voice = wr_valid && !wr_sec;                 // SEC = 0: the voice and master page
     wire wr_drum  = wr_valid &&  wr_sec;                 // SEC = 1: the drum section's page

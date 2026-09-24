@@ -28,7 +28,10 @@ def sha(path):
 
 
 def sources():
-    return [ROOT / "fpga/rtl/arty_a7_top.v"] + build_selected.sources()[1:]
+    # uart_bridge.v: the USB-UART control bridge, instantiated by the wrapper
+    # (synth_top WITH_UART=1) as a second front end for the register-write port.
+    return [ROOT / "fpga/rtl/arty_a7_top.v"] + build_selected.sources()[1:] \
+        + [ROOT / "rtl-sketch/uart_bridge.v"]
 
 
 def roms():

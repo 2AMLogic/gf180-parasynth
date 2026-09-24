@@ -1,9 +1,9 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
-| Date         : Tue Sep 22 02:48:16 2026
+| Date         : Tue Sep 22 08:40:04 2026
 | Host         : omitted from public report
-| Command      : report_clocks -file /home/ubuntu/parasynth-arty-attempt02/build/arty/clocks.rpt
+| Command      : report_clocks -file /home/ubuntu/ext-timing-rebuild/build/arty/clocks.rpt
 | Design       : arty_a7_top
 | Device       : 7a100t-csg324
 | Speed File   : -1  PRODUCTION 1.23 2018-06-13
@@ -22,15 +22,22 @@ Attributes
   I: Inverted
   S: Pin phase-shifted with Latency mode
 
-Clock                        Period(ns)  Waveform(ns)    Attributes  Sources
-clk100                       10.000      {0.000 5.000}   P           {clk_100mhz}
-hardware_clock.clock_raw     81.380      {0.000 40.690}  P,G,A       {hardware_clock.mmcm/CLKOUT0}
-hardware_clock.feedback_raw  50.000      {0.000 25.000}  P,G,A       {hardware_clock.mmcm/CLKFBOUT}
+Clock                        Period(ns)  Waveform(ns)     Attributes  Sources
+clk100                       10.000      {0.000 5.000}    P           {clk_100mhz}
+i2s_bclk_ext                 325.521     {0.000 162.760}  P,G         {i2s_bclk}
+hardware_clock.clock_raw     81.380      {0.000 40.690}   P,G,A       {hardware_clock.mmcm/CLKOUT0}
+hardware_clock.feedback_raw  50.000      {0.000 25.000}   P,G,A       {hardware_clock.mmcm/CLKFBOUT}
 
 
 ====================================================
 Generated Clocks
 ====================================================
+
+Generated Clock     : i2s_bclk_ext
+Master Source       : hardware_clock.mmcm/CLKOUT0
+Master Clock        : hardware_clock.clock_raw
+Divide By           : 4
+Generated Sources   : {i2s_bclk}
 
 Generated Clock     : hardware_clock.clock_raw
 Master Source       : hardware_clock.mmcm/CLKIN1

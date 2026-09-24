@@ -104,9 +104,11 @@ def test_real_reset_reasserts_and_waits_for_clock_lock(tmp_path):
         pytest.skip("iverilog unavailable")
     bench = tmp_path / "reset.v"
     bench.write_text('''`timescale 1ns/1ps
-module synth_top(input clk, rst_n_pad, sck, mosi, cs_n,
-                 output miso, bclk, lrclk, sdata);
-assign {miso,bclk,lrclk,sdata} = 4'b0000;
+module synth_top #(parameter WITH_UART = 0, parameter UART_BAUD = 115200,
+                   parameter UART_EVQ_DEPTH = 64, parameter UART_WRQ_DEPTH = 8)
+                  (input clk, rst_n_pad, sck, mosi, cs_n, uart_rxd,
+                   output miso, uart_txd, bclk, lrclk, sdata);
+assign {miso,uart_txd,bclk,lrclk,sdata} = 5'b00001;
 endmodule
 module reset_test;
 reg clk=0, button=1;
@@ -139,7 +141,10 @@ endmodule
 
 def test_prepared_build_resolves_the_actual_hdl_rom_filenames(tmp_path):
     import re
-    proof = build.ROOT / "fpga/reports/arty/clean/verification.json"
+    # this branch's wrapper adds the UART bridge, so the wrapper evidence this
+    # test consumes is the UART bench's (fpga/verify_uart_bridge.py); the
+    # published baseline's own evidence stays untouched in reports/arty/clean
+    proof = build.ROOT / "fpga/reports/arty/uart-clean/verification.json"
     assert build.main(["--prepare-only", "--out", str(tmp_path),
                        "--verification", str(proof)]) == 0
     voice = (build.ROOT / "rtl-sketch/voice_dp.v").read_text()

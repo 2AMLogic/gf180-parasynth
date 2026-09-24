@@ -1,0 +1,10 @@
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 130.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 310.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 490.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 670.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 850.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 1030.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 1210.000 ns requires attribute PREG set to 1.
+OPMODE Input Warning : The OPMODE 0100101 to DSP48E1 instance dsp_dpreg_tb.D2.display_invalid_opmode at 1390.000 ns requires attribute PREG set to 1.
+TB-DONE
+dsp_dpreg_tb.v:106: $finish called at 1490000 (1ps)

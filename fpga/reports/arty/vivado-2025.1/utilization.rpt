@@ -1,9 +1,9 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
-| Date         : Tue Sep 22 02:48:13 2026
+| Date         : Tue Sep 22 08:40:00 2026
 | Host         : omitted from public report
-| Command      : report_utilization -file /home/ubuntu/parasynth-arty-attempt02/build/arty/utilization.rpt
+| Command      : report_utilization -file /home/ubuntu/ext-timing-rebuild/build/arty/utilization.rpt
 | Design       : arty_a7_top
 | Device       : xc7a100tcsg324-1
 | Speed File   : -1
@@ -71,9 +71,9 @@ Table of Contents
 +--------------------------------------------+-------+-------+------------+-----------+-------+
 |                  Site Type                 |  Used | Fixed | Prohibited | Available | Util% |
 +--------------------------------------------+-------+-------+------------+-----------+-------+
-| Slice                                      |  6416 |     0 |          0 |     15850 | 40.48 |
-|   SLICEL                                   |  4381 |     0 |            |           |       |
-|   SLICEM                                   |  2035 |     0 |            |           |       |
+| Slice                                      |  6057 |     0 |          0 |     15850 | 38.21 |
+|   SLICEL                                   |  4191 |     0 |            |           |       |
+|   SLICEM                                   |  1866 |     0 |            |           |       |
 | LUT as Logic                               | 12674 |     0 |          0 |     63400 | 19.99 |
 |   using O5 output only                     |    61 |       |            |           |       |
 |   using O6 output only                     | 10055 |       |            |           |       |
@@ -88,10 +88,10 @@ Table of Contents
 |     using O6 output only                   |     0 |       |            |           |       |
 |     using O5 and O6                        |     0 |       |            |           |       |
 | Slice Registers                            | 12171 |     0 |          0 |    126800 |  9.60 |
-|   Register driven from within the Slice    |  1825 |       |            |           |       |
-|   Register driven from outside the Slice   | 10346 |       |            |           |       |
-|     LUT in front of the register is unused |  7018 |       |            |           |       |
-|     LUT in front of the register is used   |  3328 |       |            |           |       |
+|   Register driven from within the Slice    |  1882 |       |            |           |       |
+|   Register driven from outside the Slice   | 10289 |       |            |           |       |
+|     LUT in front of the register is unused |  6616 |       |            |           |       |
+|     LUT in front of the register is used   |  3673 |       |            |           |       |
 | Unique Control Sets                        |   414 |       |          0 |     15850 |  2.61 |
 +--------------------------------------------+-------+-------+------------+-----------+-------+
 * * Note: Available Control Sets calculated as Slice * 1, Review the Control Sets Report for more information regarding control sets.

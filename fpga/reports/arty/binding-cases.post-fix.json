@@ -1,0 +1,40 @@
+[
+  {
+    "case": "baseline",
+    "published": true,
+    "exceptions": [
+      "i2s_bclk"
+    ],
+    "wrapper_verification": {
+      "record_sha256": "9b6807f55a9c6486e70a280ff1a9b729b93558b311fa55b428dd085302c7ed80",
+      "transcript_sha256": "9147e063152373c9d4fe68665d589514d4efff08f315837d6fa8bfa7568a61f6",
+      "periods": 4821,
+      "scope": "Arty wrapper digital SPI-to-I2S smoke vs Python; MMCM bypassed; no physical timing claim"
+    }
+  },
+  {
+    "case": "extra_compiled_source",
+    "published": false,
+    "error": "compiled input set differs from the build record's source_sha256"
+  },
+  {
+    "case": "uart_top_with_clean_proof",
+    "published": false,
+    "error": "missing or unreadable Arty verification"
+  },
+  {
+    "case": "foreign_exception",
+    "published": false,
+    "error": "external-I/O constraint drift: output-delay exceptions ['some_other_port'] != permitted ['i2s_bclk']"
+  },
+  {
+    "case": "xdc_value_drift",
+    "published": false,
+    "error": "external-I/O constraint drift: value drift: max on ['i2s_sdata'] is 12.0 ns, budget says 8.2 ns"
+  },
+  {
+    "case": "uart_ports_without_disposition",
+    "published": false,
+    "error": "external-I/O constraint drift: uart_tx present without an output-delay constraint; uart_tx present without a receiver/baud disposition (UART_TX_DISPOSITION in fpga/ext_io_timing.py); uart_rx present without ASYNC_REG on its synchronizer stages; uart_rx present without a false path or input delay into its synchronizer"
+  }
+]
