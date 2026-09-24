@@ -43,7 +43,9 @@ def test_real_vivado_report_preserves_scope_and_final_not_estimated_timing():
     assert r["drc"]["DPREG-4"]["count"] == 13
     assert r["external_io_timing_qualified"] is True
     assert r["output_delay_exceptions"] == ["i2s_bclk"]
-    assert r["dsp_feedback_review_complete"] is False
+    # the inspector no longer carries the DSP flag at all: it is derived in
+    # publish() from bound evidence (dsp_disposition), never defaulted here
+    assert "dsp_feedback_review_complete" not in r
 
 
 @pytest.mark.parametrize("filename,before,after", [
@@ -139,3 +141,73 @@ def test_published_flag_cannot_disagree_with_the_routed_report():
             assert record[key] == value, key
     assert record["external_io_timing_qualified"] is True
     assert record["output_delay_exceptions"] == ["i2s_bclk"]
+
+
+# ---- DSP publication binding: the flag is derived, never flipped ------------
+def _dsp_fixture(tmp_path):
+    """Evidence + the drc.rpt it names, REBOUND to the bytes on disk here:
+    the committed fixture's drc.rpt is the host-stripped republication, so
+    its hash differs from the box bytes the evidence was extracted against
+    (which is exactly what the binding check must refuse elsewhere)."""
+    shutil.copyfile(FIXTURE / "drc.rpt", tmp_path / "drc.rpt")
+    ev = tmp_path / "dsp-dpreg-evidence"
+    shutil.copytree(FIXTURE / "dsp-dpreg-evidence", ev)
+    import hashlib
+    digest = hashlib.sha256((tmp_path / "drc.rpt").read_bytes()).hexdigest()
+    (ev / "drc_rpt.sha256").write_text(digest + "  drc.rpt\n")
+    return tmp_path
+
+
+def test_dsp_disposition_completes_on_evidence_bound_to_this_artifact(tmp_path):
+    # The full derive-True path needs the drc.rpt bytes the evidence was
+    # extracted AGAINST. The committed fixture carries the host-stripped
+    # republication (its hash differs from the recorded box bytes), so the
+    # analyser's own manifest pin correctly refuses it here -- that refusal
+    # is test_dsp_disposition_refuses_a_foreign_checkpoint. The True path is
+    # exercised where the bound state exists: on the build host, against the
+    # artifact directory the extraction ran in (see the lane's verification
+    # record). Skip, never fake: a harness that cannot reach the state does
+    # not answer.
+    bound = publish.dsp_disposition(_dsp_fixture(tmp_path))
+    if not bound["complete"]:
+        pytest.skip("committed fixture cannot reach the bound state: "
+                    + bound["reason"])
+    assert bound["complete"] is True, bound
+    assert "VERDICT: all" in bound["verdict"], bound["verdict"]
+
+
+def test_dsp_disposition_refuses_without_evidence(tmp_path):
+    for f in ("timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt"):
+        shutil.copyfile(FIXTURE / f, tmp_path / f)
+    r = publish.dsp_disposition(tmp_path)
+    assert r["complete"] is False
+    assert "no dsp-dpreg-evidence" in r["reason"], r
+
+
+def test_dsp_disposition_refuses_a_foreign_checkpoint(tmp_path):
+    _dsp_fixture(tmp_path)
+    (tmp_path / "dsp-dpreg-evidence" / "drc_rpt.sha256").write_text("0" * 64 + "  drc.rpt\n")
+    r = publish.dsp_disposition(tmp_path)
+    assert r["complete"] is False
+    assert "different routed checkpoint" in r["reason"], r
+
+
+def test_dsp_disposition_refuses_when_the_analyser_will_not_answer(tmp_path):
+    # the empty-dump case the review round hardened: the analyser must NO
+    # VERDICT rather than bless an absent interrogation
+    _dsp_fixture(tmp_path)
+    (tmp_path / "dsp-dpreg-evidence" / "dsp_cells_dump.txt").write_text("")
+    r = publish.dsp_disposition(tmp_path)
+    assert r["complete"] is False
+    assert "would not answer" in r["reason"], r
+
+
+def test_committed_publication_cannot_claim_a_complete_review_without_binding():
+    # the committed record predates the derivation: it must not claim True
+    # while its evidence names a different checkpoint's drc.rpt
+    record = json.loads((FIXTURE / "publication.json").read_text())
+    if record.get("dsp_feedback_review_complete") is not True:
+        return
+    r = publish.dsp_disposition(FIXTURE)
+    assert r["complete"] is True, \
+        "publication claims the DSP review complete but the binding refuses: " + r["reason"]

@@ -22,6 +22,8 @@ import math
 from pathlib import Path
 import re
 import shutil
+import subprocess
+import sys
 import build_arty as build
 import ext_io_timing as iotime
 
@@ -53,6 +55,43 @@ def compiled_inputs(build_tcl_text):
         return parts[1]
     sources = [rel(p) for p in re.findall(r"\{([^}]+)\}", ver.group(1))]
     return top.group(1), sources, [rel(xdc.group(1))]
+
+
+def dsp_disposition(artifact: Path) -> dict:
+    """Derive the DSP feedback review state from evidence bound to THIS
+    implementation's routed checkpoint. There is no manual flip: the flag is
+    true only when the disposition evidence names, by hash, the drc.rpt of
+    this very artifact (the DPREG-4 interrogation was extracted from the
+    routed checkpoint this publication certifies) AND the analyser answers
+    with a complete verdict against that same drc.rpt. Anything else is a
+    refusal recorded as data -- never a crash, never a silent true, and
+    never a new routing run: the checker connects to the existing
+    implementation's evidence."""
+    ev = artifact / "dsp-dpreg-evidence"
+
+    def refused(reason: str) -> dict:
+        return {"complete": False, "reason": reason}
+
+    if not ev.is_dir():
+        return refused("no dsp-dpreg-evidence directory bound to this artifact")
+    rec = ev / "drc_rpt.sha256"
+    if not rec.is_file():
+        return refused("evidence does not record the drc.rpt it was extracted against")
+    want = rec.read_text().split()[0].strip()
+    have = build.sha(artifact / "drc.rpt")
+    if want != have:
+        return refused("evidence was extracted against a different routed "
+                       f"checkpoint (drc.rpt {want[:12]} vs this artifact's {have[:12]})")
+    r = subprocess.run([sys.executable, str(ROOT / "tools" / "dsp_dpreg_analyse.py"),
+                        "--evidence", str(ev), "--drc", str(artifact / "drc.rpt")],
+                       capture_output=True, text=True)
+    lines = (r.stdout + r.stderr).strip().splitlines()
+    verdict = lines[-1] if lines else ""
+    if r.returncode != 0:
+        return refused(f"analyser would not answer (exit {r.returncode}): {verdict[:160]}")
+    if "VERDICT: all" not in verdict:
+        return refused(f"analyser verdict incomplete: {verdict[:160]}")
+    return {"complete": True, "reason": "", "verdict": verdict, "drc_rpt_sha256": want}
 
 
 def publish(artifact, output):
@@ -102,8 +141,13 @@ def publish(artifact, output):
         drift += iotime.uart_gate_drift(xdc_snap.read_text())
         if drift:
             raise ValueError("external-I/O constraint drift: " + "; ".join(drift))
-    remaining = ["physical programming, control and audio capture",
-                 f"{summary['drc'].get('DPREG-4', {}).get('count', 0)} DPREG-4 DSP feedback warnings"]
+    remaining = ["physical programming, control and audio capture"]
+    dsp = dsp_disposition(artifact)
+    if dsp["complete"]:
+        pass    # the DPREG-4 review is complete; it leaves the review list
+    else:
+        n = summary["drc"].get("DPREG-4", {}).get("count", 0)
+        remaining.append(f"{n} DPREG-4 DSP feedback warnings ({dsp['reason']})")
     if summary["external_io_timing_qualified"]:
         remaining.insert(0, "spi_miso status readback is qualified only at SCK <= 1.4 MHz, "
                             "not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)")
@@ -116,6 +160,11 @@ def publish(artifact, output):
                    original_artifact_sha256=record["artifact_sha256"],
                    report_transformation="Host header omitted; numerical report contents unchanged",
                    remaining_review=remaining)
+    # derived, never flipped: the DSP review is complete only when the
+    # disposition evidence binds THIS artifact's routed checkpoint and the
+    # analyser answers completely against it (dsp_disposition above)
+    summary["dsp_feedback_review_complete"] = dsp["complete"]
+    summary["dsp_disposition"] = dsp
     manifest = artifact.parent / "input-bundle.json"
     if manifest.is_file():
         summary["input_bundle"] = json.loads(manifest.read_text())
@@ -221,7 +270,6 @@ def inspect_reports(directory):
             # failing endpoint.
             "external_io_timing_qualified": unconstrained == 0 and false_pathed == 0,
             "output_delay_exceptions": exceptions,
-            "dsp_feedback_review_complete": False,
             "hardware_playback_tested": False}
 
 
