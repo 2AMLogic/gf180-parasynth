@@ -13,6 +13,12 @@ import mono_m1a_score as bass
 
 ROOT, SR = bass.ROOT, bass.SR
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/volume-mapping"
+# The baseline of this experiment is the PRE-SELECTION patch, by name, and the
+# model audio the scorecard recorded for it before the -4 dB candidate was
+# promoted (results/M1A.json at 63f08e1). Reading the live record instead would
+# compare the baseline against the promoted candidate once selection lands.
+BASELINE_PATCH = "m1a-provisional-v1"
+BASELINE_AUDIO_SHA256 = "50add9b962caa5f37716f030c7254141664ddd238ab13300708ae6f40ddd8c05"
 
 
 def counts(measured):
@@ -53,7 +59,7 @@ def oscillator_mapping(manifest):
 
 def main():
     manifest, reference = bass.load_reference()
-    patch = bass.patch_for_reference(manifest)
+    patch = bass.patch_for_reference(manifest, BASELINE_PATCH)
     engine = bass.lead.engine_configuration("selected")
     mapping = oscillator_mapping(manifest)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -62,7 +68,7 @@ def main():
              "tools/mono_m5a_score.py", "tools/measure_mono_m1a_reference.py",
              "tools/measure_mono_m5a_reference.py", "model/voice_fx.py", "model/fixed.py",
              "model/filter_rate_chain.py", "model/audio_measure.py", "audition/dsp.py"]
-    baseline_record = json.loads((ROOT / "docs/scorecard/results/M1A.json").read_text())
+    baseline_record = {"diagnostics": {"model_audio_sha256": BASELINE_AUDIO_SHA256}}
     rows = {}
     for name, volume_db, detune_cents in (("baseline", 0., 0.), ("volume-minus4db", -4., 0.),
                                          ("detune-diagnostic", -4., mapping["probe_offset_cents"])):
@@ -72,6 +78,8 @@ def main():
                     for e in bass.reference.EVENTS]
         pcm = bass.lead.vf.render_mono_fx(sequence, bass.reference.SECONDS,
                                          bass.lead._voice_for_engine(engine))[:len(reference)]
+        if name == "volume-minus4db" and selected != bass.patch_for_reference(manifest, "m1a-gain-minus4db-v2"):
+            raise bass.Refused("volume candidate differs from the named selected patch")
         audio = OUT / f"{name}.wav"
         wavfile.write(audio, SR, pcm.astype('<i2'))
         measured = bass.compare_audio(pcm.astype(np.float64) / 32768, reference)

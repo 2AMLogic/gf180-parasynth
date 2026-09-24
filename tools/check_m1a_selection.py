@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+"""Assert that the promoted M1A board record IS the accepted -4 dB candidate.
+
+Selection is only meaningful if the record the board reads was produced by the
+named patch and reproduces the evidence that justified selecting it. So this
+checks, against committed files only (no render):
+
+1. identity   -- the record names `mono_m1a_score.SELECTED_PATCH`, and its
+                 patch equals that identity's patch and the candidate's patch;
+2. audio      -- the record's model WAV hashes to the candidate WAV's hash;
+3. vector     -- the record's full property vector and per-event diagnostics
+                 equal the candidate's, exactly (not within a tolerance);
+4. policy     -- M1A's declared preservation policy
+                 (tools/measure_m1a_volume_mapping.py) holds against the
+                 pre-selection baseline: no property pass lost, no per-note
+                 harmonic pass lost, every per-note gain inside tolerance.
+
+Exit 0 match, 1 mismatch, 2 refused (an input is missing or unreadable).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+
+import mono_m1a_score as bass                                        # noqa: E402
+import measure_m1a_volume_mapping as volume                           # noqa: E402
+
+RECORD = ROOT / "docs/scorecard/results/M1A.json"
+CANDIDATE = volume.OUT / "volume-minus4db.json"
+BASELINE = volume.OUT / "baseline.json"
+
+
+def _norm(x):
+    """JSON-normalise (tuples -> lists) so a patch compares by value."""
+    return json.loads(json.dumps(x))
+
+
+def _passes(measured):
+    return {name for name, p in measured["properties"].items()
+            if p.get("valid") and abs(p["error"]) <= p["tolerance"]}
+
+
+def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list[str]:
+    """Every reason the record is not the selected candidate; [] when it is."""
+    problems = []
+    config = record["diagnostics"]["configuration"]
+    selected = _norm(bass.patch_for_reference(manifest, bass.SELECTED_PATCH))
+    if config.get("patch_id") != bass.SELECTED_PATCH:
+        problems.append(f"record patch_id {config.get('patch_id')!r} != {bass.SELECTED_PATCH!r}")
+    if _norm(config["patch"]) != selected:
+        problems.append("record patch differs from the selected identity")
+    if _norm(candidate["patch"]) != selected:
+        problems.append("candidate evidence patch differs from the selected identity")
+    if config.get("inject"):
+        problems.append("record is an injected control, not evidence")
+    audio = ROOT / record["audio"]
+    if not audio.exists() or bass.sha(audio) != record["diagnostics"]["model_audio_sha256"]:
+        problems.append("record audio missing or does not hash to its own record")
+    if record["diagnostics"]["model_audio_sha256"] != candidate["sha256"]:
+        problems.append(f"record audio {record['diagnostics']['model_audio_sha256'][:12]} != "
+                        f"candidate {candidate['sha256'][:12]}")
+    measured = candidate["measurements"]
+    for key in ("properties", "events"):
+        if _norm(record["diagnostics"][key]) != _norm(measured[key]):
+            differs = [k for k in measured["properties"]
+                       if record["diagnostics"]["properties"].get(k) != measured["properties"][k]]
+            problems.append(f"record {key} differ from the candidate's"
+                            + (f": {', '.join(differs)}" if key == "properties" else ""))
+    if _norm(record["metrics"]) != _norm(candidate["metrics"]):
+        problems.append("record required metrics differ from the candidate's")
+    # the declared preservation policy, against the pre-selection baseline
+    base = baseline["measurements"]
+    lost = sorted(_passes(base) - _passes(measured))
+    if lost:
+        problems.append(f"preservation: property pass lost: {', '.join(lost)}")
+    lost_partials = sorted(volume.passed_partials(base) - volume.passed_partials(measured))
+    if lost_partials:
+        problems.append(f"preservation: per-note harmonic pass lost: {lost_partials}")
+    tol = measured["properties"]["Gain"]["tolerance"]
+    gains = [e["rms_dbfs"]["model"] - e["rms_dbfs"]["reference"] for e in measured["events"]]
+    if not all(abs(g) <= tol for g in gains):
+        problems.append(f"preservation: per-note gain outside {tol} dB: {gains}")
+    return problems
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--record", type=Path, default=RECORD)
+    a = ap.parse_args(argv)
+    try:
+        record = json.loads(a.record.read_text())
+        candidate = json.loads(CANDIDATE.read_text())
+        baseline = json.loads(BASELINE.read_text())
+        manifest, _ = bass.load_reference()
+    except (OSError, ValueError, bass.Refused) as exc:
+        print(f"REFUSED: {exc}")
+        return 2
+    problems = check(record, candidate, baseline, manifest)
+    for p in problems:
+        print("MISMATCH:", p)
+    if problems:
+        return 1
+    props = record["diagnostics"]["properties"]
+    print(f"MATCH: {bass.SELECTED_PATCH}; audio {candidate['sha256']}")
+    for name, p in props.items():
+        state = ("unqualified" if not p.get("valid") else
+                 "pass" if abs(p["error"]) <= p["tolerance"] else "fail")
+        value = f"{p['error']:+.5f} {p['units']}" if p.get("valid") else p.get("why", "")
+        print(f"  {name:<18} {value:<24} {state}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

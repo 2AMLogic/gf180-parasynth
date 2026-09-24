@@ -47,18 +47,46 @@ def load_reference(path=MANIFEST):
         raise Refused(f"M1A reference unavailable: {exc}") from exc
 
 
-def patch_for_reference(manifest):
+# The M1A patch is a NAMED, VERSIONED identity, applied in the instrument
+# patch before rendering -- never by normalising an exported WAV. Each version
+# names the evidence that selected it. The scorecard record carries the id
+# (`diagnostics.configuration.patch_id`), so a board row always says which
+# patch it describes.
+PATCH_VERSIONS = {
+    "m1a-provisional-v1": {
+        "output_volume_db": 0.,
+        "selected_by": "initial provisional mapping (docs/scorecard/mono-m1a-miniv3/model-comparison.md)",
+    },
+    "m1a-gain-minus4db-v2": {
+        "output_volume_db": -4.,
+        "selected_by": "fixed -4 dB output-volume candidate, PR #197 "
+                       "(docs/scorecard/mono-m1a-miniv3/volume-mapping/report.json); "
+                       "Gain +4.97 -> -1.04 dB, every existing pass preserved",
+    },
+}
+SELECTED_PATCH = "m1a-gain-minus4db-v2"
+
+
+def patch_for_reference(manifest, patch_id=SELECTED_PATCH):
+    if patch_id not in PATCH_VERSIONS:
+        raise Refused(f"unknown M1A patch identity: {patch_id}")
+    volume_db = PATCH_VERSIONS[patch_id]["output_volume_db"]
     controls = manifest["controls"]
     octave_db = controls["osc2_open"]["rms_dbfs"] - controls["osc1_open"]["rms_dbfs"]
     release_ms = float(np.median([e["envelope"]["release_t20_ms"]
                                   for e in manifest["renders"][0]["events"]]))
     cutoff = round(float(np.median(manifest["filter_rest_ring_hz"])))
-    return dict(waves=("saw", "saw", "saw"), detune=(0., 12., 0.),
-                mix=(1., 10 ** (octave_db / 20), 0.), noise=0.,
-                cutoff=(cutoff, 2 * cutoff), q=.05, drive=.75,
-                amp=(.010, .25, .75, release_ms / 1000 * 4 / math.log(10)),
-                fenv=(.004, .05, 0., .05), track=0., vol=.45,
-                mod_mix=0., mod_wheel=0., osc_mod=False, filt_mod=False)
+    patch = dict(waves=("saw", "saw", "saw"), detune=(0., 12., 0.),
+                 mix=(1., 10 ** (octave_db / 20), 0.), noise=0.,
+                 cutoff=(cutoff, 2 * cutoff), q=.05, drive=.75,
+                 amp=(.010, .25, .75, release_ms / 1000 * 4 / math.log(10)),
+                 fenv=(.004, .05, 0., .05), track=0., vol=.45,
+                 mod_mix=0., mod_wheel=0., osc_mod=False, filt_mod=False)
+    if volume_db:
+        # the exact expression the volume-mapping candidate rendered with, so
+        # the selected patch is bit-identical to the audio that was accepted
+        patch["vol"] = patch["vol"] * 10 ** (volume_db / 20)
+    return patch
 
 
 def invalid(reason, units="ms"):
@@ -207,8 +235,11 @@ def run(case, inject="", keep_audio=True, cached_record=None):
         output.parent.mkdir(parents=True, exist_ok=True)
         wavfile.write(output, SR, pcm.astype('<i2'))
         artifacts["ours"] = str(output.relative_to(ROOT))
-    config = {"engine": engine, "patch": patch, "inject": inject or None,
+    config = {"engine": engine, "patch_id": SELECTED_PATCH, "patch": patch, "inject": inject or None,
               "mapping_qualification": {
+                  "output_volume": f"{PATCH_VERSIONS[SELECTED_PATCH]['output_volume_db']:+g} dB fixed "
+                                   "patch volume, applied in the patch before rendering; no "
+                                   "post-render normalization. " + PATCH_VERSIONS[SELECTED_PATCH]["selected_by"],
                   "octave_mix": "from isolated open-filter reference RMS ratio; no gain normalization after rendering",
                   "release": "median reference T20 encoded using existing host exponential law",
                   "rest_cutoff": "command set to reference ring frequency; low-resonance equivalence unqualified",
