@@ -1,5 +1,19 @@
 # M1A model comparison
 
+> **Selected patch: `m1a-gain-minus4db-v2`** (`tools/mono_m1a_score.py:
+> PATCH_VERSIONS`) — the provisional mapping with the fixed −4 dB output
+> volume of [the volume candidate](volume-mapping/README.md), applied in the
+> patch before rendering. Promoted through `tools/run_case.py M1A` at
+> `ecdc50e`; the record reproduces the candidate's audio
+> (`628a6a31…a2ba61c`) and its property vector exactly, checked by
+> `tools/check_m1a_selection.py`. Current vector: Pitch −0.05059 cents
+> **pass** · Harmonic shape 19.82331 dB **fail** · Envelope attack
+> +8.10889 ms **fail** · Envelope release +8.47917 ms **pass** · Gain
+> −1.04361 dB **pass** · Clipping 0 % **pass** · Filter envelope
+> **unqualified** — 4 passing / 2 failing / 1 unqualified. Still a valid
+> fail. The table below is the v1 (pre-selection) record and is kept as
+> history.
+
 This is a fixed-point **model** observation against frozen Mini V3 audio.
 It has no SPI → I²S or physical-board evidence. The complete 7.5 s phrase
 uses MIDI 36, 43, 36, the shared selected engine, saw plus quieter octave saw,

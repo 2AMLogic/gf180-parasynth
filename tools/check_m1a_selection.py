@@ -8,8 +8,9 @@ checks, against committed files only (no render):
 1. identity   -- the record names `mono_m1a_score.SELECTED_PATCH`, and its
                  patch equals that identity's patch and the candidate's patch;
 2. audio      -- the record's model WAV hashes to the candidate WAV's hash;
-3. vector     -- the record's full property vector and per-event diagnostics
-                 equal the candidate's, exactly (not within a tolerance);
+3. vector     -- the record's full property vector and required metrics equal
+                 the candidate's exactly; per-event raw diagnostics agree to
+                 1e-6 dB (FFT last-bit differences across hosts, see below);
 4. policy     -- M1A's declared preservation policy
                  (tools/measure_m1a_volume_mapping.py) holds against the
                  pre-selection baseline: no property pass lost, no per-note
@@ -40,6 +41,29 @@ def _norm(x):
     return json.loads(json.dumps(x))
 
 
+EVENT_ATOL = 1e-6
+
+
+def event_deviation(a, b):
+    """Largest absolute numeric difference between two diagnostics trees, or
+    None when their structure or any non-numeric value differs."""
+    if isinstance(a, bool) or isinstance(b, bool) or a is None or b is None:
+        return 0. if a == b else None
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(a - b)
+    if isinstance(a, dict) and isinstance(b, dict):
+        if set(a) != set(b):
+            return None
+        parts = [event_deviation(a[k], b[k]) for k in a]
+    elif isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        if len(a) != len(b):
+            return None
+        parts = [event_deviation(x, y) for x, y in zip(a, b)]
+    else:
+        return 0. if a == b else None
+    return None if None in parts else max(parts, default=0.)
+
+
 def _passes(measured):
     return {name for name, p in measured["properties"].items()
             if p.get("valid") and abs(p["error"]) <= p["tolerance"]}
@@ -65,12 +89,18 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
         problems.append(f"record audio {record['diagnostics']['model_audio_sha256'][:12]} != "
                         f"candidate {candidate['sha256'][:12]}")
     measured = candidate["measurements"]
-    for key in ("properties", "events"):
-        if _norm(record["diagnostics"][key]) != _norm(measured[key]):
-            differs = [k for k in measured["properties"]
-                       if record["diagnostics"]["properties"].get(k) != measured["properties"][k]]
-            problems.append(f"record {key} differ from the candidate's"
-                            + (f": {', '.join(differs)}" if key == "properties" else ""))
+    if _norm(record["diagnostics"]["properties"]) != _norm(measured["properties"]):
+        differs = [k for k in measured["properties"]
+                   if record["diagnostics"]["properties"].get(k) != measured["properties"][k]]
+        problems.append(f"record properties differ from the candidate's: {', '.join(differs)}")
+    # Per-event diagnostics are raw floats from an FFT. The same audio analysed
+    # on two hosts differs in the last bits (observed: 7.5e-11 dB on a -99 dB
+    # floor, on the REFERENCE side as well, so it is the library, not the
+    # render). Equal structure and non-numeric fields, numbers within 1e-6 dB,
+    # which is four orders below the published 5-decimal property vector.
+    worst = event_deviation(record["diagnostics"]["events"], measured["events"])
+    if worst is None or worst > EVENT_ATOL:
+        problems.append(f"record events differ from the candidate's (max deviation {worst})")
     if _norm(record["metrics"]) != _norm(candidate["metrics"]):
         problems.append("record required metrics differ from the candidate's")
     # the declared preservation policy, against the pre-selection baseline
@@ -107,7 +137,8 @@ def main(argv=None) -> int:
     if problems:
         return 1
     props = record["diagnostics"]["properties"]
-    print(f"MATCH: {bass.SELECTED_PATCH}; audio {candidate['sha256']}")
+    print(f"MATCH: {bass.SELECTED_PATCH}; audio {candidate['sha256']}; per-event max "
+          f"deviation {event_deviation(record['diagnostics']['events'], candidate['measurements']['events']):.3g}")
     for name, p in props.items():
         state = ("unqualified" if not p.get("valid") else
                  "pass" if abs(p["error"]) <= p["tolerance"] else "fail")
