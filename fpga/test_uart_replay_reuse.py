@@ -32,8 +32,11 @@ def _capture(tmp_path: Path) -> str:
 
 
 @pytest.fixture
-def fake_sim(monkeypatch):
+def fake_sim(monkeypatch, tmp_path):
     calls = []
+    rom = tmp_path / "voice.hex"
+    rom.write_text("0001\n0002\n")
+    monkeypatch.setattr(vub, "roms", lambda: [rom])
 
     def run(cmd, **kw):
         calls.append(cmd)
@@ -105,3 +108,25 @@ def test_an_injected_fresh_run_reports_its_injection(tmp_path, fake_sim):
     run = vub.simulate_replay(cap, out, inject="UART_SKIP_BYTE")
     assert run["inject"] == "UART_SKIP_BYTE"
     assert "INJECT_BUG_UART_SKIP_BYTE" in run["defines"]
+
+
+def test_reuse_refuses_a_changed_rom(tmp_path, fake_sim, capsys):
+    # a ROM the RTL $readmemh's changes the sound with no Verilog change
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    vub.simulate_replay(cap, out)
+    (tmp_path / "voice.hex").write_text("0001\n0003\n")
+    assert vub.simulate_replay(cap, out, reuse=True) is None
+    assert "roms" in capsys.readouterr().out
+
+
+def test_the_identity_names_every_rom_the_bench_reads(tmp_path, fake_sim):
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    vub.simulate_replay(cap, out)
+    rec = json.loads((out / "run_identity.json").read_text())
+    assert list(rec["identity"]["roms"].values()) == \
+        [vub._sha(tmp_path / "voice.hex")]
+
+
+def test_the_real_rom_set_is_not_empty():
+    # the resolver the identity uses must find the repository's ROMs
+    assert any(str(p).endswith(".hex") for p in vub.roms())

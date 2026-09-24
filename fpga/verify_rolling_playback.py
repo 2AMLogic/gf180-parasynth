@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import sys
@@ -335,9 +336,16 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False) -> dict:
         return {"state": "REFUSED", "reason": "RTL replay did not run",
                 "capture": cap}
     ok, comp, detail = vub.analyze(rr)
+    # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
+    # digests) is published beside the result it produced
+    receipt = Path(rr["outdir"]) / "run_identity.json"
+    published = outdir / f"{fixture}.run_identity.json"
+    published.write_bytes(receipt.read_bytes())
     out = {"state": "PASS" if ok else "FAIL", "capture": cap,
            "comparison": comp, "detail": detail[:10],
-           "reused_rtl_run": bool(rr.get("reused"))}
+           "reused_rtl_run": bool(rr.get("reused")),
+           "run_receipt": {"path": published.name,
+                           "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
     out["control"] = rtl_control(fixture, outdir, vub)
     if not out["control"]["caught"]:
         out["state"] = "FAIL"

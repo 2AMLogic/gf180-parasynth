@@ -388,12 +388,18 @@ def _sha(path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _rel(p) -> str:
+    p = Path(p).resolve()
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+
+
 def replay_identity(srcs, defines, cmd_path, tail_frames) -> dict:
     """Everything a replay's outputs depend on: the compiled sources, the
-    defines (so an injection is part of the identity), the stimulus and
-    the frames run. A reused run must match ALL of it."""
-    return {"sources": {str(Path(p).relative_to(ROOT)) if str(p).startswith(str(ROOT))
-                        else str(p): _sha(p) for p in srcs},
+    ROM images the RTL $readmemh's (they shape the sound as much as the
+    Verilog does), the defines (so an injection is part of the identity),
+    the stimulus and the frames run. A reused run must match ALL of it."""
+    return {"sources": {_rel(p): _sha(p) for p in srcs},
+            "roms": {_rel(p): _sha(p) for p in roms()},
             "defines": list(defines), "stimulus": _sha(cmd_path),
             "tail_frames": int(tail_frames)}
 
