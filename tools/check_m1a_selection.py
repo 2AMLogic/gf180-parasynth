@@ -64,6 +64,16 @@ def event_deviation(a, b):
     return None if None in parts else max(parts, default=0.)
 
 
+V2_EVENT_FIELDS = ("attack_out_of_domain", "attack_state")
+
+
+def candidate_event_deviation(record, candidate):
+    """event_deviation, ignoring the fields the v2 scorer adds per event."""
+    return event_deviation([{k: v for k, v in e.items() if k not in V2_EVENT_FIELDS}
+                            for e in record["diagnostics"]["events"]],
+                           candidate["measurements"]["events"])
+
+
 def _passes(measured):
     return {name for name, p in measured["properties"].items()
             if p.get("valid") and abs(p["error"]) <= p["tolerance"]}
@@ -111,9 +121,7 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
     # floor, on the REFERENCE side as well, so it is the library, not the
     # render). Equal structure and non-numeric fields, numbers within 1e-6 dB,
     # which is four orders below the published 5-decimal property vector.
-    added = ("attack_out_of_domain", "attack_state")        # v2 scorer fields
-    worst = event_deviation([{k: v for k, v in e.items() if k not in added}
-                             for e in record["diagnostics"]["events"]], measured["events"])
+    worst = candidate_event_deviation(record, candidate)
     if worst is None or worst > EVENT_ATOL:
         problems.append(f"record events differ from the candidate's (max deviation {worst})")
     for name in ("Fundamental/harmonics", "bass level"):
@@ -156,7 +164,7 @@ def main(argv=None) -> int:
         return 1
     props = record["diagnostics"]["properties"]
     print(f"MATCH: {bass.SELECTED_PATCH}; audio {candidate['sha256']}; per-event max "
-          f"deviation {event_deviation(record['diagnostics']['events'], candidate['measurements']['events']):.3g}")
+          f"deviation {candidate_event_deviation(record, candidate):.3g}")
     for name, p in props.items():
         state = ("unqualified" if not p.get("valid") else
                  "pass" if abs(p["error"]) <= p["tolerance"] else "fail")

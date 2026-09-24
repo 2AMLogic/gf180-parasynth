@@ -2,9 +2,9 @@
   "engine": "fixed-model",
   "case_id": "M1A",
   "subject": "Round bass / anchor",
-  "source_commit": "ecdc50e",
-  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-24T19:08:04Z",
-  "analysis_version": "m1a-envelope-score-v1",
+  "source_commit": "dc9c111",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-24T22:10:37Z",
+  "analysis_version": "m1a-envelope-score-v2",
   "reference_profile": "frozen Mini V3 software reference (screening policy: docs/scorecard/mono-m5a-policy.md); Model D cross-check unavailable",
   "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
   "audio": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav",
@@ -19,13 +19,11 @@
       "tolerance_basis": "maximum of pitch / 1 cent and harmonic error / 1 dB; no averaging"
     },
     "envelope": {
-      "value": 1.62178,
-      "reference": 0.0,
-      "error": 1.62178,
+      "valid": false,
+      "state": "no verdict",
+      "why": "unqualified component: Envelope attack (attack fit outside the estimator's qualified domain: MIDI 36 @0.1s reference: shape p=3 outside qualified {0.5, 1, 2}; MIDI 43 @2.1s reference: shape p=4 outside qualified {0.5, 1, 2})",
       "units": "normalized maximum",
-      "tolerance": 1.0,
-      "valid": true,
-      "tolerance_basis": "maximum of envelope attack / 5 ms (waveform-fit, qualified) and envelope release / 20 ms (40 ms RMS window); no averaging"
+      "tolerance": 1.0
     },
     "bass level": {
       "value": -26.02076,
@@ -58,12 +56,14 @@
         "tolerance_basis": "dB per measured partial; fixed screening limit"
       },
       "Envelope attack": {
-        "value": 8.38333,
-        "reference": 0.27444,
-        "error": 8.10889,
+        "valid": false,
+        "state": "no verdict",
+        "why": "attack fit outside the estimator's qualified domain: MIDI 36 @0.1s reference: shape p=3 outside qualified {0.5, 1, 2}; MIDI 43 @2.1s reference: shape p=4 outside qualified {0.5, 1, 2}",
         "units": "ms",
+        "unqualified_value": 8.38333,
+        "unqualified_reference": 0.27444,
+        "unqualified_error": 8.10889,
         "tolerance": 5.0,
-        "valid": true,
         "tolerance_basis": "ms; the M5A screening limit for the same 10-90% measurement; the waveform-fit estimator's known-signal error is under 1 ms (qualification in the manifest)"
       },
       "Envelope release": {
@@ -219,7 +219,12 @@
             "shape_p": 3.0,
             "explained_ratio": 0.7755
           }
-        }
+        },
+        "attack_out_of_domain": {
+          "model": null,
+          "reference": "shape p=3 outside qualified {0.5, 1, 2}"
+        },
+        "attack_state": "unqualified"
       },
       {
         "note": 43,
@@ -339,7 +344,12 @@
             "shape_p": 4.0,
             "explained_ratio": 0.737
           }
-        }
+        },
+        "attack_out_of_domain": {
+          "model": null,
+          "reference": "shape p=4 outside qualified {0.5, 1, 2}"
+        },
+        "attack_state": "unqualified"
       },
       {
         "note": 36,
@@ -459,7 +469,12 @@
             "shape_p": 1.0,
             "explained_ratio": 0.8287
           }
-        }
+        },
+        "attack_out_of_domain": {
+          "model": null,
+          "reference": null
+        },
+        "attack_state": "fail"
       }
     ],
     "qualification": {
@@ -1392,10 +1407,10 @@
         "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"
       }
     },
-    "render_source_commit": "ecdc50e",
+    "render_source_commit": "dc9c111",
     "render_worktree": {
-      "commit": "ecdc50e",
-      "described": "node/D-drums-bitexact-351-gecdc50e",
+      "commit": "dc9c111",
+      "described": "node/D-drums-bitexact-357-gdc9c111",
       "branch": "measure/m1a-select-gain",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
@@ -1416,8 +1431,8 @@
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "ecdc50e",
-      "described": "node/D-drums-bitexact-351-gecdc50e",
+      "commit": "dc9c111",
+      "described": "node/D-drums-bitexact-357-gdc9c111",
       "branch": "measure/m1a-select-gain",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
@@ -1499,7 +1514,7 @@
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-24T19:08:04Z",
+    "run_at": "2026-09-24T22:10:37Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
@@ -1514,7 +1529,7 @@
       "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:M1A:manifest": "sha256:681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d",
       "frozen:M1A:audio": "sha256:a66700fc66287bfb9023e986d35ec76ca6fabbe1c600368181de8270a55248f9",
-      "tools/mono_m1a_score.py": "sha256:91f44a0e9a9ef33ef9a93a954034bbdec92c4ec564d0cea73f997f14344ad9d7",
+      "tools/mono_m1a_score.py": "sha256:74bc08f98b81dea27b84285515e8f433d46e2da383afc9f549a13c1c4231007b",
       "model/filter_rate_chain.py": "sha256:134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
       "tools/measure_mono_m1a_reference.py": "sha256:d9b4122e75f9dfa62f71c688b917787591d59e4fb45811641ebc93c9d6bfd953",
       "audition/dsp.py": "sha256:7bd8e2dcce3934908a3175af0032aabe5031139baf0873bcc2a26f4cfea880fe",
@@ -1523,7 +1538,7 @@
     "artefacts": {
       "ours": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav"
     },
-    "outcome_code": 1,
+    "outcome_code": 2,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "note": "envelope attack qualified by waveform-domain fit with closed-form ground truth; envelope metric = worst of attack/release normalized errors"
