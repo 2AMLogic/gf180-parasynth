@@ -29,13 +29,13 @@ section 10 for where the chip sits against the wafer.space quarter slot.
 ### The board
 
 <!-- BOARD:BEGIN -->
-**20 of 100 acceptance cases have a valid measurement.** 6 pass · 14 fail · 5 no verdict · 75 not run.
+**20 of 100 acceptance cases have a valid measurement.** 9 pass · 11 fail · 5 no verdict · 75 not run.
 
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
 | Drums | 32 | 12 | 3 | 9 | 4 | 16 |
 | Mono | 32 | 2 | 0 | 2 | 1 | 29 |
-| Filters | 24 | 3 | 0 | 3 | 0 | 21 |
+| Filters | 24 | 3 | 3 | 0 | 0 | 21 |
 | Ensemble | 12 | 3 | 3 | 0 | 0 | 9 |
 
 Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverage is reported separately from agreement on purpose** — a case without a verdict is missing verification, not evidence the instrument is wrong, and it must not be able to flatter a percentage.
