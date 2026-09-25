@@ -234,8 +234,11 @@ def is_ancestor(rev: str) -> bool:
     sha = git("rev-list", "-n1", rev)
     if not sha:
         return False
-    r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"],
-                       cwd=ROOT, capture_output=True)
+    try:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", sha, "HEAD"],
+                           cwd=ROOT, capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return False
     return r.returncode == 0
 
 
@@ -295,9 +298,15 @@ def collect(files: list[str], python: str) -> tuple[set[str], str | None]:
     usage error and NOTHING runs. Without this pass a single typo'd marker
     would turn every other claim REFUSED and look like a broken repository.
     """
-    r = subprocess.run([python, "-m", "pytest", "--collect-only", "-q",
-                        "--no-header", "-p", "no:cacheprovider", *files],
-                       cwd=ROOT, capture_output=True, text=True, timeout=900)
+    try:
+        r = subprocess.run([python, "-m", "pytest", "--collect-only", "-q",
+                            "--no-header", "-p", "no:cacheprovider", *files],
+                           cwd=ROOT, capture_output=True, text=True, timeout=900)
+    except subprocess.TimeoutExpired:
+        # A timeout is "could not answer", not "the prose is contradicted".
+        # Uncaught it would exit 1 -- the STALE code -- and be read as the
+        # tree disagreeing with the docs. Return the refusal channel instead.
+        return set(), "pytest collection timed out after 900s"
     ids = {ln.strip() for ln in r.stdout.splitlines()
            if "::" in ln and not ln.startswith(("ERROR", "E  ", " "))}
     if not ids:
@@ -323,9 +332,14 @@ def run_tests(nodeids: list[str], python: str) -> tuple[dict[str, str], str | No
         return {}, None
     with tempfile.TemporaryDirectory() as td:
         xml = pathlib.Path(td) / "claims.xml"
-        subprocess.run([python, "-m", "pytest", "-q", "--no-header", "--tb=no",
-                        "-p", "no:cacheprovider", f"--junit-xml={xml}", *nodeids],
-                       cwd=ROOT, capture_output=True, text=True, timeout=3600)
+        try:
+            subprocess.run([python, "-m", "pytest", "-q", "--no-header", "--tb=no",
+                            "-p", "no:cacheprovider", f"--junit-xml={xml}", *nodeids],
+                           cwd=ROOT, capture_output=True, text=True, timeout=3600)
+        except subprocess.TimeoutExpired:
+            # Same misattribution as collect(): exit 1 means "contradicted",
+            # and a run that never finished contradicts nothing.
+            return {}, "pytest run timed out after 3600s"
         if not xml.exists():
             return {}, "pytest wrote no junit-xml report"
         try:
@@ -407,6 +421,16 @@ def check_grep(c: Claim) -> None:
     except re.error as exc:
         c.refuse(f"bad regex {c.value!r}: {exc}")
         return
+    # Before the kind split, because it is the ABSENT polarity that needs this
+    # most: an empty file set makes "nothing matched" and "nothing was
+    # examined" indistinguishable, and reporting the second in the voice of the
+    # first is a green verdict derived from no evidence. `expand()` already
+    # rejects a glob whose base directory is missing; this catches the typo one
+    # level down -- a real directory with a filename pattern that matches
+    # nothing (`tools/*.pyy`).
+    if not files:
+        c.refuse(f"in={c.attrs['in']} matched no files")
+        return
     hits: list[str] = []
     unreadable: list[str] = []
     for f in files:
@@ -420,9 +444,6 @@ def check_grep(c: Claim) -> None:
                 hits.append(f"{f.relative_to(ROOT).as_posix()}:{n}")
                 break
     if c.kind == "grep":
-        if not files:
-            c.refuse(f"in={c.attrs['in']} matched no files")
-            return
         if unreadable and not hits:
             c.refuse(f"could not read {len(unreadable)} of {len(files)} file(s)")
             return

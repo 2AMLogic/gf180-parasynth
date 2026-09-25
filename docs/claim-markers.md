@@ -115,9 +115,11 @@ than none.
 - **An `absent=` claim is only as good as the regex and globs it names.** If the
   item is delivered under a name the regex does not match, the marker keeps
   reporting `OK` and the "not yet" line stays wrong. The mitigation is partial:
-  the checker `REFUSED`s when a glob points into a directory that does not
-  exist, so a typo'd path cannot masquerade as a genuine absence — but a
-  correct path with a too-narrow regex still can. **When you deliver a "not
+  the checker `REFUSED`s whenever the `in=` globs select **no files at all** —
+  whether because the directory does not exist or because the filename pattern
+  matches nothing inside one that does — so a typo'd path cannot masquerade as
+  a genuine absence. A *correct* path with a too-narrow regex still can: the
+  files are read, the regex simply does not match. **When you deliver a "not
   yet" item, move its line and rewrite its marker**; that is part of the work,
   not follow-up.
 - **`grep=` proves a string is present, not that the code does what the prose

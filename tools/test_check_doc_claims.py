@@ -224,6 +224,27 @@ def test_a_glob_into_a_directory_that_does_not_exist_is_refused(fixtures):
     assert "repo-relative" in v["escape"].detail
 
 
+def test_a_glob_matching_zero_files_is_refused_for_both_polarities(fixtures):
+    """The directory check above is not enough: the typo can be in the FILENAME
+    pattern rather than the directory, and then the base dir exists while the
+    glob still matches nothing.
+
+    `absent=` reported OK here -- a green verdict derived from reading zero
+    files, which is the one outcome this tool exists to make impossible, and the
+    polarity where it is least detectable: for an absence claim "nothing
+    matched" and "nothing was examined" produce identical output. Both kinds
+    must REFUSE identically on an empty file set.
+    """
+    v = verdicts(write_doc(fixtures, {
+        "zero-absent": 'absent="anything" in=tools/*.pyy',
+        "zero-grep":   'grep="anything" in=tools/*.pyy',
+        "zero-multi":  'absent="anything" in=tools/*.pyy,docs/*.mdd',
+    }))
+    assert all(c.status == cdc.REFUSED for c in v.values()), {k: c.detail for k, c in v.items()}
+    for k in v:
+        assert "matched no files" in v[k].detail, v[k].detail
+
+
 # --------------------------------------------------------------------------
 # commit=
 # --------------------------------------------------------------------------
