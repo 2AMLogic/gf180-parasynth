@@ -112,7 +112,7 @@ QUALIFICATION = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
 ANALYSIS_VERSION = "m1a-envelope-score-v3"
 
 
-def attack_domain():
+def qualified_attack_domain():
     """The v3 qualified domain; REFUSES if the suite that produced it was not
     run on the estimator and signal sources now in the tree."""
     try:
@@ -132,7 +132,7 @@ def attack_domain():
 def attack_fit_qualified(fit, domain=None):
     """Why this attack fit is outside the v3 qualified domain, or None."""
     import qualify_m1a_attack as qual
-    domain = attack_domain() if domain is None else domain
+    domain = qualified_attack_domain() if domain is None else domain
     if fit.get("search_boundary"):
         return (f"fit on the ramp search {fit['search_boundary']} "
                 f"(10-90 {fit['attack_10_90_ms']:.3f} ms is a search limit, not a measurement)")
@@ -158,7 +158,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         raise Refused("bass comparison audio is silent or non-finite")
     am = lead.am
     envelopes = [am.rms_envelope(x, ms=reference.ENVELOPE_WINDOW_MS, sr=SR) for x in (ours, ref)]
-    domain = attack_domain()
+    domain = qualified_attack_domain()
     values = {name: [] for name in ("Pitch", "Harmonic shape", "Envelope attack",
                                     "Envelope release", "Gain")}
     rows = []
