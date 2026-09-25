@@ -1281,3 +1281,155 @@ what comes out — against Roland's chart, against the schematic and against a
 real TR-808. The hash answers "did this change"; it can never answer "is this
 correct". That distinction is the same one the CP row taught (§10.6): a
 comparand can look authoritative and be measuring a different quantity.
+
+---
+
+## 11. The excitation shape — the mechanism is right, the arithmetic blocks it
+
+§8.3 closed with the attack window and left a row open: *"the rest is the
+**excitation shape** — the reference's pulse shaper, §2 — which this revision
+does not implement and which contract 17.20 records as the next thing to do."*
+§8.4's table still reads `excitation shape | impulse | impulse — 17.20 | not
+done`. This section is the measurement that was supposed to decide it, and it
+decides it against shipping anything to the kit — for a reason that is not
+about the excitation at all.
+
+Everything below is printed by `model/bd_excitation_probe.py`, whose own
+preconditions are §8.3's two anchors: it REFUSES unless the reference unit
+still measures 41.2 % and our kit still measures 22.3 %. Both reproduce to
+0.05 pp. Held in place by `model/test_bd_excitation_probe.py`, which needs no
+audio.
+
+```
+python3 model/bd_excitation_probe.py --refs /tmp/tr808-ref
+```
+
+### 11.1 The gap is structural, not a knob position
+
+§8.3 quotes one file. The probe measures all 25 the corpus holds
+(`bd8/BD*.WAV`, 5 TONE × 5 DECAY, `sounds-tr808-fischer` @ `85fbecf`):
+
+| % of energy in the first 4 ms | 20–80 | 80–150 | 150–300 | 300–600 | 600–2000 Hz |
+|---|---:|---:|---:|---:|---:|
+| machine, min over 25 | 0.29 | 28.93 | 43.18 | 2.05 | 0.05 |
+| machine, **median** | 0.76 | **41.16** | 52.59 | 5.60 | 0.18 |
+| machine, max | 2.30 | 52.66 | 56.55 | 11.19 | 1.53 |
+| **ours, shipped** | **73.38** | 22.30 | **4.15** | 0.11 | 0.06 |
+
+§8.3's 41.2 % is the **median** of the machine's own knob range, not a
+coincidence of one file. And the column that matters most is not the one the
+issue names: ours puts **73.4 % below 80 Hz where the machine never exceeds
+2.30 % at any setting it has**, and 4.15 % in 150–300 Hz where the machine
+never drops below 43.18 %. Ours is outside the machine's own range on four of
+the five bands. That is not a knob position.
+
+### 11.2 The exciter envelope cannot close it, and it is not a tuning problem
+
+`v = 32767 × (ENV(e1) + ENV(e2)) >> (15 + att)` is **non-negative by
+construction**, so the excitation's spectrum is maximal at DC and no setting of
+it can tilt the pulse upward in frequency relative to the near-impulse that
+already ships. Measured, so it is not only an argument:
+
+| E_BDX | 20–80 | 80–150 | 150–300 Hz |
+|---|---:|---:|---:|
+| τ 0.1 ms (shipped) | 73.38 | 22.30 | 4.15 |
+| τ 1 ms | 80.69 | 15.10 | 4.13 |
+| τ 4 ms | 49.34 | **34.27** | 16.29 |
+| τ 8 ms | 65.59 | 17.24 | 17.06 |
+| hold 48 frames | 76.70 | 17.86 | 5.22 |
+| + a second envelope segment | 73.38 | 22.30 | 4.15 |
+
+**τ = 4 ms is the trap.** It raises the 80–150 column to 34.3 % — most of the
+way to the target the issue names — and it is not a pulse shape at all: 4 ms
+is the attack window's own length, so what moved is the exciter still being on
+when the coefficients step back to 49.4 Hz. Its low band is still 49.3 %,
+**21× the machine's largest**. A criterion that only read the 80–150 column
+would have accepted it.
+
+Two things this costs that a register-level reading would miss: **all 18
+envelopes are already read by a path**, so "add a second envelope segment" is
+a 19th envelope, not a register change — and spending it moves nothing
+(`test_adding_a_second_envelope_segment_costs_an_envelope_and_buys_nothing`).
+
+### 11.3 A bipolar excitation does close it, and the block already has one
+
+`M_BD` is mode 8 and `N_NUMS` is 11, so the bass drum's resonator carries a
+**numerator register it does not use** (contract 15.6; `MODE_NUM[m]` at
+`0xB3 + 4m`). `BP` injects `e[n] − e[n−2]` — an AC-coupled biphasic pulse,
+which is what a capacitor-coupled pulse shaper delivers into a bridged-T. One
+register write, no new hardware, `NUMS = 11` already synthesised
+(`rtl-sketch/modal_dp.v`).
+
+| | 20–80 | 80–150 | 150–300 | 300–600 | 600–2000 Hz | |
+|---|---:|---:|---:|---:|---:|---|
+| ours, shipped (RAW) | 73.38 | 22.30 | 4.15 | 0.11 | 0.06 | outside on 4 bands |
+| ours, **BP**, peak 1.0, amp 0.0516 | 0.45 | 42.86 | 48.37 | 6.84 | 1.47 | **inside on all five** |
+| machine, min…max | 0.29–2.30 | 28.9–52.7 | 43.2–56.6 | 2.05–11.19 | 0.05–1.53 | |
+
+f0 stays 49.40 Hz and the fitted body τ 142.4 ms. One register write puts
+every band inside the range the real machine covers across its whole knob.
+
+### 11.4 And it cannot ship, for a reason in `modal_fixed`, not in the kit
+
+`BP` has a zero at DC, so the 49.4 Hz ring it produces is **15.6× weaker** for
+the same excitation. Excitation amplitude can only be raised 4× (`peak` 0.25 →
+1.0); the rest has to come back through the mode's output `amp`, which does not
+touch the **state**. So the resonator runs **23.9 dB smaller inside a biquad
+that truncates** — `y = sat((acc >> CF) + x, SB)`, floor, at a pole of
+r = 0.99993. A truncating biquad settles into a DC deadband of fixed **state**
+size, so its level relative to the signal grows by exactly that 23.9 dB.
+
+DC pedestal, dB below the render's own peak, over accent (the body bus, 1.5 s):
+
+| | 0.50 | 0.70 | 1.00 | 1.40 | 2.00 | worst |
+|---|---:|---:|---:|---:|---:|---:|
+| RAW (shipped) | −40.2 | −81.2 | −46.3 | −62.2 | −52.4 | **−40.2** |
+| BP, peak 1.0 | −78.3 | **−19.4** | −22.5 | −22.5 | −22.5 | **−19.4** |
+| BP, peak 1.0, hold 8 | −78.3 | −26.6 | −84.3 | −84.3 | −84.3 | −26.6 |
+| BP, peak 1.0, hold 64 | −38.8 | −41.8 | −84.3 | −84.3 | −84.3 | −38.8 |
+
+Read the rows, not the best cell: **which accent lands in which deadband is not
+smooth**, so no single accent measures this, and the shipped kit's own pedestal
+already swings 41 dB across five accents. The BP arm's worst is 20.8 dB worse
+than the shipped kit's worst, and its 20-ms decay envelope stops being
+monotone (+5.9 dB where the shipped kit is −0.5). The arm whose pedestal is
+tolerable (`hold 64`, −38.8 dB) is the one whose band split is not: 19.66 %
+below 80 Hz.
+
+**So the kit is unchanged by this section.** Shipping BP would trade a
+measurement the reference can adjudicate for a defect it cannot, which is
+precisely the "moved the number without being better" outcome issue #21 was
+opened to avoid.
+
+### 11.5 What the shape alone can do, as a bound
+
+Replaying an arbitrary integer sequence into the same bank — more than any
+source could emit, bit-exact against `DrumsFx` before any substitution — says
+the mechanism is right and only the lever is wrong:
+
+| excitation | 20–80 | 80–150 | 150–300 Hz |
+|---|---:|---:|---:|
+| shipped exponential, τ 0.1 ms | 69.87 | 25.40 | 4.68 |
+| biphasic ±8 samples (0.33 ms) | **0.40** | **39.38** | **46.85** |
+| biphasic ±32 samples | 9.49 | 47.67 | 38.94 |
+| sine cycle, 256 samples (188 Hz) | 13.25 | 58.71 | 24.37 |
+| machine, median | 0.76 | 41.16 | 52.59 |
+
+A biphasic pulse a third of a millisecond wide lands on the machine's median —
+**driven at full excitation amplitude, so it costs the resonator's state
+nothing**, which is exactly what `BP` cannot do to a pulse that is already
+0.1 ms long. That is the shape a source in 15.4 would be aiming at.
+
+### 11.6 What this changes in §8.4's table
+
+`excitation shape | impulse | impulse — 17.20 | not done` stands, and 17.20 is
+now **specified rather than open**: a bipolar excitation ≈0.33 ms wide, whose
+target is the five-band range of §11.1 and not a single number. Its blocker is
+the truncating biquad of §11.4, which is a defect of `modal_fixed.py` /
+`rtl-sketch/modal_dp.v` and is filed separately — the shipped kit already
+carries it at −40.2 dB.
+
+*Measured 2026-09-25 against `sounds-tr808-fischer` @ `85fbecf`, renders from
+`model/drums_fx.py` at contract revision 10. Script:
+`model/bd_excitation_probe.py`, validated by
+`model/test_bd_excitation_probe.py`.*
