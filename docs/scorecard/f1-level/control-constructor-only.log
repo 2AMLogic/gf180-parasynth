@@ -1,0 +1,6 @@
+identity RateConvertedLadder factor=2 causal=True  exact match: ladder 0 / g 0 / k 0 mismatches in 12000 frames
+registers baseline  s=1.0    gain/ogain [(170394, 25206)]
+registers half      s=0.5    gain/ogain [(170394, 25206)]
+registers quarter   s=0.25   gain/ogain [(170394, 25206)]
+REFUSED  half: gain/ogain (170394, 25206) equal the baseline's -- this candidate would measure the baseline's audio under another name
+CONTROL OK  refused for the stated reason: 'equal the baseline'
