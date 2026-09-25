@@ -155,6 +155,13 @@ def test_a_clean_stub_renders_and_every_clip_is_checked(stub_render):
     assert chk["name_aliases_observed"] == []
     for cid, c in prof["clips"].items():
         assert c["pins_after_render"]["held"] is True, cid
+    assert rp.post_render_checked(prof["rigs"]["surge-type2"])
+
+
+def test_a_pre_233_record_is_not_read_as_post_render_checked():
+    """The committed profile's shape: the constant flag, no per-clip record."""
+    assert not rp.post_render_checked(
+        {"qualified": True, "qualification": {"pins_held_after_render": True}})
 
 
 def test_a_readback_that_changes_after_the_first_render_refuses(stub_render):

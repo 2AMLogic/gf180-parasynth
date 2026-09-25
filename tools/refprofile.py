@@ -64,7 +64,7 @@ those are the load-bearing ones:
     stable within one session: 259/260/264/265 report their Audio In names
     after the first clip render (#231). Since #233 `--render` re-reads every
     pin after EVERY clip and accepts exactly that rename, readback enforced;
-    profiles built before it made no post-render check (`PRE_233_BUILDERS`).
+    profiles built before it made no post-render check (`post_render_checked`).
 
 THE ESTIMATOR FLOOR, AND WHY THE PROBE LEVEL IS WHAT IT IS
 ----------------------------------------------------------
@@ -550,16 +550,19 @@ SURGE_AUDIO_IN_ALIASES = {
     265: ("A Osc 1 Unison Voices", "A Osc 1 High Cut"),
 }
 
-#: `builder_sha256` of every profile written BEFORE #233. Those renderers
-#: checked the pins once, before any clip was rendered, and wrote
-#: `pins_held_after_render: true` as a constant. A profile carrying one of
-#: these hashes therefore makes NO post-render claim, whatever that field
-#: says; the committed profile's clips reproduce bit-identically
-#: (`repro-report.json`), which is separate evidence and is not this check.
-PRE_233_BUILDERS = {
-    "4bbd8e90c0a58e52a2f38d68174e71c8a73cd62180b2c6b018687a0d61136f77":
-        "refprofile/profile.json as frozen at daf9e64 (2026-09-18)",
-}
+def post_render_checked(rig: dict) -> bool:
+    """Did the renderer that wrote this rig's record re-check the pins after
+    every clip? Only renderers from #233 on write `post_render_check`. Before
+    it, `pins_held_after_render: true` was written as a CONSTANT after a
+    single pre-render check -- the committed profile (built at daf9e64,
+    builder 4bbd8e90...) is one of those, and its flag is not evidence of a
+    post-render check. Its clips reproduce bit-identically
+    (`repro-report.json`), which is separate evidence and not this check."""
+    q = rig.get("qualification", {})
+    chk = q.get("post_render_check")
+    return bool(chk and chk.get("per_clip")
+                and chk.get("clips_checked") == chk.get("clips_rendered")
+                and q.get("pins_held_after_render") is True)
 
 
 def check_pins_post_render(dev) -> tuple[list, list]:
@@ -826,9 +829,10 @@ def cmd_list() -> int:
     print(f"built     {b.get('at')} at {w.get('commit')} "
           f"({'DIRTY ' + str(w.get('uncommitted_sha256')) if w.get('dirty') else 'clean'})")
     print(f"probe     {prof.get('probe_level_dbfs')} dBFS, {prof.get('sr')} Hz")
-    if b.get("builder_sha256") in PRE_233_BUILDERS:
-        print("pins      checked BEFORE rendering only: this builder predates #233 and "
-              "wrote pins_held_after_render as a constant")
+    for name, r in sorted(prof.get("rigs", {}).items()):
+        if r.get("qualified") and not post_render_checked(r):
+            print(f"pins      {name}: checked BEFORE rendering only. Its renderer "
+                  f"predates #233 and wrote pins_held_after_render as a constant")
     print()
     print(f"{'rig':<14}{'qualified':<11}why")
     print("-" * 100)
