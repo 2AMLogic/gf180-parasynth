@@ -5,6 +5,14 @@ NO VERDICT, and 10 ms is kept.** The estimator is now qualified over a stated
 domain with measured error bounds. All three Mini V3 reference fits fall
 outside it, for a reason the known-answer suite identifies.
 
+**Status (2026-09-25, after review of #214): CLOSED FOR NOW — attack is
+BLOCKED ON REFERENCE/METHOD SUITABILITY.** This round corrects the measurement
+and establishes a limitation; it earns no sound pass. 10 ms stays selected,
+M1A stays NO VERDICT, the board stays 20 valid / 6 passing. The frozen
+reference recordings are NOT to be changed just to obtain a score: reopening
+needs either a method qualified for spectra that change during the attack, or
+a reference whose attack is independently suitable.
+
 ## What changed (measurement version v2 → v3)
 
 1. **One quantity.** The property reports the 10–90 % attack time in ms, and
@@ -171,6 +179,19 @@ above the domain, and in the suite, readings like them (explained 0.94–0.97,
   shapes, spectra and decays.
 - The ADS decay in the suite (80 ms exponential) is not the model's linear
   decay. It was chosen as a harder case, not as a calibration.
+- **The error bounds are observed, not guaranteed.** Each sub-millisecond
+  figure is the worst error OBSERVED within selected regions of this synthetic
+  calibration suite. It is not an accuracy guarantee for arbitrary synth
+  audio, and must not be quoted as one.
+- **Known generator defect (nonblocking, recorded at review).** The
+  synthetic carrier (`tools/attack_known_answer.py`, `carrier()`) normalizes
+  to "constant power" by summing each component's power, `0.5·a²`. The octave
+  saw's harmonics fall on exactly the base saw's even-harmonic frequencies, so
+  those components add COHERENTLY (amplitude, with phase), not in power: the
+  normalization misstates the carrier's true power wherever they overlap, and
+  under a moving filter that error moves too. Correct it when this generator
+  is next revised, then requalify any claim that rests on the affected
+  spectral cases. It does not by itself reopen this investigation.
 - The attack-sweep points (`../attack-sweep/`) were fitted by the v1/v2
   estimator and are still classified under the frozen v2 rule. This rescore
   supersedes them for the 10, 4 and 5 ms settings.

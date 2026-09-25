@@ -85,7 +85,13 @@ def cutoff_trajectory(t, on, rest_hz, peak_ratio, decay_s):
 
 def carrier(t, hz, fc, *, octave_mix=0.535, phase_cycles=0.0, q=0.707):
     """Band-limited saw (+ octave saw) through a quasi-static two-pole
-    low-pass at the instantaneous cutoff `fc` (an array), constant power."""
+    low-pass at the instantaneous cutoff `fc` (an array), constant power.
+
+    KNOWN DEFECT (nonblocking; see attack-qualification/README.md): `power`
+    sums 0.5*a^2 per component, but the octave saw's harmonics coincide with
+    the base saw's even harmonics and add coherently, so this is not the true
+    power where they overlap. Fix on the next revision of this generator and
+    requalify affected claims."""
     x = np.zeros_like(t)
     power = np.zeros_like(t)
     tt = t - phase_cycles / hz
