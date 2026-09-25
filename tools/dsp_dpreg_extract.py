@@ -7,7 +7,13 @@ query the netlist; no write_checkpoint, no report writes outside this
 session's own directory (/home/ubuntu/dsp-review).
 
 REFUSED is a first-class outcome:
-  * the DCP SHA-256 is asserted ON THE BOX before Vivado opens it;
+  * the DCP SHA-256 is asserted ON THE BOX before Vivado opens it, and
+    RECORDED there as routed_dcp.sha256 ("<sha256>  <path>", manifest-
+    pinned) -- the digest binding fpga/publish_arty.dsp_disposition()
+    requires; an extraction that names its checkpoint by path only cannot
+    be bound to the routed.dcp a publication names;
+  * the DCP is re-hashed after Vivado exits and must be unchanged;
+  * the dump must record (DCP line) the path the digest record names;
   * the Vivado version is asserted inside the Tcl;
   * every one of the 13 instance names must be found exactly once;
   * the pulled artifacts are re-hashed locally against the box manifest.
@@ -18,7 +24,14 @@ Output: fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence/
   dsp_cells_dump.txt   per-cell properties, pins, drivers, OPMODE control cone
   vivado_extract.log   full Vivado batch log
   drc_dpreg_names.txt  DPREG-4 section of the BOX's drc.rpt (name cross-check)
-  MANIFEST.sha256      sha256 of the three artifacts, computed on the box
+  drc_rpt.sha256       box-side digest of the drc.rpt the targets came from
+  routed_dcp.sha256    box-side digest + path of the checkpoint opened
+  MANIFEST.sha256      sha256 of the above, computed on the box
+
+The defaults below name the HISTORICAL (vivado-2025.1, attempt02) build and
+are refused: every run must name its box, checkpoint, digest, drc.rpt and
+evidence directory explicitly, so a stale default can never be extracted
+and mistaken for the current image.
 """
 
 import argparse
@@ -297,6 +310,72 @@ def cell_targets(flagged):
     return cells
 
 
+# every file the box manifest pins; publish_arty.DSP_MANIFEST_PINNED must be
+# a subset (regression-tested)
+MANIFEST_FILES = ("dsp_cells_dump.txt", "vivado_extract.log",
+                  "drc_dpreg_names.txt", "drc_rpt.sha256", "routed_dcp.sha256")
+
+
+def stage_script(dcp, dcp_sha256, drc_rpt, remote_dir):
+    """Box-side preconditions: assert the checkpoint digest BEFORE Vivado
+    opens it and record it (with the path) as routed_dcp.sha256. Nothing is
+    recorded when the assertion fails (exit 42)."""
+    return (
+        "set -euo pipefail\n"
+        f"actual=$(sha256sum '{dcp}' | awk '{{print $1}}')\n"
+        f'if [ "$actual" != "{dcp_sha256}" ]; then '
+        'echo "REFUSED: DCP hash mismatch: $actual"; exit 42; fi\n'
+        f"mkdir -p '{remote_dir}'\n"
+        f"sha256sum '{dcp}' > '{remote_dir}/routed_dcp.sha256'\n"
+        f"sha256sum '{drc_rpt}' | tee '{remote_dir}/drc_rpt.sha256'\n"
+        f"grep -n 'DPREG-4' '{drc_rpt}' > '{remote_dir}/drc_dpreg_names.txt' || true\n"
+        "echo PRECONDITIONS_OK\n"
+    )
+
+
+def recheck_script(dcp, dcp_sha256):
+    """Box-side postcondition: the read-only run left the checkpoint
+    byte-identical (exit 44 otherwise)."""
+    return (
+        "set -euo pipefail\n"
+        f"after=$(sha256sum '{dcp}' | awk '{{print $1}}')\n"
+        f'if [ "$after" != "{dcp_sha256}" ]; then '
+        'echo "REFUSED: DCP changed during extraction: $after"; exit 44; fi\n'
+        'echo "DCP_UNCHANGED $after"\n'
+    )
+
+
+def verify_dcp_binding(evidence, dcp, dcp_sha256):
+    """The pulled evidence names, by digest, the checkpoint asserted, and
+    the dump opened that same path. Returns the digest; REFUSED otherwise."""
+    rec = evidence / "routed_dcp.sha256"
+    if not rec.is_file():
+        raise SystemExit("REFUSED: no routed_dcp.sha256 in the pulled evidence")
+    words = rec.read_text().split()
+    if len(words) != 2 or not re.fullmatch(r"[0-9a-f]{64}", words[0]):
+        raise SystemExit(f"REFUSED: malformed routed_dcp.sha256: {words}")
+    if words[0] != dcp_sha256:
+        raise SystemExit(f"REFUSED: routed_dcp.sha256 digest {words[0]} "
+                         f"!= asserted {dcp_sha256}")
+    if words[1] != dcp:
+        raise SystemExit(f"REFUSED: routed_dcp.sha256 names {words[1]}, "
+                         f"not the checkpoint asserted ({dcp})")
+    head = (evidence / "dsp_cells_dump.txt").read_text().splitlines()[:3]
+    if f"DCP {dcp}" not in head:
+        raise SystemExit(f"REFUSED: the dump opened {head[1:2]}, "
+                         f"not {dcp}")
+    return words[0]
+
+
+def write_fetched_drc(dst, text):
+    """Land the fetched box drc.rpt, refusing to replace a DIFFERENT local
+    report (e.g. a committed, host-scrubbed publication's)."""
+    if dst.exists() and dst.read_text() != text:
+        raise SystemExit(f"REFUSED: {dst} exists with different content; "
+                         "extract into a fresh evidence directory")
+    dst.write_text(text)
+
+
 def sh(cmd, **kw):
     print("+", " ".join(str(c) for c in cmd), flush=True)
     return subprocess.run(cmd, text=True, **kw)
@@ -304,31 +383,26 @@ def sh(cmd, **kw):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--box", default=BOX,
-                    help="remote Vivado host (default: the historical one)")
-    ap.add_argument("--dcp", default=DCP, help="routed checkpoint on the box")
-    ap.add_argument("--dcp-sha256", default=DCP_SHA256,
+    # no defaults: the constants above are the historical build's, and a
+    # silent default once pointed a re-extraction at the wrong checkpoint
+    ap.add_argument("--box", required=True,
+                    help=f"remote Vivado host (historical: {BOX})")
+    ap.add_argument("--dcp", required=True,
+                    help=f"routed checkpoint on the box (historical: {DCP})")
+    ap.add_argument("--dcp-sha256", required=True,
                     help="expected SHA-256 of the DCP, asserted on the box")
-    ap.add_argument("--drc-rpt", default=DRC_RPT, help="drc.rpt on the box")
+    ap.add_argument("--drc-rpt", required=True,
+                    help=f"drc.rpt on the box (historical: {DRC_RPT})")
     ap.add_argument("--remote-dir", default=REMOTE_DIR,
                     help="session directory on the box")
-    ap.add_argument("--evidence", type=pathlib.Path, default=EVIDENCE,
-                    help="local evidence output directory")
+    ap.add_argument("--evidence", type=pathlib.Path, required=True,
+                    help=f"local evidence output directory (historical: {EVIDENCE})")
     a = ap.parse_args(argv)
     evidence = a.evidence
     evidence.mkdir(parents=True, exist_ok=True)
 
     # ---- phase 1: assert preconditions on the box ----
-    stage = (
-        "set -euo pipefail\n"
-        f"actual=$(sha256sum {a.dcp} | awk '{{print $1}}')\n"
-        f'if [ "$actual" != "{a.dcp_sha256}" ]; then '
-        'echo "REFUSED: DCP hash mismatch: $actual"; exit 42; fi\n'
-        f'mkdir -p {a.remote_dir}\n'
-        f"sha256sum {a.drc_rpt} | tee {a.remote_dir}/drc_rpt.sha256\n"
-        f"grep -n 'DPREG-4' {a.drc_rpt} > {a.remote_dir}/drc_dpreg_names.txt || true\n"
-        "echo PRECONDITIONS_OK\n"
-    )
+    stage = stage_script(a.dcp, a.dcp_sha256, a.drc_rpt, a.remote_dir)
     r = sh(["ssh", a.box, "bash -s"], input=stage)
     if r.returncode != 0:
         print("REFUSED: box preconditions failed")
@@ -344,8 +418,7 @@ def main(argv=None):
     if r.returncode != 0:
         print("REFUSED: could not fetch drc.rpt")
         return 1
-    drc_local = evidence.parent / "drc.rpt"
-    drc_local.write_text(r.stdout)
+    write_fetched_drc(evidence.parent / "drc.rpt", r.stdout)
     # the bytes just fetched must be the bytes the box hashed in phase 1
     # (re-checked against drc_rpt.sha256 after the pull in phase 4)
     import hashlib
@@ -378,18 +451,22 @@ def main(argv=None):
         print(f"REFUSED: vivado batch failed rc={r.returncode}")
         sh(["ssh", a.box, f"tail -40 {a.remote_dir}/vivado_extract.log || true"])
         return 1
+    # read-only means the checkpoint is byte-identical afterwards
+    r = sh(["ssh", a.box, "bash -s"], input=recheck_script(a.dcp, a.dcp_sha256))
+    if r.returncode != 0:
+        print("REFUSED: checkpoint digest changed or could not be re-checked")
+        return 1
 
     # ---- phase 3: manifest + pull back ----
     r = sh(["ssh", a.box,
-            f"cd {a.remote_dir} && sha256sum dsp_cells_dump.txt vivado_extract.log "
-            "drc_dpreg_names.txt drc_rpt.sha256 > MANIFEST.sha256 && cat MANIFEST.sha256 && "
+            f"cd {a.remote_dir} && sha256sum {' '.join(MANIFEST_FILES)} "
+            "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
             "grep -c '^ERROR' vivado_extract.log || true"])
     if r.returncode != 0:
         print("REFUSED: manifest failed")
         return 1
 
-    for f in ("dsp_cells_dump.txt", "vivado_extract.log", "drc_dpreg_names.txt",
-              "MANIFEST.sha256", "drc_rpt.sha256"):
+    for f in MANIFEST_FILES + ("MANIFEST.sha256",):
         r = sh(["scp", f"{a.box}:{a.remote_dir}/{f}", str(evidence / f)])
         if r.returncode != 0:
             print(f"REFUSED: could not pull {f}")
@@ -416,6 +493,10 @@ def main(argv=None):
     if box_hash != fetched:
         print(f"REFUSED: fetched drc.rpt {fetched} != box drc.rpt {box_hash}")
         return 1
+
+    # the evidence names, by digest, the checkpoint the dump opened
+    bound = verify_dcp_binding(evidence, a.dcp, a.dcp_sha256)
+    print(f"routed.dcp bound  : {bound} {a.dcp}")
 
     dump = (evidence / "dsp_cells_dump.txt").read_text()
     print(f"cells dumped      : {dump.count('==== CELL ')}")

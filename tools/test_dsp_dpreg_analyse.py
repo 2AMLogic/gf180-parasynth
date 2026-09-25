@@ -261,3 +261,113 @@ def test_real_committed_evidence_still_dismisses_13_of_13():
     assert analysis["required_source"].startswith("drc.rpt")
     assert len(analysis["required_instances"]) == 13
     assert len(analysis["cells"]) == 13
+
+
+# ------------------------- extractor: the routed.dcp digest is recorded
+# The integrated baseline's first extraction named its checkpoint by PATH
+# only, so fpga/publish_arty.dsp_disposition() correctly refused to bind it
+# to the routed.dcp the publication names. The extractor now records the
+# digest itself (routed_dcp.sha256, box-side, manifest-pinned), re-hashes
+# the checkpoint after Vivado closes it, and refuses a dump that opened a
+# different path. These run the generated box scripts locally on a fake
+# checkpoint; no network or Vivado is needed.
+
+_xspec = importlib.util.spec_from_file_location(
+    "dsp_dpreg_extract", HERE / "dsp_dpreg_extract.py")
+xmod = importlib.util.module_from_spec(_xspec)
+_xspec.loader.exec_module(xmod)
+
+
+def _fake_box(tmp_path):
+    dcp = tmp_path / "build" / "routed.dcp"
+    dcp.parent.mkdir()
+    dcp.write_bytes(b"not really a checkpoint\n")
+    drc = dcp.parent / "drc.rpt"
+    drc.write_text("| DPREG-4 | Warning | x | 1 |\n")
+    import hashlib
+    return dcp, drc, hashlib.sha256(dcp.read_bytes()).hexdigest()
+
+
+def _bash(script):
+    return subprocess.run(["bash", "-s"], input=script, text=True,
+                          capture_output=True)
+
+
+def test_extractor_stage_records_the_dcp_digest_and_path(tmp_path):
+    dcp, drc, sha = _fake_box(tmp_path)
+    remote = tmp_path / "session"
+    r = _bash(xmod.stage_script(str(dcp), sha, str(drc), str(remote)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "PRECONDITIONS_OK" in r.stdout
+    rec = (remote / "routed_dcp.sha256").read_text()
+    # the exact shape publish_arty.dsp_disposition() parses
+    words = rec.split()
+    assert words == [sha, str(dcp)], rec
+    assert "routed_dcp.sha256" in xmod.MANIFEST_FILES
+
+
+def test_extractor_stage_refuses_a_wrong_dcp_and_records_nothing(tmp_path):
+    dcp, drc, sha = _fake_box(tmp_path)
+    remote = tmp_path / "session"
+    r = _bash(xmod.stage_script(str(dcp), "0" * 64, str(drc), str(remote)))
+    assert r.returncode == 42, r.stdout + r.stderr
+    assert "REFUSED: DCP hash mismatch" in r.stdout
+    assert not (remote / "routed_dcp.sha256").exists()
+
+
+def test_extractor_recheck_refuses_a_checkpoint_changed_by_the_run(tmp_path):
+    dcp, _, sha = _fake_box(tmp_path)
+    assert _bash(xmod.recheck_script(str(dcp), sha)).returncode == 0
+    dcp.write_bytes(b"rewritten by a write_checkpoint\n")
+    r = _bash(xmod.recheck_script(str(dcp), sha))
+    assert r.returncode == 44, r.stdout + r.stderr
+    assert "REFUSED: DCP changed during extraction" in r.stdout
+
+
+def _pulled(tmp_path, sha, rec_path, dump_path):
+    ev = tmp_path / "ev"
+    ev.mkdir()
+    (ev / "routed_dcp.sha256").write_text(f"{sha}  {rec_path}\n")
+    (ev / "dsp_cells_dump.txt").write_text(
+        f"VIVADO 2025.1\nDCP {dump_path}\nTOTAL_DSP48E1 0\n")
+    return ev
+
+
+def test_extractor_binding_accepts_the_digest_and_path_it_asserted(tmp_path):
+    ev = _pulled(tmp_path, "a" * 64, "/b/routed.dcp", "/b/routed.dcp")
+    assert xmod.verify_dcp_binding(ev, "/b/routed.dcp", "a" * 64) == "a" * 64
+
+
+@pytest.mark.parametrize("sha,rec_path,dump_path,why", [
+    ("b" * 64, "/b/routed.dcp", "/b/routed.dcp", "digest"),
+    ("a" * 64, "/old/routed.dcp", "/b/routed.dcp", "names"),
+    ("a" * 64, "/b/routed.dcp", "/old/routed.dcp", "dump opened"),
+])
+def test_extractor_binding_refuses_drift(tmp_path, sha, rec_path, dump_path,
+                                         why):
+    ev = _pulled(tmp_path, sha, rec_path, dump_path)
+    with pytest.raises(SystemExit) as exc:
+        xmod.verify_dcp_binding(ev, "/b/routed.dcp", "a" * 64)
+    assert str(exc.value).startswith("REFUSED:") and why in str(exc.value)
+
+
+def test_extractor_binding_refuses_a_missing_digest_record(tmp_path):
+    ev = _pulled(tmp_path, "a" * 64, "/b/routed.dcp", "/b/routed.dcp")
+    (ev / "routed_dcp.sha256").unlink()
+    with pytest.raises(SystemExit, match="REFUSED: no routed_dcp.sha256"):
+        xmod.verify_dcp_binding(ev, "/b/routed.dcp", "a" * 64)
+
+
+def test_extractor_will_not_overwrite_a_different_local_drc(tmp_path):
+    # the fetched box drc.rpt lands at <evidence>/../drc.rpt; pointed at a
+    # committed publication that would silently replace its host-scrubbed
+    # report with the box's bytes
+    dst = tmp_path / "drc.rpt"
+    dst.write_text("| Host : omitted from public report\n")
+    with pytest.raises(SystemExit, match="REFUSED: .*drc.rpt"):
+        xmod.write_fetched_drc(dst, "| Host : buildbox\n")
+    xmod.write_fetched_drc(dst, dst.read_text())  # identical bytes: fine
+    new = tmp_path / "fresh" / "drc.rpt"
+    new.parent.mkdir()
+    xmod.write_fetched_drc(new, "x\n")
+    assert new.read_text() == "x\n"

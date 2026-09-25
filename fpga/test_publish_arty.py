@@ -379,13 +379,35 @@ def test_committed_publications_carry_exactly_their_derived_dsp_state():
             assert publish.dsp_disposition(pub.parent)["complete"] is True, pub
 
 
-def test_committed_integrated_evidence_refuses_for_the_missing_dcp_binding():
-    # Pins the honest state of the committed integrated baseline: its
-    # extraction names routed.dcp by PATH only, never by digest, so it cannot
-    # be bound to the checkpoint the publication names (6c3c22c5...). When a
-    # bounded re-extraction records the digest, re-derive the publication and
-    # update this pin deliberately.
+def test_committed_integrated_evidence_is_bound_to_its_routed_dcp_by_digest():
+    # Pins the committed integrated baseline. Until 2026-09-25 its extraction
+    # named routed.dcp by PATH only and this test pinned the refusal
+    # ("evidence records no routed.dcp digest"). A bounded read-only
+    # re-extraction (tools/dsp_dpreg_extract.py, box-side digest asserted
+    # before and re-checked after Vivado) recorded the digest; the dump it
+    # produced is byte-identical to the path-only one (e738fb0c...). If this
+    # pin ever fails, the binding has drifted: re-derive, do not edit the pin.
     d = publish.dsp_disposition(INTEGRATED)
-    assert d["complete"] is False
-    assert "evidence records no routed.dcp digest" in d["reason"], d["reason"]
-    assert "6c3c22c591671eb1" in d["reason"], d["reason"]
+    assert d["complete"] is True, d["reason"]
+    assert d["routed_dcp_sha256"] == (
+        "6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8")
+    assert d["targets"] == 13
+    assert d["analysis_dump_sha256"].startswith("e738fb0c1b2db9ea")
+    rec = (INTEGRATED / "dsp-dpreg-evidence" / "routed_dcp.sha256").read_text()
+    assert rec.split() == [d["routed_dcp_sha256"],
+                           "/home/ubuntu/integrated-baseline/build/arty/routed.dcp"]
+    pub = json.loads((INTEGRATED / "publication.json").read_text())
+    # the committed publication ships and hash-records the evidence it cites
+    for name, digest in pub["published_evidence_sha256"].items():
+        assert _sha(INTEGRATED / "dsp-dpreg-evidence" / name) == digest, name
+    assert "routed_dcp.sha256" in pub["published_evidence_sha256"]
+
+
+def test_extractor_manifest_pins_everything_the_publisher_requires():
+    # the extractor's box manifest must cover what dsp_disposition() demands
+    # pinned, or a fresh extraction would refuse for an unpinned record
+    spec = importlib.util.spec_from_file_location(
+        "dsp_dpreg_extract", publish.ROOT / "tools" / "dsp_dpreg_extract.py")
+    x = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(x)
+    assert set(publish.DSP_MANIFEST_PINNED) <= set(x.MANIFEST_FILES)

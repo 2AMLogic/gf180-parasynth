@@ -33,7 +33,7 @@ set cells {
 
 open_checkpoint $dcp
 
-set out [open "/home/ubuntu/integrated-baseline/build/dsp-review/dsp_cells_dump.txt" w]
+set out [open "/home/ubuntu/dsp-review-dcpbind/dsp_cells_dump.txt" w]
 proc emit {s} { global out; puts $out $s }
 
 emit "VIVADO [version -short]"

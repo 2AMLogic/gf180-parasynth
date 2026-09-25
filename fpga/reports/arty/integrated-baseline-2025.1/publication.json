@@ -115,21 +115,35 @@
   "report_transformation": "Host header omitted; numerical report contents unchanged",
   "remaining_review": [
     "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
-    "physical programming, control and audio capture",
-    "13 DPREG-4 DSP feedback warnings (evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it)"
+    "physical programming, control and audio capture"
   ],
-  "dsp_feedback_review_complete": false,
+  "dsp_feedback_review_complete": true,
   "dsp_disposition": {
-    "complete": false,
-    "reason": "evidence records no routed.dcp digest (dsp-dpreg-evidence/routed_dcp.sha256): the extraction names its checkpoint by path only, so it cannot be bound to the routed.dcp this publication names (6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8); a bounded read-only re-extraction on the build host must record it"
+    "complete": true,
+    "reason": "",
+    "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE",
+    "targets": 13,
+    "routed_dcp_sha256": "6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8",
+    "drc_rpt_sha256": "c5747e65bc9ff5750932e81b639aadad7914d5cc7bdf9af4647afa8b41678b5e",
+    "analysis_dump_sha256": "e738fb0c1b2db9eab47471892a6a3800d37b97bf7de6fece387b7d801a2afb2c"
+  },
+  "published_evidence_sha256": {
+    "MANIFEST.sha256": "2ae516010ce60f0ba7a3b2635cd14bd3ff3fcb6fc8db4cd5f5a698c469994ad4",
+    "drc_dpreg_names.txt": "862a1a8c8af883db7bbe3d8ffdd2fcbd022210a4d4282e4f440f39a566ebaf57",
+    "drc_rpt.sha256": "8d689dc414f2b134b4cb2db6296283f2d61f331055c33187effa17f49b7c2529",
+    "dsp-opmode-analysis.json": "da98b58fce02c57073d07a7a5e1d98e6c055727cc95cd709c51ee00476ab2a1f",
+    "dsp_cells_dump.txt": "e738fb0c1b2db9eab47471892a6a3800d37b97bf7de6fece387b7d801a2afb2c",
+    "dsp_dpreg_extract.tcl": "bf5d301e2cf43d61f5fc482e5f5de7eb3ba5a37980d06cda8af1e236088f38f4",
+    "routed_dcp.sha256": "151220844514266f00cb406b62dd287f99ad8577e6afc5c3ce3acfe7e300d0aa",
+    "vivado_extract.log": "27d9cbd97f53436279a3bcd2c81588663244fee2ff16e68a325b7c3d1cbe87c2"
   },
   "published_sha256": {
-    "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
     "timing.rpt": "c7d3e81d2a656a8530f4d416076d33487c916b99f9b043dc2683164308b93fe9",
     "utilization.rpt": "9d96d2f53e4eff596f0217a94aa71128437add24eb2e4029d1293d33f181e705",
-    "build.tcl": "b05ff3b7db14e6da7c8f63ff08974010bb532c9a771d2b756c3466995b44dcb6",
+    "arty.bit": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
     "report.json": "d1810188634b5c8643045db4b78be0ce246d1bc5cd0cc433ea05388b7b7144bb",
     "clocks.rpt": "0f94dce6263ae3477d8f7cb5c6111e4f57829be1a467b4ca003edd0d65a0e9d1",
-    "drc.rpt": "bbb1d497c4dd778f08c38bf99e260de068dbd320830832bbbd1d8740726a955d"
+    "drc.rpt": "bbb1d497c4dd778f08c38bf99e260de068dbd320830832bbbd1d8740726a955d",
+    "build.tcl": "b05ff3b7db14e6da7c8f63ff08974010bb532c9a771d2b756c3466995b44dcb6"
   }
 }
