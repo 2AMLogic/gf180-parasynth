@@ -1,0 +1,18 @@
+OK       surge-type2/drive-100hz-cut250-res0.50-in+0dbfs
+OK       surge-type2/drive-100hz-cut250-res0.50-in-12dbfs
+OK       surge-type2/drive-100hz-cut250-res0.50-in-6dbfs
+OK       surge-type2/lp-cut1000-res0.00
+OK       surge-type2/lp-cut250-res0.00
+OK       surge-type2/lp-cut250-res0.70
+OK       surge-type2/lp-cut250-res0.80
+OK       surge-type2/lp-cut250-res0.86
+OK       surge-type2/lp-cut250-res0.90
+OK       surge-type2/lp-cut250-res0.93
+OK       surge-type2/lp-cut250-res0.95
+OK       surge-type2/lp-cut250-res0.97
+OK       surge-type2/lp-cut250-res0.99
+OK       surge-type2/lp-cut250-res1.00
+OK       surge-type2/lp-cut4000-res0.00
+OK       surge-type2/lp-open20k-res0.00
+16 verified, 0 failed, 0 absent
+verify exit=0
