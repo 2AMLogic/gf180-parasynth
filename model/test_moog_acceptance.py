@@ -2284,6 +2284,7 @@ def test_the_reference_noise_balance_is_reachable_from_the_register():
     assert abs(lv[1.0] - (-12.0)) < 0.5, lv
     assert abs(lv[1.76] - (-7.1)) < 0.4, f"weight 1.76 gives {lv[1.76]:.1f} dB, Mini V3's balance is -7.1"
     assert lv[1.0] < lv[1.76] < lv[2.0], lv
+    assert int(round(1.76 * 32768)) <= (1 << vf.WEIGHT_BITS) - 1, "the balance must fit the register"
 
 
 # =============================================================================
@@ -2316,4 +2317,3 @@ def test_meta_every_test_declares_status_and_ground_truth():
     import test_audio_measure as gt
     from acceptance_meta import assert_ground_truth_gate
     assert_ground_truth_gate(mod, {gt.__name__: gt, mod.__name__: mod})
-    assert int(round(1.76 * 32768)) <= (1 << vf.WEIGHT_BITS) - 1, "the balance must fit the register"
