@@ -144,3 +144,17 @@ from the −12 dBFS numbers, because it would absorb about 10 points of
 saturation. The precondition before any change: freeze one Surge Type 2 clip at
 −24 dBFS with the same stimulus, to verify the reference's documented level
 independence. Until then, the small-signal comparison above is a hypothesis.
+
+## 8. Board records updated (measurement-version update, not a sound change)
+
+`docs/scorecard/results/F1A–F1C.json` were re-run through `tools/run_case.py`
+at runner `77739a9434f2605e`, which includes the #169/#178 rolloff-estimator
+repair. They replace the `531aa8a3731dfdb8` records. The only metric that
+changes is **F1A's rolloff**: −18.5395 → −16.8728 dB/oct against a reference of
+−18.6879, so its error goes from 0.1483 to 1.8151 (tolerance 1.5) and that
+property moves from pass to fail. F1B and F1C change only in provenance. F1A
+was already failing on its corner, so its worst stays at 1.68 and the board
+totals do not move: 20 valid, 6 pass, 14 fail, 5 no verdict, 75 not run. No
+model, ROM or `CUT_TRIM` changed. `selected-path.json` was re-run after the
+probe's wording fix: its numbers are identical, and only `source_commit` and
+the probe hash (`ee680e654b55625e`) differ.
