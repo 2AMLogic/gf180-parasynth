@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q -p no:cacheprovider tools/test_f1_selected_path.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": ".........                                                                [100%]\n9 passed in 5.43s\n",
+    "secs": 6.358047008514404
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q -p no:cacheprovider tools/test_run_case.py -k 'filt_ or filter'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "................                                                         [100%]\n16 passed, 80 deselected in 3.42s\n",
+    "secs": 5.108849763870239
+  }
+]
