@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_capture_m1a_phase_cycle.py -q",
+    "state": "PASS",
+    "rc": 0,
+    "out": ".........                                                                [100%]\n9 passed in 4.27s\n",
+    "secs": 4.765113830566406
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_analyse_m1a_phase_cycle.py -q",
+    "state": "PASS",
+    "rc": 0,
+    "out": ".......                                                                  [100%]\n7 passed in 98.13s (0:01:38)\n",
+    "secs": 98.59350800514221
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_diagnose_m1a_harmonic_phase.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py -q",
+    "state": "PASS",
+    "rc": 0,
+    "out": "...............................................................          [100%]\n63 passed in 228.87s (0:03:48)\n",
+    "secs": 229.4675531387329
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/analyse_m1a_phase_cycle.py --control",
+    "state": "PASS",
+    "rc": 0,
+    "out": "{\n \"flat reference, dipping model\": {\n  \"expected\": \"SUPPORTS-DRIVE\",\n  \"got\": \"SUPPORTS-DRIVE\",\n  \"ok\": true\n },\n \"reference dips like the model\": {\n  \"expected\": \"REDIRECT-TO-PHASE\",\n  \"got\": \"REDIRECT-TO-PHASE\",\n  \"ok\": true\n },\n \"model does not dip\": {\n  \"expected\": \"INCONCLUSIVE\",\n  \"got\": \"INCONCLUSIVE\",\n  \"ok\": true\n },\n \"reference dips a third as much\": {\n  \"expected\": \"INCONCLUSIVE\",\n  \"got\": \"INCONCLUSIVE\",\n  \"ok\": true\n },\n \"reference takes disagree\": {\n  \"expected\": \"INCONCLUSIVE\",\n  \"got\": \"INCONCLUSIVE\",\n  \"ok\": true\n },\n \"known dark h5\": {\n  \"expected\": -8.046179450552566,\n  \"got\": -8.04615979064399,\n  \"ok\": true\n },\n \"flat odd partials beside beating even partials\": {\n  \"expected\": \"range < 0.3 dB\",\n  \"got\": 4.5645900435431486e-05,\n  \"ok\": true\n },\n \"measured drift\": {\n  \"expected\": -0.2634,\n  \"got\": -0.26339999924411,\n  \"ok\": true\n }\n}\n",
+    "secs": 34.898195028305054
+  }
+]
