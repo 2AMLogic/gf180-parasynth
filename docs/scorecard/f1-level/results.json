@@ -1,8 +1,8 @@
 {
  "what": "F1 selected path: compensated input-scaling candidates vs matched-level Surge Type 2 captures; rule in selection-rule.md",
- "source_commit": "eb74ea7",
+ "source_commit": "dd70f03",
  "inputs": {
-  "tools/probes/f1_level_scaling.py": "sha256:8780ecc583b518d8",
+  "tools/probes/f1_level_scaling.py": "sha256:ff8515118bd917fc",
   "tools/probes/f1_selected_path.py": "sha256:8c310f9941f9f515",
   "tools/f1_level_capture.py": "sha256:cb22513b28490c77",
   "tools/run_case.py": "sha256:77739a9434f2605e",
