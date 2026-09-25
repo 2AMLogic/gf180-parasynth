@@ -92,6 +92,13 @@ CLICK_K = 12.
 ZERO_RUN_S = .001
 FLAT_DB = .5
 SUM_RESIDUAL_DB = -40.
+# both_open is not click-tested by the MAD detector: with the filter open the
+# two saws' edges align once per psi cycle and the top of the band swells in a
+# few blocks (it REFUSED take A at 8.65 s; fourth wrong-then-right). It is
+# tested instead against the sum of the isolated takes, block by block: every
+# other component cancels there, so a click in any one take stands out. Take
+# A measured -43.8 dB overall and -40.0 dB worst block before this was fixed.
+SUM_BLOCK_DB = -30.
 OSC1_CENTS, OSC2_CENTS = 5., 10.
 TOOL_FILES = ("tools/capture_m1a_phase_cycle.py", "tools/measure_mono_m1a_reference.py",
               "tools/measure_mono_m5a_reference.py", "model/reference_rigs.py",
@@ -177,15 +184,18 @@ def check_take(audio, sr, on_s, condition):
     if zrun >= ZERO_RUN_S * sr:
         raise Refused(f"{condition}: {zrun} consecutive exact zeros inside the gate (dropout)")
     held = x[round((on_s + SUSTAIN_FROM_S) * sr):off]
-    f_nominal = 2 * F36 if condition == "osc2_open" else F36
-    clean = click_report(held, sr, f_nominal)
-    if clean["n_events"]:
-        raise Refused(f"{condition}: {clean['n_events']} transient events in the held sustain "
-                      f"at {clean['event_times_s']} s -- demo noise or clicks")
-    injected = click_report(ri.inject_clicks(held, sr, every_s=2.0), sr, f_nominal)
-    want = int((len(held) / sr - 1e-9) // 2.0)
-    if injected["n_events"] < want:
-        raise Refused(f"{condition}: click detector control failed ({injected['n_events']} of {want})")
+    clean = {"n_events": None, "max_residual_db": None, "threshold_db": None}
+    injected, want = {"n_events": None}, None
+    if condition != "both_open":
+        f_nominal = 2 * F36 if condition == "osc2_open" else F36
+        clean = click_report(held, sr, f_nominal)
+        if clean["n_events"]:
+            raise Refused(f"{condition}: {clean['n_events']} transient events in the held sustain "
+                          f"at {clean['event_times_s']} s -- demo noise or clicks")
+        injected = click_report(ri.inject_clicks(held, sr, every_s=2.0), sr, f_nominal)
+        want = int((len(held) / sr - 1e-9) // 2.0)
+        if injected["n_events"] < want:
+            raise Refused(f"{condition}: click detector control failed ({injected['n_events']} of {want})")
     sustain = x[round((on_s + SUSTAIN_FROM_S) * sr):round((on_s + GATE_S - .05) * sr)]
     env = am.rms_envelope(sustain, ms=TRANSIENT_BLOCK_MS, sr=sr)[round(.07 * sr):-round(.07 * sr)]
     env_db = 20 * np.log10(np.maximum(env, 1e-12))
@@ -215,11 +225,30 @@ def check_take(audio, sr, on_s, condition):
     return evidence
 
 
-def sum_residual_db(both, osc1, osc2, on_s, sr):
+def sum_check(both, osc1, osc2, on_s, sr):
+    """Precondition 8 (and both_open's click test): both oscillators with the
+    filter open against the sum of the isolated takes, overall and in the
+    worst block of two MIDI 36 periods. Returns dB relative to the sum."""
     a, b = round((on_s + SUSTAIN_FROM_S) * sr), round((on_s + GATE_S - .05) * sr)
     s = np.asarray(osc1[a:b], dtype=np.float64) + np.asarray(osc2[a:b], dtype=np.float64)
     r = np.asarray(both[a:b], dtype=np.float64) - s
-    return 20 * math.log10(max(am.rms(r), 1e-30) / am.rms(s))
+    nb = int(CLICK_PERIODS * sr / F36)
+    m = len(r) // nb
+    rb = np.sqrt((r[:m * nb].reshape(m, nb) ** 2).mean(axis=1))
+    sb = np.sqrt((s[:m * nb].reshape(m, nb) ** 2).mean(axis=1))
+    worst = 20 * np.log10(np.maximum(rb, 1e-30) / sb)
+    return {"overall_db": 20 * math.log10(max(am.rms(r), 1e-30) / am.rms(s)),
+            "worst_block_db": float(worst.max()),
+            "worst_block_s": round(on_s + SUSTAIN_FROM_S + int(np.argmax(worst)) * nb / sr, 3)}
+
+
+def refuse_sum(check, label):
+    if check["overall_db"] > SUM_RESIDUAL_DB:
+        raise Refused(f"{label}: both-open differs from the isolated sum by {check['overall_db']:.1f} dB; "
+                      "isolated takes do not describe the full take's oscillators")
+    if check["worst_block_db"] > SUM_BLOCK_DB:
+        raise Refused(f"{label}: both-open departs from the isolated sum by {check['worst_block_db']:.1f} dB "
+                      f"at {check['worst_block_s']} s -- a click or dropout in one take")
 
 
 # ------------------------------------------------------------ apparatus
@@ -285,14 +314,19 @@ def main():
                                    "overrides": overrides, "checks": evidence,
                                    "apparatus": apparatus}
                 print(f"take {take} {condition}: preconditions hold", flush=True)
-            resid = sum_residual_db(audio_by["both_open"], audio_by["osc1_open"],
-                                    audio_by["osc2_open"], on_s, ref.SR)
-            if resid > SUM_RESIDUAL_DB:
-                raise Refused(f"take {take}: both-open differs from the isolated sum by {resid:.1f} dB; "
-                              "isolated takes do not describe the full take's oscillators")
+            check = sum_check(audio_by["both_open"], audio_by["osc1_open"], audio_by["osc2_open"], on_s, ref.SR)
+            refuse_sum(check, f"take {take}")
+            a = round((on_s + SUSTAIN_FROM_S) * ref.SR)
+            clicked = np.array(audio_by["both_open"], dtype=np.float64)
+            clicked[a:] = ri.inject_clicks(clicked[a:], ref.SR, every_s=2.0)
+            control = sum_check(clicked, audio_by["osc1_open"], audio_by["osc2_open"], on_s, ref.SR)
+            if control["worst_block_db"] <= SUM_BLOCK_DB:
+                raise Refused(f"take {take}: the isolated-sum click control did not fire "
+                              f"({control['worst_block_db']:.1f} dB)")
+            check["injected_click_control_worst_block_db"] = control["worst_block_db"]
             takes[take] = {"note_on_s": on_s, "gate_s": GATE_S, "seconds": seconds_for(on_s),
                            "events": events_for(on_s), "conditions": rows,
-                           "isolated_sum_residual_db": resid}
+                           "isolated_sum_check": check}
         report = {"schema": "m1a-phase-cycle-capture-v1", "state": "CAPTURED",
                   "scope": "diagnostic only; the frozen M1A reference is untouched",
                   "identity": identity, "host_python": sys.executable,
@@ -303,7 +337,9 @@ def main():
                                  "frozen_manifest_sha256": ref.sha256(FROZEN / "manifest.json")},
                   "frozen_reproduction": reproduction, "integrity": integrity,
                   "thresholds": {"zero_run_s": ZERO_RUN_S, "isolated_flat_db": FLAT_DB,
-                                 "sum_residual_db": SUM_RESIDUAL_DB, "osc1_cents": OSC1_CENTS,
+                                 "sum_residual_db": SUM_RESIDUAL_DB, "sum_block_db": SUM_BLOCK_DB,
+                                 "click_periods": CLICK_PERIODS, "detrend_blocks": DETREND_BLOCKS,
+                                 "click_floor_db": CLICK_FLOOR_DB, "click_k_mad": CLICK_K, "osc1_cents": OSC1_CENTS,
                                  "osc2_cents": OSC2_CENTS},
                   "takes": takes}
         (OUT / "capture.json").write_text(json.dumps(report, indent=1) + "\n")

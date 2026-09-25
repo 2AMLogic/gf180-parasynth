@@ -69,12 +69,22 @@ def test_moving_isolated_level_refused():
     c.check_take(x, SR, ON, "full")                    # the full patch may beat
 
 
-def test_isolated_sum_residual_known():
+def test_isolated_sum_check_known_and_catches_a_click():
     a, b = saw(F36), saw(2 * F36, .05)
-    assert c.sum_residual_db(a + b, a, b, ON, SR) < -200
-    assert c.sum_residual_db(a + b + .01 * a, a, b, ON, SR) == pytest.approx(
-        20 * math.log10(.01 * np.sqrt(np.mean(a[round(1.1 * SR):] ** 2)) /
-                        np.sqrt(np.mean((a + b)[round(1.1 * SR):] ** 2))), abs=.3)
+    assert c.sum_check(a + b, a, b, ON, SR)["overall_db"] < -200
+    got = c.sum_check(a + b + .01 * a, a, b, ON, SR)["overall_db"]
+    s0 = round((ON + c.SUSTAIN_FROM_S) * SR)
+    s1 = round((ON + c.GATE_S - .05) * SR)
+    want = 20 * math.log10(.01 * np.sqrt(np.mean(a[s0:s1] ** 2)) / np.sqrt(np.mean((a + b)[s0:s1] ** 2)))
+    assert got == pytest.approx(want, abs=.05)
+    clicked = a + b
+    clicked[round(6 * SR):round(6 * SR) + 12] += .05
+    check = c.sum_check(clicked, a, b, ON, SR)
+    assert check["overall_db"] < c.SUM_RESIDUAL_DB          # one click hides in the overall figure
+    with pytest.raises(c.Refused, match="click or dropout"):
+        c.refuse_sum(check, "t")                             # and not in the worst block
+    with pytest.raises(c.Refused, match="do not describe"):
+        c.refuse_sum(c.sum_check(a + b, a, np.roll(b, 100), ON, SR), "t")   # phase differs
 
 
 def test_expected_settings_follow_the_frozen_record():
