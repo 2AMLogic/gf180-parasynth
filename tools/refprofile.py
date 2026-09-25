@@ -60,7 +60,11 @@ those are the load-bearing ones:
     keeps reporting the Classic oscillator's names, so only the readback can
     tell them apart. The rig pins them by readback; this profile records the
     readback it was built at, so a Surge update that moves them is a diff and
-    not a silent change of what "the reference" means.
+    not a silent change of what "the reference" means. The names are not even
+    stable within one session: 259/260/264/265 report their Audio In names
+    after the first clip render (#231). Since #233 `--render` re-reads every
+    pin after EVERY clip and accepts exactly that rename, readback enforced;
+    profiles built before it made no post-render check (`PRE_233_BUILDERS`).
 
 THE ESTIMATOR FLOOR, AND WHY THE PROBE LEVEL IS WHAT IT IS
 ----------------------------------------------------------
@@ -531,6 +535,52 @@ def _param_dump(p) -> dict:
     return out
 
 
+#: The one name change a pinned Surge parameter may show after a render, and
+#: only at these four indices. Measured in #231 (`tools/f1_level_capture.py`,
+#: whose `AUDIO_IN_NAMES` this matches): straight after construction dawdreamer
+#: reports 259/260/264/265 under the Classic oscillator's names -- which is
+#: what `SurgeRig.PINS` carries -- and after the NEXT render under their true
+#: Audio In names, every readback unchanged. Keyed by index AND by the Classic
+#: name the rig pins, so the alias cannot widen if a pin's name is edited, and
+#: the readback is still required exactly. Any other name change refuses.
+SURGE_AUDIO_IN_ALIASES = {
+    259: ("A Osc 1 Shape", "A Osc 1 Audio In Channel"),
+    260: ("A Osc 1 Width 1", "A Osc 1 Audio In Gain"),
+    264: ("A Osc 1 Unison Detune", "A Osc 1 Low Cut"),
+    265: ("A Osc 1 Unison Voices", "A Osc 1 High Cut"),
+}
+
+#: `builder_sha256` of every profile written BEFORE #233. Those renderers
+#: checked the pins once, before any clip was rendered, and wrote
+#: `pins_held_after_render: true` as a constant. A profile carrying one of
+#: these hashes therefore makes NO post-render claim, whatever that field
+#: says; the committed profile's clips reproduce bit-identically
+#: (`repro-report.json`), which is separate evidence and is not this check.
+PRE_233_BUILDERS = {
+    "4bbd8e90c0a58e52a2f38d68174e71c8a73cd62180b2c6b018687a0d61136f77":
+        "refprofile/profile.json as frozen at daf9e64 (2026-09-18)",
+}
+
+
+def check_pins_post_render(dev) -> tuple[list, list]:
+    """Every pinned setting, re-read AFTER a render: (problems, aliased
+    indices). A problem is (index, 'NAME'|'VALUE', expected, got). The
+    readback is enforced for every pin, aliased or not."""
+    bad, aliased = [], []
+    for idx, _val, name, want in dev.PINS:
+        got_name = dev.p.get_parameter_name(idx)
+        classic, audio_in = SURGE_AUDIO_IN_ALIASES.get(idx, (None, None))
+        if name is not None and got_name != name:
+            if name == classic and got_name == audio_in:
+                aliased.append(idx)
+            else:
+                bad.append((idx, "NAME", name, got_name))
+                continue
+        if want is not None and dev.text(idx) != want:
+            bad.append((idx, "VALUE", want, dev.text(idx)))
+    return bad, aliased
+
+
 def disqualification_probe() -> dict:
     """The measurements behind the `qualified: false` verdicts, taken here so
     they are evidence in a committed file rather than lore in a docstring.
@@ -641,6 +691,7 @@ def render(probe_disqualified: bool = True) -> dict:
     }
 
     devices, specs = {}, clip_specs()
+    post_checks: dict[str, list] = {}
     needed = sorted({s["rig"] for s in specs})
     for rig_name in needed:
         verdict = dict(RIG_VERDICTS[rig_name])
@@ -662,12 +713,17 @@ def render(probe_disqualified: bool = True) -> dict:
                              "in this profile automates a parameter, so no number here "
                              "can be the host's 93.75 Hz block rate in disguise"},
             "qualification": {
-                "pins_held_after_render": True,
+                # derived after the clips render, from the per-clip checks
+                "pins_held_after_render": None,
                 "pinned_readback": dev.pinned_report(),
                 "n_pins": len(dev.PINS),
                 "how": "reference_rigs._Plugin.qualify(): render once, then hold every "
                        "pinned setting to its NAME and its READBACK. 7/7 deliberately "
-                       "wrong setups are rejected (#87).",
+                       "wrong setups are rejected (#87). Then, after EVERY clip render "
+                       "and before that clip is written, every pin is re-read "
+                       "(refprofile.check_pins_post_render, #233): readback exact, name "
+                       "exact except the measured Classic->Audio In rename at "
+                       "259/260/264/265.",
             },
             "parameters_after_setup": _param_dump(dev.p),
         })
@@ -696,6 +752,14 @@ def render(probe_disqualified: bool = True) -> dict:
                     "f_in_hz": spec["f_in"]}
         else:                                                    # pragma: no cover
             raise Refused(f"unknown clip kind {spec['kind']!r}")
+        # #233: the pins are re-read after THIS clip's render and before it is
+        # written. Checking them once before the first clip certified nothing
+        # about the clips that followed.
+        bad, aliased = check_pins_post_render(dev)
+        if bad:
+            raise Refused(f"{cid}: pinned settings did not hold after rendering this "
+                          f"clip: {bad}")
+        post_checks.setdefault(spec["rig"], []).append({"clip_id": cid, "aliased": aliased})
         if float(np.abs(y).max()) <= 1e-9:
             raise Refused(f"{cid}: the rig rendered silence -- refusing to freeze it")
         write_clip(dest, y)
@@ -714,6 +778,7 @@ def render(probe_disqualified: bool = True) -> dict:
             "sha256": file_sha256(dest),
             "peak": round(float(np.abs(y).max()), 9),
             "rms": round(float(np.sqrt(np.mean(np.square(y)))), 9),
+            "pins_after_render": {"held": True, "name_aliases": aliased},
         }
         # How long the render took is a stopwatch reading, not provenance of the
         # audio, and putting it in the file would make every re-render show a
@@ -721,6 +786,20 @@ def render(probe_disqualified: bool = True) -> dict:
         # the review here, so it carries only what a reader must act on.
         print(f"rendered {cid}  {len(y)} frames  peak {np.abs(y).max():.4f}  "
               f"{(datetime.datetime.now() - t0).total_seconds():.2f} s", flush=True)
+
+    for rig_name in devices:
+        rendered = [s["clip_id"] for s in specs if s["rig"] == rig_name]
+        checked = post_checks.get(rig_name, [])
+        q = prof["rigs"][rig_name]["qualification"]
+        q["pins_held_after_render"] = bool(
+            rendered and [c["clip_id"] for c in checked] == rendered)
+        q["post_render_check"] = {
+            "per_clip": True,
+            "clips_rendered": len(rendered),
+            "clips_checked": len(checked),
+            "name_aliases_observed": sorted({i for c in checked for i in c["aliased"]}),
+            "permitted_aliases": {str(i): list(v) for i, v in SURGE_AUDIO_IN_ALIASES.items()},
+        }
 
     for d in devices.values():
         del d
@@ -747,6 +826,9 @@ def cmd_list() -> int:
     print(f"built     {b.get('at')} at {w.get('commit')} "
           f"({'DIRTY ' + str(w.get('uncommitted_sha256')) if w.get('dirty') else 'clean'})")
     print(f"probe     {prof.get('probe_level_dbfs')} dBFS, {prof.get('sr')} Hz")
+    if b.get("builder_sha256") in PRE_233_BUILDERS:
+        print("pins      checked BEFORE rendering only: this builder predates #233 and "
+              "wrote pins_held_after_render as a constant")
     print()
     print(f"{'rig':<14}{'qualified':<11}why")
     print("-" * 100)

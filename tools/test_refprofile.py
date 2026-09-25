@@ -382,8 +382,17 @@ def test_the_profile_records_what_produced_it():
             continue
         assert r["plugin"]["present"] is True, name
         assert r["plugin"]["binary_sha256"], name
-        assert r["qualification"]["pins_held_after_render"] is True, name
-        assert r["qualification"]["n_pins"] > 0, name
+        q = r["qualification"]
+        if b["builder_sha256"] in rp.PRE_233_BUILDERS:
+            # #233: this builder wrote the flag as a constant and never
+            # checked after a render. It must not ALSO claim the per-clip check.
+            assert "post_render_check" not in q, name
+        else:
+            chk = q["post_render_check"]
+            n = sum(c["rig"] == name for c in prof["clips"].values())
+            assert q["pins_held_after_render"] is True, name
+            assert chk["clips_checked"] == chk["clips_rendered"] == n, name
+        assert q["n_pins"] > 0, name
         assert r["parameters_after_setup"], name
 
 

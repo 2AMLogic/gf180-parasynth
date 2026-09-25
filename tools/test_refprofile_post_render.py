@@ -219,6 +219,15 @@ def test_a_rename_on_an_index_outside_the_four_refuses(stub_render):
     assert "277" in str(e.value)
 
 
+def test_the_permitted_aliases_are_exactly_the_four_measured_ones():
+    """The renderer's alias table and #231's capture tool's must not drift."""
+    import f1_level_capture as cap
+    assert {i: v[1] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items()} == AUDIO_IN
+    assert {i: v[1] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items()} == cap.AUDIO_IN_NAMES
+    pinned = {i: n for i, _v, n, _w in rr.SurgeRig.PINS}
+    assert all(pinned[i] == v[0] for i, v in rp.SURGE_AUDIO_IN_ALIASES.items())
+
+
 def test_an_audio_in_name_on_the_wrong_index_refuses(stub_render):
     def swapped(names, texts, n):
         _rename_to_audio_in(names, texts, n)
