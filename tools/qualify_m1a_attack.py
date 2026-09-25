@@ -100,6 +100,22 @@ def covering_row(domain, fit):
     return None
 
 
+def violations(rows, domain):
+    """Known-answer cases whose reading the COMMITTED domain qualifies but
+    whose error exceeds that row's bound. This -- not re-deriving a domain --
+    is the check a defective estimator must fail: an adaptive range always
+    finds SOME region where a biased estimator looks fine (a 1.15x estimator
+    re-derives a 0.25-6 ms domain), because the range is stated in the
+    estimator's own readings."""
+    out = []
+    for r in measurable(rows):
+        cover = covering_row(domain, {"attack_10_90_ms": r["measured_1090_ms"],
+                                      "explained_ratio": r["explained_ratio"]})
+        if cover and abs(r["error_ms"]) > cover["max_abs_error_ms"] + 5e-5:   # bound published to 4 dp
+            out.append(r)
+    return out
+
+
 def breakdown(rows):
     """Error by true condition -- where the estimator fails, for the doc."""
     out = {}

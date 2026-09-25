@@ -39,7 +39,8 @@ def test_selected_patch_is_unqualified_on_its_reference_fits():
     out = sweep.evaluate(row, record)
     assert out["preserved"] and out["attack_state"] == "unqualified"
     assert not out["reference_fits_in_qualified_domain"] and not out["candidate"]
-    assert out["attack_raw_worst_error_ms"] == pytest.approx(8.10889, abs=1e-4)
+    raw = record["diagnostics"]["properties"]["Envelope attack"]["unqualified_error"]
+    assert out["attack_raw_worst_error_ms"] == pytest.approx(raw, abs=1e-4)
 
 
 def test_both_sides_in_domain_grade_and_preservation_blocks():

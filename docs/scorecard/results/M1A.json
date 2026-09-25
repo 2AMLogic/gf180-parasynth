@@ -2,9 +2,9 @@
   "engine": "fixed-model",
   "case_id": "M1A",
   "subject": "Round bass / anchor",
-  "source_commit": "dc9c111",
-  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-24T22:10:37Z",
-  "analysis_version": "m1a-envelope-score-v2",
+  "source_commit": "cea5525",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-25T07:51:22Z",
+  "analysis_version": "m1a-envelope-score-v3",
   "reference_profile": "frozen Mini V3 software reference (screening policy: docs/scorecard/mono-m5a-policy.md); Model D cross-check unavailable",
   "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
   "audio": "docs/scorecard/mono-m1a-miniv3/m1a-model.wav",
@@ -21,7 +21,7 @@
     "envelope": {
       "valid": false,
       "state": "no verdict",
-      "why": "unqualified component: Envelope attack (attack fit outside the estimator's qualified domain: MIDI 36 @0.1s reference: shape p=3 outside qualified {0.5, 1, 2}; MIDI 43 @2.1s reference: shape p=4 outside qualified {0.5, 1, 2})",
+      "why": "unqualified component: Envelope attack (attack fit outside the estimator's qualified domain: MIDI 36 @0.1s model: 10-90 8.517 ms at explained ratio 0.960 is outside every qualified row; MIDI 36 @0.1s reference: 10-90 1.687 ms at explained ratio 0.724 is outside every qualified row; MIDI 43 @2.1s model: 10-90 8.600 ms at explained ratio 0.965 is outside every qualified row; MIDI 43 @2.1s reference: fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement); MIDI 36 @4.1s model: 10-90 9.950 ms at explained ratio 0.960 is outside every qualified row; MIDI 36 @4.1s reference: 10-90 1.150 ms at explained ratio 0.776 is outside every qualified row)",
       "units": "normalized maximum",
       "tolerance": 1.0
     },
@@ -58,13 +58,22 @@
       "Envelope attack": {
         "valid": false,
         "state": "no verdict",
-        "why": "attack fit outside the estimator's qualified domain: MIDI 36 @0.1s reference: shape p=3 outside qualified {0.5, 1, 2}; MIDI 43 @2.1s reference: shape p=4 outside qualified {0.5, 1, 2}",
+        "why": "attack fit outside the estimator's qualified domain: MIDI 36 @0.1s model: 10-90 8.517 ms at explained ratio 0.960 is outside every qualified row; MIDI 36 @0.1s reference: 10-90 1.687 ms at explained ratio 0.724 is outside every qualified row; MIDI 43 @2.1s model: 10-90 8.600 ms at explained ratio 0.965 is outside every qualified row; MIDI 43 @2.1s reference: fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement); MIDI 36 @4.1s model: 10-90 9.950 ms at explained ratio 0.960 is outside every qualified row; MIDI 36 @4.1s reference: 10-90 1.150 ms at explained ratio 0.776 is outside every qualified row",
         "units": "ms",
-        "unqualified_value": 8.38333,
-        "unqualified_reference": 0.27444,
-        "unqualified_error": 8.10889,
+        "qualified_domain": [
+          "explained>=0.99, 10-90 0.25-6 ms, off search boundary: |error|<=0.7833 ms (342 known answers)",
+          "explained>=0.98, 10-90 0.25-6 ms, off search boundary: |error|<=0.7833 ms (431 known answers)",
+          "explained>=0.97, 10-90 0.25-6 ms, off search boundary: |error|<=0.7833 ms (439 known answers)",
+          "explained>=0.95, 10-90 0.25-6 ms, off search boundary: |error|<=0.9793 ms (449 known answers)",
+          "explained>=0.9, 10-90 5-6 ms, off search boundary: |error|<=0.8175 ms (41 known answers)",
+          "explained>=0.8, 10-90 0.25-0.75 ms, off search boundary: |error|<=0.8167 ms (144 known answers)",
+          "explained>=0.7, 10-90 0.25-0.75 ms, off search boundary: |error|<=0.8167 ms (144 known answers)"
+        ],
+        "unqualified_value": 9.95,
+        "unqualified_reference": 1.15,
+        "unqualified_error": 8.8,
         "tolerance": 5.0,
-        "tolerance_basis": "ms; the M5A screening limit for the same 10-90% measurement; the waveform-fit estimator's known-signal error is under 1 ms (qualification in the manifest)"
+        "tolerance_basis": "ms, applied to the 10-90% attack time (not the fit's total ramp); the M5A screening limit for the same measurement. Graded only inside attack_fit_v3's qualified domain, whose known-answer error bound is under 1 ms (docs/scorecard/mono-m1a-miniv3/attack-qualification)"
       },
       "Envelope release": {
         "value": 126.10417,
@@ -203,26 +212,30 @@
           "reference": 121.64583333333333
         },
         "attack_10_90_ms": {
-          "model": 7.416666666666667,
-          "reference": 1.6397685144867342
+          "model": 8.516666666666667,
+          "reference": 1.6865480854231354
         },
         "attack_fit": {
           "model": {
-            "t0_ms": 0.4166666666666665,
-            "ramp_ms": 9.270833333333334,
+            "t0_ms": 0.375,
+            "ramp_ms": 10.645833333333334,
             "shape_p": 1.0,
-            "explained_ratio": 0.9753
+            "attack_10_90_ms": 8.516666666666667,
+            "search_boundary": null,
+            "explained_ratio": 0.9602
           },
           "reference": {
-            "t0_ms": -1.1041666666666665,
-            "ramp_ms": 3.2708333333333335,
-            "shape_p": 3.0,
-            "explained_ratio": 0.7755
+            "t0_ms": -0.5,
+            "ramp_ms": 2.6666666666666665,
+            "shape_p": 2.0,
+            "attack_10_90_ms": 1.6865480854231354,
+            "search_boundary": null,
+            "explained_ratio": 0.7238
           }
         },
         "attack_out_of_domain": {
-          "model": null,
-          "reference": "shape p=3 outside qualified {0.5, 1, 2}"
+          "model": "10-90 8.517 ms at explained ratio 0.960 is outside every qualified row",
+          "reference": "10-90 1.687 ms at explained ratio 0.724 is outside every qualified row"
         },
         "attack_state": "unqualified"
       },
@@ -328,26 +341,30 @@
           "reference": 117.625
         },
         "attack_10_90_ms": {
-          "model": 8.383333333333335,
+          "model": 8.6,
           "reference": 0.27444161415663176
         },
         "attack_fit": {
           "model": {
-            "t0_ms": -0.3125,
-            "ramp_ms": 10.479166666666666,
+            "t0_ms": 0.0,
+            "ramp_ms": 10.75,
             "shape_p": 1.0,
-            "explained_ratio": 0.9755
+            "attack_10_90_ms": 8.6,
+            "search_boundary": null,
+            "explained_ratio": 0.9654
           },
           "reference": {
-            "t0_ms": 1.1458333333333335,
+            "t0_ms": 1.125,
             "ramp_ms": 0.6666666666666666,
             "shape_p": 4.0,
-            "explained_ratio": 0.737
+            "attack_10_90_ms": 0.27444161415663176,
+            "search_boundary": "minimum",
+            "explained_ratio": 0.656
           }
         },
         "attack_out_of_domain": {
-          "model": null,
-          "reference": "shape p=4 outside qualified {0.5, 1, 2}"
+          "model": "10-90 8.600 ms at explained ratio 0.965 is outside every qualified row",
+          "reference": "fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement)"
         },
         "attack_state": "unqualified"
       },
@@ -453,28 +470,32 @@
           "reference": 123.10416666666667
         },
         "attack_10_90_ms": {
-          "model": 9.0,
-          "reference": 1.1333333333333335
+          "model": 9.95,
+          "reference": 1.15
         },
         "attack_fit": {
           "model": {
-            "t0_ms": -0.6666666666666667,
-            "ramp_ms": 11.25,
+            "t0_ms": -0.625,
+            "ramp_ms": 12.4375,
             "shape_p": 1.0,
-            "explained_ratio": 0.9766
+            "attack_10_90_ms": 9.95,
+            "search_boundary": null,
+            "explained_ratio": 0.96
           },
           "reference": {
-            "t0_ms": 0.4166666666666665,
-            "ramp_ms": 1.4166666666666667,
+            "t0_ms": 0.3958333333333335,
+            "ramp_ms": 1.4375,
             "shape_p": 1.0,
-            "explained_ratio": 0.8287
+            "attack_10_90_ms": 1.15,
+            "search_boundary": null,
+            "explained_ratio": 0.7765
           }
         },
         "attack_out_of_domain": {
-          "model": null,
-          "reference": null
+          "model": "10-90 9.950 ms at explained ratio 0.960 is outside every qualified row",
+          "reference": "10-90 1.150 ms at explained ratio 0.776 is outside every qualified row"
         },
-        "attack_state": "fail"
+        "attack_state": "unqualified"
       }
     ],
     "qualification": {
@@ -1407,11 +1428,11 @@
         "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"
       }
     },
-    "render_source_commit": "dc9c111",
+    "render_source_commit": "cea5525",
     "render_worktree": {
-      "commit": "dc9c111",
-      "described": "node/D-drums-bitexact-357-gdc9c111",
-      "branch": "measure/m1a-select-gain",
+      "commit": "cea5525",
+      "described": "node/D-drums-bitexact-396-gcea5525",
+      "branch": "measure/m1a-attack-qualification",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
@@ -1424,6 +1445,7 @@
     "filter_envelope_scope": "the model's filter-envelope mapping stays provisional and the reference cutoff trajectory is not measurable from frozen audio; recorded as an unqualified property, not a metric",
     "wrong_then_right": {
       "apparatus_corrections": 5,
+      "attack_v3": "v2's '<1 ms known-signal error' held only on the signals it was qualified on (no post-attack decay, near-steady spectrum); on the realistic known-answer suite it measured up to 4.8 ms short off the search boundary. Its gate also tested the total ramp, not the 10-90 value it reports.",
       "session_estimator_iterations": 6,
       "latest": "six ground-truth-caught defects while building the waveform-fit attack estimator (objective, template phase twice, FFT offset, fold smear, shape refinement); all listed in the estimator commit"
     }
@@ -1431,9 +1453,9 @@
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "dc9c111",
-      "described": "node/D-drums-bitexact-357-gdc9c111",
-      "branch": "measure/m1a-select-gain",
+      "commit": "cea5525",
+      "described": "node/D-drums-bitexact-396-gcea5525",
+      "branch": "measure/m1a-attack-qualification",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
@@ -1514,7 +1536,7 @@
       }
     },
     "python": "3.14.7",
-    "run_at": "2026-09-24T22:10:37Z",
+    "run_at": "2026-09-25T07:51:22Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
@@ -1529,9 +1551,11 @@
       "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:M1A:manifest": "sha256:681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d",
       "frozen:M1A:audio": "sha256:a66700fc66287bfb9023e986d35ec76ca6fabbe1c600368181de8270a55248f9",
-      "tools/mono_m1a_score.py": "sha256:74bc08f98b81dea27b84285515e8f433d46e2da383afc9f549a13c1c4231007b",
+      "tools/mono_m1a_score.py": "sha256:c756bc81291cbb364681c1f9f3750b22cf1acad622c23a7f2c062a862b250b9a",
       "model/filter_rate_chain.py": "sha256:134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798",
       "tools/measure_mono_m1a_reference.py": "sha256:d9b4122e75f9dfa62f71c688b917787591d59e4fb45811641ebc93c9d6bfd953",
+      "tools/attack_fit_v3.py": "sha256:32be5e0eea495c6c972c2b69101bb9164a3d2717a45d5c350f7a88da3c89bb54",
+      "attack-qualification/qualification.json": "sha256:b6763d101a8d3f87638252dfb1c54fc5af90c7aa6da6319278a16e7b25eeddf0",
       "audition/dsp.py": "sha256:7bd8e2dcce3934908a3175af0032aabe5031139baf0873bcc2a26f4cfea880fe",
       "model/fixed.py": "sha256:f5687bec088f7fd950c4a9a17027fb0e1d0e59dfe11fec61c3d77eab3a700da9"
     },
@@ -1541,5 +1565,5 @@
     "outcome_code": 2,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
-  "note": "envelope attack qualified by waveform-domain fit with closed-form ground truth; envelope metric = worst of attack/release normalized errors"
+  "note": "envelope attack: 10-90% by attack_fit_v3, graded only where both sides fall in the known-answer-qualified domain; envelope metric = worst of attack/release normalized errors"
 }

@@ -71,23 +71,35 @@ def test_start_red_v2_fails_the_realistic_suite():
     assert abs(kaa.measure_case(case, "v2")["error_ms"]) > 2.0
 
 
-def test_control_biased_estimator_fails_qualification():
-    """A 15 % slow estimator must not qualify: the domain rule finds no
-    row within the bound over the same known answers."""
-    def biased(rows, gain=1.15):
-        out = []
-        for r in rows:
-            r = dict(r)
-            if "refused" not in r:
-                r["measured_1090_ms"] *= gain
-                r["error_ms"] = r["measured_1090_ms"] - r["t1090_ms"]
-            out.append(r)
-        return out
-    honest = qual.derive_domain(SUITE_V3["rows"])
-    broken = qual.derive_domain(biased(SUITE_V3["rows"]))
-    width = lambda d: max((r["hi_ms"] - r["lo_ms"] for r in d), default=0)   # noqa: E731
-    assert width(broken) < width(honest)
-    # live: the biased estimator exceeds the bound on the live slice
+def _biased(rows, gain=1.0, offset=0.0):
+    out = []
+    for r in rows:
+        r = dict(r)
+        if "refused" not in r:
+            r["measured_1090_ms"] = r["measured_1090_ms"] * gain + offset
+            r["error_ms"] = r["measured_1090_ms"] - r["t1090_ms"]
+        out.append(r)
+    return out
+
+
+def test_honest_estimator_has_no_violations_of_the_committed_domain():
+    assert qual.violations(SUITE_V3["rows"], REPORT["v3"]["domain"]) == []
+
+
+@pytest.mark.parametrize("gain,offset", [(1.10, 0.), (0.90, 0.), (1., 0.3), (1., -0.3)])
+def test_control_biased_estimator_violates_the_committed_domain(gain, offset):
+    """10 % gain or 0.3 ms offset errors must be caught by the fixed domain."""
+    assert qual.violations(_biased(SUITE_V3["rows"], gain, offset), REPORT["v3"]["domain"])
+
+
+def test_control_rederiving_the_domain_is_not_a_control():
+    """Recorded wrong-then-right: re-deriving the domain from a 1.15x
+    estimator's readings still yields 0.25-6 ms, so it cannot be the check."""
+    broken = qual.derive_domain(_biased(SUITE_V3["rows"], 1.15))
+    assert any(r["lo_ms"] == 0.25 and r["hi_ms"] == 6.0 for r in broken)
+
+
+def test_control_biased_estimator_live():
     def slow(*a, **k):
         r = dict(attack_fit_v3.attack_fit_v3(*a, **k))
         r["attack_10_90_ms"] *= 1.3
