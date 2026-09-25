@@ -281,11 +281,11 @@ one the table above uses, and it is the assumption most likely to be wrong. A
 routed board is the real answer and does not exist yet.
 
 **The jack sets the thickness, not the die.** 5.0 mm tall + 1 mm PCB + 1.2 mm
-of wall each side ≈ 8.8 mm, which is the 8.6 mm above within rounding. The
-common *through-hole* alternative (Kycon STX-3120-3B) is a **10.0 mm** body on
-its own drawing and would push the case past 13 mm on the jack alone. A
-keychain needs the right-angle SMT part, and that is a real constraint on the
-BOM rather than a preference.
+of wall each side = 8.4 mm, which the 8.6 mm row above covers with 0.2 mm to
+spare. The common *through-hole* alternative (Kycon STX-3120-3B) is a
+**10.0 mm** body on its own drawing and would push the case past 13 mm on the
+jack alone. A keychain needs the right-angle SMT part, and that is a real
+constraint on the BOM rather than a preference.
 
 **Why QFN-20 4 × 4 and not 3 × 3.** ARCHITECTURE.md section 8 needs 15 pads,
 17 with a second core supply pair, so QFN-20 is the pin count either way — the
