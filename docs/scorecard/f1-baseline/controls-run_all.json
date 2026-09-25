@@ -1,0 +1,51 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_f1_selected_path.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": ".........                                                                [100%]\n9 passed in 6.95s\n",
+    "secs": 8.020595073699951
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_run_case.py -k 'filt_ or filter'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "................                                                         [100%]\n16 passed, 80 deselected in 4.85s\n",
+    "secs": 6.3919837474823
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q model/test_filter_rate_chain.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": ".................                                                        [100%]\n17 passed in 3.36s\n",
+    "secs": 5.316149950027466
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_MISSING --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-missing",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/f1-baseline/ctl-missing\nINJECTED CONTROL: REF_PROFILE_MISSING -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)\n",
+    "secs": 39.796005964279175
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_TAMPERED --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-tampered",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/f1-baseline/ctl-tampered\nINJECTED CONTROL: REF_PROFILE_TAMPERED -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)\n",
+    "secs": 39.88866400718689
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_CORNER_2X --expect changed --no-audio --results build/f1-baseline/ctl-corner2x",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/f1-baseline/ctl-corner2x\nINJECTED CONTROL: REF_CORNER_2X -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    fail           6.45  worst: Corner frequency\nF1B    fail           6.97  worst: Corner frequency\nF1C    fail           6.77  worst: Corner frequency\n------------------------------------------------------------------------------------------------\nfail: 3\ncontrol fired: REF_CORNER_2X caused the expected result on 3 measured case(s)\n",
+    "secs": 72.21330308914185
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": "OK       surge-type2/drive-100hz-cut250-res0.50-in+0dbfs\nOK       surge-type2/drive-100hz-cut250-res0.50-in-12dbfs\nOK       surge-type2/drive-100hz-cut250-res0.50-in-6dbfs\nOK       surge-type2/lp-cut1000-res0.00\nOK       surge-type2/lp-cut250-res0.00\nOK       surge-type2/lp-cut250-res0.70\nOK       surge-type2/lp-cut250-res0.80\nOK       surge-type2/lp-cut250-res0.86\nOK       surge-type2/lp-cut250-res0.90\nOK       surge-type2/lp-cut250-res0.93\nOK       surge-type2/lp-cut250-res0.95\nOK       surge-type2/lp-cut250-res0.97\nOK       surge-type2/lp-cut250-res0.99\nOK       surge-type2/lp-cut250-res1.00\nOK       surge-type2/lp-cut4000-res0.00\nOK       surge-type2/lp-open20k-res0.00\n16 verified, 0 failed, 0 absent\n",
+    "secs": 1.2620129585266113
+  }
+]

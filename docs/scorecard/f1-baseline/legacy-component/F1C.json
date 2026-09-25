@@ -1,0 +1,135 @@
+{
+  "engine": "fixed-model",
+  "case_id": "F1C",
+  "subject": "Cutoff response / high",
+  "source_commit": "c993946",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-25T16:12:18Z",
+  "provenance": {
+    "engine": "fixed-model",
+    "worktree": {
+      "commit": "c993946",
+      "described": "node/D-drums-bitexact-430-gc993946",
+      "branch": "measure/f1-filter-baseline",
+      "dirty": true,
+      "uncommitted_sha256": "0b48ca93829b7fd6",
+      "untracked_files": 2
+    },
+    "base_check": {
+      "checked": true,
+      "origin_main": "c9939461afd3",
+      "behind_commits": 0,
+      "ahead_commits": 0,
+      "n_stops_here": 11,
+      "n_stops_origin_main": 11,
+      "stale_dependencies": {},
+      "ahead_dependencies": {},
+      "allow_stale": false,
+      "problems": []
+    },
+    "command": "tools/run_case.py F1A F1B F1C --results docs/scorecard/f1-baseline/legacy-component",
+    "config": {
+      "cut_hz": 4000.0,
+      "res_ours": 0.0,
+      "res_reference": 0.0,
+      "probe_amp": 0.25,
+      "probe_level_dbfs": -12.04,
+      "n_probe_tones": 32,
+      "inject": null
+    },
+    "python": "3.14.7",
+    "run_at": "2026-09-25T16:12:18Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:4a0177412ff464a3",
+      "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
+      "model/audio_measure.py": "sha256:cd27a0a67dfde218",
+      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
+      "tools/run_case.py": "sha256:77739a9434f2605e",
+      "tools/refprofile.py": "sha256:a5c5196a1ecc952b",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:2094d43f15e9abad",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
+      "frozen:surge-type2/lp-cut4000-res0.00": "sha256:e18a16e6f2203fdf",
+      "frozen:surge-type2/lp-open20k-res0.00": "sha256:ad30cebd73b77be3"
+    },
+    "artefacts": {
+      "ours": "build/scorecard/F1C-ours-response.json",
+      "reference": "cache/surge-type2/lp-cut4000-res0.00.wav"
+    },
+    "outcome_code": 1,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "reference_profile": "surge-type2:surge-type2/lp-cut4000-res0.00 (commanded 4000 Hz, readback 4000.0 Hz, resonance 0.0), frozen at daf9e64",
+  "reference_identity": "1.2.3 org.surge-synth-team.surge-xt, binary sha256 2bc28ffe729965aa; LP Vintage Ladder subtype Type 2 = sst-filters VintageLadder::Huov, Huovilainen DAFx-04, the same paper DR 0001 implements. Rendered once through the qualified rig of #87 and frozen: this result did not run a plugin.",
+  "render_run": "reference_rigs.OurLadder@99b1c862857a stepped tone, 32 frequencies 40-12000 Hz, amp 0.25 (-12.04 dBFS), cutoff 4000 Hz, resonance 0.0 (k = 4*res, so this is our zero), 48000 Hz, no resampling anywhere",
+  "audio": "reference surge-type2/lp-cut4000-res0.00 (frozen, sha256 e18a16e6f220); ours build/scorecard/F1C-ours-response.json",
+  "tolerance_policy": {
+    "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
+    "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
+    "energy ratio": "3 dB, the half-power convention. A stated convention, not a number derived from any error of ours",
+    "event timing": "10 ms -- the positional accuracy audio_measure.onsets states for itself; a failure is larger than the estimator's own resolution",
+    "bus sum": "0.5 dB -- the final output must be the sum of the per-bus stems",
+    "rail": "0.01 % of samples at the rail, a stated budget for a render with no limiter in the path",
+    "rolloff": "1.5 dB per octave -- audio_measure.slope_db_oct's own max_residual_db. That estimator REFUSES a straight-line fit whose RMS residual exceeds it, so a difference smaller than it is inside the fit's own scatter and is not a difference. A number the estimator states about itself, not one derived from any error of ours"
+  },
+  "estimator_floors": {
+    "probe level": {
+      "value_dbfs": -12.04,
+      "basis": "the only input level inside our own fixed-point ladder's measured stability window at every resonance in the grid (-24 dBFS quantisation noise below, -6 dBFS self-saturation above); Surge is level-independent across the whole range, so the window is ours and is stated as ours",
+      "measured": true
+    },
+    "audio_measure.slope_db_oct": {
+      "refuses_past_db": 1.5,
+      "basis": "its own max_residual_db: a curve that is not a straight line over the band has no slope. It refused every resonant row at -36 and -60 dBFS on our side, which is how the window above was found"
+    },
+    "audio_measure.harmonic_signature": {
+      "floor": "measured per harmonic, per clip, from four noise draws either side of k*f0; the largest is used and a harmonic within floor_margin_db of it is reported as None, never as a number",
+      "basis": "audio_measure.harmonic_signature's own documented behaviour; it is not a constant and is deliberately not quoted as one"
+    },
+    "stepped-tone stopband": {
+      "value_db": -70.0,
+      "relative_to": "the passband plateau of the same curve",
+      "basis": "below it the coherent projection is reading the path's own truncation noise and a fitted slope reads first too steep and then too shallow. `reference_compare.response_row` already caps its fit band there; this profile records the same number so a consumer can apply it without re-deriving it"
+    }
+  },
+  "metrics": {
+    "Corner frequency": {
+      "value": 1433.4968,
+      "units": "Hz",
+      "reference": 1718.5771,
+      "error": -285.0803,
+      "tolerance": 171.8577,
+      "valid": true,
+      "tolerance_basis": "frequency"
+    },
+    "low-band gain": {
+      "value": -0.0624,
+      "units": "dB",
+      "reference": -0.1364,
+      "error": 0.074,
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "energy ratio"
+    },
+    "rolloff": {
+      "value": -15.3246,
+      "units": "dB/oct",
+      "reference": -16.4113,
+      "error": 1.0867,
+      "tolerance": 1.5,
+      "valid": true,
+      "tolerance_basis": "rolloff"
+    }
+  },
+  "diagnostics": {
+    "ours_corner_hz": 1433.4968,
+    "reference_corner_hz": 1718.5771,
+    "ours_wide_open_plateau_db": -0.0047,
+    "reference_wide_open_plateau_db": -9.0676,
+    "reference_commanded_cutoff_hz": 4000.0,
+    "reference_cutoff_readback_hz": 4000.0,
+    "probe_level_dbfs": -12.04,
+    "note": "levels are never compared across the two instruments: every number here is a ratio inside one of them, a frequency, or a slope. The wide-open plateaus are recorded so the discarded absolute levels are still on the record."
+  }
+}
