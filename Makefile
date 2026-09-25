@@ -43,7 +43,8 @@ verify:
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) fpga/verify_uart_bridge.py --scenario all --outdir build/uart-controls" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
-	  "$(PY) tools/check_decimator_saturation.py"
+	  "$(PY) tools/check_decimator_saturation.py" \
+	  "$(PY) tools/sensitivity.py check"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -188,7 +189,13 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_MISSING D09A --results build/case-noref --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_run_case.py -q -k ref_corner_2x_control_moves_a_known_reference_corner" \
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-noclip --expect 'no verdict'" \
-	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'"
+	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'" \
+	  "$(PY) tools/sensitivity.py check --inject VERDICT_ASSERTED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject POINT_TRANSCRIBED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject GRID_CHERRY_PICKED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ -q

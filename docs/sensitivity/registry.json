@@ -1,0 +1,8 @@
+{
+  "schema": "sensitivity-registry-v1",
+  "what": "Tunable parameters under the sensitivity-sweep gate. A parameter belongs here the moment someone proposes changing its value to improve something -- see docs/sensitivity-sweeps.md. Adding an entry is the reviewable act; tools/sensitivity.py check then refuses to let the registered parameter ship a value its own sweep does not cover.",
+  "records": [
+    "drum-kit-modes.json",
+    "modal-bank-nums.json"
+  ]
+}
