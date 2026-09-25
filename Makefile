@@ -11,7 +11,7 @@
 PY  := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN := $(PY) tools/run_all.py
 
-.PHONY: help verify verify-fast verify-full controls test dag board
+.PHONY: help verify verify-fast verify-full controls test dag board claims
 
 help:
 	@echo "make verify       broad repository checks, run independently in parallel"
@@ -19,6 +19,7 @@ help:
 	@echo "make verify-full  adds the hour-long runs (voice full set, drums)"
 	@echo "make controls     every injected defect that must turn something red"
 	@echo "make test         the Python suites only"
+	@echo "make claims       re-derive every marked prose claim in docs/ from evidence"
 	@echo "make board        fill the scorecard's first batch and re-render the board"
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
 
@@ -43,7 +44,8 @@ verify:
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) fpga/verify_uart_bridge.py --scenario all --outdir build/uart-controls" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
-	  "$(PY) tools/check_decimator_saturation.py"
+	  "$(PY) tools/check_decimator_saturation.py" \
+	  "$(PY) tools/check_doc_claims.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -192,6 +194,14 @@ controls:
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ -q
+
+## Re-derive every marked prose claim in docs/ from the evidence it names.
+## Three outcomes, and the third is the point: OK, STALE (the tree contradicts
+## the prose -- exit 1), REFUSED (the claim could not be evaluated at all --
+## exit 2, this repository's "no evidence", not "no problem"). Both are red.
+## Convention: docs/claim-markers.md. Also a job in `verify`.
+claims:
+	@$(PY) tools/check_doc_claims.py
 
 dag:
 	@$(PY) tools/compile_dag.py --run && $(PY) tools/compile_dag.py

@@ -21,7 +21,7 @@ HTML comment on the line after the claim it backs:
     <!-- claim: test=model/test_audio_measure.py::test_t20_is_ln10_times_tau -->
     <!-- claim: test=tools/test_x.py::test_known_defect expect=fail issue=123 -->
     <!-- claim: grep="^srccheck:" in=fpga/Makefile covers=fpga/Makefile -->
-    <!-- claim: absent="sensitivity_sweep" in=tools/*.py -->
+    <!-- claim: absent="thing_not_built_yet" in=tools/*.py -->
     <!-- claim: commit=693b4e6 -->
 
 THREE OUTCOMES, AND THE THIRD IS THE POINT.
@@ -62,6 +62,11 @@ from dataclasses import dataclass, field
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 MARKER = re.compile(r"<!--\s*claim:\s*(?P<body>.*?)\s*-->")
+# A marker inside a fenced block or inline backticks is an EXAMPLE, not a claim.
+# docs/claim-markers.md documents the syntax and so is full of them; without
+# this the convention's own documentation would be checked as assertions -- and
+# a checker that cannot read its own specification is not one to trust.
+FENCE = re.compile(r"^\s*(```|~~~)")
 
 KINDS = ("test", "grep", "absent", "commit")
 # Keys that are documentation for a human and carry no check of their own. They
@@ -136,10 +141,18 @@ def find_claims(doc: pathlib.Path) -> list[Claim]:
     """
     out: list[Claim] = []
     lines = doc.read_text(encoding="utf-8").splitlines()
+    fenced = False
     for i, line in enumerate(lines, start=1):
+        if FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue                       # a marker in a code block is an example
         m = MARKER.search(line)
         if not m:
             continue
+        if line.count("`", 0, m.start()) % 2:
+            continue                       # ...and so is one inside `backticks`
         prose = ""
         for back in range(i - 1, max(0, i - 6), -1):
             cand = lines[back - 1].strip()
