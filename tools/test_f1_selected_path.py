@@ -88,14 +88,22 @@ def test_a_tampered_reference_refuses_for_the_hash_not_for_absence(capsys):
 
 
 def test_the_531aa8a_rolloff_differs_from_the_current_one_only_through_its_corner():
-    """Known answer: on an ideal 4-pole whose passband is flat the two corner
-    bases agree, so the two rolloff estimators must agree too."""
+    """Known answer on a true ideal four-pole, |1/(1+jf/fp)|^4. The two
+    estimators fit the same 2.2-7x band but place it from different corners
+    (moving-median plateau 124.9 Hz vs DC-extrapolated 108.4 Hz), so on the
+    same curve they DISAGREE by about 1.6 dB/oct -- the same readings
+    test_run_case.py::test_filt_rolloff_of_an_ideal_4pole pins for the current
+    estimator. This is the size of the #178 measurement change on a filter
+    whose shape is known, and it is why F1A's rolloff moved with no sound
+    change."""
     import run_case as rc
     f = np.geomspace(40, 12000, 32)
     fp = 250.0
-    g = -40 * np.log10(np.abs(1 + 1j * f / fp))     # |1/(1+jf/fp)|^4 in dB
+    g = -80 * np.log10(np.abs(1 + 1j * f / fp))     # 20*log10 |1/(1+jf/fp)|^4
     cut = 250.0
     new = rc.filt_rolloff(cut)(f, g)
     old = fsp.rolloff_531aa8a(cut)(f, g)
     assert new.ok and old.ok
-    assert abs(new.value - old.value) < 1.0
+    assert new.value == pytest.approx(-17.06, abs=0.15)
+    assert old.value == pytest.approx(-18.68, abs=0.15)
+    assert new.value - old.value == pytest.approx(1.62, abs=0.15)

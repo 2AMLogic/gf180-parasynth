@@ -1,0 +1,8 @@
+==============================================================================
+FAIL(1)         14.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q -p no:cacheprovider tools/test_f1_selected_path.py -k 531aa8a
+              tools/test_f1_selected_path.py:101: AssertionError
+              =========================== short test summary info ============================
+              FAILED tools/test_f1_selected_path.py::test_the_531aa8a_rolloff_differs_from_the_current_one_only_through_its_corner
+              1 failed, 8 deselected in 10.85s
+==============================================================================
+0/1 passed  --  FAIL /Users/joseph/dev/gf180-parasynth/.venv/bin/

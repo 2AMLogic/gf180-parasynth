@@ -24,14 +24,18 @@ Reproduce (about 3 minutes, no plugin):
 | legacy engine | `reference_rigs.OurLadder` (`run_case.our_filter_curve`), which is the base-rate ladder with a 2x zero-order-hold subframe loop |
 | code hashes | `run_case.py` `77739a9434f2605e`, `audio_measure.py` `cd27a0a67dfde218`, `reference_rigs.py` `99b1c862857a34a8`, `voice_fx.py` `eb26dc7d7a9e9cea`, `filter_rate_chain.py` `134b958dec5308fd`, `fixed.py` `f5687bec088f7fd9`, `mono_m5a_score.py` `a27fbddee20a0827` |
 
-## 2. What changed in the measurement (the curves did not change)
+## 2. What changed in the measurement (the old metrics reproduce to 4 dp)
 
 On today's legacy curves the `531aa8a` estimators reproduce every committed
 board number to 4 decimal places: ours corner, low-band and rolloff, plus the
 reference corner and rolloff (`committed_531aa8a_reproduced: true` for all three
-cases). The response data is therefore unchanged, and every difference below
-comes from the estimator (#178, which moved `filt_rolloff` onto the
-DC-extrapolated plateau).
+cases). This is evidence that the scalar measurements are reproducible, not
+proof that the full curves are identical: those curves were never committed, so
+matching several scalar readings is all that can be checked. Within that
+limit, the rolloff differences below come from the estimator (#178, which
+moved `filt_rolloff` onto the DC-extrapolated plateau). The same shift shows
+up on a known curve: on a true ideal four-pole the two estimators read −18.68
+and −17.06 dB/oct (`test_f1_selected_path.py`).
 
 | case | ours rolloff @531aa8a | ours rolloff now | Δ | reference @531aa8a → now | verdict @531aa8a → now |
 |---|---|---|---|---|---|
@@ -39,8 +43,9 @@ DC-extrapolated plateau).
 | F1B | −15.99 | −15.99 | 0.00 | −17.92 → −17.92 | fail → fail (1.93) |
 | F1C | −15.32 | −15.32 | 0.00 | −16.41 → −16.41 | pass → pass (1.09) |
 
-The corner and low-band gain do not change: they were already on the current
-estimator. The F1A rolloff failure is a measurement change, not a sound change.
+The corner and low-band gain readings do not change: they were already on the
+current estimator. Because the old metrics reproduce, the F1A rolloff failure
+is attributed to the measurement change, not to a sound change.
 
 ## 3. The table (current estimator, −12.04 dBFS, resonance 0)
 
