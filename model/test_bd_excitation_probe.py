@@ -193,7 +193,7 @@ def test_the_shipped_kit_has_a_dc_pedestal_too_and_the_numerator_arm_is_worse():
     already settles into a DC pedestal -- worst -40.2 dB below peak over
     accents 0.5-2.0 -- because the same biquad truncates today. The numerator
     arm's is -19.4 dB. This test is why #21's follow-up is filed against
-    `modal_fixed`, not against the kit."""
+    `modal_fixed` (#220), not against the kit."""
     ship = max(bx.pedestal_over_accents(bx.bd_kit()))
     amp = bx.calibrate_amp(BP, 1.0, 0)
     bp = max(bx.pedestal_over_accents(bx.bd_kit(BP, amp, 1.0)))

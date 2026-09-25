@@ -57,8 +57,8 @@ WHAT IT FOUND (2026-09-25; every number below is printed by `--refs`):
 
 So the excitation shape is the right mechanism and the numerator is the right
 lever, and what blocks it is `modal_fixed`'s arithmetic. That is a different
-defect, filed separately; this module ships the measurement and NOT a change
-to the kit.
+defect, filed separately as #220; this module ships the measurement and NOT
+a change to the kit.
 
 PRECONDITIONS, asserted rather than assumed (docs/failure-modes.md):
 

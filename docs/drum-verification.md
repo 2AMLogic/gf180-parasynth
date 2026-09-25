@@ -1426,8 +1426,8 @@ nothing**, which is exactly what `BP` cannot do to a pulse that is already
 now **specified rather than open**: a bipolar excitation ≈0.33 ms wide, whose
 target is the five-band range of §11.1 and not a single number. Its blocker is
 the truncating biquad of §11.4, which is a defect of `modal_fixed.py` /
-`rtl-sketch/modal_dp.v` and is filed separately — the shipped kit already
-carries it at −40.2 dB.
+`rtl-sketch/modal_dp.v` and is filed separately as #220 — the shipped kit
+already carries it at −40.2 dB.
 
 *Measured 2026-09-25 against `sounds-tr808-fischer` @ `85fbecf`, renders from
 `model/drums_fx.py` at contract revision 10. Script:
