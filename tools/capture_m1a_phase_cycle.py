@@ -62,13 +62,12 @@ CONDITIONS = {"full": {},
               "osc2_open": {"osc1_level": 0., **OPEN},
               "both_open": dict(OPEN)}          # precondition 8 only
 SUSTAIN_FROM_S = 1.0                 # after note-on; the analysis region starts here
-# The MAD transient detector compares short-block high-band levels. At MIDI 36
-# a 5 ms block holds a saw's reset edge in one block of three, so the levels
-# are bimodal and EVERY period reads as a click (found by the synthetic test,
-# wrong-then-right). Blocks of exactly four MIDI 36 periods (eight of
-# oscillator 2) hold the same number of edges each, so a held note is
-# stationary again; the injected-click control in every take proves the
-# longer block still sees clicks.
+# Period-synchronous windows. At MIDI 36 a 5 ms block (the integrity tool's
+# default) holds a saw's reset edge in one block of three, so block levels are
+# bimodal and EVERY period reads as a click (found by the synthetic test,
+# wrong-then-right); a 40 ms RMS likewise ripples by 2 dB on a steady saw. The
+# RMS-flatness check uses four MIDI 36 periods; the click detector below uses
+# two periods of the take's own fundamental.
 F36 = 440 * 2 ** ((NOTE - 69) / 12)
 TRANSIENT_BLOCK_MS = 4000 / F36
 # The full patch is NOT stationary: its high band swells ~2 dB over ~0.7 s once
@@ -80,9 +79,13 @@ TRANSIENT_BLOCK_MS = 4000 / F36
 # block, the swell ten. Two further attempts were measured and dropped: a
 # ~1 s detrend left a 2.6 dB residual swell; a one-period-cancellation
 # residual does not cancel on the Mini V3's oscillators (-23 dB residual) and
-# lost the injected clicks. Measured on take A before the rule was fixed:
-# clean residual <= 0.47 dB (full) and <= 0.04 dB (open), injected clicks
-# >= 32 dB (full) and >= 1.8 dB (open, where saw edges dominate the band).
+# lost the injected clicks. Then four MIDI 36 periods per block (eight of
+# oscillator 2) missed one injected click on oscillator 2 (0.65 dB; third
+# wrong-then-right). Blocks are therefore TWO periods of the take's own
+# fundamental. Measured on all six takes with this block: clean residual
+# <= 0.16 dB, injected clicks >= 2.69 dB (open saws, whose edges dominate the
+# band) and >= 35 dB (full patch). The floor sits between.
+CLICK_PERIODS = 2
 DETREND_BLOCKS = 5
 CLICK_FLOOR_DB = 1.
 CLICK_K = 12.
@@ -128,16 +131,16 @@ def longest_zero_run(x):
     return int(np.max(edges[1::2] - edges[::2])) if len(edges) else 0
 
 
-def click_report(x, sr):
+def click_report(x, sr, f0):
     """Brief broadband transients against a SLOWLY varying held note.
 
     `reference_integrity.transient_report`'s method (second difference, block
-    RMS, median + k*MAD, with blocks of four MIDI 36 periods) applied to the
+    RMS, median + k*MAD, with blocks of CLICK_PERIODS periods of f0) applied to the
     block levels AFTER dividing out their running median, so a swell lasting
     many blocks is not an event."""
     from scipy.ndimage import median_filter
     d = np.diff(np.asarray(x, dtype=np.float64), n=2)
-    nb = max(8, int(TRANSIENT_BLOCK_MS * sr / 1000))
+    nb = max(8, int(CLICK_PERIODS * sr / f0))
     m = len(d) // nb
     lev = np.sqrt((d[:m * nb].reshape(m, nb) ** 2).mean(axis=1))
     trend = median_filter(lev, size=DETREND_BLOCKS, mode="nearest")
@@ -149,7 +152,7 @@ def click_report(x, sr):
     events = [] if not len(hot) else np.split(hot, np.flatnonzero(np.diff(hot) > 2) + 1)
     return {"n_events": len(events), "threshold_db": thr, "max_residual_db": float(res.max()),
             "event_times_s": [round(float(e[0]) * nb / sr, 3) for e in events[:40]],
-            "block_ms": TRANSIENT_BLOCK_MS, "detrend_blocks": DETREND_BLOCKS}
+            "block_samples": nb, "detrend_blocks": DETREND_BLOCKS}
 
 
 def pitch_hz(x, sr, expect_hz, on_s):
@@ -174,11 +177,12 @@ def check_take(audio, sr, on_s, condition):
     if zrun >= ZERO_RUN_S * sr:
         raise Refused(f"{condition}: {zrun} consecutive exact zeros inside the gate (dropout)")
     held = x[round((on_s + SUSTAIN_FROM_S) * sr):off]
-    clean = click_report(held, sr)
+    f_nominal = 2 * F36 if condition == "osc2_open" else F36
+    clean = click_report(held, sr, f_nominal)
     if clean["n_events"]:
         raise Refused(f"{condition}: {clean['n_events']} transient events in the held sustain "
                       f"at {clean['event_times_s']} s -- demo noise or clicks")
-    injected = click_report(ri.inject_clicks(held, sr, every_s=2.0), sr)
+    injected = click_report(ri.inject_clicks(held, sr, every_s=2.0), sr, f_nominal)
     want = int((len(held) / sr - 1e-9) // 2.0)
     if injected["n_events"] < want:
         raise Refused(f"{condition}: click detector control failed ({injected['n_events']} of {want})")
