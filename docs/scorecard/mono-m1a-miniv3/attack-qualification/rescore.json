@@ -1,0 +1,382 @@
+{
+  "schema": "m1a-attack-rescore-v1",
+  "analysis_version": "m1a-envelope-score-v3",
+  "domain": [
+    {
+      "explained_min": 0.99,
+      "lo_ms": 0.25,
+      "hi_ms": 6.0,
+      "cases": 342,
+      "max_abs_error_ms": 0.7833,
+      "mean_error_ms": 0.0073
+    },
+    {
+      "explained_min": 0.98,
+      "lo_ms": 0.25,
+      "hi_ms": 6.0,
+      "cases": 431,
+      "max_abs_error_ms": 0.7833,
+      "mean_error_ms": 0.009
+    },
+    {
+      "explained_min": 0.97,
+      "lo_ms": 0.25,
+      "hi_ms": 6.0,
+      "cases": 439,
+      "max_abs_error_ms": 0.7833,
+      "mean_error_ms": 0.0079
+    },
+    {
+      "explained_min": 0.95,
+      "lo_ms": 0.25,
+      "hi_ms": 6.0,
+      "cases": 449,
+      "max_abs_error_ms": 0.9793,
+      "mean_error_ms": 0.0125
+    },
+    {
+      "explained_min": 0.9,
+      "lo_ms": 5.0,
+      "hi_ms": 6.0,
+      "cases": 41,
+      "max_abs_error_ms": 0.8175,
+      "mean_error_ms": 0.1941
+    },
+    {
+      "explained_min": 0.8,
+      "lo_ms": 0.25,
+      "hi_ms": 0.75,
+      "cases": 144,
+      "max_abs_error_ms": 0.8167,
+      "mean_error_ms": -0.0097
+    },
+    {
+      "explained_min": 0.7,
+      "lo_ms": 0.25,
+      "hi_ms": 0.75,
+      "cases": 144,
+      "max_abs_error_ms": 0.8167,
+      "mean_error_ms": -0.0097
+    }
+  ],
+  "settings": [
+    {
+      "amp_attack_ms": 10.0,
+      "sha256": "628a6a312288ed8dc817be0152329cc9de2fe3ff6e239d987c7f80423a2ba61c",
+      "events": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model": {
+            "attack_10_90_ms": 8.516666666666667,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9602,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 8.517 ms at explained ratio 0.960 is outside every qualified row"
+          },
+          "reference": {
+            "attack_10_90_ms": 1.6865480854231354,
+            "shape_p": 2.0,
+            "explained_ratio": 0.7238,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.687 ms at explained ratio 0.724 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model": {
+            "attack_10_90_ms": 8.6,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9654,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 8.600 ms at explained ratio 0.965 is outside every qualified row"
+          },
+          "reference": {
+            "attack_10_90_ms": 0.27444161415663176,
+            "shape_p": 4.0,
+            "explained_ratio": 0.656,
+            "search_boundary": "minimum",
+            "qualified": false,
+            "why": "fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement)"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model": {
+            "attack_10_90_ms": 9.95,
+            "shape_p": 1.0,
+            "explained_ratio": 0.96,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 9.950 ms at explained ratio 0.960 is outside every qualified row"
+          },
+          "reference": {
+            "attack_10_90_ms": 1.15,
+            "shape_p": 1.0,
+            "explained_ratio": 0.7765,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.150 ms at explained ratio 0.776 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        }
+      ],
+      "properties": {
+        "Pitch": {
+          "valid": true,
+          "error": -0.05059,
+          "unqualified_error": null
+        },
+        "Harmonic shape": {
+          "valid": true,
+          "error": 19.82331,
+          "unqualified_error": null
+        },
+        "Envelope attack": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": 8.8
+        },
+        "Envelope release": {
+          "valid": true,
+          "error": 8.47917,
+          "unqualified_error": null
+        },
+        "Gain": {
+          "valid": true,
+          "error": -1.04361,
+          "unqualified_error": null
+        },
+        "Filter envelope": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": null
+        },
+        "Clipping": {
+          "valid": true,
+          "error": 0.0,
+          "unqualified_error": null
+        }
+      }
+    },
+    {
+      "amp_attack_ms": 4.0,
+      "sha256": "d71775036264a70012171c90ee8c9576aa22d41cd687adfa6e4551060551283c",
+      "events": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model": {
+            "attack_10_90_ms": 0.27444161415663176,
+            "shape_p": 4.0,
+            "explained_ratio": 0.956,
+            "search_boundary": "minimum",
+            "qualified": false,
+            "why": "fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement)"
+          },
+          "reference": {
+            "attack_10_90_ms": 1.6865480854231354,
+            "shape_p": 2.0,
+            "explained_ratio": 0.7238,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.687 ms at explained ratio 0.724 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model": {
+            "attack_10_90_ms": 3.0832207186641694,
+            "shape_p": 2.0,
+            "explained_ratio": 0.9617,
+            "search_boundary": null,
+            "qualified": true,
+            "why": null
+          },
+          "reference": {
+            "attack_10_90_ms": 0.27444161415663176,
+            "shape_p": 4.0,
+            "explained_ratio": 0.656,
+            "search_boundary": "minimum",
+            "qualified": false,
+            "why": "fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement)"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model": {
+            "attack_10_90_ms": 3.3166666666666673,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9459,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 3.317 ms at explained ratio 0.946 is outside every qualified row"
+          },
+          "reference": {
+            "attack_10_90_ms": 1.15,
+            "shape_p": 1.0,
+            "explained_ratio": 0.7765,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.150 ms at explained ratio 0.776 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        }
+      ],
+      "properties": {
+        "Pitch": {
+          "valid": true,
+          "error": -0.05059,
+          "unqualified_error": null
+        },
+        "Harmonic shape": {
+          "valid": true,
+          "error": 19.82331,
+          "unqualified_error": null
+        },
+        "Envelope attack": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": 2.80878
+        },
+        "Envelope release": {
+          "valid": true,
+          "error": 8.47917,
+          "unqualified_error": null
+        },
+        "Gain": {
+          "valid": true,
+          "error": -1.04361,
+          "unqualified_error": null
+        },
+        "Filter envelope": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": null
+        },
+        "Clipping": {
+          "valid": true,
+          "error": 0.0,
+          "unqualified_error": null
+        }
+      }
+    },
+    {
+      "amp_attack_ms": 5.0,
+      "sha256": "1689d72372ed7a872d147faf9cdc7b952ff80362ba814fcc2fb68a398ba236b9",
+      "events": [
+        {
+          "note": 36,
+          "on_s": 0.1,
+          "model": {
+            "attack_10_90_ms": 4.95,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9578,
+            "search_boundary": null,
+            "qualified": true,
+            "why": null
+          },
+          "reference": {
+            "attack_10_90_ms": 1.6865480854231354,
+            "shape_p": 2.0,
+            "explained_ratio": 0.7238,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.687 ms at explained ratio 0.724 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 43,
+          "on_s": 2.1,
+          "model": {
+            "attack_10_90_ms": 5.216666666666667,
+            "shape_p": 0.5,
+            "explained_ratio": 0.9632,
+            "search_boundary": null,
+            "qualified": true,
+            "why": null
+          },
+          "reference": {
+            "attack_10_90_ms": 0.27444161415663176,
+            "shape_p": 4.0,
+            "explained_ratio": 0.656,
+            "search_boundary": "minimum",
+            "qualified": false,
+            "why": "fit on the ramp search minimum (10-90 0.274 ms is a search limit, not a measurement)"
+          },
+          "grade": "unqualified"
+        },
+        {
+          "note": 36,
+          "on_s": 4.1,
+          "model": {
+            "attack_10_90_ms": 3.9166666666666665,
+            "shape_p": 1.0,
+            "explained_ratio": 0.9496,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 3.917 ms at explained ratio 0.950 is outside every qualified row"
+          },
+          "reference": {
+            "attack_10_90_ms": 1.15,
+            "shape_p": 1.0,
+            "explained_ratio": 0.7765,
+            "search_boundary": null,
+            "qualified": false,
+            "why": "10-90 1.150 ms at explained ratio 0.776 is outside every qualified row"
+          },
+          "grade": "unqualified"
+        }
+      ],
+      "properties": {
+        "Pitch": {
+          "valid": true,
+          "error": -0.05059,
+          "unqualified_error": null
+        },
+        "Harmonic shape": {
+          "valid": true,
+          "error": 19.82331,
+          "unqualified_error": null
+        },
+        "Envelope attack": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": 4.94223
+        },
+        "Envelope release": {
+          "valid": true,
+          "error": 8.47917,
+          "unqualified_error": null
+        },
+        "Gain": {
+          "valid": true,
+          "error": -1.04361,
+          "unqualified_error": null
+        },
+        "Filter envelope": {
+          "valid": false,
+          "error": null,
+          "unqualified_error": null
+        },
+        "Clipping": {
+          "valid": true,
+          "error": 0.0,
+          "unqualified_error": null
+        }
+      }
+    }
+  ]
+}

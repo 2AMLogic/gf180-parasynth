@@ -13,6 +13,7 @@ import numpy as np
 from scipy.io import wavfile
 import mono_m5a_score as lead
 import measure_mono_m1a_reference as reference
+import attack_fit_v3
 
 ROOT, SR = lead.ROOT, lead.SR
 MANIFEST = ROOT / "docs/scorecard/mono-m1a-miniv3/manifest.json"
@@ -89,27 +90,55 @@ def patch_for_reference(manifest, patch_id=SELECTED_PATCH):
     return patch
 
 
-# attack_fit's KNOWN-SIGNAL domain, from its own qualification (docstring of
-# measure_mono_m1a_reference.attack_fit): 10-90% spans from ramps of 0.5-20 ms
-# and shapes p in {0.5, 1, 2}. The fit also searches p = 3, 4 and cannot
-# return a ramp shorter than 32 samples (0.667 ms); a fit on that minimum is a
-# search boundary, which establishes nothing about the true attack. A reading
-# outside the domain on EITHER side is not a measurement this estimator has
-# been shown to make, so the comparison is UNQUALIFIED -- neither pass nor fail.
-ATTACK_QUALIFIED_SHAPES = (0.5, 1.0, 2.0)
-ATTACK_QUALIFIED_RAMP_MS = (0.5, 20.0)
-ATTACK_FIT_MIN_RAMP_MS = 32 * 1000 / 48000
+# ANALYSIS VERSION m1a-envelope-score-v3.
+#
+# ONE QUANTITY: the attack property reports, and its 5 ms tolerance applies
+# to, the 10-90 % attack time in ms. v2 stated its qualification in that
+# quantity (known 10-90 % spans 0.5-20 ms) but gated the fit's TOTAL RAMP
+# `ramp_ms`, which is 10-90 / kfrac(p): 1.25x at p = 1, 2.4x at p = 4. v3
+# gates on the reported 10-90 value itself.
+#
+# THE ESTIMATOR is attack_fit_v3 (quadratic post-attack level, 80 ms window),
+# because the v2 fit had no representation of the ADS decay both patches
+# have and measured known attacks short by up to 4.8 ms on steady spectra
+# (docs/scorecard/mono-m1a-miniv3/attack-qualification/).
+#
+# THE DOMAIN is a region of what the fit RETURNS (10-90 value, explained-energy
+# ratio, search-boundary flag), derived by qualify_m1a_attack.derive_domain
+# from the committed known-answer suite, each row with its measured worst
+# error. A fit on a search boundary is never a measurement. A reading outside
+# every row on EITHER side is UNQUALIFIED -- neither pass nor fail.
+QUALIFICATION = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
+ANALYSIS_VERSION = "m1a-envelope-score-v3"
 
 
-def attack_fit_qualified(fit):
-    """Why this attack fit is outside the estimator's validated domain, or None."""
-    if fit["shape_p"] not in ATTACK_QUALIFIED_SHAPES:
-        return f"shape p={fit['shape_p']:g} outside qualified {{0.5, 1, 2}}"
-    if fit["ramp_ms"] <= ATTACK_FIT_MIN_RAMP_MS + 1e-9:
-        return f"ramp {fit['ramp_ms']:.3f} ms on the fit's search minimum"
-    lo, hi = ATTACK_QUALIFIED_RAMP_MS
-    if not lo <= fit["ramp_ms"] <= hi:
-        return f"ramp {fit['ramp_ms']:.3f} ms outside qualified {lo}-{hi} ms"
+def qualified_attack_domain():
+    """The v3 qualified domain; REFUSES if the suite that produced it was not
+    run on the estimator and signal sources now in the tree."""
+    try:
+        suite = json.loads((QUALIFICATION / "suite-v3.json").read_text())
+        report = json.loads((QUALIFICATION / "qualification.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise Refused(f"attack qualification unavailable: {exc}") from exc
+    for rel, digest in suite["sources_sha256"].items():
+        if sha(ROOT / rel) != digest:
+            raise Refused(f"attack qualification is stale: {rel} changed since the suite ran")
+    domain = report["v3"]["domain"]
+    if not domain or any(r["max_abs_error_ms"] > report["bound_ms"] for r in domain):
+        raise Refused("attack qualification has no row within its error bound")
+    return domain
+
+
+def attack_fit_qualified(fit, domain=None):
+    """Why this attack fit is outside the v3 qualified domain, or None."""
+    import qualify_m1a_attack as qual
+    domain = qualified_attack_domain() if domain is None else domain
+    if fit.get("search_boundary"):
+        return (f"fit on the ramp search {fit['search_boundary']} "
+                f"(10-90 {fit['attack_10_90_ms']:.3f} ms is a search limit, not a measurement)")
+    if qual.covering_row(domain, fit) is None:
+        return (f"10-90 {fit['attack_10_90_ms']:.3f} ms at explained ratio "
+                f"{fit['explained_ratio']:.3f} is outside every qualified row")
     return None
 
 
@@ -127,6 +156,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         raise Refused("bass comparison audio is silent or non-finite")
     am = lead.am
     envelopes = [am.rms_envelope(x, ms=reference.ENVELOPE_WINDOW_MS, sr=SR) for x in (ours, ref)]
+    domain = qualified_attack_domain()
     values = {name: [] for name in ("Pitch", "Harmonic shape", "Envelope attack",
                                     "Envelope release", "Gain")}
     rows = []
@@ -154,10 +184,10 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         values["Envelope release"].append(tuple(t["release_t20_ms"] for t in timing))
         # Qualified 10-90% attack on BOTH sides by the same waveform-domain
         # fit, each measured with its own steady-state template.
-        attacks = [reference.attack_fit(x, SR, p.value, on, off)
+        attacks = [attack_fit_v3.attack_fit_v3(x, SR, p.value, on, off)
                    for x, p in zip((ours, ref), pitches)]
         values["Envelope attack"].append(tuple(a["attack_10_90_ms"] for a in attacks))
-        attack_domain = {side: attack_fit_qualified(a) for side, a in zip(("model", "reference"), attacks)}
+        attack_domain = {side: attack_fit_qualified(a, domain) for side, a in zip(("model", "reference"), attacks)}
         rows.append({**event, "pitch_error_cents": pitch_error,
                      "harmonics_db": dict(zip(("model", "reference"), spectra)),
                      "harmonic_error_db_model_minus_reference": {k: v[0] for k, v in partials.items()},
@@ -166,6 +196,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
                      "release_t20_ms": dict(zip(("model", "reference"), values["Envelope release"][-1])),
                      "attack_10_90_ms": dict(zip(("model", "reference"), values["Envelope attack"][-1])),
                      "attack_fit": {side: {k: a[k] for k in ("t0_ms", "ramp_ms", "shape_p",
+                                                            "attack_10_90_ms", "search_boundary",
                                                             "explained_ratio")}
                                     for side, a in zip(("model", "reference"), attacks)},
                      "attack_out_of_domain": attack_domain,
@@ -186,9 +217,11 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         if name == "Envelope release":
             tolerance, basis = 20., "ms; fixed bass screening limit, above known-signal release error (<10 ms)"
         if name == "Envelope attack":
-            tolerance, basis = 5.0, ("ms; the M5A screening limit for the same 10-90% "
-                                     "measurement; the waveform-fit estimator's known-signal "
-                                     "error is under 1 ms (qualification in the manifest)")
+            tolerance, basis = 5.0, ("ms, applied to the 10-90% attack time (not the fit's "
+                                     "total ramp); the M5A screening limit for the same "
+                                     "measurement. Graded only inside attack_fit_v3's "
+                                     "qualified domain, whose known-answer error bound is "
+                                     "under 1 ms (docs/scorecard/mono-m1a-miniv3/attack-qualification)")
         properties[name] = lead._metric(name, ours_value, reference_value, units, tolerance, basis)
     unqualified = [f"MIDI {r['note']} @{r['on_s']:g}s {side}: {why}" for r in rows
                    for side, why in r["attack_out_of_domain"].items() if why]
@@ -197,6 +230,10 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         properties["Envelope attack"] = {
             **invalid("attack fit outside the estimator's qualified domain: "
                       + "; ".join(unqualified)),
+            "qualified_domain": [f"explained>={r['explained_min']:g}, 10-90 {r['lo_ms']:g}-"
+                                 f"{r['hi_ms']:g} ms, off search boundary: |error|<="
+                                 f"{r['max_abs_error_ms']:g} ms ({r['cases']} known answers)"
+                                 for r in domain],
             "unqualified_value": raw["value"], "unqualified_reference": raw["reference"],
             "unqualified_error": raw["error"], "tolerance": raw["tolerance"],
             "tolerance_basis": raw["tolerance_basis"]}
@@ -220,7 +257,7 @@ def required_metrics(measured):
     else:
         envelope = max(abs(props[n]["error"]) / props[n]["tolerance"] for n in parts)
         envelope_metric = lead._metric("envelope", envelope, 0., "normalized maximum", 1.,
-            "maximum of envelope attack / 5 ms (waveform-fit, qualified) and "
+            "maximum of envelope attack / 5 ms (10-90%, attack_fit_v3, qualified) and "
             "envelope release / 20 ms (40 ms RMS window); no averaging")
     return {"Fundamental/harmonics": lead._metric("Fundamental/harmonics", distance, 0., "normalized maximum", 1.,
                 "maximum of pitch / 1 cent and harmonic error / 1 dB; no averaging"),
@@ -302,14 +339,16 @@ def run(case, inject="", keep_audio=True, cached_record=None):
         "frozen:M1A:audio": "sha256:" + manifest["renders"][0]["sha256"],
         "tools/mono_m1a_score.py": "sha256:" + sha(Path(__file__)),
         "model/filter_rate_chain.py": "sha256:" + sha(ROOT / "model/filter_rate_chain.py"),
-        "tools/measure_mono_m1a_reference.py": "sha256:" + sha(ROOT / "tools/measure_mono_m1a_reference.py")})
+        "tools/measure_mono_m1a_reference.py": "sha256:" + sha(ROOT / "tools/measure_mono_m1a_reference.py"),
+        "tools/attack_fit_v3.py": "sha256:" + sha(ROOT / "tools/attack_fit_v3.py"),
+        "attack-qualification/qualification.json": "sha256:" + sha(QUALIFICATION / "qualification.json")})
     for rel in ("audition/dsp.py", "model/fixed.py"):
         inputs[rel] = "sha256:" + sha(ROOT / rel)
     provenance = run_case.provenance(inputs, artifacts, config)
     provenance["worktree"] = source_tree
     return {"engine": "fixed-model", "case_id": "M1A", "subject": case["subject"],
             "source_commit": source_commit, "analysis_run": run_case.analysis_run(),
-            "analysis_version": "m1a-envelope-score-v2",
+            "analysis_version": ANALYSIS_VERSION,
             "reference_profile": "frozen Mini V3 software reference (screening policy: "
                                  "docs/scorecard/mono-m5a-policy.md); Model D cross-check unavailable",
             "render_run": "7.5 s complete MIDI 36/43/36 phrase; selected oscillator/filter 2x; provisional patch",
@@ -328,11 +367,17 @@ def run(case, inject="", keep_audio=True, cached_record=None):
                                 "provisional and the reference cutoff trajectory is not measurable "
                                 "from frozen audio; recorded as an unqualified property, not a metric",
                             "wrong_then_right": {"apparatus_corrections": 5,
+                                "attack_v3": "v2's '<1 ms known-signal error' held only on the "
+                                "signals it was qualified on (no post-attack decay, near-steady "
+                                "spectrum); on the realistic known-answer suite it measured up to "
+                                "4.8 ms short off the search boundary. Its gate also tested the "
+                                "total ramp, not the 10-90 value it reports.",
                                 "session_estimator_iterations": 6,
                                 "latest": "six ground-truth-caught defects while building the "
                                 "waveform-fit attack estimator (objective, template phase twice, "
                                 "FFT offset, fold smear, shape refinement); all listed in the "
                                 "estimator commit"}},
             "provenance": provenance,
-            "note": "envelope attack qualified by waveform-domain fit with closed-form "
-                    "ground truth; envelope metric = worst of attack/release normalized errors"}
+            "note": "envelope attack: 10-90% by attack_fit_v3, graded only where both sides "
+                    "fall in the known-answer-qualified domain; envelope metric = worst of "
+                    "attack/release normalized errors"}

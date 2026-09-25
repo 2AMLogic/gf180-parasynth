@@ -1,0 +1,350 @@
+{
+  "schema": "m1a-attack-qualification-v1",
+  "bound_ms": 1.0,
+  "min_cases": 30,
+  "source_commit": "1fb1115adec5c1a3a318532f1378a39a32bc7ca5",
+  "v2": {
+    "cases": 1898,
+    "search_boundary_hits": 580,
+    "domain": [
+      {
+        "explained_min": 0.99,
+        "lo_ms": 0.25,
+        "hi_ms": 1.5,
+        "cases": 199,
+        "max_abs_error_ms": 0.9833,
+        "mean_error_ms": -0.1482
+      },
+      {
+        "explained_min": 0.98,
+        "lo_ms": 0.25,
+        "hi_ms": 1.5,
+        "cases": 199,
+        "max_abs_error_ms": 0.9833,
+        "mean_error_ms": -0.1482
+      },
+      {
+        "explained_min": 0.97,
+        "lo_ms": 0.25,
+        "hi_ms": 1.5,
+        "cases": 254,
+        "max_abs_error_ms": 0.9833,
+        "mean_error_ms": -0.1481
+      },
+      {
+        "explained_min": 0.95,
+        "lo_ms": 0.25,
+        "hi_ms": 1.5,
+        "cases": 286,
+        "max_abs_error_ms": 0.9833,
+        "mean_error_ms": -0.1324
+      },
+      {
+        "explained_min": 0.9,
+        "lo_ms": 0.25,
+        "hi_ms": 1.0,
+        "cases": 222,
+        "max_abs_error_ms": 0.75,
+        "mean_error_ms": -0.0995
+      },
+      {
+        "explained_min": 0.8,
+        "lo_ms": 0.25,
+        "hi_ms": 1.0,
+        "cases": 252,
+        "max_abs_error_ms": 0.75,
+        "mean_error_ms": -0.0803
+      },
+      {
+        "explained_min": 0.7,
+        "lo_ms": 0.25,
+        "hi_ms": 0.75,
+        "cases": 196,
+        "max_abs_error_ms": 0.9,
+        "mean_error_ms": -0.0822
+      }
+    ],
+    "breakdown": {
+      "spectrum=fenv-2x-50ms": {
+        "cases": 364,
+        "search_boundary": 114,
+        "max_abs_error_ms_off_boundary": 4.783,
+        "explained_range": [
+          0.9203,
+          0.98
+        ]
+      },
+      "spectrum=fenv-4x-150ms": {
+        "cases": 364,
+        "search_boundary": 107,
+        "max_abs_error_ms_off_boundary": 7.333,
+        "explained_range": [
+          0.733,
+          0.8681
+        ]
+      },
+      "spectrum=fenv-8x-20ms": {
+        "cases": 364,
+        "search_boundary": 160,
+        "max_abs_error_ms_off_boundary": 16.7,
+        "explained_range": [
+          0.7857,
+          0.9605
+        ]
+      },
+      "spectrum=steady-bright": {
+        "cases": 364,
+        "search_boundary": 93,
+        "max_abs_error_ms_off_boundary": 5.367,
+        "explained_range": [
+          0.9782,
+          0.9967
+        ]
+      },
+      "spectrum=steady-dull": {
+        "cases": 442,
+        "search_boundary": 106,
+        "max_abs_error_ms_off_boundary": 4.833,
+        "explained_range": [
+          0.9924,
+          1.0
+        ]
+      },
+      "shape=p0.5": {
+        "cases": 260,
+        "search_boundary": 89,
+        "max_abs_error_ms_off_boundary": 15.133,
+        "explained_range": [
+          0.7355,
+          0.9965
+        ]
+      },
+      "shape=p1": {
+        "cases": 286,
+        "search_boundary": 79,
+        "max_abs_error_ms_off_boundary": 15.717,
+        "explained_range": [
+          0.7348,
+          1.0
+        ]
+      },
+      "shape=p2": {
+        "cases": 260,
+        "search_boundary": 66,
+        "max_abs_error_ms_off_boundary": 16.333,
+        "explained_range": [
+          0.7344,
+          0.9964
+        ]
+      },
+      "shape=p3": {
+        "cases": 286,
+        "search_boundary": 77,
+        "max_abs_error_ms_off_boundary": 16.7,
+        "explained_range": [
+          0.7333,
+          1.0
+        ]
+      },
+      "shape=p4": {
+        "cases": 260,
+        "search_boundary": 77,
+        "max_abs_error_ms_off_boundary": 16.367,
+        "explained_range": [
+          0.733,
+          0.9966
+        ]
+      },
+      "shape=rc3": {
+        "cases": 286,
+        "search_boundary": 97,
+        "max_abs_error_ms_off_boundary": 15.05,
+        "explained_range": [
+          0.7358,
+          1.0
+        ]
+      },
+      "shape=rc5": {
+        "cases": 260,
+        "search_boundary": 95,
+        "max_abs_error_ms_off_boundary": 14.883,
+        "explained_range": [
+          0.7364,
+          0.9961
+        ]
+      }
+    }
+  },
+  "v3": {
+    "cases": 1898,
+    "search_boundary_hits": 550,
+    "domain": [
+      {
+        "explained_min": 0.99,
+        "lo_ms": 0.25,
+        "hi_ms": 6.0,
+        "cases": 342,
+        "max_abs_error_ms": 0.7833,
+        "mean_error_ms": 0.0073
+      },
+      {
+        "explained_min": 0.98,
+        "lo_ms": 0.25,
+        "hi_ms": 6.0,
+        "cases": 431,
+        "max_abs_error_ms": 0.7833,
+        "mean_error_ms": 0.009
+      },
+      {
+        "explained_min": 0.97,
+        "lo_ms": 0.25,
+        "hi_ms": 6.0,
+        "cases": 439,
+        "max_abs_error_ms": 0.7833,
+        "mean_error_ms": 0.0079
+      },
+      {
+        "explained_min": 0.95,
+        "lo_ms": 0.25,
+        "hi_ms": 6.0,
+        "cases": 449,
+        "max_abs_error_ms": 0.9793,
+        "mean_error_ms": 0.0125
+      },
+      {
+        "explained_min": 0.9,
+        "lo_ms": 5.0,
+        "hi_ms": 6.0,
+        "cases": 41,
+        "max_abs_error_ms": 0.8175,
+        "mean_error_ms": 0.1941
+      },
+      {
+        "explained_min": 0.8,
+        "lo_ms": 0.25,
+        "hi_ms": 0.75,
+        "cases": 144,
+        "max_abs_error_ms": 0.8167,
+        "mean_error_ms": -0.0097
+      },
+      {
+        "explained_min": 0.7,
+        "lo_ms": 0.25,
+        "hi_ms": 0.75,
+        "cases": 144,
+        "max_abs_error_ms": 0.8167,
+        "mean_error_ms": -0.0097
+      }
+    ],
+    "breakdown": {
+      "spectrum=fenv-2x-50ms": {
+        "cases": 364,
+        "search_boundary": 106,
+        "max_abs_error_ms_off_boundary": 7.917,
+        "explained_range": [
+          0.8768,
+          0.97
+        ]
+      },
+      "spectrum=fenv-4x-150ms": {
+        "cases": 364,
+        "search_boundary": 74,
+        "max_abs_error_ms_off_boundary": 7.767,
+        "explained_range": [
+          0.6841,
+          0.8463
+        ]
+      },
+      "spectrum=fenv-8x-20ms": {
+        "cases": 364,
+        "search_boundary": 189,
+        "max_abs_error_ms_off_boundary": 8.683,
+        "explained_range": [
+          0.6568,
+          0.9245
+        ]
+      },
+      "spectrum=steady-bright": {
+        "cases": 364,
+        "search_boundary": 86,
+        "max_abs_error_ms_off_boundary": 4.133,
+        "explained_range": [
+          0.9794,
+          1.0
+        ]
+      },
+      "spectrum=steady-dull": {
+        "cases": 442,
+        "search_boundary": 95,
+        "max_abs_error_ms_off_boundary": 3.667,
+        "explained_range": [
+          0.9968,
+          1.0
+        ]
+      },
+      "shape=p0.5": {
+        "cases": 260,
+        "search_boundary": 83,
+        "max_abs_error_ms_off_boundary": 7.117,
+        "explained_range": [
+          0.6572,
+          1.0
+        ]
+      },
+      "shape=p1": {
+        "cases": 286,
+        "search_boundary": 85,
+        "max_abs_error_ms_off_boundary": 7.017,
+        "explained_range": [
+          0.6572,
+          1.0
+        ]
+      },
+      "shape=p2": {
+        "cases": 260,
+        "search_boundary": 70,
+        "max_abs_error_ms_off_boundary": 5.083,
+        "explained_range": [
+          0.6572,
+          1.0
+        ]
+      },
+      "shape=p3": {
+        "cases": 286,
+        "search_boundary": 66,
+        "max_abs_error_ms_off_boundary": 8.683,
+        "explained_range": [
+          0.6569,
+          1.0
+        ]
+      },
+      "shape=p4": {
+        "cases": 260,
+        "search_boundary": 68,
+        "max_abs_error_ms_off_boundary": 5.6,
+        "explained_range": [
+          0.6568,
+          1.0
+        ]
+      },
+      "shape=rc3": {
+        "cases": 286,
+        "search_boundary": 90,
+        "max_abs_error_ms_off_boundary": 8.175,
+        "explained_range": [
+          0.6572,
+          1.0
+        ]
+      },
+      "shape=rc5": {
+        "cases": 260,
+        "search_boundary": 88,
+        "max_abs_error_ms_off_boundary": 8.214,
+        "explained_range": [
+          0.6572,
+          1.0
+        ]
+      }
+    }
+  }
+}

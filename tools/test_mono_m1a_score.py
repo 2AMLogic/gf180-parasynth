@@ -11,7 +11,7 @@ def signal(cents=0):
     audio = np.zeros_like(t)
     for event in bass.reference.EVENTS:
         dt = t - event["on_s"]
-        env = np.clip(dt / .01, 0, 1)
+        env = np.clip(dt / .005, 0, 1)   # 10-90 = 4 ms, inside the v3 domain
         off = dt >= event["gate_s"]
         env[off] = np.exp(-(dt[off] - event["gate_s"]) / .05)
         hz = 440 * 2 ** ((event["note"] - 69 + cents / 100) / 12)
@@ -28,7 +28,7 @@ def test_known_bass_and_pitch_mutation():
     assert changed["properties"]["Pitch"]["error"] == pytest.approx(25, abs=.5)
     assert clean["properties"]["Envelope release"]["valid"]
     # identical audio on both sides: the qualified attack must read the same
-    # 8 ms 10-90 span it was built with, within the estimator's own bound
+    # 4 ms 10-90 span it was built with, within the estimator's own bound
     assert clean["properties"]["Envelope attack"]["valid"]
     assert abs(clean["properties"]["Envelope attack"]["error"]) < 1.0
     assert abs(changed["properties"]["Envelope attack"]["error"]) < 1.0
@@ -44,8 +44,8 @@ def test_known_bass_and_pitch_mutation():
         assert event["harmonics_db"]["model"]["h2"] == pytest.approx(20 * np.log10(.2), abs=.05)
         assert event["harmonics_db"]["model"]["h3"] == pytest.approx(-20., abs=.05)
         assert event["release_t20_ms"]["model"] == pytest.approx(50 * np.log(10), abs=10)
-        assert event["attack_10_90_ms"]["model"] == pytest.approx(8., abs=1.0)
-        assert event["attack_10_90_ms"]["reference"] == pytest.approx(8., abs=1.0)
+        assert event["attack_10_90_ms"]["model"] == pytest.approx(4., abs=1.0)
+        assert event["attack_10_90_ms"]["reference"] == pytest.approx(4., abs=1.0)
 
 
 def test_missing_or_corrupt_reference_refuses(tmp_path):
@@ -104,11 +104,11 @@ def test_changed_cached_audio_refuses(tmp_path):
 
 
 # --- attack qualification on BOTH sides ---------------------------------------
-# A reading outside attack_fit's known-signal domain (p in {0.5,1,2}, ramp
-# 0.5-20 ms, above the 32-sample search minimum) is UNQUALIFIED, not a grade.
+# A reading outside attack_fit_v3's known-answer domain (a region of reported
+# 10-90 value x explained ratio, off the ramp search boundary) is UNQUALIFIED.
 
 def _patched_fits(monkeypatch, side, **fit):
-    real = bass.reference.attack_fit
+    real = bass.attack_fit_v3.attack_fit_v3
     calls = {"n": 0}
 
     def fake(*args, **kwargs):
@@ -118,13 +118,14 @@ def _patched_fits(monkeypatch, side, **fit):
         if which == side:
             out.update(fit)
         return out
-    monkeypatch.setattr(bass.reference, "attack_fit", fake)
+    monkeypatch.setattr(bass.attack_fit_v3, "attack_fit_v3", fake)
 
 
 @pytest.mark.parametrize("side", ["model", "reference"])
-@pytest.mark.parametrize("fit", [dict(shape_p=4.0, ramp_ms=0.6666666666666666),
-                                 dict(shape_p=3.0, ramp_ms=3.27),
-                                 dict(shape_p=1.0, ramp_ms=25.)])
+@pytest.mark.parametrize("fit", [dict(shape_p=4.0, ramp_ms=0.6666666666666666,
+                                      attack_10_90_ms=0.27444, search_boundary="minimum"),
+                                 dict(shape_p=1.0, ramp_ms=10.0, attack_10_90_ms=8.0),
+                                 dict(explained_ratio=0.72)])
 def test_out_of_domain_attack_on_either_side_is_unqualified(monkeypatch, side, fit):
     _patched_fits(monkeypatch, side, **fit)
     measured = bass.compare_audio(signal(), signal())
@@ -140,7 +141,8 @@ def test_out_of_domain_attack_on_either_side_is_unqualified(monkeypatch, side, f
 def test_control_pre_rule_scorer_would_have_graded_it(monkeypatch):
     """The same out-of-domain reference fit, with the rule off, is GRADED --
     which is what the published board did with M1A's p=3 / p=4 reference fits."""
-    _patched_fits(monkeypatch, "reference", shape_p=4.0, ramp_ms=0.6666666666666666)
+    _patched_fits(monkeypatch, "reference", shape_p=4.0, ramp_ms=0.6666666666666666,
+                  attack_10_90_ms=0.27444, search_boundary="minimum")
     old = bass.compare_audio(signal(), signal(), attack_domain_rule=False)
     assert old["properties"]["Envelope attack"]["valid"] is True
     assert bass.required_metrics(old)["envelope"]["valid"] is True
@@ -150,5 +152,6 @@ def test_in_domain_fits_still_grade():
     measured = bass.compare_audio(signal(), signal())
     assert measured["properties"]["Envelope attack"]["valid"]
     assert all(e["attack_state"] == "pass" for e in measured["events"])
-    assert bass.attack_fit_qualified({"shape_p": 1.0, "ramp_ms": 10.}) is None
-    assert bass.attack_fit_qualified({"shape_p": 4.0, "ramp_ms": 10.})
+    ok = {"attack_10_90_ms": 4.0, "explained_ratio": 0.99, "search_boundary": None}
+    assert bass.attack_fit_qualified(ok) is None
+    assert bass.attack_fit_qualified({**ok, "attack_10_90_ms": 8.0})

@@ -93,8 +93,18 @@ def render_point(ms):
 
 
 def fit_in_domain(fit):
-    """The board scorer's rule (mono_m1a_score.attack_fit_qualified)."""
-    return bass.attack_fit_qualified(fit) is None
+    """The m1a-envelope-score-v2 rule, FROZEN here: this sweep's points were
+    fitted by v1's attack_fit, and its published classification was made
+    under v2's domain (p in {0.5,1,2}, ramp 0.5-20 ms, above the 32-sample
+    minimum). v3 (mono_m1a_score.attack_fit_qualified) re-measures the audio
+    with a different estimator; see attack-qualification/ for that rescore.
+    Note the v2 rule gates the total RAMP, not the 10-90 value -- the
+    conflation v3 corrects."""
+    if fit["shape_p"] not in (0.5, 1.0, 2.0):
+        return False
+    if fit["ramp_ms"] <= 32 * 1000 / 48000 + 1e-9:
+        return False
+    return 0.5 <= fit["ramp_ms"] <= 20.0
 
 
 def nominal_vca_10_90_ms(attack_ms):
@@ -182,9 +192,14 @@ def summarize():
     cp = json.loads(json.dumps(control["measurements"]["properties"]))
     sp = selected["diagnostics"]["properties"]
     raw = sp["Envelope attack"].get("unqualified_error", sp["Envelope attack"].get("error"))
+    # A v3 record re-measures the attack with attack_fit_v3, so its raw
+    # attack is a different measurement of the same audio; audio hash and
+    # every other property must still match exactly.
+    raw_matches = (selected.get("analysis_version") == bass.ANALYSIS_VERSION
+                   or cp["Envelope attack"]["error"] == raw)
     if (control["sha256"] != selected["diagnostics"]["model_audio_sha256"]
             or any(cp[k] != sp[k] for k in cp if k != "Envelope attack")
-            or cp["Envelope attack"]["error"] != raw):
+            or not raw_matches):
         raise bass.Refused("control point does not reproduce the selected patch's record")
     table = [evaluate(rows[ms], selected) for ms in grid["grid_ms"]]
     candidates = [r for r in table if r["candidate"]]

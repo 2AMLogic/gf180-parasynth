@@ -1,5 +1,10 @@
 # M1A amp-attack sweep of the selected patch
 
+> **Superseded for 10, 4 and 5 ms** by the v3 known-answer qualification and
+> rescore in [`../attack-qualification/`](../attack-qualification/README.md):
+> the v1/v2 attack readings below carry errors of several ms on realistic
+> signals, and every reference fit remains unqualified under v3.
+
 Base patch `m1a-gain-minus4db-v2`. **Only `amp[0]` (amplitude attack, seconds)
 changes.** The reference, estimator, engine, tolerances, note sequence and every
 other patch field stay fixed. The grid, the attack-pass rule and the preservation
