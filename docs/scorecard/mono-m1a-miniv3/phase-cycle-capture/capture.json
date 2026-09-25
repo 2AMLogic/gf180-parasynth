@@ -1,0 +1,2953 @@
+{
+ "schema": "m1a-phase-cycle-capture-v1",
+ "state": "CAPTURED",
+ "scope": "diagnostic only; the frozen M1A reference is untouched",
+ "identity": {
+  "name": "Mini V3",
+  "bundle_id": "com.Arturia.Mini-V3.vst3",
+  "version": "3.12.0.3422",
+  "bundle_info_sha256": "f98d1a2857dd6fadbe41925c9089a975352cb2f8889659a67bffe79c55c88004",
+  "plugin_binary_sha256": "6b11ae9cc12d5ae476bd3ba686e5d3ac28b0a6031bf9ad86fbd83cead2f3ca09",
+  "host": "dawdreamer",
+  "host_version": "0.8.3"
+ },
+ "host_python": "/opt/homebrew/anaconda3/bin/python3",
+ "sample_rate_hz": 48000,
+ "block_size_samples": 16,
+ "midi_velocity": 100,
+ "provenance": {
+  "commit": "02cd7a4f2f088f1f95553b16865b540da530e675",
+  "files_sha256": {
+   "tools/capture_m1a_phase_cycle.py": "36ea903331279a35e01c194af29b7960cb35d1395964e918d71c63f694996c0d",
+   "tools/measure_mono_m1a_reference.py": "d9b4122e75f9dfa62f71c688b917787591d59e4fb45811641ebc93c9d6bfd953",
+   "tools/measure_mono_m5a_reference.py": "7f4e6d4e820e10ef3e4742fbabce1ff57815325bbbf80472f865104a9978405f",
+   "model/reference_rigs.py": "99b1c862857a34a8689e9389010aabc86e3ec790c37da1ee5de84b88e449dce9",
+   "model/reference_integrity.py": "b9bee899539f53c8466dc35923422f10c9842cfbb2912e54698b6862b1971f25",
+   "model/audio_measure.py": "cd27a0a67dfde218130c7bb8657e18d9050c8ea95f66d03992b8e00375455f36"
+  },
+  "frozen_manifest_sha256": "681d8e56e05b81a616e02dc21df4648f3aedeb1964987f53ca30d888e755db8d"
+ },
+ "frozen_reproduction": [
+  {
+   "file": "m1a-repeat-0.wav",
+   "bit_exact": true
+  },
+  {
+   "file": "m1a-repeat-1.wav",
+   "bit_exact": true
+  },
+  {
+   "file": "m1a-repeat-2.wav",
+   "bit_exact": true
+  },
+  {
+   "file": "control-osc1_open.wav",
+   "bit_exact": true
+  },
+  {
+   "file": "control-osc2_open.wav",
+   "bit_exact": true
+  }
+ ],
+ "integrity": {
+  "command": [
+   "/opt/homebrew/anaconda3/bin/python3",
+   "/private/tmp/wt-m1a-phase-capture/model/reference_integrity.py",
+   "--stage",
+   "demo",
+   "--devices",
+   "miniv3",
+   "--source",
+   "smooth",
+   "--seconds",
+   "40",
+   "--block",
+   "16",
+   "--out",
+   "/var/folders/fb/l4j31ymn3bn0mc6v1qbvvl8c0000gn/T/mono-reference-integrity-xp8i11cw"
+  ],
+  "duration_s": 40,
+  "block_size_samples": 16,
+  "clean_events": 0,
+  "injected_click_events": 5,
+  "detector_control_passed": true,
+  "stdout": "-- miniv3: 40 s, one held note, source=smooth\n   rms 0.0487   peak 0.07434   peak/median high-band   +0.6 dB   events 0 (0.00/min)   per minute [0]\n   CONTROL, same render with a click every 7 s at 0.25 x peak: 5 events (+60.7 dB) -- detector WORKS",
+  "stderr": "error: attempt to map invalid URI `/Library/Audio/Plug-Ins/VST3/Mini V3.vst3'"
+ },
+ "thresholds": {
+  "zero_run_s": 0.001,
+  "isolated_flat_db": 0.5,
+  "sum_residual_db": -40.0,
+  "sum_block_db": -30.0,
+  "click_periods": 2,
+  "detrend_blocks": 5,
+  "click_floor_db": 1.0,
+  "click_k_mad": 12.0,
+  "osc1_cents": 5.0,
+  "osc2_cents": 10.0
+ },
+ "takes": {
+  "A": {
+   "note_on_s": 0.1,
+   "gate_s": 12.0,
+   "seconds": 13.1,
+   "events": [
+    {
+     "note": 36,
+     "on_s": 0.1,
+     "gate_s": 12.0
+    }
+   ],
+   "conditions": {
+    "full": {
+     "file": "takeA-full.wav",
+     "sha256": "1ebb83aa3264278942f6e8f0eef3027e47113a2a82426ed36022a93d7fbcfd4d",
+     "overrides": {},
+     "checks": {
+      "peak": 0.14383947849273682,
+      "longest_zero_run_in_gate": 8,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.15274165579709728,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -25.340854929131353,
+      "sustain_rms_4period_range_db": 2.56954037310852
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 0.5,
+        "readback": "0.500"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 0.5,
+        "readback": "0.500"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.14383947849273682,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        0.5
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.3
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "osc1_open": {
+     "file": "takeA-osc1_open.wav",
+     "sha256": "dc5e310939393752fa6dee29899b62459238b95ebbe1230ccb227bca50e32db7",
+     "overrides": {
+      "osc2_level": 0.0,
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.15239958465099335,
+      "longest_zero_run_in_gate": 8,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.027278774445438254,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -25.895351000344743,
+      "sustain_rms_4period_range_db": 0.0070558172269521435,
+      "f0_hz": 65.4053582289365,
+      "cents_from_midi": -0.027345117641226442
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.15239958465099335,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.0
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "osc2_open": {
+     "file": "takeA-osc2_open.wav",
+     "sha256": "37f558d4b8074628a95fb1b8f110e75b27cbeb1ee864961e99a22aa72c9c0591",
+     "overrides": {
+      "osc1_level": 0.0,
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.07680965214967728,
+      "longest_zero_run_in_gate": 8,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.011221852404087209,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -31.43691541153646,
+      "sustain_rms_4period_range_db": 0.04299132823949847,
+      "f0_hz": 130.54716461926722,
+      "cents_from_octave": -3.5188799392602275
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.07680965214967728,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.0
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "both_open": {
+     "file": "takeA-both_open.wav",
+     "sha256": "d125cb8481ceda0fc3409efe0d9dafad1068c0d588d917f9d4e097f4b39f6438",
+     "overrides": {
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.19758804142475128,
+      "longest_zero_run_in_gate": 8,
+      "transient_events": null,
+      "transient_max_residual_db": null,
+      "transient_threshold_db": null,
+      "injected_click_events": null,
+      "injected_click_expected": null,
+      "sustain_rms_dbfs": -24.802186551038837,
+      "sustain_rms_4period_range_db": 2.5299533922101283
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.19758804142475128,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    }
+   },
+   "isolated_sum_check": {
+    "overall_db": -43.74363359275259,
+    "worst_block_db": -39.978495702070404,
+    "worst_block_s": 5.959,
+    "injected_click_control_worst_block_db": -20.45680730860093
+   }
+  },
+  "B": {
+   "note_on_s": 2.0,
+   "gate_s": 12.0,
+   "seconds": 15.0,
+   "events": [
+    {
+     "note": 36,
+     "on_s": 2.0,
+     "gate_s": 12.0
+    }
+   ],
+   "conditions": {
+    "full": {
+     "file": "takeB-full.wav",
+     "sha256": "b903fcdb958053378be4cb82192aedd36725e5999b2d7879f0e3e482a26606ad",
+     "overrides": {},
+     "checks": {
+      "peak": 0.15965214371681213,
+      "longest_zero_run_in_gate": 20,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.16290307457073258,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -25.430310039274083,
+      "sustain_rms_4period_range_db": 2.569326205759346
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 0.5,
+        "readback": "0.500"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 0.5,
+        "readback": "0.500"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.15965214371681213,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        0.5
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.3
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "osc1_open": {
+     "file": "takeB-osc1_open.wav",
+     "sha256": "8d6d69eeb3db8ebda6834917626e8a76096ee572caf191f967be2ba11e3d7313",
+     "overrides": {
+      "osc2_level": 0.0,
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.1565537005662918,
+      "longest_zero_run_in_gate": 20,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.02751017124718573,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -25.894762721496658,
+      "sustain_rms_4period_range_db": 0.007086564284620067,
+      "f0_hz": 65.40510624594245,
+      "cents_from_midi": -0.034014943955889866
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.1565537005662918,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.0
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "osc2_open": {
+     "file": "takeB-osc2_open.wav",
+     "sha256": "3310c7f341e377afd965770c419047f2a4c5a0888c10b2948c8e07a5058b9946",
+     "overrides": {
+      "osc1_level": 0.0,
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.07582821696996689,
+      "longest_zero_run_in_gate": 20,
+      "transient_events": 0,
+      "transient_max_residual_db": 0.010023450207120622,
+      "transient_threshold_db": 1.0,
+      "injected_click_events": 5,
+      "injected_click_expected": 5,
+      "sustain_rms_dbfs": -31.43694548041364,
+      "sustain_rms_4period_range_db": 0.042991197809065795,
+      "f0_hz": 130.54700694795443,
+      "cents_from_octave": -3.5209708778946704
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.07582821696996689,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.0
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    },
+    "both_open": {
+     "file": "takeB-both_open.wav",
+     "sha256": "e94e55143590c9d05e1b6a2b0408c433da69f9c406ffa2bf360587bef6ac823b",
+     "overrides": {
+      "filter_cutoff": 1.0,
+      "filter_contour": 0.0
+     },
+     "checks": {
+      "peak": 0.19743624329566956,
+      "longest_zero_run_in_gate": 20,
+      "transient_events": null,
+      "transient_max_residual_db": null,
+      "transient_threshold_db": null,
+      "injected_click_events": null,
+      "injected_click_expected": null,
+      "sustain_rms_dbfs": -24.88573363372201,
+      "sustain_rms_4period_range_db": 2.5296369740227043
+     },
+     "apparatus": {
+      "before": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "after": {
+       "general_level": {
+        "index": 0,
+        "name": "General Level",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "osc1_level": {
+        "index": 15,
+        "name": "Level Osc1",
+        "written": 0.7,
+        "readback": "0.700"
+       },
+       "external_level": {
+        "index": 22,
+        "name": "Level Ext",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_cutoff": {
+        "index": 23,
+        "name": "CutOff",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "filter_emphasis": {
+        "index": 24,
+        "name": "Emphasis",
+        "written": 0.05,
+        "readback": "0.050"
+       },
+       "filter_contour": {
+        "index": 25,
+        "name": "Amount",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "filter_attack": {
+        "index": 26,
+        "name": "VCF Attack",
+        "written": 0.005,
+        "readback": "0.005"
+       },
+       "filter_decay": {
+        "index": 27,
+        "name": "VCF Decay",
+        "written": 0.15,
+        "readback": "0.150"
+       },
+       "filter_sustain": {
+        "index": 28,
+        "name": "VCF Sustain",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "amp_attack": {
+        "index": 29,
+        "name": "VCA Attack",
+        "written": 0.02,
+        "readback": "0.020"
+       },
+       "amp_decay": {
+        "index": 30,
+        "name": "VCA Decay",
+        "written": 0.25,
+        "readback": "0.250"
+       },
+       "amp_sustain": {
+        "index": 31,
+        "name": "VCA Sustain",
+        "written": 0.75,
+        "readback": "0.750"
+       },
+       "osc1_range": {
+        "index": 45,
+        "name": "Range Osc1",
+        "written": "8'",
+        "readback": "8'"
+       },
+       "osc1_enable": {
+        "index": 72,
+        "name": "Osc1",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc2_enable": {
+        "index": 73,
+        "name": "Osc2",
+        "written": 1.0,
+        "readback": "1.00"
+       },
+       "osc3_enable": {
+        "index": 74,
+        "name": "Osc3",
+        "written": 0.0,
+        "readback": "0.000"
+       },
+       "osc2_level": {
+        "index": 16,
+        "name": "Level Osc2",
+        "written": 0.3,
+        "readback": "0.300"
+       },
+       "osc2_range": {
+        "index": 46,
+        "name": "Range Osc2",
+        "written": "4'",
+        "readback": "4'"
+       },
+       "osc2_wave": {
+        "index": 49,
+        "name": "Wave Osc2",
+        "written": "sawtooth",
+        "readback": "sawtooth"
+       }
+      },
+      "latency_removed": 44,
+      "peak": 0.19743624329566956,
+      "settings": {
+       "general_level": [
+        0,
+        "General Level",
+        0.7
+       ],
+       "osc1_level": [
+        15,
+        "Level Osc1",
+        0.7
+       ],
+       "external_level": [
+        22,
+        "Level Ext",
+        0.0
+       ],
+       "filter_cutoff": [
+        23,
+        "CutOff",
+        1.0
+       ],
+       "filter_emphasis": [
+        24,
+        "Emphasis",
+        0.05
+       ],
+       "filter_contour": [
+        25,
+        "Amount",
+        0.0
+       ],
+       "filter_attack": [
+        26,
+        "VCF Attack",
+        0.005
+       ],
+       "filter_decay": [
+        27,
+        "VCF Decay",
+        0.15
+       ],
+       "filter_sustain": [
+        28,
+        "VCF Sustain",
+        0.0
+       ],
+       "amp_attack": [
+        29,
+        "VCA Attack",
+        0.02
+       ],
+       "amp_decay": [
+        30,
+        "VCA Decay",
+        0.25
+       ],
+       "amp_sustain": [
+        31,
+        "VCA Sustain",
+        0.75
+       ],
+       "osc1_range": [
+        45,
+        "Range Osc1",
+        0.575
+       ],
+       "osc1_enable": [
+        72,
+        "Osc1",
+        1.0
+       ],
+       "osc2_enable": [
+        73,
+        "Osc2",
+        1.0
+       ],
+       "osc3_enable": [
+        74,
+        "Osc3",
+        0.0
+       ],
+       "osc2_level": [
+        16,
+        "Level Osc2",
+        0.3
+       ],
+       "osc2_range": [
+        46,
+        "Range Osc2",
+        0.7417
+       ],
+       "osc2_wave": [
+        49,
+        "Wave Osc2",
+        0.4083
+       ]
+      }
+     }
+    }
+   },
+   "isolated_sum_check": {
+    "overall_db": -43.990151835546946,
+    "worst_block_db": -40.027878143383155,
+    "worst_block_s": 10.243,
+    "injected_click_control_worst_block_db": -20.34914760455623
+   }
+  }
+ }
+}
