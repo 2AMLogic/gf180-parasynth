@@ -3,23 +3,23 @@
 # SW Build 6140274 on Wed May 21 22:58:25 MDT 2025
 # IP Build 6138677 on Thu May 22 03:10:11 MDT 2025
 # SharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025
-# Start of session at: Wed Sep 23 10:32:10 2026
-# Process ID         : 42301
-# Current directory  : /home/ubuntu/integrated-baseline/build/dsp-review
+# Start of session at: Fri Sep 25 07:01:55 2026
+# Process ID         : 1266
+# Current directory  : /home/ubuntu/dsp-review-dcpbind
 # Command line       : vivado -mode batch -source dsp_dpreg_extract.tcl -log vivado_extract.log -journal vivado_extract.jou
-# Log file           : /home/ubuntu/integrated-baseline/build/dsp-review/vivado_extract.log
-# Journal file       : /home/ubuntu/integrated-baseline/build/dsp-review/vivado_extract.jou
+# Log file           : /home/ubuntu/dsp-review-dcpbind/vivado_extract.log
+# Journal file       : /home/ubuntu/dsp-review-dcpbind/vivado_extract.jou
 # Running On         : ip-172-31-72-198
 # Platform           : Ubuntu
 # Operating System   : Ubuntu 22.04.5 LTS
-# Processor Detail   : Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz
-# CPU Frequency      : 2499.994 MHz
+# Processor Detail   : Intel(R) Xeon(R) Platinum 8175M CPU @ 2.50GHz
+# CPU Frequency      : 3096.496 MHz
 # CPU Physical cores : 4
 # CPU Logical cores  : 8
-# Host memory        : 33263 MB
+# Host memory        : 32911 MB
 # Swap memory        : 0 MB
-# Total Virtual      : 33263 MB
-# Available Virtual  : 32646 MB
+# Total Virtual      : 32911 MB
+# Available Virtual  : 32488 MB
 #-----------------------------------------------------------
 source dsp_dpreg_extract.tcl
 # if {![string match "2025.1*" [version -short]]} {
@@ -53,14 +53,14 @@ Command: open_checkpoint /home/ubuntu/integrated-baseline/build/arty/routed.dcp
 
 Starting open_checkpoint Task
 
-Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.05 . Memory (MB): peak = 1481.656 ; gain = 0.000 ; free physical = 27772 ; free virtual = 30720
+Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.04 . Memory (MB): peak = 1451.473 ; gain = 8.906 ; free physical = 29395 ; free virtual = 30624
 INFO: [Device 21-403] Loading part xc7a100tcsg324-1
-Netlist sorting complete. Time (s): cpu = 00:00:00.1 ; elapsed = 00:00:00.1 . Memory (MB): peak = 1805.609 ; gain = 0.000 ; free physical = 27484 ; free virtual = 30433
+Netlist sorting complete. Time (s): cpu = 00:00:00.1 ; elapsed = 00:00:00.1 . Memory (MB): peak = 1836.520 ; gain = 0.000 ; free physical = 28990 ; free virtual = 30264
 INFO: [Netlist 29-17] Analyzing 3072 Unisim elements for replacement
 INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
 INFO: [Project 1-479] Netlist was created with Vivado 2025.1
 INFO: [Project 1-570] Preparing netlist for logic optimization
-Read ShapeDB Complete: Time (s): cpu = 00:00:00.05 ; elapsed = 00:00:00.05 . Memory (MB): peak = 1895.484 ; gain = 6.250 ; free physical = 27383 ; free virtual = 30331
+Read ShapeDB Complete: Time (s): cpu = 00:00:00.05 ; elapsed = 00:00:00.06 . Memory (MB): peak = 1927.363 ; gain = 6.250 ; free physical = 28872 ; free virtual = 30160
 INFO: [Timing 38-478] Restoring timing data from binary archive.
 INFO: [Timing 38-479] Binary timing data restore complete.
 INFO: [Project 1-856] Restoring constraints from binary archive.
@@ -69,17 +69,17 @@ INFO: [Constraints 18-5170] The checkpoint was created with non-default paramete
 INFO: [Project 1-853] Binary constraint restore complete.
 INFO: [Designutils 20-5722] Start Reading Physical Databases.
 Reading placement.
-Read Netlist Cache: Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.03 . Memory (MB): peak = 2507.047 ; gain = 0.000 ; free physical = 26824 ; free virtual = 29773
+Read Netlist Cache: Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.03 . Memory (MB): peak = 2538.895 ; gain = 0.000 ; free physical = 28273 ; free virtual = 29588
 Reading placer database...
-Read Device Cache: Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2507.047 ; gain = 0.000 ; free physical = 26824 ; free virtual = 29773
-Read PlaceDB: Time (s): cpu = 00:00:01 ; elapsed = 00:00:01 . Memory (MB): peak = 2530.117 ; gain = 23.070 ; free physical = 26792 ; free virtual = 29741
-Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2530.117 ; gain = 0.000 ; free physical = 26792 ; free virtual = 29741
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2538.895 ; gain = 0.000 ; free physical = 28273 ; free virtual = 29588
+Read PlaceDB: Time (s): cpu = 00:00:01 ; elapsed = 00:00:01 . Memory (MB): peak = 2561.965 ; gain = 23.070 ; free physical = 28250 ; free virtual = 29564
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2561.965 ; gain = 0.000 ; free physical = 28250 ; free virtual = 29564
 Reading routing.
-Read RouteStorage: Time (s): cpu = 00:00:00.84 ; elapsed = 00:00:00.25 . Memory (MB): peak = 2542.305 ; gain = 12.188 ; free physical = 26785 ; free virtual = 29734
-Read Physdb Files: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2542.305 ; gain = 35.258 ; free physical = 26785 ; free virtual = 29734
-Restored from archive | CPU: 2.240000 secs | Memory: 39.430717 MB |
-Finished XDEF File Restore: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2542.305 ; gain = 35.258 ; free physical = 26785 ; free virtual = 29734
-Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2542.305 ; gain = 0.000 ; free physical = 26785 ; free virtual = 29734
+Read RouteStorage: Time (s): cpu = 00:00:00.8 ; elapsed = 00:00:00.22 . Memory (MB): peak = 2574.152 ; gain = 12.188 ; free physical = 28234 ; free virtual = 29548
+Read Physdb Files: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2574.152 ; gain = 35.258 ; free physical = 28234 ; free virtual = 29548
+Restored from archive | CPU: 2.140000 secs | Memory: 39.430992 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2574.152 ; gain = 35.258 ; free physical = 28234 ; free virtual = 29548
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2574.152 ; gain = 0.000 ; free physical = 28234 ; free virtual = 29549
 INFO: [Project 1-111] Unisim Transformation Summary:
   A total of 34 instances were transformed.
   RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 12 instances
@@ -88,8 +88,8 @@ INFO: [Project 1-111] Unisim Transformation Summary:
   RAM64X1D => RAM64X1D (RAMD64E(x2)): 1 instance 
 
 INFO: [Project 1-604] Checkpoint was created with Vivado v2025.1 (64-bit) build 6140274
-open_checkpoint: Time (s): cpu = 00:00:34 ; elapsed = 00:00:19 . Memory (MB): peak = 2546.340 ; gain = 1064.684 ; free physical = 26785 ; free virtual = 29734
-# set out [open "/home/ubuntu/integrated-baseline/build/dsp-review/dsp_cells_dump.txt" w]
+open_checkpoint: Time (s): cpu = 00:00:33 ; elapsed = 00:00:20 . Memory (MB): peak = 2582.188 ; gain = 1142.590 ; free physical = 28234 ; free virtual = 29549
+# set out [open "/home/ubuntu/dsp-review-dcpbind/dsp_cells_dump.txt" w]
 # proc emit {s} { global out; puts $out $s }
 # emit "VIVADO [version -short]"
 # emit "DCP $dcp"
@@ -380,4 +380,4 @@ WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hie
 # if {$missing > 0} { puts "REFUSED: $missing of [llength $cells] cells not found"; exit 43 }
 # puts "EXTRACT_OK"
 EXTRACT_OK
-INFO: [Common 17-206] Exiting Vivado at Wed Sep 23 10:32:56 2026...
+INFO: [Common 17-206] Exiting Vivado at Fri Sep 25 07:02:48 2026...

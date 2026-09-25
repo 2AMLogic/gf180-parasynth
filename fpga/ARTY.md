@@ -107,18 +107,27 @@ reports (every file hash-checked against the artifact after copying, digests
 in `published_evidence_sha256`), and refuses to publish a true verdict the
 published directory cannot reproduce on its own.
 
-**This baseline's committed flag is `false`, and that is the derived
-answer.** Its extraction names the checkpoint by path only
-(`DCP /home/ubuntu/integrated-baseline/build/arty/routed.dcp`), never by
-digest, so it cannot be bound to routed.dcp `6c3c22c5…`. The structural
-verdict itself (13/13 dismissed) stands; the binding is what is missing.
-Closing it is a bounded, read-only task on the build host, no new routing:
-record `sha256sum routed.dcp` (must equal `6c3c22c5…`) as
-`dsp-dpreg-evidence/routed_dcp.sha256`, re-run `dsp_dpreg_extract.tcl`,
-confirm the checkpoint hash is unchanged afterwards, re-pin
-`MANIFEST.sha256`, then `python fpga/publish_arty.py <dir> --rederive-dsp`.
-If that checkpoint no longer exists, the flag stays false until a
-re-implementation is extracted.
+**This baseline's committed flag is `true`, and that is the derived
+answer** (since 2026-09-25). The first extraction named the checkpoint by
+path only, so until then the flag was derived `false`. A bounded read-only
+re-extraction closed it: `tools/dsp_dpreg_extract.py` (which now records
+the digest itself and has no defaults, so a stale target cannot be used)
+asserted routed.dcp `6c3c22c5…` on the build host before Vivado 2025.1
+opened it, wrote `dsp-dpreg-evidence/routed_dcp.sha256` into the box
+manifest, and re-hashed the checkpoint after Vivado exited (unchanged; the
+Tcl contains no write_checkpoint/opt/place/route). The new dump is
+byte-identical to the path-only one (`e738fb0c…`). The artifact directory
+(every file hash-matched against `report.json`) was then published through
+`publish()` and the published directory reopened: `dsp_disposition()` on
+it alone reproduces the published record exactly (13/13 dismissed, bound to
+`6c3c22c5…`). The committed `publication.json` is that output, differing from
+its predecessor only in the DSP fields and `published_evidence_sha256`, and
+`publish_arty.py <dir> --rederive-dsp` is a fixed point on it. To repeat:
+`python tools/dsp_dpreg_extract.py --box <host> --dcp <routed.dcp> \
+--dcp-sha256 <digest> --drc-rpt <drc.rpt> --evidence <fresh dir>/dsp-dpreg-evidence`,
+then `tools/dsp_dpreg_analyse.py --evidence …` and publish. If a checkpoint
+no longer exists, its flag stays false until a re-implementation is
+extracted.
 
 ## External I/O timing
 
