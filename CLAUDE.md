@@ -21,7 +21,10 @@ Four consequences that will bite you specifically:
   delivered 37 of 155 writes with every block still bit-exact.
 - **Sweep a parameter before arguing about it.** Hours went into 8 modes versus
   12; yosys pads the bank to a power of two, so 9 through 16 cost identically,
-  and the variable that mattered was `NUMS`.
+  and the variable that mattered was `NUMS`. Both dials are now swept records
+  under `tools/sensitivity.py check`, which `make verify` runs — register a
+  parameter there *when the proposal is made*, not when it lands
+  (`docs/sensitivity-sweeps.md`).
 
 **And a second root cause, from the measurement apparatus rather than the
 evidence: preconditions assumed rather than asserted.** Every one of these was

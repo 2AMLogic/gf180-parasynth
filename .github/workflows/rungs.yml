@@ -149,6 +149,27 @@ jobs:
       - name: the merge would not lose a file
         run: python tools/check_stale_base.py --base origin/main --head HEAD
 
+      # Every registered tunable parameter ships a value its own committed
+      # sweep covers, and every verdict is recomputed from the measurements
+      # rather than read out of the record. --changed-since additionally
+      # prices any registered parameter this branch moves: on main it finds
+      # nothing to price, which is why the step is satisfiable on every push
+      # as well as on every PR. docs/sensitivity-sweeps.md.
+      - name: a tunable parameter was swept before it was argued about
+        run: python tools/sensitivity.py check --changed-since origin/main
+
+      # ... and the gate can fail. Each injection corrupts the records in
+      # memory in one specific way the gate exists to catch; a run where none
+      # of these fires is a broken run, not a quiet one.
+      - name: the sensitivity gate can still fail
+        run: |
+          python tools/sensitivity.py check --inject VERDICT_ASSERTED --expect fail
+          python tools/sensitivity.py check --inject POINT_TRANSCRIBED --expect fail
+          python tools/sensitivity.py check --inject GRID_CHERRY_PICKED --expect fail
+          python tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail
+          python tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail
+          python tools/sensitivity.py check --inject RULE_UNSTATED --expect refused
+
       - name: F3 -- measurement ground truth
         run: python -m pytest model/test_audio_measure.py -q
       - name: M2 -- the voice is musically a Minimoog

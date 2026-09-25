@@ -119,6 +119,24 @@ objective was actually sensitive.
 > **Automate:** before a parameter debate is allowed to consume time, sweep it.
 > A one-line sweep would have ended the modes argument in minutes. Make
 > sensitivity analysis a gate on optimisation work, not an afterthought.
+>
+> **In place.** `tools/sensitivity.py check`, in `make verify` and in the
+> `python` job of `rungs.yml`. A parameter joins
+> `docs/sensitivity/registry.json` when someone *proposes* changing it; from
+> then on the gate asserts that the value which ships is a point on a committed
+> grid, that the grid **is** the set of points the measurement artefact holds
+> (so a plateau cannot be manufactured by dropping one), that every recorded
+> point re-extracts from that artefact, that the flat/sensitive verdict is
+> recomputed rather than asserted, and that the measured shape matches a
+> prediction derived **independently of the measurement**. Six injected
+> controls in `make controls`. `MODES` and `NUMS` are retrofitted — the
+> argument, recomputed, is a step of +16.8 % from 8 into the 9–16 bracket and
+> then a plateau of 0.67 % across 11–16, against +6.35 % and +7.52 % for the
+> dial nobody swept. Convention and limits: `docs/sensitivity-sweeps.md`.
+>
+> **What it still cannot do:** see an argument. It gates the artefact the
+> argument should have been settled by, and it only watches parameters someone
+> registered.
 
 ## A sixth, different in kind: rejecting imperfect evidence
 
@@ -145,13 +163,15 @@ withdrew one of our own false claims.
 integration check, including the exact defect that shipped (`SPI_ADDR7`).
 `make srccheck`. CI running the integrated verifier, not only block checks. A
 negative control that mutates *arithmetic* rather than syntax — which caught
-that inflating `rms` by 5 % passed all sixty ground-truth tests.
+that inflating `rms` by 5 % passed all sixty ground-truth tests. Sensitivity
+sweeps as a gate (`tools/sensitivity.py`, mechanism 5 above) — registry-scoped,
+so it watches the parameters someone registered and not every parameter.
 
 **Not yet.** The estimator meta-test. Implementation-versus-fidelity test
 classification and the UNVALIDATED state. Report staleness. Claim-to-evidence
-linking. Sensitivity sweeps as a gate.
+linking.
 
-Those five are the difference between a process that catches this class of
+Those four are the difference between a process that catches this class of
 error and one that relies on someone reading carefully at the right moment.
 
 ---
