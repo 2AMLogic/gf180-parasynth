@@ -242,6 +242,64 @@ against USB 2.0's 500 mA. A 400 mAh cell gives ~7.5 h of normal use.
 **A 15 mm speaker in a matchbox cannot produce bass.** It proves the thing is
 alive; it does not demonstrate the sound. The jack is the real output.
 
+### The keychain dongle, itemised
+
+The dongle row above is an envelope with no parts list behind it. This is the
+BOM the product target actually names (issue 1, DR 0002): **USB-C in, 3.5 mm
+out, no speaker, no amplifier, no battery** — with every footprint traced to a
+manufacturer's drawing rather than to memory.
+
+`drawing` = read off the manufacturer's mechanical drawing · `package` =
+JEDEC/vendor package outline · `estimate` = not sourced, and labelled so
+
+| part | package | land, mm | area, mm² | tall, mm | source |
+|---|---|---|---:|---:|---|
+| USB-C receptacle | GCT USB4105-GF-A, SMT | 8.94 × 7.35 | 65.7 | 3.31 | `drawing` |
+| MCU | CH32V203F8U6, QFN-20 3 × 3 | 3.2 × 3.2 | 10.2 | 0.9 | `package` |
+| **this chip** | QFN-20 4 × 4 | 4.4 × 4.4 | 19.4 | 0.9 | `package`, sized below |
+| DAC | PCM5102A, TSSOP-20 (PW0020A) | 7.1 × 5.8 | 41.2 | 1.2 | `drawing` 4220206/A ¹ |
+| 3.5 mm TRS jack | CUI/Same Sky MJ-3523-SMT-TR, right-angle SMT | 14.5 × 6.0 | 87.0 | 5.0 | `drawing` 2025-04-15 |
+| LDO, 12.288 MHz crystal, ~20 × 0402, LED | SOT-23-5, 3.2 × 2.5, 0402 | — | 20 | ≤ 1.0 | `estimate` |
+| | | **sum** | **243.5** | | |
+| | | **× 2.1 routing** | **511** | | |
+
+¹ TI's land-pattern example gives 5.8 mm along the pin rows; 7.1 mm across is
+the 6.4 mm lead span plus pad overhang. Body is 6.5 × 4.4 mm, JEDEC MO-153.
+
+**511 mm² against the dongle row's 29 × 20 = 580 mm². It fits, with 12 %
+slack** — and issue 1's placeholder "~20 × 40 mm" (800 mm²) is 1.6× more board
+than the parts need, so the guess was loose in the safe direction. The
+smallest rectangle that satisfies both the area and the two edge-mounted
+connectors is about **20 × 26 mm**: USB-C on one short edge (7.35 mm deep),
+the jack across the other (6.0 mm deep, using 14.5 mm of the 20 mm width),
+leaving ~12.6 mm of middle for three ICs whose lands total 14.7 mm across a
+20 mm board.
+
+**That is an area budget plus a connector edge check, not a placed layout.**
+Nothing here has been through a CAD tool; the ×2.1 routing factor is the same
+one the table above uses, and it is the assumption most likely to be wrong. A
+routed board is the real answer and does not exist yet.
+
+**The jack sets the thickness, not the die.** 5.0 mm tall + 1 mm PCB + 1.2 mm
+of wall each side ≈ 8.8 mm, which is the 8.6 mm above within rounding. The
+common *through-hole* alternative (Kycon STX-3120-3B) is a **10.0 mm** body on
+its own drawing and would push the case past 13 mm on the jack alone. A
+keychain needs the right-angle SMT part, and that is a real constraint on the
+BOM rather than a preference.
+
+**Why QFN-20 4 × 4 and not 3 × 3.** ARCHITECTURE.md section 8 needs 15 pads,
+17 with a second core supply pair, so QFN-20 is the pin count either way — the
+body size is set by the die. 2.2 mm² (1.48 mm square) sits on a 3 × 3 QFN's
+pad; the routed two-slot die measured in issue 33's follow-up status (issue
+36) is 3,464,960 µm², **1.86 mm square**, and wants the 4 × 4.
+
+**That is the whole board-level exposure to issue 33** ("the joined chip does
+not fit in one quarter slot"): whichever slot count wins, the package steps by
+one size and the board by ~10 mm² out of 511. Issue 33 is a **cost** risk to
+issue 1's BOM — the $3.50–4.50 die line and the $19–46 retail figure both
+assume a single quarter slot — and it is not a fit risk. The chip is still
+never the size constraint.
+
 ---
 
 ## 9. What is NOT done
