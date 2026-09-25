@@ -1,0 +1,86 @@
+{
+ "words": {
+  "baseline": [
+   [
+    170394,
+    25206
+   ]
+  ],
+  "gain_only": [
+   [
+    170394,
+    50412
+   ]
+  ]
+ },
+ "tolerances": {
+  "corner_pct": 0.1,
+  "rolloff_db_oct": 0.05,
+  "lowband_db": 0.05,
+  "level_db": 0.1,
+  "min_level_move_db": 3.0
+ },
+ "cases": {
+  "F1A": {
+   "baseline": {
+    "corner_hz": 97.8751,
+    "rolloff_db_oct": -16.8753,
+    "lowband_db": -1.2789
+   },
+   "gain_only": {
+    "corner_hz": 97.8783,
+    "rolloff_db_oct": -16.8737,
+    "lowband_db": -1.2789
+   },
+   "corner_change_pct": 0.0033,
+   "rolloff_change": 0.0016,
+   "lowband_change": 0.0,
+   "abs_level_baseline_db_re_input": -0.0008,
+   "abs_level_gain_only_db_re_input": 6.0198,
+   "level_move_db": 6.0206,
+   "level_move_expected_db": 6.0206,
+   "pass": true
+  },
+  "F1B": {
+   "baseline": {
+    "corner_hz": 376.4053,
+    "rolloff_db_oct": -15.9762,
+    "lowband_db": -0.2315
+   },
+   "gain_only": {
+    "corner_hz": 376.411,
+    "rolloff_db_oct": -15.9757,
+    "lowband_db": -0.2315
+   },
+   "corner_change_pct": 0.0015,
+   "rolloff_change": 0.0005,
+   "lowband_change": 0.0,
+   "abs_level_baseline_db_re_input": -0.0019,
+   "abs_level_gain_only_db_re_input": 6.0188,
+   "level_move_db": 6.0206,
+   "level_move_expected_db": 6.0206,
+   "pass": true
+  },
+  "F1C": {
+   "baseline": {
+    "corner_hz": 1437.0459,
+    "rolloff_db_oct": -15.1079,
+    "lowband_db": -0.0696
+   },
+   "gain_only": {
+    "corner_hz": 1437.0595,
+    "rolloff_db_oct": -15.1072,
+    "lowband_db": -0.0696
+   },
+   "corner_change_pct": 0.0009,
+   "rolloff_change": 0.0007,
+   "lowband_change": 0.0,
+   "abs_level_baseline_db_re_input": -0.0043,
+   "abs_level_gain_only_db_re_input": 6.0162,
+   "level_move_db": 6.0206,
+   "level_move_expected_db": 6.0206,
+   "pass": true
+  }
+ },
+ "pass": true
+}

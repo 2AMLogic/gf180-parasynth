@@ -1,0 +1,4 @@
+gain-only F1A: words 170394/25206 -> 42598/100825  corner 97.8751 -> 108.6649 (+11.0241 %)  rolloff -0.9180  lowband +0.3823  level -0.001 -> -0.001 dB (moved +0.000, expected +12.041)  FAIL
+gain-only F1B: words 170394/25206 -> 42598/100825  corner 376.4053 -> 431.7379 (+14.7003 %)  rolloff -1.9148  lowband +0.0826  level -0.002 -> -0.001 dB (moved +0.001, expected +12.041)  FAIL
+gain-only F1C: words 170394/25206 -> 42598/100825  corner 1437.0459 -> 1656.176 (+15.2487 %)  rolloff -1.1608  lowband +0.0273  level -0.004 -> -0.003 dB (moved +0.002, expected +12.041)  FAIL
+GAIN-ONLY CONTROL FAIL: the response shape moved with the level word

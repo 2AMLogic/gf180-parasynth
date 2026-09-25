@@ -1,44 +1,65 @@
 [
   {
-    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject CONSTRUCTOR_ONLY --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-constructor-only.log 2>&1",
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --json docs/scorecard/f1-level/results.json > docs/scorecard/f1-level/results.log 2>&1",
+    "state": "PENDING",
+    "rc": null,
+    "out": "",
+    "secs": 0.0
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --gain-only-control --json docs/scorecard/f1-level/gain-only-control.json > docs/scorecard/f1-level/control-gain-only.log 2>&1",
     "state": "PASS",
     "rc": 0,
     "out": "",
-    "secs": 259.2008099555969
+    "secs": 748.6677920818329
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --gain-only-control --inject GAIN_ONLY_MOVES_DRIVE > docs/scorecard/f1-level/control-gain-only-injected.log 2>&1; test $? -eq 1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 752.0949671268463
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject CONSTRUCTOR_ONLY --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-constructor-only.log 2>&1",
+    "state": "PENDING",
+    "rc": null,
+    "out": "",
+    "secs": 0.0
   },
   {
     "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject WORDS_NOT_ENTERING --expect-refused 'not the candidate' > docs/scorecard/f1-level/control-words-not-entering.log 2>&1",
-    "state": "PASS",
-    "rc": 0,
+    "state": "PENDING",
+    "rc": null,
     "out": "",
-    "secs": 258.9012060165405
+    "secs": 0.0
   },
   {
     "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-clean-run-is-not-a-refusal.log 2>&1; test $? -eq 1",
-    "state": "PASS",
-    "rc": 0,
+    "state": "PENDING",
+    "rc": null,
     "out": "",
-    "secs": 259.0203318595886
+    "secs": 0.0
   },
   {
     "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_f1_level_scaling.py tools/test_f1_selected_path.py -q > docs/scorecard/f1-level/tests.log 2>&1",
     "state": "PASS",
     "rc": 0,
     "out": "",
-    "secs": 88.00640821456909
+    "secs": 193.9941909313202
   },
   {
     "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/f1_level_capture.py > docs/scorecard/f1-level/captures-verify.log 2>&1",
     "state": "PASS",
     "rc": 0,
     "out": "",
-    "secs": 3.5006449222564697
+    "secs": 7.942978143692017
   },
   {
     "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py > docs/scorecard/f1-level/refprofile-verify.log 2>&1",
     "state": "PASS",
     "rc": 0,
     "out": "",
-    "secs": 2.868021011352539
+    "secs": 7.313642978668213
   }
 ]
