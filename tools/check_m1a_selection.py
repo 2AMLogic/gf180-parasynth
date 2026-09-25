@@ -65,13 +65,24 @@ def event_deviation(a, b):
 
 
 V2_EVENT_FIELDS = ("attack_out_of_domain", "attack_state")
+# m1a-envelope-score-v3 re-measures the attack with attack_fit_v3; the
+# candidate evidence was measured by v1's attack_fit, so the attack fields are
+# a different measurement of the SAME audio and are checked separately.
+V3_EVENT_FIELDS = V2_EVENT_FIELDS + ("attack_10_90_ms", "attack_fit")
+
+
+def _skipped(record):
+    return V3_EVENT_FIELDS if record.get("analysis_version") == bass.ANALYSIS_VERSION \
+        else V2_EVENT_FIELDS
 
 
 def candidate_event_deviation(record, candidate):
-    """event_deviation, ignoring the fields the v2 scorer adds per event."""
-    return event_deviation([{k: v for k, v in e.items() if k not in V2_EVENT_FIELDS}
+    """event_deviation, ignoring the fields the later scorers add or re-measure."""
+    skip = _skipped(record)
+    return event_deviation([{k: v for k, v in e.items() if k not in skip}
                             for e in record["diagnostics"]["events"]],
-                           candidate["measurements"]["events"])
+                           [{k: v for k, v in e.items() if k not in skip}
+                            for e in candidate["measurements"]["events"]])
 
 
 def _passes(measured):
@@ -110,7 +121,14 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
     ra, ca = rp["Envelope attack"], cp["Envelope attack"]
     raw = ((ra["value"], ra["reference"], ra["error"]) if ra.get("valid") else
            (ra.get("unqualified_value"), ra.get("unqualified_reference"), ra.get("unqualified_error")))
-    if raw != (ca["value"], ca["reference"], ca["error"]):
+    if record.get("analysis_version") == bass.ANALYSIS_VERSION:
+        # v3: the raw reading is the record's own worst event, not the v1 figure
+        pairs = [(e["attack_10_90_ms"]["model"], e["attack_10_90_ms"]["reference"])
+                 for e in record["diagnostics"]["events"]]
+        m, r = max(pairs, key=lambda p: abs(p[0] - p[1]))
+        if raw[0] is None or abs(raw[0] - m) > 1e-5 or abs(raw[1] - r) > 1e-5:
+            problems.append("record attack reading is not its own worst event")
+    elif raw != (ca["value"], ca["reference"], ca["error"]):
         problems.append("record attack reading differs from the candidate's")
     out_of_domain = any(bass.attack_fit_qualified(e["attack_fit"][side])
                         for e in record["diagnostics"]["events"] for side in ("model", "reference"))

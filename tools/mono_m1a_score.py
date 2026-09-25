@@ -138,9 +138,7 @@ def attack_fit_qualified(fit, domain=None):
                 f"(10-90 {fit['attack_10_90_ms']:.3f} ms is a search limit, not a measurement)")
     if qual.covering_row(domain, fit) is None:
         return (f"10-90 {fit['attack_10_90_ms']:.3f} ms at explained ratio "
-                f"{fit['explained_ratio']:.3f} is outside every qualified row "
-                "(" + "; ".join(f"explained>={r['explained_min']:g}: {r['lo_ms']:g}-{r['hi_ms']:g} ms"
-                                for r in domain) + ")")
+                f"{fit['explained_ratio']:.3f} is outside every qualified row")
     return None
 
 
@@ -232,6 +230,10 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         properties["Envelope attack"] = {
             **invalid("attack fit outside the estimator's qualified domain: "
                       + "; ".join(unqualified)),
+            "qualified_domain": [f"explained>={r['explained_min']:g}, 10-90 {r['lo_ms']:g}-"
+                                 f"{r['hi_ms']:g} ms, off search boundary: |error|<="
+                                 f"{r['max_abs_error_ms']:g} ms ({r['cases']} known answers)"
+                                 for r in domain],
             "unqualified_value": raw["value"], "unqualified_reference": raw["reference"],
             "unqualified_error": raw["error"], "tolerance": raw["tolerance"],
             "tolerance_basis": raw["tolerance_basis"]}
@@ -365,6 +367,11 @@ def run(case, inject="", keep_audio=True, cached_record=None):
                                 "provisional and the reference cutoff trajectory is not measurable "
                                 "from frozen audio; recorded as an unqualified property, not a metric",
                             "wrong_then_right": {"apparatus_corrections": 5,
+                                "attack_v3": "v2's '<1 ms known-signal error' held only on the "
+                                "signals it was qualified on (no post-attack decay, near-steady "
+                                "spectrum); on the realistic known-answer suite it measured up to "
+                                "4.8 ms short off the search boundary. Its gate also tested the "
+                                "total ramp, not the 10-90 value it reports.",
                                 "session_estimator_iterations": 6,
                                 "latest": "six ground-truth-caught defects while building the "
                                 "waveform-fit attack estimator (objective, template phase twice, "
