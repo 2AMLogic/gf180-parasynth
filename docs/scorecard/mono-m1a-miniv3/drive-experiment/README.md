@@ -1,6 +1,8 @@
 # M1A filter-drive experiment (one bounded round)
 
-**Experiment only; nothing is promoted.** The selected patch (`m1a-gain-minus4db-v2`), the
+**Experiment only; nothing is promoted.** This work adds a diagnostic tool, its tests, a
+report and this README. It changes no production implementation, patch, reference or
+tolerance. The selected patch (`m1a-gain-minus4db-v2`), the
 engine, the frozen reference, the scorer (`m1a-envelope-score-v3`), the windows and the
 tolerances are unchanged.
 
@@ -41,8 +43,10 @@ A candidate must not win by getting quieter. For each candidate:
    rendering. It is set once and never iterated, never fitted to the reference, and never
    applied as post-normalisation of audio.
 
-The analytic small-signal ratio 0.75/drive is reported next to Δ for comparison, but not
-used. The baseline's compensation is exactly 1.
+This is a **predeclared, one-pass development calibration applied in the patch**. It differs
+from plan071's suggestion of an analytic small-signal compensation. The analytic ratio
+0.75/drive is reported next to Δ for comparison, but it is not used. The baseline's
+compensation is exactly 1.
 
 ### Measurements per candidate
 
@@ -87,7 +91,7 @@ Its frozen acceptance rule for a fresh MIDI 43 Mini V3 capture is written and co
 
 **Choice: NONE. STOP.** Neither non-baseline candidate is eligible. Both fail (a), the
 regressions rule, and (b), the harmonic-shape rule. Both pass (c): drive does remove the
-model's excess phase sensitivity. Record: `report.json`. Instrument:
+model's excess phase sensitivity. Record: `report.json`. Check verdicts: `run_all.json`, plus `run_all-corrections.json` for the review corrections, whose quoted numbers `tools/check_m1a_drive_report.py` checks against the report. Instrument:
 `tools/measure_m1a_drive.py`. Rules tests: `tools/test_measure_m1a_drive.py`.
 
 Preconditions held before any candidate was used:
@@ -127,8 +131,10 @@ Even-partial ranges (h2/h4/h6/h8) stay about the same across candidates: 24.1–
 the peak is between −17.1 and −16.9 dBFS for the phrase and the moving-phase renders alike.
 
 **What this shows (development data, not confirmation).** Drive controls the excess phase
-sensitivity almost entirely. At 0.25, the model's odd-partial ranges, darkening and mean
-ratios come close to the Mini V3's on this capture. That supports the drive mechanism named
+sensitivity almost entirely. At 0.25, the model's odd-partial ranges and darkening come close
+to the Mini V3's on this capture. So do its mean ratios, but only for h3, h5 and h7. The
+mean-ratio errors (model − reference) are h3 −0.247, h5 −0.270, h7 −0.064, h9 +0.460 and
+h11 +1.045 dB, so h9 and h11 are not within 0.3 dB. That supports the drive mechanism named
 in #218 and #219. It does not validate it: the curve was inspected before this experiment,
 and drive 0.25 was one of three predeclared points, not fitted.
 
@@ -183,7 +189,10 @@ and drive 0.25 was one of three predeclared points, not fitted.
 | | h11 | −0.44 | −1.00 (−0.56) | **+1.49 (+1.93) REG** |
 | | h12 | +2.79 | +3.73 (+0.95) | +4.97 (+2.19) |
 
-**Every regression.** These are all per-cell; no property regresses.
+**Every regression.** Every regression is a per-note, per-partial cell that lost its pass.
+No previously passing property loses its pass. The Harmonic shape property was already
+failing, and it still worsens numerically: 19.82 → 20.48 → 22.63 dB, as the signed vector
+above shows.
 
 - **0.50, 4 regressions:** 36@0.1 h8; 43@2.1 h4 and h10; 36@4.1 h4.
 - **0.25, 6 regressions:** 36@0.1 h8 and h10; 43@2.1 h4 and h10; 36@4.1 h4 and h11.
@@ -191,17 +200,22 @@ and drive 0.25 was one of three predeclared points, not fitted.
 ### Why neither is chosen
 
 - **(a) Regressions: fail** for both candidates (4 and 6 cells).
-- **(b) Harmonic shape: fail.** It gets worse: 19.82 → 20.48 → 22.63 dB. The official
-  maximum is the h8 notch at 36@4.1, which #218 attributed to oscillator phase state. Lower
-  drive deepens it, and it raises the *even* partials by 1.5–3.6 dB across the phrase
-  (h4, h6, h8, h10, h12). Once compensated, lowering drive brings the odd partials up to the
+- **(b) Harmonic shape: fail.** The committed rule required the original phrase's harmonic
+  maximum to improve by at least 0.5 dB. Instead it gets worse: 19.82 → 20.48 → 22.63 dB.
+  The maximum is the h8 cell at 36@4.1, where the *reference* has a notch (−62.58 dBFS).
+  That cell's error is positive, and it rises from +19.82 to +22.63 dB. So the *model's* h8
+  rises relative to the fixed reference notch. These data do not show a deeper model notch.
+  #218 left this cell unresolved: matching the phase still left about +10.52 dB, so phase has
+  not been established as its sole cause. Lowering drive also raises the *even* partials by
+  1.5–3.6 dB across the phrase (h4, h6, h8, h10, h12). Once compensated, lowering drive brings the odd partials up to the
   reference (h5/h7/h9/h11 on 36@0.1: −5.6/−8.3/−6.0/−4.3 → −0.4/−0.6/−0.7/+0.1). But it
   overshoots every even partial, and the even partials carry the scored maximum.
 - **(c) Odd range: pass** for both (10.14 → 5.96 → 1.68 dB).
 
 **Conclusion.** Drive alone does not improve the harmonic property. The excess odd-partial
-phase sensitivity is a drive effect. The remaining harmonic failure sits in the even partials:
-their level relative to the fundamental, and the phase-state notches. Per the brief: **stop**.
+phase sensitivity is a drive effect. The remaining harmonic failure sits in the even partials: their level relative to the
+fundamental, and the reference's notches. Phase state accounts for part of those notches;
+#218 left the h8 residual unresolved. Per the brief: **stop**.
 The next step is another measurable failure, not more M1A. No MIDI 43 acceptance rule is
 written, because no candidate was chosen.
 
