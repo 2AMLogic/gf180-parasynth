@@ -105,6 +105,12 @@ remedy: being right once is not a property that persists.
 > passes, or predates the file it describes. When a tracked-defect marker
 > fires, assert the failure is the recorded one.
 
+*Done, #223:* `tools/check_doc_claims.py`, convention in `docs/claim-markers.md`,
+gated by `make claims`. Coverage is deliberately partial — this document's
+status list below, not all thirty-six files under `docs/`.
+<!-- claim: grep="^claims:" in=Makefile -->
+<!-- claim: test=tools/test_check_doc_claims.py::test_a_claim_whose_backing_test_fails_is_stale -->
+
 ### 5. Optimising a variable before measuring whether it matters
 
 Hours went into 8 modes versus 12. The answer was that yosys pads the bank's
@@ -141,18 +147,65 @@ withdrew one of our own false claims.
 
 ## What is already mechanical, and what is not
 
-**In place.** Ground-truth estimator suite. Injected-defect controls on every
-integration check, including the exact defect that shipped (`SPI_ADDR7`).
-`make srccheck`. CI running the integrated verifier, not only block checks. A
-negative control that mutates *arithmetic* rather than syntax — which caught
-that inflating `rms` by 5 % passed all sixty ground-truth tests.
+**Every line in this section carries a claim marker** naming the evidence that
+makes it true, and `tools/check_doc_claims.py` re-derives each one under
+`make verify`. The convention is `docs/claim-markers.md`.
 
-**Not yet.** The estimator meta-test. Implementation-versus-fidelity test
-classification and the UNVALIDATED state. Report staleness. Claim-to-evidence
-linking. Sensitivity sweeps as a gate.
+That is not decoration; this list is the reason the checker exists. It was
+written on 2026-09-18 15:55 (`693b4e6`) and **two of the five items it called
+"Not yet" had been delivered later the same day** — the fidelity classification,
+by the very issue (#45) that commissioned the list, and report staleness, by
+#69/#93. It then stayed wrong for a week, in the one document `CLAUDE.md` tells
+every session to read first, because being right once is not a property that
+persists and nothing was re-deriving it. This is mechanism 4 happening to the
+document that names mechanism 4.
 
-Those five are the difference between a process that catches this class of
-error and one that relies on someone reading carefully at the right moment.
+**In place.**
+
+- Ground-truth estimator suite.
+  <!-- claim: test=model/test_audio_measure.py::test_t20_is_ln10_times_tau -->
+- Injected-defect controls on every integration check, including the exact
+  defect that shipped (`SPI_ADDR7`).
+  <!-- claim: grep="--inject SPI_ADDR7" in=Makefile -->
+- `make -C fpga srccheck` — the routed file set is the verified file set.
+  <!-- claim: grep="^srccheck:" in=fpga/Makefile covers=fpga/Makefile -->
+- CI running the integrated verifier, not only block checks.
+  <!-- claim: grep="verify_synth_top" in=.github/workflows/*.yml -->
+- A negative control that mutates *arithmetic* rather than syntax — which
+  caught that inflating `rms` by 5 % passed all sixty ground-truth tests.
+  <!-- claim: test=model/test_audio_measure.py::test_rms_of_a_sinusoid_is_amplitude_over_root_two -->
+- **Implementation-versus-fidelity classification, and the UNVALIDATED state**
+  (mechanism 2, #45). `tools/compile_dag.py` reports a subsystem whose only
+  green evidence is against our own model as UNVALIDATED, however many
+  implementation tests pass. *Listed as "Not yet" here for a week after it
+  shipped.*
+  <!-- claim: grep="UNVALIDATED" in=tools/compile_dag.py -->
+- **Report staleness** (mechanism 3, #69 delivered in #93). Every result record
+  carries its source commit, a dirty-tree flag, input hashes and the exact
+  command — and a result without provenance gets no verdict rather than a
+  quiet one. *Also listed as "Not yet" here for a week after it shipped.*
+  <!-- claim: test=tools/test_run_case.py::test_a_result_without_provenance_gets_no_verdict -->
+- **Claim-to-evidence linking** (mechanism 4, #45 item 4, #223) — this
+  mechanism. A prose claim carries the test or commit that justifies it, and a
+  checker flags one whose backing test is missing, passes when it is cited as
+  failing, or predates the file it describes.
+  <!-- claim: test=tools/test_check_doc_claims.py::test_a_claim_backed_by_a_passing_test_is_ok -->
+
+**Not yet.**
+
+- **The estimator meta-test** (mechanism 1, #222). Nothing enforces that every
+  measurement function reachable from an acceptance test appears in the
+  ground-truth suite; `model/test_audio_measure.py` is the suite, but its
+  coverage of that reachable set is maintained by hand.
+  <!-- claim: absent="estimator_meta|reachable_estimators" in=model/*.py,tools/*.py issue=222 -->
+- **Sensitivity sweeps as a gate** on optimisation work (mechanism 5, #224).
+  <!-- claim: absent="check_sensitivity|sensitivity_gate" in=tools/*.py,model/*.py issue=224 -->
+
+Two, not five — and the arithmetic of that sentence is the finding, not the
+good news. Those two remain the difference between a process that catches this
+class of error and one that relies on someone reading carefully at the right
+moment. Two of the three that closed did so within hours of being listed, and
+this document was the last thing to know.
 
 ---
 

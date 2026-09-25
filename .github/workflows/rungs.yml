@@ -96,7 +96,13 @@ jobs:
 
   python:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was already marginal before the claim-checker steps below: the two
+    # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
+    # spends the cap on its own. The claim checker and its controls measured
+    # 22s + 45s locally; adding them under a 30-minute cap would buy a gate at
+    # the price of an intermittent red, which is the trade
+    # docs/failure-modes.md says not to make.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,6 +161,16 @@ jobs:
         run: python -m pytest model/test_moog_acceptance.py -q
       - name: everything else
         run: python -m pytest model/ spec/ -q
+
+      # The claim checker gates prose against the tree, so it has to RUN on a
+      # pull request or it gates nothing -- the list it was commissioned to fix
+      # stayed wrong for a week because nothing was re-deriving it, and a gate
+      # nothing invokes fails exactly the same way. Its own controls first: an
+      # unexercised checker measures the checker, not the docs.
+      - name: the claim checker's controls
+        run: python -m pytest tools/test_check_doc_claims.py -q
+      - name: documented claims match the evidence
+        run: python tools/check_doc_claims.py
 
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
