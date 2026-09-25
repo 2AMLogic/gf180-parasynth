@@ -2073,36 +2073,16 @@ def test_meta_every_test_declares_status_and_ground_truth():
     `model/test_audio_measure.py` that backs the estimator it uses -- and that
     test must exist. "Verified in a source" and "validated by our own
     measurement" are different claims, and an acceptance suite that blurs them
-    is how an inference becomes a fact."""
+    is how an inference becomes a fact.
+
+    The checking logic itself is shared with `test_moog_acceptance.py`'s own
+    meta-test (#222) -- `model/acceptance_meta.py` -- so a third suite can
+    reuse it without copy-pasting this body; this test's only job is to name
+    ITS OWN module and ITS OWN escape hatches."""
     import test_808_acceptance as mod
     import test_audio_measure as gt
-    tags = ("[source-verified:", "[source-inferred:", "[hardware-measured:",
-            "[measured-here:", "[defect:", "[method]", "[meta]")
-    known = {n for n in vars(gt) if n.startswith("test_")}
-    missing_tag, missing_gt, unknown_gt = [], [], []
-    for name, fn in sorted(vars(mod).items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        doc = (fn.__doc__ or "").lstrip()
-        if not doc.startswith(tags):
-            missing_tag.append(name)
-            continue
-        if name.startswith("test_meta_"):
-            continue
-        m = re.search(r"Ground truth:\s*(.+)$", doc, re.S)
-        if not m:
-            missing_gt.append(name)
-            continue
-        for ref in re.findall(r"test_audio_measure\.(\w+)", m.group(1)):
-            if ref not in known:
-                unknown_gt.append(f"{name} -> {ref}")
-    assert not missing_tag, f"tests without a claim-status tag: {missing_tag}"
-    assert not missing_gt, f"tests that name no estimator ground truth: {missing_gt}"
-    assert not unknown_gt, f"ground-truth tests that do not exist: {unknown_gt}"
-    assert NOT_ASSERTED, "the could-not-establish list must stay in this file"
-    live = {n for n in vars(mod) if n.startswith("test_")}
-    stale = [n for n in KNOWN_DEFECTS if n not in live]
-    assert not stale, f"KNOWN_DEFECTS names tests that no longer exist: {stale}"
+    from acceptance_meta import assert_ground_truth_gate
+    assert_ground_truth_gate(mod, gt, not_asserted=NOT_ASSERTED, known_defects=KNOWN_DEFECTS)
 
 
 def test_meta_render_manifest_describes_what_was_played():

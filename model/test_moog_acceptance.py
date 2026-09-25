@@ -300,9 +300,12 @@ class _LadderVariant(_REAL_LADDER):
 
 
 def test_the_negative_control_is_the_model_when_it_is_not_defective():
-    """`_LadderVariant(stages=4, nonlin='every')` must be the model bit for
+    """[method] `_LadderVariant(stages=4, nonlin='every')` must be the model bit for
     bit. Every comparison in this file rests on that: a control that has
-    drifted from the model measures the drift, not the structure."""
+    drifted from the model measures the drift, not the structure.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     n = int(0.2 * SR)
     x = np.round(0.9 * FS * np.sin(2 * math.pi * 220.0 * np.arange(n) / SR)).astype(np.int16)
     a = ladder_render(x, 3000, 0.8, 2.0, ladder=_REAL_LADDER(**vf.LADDER_CFG))
@@ -318,7 +321,7 @@ ONSET_CUTS = [30, 200, 1600, 3000, 10000, 21600]
 
 @pytest.mark.parametrize("cut", ONSET_CUTS)
 def test_res_1_is_the_onset_of_self_oscillation_at_every_cutoff(cut):
-    """**DR 0006, tolerance 0.39 %.** The compensation ROM exists so that the
+    """[source-verified: DR 0006] **DR 0006, tolerance 0.39 %.** The compensation ROM exists so that the
     resonance knob means the same thing everywhere: `res = 1` is the edge of
     self-oscillation at 30 Hz and at 21.6 kHz alike. DR 0006's residual table
     gives a worst case of 0.39 % (at the 21.6 kHz clamp edge) and under 0.2 %
@@ -337,7 +340,10 @@ def test_res_1_is_the_onset_of_self_oscillation_at_every_cutoff(cut):
     top of the keyboard's usable range.
 
     This is the ONSET only. The pitch it oscillates at is a separate property
-    with its own error, and its own test below."""
+    with its own error, and its own test below.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     r = onset_res(cut)
     tol = 0.0050 if cut >= vf.CUT_MAX else 0.0020
     assert abs(r - 1.0) <= tol, f"{cut} Hz: onset at res {r:.5f} ({(r-1)*100:+.3f} %)"
@@ -350,7 +356,7 @@ TRACKING_REV8 = {200: 0.979, 400: 0.984, 800: 0.990, 1600: 1.001, 3000: 1.020, 1
 
 
 def test_the_self_oscillation_pitch_tracks_the_cutoff_with_a_recorded_error():
-    """**DR 0011; DR 0006's tracking table; DESIGN.md section 5.**
+    """[source-verified: DR 0011; DR 0006's tracking table; DESIGN.md section 5] **DR 0011; DR 0006's tracking table; DESIGN.md section 5.**
 
     The filter used as an oscillator has to play in tune with its cutoff. This
     is an ABSOLUTE property, not a drift one: a uniform error in the cutoff
@@ -373,7 +379,10 @@ def test_the_self_oscillation_pitch_tracks_the_cutoff_with_a_recorded_error():
     **Worst error 7.2 % -> 0.94 %; spread over the six, 9.3 -> 1.5 percentage
     points.** DR 0001's and DESIGN.md's "+-2 % from 200 Hz to 1.6 kHz" was
     0.06 pp optimistic at its own endpoint in revision 8; it now holds with a
-    factor of two in hand, and is asserted at +-1 %."""
+    factor of two in hand, and is asserted at +-1 %.
+
+    Ground truth: test_audio_measure.test_zero_crossing_frequency_on_a_known_tone, test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     ratios = {}
     for cut, expect in TRACKING.items():
         rate, tail = ring_growth(cut, onset_res(cut))
@@ -390,7 +399,7 @@ def test_the_self_oscillation_pitch_tracks_the_cutoff_with_a_recorded_error():
 
 
 def test_the_minus_3db_corner_is_where_the_commanded_cutoff_says():
-    """**The ABSOLUTE cutoff, measured a second and independent way.**
+    """[measured-here: the -3 dB corner ratio at 800 Hz] **The ABSOLUTE cutoff, measured a second and independent way.**
 
     The self-oscillation test above is resonant; this one is not, and the two
     can fail separately. A four-pole cascade's -3 dB corner is structurally
@@ -408,23 +417,29 @@ def test_the_minus_3db_corner_is_where_the_commanded_cutoff_says():
     This is the property a drift metric cannot see. `docs/discrimination.md`
     section 8's "7.92 pp over six octaves" measures how much the corners differ
     FROM EACH OTHER; an injected uniform 30 % cutoff skew moves that by a
-    quarter of a percentage point and moves THIS by 30 %."""
+    quarter of a percentage point and moves THIS by 30 %.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     r = corner_ratio(800)
     assert abs(r - 0.7145) < 0.010, r
 
 
 def test_the_corner_does_not_drift_across_the_range():
-    """**Non-uniformity, the other half of the pair.** The spread of
+    """[measured-here: corner/commanded spread over 200 Hz .. 10 kHz] **Non-uniformity, the other half of the pair.** The spread of
     corner/commanded over 200 Hz .. 10 kHz: 4.03 percentage points in revision
     8, 3.16 in revision 9 (DR 0011). Locked at 3.5 pp -- which revision 8 fails
     and an injected uniform skew passes, because a skew that displaces every
-    corner equally cannot change how much they differ from each other."""
+    corner equally cannot change how much they differ from each other.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     r = [corner_ratio(c) for c in (200, 800, 3000, 10000)]
     assert (max(r) - min(r)) <= 0.035, r
 
 
 def test_control_a_uniform_cutoff_skew_is_absolute_error_a_drift_metric_cannot_see():
-    """**The estimator tested by injecting the error it exists to catch**
+    """[meta] **The estimator tested by injecting the error it exists to catch**
     (`docs/verification-rules.md` rule 2), and the reason there are two cutoff
     properties above instead of one.
 
@@ -437,7 +452,10 @@ def test_control_a_uniform_cutoff_skew_is_absolute_error_a_drift_metric_cannot_s
 
     A fix that flattened the drift while leaving a uniform offset in place
     would be reported as a success by the drift metric alone. That is asserted
-    here, not assumed."""
+    here, not assumed.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     skewed = corner_ratio(800, skew=1.30)
     assert abs(skewed - 0.7145) > 0.10, skewed                  # the absolute property fires
     r = [corner_ratio(c, skew=1.30) for c in (200, 800, 3000, 10000)]
@@ -445,9 +463,12 @@ def test_control_a_uniform_cutoff_skew_is_absolute_error_a_drift_metric_cannot_s
 
 
 def test_control_removing_the_tuning_polynomial(monkeypatch):
-    """Defect: DR 0011's cutoff ROM reverted to revision 8's untuned one,
+    """[meta] Defect: DR 0011's cutoff ROM reverted to revision 8's untuned one,
     `make_g_rom(tune=False)`. The self-oscillation pitch then misses its locked
-    table at every cutoff, which is what that property is for."""
+    table at every cutoff, which is what that property is for.
+
+    Ground truth: test_audio_measure.test_zero_crossing_frequency_on_a_known_tone, test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     monkeypatch.setitem(globals(), "G_ROM", G_ROM_UNTUNED)
     monkeypatch.setitem(globals(), "K_ROM", _k_rom_for(G_ROM_UNTUNED))
     msg = _expect_red(test_the_self_oscillation_pitch_tracks_the_cutoff_with_a_recorded_error)
@@ -455,14 +476,17 @@ def test_control_removing_the_tuning_polynomial(monkeypatch):
 
 
 def test_it_still_self_oscillates_at_10_khz():
-    """**DR 0006, the regression guard for the whole decision record.** Before
+    """[source-verified: DR 0006] **DR 0006, the regression guard for the whole decision record.** Before
     the compensation ROM the filter would not sustain above about 3 kHz at a
     fixed `k = 4 res` -- DR 0001 recorded that as a consequence, and it is the
     defect DR 0006 was written to remove.
 
     At 10 kHz and `res = 1.05`, kicked once and then left alone: the tail is a
     sustained tone (rms 2966 LSB, peak-to-median 111 dB) within 8 % of the
-    cutoff. Uncompensated, the same patch decays to rms 3 -- silence."""
+    cutoff. Uncompensated, the same patch decays to rms 3 -- silence.
+
+    Ground truth: test_audio_measure.test_dominant_frequency_on_known_tones, test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_audio_measure.test_tonality_separates_a_tone_from_noise_where_a_percentile_does_not
+    """
     tail = sustained_tail(10000, res=1.05)
     assert am.rms(tail) > 500.0, f"rms {am.rms(tail):.1f}: not sustaining"
     assert am.tonality_db(tail) > 40.0, "sustaining, but not as a tone"
@@ -473,7 +497,7 @@ def test_it_still_self_oscillates_at_10_khz():
 
 
 def test_the_stopband_falls_at_24_db_per_octave():
-    """**Four poles, contract 11.4: ~24 dB/octave.** Measured between 4x and 8x
+    """[source-verified: contract 11.4] **Four poles, contract 11.4: ~24 dB/octave.** Measured between 4x and 8x
     the cutoff, which is the band where a cascade of four scaled
     impulse-invariant one-poles is asymptotic (the ideal falls 23.3 dB there
     against the 24 dB asymptote, and only 21.2 dB between 2x and 4x) and is
@@ -484,7 +508,10 @@ def test_the_stopband_falls_at_24_db_per_octave():
     Measured: -48.57 dB at 2x, -70.02 at 4x, -93.67 at 8x -- 21.45 and
     23.65 dB/octave. Tolerance 21..26 dB/octave on the asymptotic band; a
     three-pole cascade measures 17.4 there, a five-pole 29, so the band
-    separates a dropped stage by more than 3 dB."""
+    separates a dropped stage by more than 3 dB.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     cut = 500.0
     g2 = probe_gain_db(2 * cut, cut, 0.0, 0.1)
     g4 = probe_gain_db(4 * cut, cut, 0.0, 0.1)
@@ -495,7 +522,7 @@ def test_the_stopband_falls_at_24_db_per_octave():
 
 @pytest.mark.parametrize("cut,drive", [(8000, 3.0), (12000, 2.5)])
 def test_the_nonlinearity_is_in_every_stage(cut, drive):
-    """**DR 0001: "Anyone reimplementing this must not simplify to a single
+    """[source-verified: DR 0001] **DR 0001: "Anyone reimplementing this must not simplify to a single
     feedback-path tanh. That is a different filter, and the difference is the
     point." Tolerance: 5 dB on harmonics 6-10, DR 0001's own figure.**
 
@@ -514,7 +541,10 @@ def test_the_nonlinearity_is_in_every_stage(cut, drive):
 
     What this does NOT show: that our filter matches a Moog ladder. It shows it
     is not the linearised alternative. Matching the circuit needs an
-    independently derived response or a reference recording; we have neither."""
+    independently derived response or a reference recording; we have neither.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     f0, n = 110.0, int(0.5 * SR)
     x = np.round(0.95 * FS * np.sin(2 * math.pi * f0 * np.arange(n) / SR)).astype(np.int16)
     ours = ladder_render(x, cut, 0.9, drive, ladder=_REAL_LADDER(**vf.LADDER_CFG))
@@ -529,7 +559,7 @@ def test_the_nonlinearity_is_in_every_stage(cut, drive):
 
 
 def test_driving_it_thickens_where_the_linearised_structure_flat_tops():
-    """**DR 0001: "Driving it brightens; driving the real structure thickens."**
+    """[source-verified: DR 0001] **DR 0001: "Driving it brightens; driving the real structure thickens."**
 
     The structural reason, measured as a level. Each stage integrates toward
     `tanh(y) = prev`, so as the drive rises the state keeps climbing (atanh
@@ -540,7 +570,10 @@ def test_driving_it_thickens_where_the_linearised_structure_flat_tops():
     at drive 6 is the same number as at drive 1, to the LSB.
 
     Tolerance: ours must grow by at least 4 dB over that range, theirs by less
-    than 0.5 dB. res 0.3, cutoff 8 kHz, a 110 Hz tone at 0.95 full scale."""
+    than 0.5 dB. res 0.3, cutoff 8 kHz, a 110 Hz tone at 0.95 full scale.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     f0, n = 110.0, int(0.25 * SR)
     x = np.round(0.95 * FS * np.sin(2 * math.pi * f0 * np.arange(n) / SR)).astype(np.int16)
 
@@ -556,11 +589,14 @@ def test_driving_it_thickens_where_the_linearised_structure_flat_tops():
 
 
 def test_resonance_lifts_a_peak_at_the_cutoff():
-    """**Contract 11.5 / DR 0006: the resonance control is a resonance.**
+    """[source-verified: contract 11.5 / DR 0006] **Contract 11.5 / DR 0006: the resonance control is a resonance.**
     Probed at the cutoff and a decade below it, at res 0, 0.3, 0.6 and 0.9.
     The peak above the passband rises monotonically -12.2, -2.8, +4.6,
     +10.4 dB: a 22.6 dB swing across the knob. Tolerances: monotone, at most
-    -10 dB at res 0 (no peak at all) and at least +8 dB at res 0.9."""
+    -10 dB at res 0 (no peak at all) and at least +8 dB at res 0.9.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     cut, drive = 500.0, 0.1
     peaks = []
     for res in (0.0, 0.3, 0.6, 0.9):
@@ -573,7 +609,7 @@ def test_resonance_lifts_a_peak_at_the_cutoff():
 
 
 def test_the_passband_compensation_is_partial_and_is_the_one_in_the_contract():
-    """**DR 0005 item 5 and contract 11.5: `ogain`'s `(1 + 2 res)` term is a
+    """[source-verified: DR 0005 item 5 and contract 11.5] **DR 0005 item 5 and contract 11.5: `ogain`'s `(1 + 2 res)` term is a
     PARTIAL passband-loss compensation** -- what the audition heard, not a
     flat response. The ladder's passband loses `1/(1 + 4 res)`; `ogain` gives
     back `(1 + 2 res)`, so the net is `(1 + 2 res)/(1 + 4 res)`.
@@ -587,7 +623,10 @@ def test_the_passband_compensation_is_partial_and_is_the_one_in_the_contract():
         1.00   -4.29         -4.44            -13.98
 
     Tolerance 0.5 dB against the closed form, which also refutes the
-    uncompensated law by 9 dB at res = 1."""
+    uncompensated law by 9 dB at res = 1.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     cut, drive = 500.0, 0.1
     ref = probe_gain_db(0.1 * cut, cut, 0.0, drive)
     for res in (0.25, 0.5, 0.75, 1.0):
@@ -599,7 +638,7 @@ def test_the_passband_compensation_is_partial_and_is_the_one_in_the_contract():
 
 
 def test_opening_the_cutoff_makes_a_note_brighter():
-    """**Acceptance, not diagnosis.** The cutoff control has to do the one
+    """[measured-here: cutoff-to-brightness ordering on the finished voice] **Acceptance, not diagnosis.** The cutoff control has to do the one
     thing a player expects: open it and the note gets brighter. Measured on
     the finished voice as a POWER-weighted spectral centroid, which is an
     ordering of brightness and NOT a measurement of the cutoff -- it moves
@@ -609,7 +648,10 @@ def test_opening_the_cutoff_makes_a_note_brighter():
 
     A held saw at 110 Hz, res 0.3, no tracking, filter envelope pinned open:
     105, 134, 162, 195, 233 Hz for cutoffs 300..4800. Tolerance: strictly
-    increasing, and at least 1.5 x from end to end."""
+    increasing, and at least 1.5 x from end to end.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_audio_measure.test_a_centroid_is_not_a_corner_frequency
+    """
     cents = []
     for cut in (300, 600, 1200, 2400, 4800):
         out, _ = one_note(45, 0.5, waves=("saw",), detune=(0.0,), mix=(1.0,),
@@ -635,7 +677,7 @@ def _osc(shape, note, n, blep=True):
 @pytest.mark.parametrize("note", [40, 64, 88])
 @pytest.mark.parametrize("shape", ["saw", "square"])
 def test_polyblep_suppresses_aliasing_at_every_register(shape, note):
-    """**DR 0001's table, tolerance 14 dB (measured ~16).** Inharmonic energy
+    """[source-verified: DR 0001's table] **DR 0001's table, tolerance 14 dB (measured ~16).** Inharmonic energy
     was the largest defect in the survey that chose the filter -- -27.7 dB at
     note 40 and -14.8 dB at note 88 for a naive saw -- and PolyBLEP was adopted
     to remove about 16 dB of it uniformly.
@@ -652,7 +694,10 @@ def test_polyblep_suppresses_aliasing_at_every_register(shape, note):
     reads that rather than a floor quoted here, because #119 moved the floor
     from about -54 dB (Hann) to about -88 (Blackman-Harris) without moving any
     of the numbers above, and a floor written into a docstring is wrong the
-    next time the window changes."""
+    next time the window changes.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     naive, f0 = _osc(shape, note, n, blep=False)
     blep, _ = _osc(shape, note, n, blep=True)
@@ -667,7 +712,7 @@ def test_polyblep_suppresses_aliasing_at_every_register(shape, note):
 
 @pytest.mark.parametrize("note", [64, 88])
 def test_polyblep_removes_the_predicted_fold_back_images(note):
-    """The same property measured where the aliases actually are, rather than
+    """[measured-here: fold-back images measured directly, not by exclusion] The same property measured where the aliases actually are, rather than
     by exclusion: every harmonic above Nyquist images at a computable
     frequency, and only those bins are read (`audio_measure.foldback_alias_db`,
     ground truth: a planted image of known energy is recovered to 0.8 dB).
@@ -678,7 +723,10 @@ def test_polyblep_removes_the_predicted_fold_back_images(note):
     Note 40 is deliberately absent: there the images are dense enough to
     collide with real harmonics and the estimator refuses the measurement
     (test_foldback_refuses_a_low_note_where_the_images_are_dense). The test
-    above covers note 40 with the complementary measure."""
+    above covers note 40 with the complementary measure.
+
+    Ground truth: test_audio_measure.test_foldback_finds_a_planted_image_and_ignores_the_real_harmonics
+    """
     n = 1 << 15
     naive, f0 = _osc("saw", note, n, blep=False)
     blep, _ = _osc("saw", note, n, blep=True)
@@ -690,12 +738,15 @@ def test_polyblep_removes_the_predicted_fold_back_images(note):
 
 
 def test_the_squares_correction_has_the_opposite_sign_to_the_saws():
-    """**DESIGN.md section 6 / contract 6.4: a square steps UP at the wrap
+    """[source-verified: DESIGN.md section 6 / contract 6.4] **DESIGN.md section 6 / contract 6.4: a square steps UP at the wrap
     where a saw steps DOWN, and getting it backwards measures worse than no
     correction at all.** Tolerance: the square must beat naive by 14 dB at
     every register (measured 15.0 / 15.7 / 15.7); inverted it measures 0.0 dB
     of improvement, i.e. the correction buys nothing -- which is the injected
-    defect in the last group."""
+    defect in the last group.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     for note in (40, 64, 88):
         naive, f0 = _osc("square", note, n, blep=False)
@@ -706,7 +757,7 @@ def test_the_squares_correction_has_the_opposite_sign_to_the_saws():
 
 
 def test_the_waveforms_are_the_shapes_the_contract_names():
-    """**Contract 6.4, a property of the SHAPE, separate from aliasing.** Each
+    """[source-verified: contract 6.4] **Contract 6.4, a property of the SHAPE, separate from aliasing.** Each
     naive waveform's harmonic series is what its name means, at 110 Hz:
 
         saw       every harmonic, falling 1/k          h2 -6.0, h3 -9.5 dB
@@ -717,7 +768,10 @@ def test_the_waveforms_are_the_shapes_the_contract_names():
 
     Tolerance 1 dB on the present partials, 60 dB of rejection on the absent
     ones. This catches a shape wired to the wrong formula, a duty cycle that
-    is not 50 % or 25 %, and a sine table read with the wrong symmetry."""
+    is not 50 % or 25 %, and a sine table read with the wrong symmetry.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     n = 1 << 15
     f0 = dsp.phase_inc(110.0) * SR / (1 << 24)
 
@@ -757,7 +811,7 @@ def _glide_incs(a, b, dur=1.0, **kw):
 
 
 def test_the_glide_is_geometric_and_at_a_constant_rate():
-    """**DR 0004: constant rate, linear in pitch, 90 ms per octave +-1 %.**
+    """[source-verified: DR 0004] **DR 0004: constant rate, linear in pitch, 90 ms per octave +-1 %.**
     The Minimoog's panel control is a RATE ("the further to the right ... the
     longer it will take a tone to move from one pitch to the next"), and the
     reissue specifies it per octave; Moog's and Sequential's current
@@ -771,7 +825,10 @@ def test_the_glide_is_geometric_and_at_a_constant_rate():
 
     This is OUR specified behaviour, recorded in DR 0004 as a design decision
     with its evidence; it is not to be "fixed" toward some other instrument's
-    constant-time law, which remains available as a host policy."""
+    constant-time law, which remains available as a host policy.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     one_up, land1 = _glide_incs(52, 64)
     two_up, land2 = _glide_incs(40, 64)
     _, land_dn = _glide_incs(64, 52)
@@ -791,7 +848,7 @@ def test_the_glide_is_geometric_and_at_a_constant_rate():
 
 
 def test_a_high_resonance_note_reaches_exactly_zero_after_its_release():
-    """**DR 0005 item 3, tolerance: exactly zero.** The audition applied the
+    """[source-verified: DR 0005 item 3] **DR 0005 item 3, tolerance: exactly zero.** The audition applied the
     amplitude envelope BEFORE the filter. With one continuous voice that means
     a self-oscillating patch never ends -- the envelope closes the filter's
     input and the filter keeps singing; measured then at 0.41 x full scale
@@ -804,7 +861,10 @@ def test_a_high_resonance_note_reaches_exactly_zero_after_its_release():
     `max(1, .)` floor is what makes it reach 0 at all).
 
     Also the acceptance question behind it: nothing audible after gate-off, no
-    DC, no limit cycle at the output."""
+    DC, no limit cycle at the output.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     regs = vf.VoiceFx.patch_regs(waves=("sine",), detune=(0.0,), mix=(1.0,),
                                  cutoff=(600, 600), q=1.06, drive=0.5, track=0.0,
                                  amp=(0.005, 0.1, 0.8, 0.05))
@@ -822,7 +882,7 @@ def test_a_high_resonance_note_reaches_exactly_zero_after_its_release():
 
 
 def test_nothing_clips_at_the_reference_gain_structure():
-    """**DR 0005 and contract 12, tolerance: zero samples.** The chain has
+    """[source-verified: DR 0005 and contract 12] **DR 0005 and contract 12, tolerance: zero samples.** The chain has
     exactly six clamps and at the reference `vol = 0.45` none of the
     undesigned ones fires on any of the eight audition patches. Measured per
     patch (each render analysed as its own event):
@@ -833,7 +893,10 @@ def test_nothing_clips_at_the_reference_gain_structure():
         clamp 6  output sat16           0 samples at `vol` 0.45; at rev 1's
                                         0.9, growl-bass clips 4.8 %
 
-    The designed saturation -- the ladder's tanh -- is a separate test."""
+    The designed saturation -- the ladder's tanh -- is a separate test.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     import patches
     worst_ladder, worst_out = 0.0, 0.0
     for name, seq, total in patches.MONO:
@@ -856,7 +919,7 @@ def test_nothing_clips_at_the_reference_gain_structure():
 
 
 def test_the_drive_control_engages_the_ladders_saturation():
-    """**DR 0005 item 1: the designed saturation is the ladder's tanh, driven
+    """[source-verified: DR 0005 item 1] **DR 0005 item 1: the designed saturation is the ladder's tanh, driven
     by `gain`.** The other side of the clipping test -- nothing clips, but the
     thing that is supposed to distort must distort.
 
@@ -876,7 +939,10 @@ def test_the_drive_control_engages_the_ladders_saturation():
     Tolerances: below -60 dB at drive 0.05 and 0.2 (clean), above -20 dB at
     drive 1.6 (the drive control does something), monotone from 0.45 up with
     at least 20 dB between 0.45 and 3.0, and at least 10 dB of level
-    compression from drive 0.1 to 6."""
+    compression from drive 0.1 to 6.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series, test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     f0, n = 220.0, int(0.3 * SR)
     x = np.round(0.9 * FS * np.sin(2 * math.pi * f0 * np.arange(n) / SR)).astype(np.int16)
 
@@ -898,7 +964,7 @@ def test_the_drive_control_engages_the_ladders_saturation():
 
 @pytest.mark.parametrize("release", [0.02, 0.12, 0.5, 1.0])
 def test_the_envelope_release_reaches_zero_and_does_not_stair_step(release):
-    """**Contract 8.3 and DESIGN.md section 4, tolerances: exactly zero, and a
+    """[source-verified: contract 8.3 and DESIGN.md section 4] **Contract 8.3 and DESIGN.md section 4, tolerances: exactly zero, and a
     floor below -62 dBFS up to a 1 s release.**
 
     `L -= max(1, (L*rate) >> 16)`. The `max(1, .)` is load-bearing: without it
@@ -914,7 +980,10 @@ def test_the_envelope_release_reaches_zero_and_does_not_stair_step(release):
     with the floor at -96.9 / -81.2 / -69.0 / -62.1 dBFS. 24 bits is chosen so
     that the last figure stays under the 16-bit noise floor; at 16 bits the
     same release turns linear at -14 dBFS, which is the staircase this test
-    exists to catch."""
+    exists to catch.
+
+    Ground truth: test_audio_measure.test_longest_plateau_counts_a_stair_step
+    """
     env = vf.AdsrFx(0.005, 0.1, 1.0, release)
     env.render(int(0.3 * SR), int(0.3 * SR))                 # hold at sustain
     level = env.render(int(4 * SR), 0, q=env.EB)             # the 24-bit level per frame
@@ -930,7 +999,7 @@ def test_the_envelope_release_reaches_zero_and_does_not_stair_step(release):
 
 
 def test_a_cutoff_jump_mid_note_does_not_click():
-    """**Contract 4.3 and 10.1: a control write takes effect at a frame
+    """[source-verified: contract 4.3 and 10.1] **Contract 4.3 and 10.1: a control write takes effect at a frame
     boundary, and nothing else about the voice restarts.**
 
     An instantaneous 16 x cutoff write is a legitimate level change -- there is
@@ -950,7 +1019,10 @@ def test_a_cutoff_jump_mid_note_does_not_click():
     Then the resonance, which `play` cannot write mid-note but the chip
     modulates per frame: `k_eff` stepped between 0 and the onset every 5 ms
     for half a second must stay inside the 19-bit output word, with no step
-    beyond the signal's own."""
+    beyond the signal's own.
+
+    Ground truth: test_audio_measure.test_max_sample_step_finds_a_planted_click, test_audio_measure.test_analytic_envelope_of_a_damped_sinusoid_is_the_exponential, test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     regs = vf.VoiceFx.patch_regs(waves=("saw",), detune=(0.0,), mix=(1.0,),
                                  cutoff=(400, 400), q=0.7, drive=1.6, track=0.0,
                                  amp=(0.005, 0.2, 1.0, 0.1), fenv=(0.001, 0.01, 1.0, 0.01))
@@ -1002,9 +1074,12 @@ def _expect_red(fn, *a, **kw):
 
 
 def test_control_removing_the_resonance_compensation(monkeypatch):
-    """Defect: `k_eff = k`, the rev-1 filter with no compensation ROM
+    """[meta] Defect: `k_eff = k`, the rev-1 filter with no compensation ROM
     (DR 0006). The filter must then stop sustaining above ~3 kHz, and
-    test_it_still_self_oscillates_at_10_khz must go red."""
+    test_it_still_self_oscillates_at_10_khz must go red.
+
+    Ground truth: test_audio_measure.test_dominant_frequency_on_known_tones, test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_audio_measure.test_tonality_separates_a_tone_from_noise_where_a_percentile_does_not
+    """
     monkeypatch.setattr(vf, "k_effective", lambda k, kc: np.asarray(k, dtype=np.int64))
     msg = _expect_red(test_it_still_self_oscillates_at_10_khz)
     assert "not sustaining" in msg or "ROM changed nothing" in msg
@@ -1013,8 +1088,11 @@ def test_control_removing_the_resonance_compensation(monkeypatch):
 
 
 def test_control_inverting_the_squares_polyblep_sign(monkeypatch):
-    """Defect: the square's correction with the saw's sign (DESIGN.md section
-    6). The improvement over naive collapses from 15 dB to 0."""
+    """[meta] Defect: the square's correction with the saw's sign (DESIGN.md section
+    6). The improvement over naive collapses from 15 dB to 0.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     real = vf.blep_fx
     monkeypatch.setattr(vf, "blep_fx", lambda *a, **kw: -real(*a, **kw))
     n = int(0.5 * SR)
@@ -1062,9 +1140,12 @@ class _NoFloorAdsr(vf.AdsrFx):
 
 
 def test_control_removing_the_envelope_release_floor(monkeypatch):
-    """Defect: no `max(1, .)` in the release. The level stalls at
+    """[meta] Defect: no `max(1, .)` in the release. The level stalls at
     `2^(16+exponent)/mantissa - 1` and the note never ends -- which is exactly what the
-    'a note ends' property is for."""
+    'a note ends' property is for.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign, test_audio_measure.test_longest_plateau_counts_a_stair_step
+    """
     monkeypatch.setattr(vf, "AdsrFx", _NoFloorAdsr)
     env = vf.AdsrFx(0.005, 0.1, 1.0, 0.12)
     env.render(int(0.3 * SR), int(0.3 * SR))
@@ -1100,9 +1181,12 @@ def _render_vca_before_filter(self, incs, track, gate, trig, n, mw=None):
 
 
 def test_control_moving_the_vca_before_the_filter(monkeypatch):
-    """Defect: the audition's chain order. A self-oscillating patch then never
+    """[meta] Defect: the audition's chain order. A self-oscillating patch then never
     ends -- the envelope closes the filter's input and the filter keeps
-    singing -- which is the measurement DR 0005 was written from."""
+    singing -- which is the measurement DR 0005 was written from.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     monkeypatch.setattr(vf.VoiceFx, "_render", _render_vca_before_filter)
     _expect_red(test_a_high_resonance_note_reaches_exactly_zero_after_its_release)
 
@@ -1116,8 +1200,11 @@ class _ThreePoleLadder(_LadderVariant):
 
 
 def test_control_dropping_a_pole(monkeypatch):
-    """Defect: three one-poles instead of four. The stopband then falls at
-    17.4 dB/octave instead of 23.7, which is what the slope property is for."""
+    """[meta] Defect: three one-poles instead of four. The stopband then falls at
+    17.4 dB/octave instead of 23.7, which is what the slope property is for.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
     monkeypatch.setattr(vf, "LadderFx", _ThreePoleLadder)
     _expect_red(test_the_stopband_falls_at_24_db_per_octave)
 
@@ -1149,11 +1236,14 @@ class _SilentVoice(vf.VoiceFx):
 
 
 def test_control_a_silent_stub_passes_nothing(monkeypatch):
-    """The anti-vacuous-pass control, `docs/verification-rules.md` rule 1: a
+    """[meta] The anti-vacuous-pass control, `docs/verification-rules.md` rule 1: a
     model with the right ports and no behaviour must fail every property, not
     pass any of them by default. The estimators refuse a silent record
     (`InsufficientEvidence`, itself an AssertionError) rather than returning a
-    plausible number, so each of these goes red for a stated reason."""
+    plausible number, so each of these goes red for a stated reason.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_audio_measure.test_dominant_frequency_on_known_tones, test_audio_measure.test_tonality_separates_a_tone_from_noise_where_a_percentile_does_not, test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise, test_audio_measure.test_a_centroid_is_not_a_corner_frequency, test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor, test_audio_measure.test_foldback_finds_a_planted_image_and_ignores_the_real_harmonics, test_audio_measure.test_harmonic_powers_recovers_a_known_series, test_audio_measure.test_peak_is_the_largest_magnitude_either_sign, test_audio_measure.test_analytic_envelope_of_a_damped_sinusoid_is_the_exponential, test_audio_measure.test_max_sample_step_finds_a_planted_click
+    """
     monkeypatch.setattr(vf, "LadderFx", _SilentLadder)
     monkeypatch.setattr(vf, "OscFx", _SilentOsc)
     monkeypatch.setattr(vf, "VoiceFx", _SilentVoice)
@@ -1176,10 +1266,13 @@ def test_control_a_silent_stub_passes_nothing(monkeypatch):
 
 
 def test_control_a_silent_stub_is_not_mistaken_for_a_note_that_ended(monkeypatch):
-    """The one property a silent stub could pass by accident -- "the output is
+    """[meta] The one property a silent stub could pass by accident -- "the output is
     zero after the release" is true of a model that is zero throughout. The
     test guards against it by requiring the filter to be audibly ringing
-    first, and that guard is what has to fire."""
+    first, and that guard is what has to fire.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     monkeypatch.setattr(vf, "LadderFx", _SilentLadder)
     msg = _expect_red(test_a_high_resonance_note_reaches_exactly_zero_after_its_release)
     assert "not singing" in msg
@@ -1195,7 +1288,7 @@ def test_control_a_silent_stub_is_not_mistaken_for_a_note_that_ended(monkeypatch
 def band_power_db(x, lo, hi, sr=SR):
     """Power in a band, in dB relative to full scale squared, from a Hann-
     windowed periodogram. BROADBAND, so this is a power sum over bins and not
-    any kind of line estimator; `test_band_power_db_recovers_known_band_powers`
+    any kind of line estimator; `test_meta_band_power_db_recovers_known_band_powers`
     is its ground truth."""
     f, mag = am.spectrum(x, sr)
     m = (f >= lo) & (f < hi)
@@ -1213,7 +1306,7 @@ def octave_slope_db(x, lo=63.0, hi=16000.0, sr=SR):
     POWER rising at 3 dB per octave -- which is what "equal power per octave"
     means for pink noise. The number drawing 1431 labels its filter with is a
     slope of the TRANSFER FUNCTION, i.e. of the density, so that is what this
-    returns. `test_band_power_db_recovers_known_band_powers` pins both halves
+    returns. `test_meta_band_power_db_recovers_known_band_powers` pins both halves
     against closed-form signals."""
     edges, f = [], lo
     while f * 2 <= hi * 1.0001:
@@ -1224,8 +1317,8 @@ def octave_slope_db(x, lo=63.0, hi=16000.0, sr=SR):
     return float(np.linalg.lstsq(A, p, rcond=None)[0][0]), p
 
 
-def test_band_power_db_recovers_known_band_powers():
-    """**Ground truth for the two estimators above** (`docs/verification-rules.md`
+def test_meta_band_power_db_recovers_known_band_powers():
+    """[meta] **Ground truth for the two estimators above** (`docs/verification-rules.md`
     rule 2, and the brief's rule that no estimator is quoted before it is
     validated against a closed-form signal). Three of them, because the
     bandwidth division has two ways to be wrong and only one of them shows up
@@ -1277,12 +1370,15 @@ def noise_colours(n=1 << 17, seed=None):
 
 # ---- the noise source ------------------------------------------------------
 def test_white_is_white_and_pink_falls_at_three_db_per_octave():
-    """**docs/minimoog-reference.md N4.** Drawing 1431 labels the network
+    """[source-verified: docs/minimoog-reference.md N4] **docs/minimoog-reference.md N4.** Drawing 1431 labels the network
     between the white emitter follower and the pink amplifier
     "-3 db/OCTAVE FILTER", and evaluating its five components gives -3.10
     dB/octave over 20 Hz .. 20 kHz. Measured on the integer noise board over
     131 072 frames: white is flat within 0.5 dB/octave, pink falls at 3 dB per
-    octave within 0.4."""
+    octave within 0.4.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
     w, p, _ = noise_colours()
     sw, _ = octave_slope_db(w[1000:])
     sp, bands = octave_slope_db(p[1000:])
@@ -1291,10 +1387,13 @@ def test_white_is_white_and_pink_falls_at_three_db_per_octave():
 
 
 def test_red_is_pink_through_one_more_pole_at_about_100_hz():
-    """**docs/minimoog-reference.md N5.** Drawing 1431 labels the section after
+    """[source-verified: docs/minimoog-reference.md N5] **docs/minimoog-reference.md N5.** Drawing 1431 labels the section after
     the pink amplifier "100 Hz Lowpass Filter", and SM 2.5 says it is one R and
     one C; R914 = 10 k with C908 = 0.15 uF is 106.1 Hz. So red/pink must be a
-    single pole: -3 dB at the corner, and falling 6 dB per octave above it."""
+    single pole: -3 dB at the corner, and falling 6 dB per octave above it.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
     _, p, r = noise_colours()
     p, r = p[4000:], r[4000:]
     fc = 106.1
@@ -1308,11 +1407,14 @@ def test_red_is_pink_through_one_more_pole_at_about_100_hz():
 
 
 def test_the_three_noise_colours_leave_at_the_same_level():
-    """**docs/minimoog-reference.md N6.** Drawing 1431 labels the white, pink
+    """[source-verified: docs/minimoog-reference.md N6] **docs/minimoog-reference.md N6.** Drawing 1431 labels the white, pink
     and red outputs -4 dBm EACH, and SM 5.27's acceptance test asks for both
     white and pink at "-5 +-3 dB" at the same output: the colour switch is not
     a level change. Ours are equalised by noise power and land within 0.2 dB of
-    each other."""
+    each other.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     w, p, r = noise_colours()
     lv = [20 * math.log10(am.rms(v[4000:]) / FS) for v in (w, p, r)]
     assert max(lv) - min(lv) < 0.2, [f"{v:.2f}" for v in lv]
@@ -1320,22 +1422,28 @@ def test_the_three_noise_colours_leave_at_the_same_level():
 
 
 def test_nothing_in_the_noise_path_reaches_the_rail():
-    """**docs/minimoog-reference.md N7.** Equal-RMS colours and a hard rail
+    """[source-verified: docs/minimoog-reference.md N7] **docs/minimoog-reference.md N7.** Equal-RMS colours and a hard rail
     fight: the pink network's crest factor is 4.6. `NOISE_SHIFT = 2` is what
     buys the headroom, and this is the measurement that says it is enough --
-    no colour comes within 2 dB of full scale over 131 072 frames."""
+    no colour comes within 2 dB of full scale over 131 072 frames.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     for name, v in zip(("white", "pink", "red"), noise_colours()):
         pk = am.peak(v[1000:]) / FS
         assert pk < 0.79, f"{name} peaks at {pk:.3f} of full scale"
 
 
 def test_the_noise_selector_swaps_both_pairs_at_once():
-    """**docs/minimoog-reference.md N2.** "The noise selector switch selects
+    """[source-verified: docs/minimoog-reference.md N2] **docs/minimoog-reference.md N2.** "The noise selector switch selects
     white or pink noise for audio and pink or red for modulation" (SM 2.5) --
     one bit, two destinations, and the pair moves together. With `nsel` clear
     the audio path carries white; with it set, pink. The modulation path moves
     the other way, from pink to red, which is measurable as a fall in its
-    high-frequency content."""
+    high-frequency content.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     def trace(nsel):
         v = vf.VoiceFx()
         v.note(45, 0.5, mix=(0, 0, 0), noise=1.0, nsel=nsel, cutoff=(18000, 18000),
@@ -1351,7 +1459,7 @@ def test_the_noise_selector_swaps_both_pairs_at_once():
 
 
 def test_the_voice_uses_the_same_generator_as_the_drums_and_not_the_same_sequence():
-    """**docs/minimoog-reference.md N3.** Two claims, and they pull opposite
+    """[source-verified: docs/minimoog-reference.md N3] **docs/minimoog-reference.md N3.** Two claims, and they pull opposite
     ways.
 
     The polynomial is the drum section's, so that the one primitive pentanomial
@@ -1361,7 +1469,10 @@ def test_the_voice_uses_the_same_generator_as_the_drums_and_not_the_same_sequenc
     The SEED is not, so that the two noises are independent: sharing one
     generator would be nearly free in area and would make the voice's noise and
     the drums' the SAME signal, which sums at +6 dB instead of +3. The two
-    16-bit word streams must be uncorrelated."""
+    16-bit word streams must be uncorrelated.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     import drums_fx as dx
     assert vf.LFSR_TAPS == dx.LFSR_TAPS and vf.LFSR_BITS == dx.LFSR_BITS
     for seed in (1, 12345, 0x7F215FF7):
@@ -1378,13 +1489,16 @@ def test_the_voice_uses_the_same_generator_as_the_drums_and_not_the_same_sequenc
 
 
 def test_noise_through_the_ladder_is_a_swept_band_of_noise():
-    """**docs/minimoog-reference.md N8, and the reason noise was the largest
+    """[source-verified: docs/minimoog-reference.md N8] **docs/minimoog-reference.md N8, and the reason noise was the largest
     gap.** "Audio signals from the three VCO's, the noise..." are summed ahead
     of the filter (SM 2.2.1), so a cutoff envelope on noise is a swept band --
     wind, surf, breath. Measured on the finished voice with a 300 Hz -> 9 kHz
     cutoff envelope: the power-weighted centroid of the first 40 ms is at least
     an octave above the last 40 ms of the sustain, and the output is broadband
-    throughout (tonality below 12 dB)."""
+    throughout (tonality below 12 dB).
+
+    Ground truth: test_audio_measure.test_a_centroid_is_not_a_corner_frequency, test_audio_measure.test_tonality_separates_a_tone_from_noise_where_a_percentile_does_not
+    """
     v = vf.VoiceFx()
     y = v.note(48, 1.0, mix=(0, 0, 0), noise=1.0, cutoff=(300, 9000), q=0.8, drive=2.0,
                amp=(0.002, 0.9, 0.35, 0.1), fenv=(0.002, 0.25, 0.08, 0.1)).astype(float)
@@ -1404,13 +1518,16 @@ def test_noise_through_the_ladder_is_a_swept_band_of_noise():
 
 
 def test_the_pink_filter_is_the_network_on_the_drawing():
-    """**docs/minimoog-reference.md N4, the traceability claim itself.** The
+    """[source-verified: docs/minimoog-reference.md N4] **docs/minimoog-reference.md N4, the traceability claim itself.** The
     digital pink filter is not "a pink filter"; it is the bilinear transform of
     drawing 1431's five components. So it must match that analog network's
     transfer function, not merely have the right slope: within 0.6 dB below
     2 kHz, and within 2.6 dB at 20 kHz where bilinear warping costs what it
     costs. This is the test that would catch a plausible pink filter
-    substituted for the traceable one."""
+    substituted for the traceable one.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
     Rs, R8, C4, R9, C5 = 10e3, 3.3e3, 0.12e-6, 240.0, 0.033e-6
 
     def analog(f):
@@ -1430,11 +1547,14 @@ def test_the_pink_filter_is_the_network_on_the_drawing():
 
 # ---- the waveform set ------------------------------------------------------
 def test_the_model_d_waveform_set_is_complete():
-    """**docs/minimoog-reference.md W1.** Six waveforms per oscillator
+    """[source-verified: docs/minimoog-reference.md W1] **docs/minimoog-reference.md W1.** Six waveforms per oscillator
     (drawing 1448): triangle, shark-tooth, sawtooth, square, wide rectangular,
     narrow rectangular -- with the reverse sawtooth in oscillator 3's second
     position instead of the shark-tooth. All seven distinct shapes must exist,
-    be band-limitable, and be distinct from one another."""
+    be band-limitable, and be distinct from one another.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     need = ("tri", "shark", "saw", "square", "pulse29", "pulse15", "revsaw")
     for s in need:
         assert s in vf.WAVE_CODE, s
@@ -1447,13 +1567,16 @@ def test_the_model_d_waveform_set_is_complete():
 
 
 def test_the_shark_tooth_is_the_divider_on_the_drawing():
-    """**docs/minimoog-reference.md W3.** The shark-tooth position taps the
+    """[source-verified: docs/minimoog-reference.md W3] **docs/minimoog-reference.md W3.** The shark-tooth position taps the
     junction of R030 (47 k, from the saw) and R031 (10 k, from the triangle),
     between two buffered sources of equal amplitude (W2), so it is
     10/57 saw + 47/57 triangle -- 5749 and 27019 in Q0.15, summing to exactly
     32768. Asserted as arithmetic on the naive shapes, and then as a spectral
     consequence: the shark-tooth's EVEN harmonics come from its sawtooth share
-    alone, so h2 must sit 20*log10(10/57) below the sawtooth's own h2."""
+    alone, so h2 must sit 20*log10(10/57) below the sawtooth's own h2.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     assert vf.SHARK_W_SAW + vf.SHARK_W_TRI == 32768
     assert vf.SHARK_W_SAW == round(10 / 57 * 32768) and vf.SHARK_W_TRI == round(47 / 57 * 32768)
     ph = np.arange(0, 1 << 24, 1 << 9, dtype=np.int64)
@@ -1471,7 +1594,7 @@ def test_the_shark_tooth_is_the_divider_on_the_drawing():
 
 
 def test_the_three_rectangular_widths_are_50_29_and_15_percent():
-    """**docs/minimoog-reference.md W4.** SW6's width deck selects 0 V, -1.5 V
+    """[source-verified: docs/minimoog-reference.md W4] **docs/minimoog-reference.md W4.** SW6's width deck selects 0 V, -1.5 V
     or -2.5 V (drawing 1448's 1.5 k / 1 k / 7.5 k divider), and SM 2.3 pins the
     ends of that range at 50 % and 15 % duty. Duty is linear in the threshold,
     so the middle tap is 29 %.
@@ -1479,7 +1602,10 @@ def test_the_three_rectangular_widths_are_50_29_and_15_percent():
     Measured two ways, because a duty cycle counted off the waveform and a duty
     cycle read out of the spectrum fail differently: the fraction of the cycle
     the naive wave spends high, and the position of the spectral nulls (a pulse
-    of duty d has a null at every harmonic k with k*d an integer)."""
+    of duty d has a null at every harmonic k with k*d an integer).
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     ph = np.arange(1 << 24, dtype=np.int64)
     for shape, duty in (("square", 0.50), ("pulse29", 0.29), ("pulse15", 0.15)):
         high = float((vf.naive_fx(shape, ph) > 0).mean())
@@ -1515,11 +1641,14 @@ def test_the_three_rectangular_widths_are_50_29_and_15_percent():
 
 
 def test_the_reverse_sawtooth_is_the_sawtooth_inverted():
-    """**docs/minimoog-reference.md W5.** Oscillator 3's Q20 is "a standard
+    """[source-verified: docs/minimoog-reference.md W5] **docs/minimoog-reference.md W5.** Oscillator 3's Q20 is "a standard
     common emitter transistor inverter" on the sawtooth (SM 2.3), so the
     reverse saw is the band-limited saw negated -- not a second oscillator and
     not a second PolyBLEP. Sample for sample, off by at most the one LSB the
-    Q1.15 rail costs at -32768."""
+    Q1.15 rail costs at -32768.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     n = 1 << 13
     saw, _ = _osc("saw", 60, n)
     rev, _ = _osc("revsaw", 60, n)
@@ -1529,12 +1658,15 @@ def test_the_reverse_sawtooth_is_the_sawtooth_inverted():
 
 
 def test_the_new_shapes_are_band_limited_too():
-    """**DR 0001 applied to W1's additions.** A waveform set is only complete
+    """[source-verified: DR 0001 applied to W1's additions] **DR 0001 applied to W1's additions.** A waveform set is only complete
     if the new shapes alias no worse than the old ones. Each discontinuous
     shape added in revision 9 must suppress the predicted fold-back images by
     at least 10 dB at a high note, the same property
     `test_polyblep_removes_the_predicted_fold_back_images` asserts for the
-    sawtooth."""
+    sawtooth.
+
+    Ground truth: test_audio_measure.test_foldback_finds_a_planted_image_and_ignores_the_real_harmonics
+    """
     n = 1 << 14
     for shape in ("shark", "revsaw", "pulse29", "pulse15"):
         naive, f0 = _osc(shape, 88, n, blep=False)
@@ -1552,7 +1684,7 @@ def _mod_voice(dur=1.0, note=57, **patch):
 
 
 def test_the_mod_wheel_at_full_moves_the_pitch_13_to_23_semitones():
-    """**docs/minimoog-reference.md M7 -- the factory acceptance window, SM
+    """[source-verified: docs/minimoog-reference.md M7 -- SM 5.37] **docs/minimoog-reference.md M7 -- the factory acceptance window, SM
     5.37.** "Turn on OSCILLATOR MODULATION switch and rotate MOD control wheel
     fully up. The oscillator should change 13 to 23 semitones."
 
@@ -1560,6 +1692,8 @@ def test_the_mod_wheel_at_full_moves_the_pitch_13_to_23_semitones():
     runs on -- exact, and what the register path promises. And the SOUND: one
     sine oscillator through a wide-open filter, the instantaneous frequency of
     the analytic signal, which is what a technician with a keyboard was doing.
+
+    Ground truth: test_audio_measure.test_instantaneous_frequency_tracks_a_known_glide
     """
     y, t = _mod_voice(waves=("sine", "saw", "tri"), mix=(1.0, 0.0, 0.0), cutoff=(20000, 20000),
                       q=0.1, drive=0.4, track=0.0, osc_mod=True, osc3_ctl=False,
@@ -1574,14 +1708,17 @@ def test_the_mod_wheel_at_full_moves_the_pitch_13_to_23_semitones():
 
 
 def test_the_mod_wheel_at_full_sweeps_the_cutoff_from_440_to_at_least_2400():
-    """**docs/minimoog-reference.md M8 -- SM 5.19.** "Adjust CUTOFF FREQUENCY
+    """[source-verified: docs/minimoog-reference.md M8 -- SM 5.19] **docs/minimoog-reference.md M8 -- SM 5.19.** "Adjust CUTOFF FREQUENCY
     control for 440 Hz when pitch is low. When pitch switches to high, check to
     see that frequency is a minimum of 2.4 kHz." A square-wave oscillator 3, so
     the cutoff has two values and the test is a ratio between them.
 
     Asserted on the commanded cutoff, and then HEARD: the same patch at res
     1.05 sings, and the frequency it sings at follows the commanded cutoff
-    within 1 % (DR 0011), so the sung frequency has to make the same jump."""
+    within 1 % (DR 0011), so the sung frequency has to make the same jump.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     _, t = _mod_voice(waves=("saw", "saw", "square"), mix=(1.0, 0, 0), cutoff=(440, 440),
                       q=0.7, drive=1.0, track=0.0, filt_mod=True, osc3_ctl=False,
                       mod_wheel=1.0, mod_mix=0.0, mod_filter=vf.MFD_REF_OCT)
@@ -1593,12 +1730,15 @@ def test_the_mod_wheel_at_full_sweeps_the_cutoff_from_440_to_at_least_2400():
 
 
 def test_the_modulation_mix_is_a_pan_and_not_two_levels():
-    """**docs/minimoog-reference.md M4 -- SM 2.4.** "The wiper of R23 is
+    """[source-verified: docs/minimoog-reference.md M4 -- SM 2.4] **docs/minimoog-reference.md M4 -- SM 2.4.** "The wiper of R23 is
     connected to ground and, therefore, when the MODULATION MIX potentiometer
     is rotated, it PANS between the two modulation signals." A pan, so: at one
     end the bus is oscillator 3 alone, at the other it is noise alone, and in
     between the two weights sum to a constant -- which means a fully-panned bus
-    is never louder than either source on its own."""
+    is never louder than either source on its own.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     assert vf.mod_pan(30000, -20000, 0) == 30000
     assert vf.mod_pan(30000, -20000, vf.MMIX_FULL) == -20000
     assert vf.mod_pan(30000, -20000, vf.MMIX_FULL + 9999) == -20000, "mmix past its top must clamp"
@@ -1611,11 +1751,14 @@ def test_the_modulation_mix_is_a_pan_and_not_two_levels():
 
 
 def test_osc_3_control_takes_oscillator_3_off_the_modulation_bus():
-    """**docs/minimoog-reference.md M1 -- SM 2.18.** "A switch, SW2, interrupts
+    """[source-verified: docs/minimoog-reference.md M1 -- SM 2.18] **docs/minimoog-reference.md M1 -- SM 2.18.** "A switch, SW2, interrupts
     the keyboard, modulation, external, and pitchbend voltage on oscillator
     three." That is what makes oscillator 3 usable as a modulator at all: with
     the switch off it is not modulated by the bus it is driving. Oscillators 1
-    and 2 must still be."""
+    and 2 must still be.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     kw = dict(waves=("saw", "saw", "tri"), mix=(1.0, 0.8, 0.0), cutoff=(6000, 6000), q=0.3,
               drive=1.0, track=0.0, osc_mod=True, mod_wheel=1.0, mod_mix=0.0)
     _, off = _mod_voice(0.5, **kw, osc3_ctl=False)
@@ -1629,7 +1772,7 @@ def test_osc_3_control_takes_oscillator_3_off_the_modulation_bus():
 
 
 def test_the_lo_range_reaches_the_clicks_two_to_five_seconds_apart():
-    """**docs/minimoog-reference.md M2 -- SM 5.36.** "Set... RANGE switch to LO,
+    """[source-verified: docs/minimoog-reference.md M2 -- SM 5.36] **docs/minimoog-reference.md M2 -- SM 5.36.** "Set... RANGE switch to LO,
     and OSCILLATOR-3 FREQUENCY counterclockwise to minimum. Listen to the
     audible clicks which should occur between two to five seconds apart." That
     is 0.2 to 0.5 Hz, and the same paragraph requires the top of LO to overlap
@@ -1637,7 +1780,10 @@ def test_the_lo_range_reaches_the_clicks_two_to_five_seconds_apart():
 
     No hardware is needed for this and that is the point of the test: the
     24-bit increment register already spans it, and the host's Hz-to-increment
-    conversion lands inside the window."""
+    conversion lands inside the window.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     for hz in (0.2, 0.35, 0.5):
         inc = dsp.phase_inc(hz)
         assert inc > 0, hz
@@ -1656,12 +1802,15 @@ def test_the_lo_range_reaches_the_clicks_two_to_five_seconds_apart():
 
 
 def test_the_modulation_tap_is_the_same_signal_band_limited_or_not_at_lo_rates():
-    """**docs/minimoog-reference.md M5's own caveat.** The modulation tap is
+    """[source-verified: docs/minimoog-reference.md M5's own caveat] **docs/minimoog-reference.md M5's own caveat.** The modulation tap is
     oscillator 3's NAIVE waveform, on the argument that at LO rates the
     PolyBLEP window never opens so the two are identical -- and that the
     modulation path is a control voltage nobody hears anyway. The first half of
     that argument is checkable, so it is checked here rather than asserted: at
-    every LO-range rate, naive and band-limited agree sample for sample."""
+    every LO-range rate, naive and band-limited agree sample for sample.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     n = int(2.0 * SR)
     for hz in (0.2, 1.0, 4.0, 20.0):
         inc = dsp.phase_inc(hz)
@@ -1687,12 +1836,15 @@ def test_the_modulation_tap_is_the_same_signal_band_limited_or_not_at_lo_rates()
 
 
 def test_the_modulation_value_is_exactly_one_frame_old():
-    """**docs/minimoog-reference.md M9.** Oscillator 3 is both the modulation
+    """[source-verified: docs/minimoog-reference.md M9] **docs/minimoog-reference.md M9.** Oscillator 3 is both the modulation
     source and, with OSC-3 CONTROL on, a modulation destination -- a feedback
     path. The chip breaks it with one register, so the modulation value used in
     frame n is built from frame n-1's sources. One frame is 20.8 us. This is a
     specification and not an artefact, so it is pinned: the modulation trace
-    must be the panned source delayed by exactly one frame, and by no more."""
+    must be the panned source delayed by exactly one frame, and by no more.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     v = vf.VoiceFx()
     v.note(57, 0.3, waves=("saw", "saw", "tri"), mix=(1.0, 0, 0), noise=0.0,
            cutoff=(4000, 4000), q=0.3, drive=1.0, track=0.0,
@@ -1708,10 +1860,13 @@ def test_the_modulation_value_is_exactly_one_frame_old():
 # 6. ... AND THESE CAN FAIL TOO
 # =============================================================================
 def test_control_a_pink_filter_that_is_only_a_plausible_pink_filter(monkeypatch):
-    """Defect: the traceable biquad replaced by a single pole placed to give
+    """[meta] Defect: the traceable biquad replaced by a single pole placed to give
     roughly the right slope over the audio band. It is a perfectly reasonable
     pink filter and it is not the one on drawing 1431, so the slope test may
-    survive and the NETWORK test must not."""
+    survive and the NETWORK test must not.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
     class _Plausible(vf.NoiseFx):
         def step(self):
             self.lfsr, x0 = vf.lfsr_frame(self.lfsr)
@@ -1723,55 +1878,73 @@ def test_control_a_pink_filter_that_is_only_a_plausible_pink_filter(monkeypatch)
 
 
 def test_control_noise_colours_that_are_not_level_matched(monkeypatch):
-    """Defect: the make-up gains that equalise the three colours removed --
+    """[meta] Defect: the make-up gains that equalise the three colours removed --
     the pink and red paths left at the raw gain of their filters, which is
     where a straightforward implementation lands. Drawing 1431's three -4 dBm
-    labels are what says that is wrong."""
+    labels are what says that is wrong.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     monkeypatch.setattr(vf, "RED_GAIN", 1 << vf.PINK_AQ)
     monkeypatch.setattr(vf, "PINK_B", tuple(int(b / 9.547084) for b in vf.PINK_B))
     _expect_red(test_the_three_noise_colours_leave_at_the_same_level)
 
 
 def test_control_a_shark_tooth_mixed_in_the_wrong_proportion(monkeypatch):
-    """Defect: R030 and R031 read off the drawing the wrong way round, so the
+    """[meta] Defect: R030 and R031 read off the drawing the wrong way round, so the
     mix becomes 47/57 saw and 10/57 triangle. It is still a shark-tooth-shaped
-    wave; it is the wrong one, and the even-harmonic test is what sees it."""
+    wave; it is the wrong one, and the even-harmonic test is what sees it.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     monkeypatch.setattr(vf, "SHARK_W_SAW", 27019)
     monkeypatch.setattr(vf, "SHARK_W_TRI", 5749)
     _expect_red(test_the_shark_tooth_is_the_divider_on_the_drawing)
 
 
 def test_control_rectangular_widths_left_at_the_shipped_25_percent(monkeypatch):
-    """Defect: the two new widths wired to the 25 % duty contract revision 4
+    """[meta] Defect: the two new widths wired to the 25 % duty contract revision 4
     shipped -- which is what "we have four waveforms and called it done" looks
-    like from the inside. SM 2.3's 50 % and 15 % are what reject it."""
+    like from the inside. SM 2.3's 50 % and 15 % are what reject it.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
     monkeypatch.setitem(vf.DUTY, "pulse29", vf.DUTY_P25)
     monkeypatch.setitem(vf.DUTY, "pulse15", vf.DUTY_P25)
     _expect_red(test_the_three_rectangular_widths_are_50_29_and_15_percent)
 
 
 def test_control_a_modulation_depth_that_misses_the_factory_window(monkeypatch):
-    """Defect: the pitch depth halved -- 0.375 octave instead of 0.75, i.e.
+    """[meta] Defect: the pitch depth halved -- 0.375 octave instead of 0.75, i.e.
     9 semitones of swing where SM 5.37 requires 13 to 23. A plausible-looking
-    vibrato that a Model D would have failed its acceptance test with."""
+    vibrato that a Model D would have failed its acceptance test with.
+
+    Ground truth: test_audio_measure.test_instantaneous_frequency_tracks_a_known_glide
+    """
     monkeypatch.setattr(vf, "MPD_REF_OCT", 0.375)
     msg = _expect_red(test_the_mod_wheel_at_full_moves_the_pitch_13_to_23_semitones)
     assert "SM 5.37" in msg
 
 
 def test_control_a_modulation_mix_that_sums_instead_of_panning(monkeypatch):
-    """Defect: MOD MIX read as two independent levels rather than SM 2.4's pan.
+    """[meta] Defect: MOD MIX read as two independent levels rather than SM 2.4's pan.
     Both sources at full then drive the bus to twice full scale, where the
-    Model D's pot cannot."""
+    Model D's pot cannot.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     monkeypatch.setattr(vf, "mod_pan",
                         lambda o, nz, m: vf.clamp16(o + ((nz * min(m, vf.MMIX_FULL)) >> 15)))
     _expect_red(test_the_modulation_mix_is_a_pan_and_not_two_levels)
 
 
 def test_control_oscillator_3_left_on_the_modulation_bus(monkeypatch):
-    """Defect: SW2's modulation half missing, so oscillator 3 modulates itself
+    """[meta] Defect: SW2's modulation half missing, so oscillator 3 modulates itself
     whatever OSC-3 CONTROL says. The instrument's whole use of oscillator 3 as
-    an LFO depends on that switch, and this is the property that holds it."""
+    an LFO depends on that switch, and this is the property that holds it.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     real = vf.VoiceFx._modulate
 
     def always_on(self, incs, n, mw):
@@ -1795,7 +1968,7 @@ ALIAS_CURVE = {40: -42.7, 52: -39.7, 64: -36.6, 76: -33.7, 88: -31.0, 100: -28.5
 
 
 def test_the_sawtooths_aliasing_floor_degrades_with_pitch_and_is_locked():
-    """**Contract open item 15.** Sawtooth inharmonic fraction, PolyBLEP on,
+    """[measured-here: contract open item 15] **Contract open item 15.** Sawtooth inharmonic fraction, PolyBLEP on,
     at six registers:
 
     | note | f0 | ours | Surge |
@@ -1810,7 +1983,10 @@ def test_the_sawtooths_aliasing_floor_degrades_with_pitch_and_is_locked():
     regression is loud, and the *slope* is asserted as PRESENT rather than
     absent — this test exists to keep a defect visible, not to claim it is
     fixed. When the fix lands, these numbers move and this docstring is the
-    before."""
+    before.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     got = {}
     for note, want in ALIAS_CURVE.items():
@@ -1824,7 +2000,7 @@ def test_the_sawtooths_aliasing_floor_degrades_with_pitch_and_is_locked():
 
 
 def test_oversampling_the_oscillators_regresses_only_through_the_drop_decimator():
-    """**Issue #80, explained and locked. `docs/oversampling-paradox.md`,
+    """[measured-here: issue #80] **Issue #80, explained and locked. `docs/oversampling-paradox.md`,
     `model/alias_probe.py`.**
 
     Running the oscillator at 2x and reducing it to the base rate by KEEPING
@@ -1842,7 +2018,10 @@ def test_oversampling_the_oscillators_regresses_only_through_the_drop_decimator(
         tenths of a dB. That is the mechanism, as an energy budget;
       * a decimation filter removes it. This is the assertion that keeps the
         test honest about scope: it guards the DROP-DECIMATOR, not the
-        technique. Oversampling with a real decimator beats what we ship."""
+        technique. Oversampling with a real decimator beats what we ship.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     inc = ap.base_inc(40)
     f0 = inc * SR / (1 << 24)
@@ -1871,7 +2050,7 @@ def test_oversampling_the_oscillators_regresses_only_through_the_drop_decimator(
 
 
 def test_the_oversampling_regression_is_not_the_fixed_point_and_not_our_oscillator():
-    """**Issue #80 hypotheses 3 and 4, both ruled out by substitution.**
+    """[measured-here: issue #80 hypotheses 3 and 4] **Issue #80 hypotheses 3 and 4, both ruled out by substitution.**
 
     Hypothesis 3 (more samples, more quantisation events): the SAME PolyBLEP in
     float64, with no Q1.15, no reciprocal approximation and no saturation,
@@ -1881,7 +2060,10 @@ def test_the_oversampling_regression_is_not_the_fixed_point_and_not_our_oscillat
     band-limited sawtooth, summed from its Fourier series at 96 kHz, put
     through the same drop-decimator, comes out WORSE than ours -- because
     PolyBLEP's two-sample residual attenuates the top of the oversampled band,
-    so there is less there to fold. A perfect oscillator would regress more."""
+    so there is less there to fold. A perfect oscillator would regress more.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     for note in (40, 64, 100):
         inc = ap.base_inc(note)
@@ -1898,14 +2080,17 @@ def test_the_oversampling_regression_is_not_the_fixed_point_and_not_our_oscillat
 
 
 def test_the_polyblep_correction_is_the_same_at_both_rates():
-    """**Issue #80 hypothesis 1, ruled out by construction and by
+    """[measured-here: issue #80 hypothesis 1] **Issue #80 hypothesis 1, ruled out by construction and by
     measurement.** The leading guess was that the correction was computed for
     one rate and applied at another.
 
     It cannot have been: `blep_fx` decides the window with `ph < inc` and
     scales it by the reciprocal of `inc`, so the window is one sample on each
     side AT WHATEVER RATE, with the same peak. Halving the increment halves it
-    in phase and leaves it unchanged in samples. Measured at six registers."""
+    in phase and leaves it unchanged in samples. Measured at six registers.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     for note in (40, 52, 64, 76, 88, 100):
         d = ap.blep_normalisation(note, 2)
         lo, hi = d["base"], d["2x"]
@@ -1920,7 +2105,7 @@ def test_the_polyblep_correction_is_the_same_at_both_rates():
 
 
 def test_the_shipped_ladder_loses_nothing_to_its_last_sub_step_decimation():
-    """**The contrast that makes #80's mechanism a mechanism rather than a
+    """[measured-here: the #80 mechanism, contrasted against a decimator that costs nothing] **The contrast that makes #80's mechanism a mechanism rather than a
     rule about decimators.** The voice already reduces a 2x rate to the output
     rate by keeping the last sub-step, in `LadderFx.process`, and it costs
     nothing there. Surge's Huovilainen does the same and is likewise fine.
@@ -1945,7 +2130,10 @@ def test_the_shipped_ladder_loses_nothing_to_its_last_sub_step_decimation():
     level this suite already accepts from an oscillator -- PolyBLEP is required
     only to reach -28 dB by `test_polyblep_suppresses_aliasing_at_every_register`,
     and the ladder's output is 47 dB below that. The contrast with #80 is the
-    second assertion and is unaffected."""
+    second assertion and is unaffected.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor, test_audio_measure.test_inharmonic_fraction_db_window_is_blackman_harris_not_hann
+    """
     n = int(0.25 * SR)
     inc = ap.base_inc(64)
     f0 = inc * SR / (1 << 24)
@@ -1978,7 +2166,7 @@ def test_the_shipped_ladder_loses_nothing_to_its_last_sub_step_decimation():
 
 
 def test_the_aliasing_estimator_reproduces_a_known_alias_content():
-    """**The estimator's own ground truth, in the regime this section uses it**
+    """[method] **The estimator's own ground truth, in the regime this section uses it**
     -- hundreds of harmonics, not the eleven `test_audio_measure` checks.
 
     Drop-decimating an analytic band-limited sawtooth produces an alias content
@@ -1986,7 +2174,10 @@ def test_the_aliasing_estimator_reproduces_a_known_alias_content():
     guard rule, with no FFT anywhere. `inharmonic_fraction_db` must agree.
     Six estimator bugs were found the day `audio_measure`'s ground truth was
     written and eight-plus measurements have been withdrawn here; nothing in
-    the two tests above is worth reading unless this passes."""
+    the two tests above is worth reading unless this passes.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
     n = int(0.5 * SR)
     for note in (40, 64, 100):
         f0 = ap.base_inc(note) * SR / (1 << 24)
@@ -2013,7 +2204,7 @@ def test_the_aliasing_estimator_reproduces_a_known_alias_content():
 # a different question and answers differently on one column.
 # =============================================================================
 def test_the_noise_distribution_is_inside_the_references_where_it_is_heard():
-    """**docs/minimoog-reference.md N6a; contract open item 18.**
+    """[source-verified: docs/minimoog-reference.md N6a; contract open item 18] **docs/minimoog-reference.md N6a; contract open item 18.**
 
     | source | crest dB | kurtosis |
     |---|---|---|
@@ -2033,7 +2224,10 @@ def test_the_noise_distribution_is_inside_the_references_where_it_is_heard():
 
     The distinction matters because the cheap fix — summing independent LFSR
     slices — costs two or three times the noise generator to buy a
-    distribution the filter already delivers."""
+    distribution the filter already delivers.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
     def shape(x):
         x = np.asarray(x, dtype=np.float64)
         rms = am.rms(x)
@@ -2053,12 +2247,15 @@ def test_the_noise_distribution_is_inside_the_references_where_it_is_heard():
 
 
 def test_the_noise_period_is_not_a_loop_anyone_will_hear():
-    """**docs/minimoog-reference.md N3.** Neither reference repeats inside 8 s,
+    """[source-verified: docs/minimoog-reference.md N3] **docs/minimoog-reference.md N3.** Neither reference repeats inside 8 s,
     which puts a floor of about 19 register bits on any LFSR that wants to be
     ruled out by that measurement. Ours is 31 bits: 2^31 − 1 output bits at 16
     per frame is **46.6 minutes** before the word stream repeats — four
     thousand times the floor, and long enough that a sustained noise bed cannot
-    be heard as a loop."""
+    be heard as a loop.
+
+    Ground truth: test_audio_measure.test_damped_sinusoid_matches_the_coefficients_that_generated_it
+    """
     seconds = (2 ** vf.LFSR_BITS - 1) / vf.NOISE_BITS / SR
     assert vf.LFSR_BITS >= 19, vf.LFSR_BITS
     assert seconds > 8.0 * 100, f"{seconds:.1f} s"
@@ -2066,14 +2263,17 @@ def test_the_noise_period_is_not_a_loop_anyone_will_hear():
 
 
 def test_the_reference_noise_balance_is_reachable_from_the_register():
-    """**docs/minimoog-reference.md N7.** Mini V3 puts its white noise **7.1 dB
+    """[source-verified: docs/minimoog-reference.md N7] **docs/minimoog-reference.md N7.** Mini V3 puts its white noise **7.1 dB
     below its own sawtooth** at the mixer. `NOISE_SHIFT = 2` puts ours 12.0 dB
     below at equal mixer weights — the headroom that keeps pink off the rail.
 
     The 4.9 dB is a patch value, not a hardware limit, and this is the test
     that says so: `WN` is Q0.15 and reaches 2.0, the balance is monotonic in
     it, and weight 1.76 lands on -7.1 dB with an eighth of the register's range
-    still spare."""
+    still spare.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
     n = 1 << 16
     w, _, _ = noise_colours(n)
     saw = vf.OscFx("saw", blep=True).render(n, dsp.phase_inc(dsp.note_hz(45))).astype(np.float64)
@@ -2085,3 +2285,35 @@ def test_the_reference_noise_balance_is_reachable_from_the_register():
     assert abs(lv[1.76] - (-7.1)) < 0.4, f"weight 1.76 gives {lv[1.76]:.1f} dB, Mini V3's balance is -7.1"
     assert lv[1.0] < lv[1.76] < lv[2.0], lv
     assert int(round(1.76 * 32768)) <= (1 << vf.WEIGHT_BITS) - 1, "the balance must fit the register"
+
+
+# =============================================================================
+# meta -- this suite must be able to fail, and must say what it claims
+# (#222, extending #45 item 1's gate beyond `test_808_acceptance.py`)
+# =============================================================================
+def test_meta_every_test_declares_status_and_ground_truth():
+    """[meta] Every test opens with its claim status, and every test that
+    measures something names the ground-truth test that backs the estimator it
+    uses -- and that test must exist. "Verified in a source" and "validated by
+    our own measurement" are different claims, and a suite with 42 (now 68)
+    tests and zero external references is exactly the gap `docs/failure-modes.md`
+    section 2 and issue #45 name.
+
+    A `Ground truth:` line may name `test_audio_measure.<fn>`, for the shared,
+    ground-truthed estimator module every acceptance suite measures through,
+    or `test_moog_acceptance.<fn>` -- a self-reference -- for the two local
+    convenience estimators this file defines and validates itself
+    (`band_power_db`, `octave_slope_db`, pinned by
+    `test_meta_band_power_db_recovers_known_band_powers`) rather than adding
+    to `audio_measure.py`.
+
+    The checking logic is shared with `test_808_acceptance.py`'s own
+    meta-test, in `model/acceptance_meta.py`, so this suite and that one
+    cannot drift into checking the claim differently; this test's only job is
+    to name ITS OWN module and modules. This suite has no NOT_ASSERTED /
+    KNOWN_DEFECTS table of its own (every property it claims is either met or
+    absent from the file), so those escape hatches are not passed here."""
+    import test_moog_acceptance as mod
+    import test_audio_measure as gt
+    from acceptance_meta import assert_ground_truth_gate
+    assert_ground_truth_gate(mod, {gt.__name__: gt, mod.__name__: mod})
