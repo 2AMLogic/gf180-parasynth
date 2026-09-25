@@ -83,7 +83,11 @@ def test_locked_oscillators_are_classified_as_reset_consistent():
 def test_the_synthetic_control_classifies_every_known_case():
     report = d.synthetic_control()
     assert {name: case["ok"] for name, case in report.items()} == {
-        "persistent partial deficit": True, "interference only": True, "genuine amplitude change": True}
+        "persistent partial deficit": True, "interference only": True, "genuine amplitude change": True,
+        "changing fundamental": True}
+    # a changing fundamental moves the ratio, not the partial's absolute level
+    assert report["changing fundamental"]["scored_h5"][1] == pytest.approx(-3., abs=.05)
+    assert report["changing fundamental"]["lives_in_got"] == {"event 2 h5": "fundamental"}
     # interference and the amplitude change look alike in the mixed signal ...
     assert abs(report["interference only"]["scored_h8"][1]) > 10
     assert abs(report["genuine amplitude change"]["scored_h8"][1]) > 10
@@ -147,3 +151,18 @@ def test_committed_report_reproduces_from_frozen_audio_without_rendering():
         assert mine["absolute_dbfs"][f"h{cell['k']}"] == pytest.approx(cell["abs_reference"], abs=1e-9)
     assert max(abs(e) for e in report["reference_phase"]["free_running_error_deg"]) < 2.
     assert abs(report["reference_phase"]["reset_error_deg"][2]) > 90.
+
+
+def test_lives_in_separates_fundamental_from_partial():
+    base = {f"h{k}": -.9 for k in range(1, 13)}          # a common output-gain offset only
+    assert set(d.lives_in(base).values()) == {"within tolerance"}
+    assert d.lives_in({**base, "h7": -6.9})["h7"] == "partial"
+    assert d.lives_in({**{f"h{k}": 0. for k in range(1, 13)}, "h1": 3.})["h5"] == "fundamental"
+    assert d.lives_in({**base, "h1": 2.1, "h5": -4.})["h5"] == "both"
+
+
+def test_injected_defect_ratio_only_attribution_fails_the_changing_fundamental_control(monkeypatch):
+    monkeypatch.setattr(d, "lives_in", lambda errors, tol=d.TOL: {
+        k: ("within tolerance" if abs(v - errors["h1"]) <= tol else "partial")
+        for k, v in errors.items() if k != "h1"})
+    assert not d.synthetic_control()["changing fundamental"]["ok"]

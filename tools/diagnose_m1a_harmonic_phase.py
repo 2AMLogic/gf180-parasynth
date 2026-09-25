@@ -205,6 +205,36 @@ def classify(scored, matched, energy_change_db, tol=TOL, energy_tol=ENERGY_TOL):
     return "unresolved"
 
 
+LABELS = {"within tolerance": "within tolerance",
+          "phase-dependent": "phase-sensitive in a controlled diagnostic",
+          "persistent": "persistent over the observed events",
+          "mixed": "phase-sensitive in a controlled diagnostic, with a persistent remainder",
+          "amplitude change": "a contributor's own amplitude changed",
+          "unresolved": "unresolved"}
+
+
+def lives_in(abs_error_db, tol=TOL):
+    """Where a ratio-to-fundamental error lives, from ABSOLUTE model-minus-
+    reference partial errors {hk: dB} at one instance. The ratio error is
+    exactly abs(hk) - abs(h1); this says which term carries it. A common
+    output-gain offset cancels in the ratio and so reads 'within tolerance'.
+    Returns {hk: 'partial' | 'fundamental' | 'both' | 'within tolerance'}."""
+    fundamental = abs_error_db["h1"]
+    out = {}
+    for key, partial in abs_error_db.items():
+        if key == "h1":
+            continue
+        if abs(partial - fundamental) <= tol:
+            out[key] = "within tolerance"
+        elif abs(fundamental) <= tol:
+            out[key] = "partial"
+        elif abs(partial) <= tol:
+            out[key] = "fundamental"
+        else:
+            out[key] = "both"
+    return out
+
+
 def classify_table(scored, matched, energy):
     """scored/matched: {hk: [e_instance...]}; energy: {hk: dB}."""
     return {k: classify(scored[k], matched.get(k) if matched else None, energy.get(k, 0.))
@@ -213,13 +243,15 @@ def classify_table(scored, matched, energy):
 
 # ------------------------------------------------------- synthetic control
 def synth_phrase(psi_first_deg, drift_by_note, osc2_gain_db=None, filter_db=None,
-                 locked=False, seconds=bass.reference.SECONDS):
+                 locked=False, seconds=bass.reference.SECONDS, osc1_gain_db=None):
     """Two ideal saw oscillators (12 partials each) through a per-partial linear
     gain -- the known answer. Returns (osc1, osc2): the mix is their sum.
 
     locked=True holds oscillator 2 at psi_first exactly twice oscillator 1
     (the model's phase state). osc2_gain_db: {(event_index, j): dB} changes
-    oscillator 2's own partial energy inside that event only."""
+    oscillator 2's own partial energy inside that event only; osc1_gain_db
+    {(event_index, k): dB} does the same for oscillator 1 (k=1 is the
+    fundamental: the changing-fundamental case)."""
     n = round(seconds * SR)
     t = np.arange(n) / SR
     f1 = np.zeros(n)
@@ -239,7 +271,11 @@ def synth_phrase(psi_first_deg, drift_by_note, osc2_gain_db=None, filter_db=None
     filter_db = filter_db or {}
     osc1, osc2 = np.zeros(n), np.zeros(n)
     for k in range(1, KMAX + 1):
-        g = 10 ** (filter_db.get(k, 0.) / 20)
+        g = np.full(n, 10 ** (filter_db.get(k, 0.) / 20))
+        for (i, kk), change in (osc1_gain_db or {}).items():
+            if kk == k:
+                e = EVENTS[i]
+                g[round(e["on_s"] * SR):round((e["on_s"] + e["gate_s"]) * SR)] *= 10 ** (change / 20)
         osc1 += g * .05 / k * np.sin(2 * np.pi * k * ph1)
     for j in range(1, JMAX + 1):
         g = np.full(n, 10 ** (filter_db.get(2 * j, 0.) / 20))
@@ -263,7 +299,10 @@ def _energy_change(ref_phase_rows):
     out = {}
     for k in range(2, KMAX + 1):
         a, b = ref_phase_rows[REPEAT[0]], ref_phase_rows[REPEAT[1]]
-        change = abs(b["osc1_dbfs"][f"h{k}"] - a["osc1_dbfs"][f"h{k}"])
+        # a ratio-to-fundamental moves when EITHER its partial or the
+        # fundamental moves, so the fundamental's own change counts too
+        change = max(abs(b["osc1_dbfs"][f"h{k}"] - a["osc1_dbfs"][f"h{k}"]),
+                     abs(b["osc1_dbfs"]["h1"] - a["osc1_dbfs"]["h1"]))
         if k % 2 == 0:
             change = max(change, abs(b["osc2_dbfs_at_mix_partial"][f"h{k}"]
                                      - a["osc2_dbfs_at_mix_partial"][f"h{k}"]))
@@ -282,7 +321,9 @@ def separate(reference_mix, ref_osc1, ref_osc2, model_mix, model_at_reference_ph
     scored = _repeat_errors(model, reference)
     residual = _repeat_errors(matched, reference)
     energy = _energy_change(phase_rows)
-    return {"classification": classify_table(scored, residual, energy),
+    where = [lives_in({k: m["absolute_dbfs"][k] - r["absolute_dbfs"][k] for k in m["absolute_dbfs"]})
+             for m, r in zip(model, reference)]
+    return {"classification": classify_table(scored, residual, energy), "lives_in": where,
             "scored": scored, "matched_residual": residual, "energy_change_db": energy,
             "phase_rows": phase_rows, "reference": reference, "model": model, "matched": matched}
 
@@ -329,10 +370,26 @@ def synthetic_control():
     cases["genuine amplitude change"] = (
         separate(c1 + c2, c1, c2, m1 + m2, matched_from(tilt)),
         {"h8": "amplitude change", "h5": "within tolerance"})
+    # D: changing fundamental -- oscillator 1's FUNDAMENTAL loses 3 dB in the
+    # repeat; every other partial's absolute level is unchanged, yet every
+    # ratio moves by 3 dB. Must be attributed to the fundamental.
+    f1, f2 = ref(osc1_gain_db={(2, 1): -3.})
+    cases["changing fundamental"] = (
+        separate(f1 + f2, f1, f2, r1 + r2, matched_from(tilt)),
+        {"h5": "amplitude change", "h8": "amplitude change"})
+    where_expected = {"persistent partial deficit": (2, "h5", "partial"),
+                      "interference only": (0, "h8", "partial"),
+                      "genuine amplitude change": (2, "h8", "partial"),
+                      "changing fundamental": (2, "h5", "fundamental")}
     report = {}
     for name, (result, expected) in cases.items():
         got = {k: result["classification"][k] for k in expected}
-        report[name] = {"expected": expected, "got": got, "ok": got == expected,
+        i, key, place = where_expected[name]
+        where = result["lives_in"][i][key]
+        report[name] = {"expected": expected, "got": got, "ok": got == expected and where == place,
+                        "lives_in_expected": {f"event {i} {key}": place},
+                        "lives_in_got": {f"event {i} {key}": where},
+                        "scored_h5": result["scored"]["h5"],
                         "scored_h8": result["scored"]["h8"],
                         "matched_residual_h8": result["matched_residual"]["h8"]}
     return report
@@ -367,6 +424,27 @@ def render(patch, osc2_phase=0, mix=None):
     voice.oscs[1].phase = int(osc2_phase) % CYCLE
     voice._os2_phase[1] = int(osc2_phase) % CYCLE
     return voice.play(regs, host.writes(events, regs), n)
+
+
+def render_with_mixer_peak(patch, osc2_phase=0):
+    """render(), also returning the largest |mixer sum| (Q1.15 units) -- the
+    level the ladder's tanh input stage sees. Diagnostic spy only: the mixer
+    function is wrapped for the call and restored."""
+    vf, peaks = lead.vf, []
+    real = vf.mix_fx
+
+    def spy(signals, weights, q=15):
+        acc = np.zeros_like(signals[0], dtype=np.int64)
+        for sig, w in zip(signals, weights):
+            acc += sig * int(w)
+        peaks.append(int(np.max(np.abs(acc >> q))))
+        return real(signals, weights, q)
+    vf.mix_fx = spy
+    try:
+        pcm = render(patch, osc2_phase)
+    finally:
+        vf.mix_fx = real
+    return pcm, max(peaks)
 
 
 def pcm_sha(pcm):
@@ -405,7 +483,40 @@ def reference_audio():
     return manifest, reference.astype(np.float64), controls
 
 
+def annotate(report):
+    """Everything derived from measured numbers already in the report: the
+    absolute-versus-ratio attribution, the repeat-pair classification and the
+    known-answer control. Needs no render, so `--reanalyse` can refresh it."""
+    for i, e in enumerate(EVENTS):
+        cells = [c for c in report["table"] if c["on_s"] == e["on_s"]]
+        where = lives_in({f"h{c['k']}": c["abs_model"] - c["abs_reference"] for c in cells})
+        for c in cells:
+            c["lives_in"] = where.get(f"h{c['k']}", "fundamental" if c["k"] == 1 else None)
+    pair = report["repeat_pair"]
+    pair["energy_change_db"] = _energy_change(report["reference_phase"]["rows"])
+    pair["classification"] = classify_table(pair["scored"], pair["matched_residual"], pair["energy_change_db"])
+    pair["label"] = {k: LABELS[v] for k, v in pair["classification"].items()}
+    report["synthetic_control"] = synthetic_control()
+    report["conventions"] = {
+        "level": "20*log10 of the Blackman-Harris coherent-projection AMPLITUDE of one partial "
+                 "(windowed_tone_amplitude, the scorer's primitive); a full-scale sine reads 0 dBFS",
+        "ratio": "the scorer's harmonic_signature ratio, partial amplitude over fundamental amplitude, dB",
+        "power_mean": "sweep averages are means of amplitude squared, reported on the same dB scale",
+        "phase": "psi = oscillator-2 phase minus twice oscillator-1 phase, degrees of oscillator 2; "
+                 "theta_j = j*psi at mix partial 2j; referenced to the window centre",
+        "window": "on+0.30 s to on+0.55 s, the scorer's window; history: event 0 from reset, event 1 "
+                  "MIDI 43 after MIDI 36 released, event 2 MIDI 36 after MIDI 43 released 1.4 s earlier"}
+    return report
+
+
 def main():
+    if "--reanalyse" in sys.argv:
+        report = annotate(json.loads((OUT / "report.json").read_text()))
+        report["reanalysis_source_sha256"] = bass.sha(ROOT / "tools/diagnose_m1a_harmonic_phase.py")
+        (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
+        ok = all(v["ok"] for v in report["synthetic_control"].values())
+        print(json.dumps({"classification": report["repeat_pair"]["classification"], "control_ok": ok}, indent=1))
+        sys.exit(0 if ok else 1)
     manifest, ref, controls = reference_audio()     # float32 full scale 1.0
     n_ref = len(ref)
     record = json.loads(RECORD.read_text())
@@ -470,9 +581,13 @@ def main():
     sweep = []
     for s in range(SWEEP):
         p = s * CYCLE // SWEEP
-        pcm = pcm_of(f"sweep {s}", selected, p)
+        pcm, peak = render_with_mixer_peak(selected, p)
+        pcm = pcm[:n_ref]
+        renders[f"sweep {s}"] = {"osc2_phase": p, "detune2": selected["detune"][1],
+                                 "mix": list(selected["mix"]), "pcm_sha256": pcm_sha(pcm)}
         sweep.append({"osc2_phase": p, "psi_deg": [model_psi(selected, p, centre_s(e)) for e in EVENTS],
-                      "events": [partials(pcm, e) for e in EVENTS]})
+                      "mixer_peak_q15": peak,
+                      "events": [partials(pcm.astype(np.float64) / 32768, e) for e in EVENTS]})
 
     reference = [partials(ref, e) for e in EVENTS]
     model_rows = [partials(model, e) for e in EVENTS]
@@ -539,9 +654,15 @@ def main():
         "repeat_pair": {"scored": scored, "matched_residual": residual,
                         "energy_change_db": energy, "classification": classes},
         "synthetic_control": control,
+        "model_phase_sweep": [{"osc2_phase": row["osc2_phase"], "psi_deg": row["psi_deg"],
+                               "mixer_peak_q15": row["mixer_peak_q15"],
+                               "ratio_db": [ev["ratio_db"] for ev in row["events"]],
+                               "absolute_dbfs": [ev["absolute_dbfs"] for ev in row["events"]]}
+                              for row in sweep],
         "scope": "diagnosis only; no patch, engine, reference, estimator or scorer change. "
                  "Renders are diagnostic (oscillator-2 starting phase only) and each is hash-recorded.",
     }
+    report = annotate(report)
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "report.json").write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps({"classification": classes, "control_ok": {k: v["ok"] for k, v in control.items()},
