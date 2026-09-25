@@ -94,6 +94,11 @@ STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2"
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
+F1CAL = "surge-type2-clean-v1"
+#: plan074 D negative control: the image names the calibration, the register
+#: port receives the LEGACY gain/ogain words. The model still renders the
+#: requested image, so the bench must mismatch. Set by --f1cal-fault.
+F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
 
@@ -380,6 +385,28 @@ def scenarios(which: str, only=None) -> list:
                 on = int(start * SR); off = min(n - 1, on + max(1, int(g * SR)))
                 if on < n: events.append((on, "on", note)); events.append((off, "off", note))
             add("audition", f"reference sequence {name} through KeyHost, first 0.8 s", regs, host.writes(events, regs), n)
+
+    # -- f1cal: plan074 D. OPT-IN ONLY (it must be named in --only), so the
+    # existing quick/full sets and their recorded frame counts do not move.
+    # The calibrated operating point's words at the F1 cutoffs (res 0, drive
+    # 1.0), then at resonance 1.0 and 1.1 (past self-oscillation onset) at
+    # 1 kHz: the resonant/self-oscillating path the reciprocal ogain feeds.
+    # REVSAW, not saw: with --filter2x, three 2x SAW oscillators plus the 2x
+    # filter do not finish frame 0 inside this bench's budget (go at cycle 48
+    # of 256; synth_top pulses go at cycle 8) -- "datapath still busy at the
+    # end of frame 0", measured with the legacy words too, so it is not the
+    # calibration. The ladder sees a sawtooth either way.
+    if only is not None and "f1cal" in only:
+        n = int((0.03 if q else 0.1) * SR)
+        for i, (cut, res) in enumerate(((250, 0.0), (1000, 0.0), (4000, 0.0),
+                                        (1000, 1.0), (1000, 1.1))):
+            regs = v.patch_regs(waves=("revsaw", "revsaw", "revsaw"), detune=(0.0, 0.0, 0.0),
+                                mix=(1.0, 0.0, 0.0), cutoff=(cut, cut), q=res, drive=1.0,
+                                track=0.0, amp=(0.001, 0.25, 1.0, 0.05),
+                                filter_calibration=F1CAL)
+            writes = _note_writes(45, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+            add("f1cal", f"{F1CAL} at {cut} Hz, res {res}, drive 1.0 "
+                         f"(gain {regs['gain']}, ogain {regs['ogain']})", regs, writes, n)
     return S
 
 
@@ -445,7 +472,12 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
         phases0 = [o.phase for o in v.oscs]
         y = v.play(regs, writes, n)                     # the voice persists across scenarios
         t = v.trace
-        all_writes += patch_to_writes(regs, f0) + model_writes_to_regs(writes, f0)
+        pw = patch_to_writes(regs, f0)
+        if F1CAL_FAULT == "LEGACY_WORDS" and regs.get("filter_calibration"):
+            _, lg, log = vf.ladder_regs(regs["res"], regs["drive"])
+            pw = [(f, fl, ad, lg if ad == A["GAIN"] else log if ad == A["OGAIN"] else d)
+                  for f, fl, ad, d in pw]
+        all_writes += pw + model_writes_to_regs(writes, f0)
         er = [[vf.recip_of(int(i)) for i in t["incs"][k]] for k in range(3)]
         vol = int(regs["vol"])
         for i in range(n):
@@ -581,7 +613,12 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
+    ap.add_argument("--f1cal-fault", default=None, choices=("LEGACY_WORDS",),
+                    help="with --only f1cal: deliver the legacy gain/ogain words while the "
+                         "image names the calibration; must mismatch (use --expect-fail)")
     a = ap.parse_args(argv)
+    global F1CAL_FAULT
+    F1CAL_FAULT = a.f1cal_fault
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
     if "VOICE_OSC_2X" in a.define:
         ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")

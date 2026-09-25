@@ -1,0 +1,8 @@
+res 0.00 mix 1.00 | legacy g/og 170394/25206 peak  16057 rms   -9.49 rail 0/0 | cal g/og 42598/100825 peak  23784 rms   -7.36 rail 0/0 | d level  +2.13 dB  pass
+res 0.50 mix 1.00 | legacy g/og 170394/50412 peak  19742 rms  -10.24 rail 0/0 | cal g/og 42598/201649 peak  30862 rms   -9.30 rail 0/0 | d level  +0.93 dB  pass
+res 1.00 mix 1.00 | legacy g/og 170394/75618 peak  23164 rms  -10.19 rail 0/0 | cal g/og 42598/302474 peak  45867 rms   -5.65 rail 0/0 | d level  +4.54 dB  pass
+res 1.10 mix 1.00 | legacy g/og 170394/80660 peak  23332 rms  -10.00 rail 0/0 | cal g/og 42598/322639 peak  52609 rms   -3.72 rail 0/0 | d level  +6.28 dB  pass
+res 1.10 mix 0.01 | legacy g/og 170394/80660 peak  23332 rms  -10.00 rail 0/0 | cal g/og 42598/322639 peak  52609 rms   -3.72 rail 0/0 | d level  +6.28 dB  pass
+wrote docs/scorecard/f1-calibrated/headroom.json
+SCREEN PASSED  no new rail samples under the calibration
+exit=0
