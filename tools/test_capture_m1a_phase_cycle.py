@@ -84,3 +84,20 @@ def test_expected_settings_follow_the_frozen_record():
     assert c.expected_settings(manifest, "osc1_open")["osc2_level"][2] == 0.
     both = c.expected_settings(manifest, "both_open")
     assert both["filter_cutoff"][2] == 1. and both["osc2_level"][2] == .3 and both["filter_contour"][2] == 0.
+
+
+def test_slow_psi_cycle_swell_is_not_a_click_but_clicks_on_it_are():
+    # the full patch's high band swells ~2 dB once per 3.8 s psi cycle; the
+    # unmodified detector flagged exactly that (wrong-then-right)
+    x = saw(F36, partials=16)           # a full patch: the 1 kHz filter leaves ~16 partials
+    t = np.arange(len(x)) / SR
+    swell = 1 + .25 * np.exp(-((((t - 1.9) % 3.8) - 1.9) / .2) ** 2)
+    ev = c.check_take(x * swell, SR, ON, "full")
+    assert ev["transient_events"] == 0
+    unmodified = c.ri.transient_report((x * swell)[round(1.1 * SR):round(12.1 * SR)], SR,
+                                       skip_s=0., block_ms=c.TRANSIENT_BLOCK_MS)
+    assert unmodified["n_events"] >= 2          # the defect the detrend removes
+    y = x * swell
+    y[round(4.0 * SR):round(4.0 * SR) + 12] += .15 * np.random.default_rng(2).standard_normal(12)
+    with pytest.raises(c.Refused, match="transient"):
+        c.check_take(y, SR, ON, "full")
