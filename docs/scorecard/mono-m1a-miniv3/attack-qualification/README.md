@@ -191,7 +191,10 @@ above the domain, and in the suite, readings like them (explained 0.94–0.97,
   normalization misstates the carrier's true power wherever they overlap, and
   under a moving filter that error moves too. Correct it when this generator
   is next revised, then requalify any claim that rests on the affected
-  spectral cases. It does not by itself reopen this investigation.
+  spectral cases. It does not by itself reopen this investigation. (The note
+  lives here, not in the generator's source: the scorer binds the suite to
+  that file's hash and correctly refuses the qualification as stale if even
+  a comment changes.)
 - The attack-sweep points (`../attack-sweep/`) were fitted by the v1/v2
   estimator and are still classified under the frozen v2 rule. This rescore
   supersedes them for the 10, 4 and 5 ms settings.
