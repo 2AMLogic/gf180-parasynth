@@ -440,7 +440,8 @@ def main(argv=None) -> int:
         print(f"wrote {p}")
     if not all_repro:
         print("FAIL     today's legacy curves do not reproduce the committed F1 records "
-              "under the 531aa8a estimator: the curves moved, so old-vs-new is confounded")
+              "under the 531aa8a estimator: the old metrics no longer reproduce, so "
+              "old-vs-new is confounded")
         return 1
     return 0
 
