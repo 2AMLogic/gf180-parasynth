@@ -403,7 +403,24 @@ def main(argv=None) -> int:
     ap.add_argument("--json", default=None)
     ap.add_argument("--inject", default="", choices=INJECTS)
     ap.add_argument("--workers", type=int, default=9)
+    ap.add_argument("--expect-refused", default=None, metavar="REASON",
+                    help="control mode: exit 0 only if the run REFUSES with REASON in its "
+                         "message; exit 1 if it measures or refuses for another reason")
     a = ap.parse_args(argv)
+    if a.expect_refused is not None:
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = main([x for x in (argv if argv is not None else sys.argv[1:])
+                         if x not in ("--expect-refused", a.expect_refused)])
+        out = buf.getvalue()
+        print(out, end="")
+        refusal = [ln for ln in out.splitlines() if ln.startswith("REFUSED")]
+        if code == 2 and refusal and a.expect_refused in refusal[-1]:
+            print(f"CONTROL OK  refused for the stated reason: {a.expect_refused!r}")
+            return 0
+        print(f"CONTROL FAILED  exit {code}; wanted a refusal containing {a.expect_refused!r}")
+        return 1
     try:
         base_vpu_asserted()
         manifest = cap.load_manifest()
