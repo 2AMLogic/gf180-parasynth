@@ -1,0 +1,9 @@
+==============================================================================
+PASS           259.2s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject CONSTRUCTOR_ONLY --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-constructor-only.log 2>&1
+PASS           258.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject WORDS_NOT_ENTERING --expect-refused 'not the candidate' > docs/scorecard/f1-level/control-words-not-entering.log 2>&1
+PASS           259.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-clean-run-is-not-a-refusal.log 2>&1; test $? -eq 1
+PASS            88.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_f1_level_scaling.py tools/test_f1_selected_path.py -q > docs/scorecard/f1-level/tests.log 2>&1
+PASS             3.5s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/f1_level_capture.py > docs/scorecard/f1-level/captures-verify.log 2>&1
+PASS             2.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py > docs/scorecard/f1-level/refprofile-verify.log 2>&1
+==============================================================================
+6/6 passed

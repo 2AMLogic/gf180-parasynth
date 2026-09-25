@@ -1,0 +1,2644 @@
+{
+ "what": "F1 selected path: compensated input-scaling candidates vs matched-level Surge Type 2 captures; rule in selection-rule.md",
+ "source_commit": "eb74ea7",
+ "inputs": {
+  "tools/probes/f1_level_scaling.py": "sha256:8780ecc583b518d8",
+  "tools/probes/f1_selected_path.py": "sha256:8c310f9941f9f515",
+  "tools/f1_level_capture.py": "sha256:cb22513b28490c77",
+  "tools/run_case.py": "sha256:77739a9434f2605e",
+  "model/audio_measure.py": "sha256:cd27a0a67dfde218",
+  "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
+  "model/fixed.py": "sha256:f5687bec088f7fd9",
+  "model/filter_rate_chain.py": "sha256:134b958dec5308fd",
+  "model/reference_rigs.py": "sha256:99b1c862857a34a8",
+  "docs/scorecard/f1-level/selection-rule.md": "sha256:886267ef21e74b3f",
+  "docs/scorecard/f1-level/captures/manifest.json": "sha256:9a9369370f19bfe0",
+  "docs/scorecard/f1-level/captures/audio.zip": "sha256:b8527942b6bebcb3"
+ },
+ "identity": {
+  "ladder_class": "RateConvertedLadder",
+  "factor": 2,
+  "causal": true,
+  "preserve_headroom": true,
+  "latency_frames": 20,
+  "out_bits": 19,
+  "ladder_cfg": {
+   "state_bits": 24,
+   "state_q": 20,
+   "tanh_entries": 16,
+   "interp": true,
+   "out_bits": 19,
+   "oversample": 2
+  },
+  "g_rom_bits": 7,
+  "k_rom_bits": 5,
+  "g_exact": false,
+  "k_comp": true,
+  "problems": []
+ },
+ "exact_match": {
+  "frames": 12000,
+  "cutoff_hz_range": [
+   404,
+   4153
+  ],
+  "g_mismatches": 0,
+  "k_mismatches": 0,
+  "ladder_mismatches": 0,
+  "first_mismatch": null,
+  "ladder_rms_q15": 11866.9,
+  "ok": true
+ },
+ "base_vpu": 0.13,
+ "candidates": {
+  "baseline": 1.0,
+  "half": 0.5,
+  "quarter": 0.25
+ },
+ "fixed": {
+  "res": 0.0,
+  "drive": 1.0,
+  "LADDER_CFG": {
+   "state_bits": 24,
+   "state_q": 20,
+   "tanh_entries": 16,
+   "interp": true,
+   "out_bits": 19
+  },
+  "CUT_TRIM": 1.03,
+  "GROM_BITS": 7,
+  "KROM_BITS": 5,
+  "rate": "RateConvertedLadder 2x causal"
+ },
+ "surge": {
+  "a0.2500": {
+   "open_noise": {
+    "noise_db_re_stimulus_median": -90.91,
+    "noise_db_re_stimulus_worst": -78.9,
+    "thd_db_median": -116.73,
+    "thd_db_worst": -104.62,
+    "n_tones": 26
+   },
+   "cases": {
+    "F1A": {
+     "corner_hz": 117.6344,
+     "rolloff_db_oct": -18.6879,
+     "lowband_db": -0.9073,
+     "open_plateau_db": -9.2894,
+     "curve_db": [
+      -9.9895,
+      -10.0273,
+      -10.1967,
+      -10.5076,
+      -11.0005,
+      -11.731,
+      -12.7434,
+      -14.1359,
+      -15.9681,
+      -18.3312,
+      -21.2747,
+      -24.7959,
+      -28.865,
+      -33.4691,
+      -38.473,
+      -43.8595,
+      -49.5228,
+      -55.386,
+      -61.403,
+      -67.5257,
+      -73.7333,
+      -79.9966,
+      -86.3037,
+      -92.6377,
+      -98.9929,
+      -105.3801,
+      -111.7579,
+      -118.0887,
+      -124.5274,
+      -130.9698,
+      -137.2461,
+      -143.5238
+     ]
+    },
+    "F1B": {
+     "corner_hz": 450.5278,
+     "rolloff_db_oct": -17.9191,
+     "lowband_db": -0.2556,
+     "open_plateau_db": -9.135,
+     "curve_db": [
+      -9.576,
+      -9.4324,
+      -9.3489,
+      -9.2938,
+      -9.2793,
+      -9.2903,
+      -9.3477,
+      -9.4395,
+      -9.5906,
+      -9.8098,
+      -10.1386,
+      -10.5999,
+      -11.2254,
+      -12.1202,
+      -13.3334,
+      -14.9478,
+      -17.048,
+      -19.6905,
+      -22.9199,
+      -26.7225,
+      -31.0675,
+      -35.8862,
+      -41.0987,
+      -46.6263,
+      -52.3971,
+      -58.3443,
+      -64.4281,
+      -70.6062,
+      -76.8546,
+      -83.156,
+      -89.4964,
+      -95.8715
+     ]
+    },
+    "F1C": {
+     "corner_hz": 1718.5771,
+     "rolloff_db_oct": -16.4113,
+     "lowband_db": -0.1364,
+     "open_plateau_db": -9.0676,
+     "curve_db": [
+      -9.5497,
+      -9.3946,
+      -9.2933,
+      -9.2143,
+      -9.1647,
+      -9.124,
+      -9.1101,
+      -9.0963,
+      -9.0862,
+      -9.0981,
+      -9.1326,
+      -9.1576,
+      -9.1936,
+      -9.2642,
+      -9.3454,
+      -9.4877,
+      -9.6808,
+      -9.9642,
+      -10.3577,
+      -10.9269,
+      -11.7016,
+      -12.7685,
+      -14.205,
+      -16.0922,
+      -18.4956,
+      -21.4771,
+      -25.04,
+      -29.1678,
+      -33.8052,
+      -38.876,
+      -44.3034,
+      -50.0103
+     ]
+    }
+   }
+  },
+  "a0.1250": {
+   "open_noise": {
+    "noise_db_re_stimulus_median": -90.91,
+    "noise_db_re_stimulus_worst": -78.9,
+    "thd_db_median": -124.9,
+    "thd_db_worst": -104.62,
+    "n_tones": 26
+   },
+   "cases": {
+    "F1A": {
+     "corner_hz": 117.6349,
+     "rolloff_db_oct": -18.6879,
+     "lowband_db": -0.9073,
+     "open_plateau_db": -9.2894,
+     "curve_db": [
+      -9.9895,
+      -10.0273,
+      -10.1967,
+      -10.5076,
+      -11.0005,
+      -11.7309,
+      -12.7434,
+      -14.1358,
+      -15.9681,
+      -18.3312,
+      -21.2747,
+      -24.7959,
+      -28.865,
+      -33.4691,
+      -38.4729,
+      -43.8595,
+      -49.5227,
+      -55.3859,
+      -61.403,
+      -67.5256,
+      -73.7333,
+      -79.9965,
+      -86.3037,
+      -92.6377,
+      -98.9929,
+      -105.3801,
+      -111.7579,
+      -118.0887,
+      -124.5274,
+      -130.9698,
+      -137.2461,
+      -143.5238
+     ]
+    },
+    "F1B": {
+     "corner_hz": 450.5291,
+     "rolloff_db_oct": -17.9191,
+     "lowband_db": -0.2556,
+     "open_plateau_db": -9.135,
+     "curve_db": [
+      -9.576,
+      -9.4324,
+      -9.3489,
+      -9.2938,
+      -9.2793,
+      -9.2903,
+      -9.3477,
+      -9.4395,
+      -9.5906,
+      -9.8098,
+      -10.1386,
+      -10.5999,
+      -11.2254,
+      -12.1202,
+      -13.3334,
+      -14.9477,
+      -17.048,
+      -19.6905,
+      -22.9199,
+      -26.7224,
+      -31.0674,
+      -35.8861,
+      -41.0986,
+      -46.6262,
+      -52.3971,
+      -58.3443,
+      -64.4281,
+      -70.6062,
+      -76.8545,
+      -83.1559,
+      -89.4964,
+      -95.8715
+     ]
+    },
+    "F1C": {
+     "corner_hz": 1718.583,
+     "rolloff_db_oct": -16.4113,
+     "lowband_db": -0.1364,
+     "open_plateau_db": -9.0676,
+     "curve_db": [
+      -9.5497,
+      -9.3946,
+      -9.2933,
+      -9.2143,
+      -9.1647,
+      -9.124,
+      -9.1101,
+      -9.0963,
+      -9.0862,
+      -9.0981,
+      -9.1326,
+      -9.1576,
+      -9.1936,
+      -9.2642,
+      -9.3454,
+      -9.4877,
+      -9.6808,
+      -9.9642,
+      -10.3577,
+      -10.9269,
+      -11.7016,
+      -12.7685,
+      -14.205,
+      -16.0922,
+      -18.4956,
+      -21.4771,
+      -25.04,
+      -29.1678,
+      -33.8052,
+      -38.876,
+      -44.3034,
+      -50.0103
+     ]
+    }
+   }
+  },
+  "a0.0625": {
+   "open_noise": {
+    "noise_db_re_stimulus_median": -90.91,
+    "noise_db_re_stimulus_worst": -78.9,
+    "thd_db_median": -125.09,
+    "thd_db_worst": -104.62,
+    "n_tones": 26
+   },
+   "cases": {
+    "F1A": {
+     "corner_hz": 117.635,
+     "rolloff_db_oct": -18.6879,
+     "lowband_db": -0.9073,
+     "open_plateau_db": -9.2894,
+     "curve_db": [
+      -9.9895,
+      -10.0273,
+      -10.1967,
+      -10.5076,
+      -11.0005,
+      -11.7309,
+      -12.7434,
+      -14.1358,
+      -15.9681,
+      -18.3312,
+      -21.2747,
+      -24.7959,
+      -28.865,
+      -33.4691,
+      -38.4729,
+      -43.8595,
+      -49.5227,
+      -55.3859,
+      -61.403,
+      -67.5256,
+      -73.7333,
+      -79.9965,
+      -86.3037,
+      -92.6377,
+      -98.9929,
+      -105.3801,
+      -111.7579,
+      -118.0887,
+      -124.5274,
+      -130.9698,
+      -137.2461,
+      -143.5238
+     ]
+    },
+    "F1B": {
+     "corner_hz": 450.5295,
+     "rolloff_db_oct": -17.9191,
+     "lowband_db": -0.2556,
+     "open_plateau_db": -9.135,
+     "curve_db": [
+      -9.576,
+      -9.4324,
+      -9.3489,
+      -9.2938,
+      -9.2793,
+      -9.2903,
+      -9.3477,
+      -9.4395,
+      -9.5906,
+      -9.8098,
+      -10.1386,
+      -10.5999,
+      -11.2254,
+      -12.1202,
+      -13.3333,
+      -14.9477,
+      -17.048,
+      -19.6905,
+      -22.9199,
+      -26.7224,
+      -31.0674,
+      -35.8861,
+      -41.0986,
+      -46.6262,
+      -52.3971,
+      -58.3443,
+      -64.428,
+      -70.6062,
+      -76.8545,
+      -83.1559,
+      -89.4964,
+      -95.8715
+     ]
+    },
+    "F1C": {
+     "corner_hz": 1718.5846,
+     "rolloff_db_oct": -16.4113,
+     "lowband_db": -0.1364,
+     "open_plateau_db": -9.0676,
+     "curve_db": [
+      -9.5497,
+      -9.3946,
+      -9.2933,
+      -9.2143,
+      -9.1647,
+      -9.124,
+      -9.1101,
+      -9.0963,
+      -9.0862,
+      -9.0981,
+      -9.1326,
+      -9.1576,
+      -9.1936,
+      -9.2642,
+      -9.3454,
+      -9.4877,
+      -9.6808,
+      -9.9642,
+      -10.3577,
+      -10.9269,
+      -11.7016,
+      -12.7685,
+      -14.205,
+      -16.0922,
+      -18.4956,
+      -21.4771,
+      -25.04,
+      -29.1678,
+      -33.8052,
+      -38.876,
+      -44.3034,
+      -50.0103
+     ]
+    }
+   }
+  }
+ },
+ "surge_nominal_vs_frozen": {
+  "cut250": {
+   "frozen_clip": "surge-type2/lp-cut250-res0.00",
+   "max_abs_curve_diff_db": 0.0
+  },
+  "cut1000": {
+   "frozen_clip": "surge-type2/lp-cut1000-res0.00",
+   "max_abs_curve_diff_db": 1.342660205239099e-08
+  },
+  "cut4000": {
+   "frozen_clip": "surge-type2/lp-cut4000-res0.00",
+   "max_abs_curve_diff_db": 1.2299672391691274e-10
+  },
+  "open20k": {
+   "frozen_clip": "surge-type2/lp-open20k-res0.00",
+   "max_abs_curve_diff_db": 0.0
+  }
+ },
+ "table": {
+  "baseline": {
+   "s": 1.0,
+   "levels": {
+    "a0.2500": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -52.04,
+       "noise_db_re_stimulus_worst": -44.41,
+       "thd_db_median": -34.86,
+       "thd_db_worst": -21.95,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 9313,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 170394,
+       "ogain": 25206,
+       "entering": [
+        [
+         170394,
+         25206
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 97.8751,
+        "rolloff_db_oct": -16.8753,
+        "lowband_db": -1.2789
+       },
+       "surge": {
+        "corner_hz": 117.6344,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 97.8751,
+         "reference": 117.6344,
+         "error": -19.7593,
+         "tolerance": 11.7634,
+         "valid": true,
+         "within": false,
+         "error_pct": -16.8
+        },
+        "lowband_db": {
+         "value": -1.2789,
+         "reference": -0.9073,
+         "error": -0.3716,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.8753,
+         "reference": -18.6879,
+         "error": 1.8126,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": false
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 376.4053,
+        "rolloff_db_oct": -15.9762,
+        "lowband_db": -0.2315
+       },
+       "surge": {
+        "corner_hz": 450.5278,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 376.4053,
+         "reference": 450.5278,
+         "error": -74.1225,
+         "tolerance": 45.0528,
+         "valid": true,
+         "within": false,
+         "error_pct": -16.45
+        },
+        "lowband_db": {
+         "value": -0.2315,
+         "reference": -0.2556,
+         "error": 0.0241,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -15.9762,
+         "reference": -17.9191,
+         "error": 1.9429,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": false
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1437.0459,
+        "rolloff_db_oct": -15.1079,
+        "lowband_db": -0.0696
+       },
+       "surge": {
+        "corner_hz": 1718.5771,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1437.0459,
+         "reference": 1718.5771,
+         "error": -281.5312,
+         "tolerance": 171.8577,
+         "valid": true,
+         "within": false,
+         "error_pct": -16.38
+        },
+        "lowband_db": {
+         "value": -0.0696,
+         "reference": -0.1364,
+         "error": 0.0668,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -15.1079,
+         "reference": -16.4113,
+         "error": 1.3034,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.1250": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -60.7,
+       "noise_db_re_stimulus_worst": -53.78,
+       "thd_db_median": -44.8,
+       "thd_db_worst": -31.58,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 4657,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 170394,
+       "ogain": 25206,
+       "entering": [
+        [
+         170394,
+         25206
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 106.4513,
+        "rolloff_db_oct": -17.0329,
+        "lowband_db": -0.9854
+       },
+       "surge": {
+        "corner_hz": 117.6349,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 106.4513,
+         "reference": 117.6349,
+         "error": -11.1836,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -9.51
+        },
+        "lowband_db": {
+         "value": -0.9854,
+         "reference": -0.9073,
+         "error": -0.0781,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.0329,
+         "reference": -18.6879,
+         "error": 1.655,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": false
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 419.1918,
+        "rolloff_db_oct": -17.8914,
+        "lowband_db": -0.1669
+       },
+       "surge": {
+        "corner_hz": 450.5291,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 419.1918,
+         "reference": 450.5291,
+         "error": -31.3373,
+         "tolerance": 45.0529,
+         "valid": true,
+         "within": true,
+         "error_pct": -6.96
+        },
+        "lowband_db": {
+         "value": -0.1669,
+         "reference": -0.2556,
+         "error": 0.0887,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.8914,
+         "reference": -17.9191,
+         "error": 0.0277,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1616.8396,
+        "rolloff_db_oct": -16.2649,
+        "lowband_db": -0.0476
+       },
+       "surge": {
+        "corner_hz": 1718.583,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1616.8396,
+         "reference": 1718.583,
+         "error": -101.7434,
+         "tolerance": 171.8583,
+         "valid": true,
+         "within": true,
+         "error_pct": -5.92
+        },
+        "lowband_db": {
+         "value": -0.0476,
+         "reference": -0.1364,
+         "error": 0.0888,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2649,
+         "reference": -16.4113,
+         "error": 0.1464,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.0625": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -71.1,
+       "noise_db_re_stimulus_worst": -70.86,
+       "thd_db_median": -86.81,
+       "thd_db_worst": -75.97,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 2329,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 170394,
+       "ogain": 25206,
+       "entering": [
+        [
+         170394,
+         25206
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6582,
+        "rolloff_db_oct": -17.7993,
+        "lowband_db": -0.8966
+       },
+       "surge": {
+        "corner_hz": 117.635,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6582,
+         "reference": 117.635,
+         "error": -8.9768,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.63
+        },
+        "lowband_db": {
+         "value": -0.8966,
+         "reference": -0.9073,
+         "error": 0.0107,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.7993,
+         "reference": -18.6879,
+         "error": 0.8886,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.7204,
+        "rolloff_db_oct": -17.9061,
+        "lowband_db": -0.1489
+       },
+       "surge": {
+        "corner_hz": 450.5295,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.7204,
+         "reference": 450.5295,
+         "error": -18.8091,
+         "tolerance": 45.053,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.17
+        },
+        "lowband_db": {
+         "value": -0.1489,
+         "reference": -0.2556,
+         "error": 0.1067,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.9061,
+         "reference": -17.9191,
+         "error": 0.013,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1656.1159,
+        "rolloff_db_oct": -16.2789,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.5846,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1656.1159,
+         "reference": 1718.5846,
+         "error": -62.4687,
+         "tolerance": 171.8585,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.63
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2789,
+         "reference": -16.4113,
+         "error": 0.1324,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 170394,
+        "ogain": 25206,
+        "entering": [
+         [
+          170394,
+          25206
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    }
+   }
+  },
+  "half": {
+   "s": 0.5,
+   "levels": {
+    "a0.2500": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -60.75,
+       "noise_db_re_stimulus_worst": -53.81,
+       "thd_db_median": -44.8,
+       "thd_db_worst": -31.58,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 9313,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 85197,
+       "ogain": 50412,
+       "entering": [
+        [
+         85197,
+         50412
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 106.451,
+        "rolloff_db_oct": -17.0313,
+        "lowband_db": -0.9854
+       },
+       "surge": {
+        "corner_hz": 117.6344,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 106.451,
+         "reference": 117.6344,
+         "error": -11.1834,
+         "tolerance": 11.7634,
+         "valid": true,
+         "within": true,
+         "error_pct": -9.51
+        },
+        "lowband_db": {
+         "value": -0.9854,
+         "reference": -0.9073,
+         "error": -0.0781,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.0313,
+         "reference": -18.6879,
+         "error": 1.6566,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": false
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 419.195,
+        "rolloff_db_oct": -17.8889,
+        "lowband_db": -0.1669
+       },
+       "surge": {
+        "corner_hz": 450.5278,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 419.195,
+         "reference": 450.5278,
+         "error": -31.3328,
+         "tolerance": 45.0528,
+         "valid": true,
+         "within": true,
+         "error_pct": -6.95
+        },
+        "lowband_db": {
+         "value": -0.1669,
+         "reference": -0.2556,
+         "error": 0.0887,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.8889,
+         "reference": -17.9191,
+         "error": 0.0302,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1616.8553,
+        "rolloff_db_oct": -16.2652,
+        "lowband_db": -0.0475
+       },
+       "surge": {
+        "corner_hz": 1718.5771,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1616.8553,
+         "reference": 1718.5771,
+         "error": -101.7218,
+         "tolerance": 171.8577,
+         "valid": true,
+         "within": true,
+         "error_pct": -5.92
+        },
+        "lowband_db": {
+         "value": -0.0475,
+         "reference": -0.1364,
+         "error": 0.0889,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2652,
+         "reference": -16.4113,
+         "error": 0.1461,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.1250": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -75.13,
+       "noise_db_re_stimulus_worst": -74.8,
+       "thd_db_median": -87.97,
+       "thd_db_worst": -76.44,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 4657,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 85197,
+       "ogain": 50412,
+       "entering": [
+        [
+         85197,
+         50412
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6636,
+        "rolloff_db_oct": -17.7985,
+        "lowband_db": -0.8966
+       },
+       "surge": {
+        "corner_hz": 117.6349,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6636,
+         "reference": 117.6349,
+         "error": -8.9713,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.63
+        },
+        "lowband_db": {
+         "value": -0.8966,
+         "reference": -0.9073,
+         "error": 0.0107,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.7985,
+         "reference": -18.6879,
+         "error": 0.8894,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.7317,
+        "rolloff_db_oct": -17.8976,
+        "lowband_db": -0.1489
+       },
+       "surge": {
+        "corner_hz": 450.5291,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.7317,
+         "reference": 450.5291,
+         "error": -18.7974,
+         "tolerance": 45.0529,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.17
+        },
+        "lowband_db": {
+         "value": -0.1489,
+         "reference": -0.2556,
+         "error": 0.1067,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.8976,
+         "reference": -17.9191,
+         "error": 0.0215,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1656.1328,
+        "rolloff_db_oct": -16.2755,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.583,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1656.1328,
+         "reference": 1718.583,
+         "error": -62.4502,
+         "tolerance": 171.8583,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.63
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2755,
+         "reference": -16.4113,
+         "error": 0.1358,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.0625": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -69.12,
+       "noise_db_re_stimulus_worst": -68.75,
+       "thd_db_median": -82.48,
+       "thd_db_worst": -70.44,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 2329,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 85197,
+       "ogain": 50412,
+       "entering": [
+        [
+         85197,
+         50412
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6501,
+        "rolloff_db_oct": -17.8126,
+        "lowband_db": -0.8967
+       },
+       "surge": {
+        "corner_hz": 117.635,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6501,
+         "reference": 117.635,
+         "error": -8.9849,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.64
+        },
+        "lowband_db": {
+         "value": -0.8967,
+         "reference": -0.9073,
+         "error": 0.0106,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.8126,
+         "reference": -18.6879,
+         "error": 0.8753,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.6815,
+        "rolloff_db_oct": -17.9195,
+        "lowband_db": -0.149
+       },
+       "surge": {
+        "corner_hz": 450.5295,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.6815,
+         "reference": 450.5295,
+         "error": -18.848,
+         "tolerance": 45.053,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.18
+        },
+        "lowband_db": {
+         "value": -0.149,
+         "reference": -0.2556,
+         "error": 0.1066,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.9195,
+         "reference": -17.9191,
+         "error": -0.0004,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1655.9912,
+        "rolloff_db_oct": -16.2903,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.5846,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1655.9912,
+         "reference": 1718.5846,
+         "error": -62.5934,
+         "tolerance": 171.8585,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.64
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2903,
+         "reference": -16.4113,
+         "error": 0.121,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 85197,
+        "ogain": 50412,
+        "entering": [
+         [
+          85197,
+          50412
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    }
+   }
+  },
+  "quarter": {
+   "s": 0.25,
+   "levels": {
+    "a0.2500": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -77.73,
+       "noise_db_re_stimulus_worst": -77.33,
+       "thd_db_median": -88.3,
+       "thd_db_worst": -76.54,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 9313,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 42598,
+       "ogain": 100825,
+       "entering": [
+        [
+         42598,
+         100825
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6649,
+        "rolloff_db_oct": -17.7933,
+        "lowband_db": -0.8966
+       },
+       "surge": {
+        "corner_hz": 117.6344,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6649,
+         "reference": 117.6344,
+         "error": -8.9695,
+         "tolerance": 11.7634,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.62
+        },
+        "lowband_db": {
+         "value": -0.8966,
+         "reference": -0.9073,
+         "error": 0.0107,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.7933,
+         "reference": -18.6879,
+         "error": 0.8946,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.7379,
+        "rolloff_db_oct": -17.891,
+        "lowband_db": -0.1489
+       },
+       "surge": {
+        "corner_hz": 450.5278,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.7379,
+         "reference": 450.5278,
+         "error": -18.7899,
+         "tolerance": 45.0528,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.17
+        },
+        "lowband_db": {
+         "value": -0.1489,
+         "reference": -0.2556,
+         "error": 0.1067,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.891,
+         "reference": -17.9191,
+         "error": 0.0281,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1656.176,
+        "rolloff_db_oct": -16.2687,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.5771,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1656.176,
+         "reference": 1718.5771,
+         "error": -62.4011,
+         "tolerance": 171.8577,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.63
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2687,
+         "reference": -16.4113,
+         "error": 0.1426,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 9313,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.1250": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -71.86,
+       "noise_db_re_stimulus_worst": -71.21,
+       "thd_db_median": -83.11,
+       "thd_db_worst": -70.43,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 4657,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 42598,
+       "ogain": 100825,
+       "entering": [
+        [
+         42598,
+         100825
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6593,
+        "rolloff_db_oct": -17.81,
+        "lowband_db": -0.8967
+       },
+       "surge": {
+        "corner_hz": 117.6349,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6593,
+         "reference": 117.6349,
+         "error": -8.9756,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.63
+        },
+        "lowband_db": {
+         "value": -0.8967,
+         "reference": -0.9073,
+         "error": 0.0106,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.81,
+         "reference": -18.6879,
+         "error": 0.8779,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.6974,
+        "rolloff_db_oct": -17.91,
+        "lowband_db": -0.1489
+       },
+       "surge": {
+        "corner_hz": 450.5291,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.6974,
+         "reference": 450.5291,
+         "error": -18.8317,
+         "tolerance": 45.0529,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.18
+        },
+        "lowband_db": {
+         "value": -0.1489,
+         "reference": -0.2556,
+         "error": 0.1067,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.91,
+         "reference": -17.9191,
+         "error": 0.0091,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1656.03,
+        "rolloff_db_oct": -16.2822,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.583,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1656.03,
+         "reference": 1718.583,
+         "error": -62.553,
+         "tolerance": 171.8583,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.64
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.2822,
+         "reference": -16.4113,
+         "error": 0.1291,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 4657,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    },
+    "a0.0625": {
+     "open": {
+      "noise": {
+       "noise_db_re_stimulus_median": -65.78,
+       "noise_db_re_stimulus_worst": -65.26,
+       "thd_db_median": -76.12,
+       "thd_db_worst": -64.55,
+       "n_tones": 26
+      },
+      "clipping": {
+       "reconstruction_would_clip": 0,
+       "reconstruction_max_abs_q15": 2329,
+       "output_rail_words": 0,
+       "sat_out_events": 0,
+       "sat_state_events": 0,
+       "tanh_domain_clamps": 0,
+       "tanh_calls": 4422960
+      },
+      "regs": {
+       "gain": 42598,
+       "ogain": 100825,
+       "entering": [
+        [
+         42598,
+         100825
+        ]
+       ],
+       "baseline": [
+        170394,
+        25206
+       ],
+       "g_q16": 47327,
+       "k_eff_q14": 0,
+       "cut_lo": 20000
+      }
+     },
+     "cases": {
+      "F1A": {
+       "ours": {
+        "corner_hz": 108.6486,
+        "rolloff_db_oct": -17.8282,
+        "lowband_db": -0.8971
+       },
+       "surge": {
+        "corner_hz": 117.635,
+        "rolloff_db_oct": -18.6879,
+        "lowband_db": -0.9073
+       },
+       "score": {
+        "corner_hz": {
+         "value": 108.6486,
+         "reference": 117.635,
+         "error": -8.9864,
+         "tolerance": 11.7635,
+         "valid": true,
+         "within": true,
+         "error_pct": -7.64
+        },
+        "lowband_db": {
+         "value": -0.8971,
+         "reference": -0.9073,
+         "error": 0.0102,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.8282,
+         "reference": -18.6879,
+         "error": 0.8597,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 1089,
+        "k_eff_q14": 0,
+        "cut_lo": 250
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1B": {
+       "ours": {
+        "corner_hz": 431.6353,
+        "rolloff_db_oct": -17.9178,
+        "lowband_db": -0.149
+       },
+       "surge": {
+        "corner_hz": 450.5295,
+        "rolloff_db_oct": -17.9191,
+        "lowband_db": -0.2556
+       },
+       "score": {
+        "corner_hz": {
+         "value": 431.6353,
+         "reference": 450.5295,
+         "error": -18.8942,
+         "tolerance": 45.053,
+         "valid": true,
+         "within": true,
+         "error_pct": -4.19
+        },
+        "lowband_db": {
+         "value": -0.149,
+         "reference": -0.2556,
+         "error": 0.1066,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -17.9178,
+         "reference": -17.9191,
+         "error": 0.0013,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 4211,
+        "k_eff_q14": 0,
+        "cut_lo": 1000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      },
+      "F1C": {
+       "ours": {
+        "corner_hz": 1655.7025,
+        "rolloff_db_oct": -16.3066,
+        "lowband_db": -0.0423
+       },
+       "surge": {
+        "corner_hz": 1718.5846,
+        "rolloff_db_oct": -16.4113,
+        "lowband_db": -0.1364
+       },
+       "score": {
+        "corner_hz": {
+         "value": 1655.7025,
+         "reference": 1718.5846,
+         "error": -62.8821,
+         "tolerance": 171.8585,
+         "valid": true,
+         "within": true,
+         "error_pct": -3.66
+        },
+        "lowband_db": {
+         "value": -0.0423,
+         "reference": -0.1364,
+         "error": 0.0941,
+         "tolerance": 3.0,
+         "valid": true,
+         "within": true
+        },
+        "rolloff_db_oct": {
+         "value": -16.3066,
+         "reference": -16.4113,
+         "error": 0.1047,
+         "tolerance": 1.5,
+         "valid": true,
+         "within": true
+        }
+       },
+       "regs": {
+        "gain": 42598,
+        "ogain": 100825,
+        "entering": [
+         [
+          42598,
+          100825
+         ]
+        ],
+        "baseline": [
+         170394,
+         25206
+        ],
+        "g_q16": 14797,
+        "k_eff_q14": 0,
+        "cut_lo": 4000
+       },
+       "clipping": {
+        "reconstruction_would_clip": 0,
+        "reconstruction_max_abs_q15": 2329,
+        "output_rail_words": 0,
+        "sat_out_events": 0,
+        "sat_state_events": 0,
+        "tanh_domain_clamps": 0,
+        "tanh_calls": 4422960
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "evaluation": {
+  "verdicts": {
+   "half": {
+    "eligible": true,
+    "checks": {
+     "1_registers": true,
+     "2_validity": true,
+     "3_corner": true,
+     "4_rolloff": true,
+     "5_lowband": true,
+     "6_noise": true,
+     "7_clipping": true,
+     "8_level_dependence": true
+    },
+    "mean_abs_corner_err_pct": 7.46,
+    "baseline_mean_abs_corner_err_pct": 16.543
+   },
+   "quarter": {
+    "eligible": true,
+    "checks": {
+     "1_registers": true,
+     "2_validity": true,
+     "3_corner": true,
+     "4_rolloff": true,
+     "5_lowband": true,
+     "6_noise": true,
+     "7_clipping": true,
+     "8_level_dependence": true
+    },
+    "mean_abs_corner_err_pct": 5.14,
+    "baseline_mean_abs_corner_err_pct": 16.543
+   }
+  },
+  "selection": "quarter"
+ }
+}
