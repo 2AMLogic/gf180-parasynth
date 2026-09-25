@@ -62,7 +62,15 @@ PRIMARY_AMP = 0.25
 CASES = {"F1A": "cut250", "F1B": "cut1000", "F1C": "cut4000"}
 OPEN = "open20k"
 RES, DRIVE = 0.0, f1.DRIVE
-INJECTS = ("", "CONSTRUCTOR_ONLY", "WORDS_NOT_ENTERING")
+INJECTS = ("", "CONSTRUCTOR_ONLY", "WORDS_NOT_ENTERING", "GAIN_ONLY_MOVES_DRIVE")
+
+#: The gain-only control (plan073 C): the post-filter level word ogain alone is
+#: doubled (+6.02 dB), internal gain unchanged. Pre-declared expectation, and
+#: the tolerances it is judged by (measurement uncertainty of a response whose
+#: shape did not change; the estimators read identical shapes identically):
+GAIN_ONLY_OGAIN_MULT = 2.0
+GAIN_ONLY_TOL = {"corner_pct": 0.10, "rolloff_db_oct": 0.05, "lowband_db": 0.05,
+                 "level_db": 0.10, "min_level_move_db": 3.0}
 NOISE_FMAX = 4000.0
 N_HARM = 9
 
@@ -88,13 +96,46 @@ def base_vpu_asserted() -> float:
 # ---------------------------------------------------------------------------
 # candidate registers, and the trap
 # ---------------------------------------------------------------------------
-def candidate_regs(s: float, cut_hz: float) -> dict:
+GAIN_FIELD_MAX = (1 << fixed.LadderFx.GAIN_BITS) - 1     # gain and ogain: 20-bit unsigned
+
+
+def unclamped_words(s: float, ogain_mult: float = 1.0) -> tuple:
+    """The gain/ogain words BEFORE `LadderFx.regs`'s `usat` clamp, by the same
+    arithmetic. A clamped word is a different candidate from the one named, so
+    the caller must refuse rather than measure it."""
+    if not (s > 0 and ogain_mult > 0 and math.isfinite(s) and math.isfinite(ogain_mult)):
+        raise Refused(f"scale s={s}, ogain_mult={ogain_mult}: not a positive finite number")
+    vpu = BASE_VPU * s
+    gain = int(round(DRIVE * vpu / fixed.VT2 * (1 << fixed.COEF_Q)))
+    ogain = int(round(fixed.VT2 / vpu * (1.0 + 0.5 * RES * 4.0) * (1 << fixed.COEF_Q)))
+    ogain = int(round(ogain * ogain_mult)) if ogain_mult != 1.0 else ogain
+    return gain, ogain
+
+
+def check_range(name: str, words: tuple) -> None:
+    for field, w in zip(("gain", "ogain"), words):
+        if not 0 <= w <= GAIN_FIELD_MAX:
+            raise Refused(f"{name}: {field} word {w} is outside the "
+                          f"{fixed.LadderFx.GAIN_BITS}-bit field (0..{GAIN_FIELD_MAX}); "
+                          f"the host conversion would clamp it, so this is not the "
+                          f"candidate it is named as")
+
+
+def candidate_regs(s: float, cut_hz: float, ogain_mult: float = 1.0,
+                   name: str = "candidate") -> dict:
     """The host registers for cutoff `cut_hz` with the gain/ogain conversion
-    run at volts_per_unit = BASE_VPU * s. Everything else is `host_regs`."""
+    run at volts_per_unit = BASE_VPU * s, and ogain additionally multiplied by
+    `ogain_mult` (the gain-only control). Everything else is `host_regs`.
+    REFUSES a word that would not fit its field instead of clamping it."""
     r = dict(f1.host_regs(cut_hz, RES, DRIVE))
+    raw = unclamped_words(s, ogain_mult)
+    check_range(name, raw)
     _k, gain, ogain = fixed.LadderFx(**{**vf.LADDER_CFG, "volts_per_unit": BASE_VPU * s}).regs(
         RES, DRIVE)
-    r["gain"], r["ogain"] = gain, ogain
+    if ogain_mult == 1.0 and (gain, ogain) != raw:
+        raise Refused(f"{name}: LadderFx.regs gives {(gain, ogain)}, the unclamped "
+                      f"arithmetic gives {raw}")
+    r["gain"], r["ogain"] = raw
     return r
 
 
@@ -122,7 +163,7 @@ def assert_registers(name: str, s: float, entering: set, predicted: tuple,
     if entering != {predicted}:
         raise Refused(f"{name}: gain/ogain entering the ladder {sorted(entering)} are not the "
                       f"candidate's predicted words {predicted}")
-    if s != 1.0 and predicted == baseline:
+    if name != "baseline" and predicted == baseline:
         raise Refused(f"{name}: gain/ogain {predicted} equal the baseline's -- this candidate "
                       f"would measure the baseline's audio under another name")
 
@@ -256,7 +297,8 @@ def surge_vs_frozen(manifest) -> dict:
 
 def run_job(args) -> dict:
     """One candidate at one level: the three cases plus wide-open."""
-    name, s, amp, inject = args
+    name, s, amp, inject, *rest = args
+    ogain_mult = rest[0] if rest else 1.0
     freqs = np.asarray(cap.load_manifest()["clips"][
         cap.clip_key(OPEN, amp, 1)]["freqs_hz"], dtype=np.float64)
     out = {"candidate": name, "s": s, "amp": amp, "conditions": {}}
@@ -268,7 +310,7 @@ def run_job(args) -> dict:
             predicted = (regs["gain"], regs["ogain"])
         else:
             _p, voice = f1.build_voice("selected")
-            regs = candidate_regs(s, cut)
+            regs = candidate_regs(s, cut, ogain_mult, name)
             predicted = (regs["gain"], regs["ogain"])
             if inject == "WORDS_NOT_ENTERING" and s != 1.0:
                 regs = candidate_regs(1.0, cut)          # the words that actually go in
@@ -302,6 +344,56 @@ def run_job(args) -> dict:
     return out
 
 
+def gain_only_control(inject: str = "", workers: int = 2) -> tuple[int, dict]:
+    """Baseline vs ogain-only at the F1 level. PASSES (0) only if the corner,
+    rolloff and relative low-band gain stay at baseline within GAIN_ONLY_TOL
+    while the absolute level moves by the ogain ratio. Otherwise FAIL (1).
+    `inject='GAIN_ONLY_MOVES_DRIVE'` substitutes the quarter candidate (which
+    moves internal drive, not level) and must FAIL."""
+    amp = PRIMARY_AMP
+    go_args = (("gain_only", 0.25, amp, "", 1.0) if inject == "GAIN_ONLY_MOVES_DRIVE"
+               else ("gain_only", 1.0, amp, "", GAIN_ONLY_OGAIN_MULT))
+    with cf.ProcessPoolExecutor(max_workers=workers) as ex:
+        base, go = list(ex.map(run_job, [("baseline", 1.0, amp, "", 1.0), go_args]))
+    freqs = np.asarray(cap.load_manifest()["clips"][cap.clip_key(OPEN, amp, 1)]["freqs_hz"])
+    T = GAIN_ONLY_TOL
+    rep_, ok = {"words": {"baseline": base["conditions"][OPEN]["regs"]["entering"],
+                          "gain_only": go["conditions"][OPEN]["regs"]["entering"]},
+                "tolerances": T, "cases": {}}, True
+    ob, og = np.asarray(base["conditions"][OPEN]["curve_db"]), np.asarray(go["conditions"][OPEN]["curve_db"])
+    (gb, obw), = base["conditions"][OPEN]["regs"]["entering"]
+    (gg, ogw), = go["conditions"][OPEN]["regs"]["entering"]
+    want_move = 20 * math.log10(ogw / obw)
+    for cid, cond in CASES.items():
+        cut = rc.FILTER_CASES[cid]["cut_hz"]
+        rb_ = rc._ref_band(freqs, cut)
+        pb, pg = am.plateau_db(freqs, ob, rb_), am.plateau_db(freqs, og, rb_)
+        rdb = reads(freqs, np.asarray(base["conditions"][cond]["curve_db"]), cut, pb)
+        rdg = reads(freqs, np.asarray(go["conditions"][cond]["curve_db"]), cut, pg)
+        move = pg - pb
+        c = {"baseline": rdb, "gain_only": rdg,
+             "corner_change_pct": round(100 * (rdg["corner_hz"] / rdb["corner_hz"] - 1), 4),
+             "rolloff_change": round(rdg["rolloff_db_oct"] - rdb["rolloff_db_oct"], 4),
+             "lowband_change": round(rdg["lowband_db"] - rdb["lowband_db"], 4),
+             "abs_level_baseline_db_re_input": round(pb, 4),
+             "abs_level_gain_only_db_re_input": round(pg, 4),
+             "level_move_db": round(move, 4), "level_move_expected_db": round(want_move, 4)}
+        c["pass"] = (abs(c["corner_change_pct"]) <= T["corner_pct"]
+                     and abs(c["rolloff_change"]) <= T["rolloff_db_oct"]
+                     and abs(c["lowband_change"]) <= T["lowband_db"]
+                     and abs(move - want_move) <= T["level_db"]
+                     and abs(move) >= T["min_level_move_db"])
+        ok &= c["pass"]
+        rep_["cases"][cid] = c
+        print(f"gain-only {cid}: words {gb}/{obw} -> {gg}/{ogw}  corner {rdb['corner_hz']} -> "
+              f"{rdg['corner_hz']} ({c['corner_change_pct']:+.4f} %)  rolloff "
+              f"{c['rolloff_change']:+.4f}  lowband {c['lowband_change']:+.4f}  level "
+              f"{pb:.3f} -> {pg:.3f} dB (moved {move:+.3f}, expected {want_move:+.3f})  "
+              f"{'PASS' if c['pass'] else 'FAIL'}")
+    rep_["pass"] = bool(ok)
+    return (0 if ok else 1), rep_
+
+
 def assemble(jobs: list, surge: dict) -> dict:
     """Per candidate, per level, per case: reads and errors vs matched Surge."""
     table = {}
@@ -322,6 +414,9 @@ def assemble(jobs: list, surge: dict) -> dict:
             ref = surge[tag]["cases"][cid]
             sc = f1.score(ours, ref)
             lvl["cases"][cid] = {"ours": ours, "surge": {k: ref[k] for k in ours},
+                                 "abs_open_plateau_db_re_input": {
+                                     "ours": round(float(pl), 4),
+                                     "surge": ref["open_plateau_db"]},
                                  "score": sc, "regs": j["conditions"][cond]["regs"],
                                  "clipping": j["conditions"][cond]["clipping"]}
         table.setdefault(j["candidate"], {"s": j["s"], "levels": {}})["levels"][tag] = lvl
@@ -397,6 +492,24 @@ def evaluate(table: dict) -> dict:
     return {"verdicts": verdicts, "selection": sel}
 
 
+BASELINE_228 = ROOT / "docs" / "scorecard" / "f1-baseline" / "selected-path.json"
+
+
+def baseline_reproduces_228(table: dict, same: float = 5e-4) -> dict:
+    """plan073 C: alpha 1 must reproduce the reviewed selected-path reads."""
+    d = json.loads(BASELINE_228.read_text())
+    lv = table["baseline"]["levels"][cap.amp_tag(PRIMARY_AMP)]["cases"]
+    diffs = {}
+    for row in d["rows"]:
+        want = row["reads"]["selected"]
+        got = lv[row["case"]]["ours"]
+        for k in ("corner_hz", "rolloff_db_oct", "lowband_db"):
+            diffs[f"{row['case']}.{k}"] = round(abs(got[k] - want[k]), 6)
+    worst = max(diffs.values())
+    return {"ok": worst <= same, "worst_abs_diff": worst, "diffs": diffs,
+            "against": "docs/scorecard/f1-baseline/selected-path.json"}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -406,7 +519,22 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-refused", default=None, metavar="REASON",
                     help="control mode: exit 0 only if the run REFUSES with REASON in its "
                          "message; exit 1 if it measures or refuses for another reason")
+    ap.add_argument("--gain-only-control", action="store_true",
+                    help="expected-outcome control: ogain alone doubled must leave the "
+                         "corner at baseline while the level moves; exit 0 only then")
     a = ap.parse_args(argv)
+    if a.gain_only_control:
+        try:
+            base_vpu_asserted()
+            code, rep_ = gain_only_control(a.inject)
+        except (Refused, cap.Refused, f1.Refused, rc.Refused) as e:
+            print(f"REFUSED  {e}")
+            return 2
+        if a.json:
+            pathlib.Path(a.json).write_text(json.dumps(rep_, indent=1, default=list) + "\n")
+        print("GAIN-ONLY CONTROL " + ("PASS: level moved, corner did not" if code == 0 else
+                                      "FAIL: the response shape moved with the level word"))
+        return code
     if a.expect_refused is not None:
         import io
         buf = io.StringIO()
@@ -457,6 +585,9 @@ def main(argv=None) -> int:
 
     table = assemble(jobs, surge)
     ev = evaluate(table)
+    alpha1 = baseline_reproduces_228(table)
+    print(f"alpha 1 reproduces #228's selected-path reads: {alpha1['ok']} "
+          f"(worst |diff| {alpha1['worst_abs_diff']})")
 
     print("\nSurge Type 2, matched levels (takes bit-identical; take 1 read)")
     print(f"{'amp':>7s} {'case':4s} {'corner':>9s} {'rolloff':>8s} {'lowband':>8s}")
@@ -483,6 +614,8 @@ def main(argv=None) -> int:
     for n, v in ev["verdicts"].items():
         print(f"verdict {n}: eligible={v['eligible']} {v['checks']}")
     print(f"SELECTION (within the rig's scope only): {ev['selection']}")
+    if not alpha1["ok"]:
+        print("FAIL     alpha 1 does not reproduce #228's selected-path reads")
 
     if a.json:
         doc = {"what": "F1 selected path: compensated input-scaling candidates vs matched-level "
@@ -502,12 +635,20 @@ def main(argv=None) -> int:
                          "CUT_TRIM": vf.CUT_TRIM, "GROM_BITS": vf.GROM_BITS,
                          "KROM_BITS": vf.KROM_BITS, "rate": "RateConvertedLadder 2x causal"},
                "surge": surge, "surge_nominal_vs_frozen": frozen_cmp,
-               "table": table, "evaluation": ev}
+               "table": table, "evaluation": ev,
+               "alpha1_reproduces_228": alpha1,
+               "evidence_status": {
+                   "amp 0.25": "nominal F1 level: official tolerances (corner 10 %, rolloff "
+                               "1.5 dB/oct, gain 3 dB) apply",
+                   "amp 0.125, 0.0625": "versioned DEVELOPMENT evidence (captures "
+                                        "f1-level-captures/1); no acceptance basis is "
+                                        "recorded for these levels, so the official "
+                                        "tolerances are shown for orientation only"}}
         p = pathlib.Path(a.json)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(doc, indent=1, default=list) + "\n")
         print(f"wrote {p}")
-    return 0
+    return 0 if alpha1["ok"] else 1
 
 
 if __name__ == "__main__":

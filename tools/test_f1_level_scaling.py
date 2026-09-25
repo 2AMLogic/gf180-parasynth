@@ -204,3 +204,38 @@ def test_rule_refuses_selection_when_words_equal_the_baseline():
 def test_rule_rejects_an_insufficient_corner_gain():
     ev = fls.evaluate(_fake_table(-14.0))
     assert not ev["verdicts"]["half"]["checks"]["3_corner"] and ev["selection"] is None
+
+
+# --- out-of-range register values REFUSE, never clamp (plan073 C) ------------
+@pytest.mark.parametrize("alpha,field", [(0.01, "ogain"), (7.0, "gain")])
+def test_out_of_range_alpha_refuses_instead_of_clamping(alpha, field):
+    import fixed, voice_fx as vf
+    # the host conversion WOULD have clamped silently: that is the hazard
+    _k, g, og = fixed.LadderFx(**{**vf.LADDER_CFG, "volts_per_unit": 0.13 * alpha}).regs(0.0, 1.0)
+    assert max(g, og) == fls.GAIN_FIELD_MAX
+    with pytest.raises(fls.Refused, match=f"{field} word .* outside the 20-bit field"):
+        fls.candidate_regs(alpha, CUT, name=f"alpha={alpha}")
+
+
+def test_out_of_range_refusal_reaches_the_run_job():
+    with pytest.raises(fls.Refused, match="outside the 20-bit field"):
+        fls.run_job(("alpha0.01", 0.01, 0.0625, ""))
+
+
+@pytest.mark.parametrize("alpha", [0.0, -0.5, float("nan")])
+def test_non_positive_alpha_refuses(alpha):
+    with pytest.raises(fls.Refused):
+        fls.candidate_regs(alpha, CUT)
+
+
+def test_the_selection_candidates_are_in_range_and_unclamped():
+    for s in fls.CANDIDATES.values():
+        r = fls.candidate_regs(s, CUT)
+        assert 0 < r["gain"] < fls.GAIN_FIELD_MAX and 0 < r["ogain"] < fls.GAIN_FIELD_MAX
+
+
+# --- the gain-only control's words ------------------------------------------
+def test_gain_only_words_change_ogain_only():
+    b = fls.candidate_regs(1.0, CUT)
+    g = fls.candidate_regs(1.0, CUT, fls.GAIN_ONLY_OGAIN_MULT, "gain_only")
+    assert g["gain"] == b["gain"] and g["ogain"] == 2 * b["ogain"]
