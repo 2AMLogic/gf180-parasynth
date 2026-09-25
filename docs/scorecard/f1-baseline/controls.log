@@ -1,35 +1,35 @@
 ==============================================================================
-PASS             8.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_f1_selected_path.py
+PASS            11.3s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_f1_selected_path.py
               .........                                                                [100%]
-              9 passed in 6.95s
-PASS             6.4s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_run_case.py -k 'filt_ or filter'
+              9 passed in 8.68s
+PASS             8.2s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q tools/test_run_case.py -k 'filt_ or filter'
               ................                                                         [100%]
-              16 passed, 80 deselected in 4.85s
-PASS             5.3s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q model/test_filter_rate_chain.py
+              16 passed, 80 deselected in 4.41s
+PASS             8.5s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q model/test_filter_rate_chain.py
               .................                                                        [100%]
-              17 passed in 3.36s
-PASS            39.8s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_MISSING --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-missing
+              17 passed in 4.49s
+PASS            62.5s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_MISSING --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-missing
               F1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               F1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               ------------------------------------------------------------------------------------------------
               no verdict: 3
               control fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)
-PASS            39.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_TAMPERED --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-tampered
+PASS            63.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_PROFILE_TAMPERED --expect 'no verdict' --no-audio --results build/f1-baseline/ctl-tampered
               F1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               F1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
               ------------------------------------------------------------------------------------------------
               no verdict: 3
               control fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)
-PASS            72.2s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_CORNER_2X --expect changed --no-audio --results build/f1-baseline/ctl-corner2x
+PASS           109.6s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C --inject REF_CORNER_2X --expect changed --no-audio --results build/f1-baseline/ctl-corner2x
               F1A    fail           6.45  worst: Corner frequency
               F1B    fail           6.97  worst: Corner frequency
               F1C    fail           6.77  worst: Corner frequency
               ------------------------------------------------------------------------------------------------
               fail: 3
               control fired: REF_CORNER_2X caused the expected result on 3 measured case(s)
-PASS             1.3s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py
+PASS             1.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py
               OK       surge-type2/lp-cut250-res0.97
               OK       surge-type2/lp-cut250-res0.99
               OK       surge-type2/lp-cut250-res1.00

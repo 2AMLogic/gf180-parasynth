@@ -260,12 +260,45 @@ def score(ours: dict, ref: dict) -> dict:
     return rows
 
 
+def level_sweep(voice, amps=(0.015625, 0.03125, 0.0625, 0.125, 0.25, 0.5)) -> list:
+    """The selected path's usable probe LEVEL range: each F1 cutoff at each
+    level, read by the current estimators, beside the legacy component at the
+    same level and the frozen reference's corner (whose clip exists only at
+    the profile's probe level). A refusal is recorded as one."""
+    out = []
+    for cid in CASES:
+        spec = rc.FILTER_CASES[cid]
+        ref_f, ref_g, _ = rc.load_filter_reference(spec["ref_clip"])
+        ref_c = _v(rc.filt_corner(spec["cut_hz"])(ref_f, ref_g))
+        for amp in amps:
+            g, info = selected_curve(voice, ref_f, spec["cut_hz"], spec["res_ours"], amp)
+            lc = _v(rc.filt_corner(spec["cut_hz"])(
+                ref_f, rc.our_filter_curve(ref_f, spec["cut_hz"], spec["res_ours"], amp)))
+            c = rc.filt_corner(spec["cut_hz"])(ref_f, g)
+            r = rc.filt_rolloff(spec["cut_hz"])(ref_f, g)
+            out.append({"case": cid, "amp": amp,
+                        "level_dbfs": round(20 * math.log10(amp), 2),
+                        "corner_hz": _v(c), "corner_refused": None if c.ok else c.reason,
+                        "legacy_corner_hz": lc, "reference_corner_hz_at_probe_level": ref_c,
+                        "corner_error_pct_vs_reference": (round(100 * (_v(c) / ref_c - 1), 2)
+                                                          if c.ok and ref_c else None),
+                        "rolloff_db_oct": _v(r), "rolloff_refused": None if r.ok else r.reason,
+                        "reconstruction_would_clip": info["reconstruction_would_clip"],
+                        "output_max_abs": info["output_max_abs"]})
+            print(f"level {cid} {out[-1]['level_dbfs']:+6.2f} dBFS  corner {out[-1]['corner_hz']} "
+                  f"({out[-1]['corner_error_pct_vs_reference']:+.2f} %)  legacy {lc}  "
+                  f"rolloff {out[-1]['rolloff_db_oct']}  {r.reason if not r.ok else ''}")
+    return out
+
+
 # ---------------------------------------------------------------------------
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", default=None)
     ap.add_argument("--inject", default="", choices=INJECTS)
+    ap.add_argument("--level-sweep", action="store_true",
+                    help="also read each case at -24/-18/-12/-6 dBFS on the selected path")
     a = ap.parse_args(argv)
 
     _, selected = build_voice("selected")
@@ -372,6 +405,7 @@ def main(argv=None) -> int:
               f"{S['lowband_db']:6.2f} | {r['committed_531aa8a_reproduced']}")
 
     all_repro = all(r["committed_531aa8a_reproduced"] for r in rows)
+    sweep = level_sweep(probe) if a.level_sweep else None
     if a.json:
         doc = {
             "what": "F1A-F1C cutoff response: legacy standalone component and the "
@@ -397,6 +431,7 @@ def main(argv=None) -> int:
             "committed_records_at": SUPERSEDED_AT,
             "committed_531aa8a_reproduced_all": all_repro,
             "rows": rows,
+            "level_sweep": sweep,
             "curves": curves,
         }
         p = pathlib.Path(a.json)
