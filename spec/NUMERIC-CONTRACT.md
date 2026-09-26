@@ -1392,6 +1392,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
+| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 11**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is revision 10 exactly |
 | `0x90 + p` | `PATH[p]` | 25 | `[4:0] src`, `[9:5] e1`, `[14:10] e2`, `[16:15] nl`, `[19:17] att`, `[24:20] dest` (15.5) |
 | `0xB0 + 4m` | `MODE_A1[m]` | 26 s | Q2.24 coefficient a1 = 2r·cos ω |
 | `0xB1 + 4m` | `MODE_A2[m]` | 26 s | Q2.24 coefficient a2 = −r² |
@@ -1419,7 +1420,7 @@ bus.
 
 State registers, not host-writable except by
 RESET: `stops_prev` (11), per envelope `level` (24), `strike` (24), `t`
-(11), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
+(11), `fcap` (24, revision 11: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
 `y2[m]`, `exc[m]` (21), `h1[m]`, `h2[m]` (21, modes 0..`N_NUMS`−1). The gains
 `dvol`, `bvol` of the output stage (12) are the instrument's, 16 bits
 unsigned each.
@@ -1471,6 +1472,39 @@ else:
 if choke < 8 and fire[choke]:  level ← 0                    choked, after everything above
 ENV(e) = level >> 9                                         Q0.15, what the paths multiply by
 ```
+
+**Revision 11: the final strike** (plan084; the clap's confirmed "L2",
+`docs/scorecard/clap-d12a/README.md` section 10). With `FRATE = 0` nothing
+below applies and the envelope is revision 10 exactly. With `FRATE ≠ 0`, and
+`last = bursts · period`:
+
+```
+fired:                         fcap ← level                 the fire level, captured once per hit
+re-strike at t = last:         strike ← fcap ; level ← strike      NOT 13/16 of the last strike
+decay while t > last:          dec ← (level · FRATE) >> 16   FRATE instead of rate
+choked:                        fcap ← 0 as well              no final strike can follow a choke
+```
+
+- `PEAK` and `ACCENT` are read only when the envelope fires, so a mid-note
+  write of either cannot move the final strike; `RATE` and `FRATE` are read on
+  every decay frame and apply from the frame they are written.
+- A re-strike of the stop (a new fire) restarts `t` and recaptures `fcap`:
+  the new hit owns its state, before, at or after the old hit's `last`.
+- With `bursts = 0` or `period = 0`, `last = 0` and the envelope simply
+  decays at `FRATE` from the frame after its strike.
+- A preset that shares an envelope with a final-strike sound writes
+  `FRATE = 0` (the maracas, on the clap's circuit): the feature is register
+  state and would otherwise persist into it. `test_clap_final_strike.py`'s
+  MA-leak control is that omission.
+- The reference kit's clap (Appendix G): `bursts = 3`, `period = 511` (0,
+  10.6, 21.3, 31.9 ms), early strikes at τ 4 ms and 13/16, the final strike
+  at the fire level with `FRATE` = τ 20 ms, the tail at τ 80 ms.
+- RTL (`drum_dp.v`): no multiply of its own -- the final strike is a register
+  copy from `fcap` and the final decay only selects `FRATE` for `mul_b`, so
+  the envelope schedule's cycle count is unchanged. Negative controls
+  `INJECT_BUG_DRUM_FINAL_WEAK` (13/16 final strike), `_FINAL_SHORT` (keeps
+  `RATE`), `_FINAL_SHIFT` (one burst early, the 4th strike omitted) and
+  `_FCAP_STALE` (a retrigger keeps the previous capture).
 
 `ENV(e)` is read *after* this frame's update: the fired frame reads the
 strike, the next frame the first decay. A `hold` of H keeps the strike for
@@ -1647,7 +1681,7 @@ says so:
 | 1 SD | PULSE × 0.1 ms → modes 7 (173 Hz, Q 16.3) and 8 (336 Hz, Q 9.9); NOISE × 15 ms → mode 3 (**BP** 2.75 kHz, Q 0.7) | 7, 8 (RAW), 3 (**BP**) | 2, 3 | both f0/Q, the snappy filter's pole, τ 15 ms | both bodies from the pulse, not the cascade (17.15); the snappy filter's **numerator**: reference 3 calls it a high-pass and the machine measures a band-pass on the same pole (17.22); SNAPPY level set to the knob's own curve at 5.0 |
 | 2 LT, 3 HT | PULSE × 0.1 ms → mode 9 (90 Hz, Q 25) / 10 (185 Hz, Q 25); the host's diode pitch drop sweeps f0 from ×1.06 down over 60 ms, scaled by accent above a threshold and by the TUNING pot (15.7.1) | 9, 10 (RAW) | 4, 5 | f0, Q, **the pitch drop** (reference 4) | no pink-noise rumble (17.14) |
 | 4 CH, 5 OH | SQSUM → mode 0 (BP 7117 Hz, Q 6, amp 0); TAP 0, SWING × envelope → mode 2 (HP 11.7 kHz, Q 2.5) / mode 1 (HP 7.8 kHz, Q 2.5); CH chokes OH | 0 (BP), 1, 2 (HP) | 6 (20 ms), 7 (150 ms, choke 4) | oscillators, BP, HPs, CH τ, the choke | OH τ 150 ms (DECAY mid) |
-| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (3 bursts τ 4 ms every 480 frames + tail τ 47 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, three bursts, τ 47 ms | period 480 = 10 ms, tail −10 dB (17.17) |
+| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 11 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
 | 7 CB | **SQ 4 and SQ 5 on two separate paths**, each SWING × (τ 5 ms at 0.5 + **τ 100 ms** at 0.5) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010) | nothing: the BP centre was 17.16 and is now fitted to a recording (1100 Hz Q 2.8), and the tail is the measured 98 ms |
 
 Fourteen of the sixteen paths are used; mode 11 is spare (zero). Levels are
@@ -1728,8 +1762,8 @@ which is why `verify_drums.py`'s stimulus carries them.
 
 ### 15.8 Reset
 
-RESET (`0xFF`, or hardware reset) sets every register of 15.1 and every
-state register to 0, except the LFSR, which takes 1. Consequences: every
+RESET (`0xFF`, or hardware reset) sets every register of 15.1 (including
+revision 11's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).

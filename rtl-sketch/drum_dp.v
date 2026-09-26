@@ -60,6 +60,7 @@ module drum_dp #(
     input  wire [ENVS*27-1:0]    env_ctl_bus,
     input  wire [ENVS*24-1:0]    env_peak_bus,
     input  wire [ENVS*16-1:0]    env_rate_bus,
+    input  wire [ENVS*16-1:0]    env_frate_bus,       // revision 11: the final strike (15.3)
     input  wire [PATHS*25-1:0]   path_bus,
     output wire [MW-1:0]         tap_sel,
     input  wire signed [SB-1:0]  tap_y1,
@@ -89,6 +90,7 @@ module drum_dp #(
     reg [23:0] phase [0:5];
     reg [23:0] level  [0:ENVS-1];
     reg [23:0] strike [0:ENVS-1];
+    reg [23:0] fcap   [0:ENVS-1];   // revision 11: the fire level, captured once per hit (15.3)
     reg [10:0] tcnt   [0:ENVS-1];
     reg signed [21:0] dmix;
     reg [1:0]  st;                                  // 0 idle, 1 envelopes, 2 paths, 3 drain
@@ -137,6 +139,7 @@ module drum_dp #(
     wire [8:0]  e_per  = ectl[26:18];
     wire [23:0] e_peak = env_peak_bus[ei*24 +: 24];
     wire [15:0] e_rate = env_rate_bus[ei*16 +: 16];
+    wire [15:0] e_frate = env_frate_bus[ei*16 +: 16];
 `ifdef INJECT_BUG_DRUM_LEVEL_TRIG
     wire [STOPS-1:0] fire_src = stops_q;            // NEGATIVE CONTROL: level, not edge
 `else
@@ -158,9 +161,32 @@ module drum_dp #(
                            (e_bur >= 2'd2 && t_nx == per2) ||
                            (e_bur == 2'd3 && t_nx == per3));
     wire [1:0]  e_op    = e_fired ? 2'd0 : e_holdp ? 2'd1 : e_rs ? 2'd2 : 2'd3;   // FIRE HOLD RESTRIKE DECAY
+    // Revision 11 (15.3): with FRATE != 0 the LAST re-strike (t = bursts*period)
+    // restores the captured fire level instead of 13/16 of the last strike, and
+    // every decay after it runs at FRATE. FRATE = 0 is revision 10 exactly.
+    // Neither needs a multiply of its own: the final strike is a register copy
+    // (the slot's product is unused) and the final decay only swaps mul_b.
+    wire        e_fen   = (e_frate != 16'd0);
+`ifdef INJECT_BUG_DRUM_FINAL_SHIFT
+    // NEGATIVE CONTROL: the final strike one burst early -- the 4th strike omitted
+    wire [10:0] last_t  = (e_bur == 2'd2) ? {2'b0, e_per} : (e_bur == 2'd3) ? per2 : 11'd0;
+`else
+    wire [10:0] last_t  = (e_bur == 2'd1) ? {2'b0, e_per} : (e_bur == 2'd2) ? per2 :
+                          (e_bur == 2'd3) ? per3 : 11'd0;
+`endif
+`ifdef INJECT_BUG_DRUM_FINAL_WEAK
+    wire        e_fin   = 1'b0;                     // NEGATIVE CONTROL: revision 10's 13/16 final strike
+`else
+    wire        e_fin   = e_rs && e_fen && (t_nx == last_t);
+`endif
+`ifdef INJECT_BUG_DRUM_FINAL_SHORT
+    wire        e_usefr = 1'b0;                     // NEGATIVE CONTROL: the final strike keeps RATE
+`else
+    wire        e_usefr = e_fen && (t_nx > last_t);
+`endif
     wire [16*16-1:0] accent_x = {{((16-STOPS)*16){1'b0}}, accent_bus};
     wire [15:0] e_acc   = accent_x[e_stop*16 +: 16];
-    reg  [1:0]  op_q;  reg [EI-1:0] e_q;  reg chok_q;  reg [10:0] t_q;
+    reg  [1:0]  op_q;  reg [EI-1:0] e_q;  reg chok_q;  reg [10:0] t_q;  reg fin_q;
 
     // ---- envelope slot e-1: apply the product --------------------------------------
     wire [24:0] fire_lvl25 = mul_r[39:15];                                  // (peak * accent) >> 15
@@ -236,7 +262,8 @@ module drum_dp #(
             stops_q <= 0; fire_q <= 0; lfsr <= 31'd1; noise_r <= 0; sq_r <= 0; sqpair_r <= 0;
             sqmsb_r <= 0;
             for (i = 0; i < 6; i = i + 1) phase[i] <= 0;
-            for (i = 0; i < ENVS; i = i + 1) begin level[i] <= 0; strike[i] <= 0; tcnt[i] <= 0; end
+            for (i = 0; i < ENVS; i = i + 1) begin level[i] <= 0; strike[i] <= 0; tcnt[i] <= 0; fcap[i] <= 0; end
+            fin_q <= 1'b0;
             dmix <= 0; st <= 0; e <= 0; p <= 0; half <= 0; mul_a <= 0; mul_b <= 0;
             op_q <= 0; e_q <= 0; chok_q <= 0; t_q <= 0;
             t0_q <= 0; tneg_q <= 0; tsat_q <= 0; nl_q <= 0; slin_q <= 0; envsum_q <= 0;
@@ -259,15 +286,27 @@ module drum_dp #(
             2'd1: begin                                          // envelopes (15.3)
                 // apply slot e-1 (op_q = HOLD with chok_q = 0 on the first cycle is a no-op)
                 case (op_q)
-                    2'd0: begin level[e_q] <= chok_q ? 24'd0 : fire_lvl; strike[e_q] <= fire_lvl; tcnt[e_q] <= 11'd0; end
-                    2'd1: begin if (chok_q) level[e_q] <= 24'd0; if (e != 0) tcnt[e_q] <= t_q; end
-                    2'd2: begin level[e_q] <= chok_q ? 24'd0 : rs_lvl; strike[e_q] <= rs_lvl; tcnt[e_q] <= t_q; end
-                    default: begin level[e_q] <= chok_q ? 24'd0 : dec_lvl; tcnt[e_q] <= t_q; end
+                    2'd0: begin level[e_q] <= chok_q ? 24'd0 : fire_lvl; strike[e_q] <= fire_lvl; tcnt[e_q] <= 11'd0;
+`ifdef INJECT_BUG_DRUM_FCAP_STALE
+                                // NEGATIVE CONTROL: a retrigger keeps the previous hit's captured level
+                                fcap[e_q] <= chok_q ? 24'd0 : (fcap[e_q] != 24'd0) ? fcap[e_q] : fire_lvl;
+`else
+                                fcap[e_q] <= chok_q ? 24'd0 : fire_lvl;
+`endif
+                          end
+                    2'd1: begin if (chok_q) begin level[e_q] <= 24'd0; fcap[e_q] <= 24'd0; end
+                                if (e != 0) tcnt[e_q] <= t_q; end
+                    2'd2: begin level[e_q] <= chok_q ? 24'd0 : (fin_q ? fcap[e_q] : rs_lvl);
+                                strike[e_q] <= fin_q ? fcap[e_q] : rs_lvl; tcnt[e_q] <= t_q;
+                                if (chok_q) fcap[e_q] <= 24'd0; end
+                    default: begin level[e_q] <= chok_q ? 24'd0 : dec_lvl; tcnt[e_q] <= t_q;
+                                if (chok_q) fcap[e_q] <= 24'd0; end
                 endcase
                 if (e < ENVS) begin                              // load slot e
                     mul_a <= e_fired ? {1'b0, e_peak} : e_rs ? {1'b0, strike[ei]} : {1'b0, level[ei]};
-                    mul_b <= e_fired ? e_acc : e_rs ? BURST_C : e_rate;
+                    mul_b <= e_fired ? e_acc : e_rs ? BURST_C : e_usefr ? e_frate : e_rate;
                     op_q <= e_op; e_q <= ei; chok_q <= e_chok; t_q <= e_fired ? 11'd0 : t_nx;
+                    fin_q <= !e_fired && !e_holdp && e_fin;
                     e <= e + 1'b1;
                 end else begin
                     st <= 2'd2; p <= 0; half <= 1'b0; op_q <= 2'd1; chok_q <= 1'b0;

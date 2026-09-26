@@ -8,6 +8,8 @@ Records, for the tree it runs on:
   * every one of the sixteen sounds through `run_case.render_drum_solo` at
     accent 1.0 (and 2.0), as sha256 of the float64 render and of the 16-bit PCM,
     and the sha256 of every envelope's per-frame state trace;
+  * the PRODUCTION CP (`kit_with_sounds("CP")`, no experiment code) at the same
+    accents and offsets, `cp_production`;
   * the frozen L2 experiment render (`tools/clap_final_strike_experiment.py`,
     condition "L2 final 1.00") at accents 0.5 / 1 / 2 and at the DEV and FRESH
     offsets -- the numbers the production implementation must reproduce.
@@ -64,6 +66,23 @@ def l2(args):
                                            "programmed_strikes_ms": strikes})
 
 
+def cp_production(args):
+    """The PRODUCTION CP through the kit as it stands (no experiment code), at a
+    strike offset -- the same framing as `clap_final_strike_experiment.render`."""
+    offset, accent = args
+    import drums_fx as dx
+    import run_case as rc
+    n = int(rc.SOLO_SECONDS.get("CP", 2.2) * dx.SR) + offset
+    d = dx.DrumsFx()
+    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR) + offset, dx.CP, accent)], dx.kit_with_sounds("CP")), n)
+    g = dx.accent_reg(0.45)
+    x = np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g)[offset:], dtype=np.float64) / 32768.0
+    y16 = np.clip(x * 32768.0, -32768, 32767).astype("<i2")
+    eb = d.trace["env"][dx.E_CPBURST][offset:]
+    return (f"L2@acc{accent}@off{offset}", {"float64_sha256": _sha(x), "pcm16_sha256": _sha(y16),
+                                           "burst_env_trace_sha256": _sha(np.asarray(eb, dtype=np.int64))})
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", required=True)
@@ -78,11 +97,13 @@ def main(argv=None) -> int:
     with ProcessPoolExecutor(max_workers=a.jobs) as pool:
         s = dict(pool.map(solo, jobs))
         l = dict(pool.map(l2, l2jobs))
+        cpp = dict(pool.map(cp_production, [(0, g) for g in (0.5, 1.0, 2.0)]
+                            + [(o, 1.0) for o in ex.DEV + ex.FRESH if o]))
     git = lambda *c: subprocess.run(["git", "-C", str(ROOT), *c], capture_output=True, text=True).stdout.strip()
     out = {"tool": "tools/drum_render_goldens.py", "head": git("rev-parse", "HEAD"),
            "dirty": [x for x in git("status", "--porcelain").splitlines() if x],
            "drums_fx_sha256": hashlib.sha256((ROOT / "model/drums_fx.py").read_bytes()).hexdigest(),
-           "solo": s, "l2_experiment": l}
+           "solo": s, "l2_experiment": l, "cp_production": cpp}
     p = pathlib.Path(a.out)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(out, indent=1) + "\n")

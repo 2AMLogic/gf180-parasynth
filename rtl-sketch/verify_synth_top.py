@@ -118,19 +118,9 @@ SRCS = ("synth_top.v", "voice_dp.v", "spi_ctl.v", "drum_regs.v", "drum_kit.v",
         "osc_substep_pair.v", "decimate_2x_tm_sym.v", "rate_conv_2x.v")
 
 
-def script(short: bool = False):
-    """(wait_frames, flag, sec, addr, data) in send order, the frames to run
-    after the last write, and a COVERAGE claim -- what this stimulus says it
-    reaches, checked in main() against the model rather than assumed.
-    `wait_frames` is how many frame ticks the bench waits before starting that
-    transaction; the frame a write LANDS in is the link's business and comes
-    back from the bench."""
-    S = 0.35 if short else 1.0
-    regs = vf.VoiceFx.patch_regs()
-    w = []
-    def put(wait, flag, sec, addr, data): w.append((wait, flag, sec, addr, data))
-
-    # ---- 1. the voice image, back to back (the MCU's boot-time patch load) ----
+def _voice_image(put, regs):
+    """The voice's patch image and the reference drum gains, back to back --
+    the MCU's boot-time load, shared by every stimulus that plays the voice."""
     for k, s_ in enumerate(regs["waves"]):  put(0, 0, SEC_V, A.A_WAVE + k, WAVE_CODE[s_])
     for base, key in ((A.A_AMP, "amp"), (A.A_FILT, "fenv")):
         for j, v in enumerate(regs[key]):   put(0, 0, SEC_V, base + j, v)
@@ -148,6 +138,22 @@ def script(short: bool = False):
         put(0, 1, SEC_V, A.A_INC + k, v)                     # flag = jump
     put(0, 0, SEC_V, A.A_TRACK, vf.VoiceFx.note_track(45, regs["track"]))
     for k, g in enumerate(regs["weights"]): put(0, 0, SEC_V, A.A_W + k, g)
+
+
+def script(short: bool = False):
+    """(wait_frames, flag, sec, addr, data) in send order, the frames to run
+    after the last write, and a COVERAGE claim -- what this stimulus says it
+    reaches, checked in main() against the model rather than assumed.
+    `wait_frames` is how many frame ticks the bench waits before starting that
+    transaction; the frame a write LANDS in is the link's business and comes
+    back from the bench."""
+    S = 0.35 if short else 1.0
+    regs = vf.VoiceFx.patch_regs()
+    w = []
+    def put(wait, flag, sec, addr, data): w.append((wait, flag, sec, addr, data))
+
+    # ---- 1. the voice image, back to back (the MCU's boot-time patch load) ----
+    _voice_image(put, regs)
 
     # ---- 2. the drum image: the reference kit, plus an accent of 1.0 per stop ----
     for a, v in dx.kit_808():               put(0, 0, SEC_D, a, v)
@@ -264,6 +270,111 @@ def script(short: bool = False):
                  drum_reset=sum(1 for c in w if c[2] == SEC_D and c[3] == dx.A_RESET),
                  voice_reset=sum(1 for c in w if c[2] == SEC_V and c[3] == A.A_RESET))
     return w, tail, cover
+
+
+def clap_script():
+    """plan084's production-path clap phrase (contract revision 11, the L2 final
+    strike), through the SPI pins with the voice sounding at its reference
+    gains: CP at three accents, re-struck around its final-strike boundary; CP
+    -> MA and MA -> CP switched while the other is still sounding; a drum RESET
+    in the middle of a strike train and the kit reloaded; and every stop at
+    accent 2.0 together with CP under the held note, at the INTENDED gains
+    (DVOL = BVOL = 0.45), which is the combined-headroom case. Coverage is
+    checked in main() against the model's own envelope state, not assumed."""
+    regs = vf.VoiceFx.patch_regs()
+    w = []
+    def put(wait, flag, sec, addr, data): w.append((wait, flag, sec, addr, data))
+    _voice_image(put, regs)
+    for a, v in dx.kit_808():               put(0, 0, SEC_D, a, v)
+    for st in range(dx.N_STOPS):            put(0, 0, SEC_D, dx.A_ACCENT + st, dx.accent_reg(1.0))
+    def hit(wait, sound, acc=1.0, hold=2):
+        st = dx.SOUND_STOP[sound]
+        put(wait, 0, SEC_D, dx.A_ACCENT + st, dx.accent_reg(acc))
+        put(0, 0, SEC_D, dx.A_STOPS, 1 << st); put(hold, 0, SEC_D, dx.A_STOPS, 0)
+    LASTF = dx.CP_BURSTS * dx.CP_PERIOD                       # 1533 frames, 31.9 ms
+    put(8, 0, SEC_V, A.A_GATE_ON, 0)                          # the mono voice, held throughout
+    hit(40, "CP", 1.0)
+    hit(LASTF - 8, "CP", 0.5)                                 # re-struck close to its final strike
+    hit(LASTF - 4, "CP", 2.0)
+    hit(LASTF + 6, "CP", 1.0)                                 # ... and just after one
+    hit(3 * LASTF, "CP", 1.0)
+    for a, v in dx.preset_writes("MA"):     put(0, 0, SEC_D, a, v)   # CP -> MA while CP sounds
+    hit(40, "MA", 1.0)
+    for i, (a, v) in enumerate(dx.preset_writes("CP")):   # MA -> CP 200 frames into the MA
+        put(200 if i == 0 else 0, 0, SEC_D, a, v)
+    hit(30, "CP", 1.0)                                        # MA -> CP while MA sounds
+    hit(2 * dx.CP_PERIOD, "CP", 1.0)
+    put(dx.CP_PERIOD + 100, 0, SEC_D, dx.A_RESET, 0)          # RESET in the middle of a strike train
+    for a, v in dx.kit_808():               put(0, 0, SEC_D, a, v)
+    for st in range(dx.N_STOPS):            put(0, 0, SEC_D, dx.A_ACCENT + st, dx.accent_reg(1.0))
+    hit(3 * LASTF, "CP", 1.0)
+    # combined headroom: every stop at accent 2.0 in one frame, CP among them, under the note
+    for st in range(dx.N_STOPS):            put(0, 0, SEC_D, dx.A_ACCENT + st, 65535)
+    put(3 * LASTF, 0, SEC_D, dx.A_STOPS, (1 << dx.N_STOPS) - 1); put(2, 0, SEC_D, dx.A_STOPS, 0)
+    tail = 6 * LASTF
+    return w, tail, dict(cp_hits=7, ma_hits=1, drum_reset=1)
+
+
+def clap_report(model_writes, n, exp_s, a) -> dict:
+    """What the clap phrase actually reached, from the MODEL's own envelope
+    state (a drums-only replay of the drum writes at the pin-predicted frames),
+    and the headroom split plan084 asks for: OUTPUT-rail samples in the final
+    stream, against the same fixture with the revision-10 clap image; and
+    INTERNAL envelope saturation (an envelope whose fire level reached the
+    24-bit rail), counted separately -- a saturated envelope is not a clipped
+    output, and a clean output does not mean no envelope saturated."""
+    LASTF = dx.CP_BURSTS * dx.CP_PERIOD
+    dw = [(f, ad, v) for f, fl, sec, ad, v in model_writes if sec == SEC_D]
+    d = dx.DrumsFx()
+    d.play(dw, n)
+    fire = d.trace["fire"]; env = d.trace["env"]
+    cpf = [f for f in range(n) if (int(fire[f]) >> dx.CP) & 1]
+    burst = env[dx.E_CPBURST]
+    # which CP fires were CP and which MA: MA's image writes FRATE = 0 before its strike
+    frate_at = {}
+    fr = 0
+    wi = sorted(dw)
+    k = 0
+    fa = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE + 3
+    for f in range(n):
+        while k < len(wi) and wi[k][0] <= f:
+            if wi[k][1] == fa: fr = wi[k][2]
+            if wi[k][1] == dx.A_RESET: fr = 0
+            k += 1
+        if f in cpf: frate_at[f] = fr
+    cp_only = [f for f in cpf if frate_at[f]]
+    ma = [f for f in cpf if not frate_at[f]]
+    spacing = [b - a_ for a_, b in zip(cp_only, cp_only[1:])]
+    env_sat = 0
+    for e in range(dx.N_ENV):
+        for f in range(n):
+            if env[e][f] == 32767 and (f == 0 or env[e][f - 1] != 32767) and int(fire[f]):
+                env_sat += 1
+    refused = []
+    if not any(LASTF - 64 <= g < LASTF for g in spacing): refused.append("a re-strike just BEFORE the final strike")
+    if not any(LASTF < g <= LASTF + 64 for g in spacing): refused.append("a re-strike just AFTER the final strike")
+    if d.envs[dx.E_CPBURST].n_final < 3: refused.append("three completed final strikes")
+    if not ma: refused.append("an MA strike on the shared circuit")
+    # the same fixture with the revision-10 clap image, for the output-rail split
+    rev10 = []
+    for f, fl, sec, ad, v in model_writes:
+        if sec == SEC_D and ad == dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE and (v & 15) == dx.CP \
+                and ((v >> 16) & 3) == dx.CP_BURSTS:
+            v = dx.env_ctl(dx.CP, 15, 0, 2, 480)
+        elif sec == SEC_D and ad == fa:
+            v = 0
+        elif sec == SEC_D and ad == dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE + 2 and v == dx.rate_reg(dx.CP_TAIL_TAU):
+            v = dx.rate_reg(47e-3)
+        rev10.append((f, fl, sec, ad, v))
+    m10 = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(rev10, n)
+    s10 = m10["sample"]
+    rail = lambda x: int(np.sum(np.abs(x) == 32767) + np.sum(np.asarray(x) == -32768))
+    return dict(cp_fires=len(cp_only), ma_fires=len(ma), ma_frate_zero=all(frate_at[f] == 0 for f in ma),
+                final_strikes=d.envs[dx.E_CPBURST].n_final, final_frame=LASTF,
+                restrike_spacings=spacing, env_saturated_fires=env_sat,
+                rail_samples=rail(exp_s), rail_samples_rev10=rail(s10),
+                peak=int(np.abs(exp_s).max()), peak_rev10=int(np.abs(s10).max()),
+                refused=refused)
 
 
 def m5a_script(manifest_path: str, *, smoke: bool = False,
@@ -645,6 +756,10 @@ def main(argv=None) -> int:
     ap.add_argument("--f1cal-fault", default=None, choices=F1CAL_FAULTS,
                     help="negative control: the image names the calibration, the pins "
                          "carry the legacy gain/ogain words; must fail (exit 1)")
+    ap.add_argument("--clap-phrase", action="store_true",
+                    help="plan084: the L2 clap phrase (re-strikes around the final strike, CP<->MA "
+                         "while sounding, RESET mid-train, every stop at accent 2 under the note) "
+                         "through SPI and I2S; writes clap-phrase.json with coverage and headroom")
     ap.add_argument("--envtrace", action="store_true",
                     help="write diagnostic voice gate/envelope registers per frame")
     a = ap.parse_args(argv)
@@ -693,12 +808,15 @@ def main(argv=None) -> int:
               + (f"; FAULT {a.f1cal_fault}: the pins carry legacy words "
                  f"{f1cal['legacy_words_res0']} / {f1cal['legacy_words_res05']}"
                  if a.f1cal_fault else ""))
+    elif a.clap_phrase:
+        cmds, tail, clap = clap_script()
+        cover = {}
     else:
         cmds, tail, cover = script(a.short)
     # The stimulus must reach the cases this bench claims, or it is not the
     # bench it says it is. Checked BEFORE the simulation, so a stimulus edit
     # that quietly drops a circuit refuses instead of passing.
-    focused = a.m5a or bool(a.f1cal_smoke)
+    focused = a.m5a or bool(a.f1cal_smoke) or a.clap_phrase
     if not focused:
         missing = [dx.STOP_NAMES[i] for i in range(dx.N_STOPS) if i not in cover["stops"]]
         pairs = {b for _, b in dx.PAIRS}
@@ -912,6 +1030,25 @@ def main(argv=None) -> int:
     # section is for. The model is the same whatever is injected, so this
     # refuses for a stimulus that stopped covering the case, never for a defect.
     LAST.update(model_peak=peak, model_clipped=clipped)
+    if a.clap_phrase:
+        rep_c = clap_report(model_writes, n, exp_s, a)
+        LAST.update(clap=rep_c)
+        wire = np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int64)
+        rep_c.update(wire_sha256=hashlib.sha256(wire.tobytes()).hexdigest(),
+                     model_sha256=hashlib.sha256(np.asarray(exp_i2s[:nper], dtype=np.int64).tobytes()).hexdigest(),
+                     periods=nper, wire_mismatch=mism, writes_sent=len(cmds),
+                     provenance=pv, compile_defines=defines)
+        with open(os.path.join(a.outdir, "clap-phrase.json"), "w") as fh:
+            json.dump(rep_c, fh, indent=1, default=int)
+        print(f"verify_synth_top: clap phrase: {rep_c['cp_fires']} CP fires, {rep_c['final_strikes']} final "
+              f"strikes, re-strike spacings {rep_c['restrike_spacings']} (final at {rep_c['final_frame']}); "
+              f"MA fires {rep_c['ma_fires']} with FRATE 0: {rep_c['ma_frate_zero']}; internal envelope "
+              f"saturation at fire: {rep_c['env_saturated_fires']}; output rail samples L2 "
+              f"{rep_c['rail_samples']} vs revision-10 clap in the same fixture {rep_c['rail_samples_rev10']}; "
+              f"peak {rep_c['peak']} vs {rep_c['peak_rev10']}")
+        if rep_c["refused"]:
+            print(f"verify_synth_top: REFUSED -- the clap phrase did not reach: {rep_c['refused']}")
+            return 2
     if clipped == 0 and not focused:
         print(f"verify_synth_top: REFUSED -- the simultaneous-hit section never reached the rail "
               f"(model peak {peak} of 32768): the master clamp is not exercised by this stimulus")

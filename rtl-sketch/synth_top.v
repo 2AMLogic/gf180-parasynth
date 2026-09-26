@@ -149,6 +149,7 @@ module synth_top #(
     wire [ENVS*27-1:0]    d_ectl;
     wire [ENVS*24-1:0]    d_peak;
     wire [ENVS*16-1:0]    d_rate;
+    wire [ENVS*16-1:0]    d_frate;
     wire [PATHS*25-1:0]   d_path;
     wire [MODES*26-1:0]   d_a1, d_a2;
     wire [MODES*16-1:0]   d_amp;
@@ -158,7 +159,7 @@ module synth_top #(
         .clk(clk), .rst_n(rst_n_drum), .wr_valid(wr_drum), .wr_addr(wr_addr), .wr_data(wr_data),
         .soft_rst(d_soft_rst),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
-        .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .path_bus(d_path),
+        .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .env_frate_bus(d_frate), .path_bus(d_path),
         .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num));
 
     wire signed [21:0] dmix;                 // the mix bus (15.5), 22 bits, exact:
@@ -168,7 +169,7 @@ module synth_top #(
     drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS)) u_drums (
         .clk(clk), .rst_n(rst_n_drum), .frame_tick(go),
         .stops(d_stops), .accent_bus(d_accent), .osc_inc_bus(d_osc),
-        .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .path_bus(d_path),
+        .env_ctl_bus(d_ectl), .env_peak_bus(d_peak), .env_rate_bus(d_rate), .env_frate_bus(d_frate), .path_bus(d_path),
         .a1_bus(d_a1), .a2_bus(d_a2), .amp_bus(d_amp), .num_bus(d_num),
         .mix_out(dmix), .mix_valid(mix_valid), .body_out(body), .body_valid(body_valid));
 
