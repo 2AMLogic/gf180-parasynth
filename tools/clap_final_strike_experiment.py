@@ -158,8 +158,9 @@ def render(cond: dict, accent: float = 1.0, offset: int = 0, force_subclass: boo
     eb = d.trace["env"][dx.E_CPBURST][offset:]
     rise = np.where(np.diff(eb) > 0)[0] + 1
     strikes = [round((f - (hit - offset)) / dx.SR * 1e3, 3) for f in rise if f < (hit - offset) + dx.SR // 5]
-    if eb[hit - offset] > 0:
-        strikes = [0.0] + strikes
+    # The fire frame is itself a rise from 0, so it is already in `rise`. The
+    # first run ALSO prepended 0.0 and reported every schedule with a doubled
+    # first strike ([0.0, 0.0, 10.0, 20.0]) -- a reporting bug, not a render one.
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR, strikes, eb
 
 
