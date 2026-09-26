@@ -59,7 +59,10 @@ Preconditions asserted at the point of use, each its own refusal code:
 
   SR_MISMATCH        the file's rate is not the rate the caller declared
   TOO_FEW_PERIODS    fewer than MIN_PERIODS clean periods in the window
-  LOW_LEVEL          the window sits within LEVEL_HEADROOM_DB of the file floor
+  LOW_LEVEL          the window is silent
+  WINDOW_SPANS_SILENCE
+                     the level moves by more than LEVEL_HEADROOM_DB across the
+                     window, so it is a note plus a gap, not a held tone
   NO_TRACK           the zero-crossing tracker produced no usable series
   ESTIMATOR_DISAGREE zc and het disagree on the mean f0 by > XCHECK_CENTS
   MULTI_PARTIAL      the fundamental's envelope ripples by more than one
@@ -412,6 +415,15 @@ def drift_report(x: np.ndarray, sr: int, f0_nominal: float, *,
         env_db = 20.0 * np.log10(np.maximum(env, 1e-30))
         env_db = env_db - float(np.mean(env_db))
         out["env_mod_db"] = float(np.max(env_db) - np.min(env_db))
+        # A window that runs into silence -- a release tail, or the gap before
+        # the note -- is not a held tone. It must refuse under ITS OWN code:
+        # read as ripple it looks like a mix (498 dB of "ripple" on a note plus
+        # its decay to zero), which is a true statement about the wrong thing.
+        if out["env_mod_db"] > LEVEL_HEADROOM_DB:
+            raise Refusal("WINDOW_SPANS_SILENCE",
+                          f"the fundamental's level moves {out['env_mod_db']:.1f} dB "
+                          f"across the window (> {LEVEL_HEADROOM_DB}); trim to "
+                          f"the held part before measuring pitch")
         tt = np.linspace(-1.0, 1.0, len(env_db))
         ripple = env_db - np.polyval(np.polyfit(tt, env_db, 1), tt)
         out["env_ripple_db"] = float(np.max(ripple) - np.min(ripple))

@@ -240,6 +240,61 @@ MMIX_FULL = 1 << 15              # mmix = 32768 is noise only; 0 is oscillator 3
 MPD_REF_OCT = 0.75
 MFD_REF_OCT = 1.30
 
+# ---- per-oscillator drift (DR 0018; contract 6.11) --------------------------
+# The Model D's three VCOs are not stable against each other, and the beating
+# of three slowly-wandering oscillators is part of what it sounds like. Static
+# detune gives a PERIODIC beat; drift gives a moving one.
+#
+# The mechanism is a bounded (Ornstein-Uhlenbeck) random walk per oscillator,
+# perturbing the phase increment MULTIPLICATIVELY, so the deviation is a
+# constant number of cents at every pitch. It is DISTINCT from the MR_OSC
+# modulation path of 6.9, which carries one shared, vibrato-shaped signal to all
+# three oscillators by construction and therefore cannot produce independent
+# drift whatever its depth.
+#
+# Entropy comes from the noise board's LFSR (DR 0012) -- no second generator --
+# decimated to one update every DRIFT_DIV frames and split into three
+# non-overlapping 5-bit fields of the same 16-bit word. The three fields are
+# reads of the same m-sequence 5 and 10 bits apart, and two shifts of an
+# m-sequence cross-correlate at -1/(2^31 - 1): the same decorrelation argument
+# DR 0012 already uses for the voice/drum seed separation, reused rather than
+# reinvented. `test_moog_acceptance.py` measures the realised correlation.
+DRIFT_BITS = 16                  # the DRIFT register: Q0.16 depth; 0 is off and
+                                 #   makes every sample bit-identical to no drift
+DRIFT_DIV_LOG2 = 10              # one update every 1024 frames = 21.33 ms
+DRIFT_DIV = 1 << DRIFT_DIV_LOG2
+DRIFT_ACC_BITS = 16              # the walk's state per oscillator, signed
+DRIFT_LEAK_LOG2 = 6              # acc -= round(acc / 64) each update: a bounded
+                                 #   walk with tau = 64 updates = 1.365 s. The
+                                 #   rounding is to NEAREST, not floor: floor
+                                 #   pulls negative states up by one LSB and
+                                 #   shows up as a static detune
+DRIFT_FIELD_BITS = 5             # LFSR bits per oscillator per update
+DRIFT_STEP_SHIFT = 5             # the step's scale. The 5-bit field b becomes
+                                 #   ((b << 1) + 1 - 32) << 5: odd values in
+                                 #   +-992, mean EXACTLY zero for uniform b
+DRIFT_DEV_BITS = 16              # the per-oscillator deviation word, signed
+DRIFT_DEV_Q = 20                 # ... Q0.20 of RELATIVE frequency. 1 cent is
+                                 #   2^20 * ln2 / 1200 = 605.6 LSB
+# The stationary rms of the walk's state, needed by the host to turn cents into
+# the DRIFT register. It is a property of the integer generator above, so it is
+# MEASURED from it (`drift_acc_rms`) rather than taken from the continuous-time
+# formula, and `test_moog_acceptance.py` pins it.
+DRIFT_ACC_RMS = 3394.0            # measured over 2^18 updates: 3406.4 / 3343.0
+                                  #   / 3432.3 for the three oscillators, whose
+                                  #   spread is this run's own sampling error.
+                                  #   Largest |acc| seen 15403, so the 16-bit
+                                  #   saturation has 2.1x headroom and never fires
+# The RANGE this project commits to as a target, and the reference value inside
+# it (DR 0018). It is a MUSICAL decision, not a reference measurement: the
+# frozen Mini V3 renders wander by 0.001-0.024 cents rms, 30-100x below this,
+# so the references bound drift rather than supplying an amount
+# (docs/scorecard/mono-osc-drift/). The default stays 0 -- switching it on moves
+# every rendered sample, which is a separate reviewable change.
+DRIFT_TARGET_CENTS = (0.8, 4.0)   # rms per oscillator
+DRIFT_REF_CENTS = 1.5             # the value inside it that patches should ask for
+CENTS_TO_DEV = (1 << DRIFT_DEV_Q) * math.log(2.0) / 1200.0          # 605.61 LSB per cent
+
 # ---- oscillator waveforms (docs/minimoog-reference.md W1-W7) ----------------
 # Drawing 1448 "WAVEFORM SWITCHING MINI D": saw and triangle reach the waveform
 # switch at the same +-1.75 V [verified: SM 2.3], and the shark-tooth position
@@ -629,6 +684,96 @@ class NoiseFx:
         for i in range(n):
             w[i], p[i], r[i] = self.step()
         return w, p, r
+
+
+# ---- per-oscillator drift (contract 6.11; DR 0018) --------------------------
+def drift_step(word: int, k: int) -> int:
+    """Oscillator k's noise step from the LFSR's 16-bit word.
+
+    Bits [15:11] for oscillator 0, [10:6] for 1, [5:1] for 2 -- three
+    NON-OVERLAPPING fields, so the three walks are reads of the same
+    m-sequence 5 and 10 places apart. Bit 0 is deliberately unused: the three
+    fields are then symmetric and the choice does not depend on the word width.
+
+    The field b becomes ((b << 1) + 1) - 32, i.e. an ODD value in +-31, whose
+    mean over uniform b is EXACTLY zero. Taking the field as a signed number
+    instead (b - 16) has mean -0.5, and a -0.5 mean step against a leak of
+    acc/64 parks the walk at -32 -- a small permanent detune dressed up as
+    drift."""
+    b = (word >> (11 - DRIFT_FIELD_BITS * k)) & ((1 << DRIFT_FIELD_BITS) - 1)
+    return (((b << 1) + 1) - (1 << DRIFT_FIELD_BITS)) << DRIFT_STEP_SHIFT
+
+
+def drift_acc_next(acc: int, step: int) -> int:
+    """One update of one oscillator's bounded walk:
+        acc <- sat(acc + step - round(acc / 2^DRIFT_LEAK_LOG2))
+    The leak is what makes it BOUNDED rather than a random walk, and the
+    saturation is a width guard that the measured rms sits 9 sigma inside."""
+    half = 1 << (DRIFT_LEAK_LOG2 - 1)
+    leak = (acc + half) >> DRIFT_LEAK_LOG2          # round to nearest
+    return sat(acc + step - leak, DRIFT_ACC_BITS)
+
+
+def drift_dev(acc: int, depth: int) -> int:
+    """The Q0.20 relative-frequency deviation from a walk state and the DRIFT
+    register: (acc * depth) >> 16, saturated to its own width. depth = 0 gives
+    exactly 0, so a voice with DRIFT unwritten is bit-identical to one with no
+    drift mechanism at all."""
+    return sat((acc * depth) >> DRIFT_BITS, DRIFT_DEV_BITS)
+
+
+def drift_apply(inc: int, dev: int) -> int:
+    """inc + ((inc * dev) >> DRIFT_DEV_Q), clamped to the increment register.
+    Multiplicative, so the deviation is the same number of CENTS at every
+    pitch; additive would make it the same number of Hz, which is 40 dB more
+    cents at the bottom of the keyboard than at the top."""
+    v = inc + ((inc * dev) >> DRIFT_DEV_Q)
+    return 0 if v < 0 else (INC_MAX if v > INC_MAX else v)
+
+
+def drift_reg(cents_rms: float) -> int:
+    """Host conversion (contract 5.5): the DRIFT register for a target rms
+    deviation in cents per oscillator.
+
+        depth = cents * CENTS_TO_DEV / DRIFT_ACC_RMS * 2^16
+
+    `DRIFT_ACC_RMS` is the walk's MEASURED stationary rms, not the
+    continuous-time prediction, so this conversion is grounded in the integer
+    generator that ships. 0 (or a nonpositive request) is off."""
+    if not cents_rms or cents_rms <= 0:
+        return 0
+    return usat(int(round(cents_rms * CENTS_TO_DEV / DRIFT_ACC_RMS
+                          * (1 << DRIFT_BITS))), DRIFT_BITS)
+
+
+def drift_cents(depth: int) -> float:
+    """The inverse of `drift_reg`: the rms cents a DRIFT register value means.
+    Reported rather than assumed, because the register is coarse at the bottom
+    of its range."""
+    return depth / (1 << DRIFT_BITS) * DRIFT_ACC_RMS / CENTS_TO_DEV
+
+
+def drift_walk(n_updates: int, *, div: int = 1, seed: int = VOICE_LFSR_SEED) -> tuple:
+    """(trace, rms, max|acc|) of the three walks over `n_updates`.
+
+    `div` is the LFSR frames per update. The STATIONARY statistics do not
+    depend on it -- any two distinct samples of an m-sequence are equally
+    uncorrelated -- only the timescale in seconds does, so the default 1 gives
+    the same rms 1024x faster and `test_moog_acceptance.py` checks that the
+    shipped div = DRIFT_DIV agrees within its own sampling error."""
+    state = int(seed)
+    acc = [0, 0, 0]
+    tr = [[], [], []]
+    for _ in range(int(n_updates)):
+        for _ in range(int(div)):
+            state, _ = lfsr_frame(state)
+        w = state & 0xFFFF
+        for k in range(3):
+            acc[k] = drift_acc_next(acc[k], drift_step(w, k))
+            tr[k].append(acc[k])
+    a = np.array(tr, dtype=np.float64)
+    return (a, [float(np.sqrt(np.mean(r * r))) for r in a],
+            [int(np.max(np.abs(r))) for r in a])
 
 
 # ---- 2^x for the modulation path (contract 6.9) -----------------------------
@@ -1050,6 +1195,9 @@ class VoiceFx:
         self.mod_sig = 0                             # the registered modulation value (6.9)
         self.weights = [0, 0, 0, 0]
         self.nsel = self.mmix = self.mwheel = self.mpd = self.mfd = self.mroute = 0
+        self.drift = 0                               # the DRIFT register (6.11)
+        self.drift_cnt = 0                           # frames to the next update
+        self.drift_acc = [0, 0, 0]                   # the three bounded walks
         for o in self.oscs:
             o.phase = o.inc_tgt = o.inc_acc = 0
 
@@ -1060,7 +1208,8 @@ class VoiceFx:
                    amp=(0.005, 0.25, 0.75, 0.12), fenv=(0.004, 0.30, 0.25, 0.10),
                    track=0.35, vol=None, glide_s=GLIDE_REF_S,
                    mod_mix=0.0, mod_wheel=0.0, mod_pitch=MPD_REF_OCT, mod_filter=MFD_REF_OCT,
-                   osc_mod=False, filt_mod=False, osc3_ctl=True, filter_calibration=None,
+                   osc_mod=False, filt_mod=False, osc3_ctl=True, drift_cents=0.0,
+                   filter_calibration=None,
                    **_ignored) -> dict:
         """The patch's physical units as the control image, less the per-note
         registers (inc, track_hz, gate). Same names and defaults as
@@ -1096,6 +1245,7 @@ class VoiceFx:
                     mfd=usat(int(round(mod_filter * (1 << OCT_Q))), MOD_BITS),
                     mroute=((MR_OSC if osc_mod else 0) | (MR_FILT if filt_mod else 0)
                             | (MR_OSC3 if osc3_ctl else 0)),
+                    drift=drift_reg(drift_cents),
                     **extra)
 
     @staticmethod
@@ -1186,6 +1336,7 @@ class VoiceFx:
         self.mpd = int(r.get("mpd", 0))
         self.mfd = int(r.get("mfd", 0))
         self.mroute = int(r.get("mroute", 0))
+        self.drift = int(r.get("drift", 0))
         self.regs = r
 
     def _modulate(self, incs, n, mw):
@@ -1229,8 +1380,26 @@ class VoiceFx:
         ph3 = self.oscs[2].phase
         m = self.mod_sig
         mwl = [int(v) for v in mw]
+        depth = self.drift
+        dacc = self.drift_acc
+        dcnt = self.drift_cnt
+        dev = [drift_dev(a, depth) for a in dacc]
+        dev_t = [np.empty(n, dtype=np.int64) for _ in range(3)]
         for i in range(n):
             w, p, r = nz.step()
+            # 6.11, BEFORE the modulation path uses the increments: the walk is
+            # updated on one frame in DRIFT_DIV, from the word the noise board's
+            # LFSR produced on THAT frame, and `dev` is recomputed every frame
+            # so that a DRIFT write takes effect on the frame it lands rather
+            # than waiting up to 21 ms for the next update.
+            if dcnt == 0:
+                word = nz.lfsr & 0xFFFF
+                for k in range(3):
+                    dacc[k] = drift_acc_next(dacc[k], drift_step(word, k))
+            dcnt = (dcnt + 1) & (DRIFT_DIV - 1)
+            for k in range(3):
+                dev[k] = drift_dev(dacc[k], depth)
+                dev_t[k][i] = dev[k]
             white[i] = w; pink[i] = p; red[i] = r
             msig[i] = m
             amt = clamp16((m * mwl[i]) >> 15)                    # the wheel
@@ -1249,10 +1418,19 @@ class VoiceFx:
                     inc_m[k][i] = v
             else:
                 inc_m[0][i] = inc_l[0][i]; inc_m[1][i] = inc_l[1][i]; inc_m[2][i] = inc_l[2][i]
+            if depth:
+                # drift comes AFTER the shared modulation factor and applies to
+                # all three oscillators unconditionally -- SW2 takes oscillator
+                # 3 off the MODULATION bus (M1), not off its own tuning.
+                for k in range(3):
+                    inc_m[k][i] = drift_apply(inc_m[k][i], dev[k])
             o3 = naive_one(shape3, ph3)                          # the tap, before the advance
             ph3 = (ph3 + inc_m[2][i]) & PHASE_MASK
             m = mod_pan(o3, r if nsel else p, mmix)              # 2.5: pink or RED for modulation
         self.mod_sig = m
+        self.drift_acc = dacc
+        self.drift_cnt = dcnt
+        self.drift_dev_trace = dev_t
         return inc_m, white, pink, red, mant_f, sh_f, msig
 
     def _render(self, incs, track, gate, trig, n, mw=None) -> np.ndarray:
@@ -1303,6 +1481,7 @@ class VoiceFx:
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
                           mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace,
+                          drift_dev=getattr(self, "drift_dev_trace", None),
                           filter_reconstruction=getattr(lad, "last_reconstruction", None),
                           filter_decimation=(getattr(getattr(lad, "converter", None),
                                                      "last_decimation", None)))

@@ -95,6 +95,7 @@ module voice_dp #(
     reg        nsel;                       // 0: white to audio, pink to mod; 1: pink, red (2.5)
     reg [2:0]  mroute;                     // bit0 osc mod, bit1 filter mod, bit2 OSC-3 CONTROL
     reg [15:0] mmix, mwheel, mpd, mfd;     // the MOD MIX pan, the wheel, the two depths (6.9)
+    reg [15:0] drift;                      // per-oscillator drift depth, Q0.16; 0 is off (6.11)
     reg [23:0] a_inc_a, d_dec_a, sus_a, a_inc_f, d_dec_f, sus_f;
     // Q0.16 normalized mantissa plus an 8-bit binary exponent. The exponent
     // preserves precision for long releases without widening the shared MAC.
@@ -136,6 +137,14 @@ module voice_dp #(
     reg [16:0] mant_p, mant_f;             // 2^frac, Q1.15 with 32768 = 1.0
     reg [4:0]  shf_p, shf_f;               // 15 - integer octaves: 12 .. 19
     reg [23:0] inc_mod [0:2];              // the increment each oscillator RUNS on
+    // per-oscillator drift (6.11, DR 0018): three bounded random walks off the
+    // noise board's OWN LFSR -- no second generator -- decimated to one update
+    // every 2^10 frames and split into three non-overlapping 5-bit fields of
+    // the same word. Distinct from the mod bus above, which is one shared
+    // signal to all three oscillators and cannot drift them apart.
+    reg [9:0]  drift_cnt;                  // frames to the next update
+    reg signed [15:0] drift_acc [0:2];     // each walk's state
+    reg signed [15:0] drift_dev [0:2];     // ... as a Q0.20 relative frequency
 
     // ---- ROMs: the contract's pinned images ----------------------------------
     reg [15:0] grom [0:128];
@@ -231,7 +240,9 @@ module voice_dp #(
         S_SK0 = 59, S_SK1 = 60, S_SK2 = 61,
         S_NMIX = 62, S_NACC = 63, S_CUTM = 64,
         S_RD0 = 65, S_RD1 = 66, S_RD2 = 67, S_RD3 = 68, S_RD4 = 69, S_RD5 = 70,
-        S_PN0 = 71, S_PN1 = 72, S_PN2 = 73, S_OSCWAIT = 74;
+        S_PN0 = 71, S_PN1 = 72, S_PN2 = 73, S_OSCWAIT = 74,
+        // appended again, for the same reason: tb_voice.v tracks state NUMBERS
+        S_DA0 = 75, S_DV0 = 76, S_DV1 = 77, S_DR0 = 78, S_DR1 = 79;
     reg [6:0]  state;
     reg [1:0]  kk;                     // oscillator index
     reg [1:0]  win;                    // PolyBLEP window 0..3
@@ -467,6 +478,69 @@ module voice_dp #(
     wire signed [15:0] shk_n = (shk_r > 18'sd32767) ? 16'sd32767
                              : (shk_r < -18'sd32768) ? -16'sd32768 : shk_r[15:0];
 
+    // ---- per-oscillator drift (6.11) ------------------------------------------------------
+    // The step: field b of the LFSR word becomes ((b << 1) + 1) - 32, scaled by
+    // 2^5. Odd values in +-992 with mean EXACTLY zero over uniform b; taking
+    // the field as a signed number instead has mean -0.5, and a -0.5 mean step
+    // against a leak of acc/64 parks the walk at -32 -- a static detune wearing
+    // drift's clothes.
+`ifdef INJECT_BUG_VOICE_DRIFT_MEANSTEP
+    // NEGATIVE CONTROL: the field taken as a plain signed number. Mean -0.5
+    // per update against a leak of acc/64 parks every walk at -32, which is a
+    // PERMANENT detune of 0.03 cents at full depth rather than drift.
+    function signed [11:0] dstep(input [4:0] b);
+        dstep = ($signed({7'b0, b}) - 12'sd16) <<< 6;
+    endfunction
+`else
+    function signed [11:0] dstep(input [4:0] b);
+        dstep = ($signed({6'b0, b, 1'b1}) - 12'sd32) <<< 5;
+    endfunction
+`endif
+    function signed [15:0] dsat(input signed [17:0] v);
+        dsat = (v >  18'sd32767) ?  16'sd32767 :
+               (v < -18'sd32768) ? -16'sd32768 : v[15:0];
+    endfunction
+    // the walk: acc + step - round(acc / 64), the rounding to NEAREST
+`ifdef INJECT_BUG_VOICE_DRIFT_SHARED
+    // NEGATIVE CONTROL: one field driving all three walks. This is the defect
+    // the issue names -- three oscillators in lockstep is vibrato, not drift --
+    // and it is invisible in any measurement of ONE oscillator.
+    wire [4:0] dfb0 = nx0_r[15:11], dfb1 = nx0_r[15:11], dfb2 = nx0_r[15:11];
+`else
+    wire [4:0] dfb0 = nx0_r[15:11], dfb1 = nx0_r[10:6], dfb2 = nx0_r[5:1];
+`endif
+    wire signed [11:0] dst0 = dstep(dfb0), dst1 = dstep(dfb1), dst2 = dstep(dfb2);
+`ifdef INJECT_BUG_VOICE_DRIFT_LEAKFLOOR
+    // NEGATIVE CONTROL: the leak FLOORED instead of rounded to nearest. A
+    // floor pulls every negative state up by one LSB per update, which is a
+    // bias, not a rounding difference.
+    wire signed [16:0] dlk0 = $signed({drift_acc[0][15], drift_acc[0]}) >>> 6;
+    wire signed [16:0] dlk1 = $signed({drift_acc[1][15], drift_acc[1]}) >>> 6;
+    wire signed [16:0] dlk2 = $signed({drift_acc[2][15], drift_acc[2]}) >>> 6;
+`else
+    wire signed [16:0] dlk0 = ($signed({drift_acc[0][15], drift_acc[0]}) + 17'sd32) >>> 6;
+    wire signed [16:0] dlk1 = ($signed({drift_acc[1][15], drift_acc[1]}) + 17'sd32) >>> 6;
+    wire signed [16:0] dlk2 = ($signed({drift_acc[2][15], drift_acc[2]}) + 17'sd32) >>> 6;
+`endif
+    wire signed [15:0] dacc_n0 = dsat($signed({{2{drift_acc[0][15]}}, drift_acc[0]})
+                                      + $signed({{6{dst0[11]}}, dst0})
+                                      - $signed({{1{dlk0[16]}}, dlk0}));
+    wire signed [15:0] dacc_n1 = dsat($signed({{2{drift_acc[1][15]}}, drift_acc[1]})
+                                      + $signed({{6{dst1[11]}}, dst1})
+                                      - $signed({{1{dlk1[16]}}, dlk1}));
+    wire signed [15:0] dacc_n2 = dsat($signed({{2{drift_acc[2][15]}}, drift_acc[2]})
+                                      + $signed({{6{dst2[11]}}, dst2})
+                                      - $signed({{1{dlk2[16]}}, dlk2}));
+    // dev = sat((acc * drift) >> 16); inc' = inc + ((inc * dev) >> 20). Both
+    // shifts are ARITHMETIC (floor), which is what the model's Python >> does.
+    wire signed [45:0] dev_s = mr >>> 16;
+    wire signed [15:0] dev_n = (dev_s >  46'sd32767) ?  16'sd32767 :
+                               (dev_s < -46'sd32768) ? -16'sd32768 : dev_s[15:0];
+    wire signed [45:0] dinc_s = mr >>> 20;
+    wire signed [26:0] dinc_r = $signed({3'b0, inc_mod[kk]}) + $signed(dinc_s[26:0]);
+    wire [23:0] inc_dr_n = (dinc_r < 27'sd0) ? 24'd0
+                         : (dinc_r > 27'sd16777215) ? 24'hFFFFFF : dinc_r[23:0];
+
     // ---- glide slew (6.7) ---------------------------------------------------------------
     wire [31:0] tgt   = {inc_tgt[kk], 8'b0};
     wire [55:0] Pfull = {mr[39:0], 16'b0} + {16'b0, pacc};       // inc_acc * glide, exact
@@ -525,6 +599,9 @@ module voice_dp #(
             mod_sig <= 0; naive3 <= 0; amt <= 0; octp <= 0; octf <= 0;
             mant_p <= 17'd32768; mant_f <= 17'd32768; shf_p <= 5'd15; shf_f <= 5'd15;
             wn <= 0; nsel <= 0; mroute <= 0; mmix <= 0; mwheel <= 0; mpd <= 0; mfd <= 0;
+            drift <= 0; drift_cnt <= 0;
+            drift_acc[0] <= 0; drift_acc[1] <= 0; drift_acc[2] <= 0;
+            drift_dev[0] <= 0; drift_dev[1] <= 0; drift_dev[2] <= 0;
             bacc <= 0; facc <= 0; racc <= 0; pnacc <= 0; shk <= 0; mixacc_shk <= 0;
             ep0 <= 0; ep1 <= 0;
             a_inc_a <= 0; d_dec_a <= 0; sus_a <= 0; rate_a <= 0; a_inc_f <= 0; d_dec_f <= 0; sus_f <= 0; rate_f <= 0;
@@ -606,14 +683,51 @@ module voice_dp #(
                         ma <= {1'b0, inc_acc[kk][31:8]}; mb <= {4'b0, mant_p}; state <= S_IM1;
                     end else begin
                         inc_mod[kk] <= inc_acc[kk][31:8];
-                        if (kk == 2'd2) begin kk <= 2'd0; state <= S_RCHK; end
+                        if (kk == 2'd2) begin kk <= 2'd0; state <= S_DA0; end
                         else kk <= kk + 2'd1;
                     end
                 end
                 S_IM1: begin
                     inc_mod[kk] <= inc_m_n;
-                    if (kk == 2'd2) begin kk <= 2'd0; state <= S_RCHK; end
+                    if (kk == 2'd2) begin kk <= 2'd0; state <= S_DA0; end
                     else begin kk <= kk + 2'd1; state <= S_IM0; end
+                end
+                // ---- 0b. per-oscillator drift (6.11) ----
+                // The walk advances on one frame in 2^10 whether DRIFT is zero
+                // or not, so switching drift on mid-note does not depend on
+                // when it was switched on. With DRIFT = 0 the three deviations
+                // are zero and the increments are untouched, which is why every
+                // image that never writes DRIFT renders exactly as before.
+                S_DA0: begin
+                    if (drift_cnt == 10'd0) begin
+                        drift_acc[0] <= dacc_n0; drift_acc[1] <= dacc_n1; drift_acc[2] <= dacc_n2;
+                    end
+                    drift_cnt <= drift_cnt + 10'd1;
+                    if (drift == 16'd0) begin
+                        drift_dev[0] <= 16'sd0; drift_dev[1] <= 16'sd0; drift_dev[2] <= 16'sd0;
+                        kk <= 2'd0; state <= S_RCHK;
+                    end else begin
+                        kk <= 2'd0; state <= S_DV0;
+                    end
+                end
+                S_DV0: begin
+                    ma <= {{9{drift_acc[kk][15]}}, drift_acc[kk]}; mb <= {5'b0, drift};
+                    state <= S_DV1;
+                end
+                S_DV1: begin
+                    drift_dev[kk] <= dev_n;
+                    if (kk == 2'd2) begin kk <= 2'd0; state <= S_DR0; end
+                    else begin kk <= kk + 2'd1; state <= S_DV0; end
+                end
+                S_DR0: begin
+                    ma <= {1'b0, inc_mod[kk]};
+                    mb <= {{5{drift_dev[kk][15]}}, drift_dev[kk]};
+                    state <= S_DR1;
+                end
+                S_DR1: begin
+                    inc_mod[kk] <= inc_dr_n;
+                    if (kk == 2'd2) begin kk <= 2'd0; state <= S_RCHK; end
+                    else begin kk <= kk + 2'd1; state <= S_DR0; end
                 end
                 // ---- 1. reciprocals ----
                 S_RCHK: begin
@@ -860,6 +974,7 @@ module voice_dp #(
                 8'h1F: mroute <= wr_data[2:0];                                 // OSC MOD / FILT MOD / OSC-3
                 8'h24: mmix <= wr_data[15:0];   8'h25: mwheel <= wr_data[15:0];
                 8'h26: mpd <= wr_data[15:0];    8'h27: mfd <= wr_data[15:0];
+                8'h2D: drift <= wr_data[15:0];                                 // per-oscillator drift (6.11)
                 8'h20: begin gate <= 1'b1; seg_a <= 2'd0; seg_f <= 2'd0;       // GATE_ON: ATTACK from the
 `ifdef INJECT_BUG_VOICE_TRIG_RESET                                             //   current level (8.5)
                        level_a <= 24'd0; level_f <= 24'd0;                     // NEGATIVE CONTROL: the reset-to-

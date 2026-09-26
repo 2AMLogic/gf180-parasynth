@@ -29,6 +29,12 @@ the test suite runs; --only picks by key):
              with both destinations on and OSC-3 CONTROL ON, which is
              oscillator 3 modulating its own pitch; and both depths at the
              register maximum, where the octave word saturates
+  drift      per-oscillator drift (6.11, DR 0018): the reference depth, the
+             register maximum together with the SHARED modulation bus at full
+             wheel, an oscillator drifted into the increment clamp, and a window
+             straddling a walk-update boundary. Every OTHER scenario runs
+             DRIFT = 0, which is bit-identical to no drift at all, so without
+             this key the drift path is never simulated
   notes      every NOTE_INC entry (0..127) with the default detunes; the
              increments where 5.5's clamp fires (note 127 + 24 semitones =
              2^24 - 1); the powers of two where the reciprocal clamps; inc =
@@ -83,14 +89,15 @@ from verify_ladder import tool
 A = dict(INC=0x00, WAVE=0x04, W=0x08, WN=0x0B, GLIDE=0x0C, VOL=0x0D, AMP=0x10, FILT=0x14,
          CUT_LO=0x18, CUT_HI=0x19, TRACK=0x1A, NSEL=0x1B, K=0x1C, GAIN=0x1D, OGAIN=0x1E,
          MROUTE=0x1F, GATE_ON=0x20, GATE_OFF=0x21, TRIG=0x22,
-         MMIX=0x24, MWHEEL=0x25, MPD=0x26, MFD=0x27)
+         MMIX=0x24, MWHEEL=0x25, MPD=0x26, MFD=0x27, DRIFT=0x2D)
 WAVE_CODE = vf.WAVE_CODE
 FULL24 = (1 << 24) - 1
 FIELDS = ["sample", "osc0", "osc1", "osc2", "inc0", "inc1", "inc2", "sh0", "sh1", "sh2",
           "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v",
           "phase2x0", "phase2x1", "phase2x2"]
 STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2",
-                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2"]
+                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2",
+                "drift_cnt", "drift_acc0", "drift_acc1", "drift_acc2"]
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
@@ -100,7 +107,8 @@ F1CAL = "surge-type2-clean-v1"
 #: requested image, so the bench must mismatch. Set by --f1cal-fault.
 F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
-        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
+        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY",
+        "DRIFT_SHARED", "DRIFT_LEAKFLOOR", "DRIFT_MEANSTEP"]
 
 
 # ---- the model's writes as register writes -----------------------------------
@@ -119,7 +127,8 @@ def patch_to_writes(regs: dict, f0: int) -> list:
             (f0, 0, A["VOL"], int(regs["vol"])), (f0, 0, A["GLIDE"], int(regs["glide"]))]
     out += [(f0, 0, A["NSEL"], int(regs.get("nsel", 0))), (f0, 0, A["MROUTE"], int(regs.get("mroute", 0))),
             (f0, 0, A["MMIX"], int(regs.get("mmix", 0))), (f0, 0, A["MWHEEL"], int(regs.get("mwheel", 0))),
-            (f0, 0, A["MPD"], int(regs.get("mpd", 0))), (f0, 0, A["MFD"], int(regs.get("mfd", 0)))]
+            (f0, 0, A["MPD"], int(regs.get("mpd", 0))), (f0, 0, A["MFD"], int(regs.get("mfd", 0))),
+            (f0, 0, A["DRIFT"], int(regs.get("drift", 0)))]
     return out
 
 
@@ -255,6 +264,37 @@ def scenarios(which: str, only=None) -> list:
     w = _note_writes(64, regs) + [(0, "GATE", 1), (n // 2, "MWHEEL", 0)]
     add("modulation", "both depths at 65535 (the octave word saturates at +-4), mmix past its top, "
         "wheel at 65535 then 0", regs, w, n)
+
+    # -- drift: per-oscillator drift, 6.11 / DR 0018 --------------------------------
+    # Every scenario above runs DRIFT = 0, which is bit-identical to no drift
+    # mechanism at all -- so without this key the RTL's drift path is never
+    # exercised and could be anything. Three cases: the reference depth; the
+    # register maximum together with the SHARED modulation bus on, where drift
+    # and MR_OSC multiply the same increment in one frame; and the increment
+    # clamp, where an oscillator already at 2^24 - 1 is drifted upward.
+    n = int((0.06 if q else 0.4) * SR)
+    for i, (cents, note, extra) in enumerate((
+            (vf.DRIFT_REF_CENTS, 33, {}),
+            (vf.drift_cents(65535), 45, dict(osc_mod=True, mod_wheel=1.0, mod_mix=0.0,
+                                             mod_pitch=vf.MPD_REF_OCT, osc3_ctl=True)),
+            (vf.drift_cents(65535), 127, dict(detune=(24.0, 23.0, -12.0))))):
+        regs = v.patch_regs(waves=("saw", "saw", "square"), mix=(1.0, 0.9, 0.8),
+                            q=0.7, drive=1.8, cutoff=(300, 6000), track=0.3,
+                            drift_cents=cents, **extra)
+        writes = _note_writes(note, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+        add("drift", f"DRIFT {regs['drift']} ({cents:.3f} cents rms) at note {note}"
+                     + (" with the shared mod bus at full wheel" if i == 1 else "")
+                     + (" at the increment clamp" if i == 2 else ""),
+            regs, writes, n)
+    # and the walk's own update boundary: DRIFT_DIV frames is 21.3 ms, so a
+    # window that straddles one carries the update itself rather than only the
+    # steady deviation between updates.
+    regs = v.patch_regs(waves=("saw", "revsaw", "tri"), mix=(1.0, 1.0, 1.0), q=0.4,
+                        drive=1.2, cutoff=(400, 4000), track=0.0,
+                        drift_cents=vf.DRIFT_REF_CENTS)
+    n = vf.DRIFT_DIV + (64 if q else 512)
+    add("drift", f"across a walk update: {n} frames spanning a DRIFT_DIV "
+                 f"({vf.DRIFT_DIV}-frame) boundary", regs, _note_writes(60, regs), n)
 
     # -- notes: the full note range and the increments where 5.5's clamps fire ----
     per = 12 if q else 40
@@ -493,7 +533,8 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
             print(f"  [{key}] {name}: frames {f0}..{f0 + n - 1} ({n}), {len(writes)} writes; {cov}")
         f0 += n
     state = [o.phase for o in v.oscs] + [o.inc_acc for o in v.oscs] + \
-            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + list(v._os2_phase)
+            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + \
+            list(v._os2_phase) + [v.drift_cnt] + list(v.drift_acc)
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "voice_writes.txt"), "w") as fh:
         fh.writelines("%d %d %d %d\n" % w for w in all_writes)
