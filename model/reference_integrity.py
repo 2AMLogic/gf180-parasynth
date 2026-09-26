@@ -56,19 +56,38 @@ TRANSIENT_PERIODS = 2        # blocks per note period when f0 is known
 TRANSIENT_FLOOR_DB = 1.0     # minimum threshold above the median, pitched path only
 
 
-def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0,
+def transient_report(x, sr: int = SR, *,
                      block_ms: float | None = None, k: float = 12.0, skip_s: float = 0.5,
                      f0_hz: float | None = None,
                      periods: int = TRANSIENT_PERIODS,
                      floor_db: float = TRANSIENT_FLOOR_DB) -> dict:
     """Isolated broadband transients against a stationary background.
 
-    A held note through a synthesiser is stationary: its short-time energy
-    above `hp_hz` sits at a steady floor. A click is broadband and brief, so
-    it appears as a small number of blocks whose high-band energy is far above
-    that floor. The threshold is `k` times the MEDIAN ABSOLUTE DEVIATION of
-    the block levels, not their standard deviation -- one loud click inflates
-    a standard deviation enough to hide itself.
+    **There is no adjustable cutoff.** The only high-frequency emphasis is a
+    fixed second difference, `np.diff(x, n=2)` -- transfer function
+    `(1 - z^-1)^2`, amplitude weighting `4 sin^2(pi f / sr)`. That is a +12
+    dB/octave TILT over the whole band, not a high-pass with a corner: no
+    frequency is excluded and none is passed flat. Measured through this
+    function at sr = 48 kHz (`test_second_difference_weighting_is_a_tilt`,
+    and it matches `4 sin^2` to 0.2 %):
+
+        250 Hz  -59.4 dB    4 kHz  -11.4 dB
+        500 Hz  -47.4 dB    6 kHz   -4.7 dB
+          1 kHz -35.3 dB    8 kHz    0.0 dB   <- unity, at sr/6
+          2 kHz -23.3 dB   24 kHz  +12.0 dB   <- Nyquist, gain 4
+
+    So the "high band" below is a WEIGHTING, not a passband, and the
+    detector's selectivity comes from that tilt plus the robust threshold, not
+    from a filter. This signature accepted an `hp_hz=6000` argument until
+    issue #276 and never read it; 6 kHz was not a corner of anything -- it is
+    4.7 dB below the one frequency the tilt does pass flat.
+
+    A held note through a synthesiser is stationary: its short-time
+    tilt-weighted energy sits at a steady floor. A click is broadband and
+    brief, so it appears as a small number of blocks whose weighted energy is
+    far above that floor. The threshold is `k` times the MEDIAN ABSOLUTE
+    DEVIATION of the block levels, not their standard deviation -- one loud
+    click inflates a standard deviation enough to hide itself.
 
     Reported against a Gaussian expectation: for a stationary Gaussian process
     the block levels are tightly clustered and the count above 12 MADs is
@@ -131,8 +150,9 @@ def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0,
     n = len(x)
     if n < sr:
         raise am.InsufficientEvidence("transient_report: need at least one second")
-    # a difference high-pass: no FFT wrap artefact, no filter design, and its
-    # response above hp_hz is flat enough for a detector
+    # a fixed +12 dB/octave tilt, not a filter: no FFT wrap artefact and
+    # nothing to design or tune. See the docstring for what it does and does
+    # not do.
     d = np.diff(x, n=2)
     nblocks = len(d) // nb
     lev = np.sqrt((d[:nblocks * nb].reshape(nblocks, nb) ** 2).mean(axis=1))
