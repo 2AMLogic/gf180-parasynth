@@ -170,3 +170,23 @@ naming the case/property and its preservation set.
    missed declared checks, human relay interventions, reruns caused only by
    provenance, setup failures found after expensive work began, time from
    implementation to qualified result. Not PR count or trial count.
+
+## 5. Running a trial (pilot, implemented)
+
+From a fresh checkout, on the build box or in CI (the laptop is not a
+supported environment; its Python and Icarus differ from the spec):
+
+```
+python3 tools/trial_env.py bootstrap --venv ~/work/trials-venv   # box; CI omits --venv
+~/work/trials-venv/bin/python tools/trial.py run T-DEADLINE      # or: make trial T=T-DEADLINE PY=...
+~/work/trials-venv/bin/python tools/trial.py check-receipt build/trials/T-DEADLINE/<run>/receipt.json
+```
+
+`bootstrap` installs `spec/trial-environment.json` (Python 3.12, pinned
+packages, oss-cad-suite via `tools/setup_ci_oss_cad.py`) and is a no-op when it
+is already satisfied. `tools/trial.py` refuses with NO VERDICT, before any child
+starts, when the environment, a checker, or a required asset is absent.
+`docs/trials.json` is the registry; `.github/workflows/trials.yml` runs the
+same bootstrap and gates on T-DEADLINE. Receipts live under `build/trials/` and
+are uploaded by CI as `trial-receipts`; `tools/trial.py compare A B` checks two
+environments reached the same numbers from the same inputs.
