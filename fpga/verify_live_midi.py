@@ -820,9 +820,10 @@ def check(run: dict, *, target: bool = False) -> dict:
             lbad.append(f"p95 {dist['p95_ms']:.2f} ms > {C.LATENCY_TARGET['p95_ms']}")
         if dist["p99_ms"] > C.LATENCY_TARGET["p99_ms"]:
             lbad.append(f"p99 {dist['p99_ms']:.2f} ms > {C.LATENCY_TARGET['p99_ms']}")
-    put("latency", lbad, "; ".join(lbad) or
+    put("latency", lbad, "; ".join(lbad) or (
         f"n {dist['n']}, p50 {dist['p50_ms']:.2f}, p95 {dist['p95_ms']:.2f}, "
-        f"p99 {dist['p99_ms']:.2f}, max {dist['max_ms']:.2f} ms"
+        f"p99 {dist['p99_ms']:.2f}, max {dist['max_ms']:.2f} ms" if lat else
+        f"not measured: {unpaired} anchors had no executed counterpart")
         + (" (target applies)" if target else " (reported; the target applies to `sustained`)"))
     if target:
         dropped = [c for _, c in exp["refusals"] if c == "queue-pressure"]
@@ -986,7 +987,11 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl", nargs="*", default=None, metavar="SCENARIO",
                     help="also replay the session's bytes through the UART RTL wrapper")
     ap.add_argument("--rtl-inject", nargs="*", default=[], metavar="CONTROL",
-                    help="also replay these controls' bytes through the RTL (must FAIL)")
+                    choices=("WRONG_DRUM_MAP", "DELAYED_EVENT"),
+                    help="also replay these controls' bytes through the RTL: the I2S "
+                         "comparison must FAIL. (DROP_NOTE_OFF changes the packet count, "
+                         "so its bytes cannot be paired with the schedule write for write; "
+                         "it is caught at the device contract.)")
     ap.add_argument("--reuse-rtl", action="store_true")
     ap.add_argument("--sustained-s", type=float, default=C.SUSTAINED_S)
     ap.add_argument("--rtl-sustained-s", type=float, default=3.0,
@@ -1017,9 +1022,9 @@ def main(argv=None) -> int:
         cols = " ".join(f"{p}={'M' if v == 'MOVED' else '.'}" for p, v in c["matrix"].items())
         print(f"live-midi control {name}: {'CAUGHT' if c['caught'] else 'MISSED'} "
               f"(must move {c['must_move']}) -- {cols}")
-    if a.rtl is not None:
+    if a.rtl is not None or a.rtl_inject:
         record["rtl"] = {}
-        for sc in (a.rtl or ["coverage"]):
+        for sc in ([] if a.rtl is None else (a.rtl or ["coverage"])):
             kw = {"seconds": a.rtl_sustained_s} if sc == "sustained" else {}
             r = check(run_session(sc, **kw))
             rr = rtl_replay(r, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
