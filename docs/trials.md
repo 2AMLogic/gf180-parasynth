@@ -187,7 +187,8 @@ packages, oss-cad-suite via `tools/setup_ci_oss_cad.py`) and is a no-op when it
 is already satisfied. `tools/trial.py` refuses with NO VERDICT, before any child
 starts, when the environment, a checker, or a required asset is absent.
 `docs/trials.json` is the registry; `.github/workflows/trials.yml` runs the
-same bootstrap and gates on T-DEADLINE. Receipts live under `build/trials/` and
+same bootstrap and gates on T-DEADLINE and, since #278, on T-RELEASE-BOUND in its
+own `trial-release-bound` job. Receipts live under `build/trials/` and
 are uploaded by CI as `trial-receipts`; `tools/trial.py compare A B` checks two
 environments reached the same numbers from the same inputs.
 
@@ -220,3 +221,63 @@ T-DEADLINE modes.
 | T-DEADLINE reanalyse, truncated trace | main | NO VERDICT | staging refused the altered trace before the checker ran |
 | T-PLAY-DIGITAL | main | NO VERDICT (preflight) | `held_note_audible.py` absent until #255 |
 | T-PLAY-DIGITAL | +#255 | PASS | three held notes audible (peaks 12760/7345/10376 LSB) and bit-exact; demo phrase 257,185 I2S periods, 508/508 writes, 0 mismatches; silent-image control caught |
+
+### R1 release receipts, 2026-09-26 (#278; a snapshot, not maintained state)
+
+`docs/trials/r1-2026-09-26.tgz` holds `trial-receipt/2` receipts from the build
+box, produced by `tools/r1_release_trials.py` (its `summary.json` and logs are
+in the bundle). After extracting it, `python3 tools/trial.py check-all r1`
+reports **12/12 valid**. Editing one artifact of the extracted copy (the silent
+control's peak set to 4000 and its verdict to PASS) is REJECTED twice: once as
+an altered artifact, and once because the evidence re-derives to PASS, not caught.
+
+Integrated revisions:
+
+- `landed-abfb95b/` is a clean clone of main at `abfb95b`. That commit contains
+  #274 (`935d153`, the trials pilot) and #255 (`019ec53`, the release manifest),
+  plus #261, and nothing from #278. This is the landed #274+#255 combination
+  the issue asks for. The earlier `cand255-5a8f87d/` merge above was local and
+  never pushed, so it is development evidence only.
+- `release-460abf9/` is a clean clone of #278's branch at `460abf9`, which is
+  `abfb95b` plus the stale controls. Its `fixtures/` receipts come from a
+  throwaway clone of the same commit with evidence removed. Each receipt records
+  `dirty: true` and the damage. The real manifest and tree were only read.
+
+| trial | tree | verdict | what it shows |
+|---|---|---|---|
+| T-RELEASE-BOUND | main `abfb95b` | NO VERDICT | both children BOUND, but no control declared, so it cannot PASS (the state #278 fixes) |
+| T-RELEASE-BOUND | `460abf9` | **PASS** | manifest BOUND; binding BOUND; `stale-manifest` caught; `stale-binding` caught |
+| T-RELEASE-BOUND, candidate stale-manifest | `460abf9` | FAIL | manifest bound to the pre-fix CLI bytes of `run --note 45 --fixture none` (26 packets, not 36) is STALE at exactly `commands.held-default.cmds_sha256`/`.packets` |
+| T-RELEASE-BOUND, candidate stale-binding | `460abf9` | FAIL | isolated tree holding the image's pre-#252 `voice_dp.v` (`a1575257`) is STALE against `drift-clean`, naming exactly that file |
+| T-RELEASE-BOUND, manifest deleted | `460abf9` + damage | NO VERDICT (preflight) | missing required asset; nothing ran |
+| T-RELEASE-BOUND, manifest truncated | `460abf9` + damage | NO VERDICT | `release_manifest: REFUSED -- ... unreadable`; the stale-manifest control also REFUSED (not caught) |
+| T-RELEASE-BOUND, bound record deleted | `460abf9` + damage | NO VERDICT | binding checker REFUSED; the stale-binding control also REFUSED (not caught) |
+| T-DEADLINE reanalyse | main `abfb95b` | PASS | retained traces: slack 14, 3300/3300 I2S periods; late160 caught |
+| T-DEADLINE sim | main `abfb95b` | PASS | this tree's RTL: slack 13, 3300/3300 periods, 0 missed; late160 caught |
+| T-DEADLINE sim, candidate late160 | main `abfb95b` | FAIL | 3496 missed frames, overrun: the deadline reason |
+| T-PLAY-DIGITAL sim | main `abfb95b` | **PASS** | held notes bit-exact and audible, peaks 12760/7345/10376 LSB (default/m5a-saw/m5a-pulse); demo phrase 257,185 I2S periods, 508/508 writes, 0 wire mismatches, 0 overrun; silent-image control caught (peak 0) |
+| T-PLAY-DIGITAL sim, candidate held-legacy-silent | main `abfb95b` | FAIL | pre-fix image replays bit-exact but is silent: peak 0 below the 1024 LSB floor |
+
+T-PLAY-DIGITAL on landed main reproduces the unpushed pilot merge's numbers
+exactly (the same three peaks, 257,185 periods and 508 writes). The phrase took
+2386 s of simulation.
+
+**Unreadable manifest, start red.** On landed main, `release_manifest.py
+--manifest <truncated copy>` raised `JSONDecodeError` and exited 1, which is
+STALE's exit code. The trial still read it as NO VERDICT because no verdict line
+was printed, but anything reading the exit status alone would have reported a
+stale release. #278 makes it `REFUSED` (exit 2).
+(`fpga/release/test_stale_controls.py::test_unreadable_manifest_is_refused_not_stale`)
+
+**Wrong-then-right in this work: 0 measurements.** One defect was found by
+reading code before the first run, not by a control. The binding control's
+first parser would have counted the checker's indented "re-run the bench"
+commands as uncovered sources. A STALE naming them would then have been
+REFUSED as "a different reason", which is a false negative, not a false catch.
+
+**Blocking, not yet required.** CI's `trial-release-bound` job fails unless the
+trial PASSes. Making it a *required* status check is not blocked by permissions:
+the sweep's token has admin on this repository. It is blocked by two things.
+First, `main` has no branch protection or ruleset at all, so requiring anything
+is a new repository policy. Second, a required job must exist on `main` before
+it is required, or older PRs cannot merge. Tracked as #287.

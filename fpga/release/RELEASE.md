@@ -17,7 +17,15 @@ publication, `report.json`, the DSP evidence's `routed.dcp` digest, the tree's
 RTL and ROM bytes, the evidence runs' source identities, and the CLI's current
 bytes. `STALE` means something that ships has changed; bind it again
 deliberately (`--write`) or cut a new release. `REFUSED` means the artifacts
-disagree, so no release can be bound.
+disagree or the manifest is missing or unreadable, so no release can be bound.
+
+As a trial, `python tools/trial.py run T-RELEASE-BOUND` runs this check and
+`tools/check_arty_evidence_binding.py`, plus two STALE controls from
+[`stale_controls.py`](stale_controls.py). The first is a copy of this manifest
+bound to the pre-fix CLI bytes of the held note. The second is an isolated copy
+of the tree holding the image's pre-#252 `voice_dp.v`. The trial PASSes only
+when both checks are BOUND and both controls are caught. CI's
+`trial-release-bound` job fails otherwise (#278).
 
 ## What is released
 
