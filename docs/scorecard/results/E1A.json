@@ -2,37 +2,37 @@
   "engine": "fixed-model",
   "case_id": "E1A",
   "subject": "Bass and kit / sparse",
-  "source_commit": "e428886",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:31:24Z",
+  "source_commit": "d42ac140",
+  "analysis_run": "run_case@1ce265479a2c + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T11:53:40Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "e428886",
-      "described": "node/D-drums-bitexact-84-ge428886",
-      "branch": "fix-decay-and-corner",
-      "dirty": false,
-      "uncommitted_sha256": "e3b0c44298fc1c14",
-      "untracked_files": 0
+      "commit": "d42ac140",
+      "described": "d42ac140-dirty",
+      "branch": "feature/clap-final-strike-l2",
+      "dirty": true,
+      "uncommitted_sha256": "496657134d41167b",
+      "untracked_files": 64
     },
     "base_check": {
       "checked": true,
-      "origin_main": "398bc543d7b9",
+      "origin_main": "55bf490a76ff",
       "behind_commits": 0,
-      "ahead_commits": 5,
+      "ahead_commits": 11,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
+        "model/drums_fx.py": {
+          "origin_main": "4a0177412ff4",
+          "here": "5c61662c8158"
         }
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
     },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
+    "command": "tools/run_case.py D12A E1A E1B E2A",
     "config": {
       "patch": "01-bass-classic",
       "dense": false,
@@ -41,27 +41,30 @@
       "bus_gain": 0.45,
       "limiter": false
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-19T01:31:24Z",
+    "python": "3.12.14",
+    "run_at": "2026-09-26T11:53:40Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:5c61662c81583c38",
+      "model/voice_fx.py": "sha256:85f80f46481be1a8",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:4222305718828edf",
+      "tools/run_case.py": "sha256:1ce265479a2c9d27",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e"
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc"
     },
     "artefacts": {
-      "mix": "not written (--no-audio)"
+      "mix": "build/scorecard/E1A-mix.wav"
     },
     "outcome_code": 0,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "reference_profile": "our own per-bus stems and the written hit schedule; no external reference is involved in this case",
   "render_run": "voice_fx 01-bass-classic + drums_fx sparse groove, 124 BPM, 2 bars, buses 0.45/0.45, no limiter",
-  "audio": "not written (--no-audio)",
+  "audio": "build/scorecard/E1A-mix.wav",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -102,10 +105,10 @@
     }
   },
   "diagnostics": {
-    "peak_fs": 0.816437,
+    "peak_fs": 0.81839,
     "stem_peaks_fs": {
       "voice": 0.527618,
-      "drum-mix": 0.316925,
+      "drum-mix": 0.378143,
       "body": 0.585175
     },
     "scheduled_events": 42,
@@ -120,7 +123,7 @@
       "SD"
     ],
     "onsets_outside_the_schedule": 1,
-    "dc_offset_fs": 0.00153391,
+    "dc_offset_fs": 0.00153096,
     "patch": "01-bass-classic",
     "bpm": 124.0
   }

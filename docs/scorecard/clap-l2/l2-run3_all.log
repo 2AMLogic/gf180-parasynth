@@ -1,0 +1,13 @@
+==============================================================================
+PASS           592.1s  /home/ubuntu/work/venv/bin/python -m pytest model/test_clap_final_strike.py model/test_drums_fx.py model/test_808_acceptance.py model/test_synth_top_model.py tools/test_clap_l2_identity.py tools/test_unqualified_metric.py -q -p no:cacheprovider
+              ........................................................................ [ 40%]
+              ........................................................................ [ 80%]
+              ....................................                                     [100%]
+              180 passed in 591.75s (0:09:51)
+PASS            67.0s  make reference-integration PY=/home/ubuntu/work/venv/bin/python
+                /home/ubuntu/work/clap-d/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.
+                  sr, x = wavfile.read(str(path))
+              -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+              147 passed, 5 warnings in 66.71s (0:01:06)
+==============================================================================
+2/2 passed

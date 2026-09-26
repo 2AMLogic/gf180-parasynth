@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python -m pytest model/test_clap_final_strike.py model/test_drums_fx.py model/test_808_acceptance.py model/test_synth_top_model.py tools/test_clap_l2_identity.py tools/test_unqualified_metric.py -q -p no:cacheprovider",
+    "state": "PASS",
+    "rc": 0,
+    "out": "........................................................................ [ 40%]\n........................................................................ [ 80%]\n....................................                                     [100%]\n180 passed in 591.75s (0:09:51)\n",
+    "secs": 592.0633685588837
+  },
+  {
+    "cmd": "make reference-integration PY=/home/ubuntu/work/venv/bin/python",
+    "state": "PASS",
+    "rc": 0,
+    "out": "GF180_REQUIRE_TR808_REFS=1 /home/ubuntu/work/venv/bin/python -m pytest tools/test_run_case.py tools/test_metric_purpose.py -q\n........................................................................ [ 48%]\n........................................................................ [ 97%]\n...                                                                      [100%]\n=============================== warnings summary ===============================\ntools/test_run_case.py::test_every_result_this_runner_writes_carries_provenance\ntools/test_run_case.py::test_a_missing_reference_is_a_no_verdict_with_a_reason\ntools/test_run_case.py::test_a_reference_shifted_by_twice_the_tolerance_fails\ntools/test_run_case.py::test_the_same_case_without_the_injection_does_not_fail_on_pitch\ntools/test_run_case.py::test_written_results_are_the_shape_the_board_reads\n  /home/ubuntu/work/clap-d/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.\n    sr, x = wavfile.read(str(path))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n147 passed, 5 warnings in 66.71s (0:01:06)\n",
+    "secs": 66.99257206916809
+  }
+]

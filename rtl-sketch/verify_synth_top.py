@@ -345,11 +345,17 @@ def clap_report(model_writes, n, exp_s, a) -> dict:
     cp_only = [f for f in cpf if frate_at[f]]
     ma = [f for f in cpf if not frate_at[f]]
     spacing = [b - a_ for a_, b in zip(cp_only, cp_only[1:])]
-    env_sat = 0
+    # INTERNAL saturation: a strike whose accent-scaled level hit the 24-bit
+    # envelope rail (ENV = 32767), per envelope and per frame. Not an output clip.
+    env_sat, env_sat_where = 0, []
     for e in range(dx.N_ENV):
         for f in range(n):
             if env[e][f] == 32767 and (f == 0 or env[e][f - 1] != 32767) and int(fire[f]):
                 env_sat += 1
+                env_sat_where.append({"env": e, "frame": f, "stops": [dx.STOP_NAMES[s] for s in range(dx.N_STOPS)
+                                                                       if (int(fire[f]) >> s) & 1]})
+    # OUTPUT rail samples, located: which of them fall within 50 ms of the all-stops hit
+    all_hit = next((f for f in range(n) if int(fire[f]) == (1 << dx.N_STOPS) - 1), None)
     refused = []
     if not any(LASTF - 64 <= g < LASTF for g in spacing): refused.append("a re-strike just BEFORE the final strike")
     if not any(LASTF < g <= LASTF + 64 for g in spacing): refused.append("a re-strike just AFTER the final strike")
@@ -369,9 +375,18 @@ def clap_report(model_writes, n, exp_s, a) -> dict:
     m10 = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(rev10, n)
     s10 = m10["sample"]
     rail = lambda x: int(np.sum(np.abs(x) == 32767) + np.sum(np.asarray(x) == -32768))
+    def rail_frames(x):
+        x = np.asarray(x)
+        return [int(i) for i in np.where((np.abs(x) == 32767) | (x == -32768))[0]]
+    r_new, r_old = rail_frames(exp_s), rail_frames(s10)
+    near = lambda fr: (sum(1 for f in fr if all_hit is not None and all_hit <= f < all_hit + 2400))
     return dict(cp_fires=len(cp_only), ma_fires=len(ma), ma_frate_zero=all(frate_at[f] == 0 for f in ma),
                 final_strikes=d.envs[dx.E_CPBURST].n_final, final_frame=LASTF,
-                restrike_spacings=spacing, env_saturated_fires=env_sat,
+                restrike_spacings=spacing, env_saturated_fires=env_sat, env_saturated_where=env_sat_where,
+                all_stops_hit_frame=all_hit,
+                rail_in_all_stops_hit_50ms=near(r_new), rail_in_all_stops_hit_50ms_rev10=near(r_old),
+                rail_elsewhere=[f for f in r_new if not (all_hit is not None and all_hit <= f < all_hit + 2400)],
+                rail_elsewhere_rev10=[f for f in r_old if not (all_hit is not None and all_hit <= f < all_hit + 2400)],
                 rail_samples=rail(exp_s), rail_samples_rev10=rail(s10),
                 peak=int(np.abs(exp_s).max()), peak_rev10=int(np.abs(s10).max()),
                 refused=refused)
