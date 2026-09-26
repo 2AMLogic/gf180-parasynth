@@ -1,0 +1,32 @@
+==============================================================================
+PASS            81.4s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_metric_purpose.py tools/test_acceptance_policy.py tools/test_acceptance_on_real_records.py -q -p no:cacheprovider
+              ........................................................................ [ 75%]
+              .......................                                                  [100%]
+              95 passed in 77.92s (0:01:17)
+PASS           179.0s  env GF180_REQUIRE_TR808_REFS=1 GF180_TR808_REFS=<scratchpad>/tr808-ref /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -rs
+                /private/tmp/wt-cowbell-141/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.
+                  sr, x = wavfile.read(str(path))
+              -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+              99 passed, 5 warnings in 175.82s (0:02:55)
+FAIL(1)         17.2s  env GF180_REQUIRE_TR808_REFS=1 GF180_TR808_REFS=<scratchpad>/emptyrefs /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -k 'injection_refuses_to_write or missing_reference_is_a_no_verdict'
+              =========================== short test summary info ============================
+              ERROR tools/test_run_case.py::test_a_missing_reference_is_a_no_verdict_with_a_reason
+              ERROR tools/test_run_case.py::test_the_injection_refuses_to_write_onto_the_board
+              97 deselected, 2 errors in 11.93s
+PASS            16.3s  env -u GF180_REQUIRE_TR808_REFS GF180_TR808_REFS=<scratchpad>/emptyrefs /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -rs -k 'injection_refuses_to_write or missing_reference_is_a_no_verdict'
+              =========================== short test summary info ============================
+              SKIPPED [1] tools/test_run_case.py:590: OPTIONAL local run, skipped: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS
+              SKIPPED [1] tools/test_run_case.py:645: OPTIONAL local run, skipped: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS
+              2 skipped, 97 deselected in 11.20s
+PASS            80.4s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl2
+              D13A   fail          15.81  worst: unwanted difference tone
+              ------------------------------------------------------------------------------------------------
+              fail: 1
+              control fired: CB_GATE_THE_SUM caused the expected result on 1 measured case(s)
+PASS            93.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/check_doc_claims.py
+              OK      docs/ladder-rung1-audit.md:187  model/test_ladder_headroom.py::test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin passed, as claimed
+              OK      docs/ladder-rung1-audit.md:201  model/test_ladder_headroom.py::test_the_drive_stage_saturation_point_is_in_the_references_range passed, as claimed
+              OK      docs/ladder-rung1-audit.md:219  model/test_ladder_headroom.py::test_the_rig_refuses_to_apply_the_tuning_polynomial_twice passed, as claimed
+              22 claim(s) in 39 document(s): 22 ok, 0 stale, 0 refused
+==============================================================================
+5/6 passed  --  FAIL env GF180_REQUIRE_TR808_REFS=1 GF180_TR808_R

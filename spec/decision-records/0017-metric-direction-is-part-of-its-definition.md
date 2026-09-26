@@ -121,3 +121,30 @@ floor. How precisely we read a deficit no longer matters.
   case that needs it.
 - Other scripts that compute `|error| <= tolerance` themselves, such as the
   M1A/M5A tools, do not read `purpose`. None of them scores this metric.
+
+## Amendment after review (#241): a clamp must not certify a non-number
+
+In the first version, `max(0, error) / tolerance` scored a NaN or −inf error,
+and any error over a +inf tolerance, as a **pass at distance 0**. A ceiling
+is a clamp, and a clamp swallows exactly the values that mean the measurement
+did not happen. `metric_distance` now checks `error`, `tolerance`, `value` and
+`reference` **before** any clamp or division. A non-finite number, or a
+tolerance that is not strictly positive, is refused as "invalid number" and
+the case gets **NO VERDICT** under both purposes. `measure_pair` also refuses
+a non-finite estimate before anything is written.
+
+- Start red: all 34 new checks failed (exit 1). They cover NaN and ±inf for
+  error, value and reference, plus NaN, ±inf, 0 and negative tolerance, under
+  both purposes, and non-finite estimates from ours and the reference.
+- Wrong-then-right: the first green run still failed the two zero-tolerance
+  cases. The old early exit marked them invalid without the "invalid number"
+  reason. Every check now goes through `metric_distance`.
+- The finite answers are unchanged. D13A was re-run on the settled scorer:
+  same audio hash, same vector, and still 2.82 on partial balance. The
+  CB_GATE_THE_SUM control still fires.
+
+The reference-corpus tests now read the runner's location
+(`run_case.configured_refs`: `$GF180_TR808_REFS`, else `/tmp/tr808-ref`).
+Under `GF180_REQUIRE_TR808_REFS=1` (`make reference-integration`) a missing
+corpus is REFUSED with a non-zero exit. Without it, the tests still skip, and
+each skip is marked OPTIONAL. Logs are in `docs/scorecard/cowbell-141/review-1/`.
