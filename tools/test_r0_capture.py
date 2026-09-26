@@ -70,8 +70,8 @@ def test_ncc_lag_recovers_a_known_fractional_delay():
 def test_first_strong_lag_takes_the_earliest_repeat():
     rng = np.random.default_rng(2)
     motif = _bl_noise(2000, rng)
-    sig = np.zeros(20000)
-    for at in (3000, 9000, 15000):
+    sig = np.zeros(60000)
+    for at in (3000, 27000, 51000):          # repeats 0.5 s apart, like bars of a pattern
         sig[at:at + 2000] += motif
     lag, ncc = rc.first_strong_lag(motif, sig, 0, sig.size - motif.size)
     assert abs(lag - 3000) < 0.01 and ncc > 0.99

@@ -133,7 +133,8 @@ def rms(x) -> float:
 
 def _kaiser(t, half, beta=9.0):
     u = np.clip(1.0 - (t / half) ** 2, 0.0, None)
-    return np.i0(beta * np.sqrt(u)) / np.i0(beta)
+    from scipy.special import i0            # numpy's i0 is 10x slower (profiled)
+    return i0(beta * np.sqrt(u)) / i0(beta)
 
 
 def interp(x: np.ndarray, pos: np.ndarray, half: int = 32) -> np.ndarray:
