@@ -152,34 +152,84 @@ def test_control_omitting_the_zero_order_hold_is_a_one_db_error():
 def test_the_peak_locator_recovers_the_analytic_peak_it_will_be_compared_to():
     """Ground truth for the estimator itself: hand `peak_of` the CLOSED FORM
     sampled on the probe grid and it must return the closed form's own peak. A
-    bias here would be read as every candidate's tuning error."""
-    for cut, res in ((400.0, 0.9), (1600.0, 0.5), (6400.0, 0.9)):
+    bias here would be read as every candidate's tuning error.
+
+    **The grid is centred on the ANALYTIC PEAK, not on the cutoff, because that
+    is what `peak_probe` does.** An earlier version of this test centred it on
+    the cutoff and refused at `1600/0.5` -- the ladder's peak sits at 0.819 x
+    cutoff there, outside `PEAK_SPAN`, which is the exact failure
+    `analytic_peak`'s docstring records having already been fixed in the
+    apparatus. Testing a window the apparatus does not use measures nothing the
+    apparatus does. Measured by `model/probe_rungs_2_4_gaps.py` probe 1."""
+    for cut, res in ((400.0, 0.9), (1600.0, 0.5), (6400.0, 0.9), (1600.0, 0.9)):
+        f_a, g_a = lc.analytic_peak(cut, res)
         grid = np.unique(lc.snap_freqs(
-            cut * np.geomspace(*lc.PEAK_SPAN, lc.PEAK_POINTS)))
+            f_a * np.geomspace(*lc.PEAK_SPAN, lc.PEAK_POINTS)))
         f_hat, g_hat = lc.peak_of(grid, lc.analytic_response_db(cut, res, grid))
-        dense = np.geomspace(*lc.PEAK_SPAN, 4001) * cut
-        a = lc.analytic_response_db(cut, res, dense)
-        j = int(np.argmax(a))
-        assert abs(1200.0 * math.log2(f_hat / dense[j])) < 3.0, (cut, res, f_hat, dense[j])
-        assert abs(g_hat - a[j]) < 0.05
+        assert abs(1200.0 * math.log2(f_hat / f_a)) < 3.0, (cut, res, f_hat, f_a)
+        assert abs(g_hat - g_a) < 0.05, (cut, res, g_hat, g_a)
 
 
 def test_the_instrumented_cost_is_the_shape_each_core_declares():
     """`tanh` and divide counts are counted by the inner loop; the report's
     clock estimate is built on them. Pin them so a core that changes shape
     cannot keep a stale cost, and so the claim "the whole difference is
-    divides" stays checkable."""
+    divides" stays checkable.
+
+    **Each core is instantiated with the kwargs `CORES` carries**, because
+    `NewtonCore.MULS` is set in `__init__` from `iters` and is not a class
+    constant. Instantiating without them compared the 3-iteration core's
+    instrumented 60 multiplies against the 2-iteration default's declared 43 --
+    a stale cost of exactly the kind this test exists to catch, caught here
+    against the declaration rather than in the report. Measured by
+    `model/probe_rungs_2_4_gaps.py` probe 2."""
     x = np.zeros(200)
     x[0] = 20000.0
-    want = {"shipped": (5.0, 0.0), "zdf-newton-2": (10.0, 8.0),
-            "zdf-newton-3": (15.0, 12.0), "zdf-explicit": (10.0, 1.0)}
-    for name, (tanh, div) in want.items():
+    want = {"shipped": (5.0, 0.0, 6), "zdf-newton-2": (10.0, 8.0, 43),
+            "zdf-newton-3": (15.0, 12.0, 60), "zdf-explicit": (10.0, 1.0, 25)}
+    for name, (tanh, div, muls) in want.items():
         cand = lc.Candidate(name)
         cand.render(x, 1600.0, 1.2)
         c = cand.last_cost
         assert math.isclose(c["tanh"], tanh), (name, c)
         assert math.isclose(c["divide"], div), (name, c)
-        assert c["multiply"] == lc.CORES[name][0](**vf.LADDER_CFG).MULS
+        cls, kw = lc.CORES[name]
+        assert c["multiply"] == cls(**vf.LADDER_CFG, **kw).MULS == muls, (name, c)
+
+
+def test_the_divider_latency_the_budget_allows_is_exact_not_read_off_the_grid():
+    """DR 0001's reversal turns on one number -- how fast a divider has to be
+    for the 2-iteration solve to fit 256 clocks -- and that number must be
+    solved for, not read off the swept grid.
+
+    Cost is affine in the divider latency, so the threshold is arithmetic:
+
+        zdf-newton-2   20 tanh x 2 + 86 mult + 3 coefficient-update + 16 d
+                     = 129 + 16 d <= 256   ->   d <= 7
+
+    **DR 0017 first said "<= 8 clocks", because 8 was the grid point below 17.**
+    At exactly 8 it is 257 clocks against a 256 budget and misses by one. This
+    test exists because that is the single number the whole reversal condition
+    hangs on, and it was wrong the first time it was written down."""
+    import compare_ladder_candidates as cc
+    cost = cc.stage_cost(["shipped", "zdf-newton-2", "zdf-newton-3",
+                          "zdf-explicit"])
+
+    assert cost["shipped"]["per_sample"]["divide"] == 0.0
+    assert math.isinf(cost["shipped"]["max_divider_latency_that_fits"])
+
+    n2 = cost["zdf-newton-2"]
+    assert n2["clocks_without_divider"] == 129.0, n2
+    assert n2["per_sample"]["divide"] == 16.0, n2
+    assert n2["max_divider_latency_that_fits"] == 7, n2
+    # the off-by-one itself, pinned from both sides
+    assert n2["clocks_by_divider_latency"][8] == 257.0, n2
+    assert n2["fits_budget"][8] is False, n2
+    assert 129.0 + 16.0 * 7 <= cc.CLOCKS_PER_SAMPLE < 129.0 + 16.0 * 8
+
+    # and the threshold really is per-candidate, not one number for all of them
+    assert cost["zdf-newton-3"]["max_divider_latency_that_fits"] == 3, cost
+    assert cost["zdf-explicit"]["max_divider_latency_that_fits"] >= 17, cost
 
 
 def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
@@ -194,7 +244,26 @@ def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
     Above that the delay-free explicit ladder CANNOT self-oscillate at any
     feedback. The half-sample delay the shipped filter carries is what supplies
     the missing phase, which makes it load-bearing rather than an
-    approximation (DR 0017)."""
+    approximation (DR 0017).
+
+    **AND THE CLOSED FORM IS A CEILING, NOT THE CEILING A PLAYER MEETS.** This
+    test asserted the converse -- that below 5295.6 Hz the filter does sing --
+    and that is not what the closed form says and not what happens. The bound
+    is on the PHASE: below it a -180 crossing exists, but as the stage lag
+    falls towards 45 degrees the crossing retreats into a band where the
+    cascade's own magnitude is tiny, so the feedback needed to close the loop
+    runs away. Swept (`model/probe_rungs_2_4_gaps.py` probe 3, resonance to
+    4.0, well past the instrument's range):
+
+        zdf-explicit   sings from res 1.45 at 800/1600 Hz, from res 2.00 at
+                       3200/3600/4000 Hz, and NOT AT ALL at 4800 Hz -- which is
+                       below the closed-form ceiling -- or at 6400 Hz
+        shipped        sings at every one of those cutoffs, res 1.05 to 1.45
+
+    So the delay-free ladder's usable ceiling is between 4000 and 4800 Hz, the
+    closed form's 5295.6 Hz is a loose upper bound on it, and the contrast with
+    the shipped filter at the same cutoffs is the measurement DR 0017 rests
+    on."""
     limit = lc.delay_free_oscillation_limit_hz("expo")
     assert 5295.0 < limit < 5296.0, limit
     assert math.isinf(lc.delay_free_oscillation_limit_hz("tanh-half"))
@@ -202,10 +271,27 @@ def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
     assert lc.stage_max_lag_deg("expo", 3200.0) > 45.0
 
     import compare_ladder_candidates as cc
-    below = cc.stage_resonance(["zdf-explicit"], (3200.0,), (1.45,))["zdf-explicit"]
-    above = cc.stage_resonance(["zdf-explicit"], (6400.0,), (1.45,))["zdf-explicit"]
-    assert below["sings_everywhere"], below
-    assert not above["sings_everywhere"], above
+    hard = (1.45, 2.00, 4.00)          # 4.0 is past anything the knob commands
+
+    # below the ceiling and below the measured one: it sings.
+    below = cc.stage_resonance(["zdf-explicit"], (3200.0,), hard)["zdf-explicit"]
+    assert below["sings_fraction"] > 0.0, below
+
+    # above the closed-form ceiling: no feedback closes the loop ...
+    above = cc.stage_resonance(["zdf-explicit"], (6400.0,), hard)["zdf-explicit"]
+    assert above["sings_fraction"] == 0.0, above
+
+    # ... and neither does it BELOW the ceiling at 4800 Hz. The closed form is
+    # necessary, not sufficient; this is the assertion the earlier version of
+    # this test had backwards.
+    under = cc.stage_resonance(["zdf-explicit"], (4800.0,), hard)["zdf-explicit"]
+    assert 4800.0 < limit
+    assert under["sings_fraction"] == 0.0, under
+
+    # the contrast that makes the half-sample delay load-bearing rather than
+    # merely different: the shipped filter sings at BOTH of those cutoffs.
+    ours = cc.stage_resonance(["shipped"], (4800.0, 6400.0), (1.45,))["shipped"]
+    assert ours["sings_everywhere"], ours
 
 
 def test_the_implicit_candidate_holds_the_resonant_peak_where_the_shipped_one_loses_it():
@@ -267,14 +353,44 @@ def test_start_red_every_dimension_refuses_or_condemns_the_null_core(stage):
 # 3. injected controls: each must turn its own dimension red
 # =============================================================================
 def test_control_a_dropped_pole_turns_the_linear_stage_red():
-    """Three stages instead of four. The resonant peak moves a long way and the
-    slope changes; a dimension that cannot see this cannot see an algorithm
-    change either."""
+    """Three stages instead of four. A dimension that cannot see this cannot
+    see an algorithm change either.
+
+    **It goes red by REFUSING, at every point, and that is the stronger
+    outcome.** This control was written expecting a moved dB, and what happens
+    is that three poles push the resonant peak clean out of the four-pole
+    search window, so `peak_of` reports an unbracketed maximum instead of a
+    number (`model/probe_rungs_2_4_gaps.py` probe 4 -- 6 of 6 points, every one
+    at the TOP edge of the bracket: 390 Hz for a 400/0.5 window ending at
+    390 Hz, 1854 for 1600/0.9, 7415 for 6400/0.9). `REFUSED` is a first-class
+    outcome here and it is not a weaker signal than a large number; it is the
+    apparatus declining to report a peak it cannot support, which is exactly
+    what it should do with a filter that is not the one the closed form
+    describes.
+
+    So the assertion is unanimity and direction, not magnitude -- and it is
+    paired with the four-pole run scoring every one of the same points, so the
+    refusal cannot be the stage simply being unable to measure anything."""
     import compare_ladder_candidates as cc
-    cuts, res = (1600.0,), (0.9,)
+    cuts, res = (400.0, 1600.0, 6400.0), (0.5, 0.9)
     ok = cc.stage_linear(["shipped"], cuts, res)["shipped"]
     bad = cc.stage_linear(["shipped"], cuts, res, stages=3)["shipped"]
-    assert abs(bad["worst_peak_db"] - ok["worst_peak_db"]) > 3.0, (ok, bad)
+
+    n = len(cuts) * len(res)
+    assert ok["refused"] == 0 and len(ok["points"]) == n, ok
+    assert bad["refused"] == n, bad
+    assert all("not bracketed" in v["refused"] for v in bad["points"].values()), bad
+
+    # direction: the dropped pole moves the peak UP, onto the TOP grid point of
+    # a window the correct filter sits comfortably inside. Rebuild the window
+    # exactly as `peak_probe` does so this compares grid point to grid point.
+    for key, v in bad["points"].items():
+        cut, r = (float(s) for s in key.split("/"))
+        f_a, _ = lc.analytic_peak(cut, r)
+        grid = np.unique(lc.snap_freqs(
+            f_a * np.geomspace(*lc.PEAK_SPAN, lc.PEAK_POINTS)))
+        found = float(v["refused"].split("(")[1].split()[0])
+        assert round(found) == round(float(grid[-1])), (key, found, grid[-1])
 
 
 def test_control_a_cutoff_skew_turns_the_tuning_axis_red():

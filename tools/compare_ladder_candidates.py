@@ -375,7 +375,18 @@ def stage_cost(names, **kw) -> dict:
     """Ops per output sample, instrumented, and the clock estimate that follows
     from them -- against DR 0001's own budget of 256 clocks at 12.288 MHz over
     48 kHz. The divider latency is swept (1, 8, 17) rather than assumed,
-    because it is the entire cost difference between these candidates."""
+    because it is the entire cost difference between these candidates.
+
+    **And then the sweep is turned into the exact threshold**, because a
+    three-point grid is a place to read the wrong answer off. Cost is affine in
+    the divider latency -- `clocks = fixed + divides * d` -- so the largest `d`
+    that fits is arithmetic, and `max_divider_latency_that_fits` states it.
+    Reading it off the grid instead cost this record an off-by-one: DR 0017
+    first wrote the 2-iteration solve's reversal condition as "a reciprocal
+    unit of <= 8 clocks" because 8 was the grid point below 17, when the solve
+    needs 129 + 16 d <= 256, i.e. **d <= 7** -- at exactly 8 it is 257 clocks
+    against a 256 budget and misses by one. `None` means it does not fit at any
+    latency, not even a combinational divide."""
     x = np.zeros(400)
     x[0] = 20000.0
     out = {}
@@ -391,11 +402,24 @@ def stage_cost(names, **kw) -> dict:
                          + per_sample["multiply"] * MULT_CLOCKS
                          + per_sample["divide"] * d
                          + COEF_UPDATE_MULTS * MULT_CLOCKS)
+        # exact, not read off the grid: clocks(d) = fixed + divides * d
+        fixed_clocks = (per_sample["tanh"] * TANH_CLOCKS
+                        + per_sample["multiply"] * MULT_CLOCKS
+                        + COEF_UPDATE_MULTS * MULT_CLOCKS)
+        slack = CLOCKS_PER_SAMPLE - fixed_clocks
+        if slack < 0:
+            d_max = None                       # fits at no divider latency
+        elif per_sample["divide"] == 0:
+            d_max = float("inf")               # no divider to pay for
+        else:
+            d_max = int(slack // per_sample["divide"])
         out[name] = dict(
             per_sample={k: round(v, 2) for k, v in per_sample.items()},
             iterations=c["iterations"],
             clocks_by_divider_latency={d: round(v, 1) for d, v in clocks.items()},
             fits_budget={d: bool(v <= CLOCKS_PER_SAMPLE) for d, v in clocks.items()},
+            clocks_without_divider=round(fixed_clocks, 1),
+            max_divider_latency_that_fits=d_max,
             budget=CLOCKS_PER_SAMPLE,
             note="multiply/add are declared from each core's source; tanh and "
                  "divide are counted by the inner loop")
@@ -499,6 +523,8 @@ def compare(quick: bool = False, names=None) -> dict:
                       divide=cost["per_sample"]["divide"],
                       multiply=cost["per_sample"]["multiply"],
                       clocks=cost["clocks_by_divider_latency"],
+                      max_divider_latency_that_fits=cost[
+                          "max_divider_latency_that_fits"],
                       fits=cost["fits_budget"]))
     rep["verdict"] = _verdict(rep, names)
     return rep
@@ -554,6 +580,17 @@ def _print(rep: dict) -> None:
               f"{str(g['sings_everywhere']):>6} {k['tanh']:>6.1f} {k['divide']:>5.1f} "
               f"{k['clocks'][DIV_CLOCKS[-1]]:>7.0f}")
     print(f"\n  budget {CLOCKS_PER_SAMPLE} clocks/sample (DR 0001)")
+    print("\n  DIVIDER LATENCY THE BUDGET ALLOWS -- exact, not read off the "
+          "swept grid:")
+    for n, c in rep["candidates"].items():
+        d = c["cost"]["max_divider_latency_that_fits"]
+        if c["cost"]["divide"] == 0:
+            say = "no divider"
+        elif d is None:
+            say = "does not fit at any divider latency"
+        else:
+            say = f"<= {d} clocks"
+        print(f"    {n:14s} {say}")
     red = rep["controls"]["start_red"]
     print("\n  START RED -- the null core, which has no behaviour:")
     for k_, v in red.items():
