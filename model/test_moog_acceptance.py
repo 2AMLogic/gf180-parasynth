@@ -778,6 +778,27 @@ def _osc(shape, note, n, blep=True):
     return vf.OscFx(shape, blep).render(n, inc).astype(np.float64) / FS, f0
 
 
+def _osc_2x(shape, note, n, warmup=256):
+    """The same oscillator through the SHIPPED 2x chain: PolyBLEP at 2x, the
+    31-tap half-band `_DECIM2_TAPS`, then every second sample.
+
+    This is the path `VoiceFx(oversample_2x=True)` selects for a saw, and the
+    one `fpga/SELECTED.md` carries as `OSC2X=1`.
+    `test_the_measured_2x_path_is_the_one_the_voice_renders` below asserts that
+    equivalence sample for sample, so this helper cannot drift into measuring a
+    path nobody ships. `warmup` frames fill the decimator's 30-sample history
+    first, which is what a held note does."""
+    inc = dsp.phase_inc(dsp.note_hz(note))
+    f0 = inc * SR / (1 << 24)
+    o = vf.OscFx(shape, True)
+    hist = np.zeros(len(vf._DECIM2_TAPS) - 1, dtype=np.int64)
+    phase2 = 0
+    if warmup:
+        _, hist, phase2 = vf._render_2x(o, warmup, inc, hist, phase2)
+    y, hist, phase2 = vf._render_2x(o, n, inc, hist, phase2)
+    return y.astype(np.float64) / FS, f0
+
+
 @pytest.mark.parametrize("note", [40, 64, 88])
 @pytest.mark.parametrize("shape", ["saw", "square"])
 def test_polyblep_suppresses_aliasing_at_every_register(shape, note):
@@ -2635,33 +2656,52 @@ def test_control_a_block_rate_cutoff_hold_breaks_audio_rate_modulation():
 # =============================================================================
 # 7. THE ALIASING GAP (contract open item 15)
 #
-# These two do not assert that we are good. They assert what we MEASURE, beside
-# the reference numbers we do not meet, so that the largest known defect in the
-# voice is tracked by a test instead of by a memory -- and so that a change
-# which quietly makes it worse is caught. Every property above this point
-# compared us against our own prediction of what PolyBLEP should do, which is
-# why none of them could ever have seen this.
+# These do not assert that we are good. They assert what we MEASURE, beside the
+# reference numbers we do and do not meet, so that the voice's aliasing is
+# tracked by a test instead of by a memory -- and so that a change which
+# quietly makes it worse is caught. Every property above this point compared us
+# against our own prediction of what PolyBLEP should do, which is why none of
+# them could ever have seen this.
+#
+# THE BEFORE AND THE AFTER ARE BOTH LOCKED, and they are different paths:
+#
+#   ALIAS_CURVE      the BASE-RATE oscillator. Still what ships for square,
+#                    pulse, triangle and sine (fpga/SELECTED.md: PULSE2X=0),
+#                    so it is a live lock, not a historical one.
+#   ALIAS_CURVE_2X   the 2x + FIR-decimated oscillator. What ships for the SAW
+#                    (fpga/SELECTED.md: OSC2X=1 FILTER2X=1).
 # =============================================================================
 ALIAS_CURVE = {40: -42.7, 52: -39.7, 64: -36.6, 76: -33.7, 88: -31.0, 100: -28.5}
+# Measured 2026-09-26 against 12f51c5 by tools/measure_saw_alias_after_2x.py;
+# the run is committed as docs/saw-alias-2x-results.json.
+ALIAS_CURVE_2X = {40: -61.9, 52: -57.5, 64: -54.0, 76: -52.1, 88: -51.6, 100: -52.4}
 
 
 def test_the_sawtooths_aliasing_floor_degrades_with_pitch_and_is_locked():
-    """[measured-here: contract open item 15] **Contract open item 15.** Sawtooth inharmonic fraction, PolyBLEP on,
-    at six registers:
+    """[measured-here: contract open item 15] **Contract open item 15, the BASE-RATE oscillator.** Sawtooth inharmonic
+    fraction, PolyBLEP on, no decimation filter, at six registers: −42.7 dB at
+    note 40 (82 Hz) rising to −28.5 dB at note 100 (2.6 kHz) — **about 2.8 dB
+    lost per octave**. Locked at ±1.5 dB so that a regression is loud, and the
+    *slope* is asserted as PRESENT rather than absent.
 
-    | note | f0 | ours | Surge |
-    |---|---|---|---|
-    | 40 | 82 Hz | −42.7 dB | ≈ −60 |
-    | 64 | 330 Hz | −36.6 dB | ≈ −60 |
-    | 88 | 1.3 kHz | −31.0 dB | ≈ −60 |
-    | 100 | 2.6 kHz | −28.5 dB | ≈ −60 |
+    **This test used to be the whole story and is now half of it.** The fix
+    landed: `test_the_sawtooths_aliasing_floor_after_the_2x_decimator_is_locked`
+    below measures the same six registers through the path the saw actually
+    ships on and locks the "after". What this row still is, and why it is not
+    deleted: **square, pulse, triangle and sine take no decimation filter in
+    the selected baseline** (`fpga/SELECTED.md`: `OSC2X=1` with `PULSE2X=0`),
+    so the base-rate oscillator is live shipped behaviour and a regression in
+    it is a real regression.
 
-    **About 2.8 dB lost per octave, where Surge is flat across six**, and
-    19–32 dB behind Mini V3 on every waveform. Locked at ±1.5 dB so that a
-    regression is loud, and the *slope* is asserted as PRESENT rather than
-    absent — this test exists to keep a defect visible, not to claim it is
-    fixed. When the fix lands, these numbers move and this docstring is the
-    before.
+    **The reference figures this docstring used to carry are WITHDRAWN**, by
+    issue #87 and not by this test: "Surge is flat at ≈−60 dB across six
+    octaves" was the harness's own leftover note tails (each settle render
+    added a MIDI note), and "19–32 dB behind Mini V3 on every waveform" was
+    computed from a Surge mapping that asked for a saw and received a 50 %
+    pulse. The corrected matched-pitch figures are in
+    `docs/reference-voice-report.txt` and are quoted in `docs/saw-alias-2x.md`
+    with the commit they were measured against; no reference number is quoted
+    here, because a number in a docstring is the one that goes stale unseen.
 
     Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
     """
@@ -2669,12 +2709,123 @@ def test_the_sawtooths_aliasing_floor_degrades_with_pitch_and_is_locked():
     got = {}
     for note, want in ALIAS_CURVE.items():
         x, f0 = _osc("saw", note, n, blep=True)
-        got[note] = am.inharmonic_fraction_db(x, f0).require(f"saw note {note}")
+        est = am.inharmonic_fraction_db(x, f0)
+        got[note] = est.require(f"saw note {note}")
+        # The reading has to be of the SIGNAL. #92: the whole 55 Hz column of
+        # issue #61 was withdrawn because it was the estimator's own floor.
+        assert est.detail["headroom_db"] > 20.0, \
+            f"note {note}: only {est.detail['headroom_db']:.1f} dB over the floor"
         assert abs(got[note] - want) < 1.5, f"note {note}: {got[note]:.1f} dB, locked at {want}"
     octaves = (100 - 40) / 12.0
     slope = (got[100] - got[40]) / octaves      # POSITIVE: the fraction rises toward 0
     assert 2.0 < slope < 3.6, f"the degradation is {slope:.2f} dB/octave, was 2.8"
-    assert got[100] > -35.0, "if the top of the range has improved this much, the fix landed"
+    assert got[100] > -35.0, \
+        "the base-rate path has improved; if that is intended, this lock and the " \
+        "2x lock below both need re-measuring against the references"
+
+
+def test_the_measured_2x_path_is_the_one_the_voice_renders():
+    """[meta] **The precondition the two tests below depend on.** `_osc_2x` calls
+    `voice_fx._render_2x` directly; the voice reaches it through
+    `VoiceFx._render`, which gates on the shape, keeps a decimator history per
+    oscillator and advances a second phase accumulator for the oscillators that
+    do NOT take the chain. A helper that diverged from any of that would lock a
+    curve for a path nobody ships — this repository's own recurring failure
+    (every bench drove the register write port rather than the link, and the
+    control path delivered 37 of 155 writes with every block still bit-exact).
+
+    Both directions are asserted: on must equal the helper, and off must NOT
+    equal on, or the flag is selecting nothing.
+
+    Ground truth: this test is itself the ground truth — it is an equality, not an estimate.
+    """
+    v = vf.VoiceFx(oversample_2x=True)
+    v.note(76, 0.6, waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+           mix=(1.0, 0.0, 0.0), noise=0.0, drift_cents=0.0,
+           mod_mix=0.0, mod_wheel=0.0, glide_s=0)
+    shipped = np.asarray(v.trace["osc"][0], dtype=np.int64)
+    incs = np.asarray(v.trace["incs"][0], dtype=np.int64)
+    here, _, _ = vf._render_2x(vf.OscFx("saw", True), len(shipped), incs,
+                               np.zeros(len(vf._DECIM2_TAPS) - 1, dtype=np.int64), 0)
+    assert np.array_equal(shipped, np.asarray(here, dtype=np.int64)), \
+        "the 2x oscillator measured here is not the one VoiceFx(oversample_2x=True) renders"
+
+    w = vf.VoiceFx(oversample_2x=False)
+    w.note(76, 0.6, waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+           mix=(1.0, 0.0, 0.0), noise=0.0, drift_cents=0.0,
+           mod_mix=0.0, mod_wheel=0.0, glide_s=0)
+    assert not np.array_equal(np.asarray(w.trace["osc"][0], dtype=np.int64), shipped), \
+        "oversample_2x renders the same oscillator output either way"
+
+
+def test_the_sawtooths_aliasing_floor_after_the_2x_decimator_is_locked():
+    """[measured-here: issue #61] **Issue #61's "after", and the docstring above is the before.**
+    The same six registers, through the path the saw ships on
+    (`VoiceFx(oversample_2x=True)`, `fpga/SELECTED.md`: `OSC2X=1 FILTER2X=1`).
+    Measured 2026-09-26 against commit `12f51c5` by
+    `tools/measure_saw_alias_after_2x.py`, whose own controls are in
+    `tools/test_measure_saw_alias_after_2x.py`:
+
+    | note | f0 | base rate | 2x + FIR | headroom |
+    |---|---|---|---|---|
+    | 40 | 82 Hz | −42.9 dB | **−61.9 dB** | 28.3 dB |
+    | 64 | 330 Hz | −36.7 dB | **−54.0 dB** | 36.5 dB |
+    | 88 | 1.3 kHz | −31.0 dB | **−51.6 dB** | 38.0 dB |
+    | 100 | 2.6 kHz | −28.6 dB | **−52.4 dB** | 35.9 dB |
+
+    **17.3 to 23.9 dB across the six, and the degradation with pitch falls from
+    2.88 to 1.90 dB/octave** — and stops entirely above note 76, where the
+    curve is flat within 0.9 dB. Matched against the references at their own
+    pitches (`docs/saw-alias-2x.md`): the gap to Mini V3 closes from 17.7–19.9
+    dB to **−0.3 to +1.8 dB**, and to Surge XT narrows from 24.9–60.6 dB to
+    **9.9–41.9 dB**. Those are matched-pitch margins from
+    `docs/reference-voice-report.txt`; they are NOT re-derived here, because
+    this suite must run on a host with no VST3 plugins.
+
+    Three things are asserted besides the numbers, because a curve alone cannot
+    tell you it is a measurement:
+
+      * **headroom**, per register. #92: the withdrawn 55 Hz column of this
+        very issue was the estimator's floor being read as a signal;
+      * **the improvement over the base rate**, so a regression that moved both
+        curves together could not pass;
+      * **the drop-decimator control** (issue #80): the same 2x oscillator
+        reduced by keeping the last sub-step must read WORSE than the base
+        rate. That is what attributes the gain to the FIR rather than to
+        running the oscillator faster.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
+    n = int(0.5 * SR)
+    got, base = {}, {}
+    for note, want in ALIAS_CURVE_2X.items():
+        x, f0 = _osc_2x("saw", note, n)
+        est = am.inharmonic_fraction_db(x, f0)
+        got[note] = est.require(f"2x saw note {note}")
+        assert est.detail["headroom_db"] > 20.0, \
+            f"note {note}: only {est.detail['headroom_db']:.1f} dB over the floor"
+        assert abs(got[note] - want) < 1.5, f"note {note}: {got[note]:.1f} dB, locked at {want}"
+
+        b, _ = _osc("saw", note, n, blep=True)
+        base[note] = am.inharmonic_fraction_db(b, f0).require(f"base saw note {note}")
+        assert base[note] - got[note] > 15.0, \
+            f"note {note}: the filter buys {base[note] - got[note]:.1f} dB, was 17.3 .. 23.9"
+
+    octaves = (100 - 40) / 12.0
+    slope = (got[100] - got[40]) / octaves
+    before = (base[100] - base[40]) / octaves
+    assert 1.0 < slope < 2.6, f"the degradation is {slope:.2f} dB/octave, was 1.90"
+    assert slope < before - 0.5, \
+        f"the fix must FLATTEN the curve: {slope:.2f} after against {before:.2f} before"
+
+    # the control: it is the decimation FILTER, not the oversampling
+    inc = dsp.phase_inc(dsp.note_hz(40))
+    f0 = inc * SR / (1 << 24)
+    drop = vf.OscFx("saw", True).render(2 * n, inc // 2).astype(np.float64)[1::2] / FS
+    dropped = am.inharmonic_fraction_db(drop, f0).require("2x, last sub-step kept")
+    assert dropped > base[40] + 5.0, \
+        f"the drop-decimator control reads {dropped:.1f}, base rate {base[40]:.1f} -- " \
+        "the control is not firing, so the FIR is not what this test attributes the gain to"
 
 
 def test_oversampling_the_oscillators_regresses_only_through_the_drop_decimator():
