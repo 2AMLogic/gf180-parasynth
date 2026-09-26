@@ -1,0 +1,11 @@
+
+==================================== ERRORS ====================================
+___________________ ERROR collecting tools/test_run_case.py ____________________
+tools/test_run_case.py:51: in <module>
+    REFS = rc.configured_refs()
+           ^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'run_case' has no attribute 'configured_refs'
+=========================== short test summary info ============================
+ERROR tools/test_run_case.py - AttributeError: module 'run_case' has no attri...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 17.90s

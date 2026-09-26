@@ -132,6 +132,16 @@ SR_OURS = 48000
 #   git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer /tmp/tr808-ref
 REFS_ENV = "GF180_TR808_REFS"
 REFS_DEFAULT = "/tmp/tr808-ref"
+# Set to 1 where the reference-integration tests are a REQUIRED gate: a missing
+# corpus then fails them (REFUSED) instead of skipping, because a required
+# job that goes green through skips has checked nothing.
+REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
+
+
+def configured_refs() -> pathlib.Path:
+    """The one place the corpus location is decided: ${GF180_TR808_REFS}, else
+    /tmp/tr808-ref. The CLI default and the tests both read it here."""
+    return pathlib.Path(os.environ.get(REFS_ENV) or REFS_DEFAULT)
 REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
           "s/n 103852, individual voice outputs, 16-bit/44.1 kHz")
 
@@ -187,6 +197,28 @@ def tol_fixed(value: float, basis: str):
     def f(ref: float, ctx: dict) -> tuple:
         return value, basis
     return f
+
+
+# WHAT EACH METRIC'S ERROR MEANS (plan075 section 6; decision record 0017).
+# Every metric not named here is a two-sided MATCH. A metric named here is
+# scored by `scorecard.metric_distance` in its declared direction, and the
+# direction is written into every record so the board and compare() read it
+# from the evidence rather than from this file.
+#
+# "unwanted difference tone" (the cowbell, D13A) is a DEFECT CEILING. It exists
+# to catch DR 0010's structural defect -- one swing gate on the SUM of the two
+# squares, nl(a + b), which put the tone 42 dB ABOVE the machine's. Having less
+# of it than the machine (ours -102 dB against its -68 dB) is not a defect,
+# and scoring that deficit two-sided was #141: an 11.34x headline pointing at
+# the wrong defect. The `CB_GATE_THE_SUM` control shows the ceiling still
+# fails the defect it exists for.
+METRIC_PURPOSE = {
+    "unwanted difference tone": "defect ceiling",
+}
+
+
+def metric_purpose(name: str) -> str:
+    return METRIC_PURPOSE.get(name, "match")
 
 
 # ===========================================================================
@@ -790,7 +822,27 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
 SOLO_SECONDS = {"CY": 3.6, "OH": 3.6}
 
 
-def render_drum_solo(sound: str, accent: float = 1.0) -> tuple:
+def _gate_the_sum(kit: list) -> list:
+    """INJECTED CONTROL `CB_GATE_THE_SUM`: DR 0010's defect put back. The
+    cowbell's two per-oscillator paths become ONE path taking SRC_SQPAIR --
+    the two squares summed before a single swing gate, nl(a + b) -- and the
+    other path is switched off. SQPAIR is SQ 4 + SQ 5 term for term, so the
+    level is unchanged and only the intermodulation is new. The one-sided
+    "unwanted difference tone" must still fail this."""
+    import drums_fx as dx
+    img = dict(kit)
+    cb = sorted(a for a in range(dx.A_PATH, dx.A_PATH + dx.N_PATH)
+                if a in img and ((img[a] >> 20) & 31) == dx.M_CBBP
+                and (img[a] & 31) in (dx.SRC_SQ + dx.SQPAIR[0], dx.SRC_SQ + dx.SQPAIR[1]))
+    if len(cb) != 2:
+        raise Refused(f"CB_GATE_THE_SUM expects the cowbell's two per-oscillator "
+                      f"paths and found {len(cb)}: the kit is not the one DR 0010 describes")
+    img[cb[0]] = (img[cb[0]] & ~31) | dx.SRC_SQPAIR
+    img[cb[1]] = dx.path_word(dx.SRC_OFF, dx.ENV_NONE, dest=dx.DEST_MIX)
+    return sorted(img.items())
+
+
+def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None) -> tuple:
     """One hit of one SOUND from the kit that ships, rendered here and now
     through the register interface -- never a committed WAV, so what is
     measured is the design as it stands.
@@ -807,8 +859,13 @@ def render_drum_solo(sound: str, accent: float = 1.0) -> tuple:
     seconds = SOLO_SECONDS.get(sound, 2.2)
     n = int(seconds * dx.SR)
     d = dx.DrumsFx()
-    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), stop, accent)],
-                                  dx.kit_with_sounds(sound)), n)
+    kit = dx.kit_with_sounds(sound)
+    if inject == "CB_GATE_THE_SUM":
+        if sound != "CB":
+            raise Refused(f"CB_GATE_THE_SUM is a cowbell control; {sound} does not "
+                          f"strike the cowbell, so it would inject nothing")
+        kit = _gate_the_sum(kit)
+    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), stop, accent)], kit), n)
     g = dx.accent_reg(0.45)
     out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
@@ -2093,6 +2150,52 @@ def analysis_run() -> str:
             f" at {_now()}")
 
 
+RUBRIC_CHANGE = "rubric change (measurement-version change), not a sound change"
+
+
+def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
+    """Keep a record's earlier scores when the RUBRIC under it changes.
+
+    When the record being replaced was scored under a different measurement
+    policy -- a metric's purpose, tolerance, units or the required set -- its
+    verdict is appended to `rubric_history`, labelled as a rubric change, so a
+    headline that moves because the ruler moved cannot be read as the sound
+    improving (#141: the cowbell's 11.34 -> 2.82 is exactly that). Earlier
+    history is carried forward unchanged. Same policy: history is only
+    carried, never added to, because a re-measurement is not a rubric change."""
+    import scorecard
+    old = None
+    if dest.exists():
+        try:
+            old = json.loads(dest.read_text())
+        except Exception:
+            old = None
+    history = list((old or {}).get("rubric_history") or [])
+    if old is not None:
+        before, after = scorecard.evaluate(case, old), scorecard.evaluate(case, res)
+        if (before.get("measurement_policy") and after.get("measurement_policy")
+                and before["measurement_policy"] != after["measurement_policy"]):
+            bp, ap = before["measurement_policy"], after["measurement_policy"]
+            changed = {n: {"before": bp["metrics"].get(n), "after": ap["metrics"].get(n)}
+                       for n in sorted(set(bp["metrics"]) | set(ap["metrics"]))
+                       if bp["metrics"].get(n) != ap["metrics"].get(n)}
+            if bp["required"] != ap["required"]:
+                changed["(required)"] = {"before": bp["required"], "after": ap["required"]}
+            history.append({
+                "kind": RUBRIC_CHANGE,
+                "changed": changed,
+                "superseded_at": _now(),
+                "state": before["state"], "worst": before["worst"], "why": before["why"],
+                "properties": before.get("properties"),
+                "measurement_policy": before["measurement_policy"],
+                "source_commit": old.get("source_commit"),
+                "analysis_run": old.get("analysis_run"),
+                "metrics": old.get("metrics"),
+            })
+    if history:
+        res["rubric_history"] = history
+
+
 def invalid_metric(units: str, why: str, tolerance: float | None = None) -> dict:
     """No distance, not zero distance. There is deliberately no `error` key."""
     m = {"units": units, "valid": False, "why": why}
@@ -2112,6 +2215,18 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
     one estimator and it is used on both sides, which is the rule."""
     a = est(*ours)
     b = (est if est_ref is None else est_ref)(*ref)
+    # An estimate that says ok with a non-finite number is refused HERE, at
+    # the point of use: json writes NaN happily and the board must never be
+    # handed one as an error (review of #241).
+    def _finite(v) -> bool:
+        try:
+            return math.isfinite(float(v))
+        except (TypeError, ValueError):
+            return False
+    for side, e in (("reference", b), ("ours", a)):
+        if e.ok and not _finite(e.value):
+            return invalid_metric(units, f"{side}: estimator returned a non-finite "
+                                         f"value {e.value!r}")
     if not b.ok:
         return invalid_metric(units, f"reference: {b.reason} {b.detail}")
     tol, basis = tol_rule(b.value, ctx)
@@ -2125,7 +2240,7 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
             "reference": round(float(b.value), 4),
             "error": round(float(a.value) - float(b.value), 4),
             "tolerance": round(float(tol), 4), "valid": True,
-            "tolerance_basis": basis}
+            "tolerance_basis": basis, "purpose": metric_purpose(name)}
 
 
 def write_wav16(path: pathlib.Path, x, sr: int):
@@ -2161,7 +2276,7 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
         return base
 
     ref_x, ref_sr, rel, setting = load_reference(voice, refdir, inject)
-    ours_x, ours_sr = render_drum_solo(voice)
+    ours_x, ours_sr = render_drum_solo(voice, inject=inject or None)
 
     # Each side names itself, so a refused lead says WHICH recording could not
     # supply one. A reference that was cut into the strike and a render that
@@ -2565,12 +2680,12 @@ def main(argv=None) -> int:
     ap.add_argument("--family", help="Drums | Mono | Filters | Ensemble")
     ap.add_argument("--all", action="store_true", help="every case in cases.csv")
     ap.add_argument("--list", action="store_true", help="print the plan and stop")
-    ap.add_argument("--refs", default=os.environ.get(REFS_ENV, REFS_DEFAULT),
+    ap.add_argument("--refs", default=str(configured_refs()),
                     help=f"the Fischer TR-808 corpus (default {REFS_DEFAULT}, ${REFS_ENV})")
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
-                             "MONO_PITCH_UP_25_CENTS",
+                             "MONO_PITCH_UP_25_CENTS", "CB_GATE_THE_SUM",
                              "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED",
                              *F1_INJECTS],
                     help="an injected control; requires --results outside the board")
@@ -2681,7 +2796,10 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
-            (outdir / f"{cid}.json").write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+            dest = outdir / f"{cid}.json"
+            if not a.inject:
+                carry_rubric_history(c, dest, res)
+            dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])
         if "traceback" in res:

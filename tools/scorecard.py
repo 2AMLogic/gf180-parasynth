@@ -35,7 +35,7 @@ RULES THIS ENFORCES, because each of them is a way a scorecard starts lying:
     without provenance gets NO VERDICT: it is a number nobody can re-derive.
 """
 from __future__ import annotations
-import argparse, csv, json, pathlib, subprocess, sys
+import argparse, csv, json, math, pathlib, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CASES = ROOT / "docs" / "scorecard" / "cases.csv"
@@ -45,6 +45,61 @@ RESULTS = ROOT / "docs" / "scorecard" / "results"
 ENGINES = ["float-model", "fixed-model", "integrated-rtl", "board-digital", "board-analog"]
 
 NOT_RUN, PASS, FAIL, NO_VERDICT = "not run", "pass", "fail", "no verdict"
+
+# WHAT A METRIC'S ERROR MEANS -- its declared purpose (plan075 section 6, #141).
+#
+#   match           two-sided: a deficit and an excess are both a distance.
+#   defect ceiling  one-sided: only EXCESS over the reference is a distance;
+#                   having less of an unwanted component than the machine is
+#                   not a defect and scores 0.
+#
+# A record with no `purpose` predates this field and was scored two-sided, so
+# it still is: that keeps every historical number reproducible. A purpose the
+# board does not know is REFUSED, never guessed -- guessing two-sided silently
+# re-introduces #141 and guessing one-sided hides deficits.
+MATCH, DEFECT_CEILING = "match", "defect ceiling"
+PURPOSES = (MATCH, DEFECT_CEILING)
+
+
+def _finite(m: dict, key: str, *, required: bool) -> float | None:
+    """The number under `key`, or ValueError("invalid number ...") when it is
+    missing (and required), not a number, or not finite."""
+    if key not in m or m[key] is None:
+        if required:
+            raise ValueError(f"invalid number: no {key}")
+        return None
+    v = m[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"invalid number: {key} is {v!r}")
+    if not math.isfinite(v):
+        raise ValueError(f"invalid number: {key} is {v!r}")
+    return float(v)
+
+
+def metric_distance(m: dict) -> float:
+    """|error| / tolerance for a match; max(0, error) / tolerance for a
+    defect ceiling. Dimensionless; <= 1 is inside tolerance.
+
+    EVERY NUMBER IS VALIDATED BEFORE ANY CLAMP OR DIVISION (review of #241).
+    `max(0, nan)` is 0 and `x / inf` is 0, so without this a NaN or -inf
+    error, or an infinite tolerance, is certified as a perfect pass -- and a
+    ceiling, being a clamp, is exactly where that hides. Raises ValueError
+    ("invalid number ...") for a non-finite error, value or reference, for a
+    tolerance that is not finite and strictly positive, and for a purpose it
+    does not know. The caller turns that into NO VERDICT: never a pass,
+    never a fail."""
+    purpose = m.get("purpose", MATCH)
+    if purpose not in PURPOSES:
+        raise ValueError(f"unknown metric purpose {purpose!r} (known: {', '.join(PURPOSES)})")
+    err = _finite(m, "error", required=True)
+    tol = _finite(m, "tolerance", required=True)
+    _finite(m, "value", required=False)
+    _finite(m, "reference", required=False)
+    if tol <= 0:
+        raise ValueError(f"invalid number: tolerance {tol!r} is not strictly positive")
+    if purpose == MATCH:
+        return abs(err) / tol
+    return max(0.0, err) / tol                       # DEFECT_CEILING
 
 
 def load_cases() -> list[dict]:
@@ -105,12 +160,11 @@ def evaluate(case: dict, res: dict | None) -> dict:
         if not m.get("valid", True):
             invalid.append(name)
             continue                       # NO distance, not zero distance
-        tol = m.get("tolerance")
-        err = m.get("error")
-        if tol in (None, 0) or err is None:
-            invalid.append(name)
+        try:
+            d = metric_distance(m)         # dimensionless; units never mixed
+        except ValueError as e:
+            invalid.append(f"{name} ({e})")
             continue
-        d = abs(err) / abs(tol)            # dimensionless; units never mixed
         props[name] = d                    # KEEP IT -- see `compare` below
         if worst is None or d > worst:
             worst, worst_name = d, name
@@ -127,8 +181,13 @@ def evaluate(case: dict, res: dict | None) -> dict:
             "analysis_version": res.get("analysis_version"),
             "measurement_policy": {
                 "required": sorted(required),
-                "metrics": {name: {key: metric.get(key)
-                                   for key in ("units", "tolerance", "tolerance_basis")}
+                # `purpose` is part of the policy: a change of direction is a
+                # rubric change, and compare() must call it INCOMPARABLE rather
+                # than read it as the device improving (#141). A legacy record
+                # without the field was scored as a match, so it reads as one.
+                "metrics": {name: {**{key: metric.get(key)
+                                      for key in ("units", "tolerance", "tolerance_basis")},
+                                   "purpose": metric.get("purpose", MATCH)}
                             for name, metric in metrics.items()},
             },
             "why": "" if worst <= 1.0 else f"worst: {worst_name}", "engine": engine}

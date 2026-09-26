@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
 import sys
 
@@ -44,10 +45,29 @@ import run_case as rc                                               # noqa: E402
 import scorecard as sb                                              # noqa: E402
 
 SR = 48000
-REFS = pathlib.Path(rc.REFS_DEFAULT)
-have_refs = pytest.mark.skipif(
-    not (REFS / "bd8" / "BD5050.WAV").exists(),
-    reason=f"the Fischer corpus is not at {REFS}; clone sounds-tr808-fischer")
+# The SAME location the runner uses (${GF180_TR808_REFS}, else /tmp/tr808-ref).
+# Hard-coding the default here once made these tests skip against an empty
+# /tmp/tr808-ref while the runner was measuring a corpus set by the variable.
+REFS = rc.configured_refs()
+
+
+@pytest.fixture
+def fischer_refs():
+    """Optional locally, REQUIRED where ${GF180_REQUIRE_TR808_REFS}=1: a
+    required reference-integration job must REFUSE on a missing corpus rather
+    than go green through skips."""
+    probe = REFS / "bd8" / "BD5050.WAV"
+    if probe.exists():
+        return REFS
+    msg = (f"the Fischer corpus is not at {REFS} (no {probe.relative_to(REFS)}); "
+           f"clone tidalcycles/sounds-tr808-fischer there or set {rc.REFS_ENV}")
+    if os.environ.get(rc.REFS_REQUIRED_ENV) == "1":
+        pytest.fail(f"REFUSED: {msg}. {rc.REFS_REQUIRED_ENV}=1 makes this a required "
+                    f"gate, and a required gate does not pass by skipping.", pytrace=False)
+    pytest.skip(f"OPTIONAL local run, skipped: {msg}")
+
+
+have_refs = pytest.mark.usefixtures("fischer_refs")
 
 
 def sine(hz, seconds, amp=1.0, sr=SR):
@@ -1353,3 +1373,31 @@ def test_difference_tone_db_refuses_a_reading_at_its_own_leakage_floor():
     assert not got.ok, f"reported {got.value:.1f} dB of a difference tone that is not there"
     assert "only the window" in got.reason
     assert got.detail["headroom_db"] < rc.FLOOR_MARGIN_DB
+
+
+def _pytest_one(test_id: str, env_over: dict) -> "subprocess.CompletedProcess":
+    import subprocess
+    env = {k: v for k, v in os.environ.items()
+           if k not in (rc.REFS_ENV, rc.REFS_REQUIRED_ENV)}
+    env.update(env_over)
+    return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           "-rs", f"{__file__}::{test_id}"],
+                          cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
+
+
+def test_a_required_reference_gate_refuses_a_missing_corpus(tmp_path):
+    """The gate itself, both ways, against a folder that is certainly empty:
+    required -> non-zero with REFUSED; optional -> exit 0, marked OPTIONAL."""
+    tid = "test_the_injection_refuses_to_write_onto_the_board"
+    empty = {rc.REFS_ENV: str(tmp_path)}
+    req = _pytest_one(tid, {**empty, rc.REFS_REQUIRED_ENV: "1"})
+    assert req.returncode != 0 and "REFUSED" in req.stdout, req.stdout[-2000:]
+    opt = _pytest_one(tid, empty)
+    assert opt.returncode == 0 and "OPTIONAL local run" in opt.stdout, opt.stdout[-2000:]
+
+
+def test_the_tests_read_the_same_corpus_location_as_the_runner(monkeypatch, tmp_path):
+    monkeypatch.setenv(rc.REFS_ENV, str(tmp_path))
+    assert rc.configured_refs() == tmp_path
+    monkeypatch.delenv(rc.REFS_ENV)
+    assert rc.configured_refs() == pathlib.Path(rc.REFS_DEFAULT)

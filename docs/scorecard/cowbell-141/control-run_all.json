@@ -1,0 +1,9 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: <scratchpad>/tr808-ref\nresults into:     <scratchpad>/ctl\nINJECTED CONTROL: CB_GATE_THE_SUM -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nD13A   fail          15.81  worst: unwanted difference tone\n------------------------------------------------------------------------------------------------\nfail: 1\ncontrol fired: CB_GATE_THE_SUM caused the expected result on 1 measured case(s)\n",
+    "secs": 44.14375591278076
+  }
+]

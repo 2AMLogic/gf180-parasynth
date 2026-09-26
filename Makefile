@@ -11,7 +11,7 @@
 PY  := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN := $(PY) tools/run_all.py
 
-.PHONY: help verify verify-fast verify-full controls test dag board claims
+.PHONY: help verify verify-fast verify-full controls test dag board claims reference-integration
 
 help:
 	@echo "make verify       broad repository checks, run independently in parallel"
@@ -21,6 +21,7 @@ help:
 	@echo "make test         the Python suites only"
 	@echo "make claims       re-derive every marked prose claim in docs/ from evidence"
 	@echo "make board        fill the scorecard's first batch and re-render the board"
+	@echo "make reference-integration  the Fischer-corpus tests as a REQUIRED gate (refuses if absent)"
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
 
 ## Everything a push should run.
@@ -219,6 +220,13 @@ dag:
 ## own exit convention is 0 match / 1 mismatch / 2 no evidence, and a first
 ## batch that holds deliberate not-runs exits 2 by design -- so the board, not
 ## the status, is the report.
+## The tests that need the Fischer TR-808 corpus, as a REQUIRED gate. Locally
+## they skip, marked OPTIONAL, when the corpus is absent; here a missing corpus
+## is REFUSED (non-zero), because a required job green through skips checked
+## nothing. Location: $GF180_TR808_REFS, else /tmp/tr808-ref.
+reference-integration:
+	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py -q
+
 board:
 	-@$(PY) tools/run_case.py --batch "First 32"
 	@$(PY) tools/scorecard.py --markdown --readme
