@@ -1,0 +1,9 @@
+{
+  "preset": "default",
+  "note": 45,
+  "legacy_image": false,
+  "replay_status": 0,
+  "i2s_peak_lsb": 12760,
+  "min_peak_lsb": 1024,
+  "verdict": "PASS"
+}

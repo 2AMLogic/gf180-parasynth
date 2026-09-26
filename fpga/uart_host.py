@@ -455,6 +455,61 @@ def voice_image_writes(preset: str | None = None) -> list:
     return w
 
 
+def preset_regs(preset: str | None = None) -> dict:
+    """The control image a named preset (or the default patch) programs."""
+    import voice_fx as vf
+    import selected_preset
+    return (selected_preset.definition(preset)["registers"] if preset
+            else vf.VoiceFx.patch_regs())
+
+
+def voice_mixer_writes(preset: str | None = None) -> list:
+    """The rest of the voice image `voice_image_writes` does not carry: the
+    four mixer weights (as `MusicHost.load` writes them) and the noise/
+    modulation registers. Without the weights a note-only run is SILENT --
+    every weight resets to 0 -- which is what `run --note 45 --fixture none`
+    played until the release validator (fpga/release/qualified_domain.py)
+    refused it. Sent only when no fixture image follows (a fixture's own
+    load() writes its weights), so every fixture's byte stream is unchanged."""
+    import spi_host as sh
+    import synth_top_model as stm
+    regs = preset_regs(preset)
+    w = [(0, sh.SEC_VOICE, stm.A_W + k, int(g)) for k, g in enumerate(regs["weights"])]
+    for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
+                      (stm.A_MWHEEL, "mwheel"), (stm.A_MPD, "mpd"), (stm.A_MFD, "mfd")):
+        w.append((0, sh.SEC_VOICE, addr, int(regs.get(key, 0))))
+    return w
+
+
+def apply_order(commands: list) -> list:
+    """The (flag, sec, addr, data) writes of a command list in the order the
+    device APPLIES them: live writes in order, the scheduled gate-off, then
+    events by due (stable). What the release validator checks."""
+    live = [c[1:] for c in commands if c[0] in ("write", "gate-off")]
+    ev = sorted((c for c in commands if c[0] == "event"), key=lambda c: c[1])
+    return live + [c[2:] for c in ev]
+
+
+def qualify(commands: list, *, preset: str | None, note: int | None,
+            image_sent: bool) -> dict:
+    """The player-facing release domain (fpga/release/RELEASE.md), enforced
+    on the final register writes. Raises qualified_domain.Rejected."""
+    sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+    import qualified_domain as qd
+    regs = preset_regs(preset)
+    out = {}
+    if image_sent:
+        out["patch"] = qd.check_patch(regs, name=preset or "default")
+    if note is not None:
+        qd.check_note(note, regs)
+    # device state before this command is not readable: everything the
+    # stream does not write is unknown, except the modulation registers the
+    # player path never writes on a fixture run (declared precondition)
+    out["stream"] = qd.check_stream(apply_order(commands), initial="unknown",
+                                    mod_initial="reset")
+    return out
+
+
 def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
                 held: bool = False) -> list:
     """One key event through the model's own KeyHost (contract 5.6): pitch
@@ -1579,6 +1634,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "preflight REFUSES it: over queue and wire budget)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
+    ap.add_argument("--engineering", action="store_true",
+                    help="skip the release-domain validator: the raw engineering "
+                         "interface, OUTSIDE the qualified player-facing domain")
     ap.add_argument("--capture", default=None, metavar="PREFIX",
                     help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
                          "S-line format) and PREFIX.plan.json, for replay through "
@@ -1596,6 +1654,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
     common.add_argument("--hold-frames", type=int, default=argparse.SUPPRESS)
     common.add_argument("--fixture", default=argparse.SUPPRESS)
     common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
+    common.add_argument("--engineering", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("--capture", default=argparse.SUPPRESS, metavar="PREFIX",
                         help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
                              "S-line format) and PREFIX.plan.json, for replay through "
@@ -1629,14 +1688,26 @@ def main(argv=None, *, bridge_factory=None) -> int:
             # the fixture's own structure: its load() image as live setup,
             # everything after it as scheduled events
             fx_static, fx_events, _end = phrase_static_and_events(fixture)
-    if a.cmd in ("load", "run") or a.cmd is None:
+    fixture_image = a.cmd in ("play", "run") and (a.fixture or "none") != "none"
+    if fixture_image and a.preset and not a.engineering:
+        # the fixture programs its own patch over the preset: the player
+        # would hear the fixture's sound under the preset's name
+        print(f"uart_host: REFUSED -- --preset {a.preset} with --fixture {a.fixture}: "
+              "the fixture loads its own patch over the preset", file=sys.stderr)
+        return 2
+    image_sent = a.cmd in ("load", "run") or a.cmd is None
+    if image_sent:
         for flag, sec, addr, data in voice_image_writes(a.preset):
             commands.append(("write", flag, sec, addr, data))
+        if not fx_static:
+            for flag, sec, addr, data in voice_mixer_writes(a.preset):
+                commands.append(("write", flag, sec, addr, data))
     for flag, sec, addr, data in fx_static:
         commands.append(("write", flag, sec, addr, data))
     if a.cmd == "note-on" or (a.cmd == "run" and a.note is not None):
         note = a.note if a.note is not None else 45
-        for flag, sec, addr, data in note_writes(note, True):
+        for flag, sec, addr, data in note_writes(note, True,
+                                                 preset_regs=preset_regs(a.preset)):
             commands.append(("write", flag, sec, addr, data))
     if a.cmd == "note-off":
         # a standalone off releases what is sounding: the live gate-off write
@@ -1662,6 +1733,24 @@ def main(argv=None, *, bridge_factory=None) -> int:
         return 0
     if not commands:
         ap.print_usage(); return 2
+    played_note = (a.note if a.note is not None else 45) if (
+        a.cmd == "note-on" or (a.cmd == "run" and a.note is not None)) else None
+    if a.engineering:
+        print("uart_host: ENGINEERING -- release-domain validator skipped; this "
+              "traffic is OUTSIDE the qualified player-facing domain", file=sys.stderr)
+    else:
+        sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+        import qualified_domain as qd
+        try:
+            q = qualify(commands, preset=a.preset, note=played_note, image_sent=image_sent)
+        except qd.Rejected as exc:
+            print(f"uart_host: REFUSED -- outside the qualified release domain: {exc}",
+                  file=sys.stderr)
+            return 2
+        st = q["stream"]
+        print(f"uart_host: release domain OK -- {st['inc_writes']} increment writes, "
+              f"{st['glide_transitions']} glide transitions, all in "
+              f"[{qd.INC_LO}, {qd.INC_HI}]")
 
     if a.dry_run:
         try:

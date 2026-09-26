@@ -1,0 +1,9 @@
+{
+  "preset": "m5a-saw",
+  "note": 72,
+  "legacy_image": false,
+  "replay_status": 0,
+  "i2s_peak_lsb": 7345,
+  "min_peak_lsb": 1024,
+  "verdict": "PASS"
+}
