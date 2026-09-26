@@ -47,6 +47,7 @@ verify:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/voice-osc2x" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --outdir build/voice-filter2x" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --m5a-smoke --filter2x --outdir build/top-m5a-filter2x" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --outdir build/top-drum-solo-smoke" \
 	  "$(PY) tools/gen_rate_conv_2x.py --check" \
 	  "$(PY) tools/verify_rate_conv_2x.py" \
 	  "$(PY) tools/verify_mono_case.py" \
@@ -83,7 +84,7 @@ verify:
 ## pytest files DO need iverilog and stay in `make verify` only.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
@@ -267,6 +268,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FCAP_STALE --expect-fail --outdir build/drum-fcapstale" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --clap-phrase --inject DRUM_FINAL_WEAK --expect-fail --outdir build/top-clap-finalweak" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-lfsrtap" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-drum-solo-lfsrtap" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_RESET_ALIAS --expect-fail --outdir build/top-resetalias" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_BUS_STALE --expect-fail --outdir build/top-busstale" \

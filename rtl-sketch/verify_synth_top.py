@@ -433,7 +433,17 @@ def drum_solo_script(sound: str, accent: float = 1.0, seconds: float | None = No
     the frame the hit LANDS in is the link's business (it is read back from the
     pin and reported) rather than something this script asserts. Alignment is
     done afterwards against the realised strike, which is why the gap does not
-    have to be exact."""
+    have to be exact.
+
+    THIS IS A SCORING STIMULUS, NOT A COVERAGE BENCH, and the difference is
+    measured rather than asserted. One solo hit reaches only the corners that
+    one sound reaches: of the controls run against it (see
+    docs/scorecard/drum-d02a-i2s/controls-run_all.log) `DRUM_LFSR_TAP` and
+    `I2S_SHIFT` are both CAUGHT, and `DRUM_ENV_FLOOR` is NOT -- the snare solo
+    never drives an envelope to the `dec = 0, level > 0` corner that defect
+    lives in. The coverage bench is `verify_synth_top` with no `--drum-solo`,
+    whose stimulus strikes all eleven circuits, resets both pages while they
+    sound and REFUSES if it did not; nothing here replaces it."""
     if sound not in dx.SOUND_NAMES:
         raise ValueError(f"{sound} is not one of the sixteen sounds the kit implements "
                          f"({', '.join(dx.SOUND_NAMES)})")

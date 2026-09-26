@@ -1,0 +1,21 @@
+verify_synth_top: 154 writes over the pins (3 voice, 151 drum), 106624 frames after the last
+verify_synth_top: drum solo SD (circuit 1 of 11) at accent 1.00, 2.20 s / 105600 frames, both drum buses 0.45, the voice silent; ROUTE = 0
+verify_synth_top: selected legacy single-rate waveform; compile defines: (none)
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 154 writes sent, 107410 frames, 107409 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 154, writes drained 154, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 107410 frames, MISSING in 0, worst strobe cycle 134 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 99637db-dirty, outdir /Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-290/rtl-sketch/build/drum-d02a; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 134 of 256, past the LRCLK transition at 128 (48 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..784; modelling 107409 frames
+verify_synth_top: drum solo SD struck in frame 782 at accent register 32768; wire lag 1 period(s) behind the core; scored window [303, 105903) of 107409 decoded periods
+verify_synth_top: drum solo SD decoded window against the fixed model struck in the SAME frame (782): 0 of 105600 samples differ, max |difference| 0 LSB; bit-exact True
+verify_synth_top: drum solo SD decoded window against run_case.render_drum_solo (strike in frame 480, the free-running noise LFSR at a different phase): 11411 of 105600 samples differ, max |difference| 4522 LSB
+verify_synth_top: drum solo window sha256 3d366f83e4d8d735afaaf481d7e70c264c3413279ea28fae536048959d3f3cfc
+verify_synth_top: decoded I2S WAV written to /tmp/d02a-i2s.wav
+verify_synth_top: decoded I2S WAV sha256 b5c5cad8e7f5422736585d0dc325b8a7e10b7174bef613d290e446859276e5f9
+verify_synth_top: model peak |sample| 6849 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 15221, DFILT engaged in 0 frames
+verify_synth_top: PASS -- 107409 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+verify_synth_top: SD drum path verified from SPI pins through the production drum engine and I2S pins

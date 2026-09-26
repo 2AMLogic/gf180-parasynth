@@ -14,6 +14,15 @@ push. **Do not edit by hand** -- it is a view of
 | **Ensemble** | 12 | 3 | 3 | 0 | 0 | 9 |
 | **total** | 100 | 19 | 9 | 10 | 6 | 75 |
 
+## What produced each family's numbers
+
+| family | engines | measured on the integrated RTL |
+|---|---|---|
+| **Drums** | fixed-model, integrated-rtl | `D02A` |
+| **Mono** | fixed-model, integrated-rtl | `M5A` |
+| **Filters** | fixed-model | **no case** |
+| **Ensemble** | fixed-model | **no case** |
+
 ## Every case
 
 `worst` is the largest metric error divided by its own tolerance, so it is
@@ -24,7 +33,7 @@ an invalid or missing measurement has **no** distance, never zero.
 |---|---|---|---|---|---|---|---:|---|
 | `D01A` | Drums | Development | Bass drum / anchor | Fischer hardware sample | fixed-model | ⚠️ no verdict |  | invalid: decay |
 | `D01B` | Drums | Holdout | Bass drum / variation | Second documented hardware setting | — | ⬜ not run |  |  |
-| `D02A` | Drums | Development | Snare / anchor | Fischer hardware sample | fixed-model | ✅ pass | 0.58 |  |
+| `D02A` | Drums | Development | Snare / anchor | Fischer hardware sample | integrated-rtl | ✅ pass | 0.65 |  |
 | `D02B` | Drums | Holdout | Snare / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D03A` | Drums | Development | Low tom / anchor | Fischer hardware sample | fixed-model | ❌ fail | 6.04 | worst: body spectrum |
 | `D03B` | Drums | Development | Low tom / variation | Second documented hardware setting | — | ⬜ not run |  |  |
