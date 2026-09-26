@@ -71,6 +71,7 @@ SEC_VOICE = 0
 A_INC0, A_INC2 = 0x00, 0x02
 A_WAVE = 0x04
 A_ROUTE = 0x0F
+A_DRIFT = 0x2D                 # per-oscillator drift (#252): NOT in the released image
 A_W0 = 0x08
 A_GLIDE = 0x0C
 A_MROUTE = 0x1F
@@ -89,7 +90,7 @@ _WAVES_TXT = ", ".join(sorted(str(w) for w in SUPPORTED_WAVES))
 EXCLUDED_CALIBRATION_WITH_RESONANCE = "surge-type2-clean-v1"
 
 RULES = ("INC_WIDTH", "INC_RANGE", "GLIDE_SOURCE", "GLIDE_247", "MOD_EXCURSION",
-         "WAVES", "CALIBRATION_RESONANCE", "PULSE2X", "ROUTE_DRUMFILTER")
+         "WAVES", "CALIBRATION_RESONANCE", "PULSE2X", "ROUTE_DRUMFILTER", "NOT_IN_IMAGE")
 
 
 class Rejected(ValueError):
@@ -256,6 +257,12 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
         if addr == A_RESET:
             osc = [_Osc("reset") for _ in range(3)]
             glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
+            continue
+        if addr == A_DRIFT:
+            if data & 0xFFFF:
+                raise Rejected("NOT_IN_IMAGE", "DRIFT (0x2D) was added to voice_dp.v by #252 after "
+                               "the released image was built; this image ignores it, so a "
+                               "nonzero drift would not sound as the model says", i)
             continue
         if addr == A_ROUTE:
             if data & 1:

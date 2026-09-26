@@ -77,7 +77,8 @@
       "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
       "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
     },
-    "tree_source_drift": {}
+    "source_commit": "d089c678e661d8ba7cf54841036fea89d864aaf9",
+    "source_commit_verified": true
   },
   "rollback": {
     "publication": "fpga/reports/arty/vivado-2025.1/publication.json",
@@ -121,7 +122,6 @@
         12,
         126
       ],
-      "registers_sha256": "03b09492a543714424535b4e890073d5bb5152b6d56137cb17f7d0435ff37981",
       "image_writes": 30,
       "image_sha256": "489401418b0260b6f6d0a8217e0645aa211e5cf65a73c97b2d0ae340213a5511"
     },
@@ -144,7 +144,6 @@
         0,
         127
       ],
-      "registers_sha256": "9b641cd7b86af86db3a3329d02c2c0fac79f070849b620b4c53926c71149def2",
       "image_writes": 30,
       "image_sha256": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8"
     },
@@ -167,7 +166,6 @@
         0,
         127
       ],
-      "registers_sha256": "c7a5141b093f013ff88eb54cbdac4717b8fdc754000c8eba1af97f48292884d1",
       "image_writes": 30,
       "image_sha256": "5c0d1c0ed6dca471bc313f40b4da322a0850756a33a57753a95a9f11a3b42d28"
     }
@@ -234,7 +232,8 @@
       "WAVES",
       "CALIBRATION_RESONANCE",
       "PULSE2X",
-      "ROUTE_DRUMFILTER"
+      "ROUTE_DRUMFILTER",
+      "NOT_IN_IMAGE"
     ],
     "supported_audible_waveforms": [
       "('pulse29', None, None)",
@@ -427,6 +426,11 @@
       "what": "resonance use of calibration surge-type2-clean-v1",
       "why": "qualified at resonance 0 only (plan076 section 3)",
       "enforced": "rule CALIBRATION_RESONANCE in check_patch; no release preset or fixture selects a calibration"
+    },
+    {
+      "what": "per-oscillator drift (register 0x2D, #252)",
+      "why": "added to voice_dp.v on main after this image was built; the image ignores the register, so a nonzero drift would not sound as the model says",
+      "enforced": "rule NOT_IN_IMAGE; no player-facing path writes it"
     },
     {
       "what": "--preset combined with a fixture",

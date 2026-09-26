@@ -36,7 +36,7 @@ def test_selected_artifacts_agree(fresh):
     assert img["configuration"] == {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
     assert img["bitstream_sha256"].startswith("a66c9349")
     assert img["routed_dcp_sha256"].startswith("6c3c22c5")
-    assert img["tree_source_drift"] == {}
+    assert img["source_commit_verified"] is True
     assert img["dsp_feedback_review"]["complete"] is True
     for fx, b in fresh["evidence"]["rolling_playback"].items():
         assert b["cli_bytes_equal_recorded_replay"] and b["replay_rtl_sources_match_image"], fx
@@ -108,7 +108,7 @@ def test_dsp_evidence_bound_to_another_checkpoint_refuses(tmp_path, monkeypatch)
         rm.image_identity()
 
 
-def test_tree_rtl_that_differs_from_the_image_refuses(tmp_path, monkeypatch):
+def test_image_source_absent_from_the_source_commit_refuses(tmp_path, monkeypatch):
     d = _copy_pub(tmp_path)
     pub = json.loads((d / "publication.json").read_text())
     rep = json.loads((d / "report.json").read_text())
@@ -118,9 +118,18 @@ def test_tree_rtl_that_differs_from_the_image_refuses(tmp_path, monkeypatch):
     pub["published_sha256"]["report.json"] = _sha(d / "report.json")
     (d / "publication.json").write_text(json.dumps(pub))
     monkeypatch.setattr(rm, "PUB_DIR", d)
-    assert "rtl-sketch/voice_dp.v" in rm.image_identity()["tree_source_drift"]
     verdict, detail = rm.check()
-    assert verdict == "REFUSED" and "voice_dp.v" in detail
+    assert verdict == "REFUSED" and "voice_dp.v" in detail and "source commit" in detail
+
+
+def test_working_tree_moving_past_the_image_is_reported_not_bound():
+    """#252 changed voice_dp.v on main after the image was built: the release
+    still names the image's own sources (at IMAGE_SOURCE_COMMIT) and says the
+    tree has moved, instead of silently re-binding to RTL the bitstream lacks."""
+    moved = rm.tree_drift()
+    verdict, detail = rm.check()
+    assert verdict == "BOUND"
+    assert ("moved past this image" in detail) == bool(moved)
 
 
 def test_recorded_replay_that_is_not_the_clis_bytes_refuses(tmp_path, monkeypatch):

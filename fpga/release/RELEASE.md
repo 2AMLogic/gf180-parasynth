@@ -26,7 +26,7 @@ disagree, so no release can be bound.
 | Configuration | `OSC2X=1 FILTER2X=1 PULSE2X=0` |
 | Image | [`integrated-baseline-2025.1/arty.bit`](../reports/arty/integrated-baseline-2025.1/arty.bit), 3,825,912 bytes, SHA-256 `a66c9349…4cb95` |
 | Routed checkpoint | `routed.dcp` SHA-256 `6c3c22c5…1fbf8`: the same digest in publication.json, report.json and the DSP DPREG-4 disposition |
-| Sources and ROMs | the 25 `source_sha256` entries of the publication. The manifest's check re-hashes each one in the tree, and they are equal at binding |
+| Sources and ROMs | the 25 `source_sha256` entries of the publication. The check hashes each one **at source commit `d089c678`** (`git show`); all are present. The working tree has since moved on: #252 (per-oscillator drift) changed `voice_dp.v` on main, and the bitstream was not rebuilt. The check reports this as "the working tree has moved past this image" and does not re-bind the release to RTL the bitstream lacks. A rebuilt image would be a new release |
 | Timing and fit | internal timing pass (WNS +16.19 ns, WHS +0.024 ns, 0 failing); external I/O qualified with the one `i2s_bclk` exception |
 | DSP review | complete: all 13 DPREG-4 cells, P-feedback unreachable on every reachable OPMODE |
 | Host | [`fpga/uart_host.py`](../uart_host.py): USB-UART at 115200 8N1; packets W/E/Q/X; DR 0007 rev 2 register frames. No numeric protocol version exists, so the manifest pins the exact bytes of every supported command instead |
@@ -201,6 +201,7 @@ patch.
 | #247 as filed (a glide with an endpoint ≥ 2^23) | Exact model/RTL mismatch; open defect | `INC_RANGE`, `GLIDE_247` |
 | #247 as measured (voice through the drum filter, ROUTE = 1) | The mismatch needs this route in #247's stimulus (below) | `ROUTE_DRUMFILTER` |
 | Resonance with `surge-type2-clean-v1` | Qualified at resonance 0 only | `CALIBRATION_RESONANCE` |
+| Per-oscillator drift (register 0x2D, #252) | Added to `voice_dp.v` on main after this image was built; the image ignores the register | `NOT_IN_IMAGE` |
 | `--preset` with a fixture | The fixture's patch plays under the preset's name | CLI refusal |
 | Standalone `note-on` | The device image is unknown to the command | `WAVES`; use `run` |
 

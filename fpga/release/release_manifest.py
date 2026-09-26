@@ -32,6 +32,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -49,6 +50,10 @@ ROLLING_DIR = ROOT / "fpga/reports/arty/rolling-playback"
 EVIDENCE_DIR = HERE / "evidence"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 PRESETS = ("default", "m5a-saw", "m5a-pulse")
+# main at #248's merge: the last commit whose tree held every source of the
+# published image (voice_dp.v a1575257...). #252 (per-oscillator drift) then
+# changed voice_dp.v on main; the published bitstream was not rebuilt.
+IMAGE_SOURCE_COMMIT = "d089c678e661d8ba7cf54841036fea89d864aaf9"
 
 # The supported player-facing commands: (name, argv after `uart_host.py`,
 # evidence). Each one's exact bytes are captured by the shipped CLI (dry run)
@@ -121,9 +126,19 @@ def image_identity() -> dict:
     ver = ROOT / "fpga/reports/arty/uart-clean/verification.json"
     if sha(_need(ver)) != pub["verification"]["record_sha256"]:
         raise Refused("the publication's verification record is not the uart-clean record on disk")
-    drift = {f: {"published": h, "tree": sha(ROOT / f) if (ROOT / f).exists() else None}
-             for f, h in pub["source_sha256"].items()
-             if not (ROOT / f).exists() or sha(ROOT / f) != h}
+    # the RTL/ROMs the bitstream was built from must exist, byte for byte, at
+    # the pinned source commit. The working tree may move on (main's RTL
+    # changes after the image was built); that does not change THIS image,
+    # and is reported by tree_drift(), not bound into the manifest.
+    at_commit = {}
+    for f, h in pub["source_sha256"].items():
+        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{IMAGE_SOURCE_COMMIT}:{f}"],
+                           capture_output=True)
+        got = hashlib.sha256(r.stdout).hexdigest() if r.returncode == 0 else None
+        if got != h:
+            raise Refused(f"{f}: the image was built from {h[:12]}, but the pinned source "
+                          f"commit {IMAGE_SOURCE_COMMIT[:12]} holds {got[:12] if got else 'nothing'}")
+        at_commit[f] = got
     return {
         "publication": _rel(PUB_DIR / "publication.json"),
         "publication_sha256": sha(PUB_DIR / "publication.json"),
@@ -147,11 +162,21 @@ def image_identity() -> dict:
                                  "periods": pub["verification"]["periods"],
                                  "scope": pub["verification"]["scope"]},
         "remaining_review": pub["remaining_review"],
-        # the RTL and ROMs the bitstream was built from; the tree must still
-        # hold exactly these bytes for the release to be bound to it
+        # the RTL and ROMs the bitstream was built from, verified present at
+        # source_commit (git show, hashed): the image's reproducible source
         "source_sha256": pub["source_sha256"],
-        "tree_source_drift": drift,
+        "source_commit": IMAGE_SOURCE_COMMIT,
+        "source_commit_verified": sorted(at_commit) == sorted(pub["source_sha256"]),
     }
+
+
+def tree_drift() -> dict:
+    """Image sources the WORKING TREE no longer holds (informational: the
+    tree has moved past this image; a new image would be a new release)."""
+    pub = json.loads(_need(PUB_DIR / "publication.json").read_text())
+    return {f: {"image": h, "tree": sha(ROOT / f) if (ROOT / f).exists() else None}
+            for f, h in pub["source_sha256"].items()
+            if not (ROOT / f).exists() or sha(ROOT / f) != h}
 
 
 def rollback_identity() -> dict:
@@ -179,7 +204,10 @@ def presets() -> dict:
         summary = qd.check_patch(regs, name=p)          # raises: an unqualified preset REFUSES
         image = uh.voice_image_writes(None if p == "default" else p) + \
             uh.voice_mixer_writes(None if p == "default" else p)
-        out[p] = {**summary, "registers_sha256": sha_json(regs),
+        # identity is the BYTES the image sends (image_sha256), not the
+        # model's dict: a new model key the image never writes (drift, #252)
+        # must not change the release
+        out[p] = {**summary,
                   "image_writes": len(image), "image_sha256": sha_json(image)}
     return out
 
@@ -379,6 +407,10 @@ DECLARED = {
          "why": "qualified at resonance 0 only (plan076 section 3)",
          "enforced": "rule CALIBRATION_RESONANCE in check_patch; no release preset or fixture "
                      "selects a calibration"},
+        {"what": "per-oscillator drift (register 0x2D, #252)",
+         "why": "added to voice_dp.v on main after this image was built; the image ignores the "
+                "register, so a nonzero drift would not sound as the model says",
+         "enforced": "rule NOT_IN_IMAGE; no player-facing path writes it"},
         {"what": "--preset combined with a fixture", "why": "the fixture loads its own patch; the "
                  "player would hear the fixture's sound under the preset's name",
          "enforced": "uart_host main() refuses (exit 2)"},
@@ -404,9 +436,6 @@ DECLARED = {
 
 def build() -> dict:
     image = image_identity()
-    if image["tree_source_drift"]:
-        raise Refused(f"the tree's RTL/ROM sources differ from the image's: "
-                      f"{sorted(image['tree_source_drift'])}")
     cmds = commands()
     ev = evidence(image)
     for p, h in ev["held_note"].items():
@@ -453,7 +482,10 @@ def check(manifest_path: Path = MANIFEST) -> tuple:
     diffs = _diff(committed, fresh)
     if diffs:
         return "STALE", "differs from a fresh derivation at: " + ", ".join(diffs[:20])
-    return "BOUND", f"{_rel(manifest_path)} equals a fresh derivation; artifacts agree"
+    moved = tree_drift()
+    note = (f"; NOTE the working tree has moved past this image in {sorted(moved)} -- "
+            f"the image's sources are verified at {IMAGE_SOURCE_COMMIT[:12]}") if moved else ""
+    return "BOUND", f"{_rel(manifest_path)} equals a fresh derivation; artifacts agree{note}"
 
 
 def main(argv=None) -> int:

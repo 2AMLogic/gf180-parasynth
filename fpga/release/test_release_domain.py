@@ -295,3 +295,8 @@ def test_no_player_path_writes_the_route():
         st, ev, _ = uh.phrase_static_and_events(fx)
         assert all(a != 0x0F for f, s_, a, d in st) and all(w[3] != 0x0F for w in ev), fx
     assert all(a != 0x0F for f, s_, a, d in uh.voice_image_writes(None) + uh.voice_mixer_writes(None))
+
+
+def test_drift_register_is_not_in_the_released_image():
+    assert rule_of(qd.check_stream, image() + [(0, 0, 0x2D, 1)]) == "NOT_IN_IMAGE"
+    qd.check_stream(image() + [(0, 0, 0x2D, 0)] + incs([qd.INC_HI] * 3, True))
