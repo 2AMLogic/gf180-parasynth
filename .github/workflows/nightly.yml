@@ -81,6 +81,18 @@ jobs:
           python rtl-sketch/verify_synth_top.py --inject I2S_SWAP              --expect-fail
           python rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD        --expect-fail
           python rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR        --expect-fail
+      # The build/report-tool half of docs/verification-rules.md rule 5 (#245).
+      # Pure Python: it stages a copy of an archived ORFS run and drives the
+      # shipped summarize.py, so no EDA tool is needed. Its X-propagation
+      # sibling (pnr/report_synth_area.py) is NOT here because it needs yosys,
+      # which this job does not install -- it lives in `make controls`, and it
+      # REFUSES rather than skipping when the tool is absent.
+      - name: the report tools -- a die area that is its own input must refuse
+        run: |
+          python pnr/orfs/area_provenance.py --expect ok
+          python pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET   --expect refused-circular
+          python pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular
+
       - name: the acceptance suites, against a do-nothing stub
         run: |
           TR808_STUB=silent python -m pytest model/test_808_acceptance.py -q && \

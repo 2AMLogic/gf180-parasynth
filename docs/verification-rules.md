@@ -72,6 +72,11 @@ Quote area only alongside a simulation result, and say which flow produced it �
 `klt` allows `*_1` cells and ORFS excludes them by default, which is a 22–42 %
 difference on the same RTL.
 
+This is now enforced rather than advised, for one tool: `pnr/report_synth_area.py`
+simulates before it answers and REFUSES — withholding the cell count it already
+has — when any output is X. Rule 5 records what that refusal cost to make
+trustworthy, and why the netlist-side checks cannot do the job.
+
 ---
 
 ## 4. A multi-property suite reports what it is BLIND to, not just what failed
@@ -132,7 +137,8 @@ the bugs this project actually made. So when a bug is fixed, the fix is half
 the work; the other half is reinstating the exact broken behaviour as a
 permanent control that must stay red.
 
-Four already work this way, two at each layer:
+Six already work this way — two at the control layer, two at the measurement
+layer, and two in the build/report tools:
 
 | the bug, as it shipped | the injection it became |
 |---|---|
@@ -140,6 +146,8 @@ Four already work this way, two at each layer:
 | the SPI datum truncated to 24 bits | `verify_ctl.py --inject SPI_DATA24` |
 | a 5 ms moving average used as an envelope on a 56 Hz carrier — 0.28 of a cycle | `sound_report.py --inject bd-ma-envelope` |
 | an amplitude-weighted centroid read where a power-weighted one belonged | `sound_report.py --inject sd-centroid-amp-weighted` |
+| `ladder_dp_t16`'s out-of-range tanh index quoted at **1,917 cells** for three rounds | `pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x` — the tool REFUSES and withholds the number |
+| a die area recovered from its own `{"method": "utilization", "utilization_pct": 50}` | `pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular`, and `CORE_UTILIZATION_SET` for the ORFS spelling |
 
 The last two are the measurement layer, which is where most of this project's
 errors actually lived, and both were already pinned by a helper-function unit
@@ -153,11 +161,35 @@ split, wrong by 15× — is kept the other way round, as a method retained
 *because it must stay wrong*, in `model/test_drum_fit.py`. That is the same
 rule with the sign flipped and is equally valid.
 
-**Not yet injections** (each is a real bug this project shipped, so each is
-owed one): X-propagation quoted as a 1,917-cell area, and a die area recovered
-from its own utilization input. Both are build/report-tool bugs rather than
-model bugs, and both are tracked in **issue #245**. This list is a debt marker,
-not coverage; it shrinks only when an entry becomes a control.
+**Not yet injections**: the list is empty. It held two entries — X-propagation
+quoted as a 1,917-cell area, and a die area recovered from its own utilization
+input — and both became controls under issue #245. It is a debt marker, not
+coverage; it shrinks only when an entry becomes a control, and it grows again
+the next time a bug is fixed without one.
+
+The two newest are refusal controls rather than comparison controls, which is a
+distinction worth keeping straight. The four above ask "does the bench notice a
+wrong number?" The two below ask "does the tool decline to produce a number it
+cannot stand behind?", so their `--expect` names the *reason* for the refusal
+(`refused-x`, `refused-circular`), not merely that one occurred. Without that, a
+missing yosys would have made the X control look like it had fired.
+
+**What enforcing the second one immediately found**, and this is the argument
+for a check over a comment: `pnr/orfs/ladder_dp/config.mk` and
+`pnr/orfs/synth_core/config.mk` both set `CORE_UTILIZATION = 50`, the setting
+`synth_top/config.mk`'s own header warns against at length, so
+`pnr/orfs/summarize.py` would have quoted a `die / synth cell area` of about 2
+for either of them without a word. The convention held exactly where somebody
+had written a paragraph about it and nowhere else.
+
+**And what the first one measured is a warning about which checks are worth
+anything here.** Under `TANH_INDEX_OOR` — a tanh index field one bit wider than
+the table it reads, the `ladder_dp_t16` defect — the synthesised netlist contains
+no `x`, simulates `x`-free at the gate level, and its cell count moves by
+**0.1 %** (1,677 against 1,679). Yosys is entitled to resolve a don't-care to
+anything it likes, and does. Only a behavioural simulation of the sources sees
+it: `y` is `x` on 506 of 512 sampled cycles. The area is not a weak detector of
+this class of defect, it is not a detector at all.
 
 ### The three conditions, because a control that cannot run looks like one that works
 
