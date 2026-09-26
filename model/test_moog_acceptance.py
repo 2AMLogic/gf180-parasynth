@@ -2672,7 +2672,8 @@ def test_control_a_block_rate_cutoff_hold_breaks_audio_rate_modulation():
 #                    (fpga/SELECTED.md: OSC2X=1 FILTER2X=1).
 # =============================================================================
 ALIAS_CURVE = {40: -42.7, 52: -39.7, 64: -36.6, 76: -33.7, 88: -31.0, 100: -28.5}
-# Measured 2026-09-26 against f464bff by tools/measure_saw_alias_after_2x.py.
+# Measured 2026-09-26 against 12f51c5 by tools/measure_saw_alias_after_2x.py;
+# the run is committed as docs/saw-alias-2x-results.json.
 ALIAS_CURVE_2X = {40: -61.9, 52: -57.5, 64: -54.0, 76: -52.1, 88: -51.6, 100: -52.4}
 
 
@@ -2761,7 +2762,7 @@ def test_the_sawtooths_aliasing_floor_after_the_2x_decimator_is_locked():
     """[measured-here: issue #61] **Issue #61's "after", and the docstring above is the before.**
     The same six registers, through the path the saw ships on
     (`VoiceFx(oversample_2x=True)`, `fpga/SELECTED.md`: `OSC2X=1 FILTER2X=1`).
-    Measured 2026-09-26 against commit `f464bff` by
+    Measured 2026-09-26 against commit `12f51c5` by
     `tools/measure_saw_alias_after_2x.py`, whose own controls are in
     `tools/test_measure_saw_alias_after_2x.py`:
 
