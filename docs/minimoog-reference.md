@@ -571,7 +571,9 @@ Stated, because a list of what we added is not a claim of completeness.
 
 - **The external input / microphone preamp**, the fifth mixer source
   **[verified: SM Specifications]**, with its overload lamp (§2.12). No audio
-  input pin.
+  input pin. A *digital* internal return (the chip's own output summed back
+  into its own mixer) is a different, feasible feature — see
+  `spec/decision-records/0016-external-feedback-loop.md`.
 - **The A-440 reference oscillator** (§2.2.7) — a tuning aid.
 - **The pitch wheel** as a separate control. The host writes increments.
 - **The second VCA** with its external loudness control input (§5.24.1).
