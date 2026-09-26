@@ -212,7 +212,7 @@ verdict. The same work on the box has 8 dedicated cores.
   (≤ 8 vCPU, no raw `aws ec2 run-instances`, never `Fleet=loom` hosts).
   **Stop it when the queued work is done.**
 - **Match CI, not your laptop:** Python 3.12 (`uv venv --python 3.12`, then
-  `numpy scipy pytest`, exactly what the workflows install) and the pinned
+  `numpy scipy pytest pyyaml`, what the workflows install) and the pinned
   toolchain from `tools/setup_ci_oss_cad.py` (run with `GITHUB_PATH` set to a
   file; it prints the bin dir to prepend to `PATH`). Install `make` if absent.
   Run make with `PY=<that venv's python>`.
