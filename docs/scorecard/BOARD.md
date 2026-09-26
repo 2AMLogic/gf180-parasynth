@@ -46,7 +46,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `D11B` | Drums | Development | Maracas / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D12A` | Drums | Development | Clap / anchor | Fischer hardware sample | fixed-model | ❌ fail | 4.75 | worst: burst/tail ratio |
 | `D12B` | Drums | Development | Clap / variation | Second documented hardware setting | — | ⬜ not run |  |  |
-| `D13A` | Drums | Development | Cowbell / anchor | Fischer hardware sample | fixed-model | ❌ fail | 11.34 | worst: unwanted difference tone |
+| `D13A` | Drums | Development | Cowbell / anchor | Fischer hardware sample | fixed-model | ❌ fail | 2.82 | worst: Partial balance |
 | `D13B` | Drums | Holdout | Cowbell / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D14A` | Drums | Development | Cymbal / anchor | Fischer hardware sample | fixed-model | ⚠️ no verdict |  | invalid: total decay |
 | `D14B` | Drums | Development | Cymbal / variation | Second documented hardware setting | — | ⬜ not run |  |  |

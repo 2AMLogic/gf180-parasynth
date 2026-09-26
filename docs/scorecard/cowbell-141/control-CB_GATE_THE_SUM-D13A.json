@@ -3,16 +3,16 @@
   "case_id": "D13A",
   "subject": "Cowbell / anchor",
   "source_commit": "92d826e",
-  "analysis_run": "run_case@b9069cd630e0 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@22d2ccabb277 at 2026-09-26T02:30:31Z",
+  "analysis_run": "run_case@b9069cd630e0 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@22d2ccabb277 at 2026-09-26T02:29:46Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
       "commit": "92d826e",
-      "described": "node/D-drums-bitexact-480-g92d826e",
+      "described": "node/D-drums-bitexact-480-g92d826e-dirty",
       "branch": "fix/cowbell-metric-direction",
-      "dirty": false,
-      "uncommitted_sha256": "e3b0c44298fc1c14",
-      "untracked_files": 0
+      "dirty": true,
+      "uncommitted_sha256": "a42429fd7b33170a",
+      "untracked_files": 4
     },
     "base_check": {
       "checked": true,
@@ -26,18 +26,18 @@
       "allow_stale": false,
       "problems": []
     },
-    "command": "tools/run_case.py D13A --refs /private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/tr808-ref",
+    "command": "tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl",
     "config": {
       "voice": "CB",
-      "refs": "/private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/tr808-ref",
-      "inject": null,
+      "refs": "<scratchpad>/tr808-ref",
+      "inject": "CB_GATE_THE_SUM",
       "render_seconds": 2.2,
       "accent": 1.0,
       "bus_gain": 0.45,
       "level_matched": true
     },
     "python": "3.14.7",
-    "run_at": "2026-09-26T02:30:43Z",
+    "run_at": "2026-09-26T02:29:58Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
       "model/voice_fx.py": "sha256:970ad08f32eaed5c",
@@ -53,8 +53,8 @@
       "reference:cb8/CB.WAV": "sha256:1468cbd6c75a1f23"
     },
     "artefacts": {
-      "ours": "build/scorecard/D13A-ours.wav",
-      "reference": "/private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/tr808-ref/cb8/CB.WAV"
+      "ours": "not written (--no-audio)",
+      "reference": "<scratchpad>/tr808-ref/cb8/CB.WAV"
     },
     "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
@@ -62,7 +62,7 @@
   "reference_profile": "fischer-tr808-103852:cb8/CB.WAV (no knob)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
   "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('CB') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 7 of 11",
-  "audio": "reference cb8/CB.WAV; ours build/scorecard/D13A-ours.wav",
+  "audio": "reference cb8/CB.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -74,13 +74,13 @@
   },
   "windowing": {
     "ours": {
-      "onset_index": 480,
-      "onset_ms_into_the_record": 10.0,
+      "onset_index": 481,
+      "onset_ms_into_the_record": 10.0208,
       "lead_samples": 540,
       "lead_ms": 11.25,
       "trim_ms": 1.0,
-      "lead_from_the_record_samples": 480,
-      "lead_manufactured_samples": 108,
+      "lead_from_the_record_samples": 481,
+      "lead_manufactured_samples": 107,
       "junction_level_frac_of_peak": 0.0,
       "dc_removed": true,
       "dc_frac_of_peak": 0.0,
@@ -108,30 +108,30 @@
   },
   "metrics": {
     "Partial balance": {
-      "value": 6.5461,
+      "value": 6.3947,
       "units": "dB",
       "reference": 15.0177,
-      "error": -8.4716,
+      "error": -8.623,
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "energy ratio",
       "purpose": "match"
     },
     "unwanted difference tone": {
-      "value": -101.9984,
+      "value": -20.5255,
       "units": "dB",
       "reference": -67.9664,
-      "error": -34.032,
+      "error": 47.4408,
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "energy ratio",
       "purpose": "defect ceiling"
     },
     "decay": {
-      "value": 225.4697,
+      "value": 225.5798,
       "units": "ms",
       "reference": 255.2691,
-      "error": -29.7993,
+      "error": -29.6893,
       "tolerance": 127.6345,
       "valid": true,
       "tolerance_basis": "time",
@@ -139,100 +139,13 @@
     }
   },
   "diagnostics": {
-    "ours_peak_fs": 0.197235,
-    "ours_rms_fs": 0.008284,
+    "ours_peak_fs": 0.114502,
+    "ours_rms_fs": 0.005312,
     "reference_peak_fs": 0.70401,
     "reference_rate_hz": 44100,
     "ours_rate_hz": 48000,
     "level_matched": true,
     "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. Original-gain peak and RMS are recorded above."
   },
-  "rubric_history": [
-    {
-      "kind": "rubric change (measurement-version change), not a sound change",
-      "changed": {
-        "unwanted difference tone": {
-          "before": {
-            "units": "dB",
-            "tolerance": 3.0,
-            "tolerance_basis": "energy ratio",
-            "purpose": "match"
-          },
-          "after": {
-            "units": "dB",
-            "tolerance": 3.0,
-            "tolerance_basis": "energy ratio",
-            "purpose": "defect ceiling"
-          }
-        }
-      },
-      "superseded_at": "2026-09-26T02:30:43Z",
-      "state": "fail",
-      "worst": 11.344,
-      "why": "worst: unwanted difference tone",
-      "properties": {
-        "Partial balance": 2.823866666666667,
-        "unwanted difference tone": 11.344,
-        "decay": 0.2334737081275047
-      },
-      "measurement_policy": {
-        "required": [
-          "Partial balance",
-          "decay",
-          "unwanted difference tone"
-        ],
-        "metrics": {
-          "Partial balance": {
-            "units": "dB",
-            "tolerance": 3.0,
-            "tolerance_basis": "energy ratio",
-            "purpose": "match"
-          },
-          "unwanted difference tone": {
-            "units": "dB",
-            "tolerance": 3.0,
-            "tolerance_basis": "energy ratio",
-            "purpose": "match"
-          },
-          "decay": {
-            "units": "ms",
-            "tolerance": 127.6345,
-            "tolerance_basis": "time",
-            "purpose": "match"
-          }
-        }
-      },
-      "source_commit": "7dd6337",
-      "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:28:19Z",
-      "metrics": {
-        "Partial balance": {
-          "value": 6.5461,
-          "units": "dB",
-          "reference": 15.0177,
-          "error": -8.4716,
-          "tolerance": 3.0,
-          "valid": true,
-          "tolerance_basis": "energy ratio"
-        },
-        "unwanted difference tone": {
-          "value": -101.9984,
-          "units": "dB",
-          "reference": -67.9664,
-          "error": -34.032,
-          "tolerance": 3.0,
-          "valid": true,
-          "tolerance_basis": "energy ratio"
-        },
-        "decay": {
-          "value": 225.4697,
-          "units": "ms",
-          "reference": 255.2691,
-          "error": -29.7993,
-          "tolerance": 127.6345,
-          "valid": true,
-          "tolerance_basis": "time"
-        }
-      }
-    }
-  ]
+  "INJECTED_CONTROL": "CB_GATE_THE_SUM"
 }

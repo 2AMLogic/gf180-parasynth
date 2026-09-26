@@ -1,0 +1,149 @@
+FFFFFFFFFF                                                               [100%]
+=================================== FAILURES ===================================
+________ test_the_cowbell_difference_tone_is_declared_a_defect_ceiling _________
+
+    def test_the_cowbell_difference_tone_is_declared_a_defect_ceiling():
+        """The direction is written down next to the estimator, not inferred from
+        the name. Everything else the cowbell measures stays two-sided."""
+>       assert rc.metric_purpose(NAME) == sc.DEFECT_CEILING
+               ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'run_case' has no attribute 'metric_purpose'
+
+tools/test_metric_purpose.py:82: AttributeError
+_____________ test_measure_pair_writes_the_purpose_into_the_record _____________
+
+    def test_measure_pair_writes_the_purpose_into_the_record():
+        """The board reads the purpose from the RECORD, so the record must carry
+        it -- a direction that lives only in the runner is invisible to the
+        scorecard and to compare()."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        m = rc.measure_pair(NAME, "dB", est(-102.0), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(-68.0))
+>       assert m["purpose"] == sc.DEFECT_CEILING and m["error"] == pytest.approx(-34.0)
+               ^^^^^^^^^^^^
+E       KeyError: 'purpose'
+
+tools/test_metric_purpose.py:94: KeyError
+___________ test_less_than_the_reference_is_no_distance_on_a_ceiling ___________
+
+    def test_less_than_the_reference_is_no_distance_on_a_ceiling():
+        """34 dB LESS of an unwanted component is not a defect: distance 0."""
+>       r = sc.evaluate(CASE, with_purpose(sc.DEFECT_CEILING))
+                                           ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'scorecard' has no attribute 'DEFECT_CEILING'
+
+tools/test_metric_purpose.py:104: AttributeError
+________ test_more_than_the_reference_by_more_than_the_tolerance_fails _________
+
+    def test_more_than_the_reference_by_more_than_the_tolerance_fails():
+        """Excess is still the defect: 3.5 dB over a 3 dB ceiling fails, and the
+        distance is the excess over the tolerance, not clamped."""
+>       r = sc.evaluate(CASE, with_purpose(sc.DEFECT_CEILING, error=+3.5))
+                                           ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'scorecard' has no attribute 'DEFECT_CEILING'
+
+tools/test_metric_purpose.py:114: AttributeError
+_____________ test_excess_inside_the_tolerance_passes_the_ceiling ______________
+
+    def test_excess_inside_the_tolerance_passes_the_ceiling():
+>       r = sc.evaluate(CASE, with_purpose(sc.DEFECT_CEILING, error=+2.9))
+                                           ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'scorecard' has no attribute 'DEFECT_CEILING'
+
+tools/test_metric_purpose.py:122: AttributeError
+__________ test_the_symmetric_control_reproduces_the_historical_11_34 __________
+
+    def test_the_symmetric_control_reproduces_the_historical_11_34():
+        """The same record scored two-sided gives the number the board used to
+        show. If this stops reproducing, the rubric change is no longer the only
+        thing that moved."""
+>       for r in (sc.evaluate(CASE, with_purpose(sc.MATCH)),
+                                                 ^^^^^^^^
+                  sc.evaluate(CASE, record(copy.deepcopy(HISTORICAL)))):   # legacy: no purpose
+E                 AttributeError: module 'scorecard' has no attribute 'MATCH'
+
+tools/test_metric_purpose.py:133: AttributeError
+________________ test_an_unknown_purpose_is_refused_not_scored _________________
+
+    def test_an_unknown_purpose_is_refused_not_scored():
+        """A direction the board does not understand is no verdict. Guessing
+        two-sided would silently re-introduce #141; guessing one-sided would hide
+        deficits."""
+>       r = sc.evaluate(CASE, with_purpose("lower is better, probably"))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tools/test_metric_purpose.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+purpose = 'lower is better, probably', error = -34.032
+
+    def with_purpose(purpose: str | None, error: float = -34.032) -> dict:
+        """The historical record with the difference tone's purpose and error set."""
+        m = copy.deepcopy(HISTORICAL)
+        m[NAME]["error"] = error
+        m[NAME]["value"] = round(m[NAME]["reference"] + error, 4)
+        if purpose is not None:
+            m[NAME]["purpose"] = purpose
+        for other in ("Partial balance", "decay"):
+            if purpose is not None:
+>               m[other]["purpose"] = sc.MATCH
+                                      ^^^^^^^^
+E               AttributeError: module 'scorecard' has no attribute 'MATCH'
+
+tools/test_metric_purpose.py:73: AttributeError
+___________ test_a_rubric_change_is_incomparable_not_an_improvement ____________
+
+    def test_a_rubric_change_is_incomparable_not_an_improvement():
+        """compare() must not read 11.34 -> 2.82 as the cowbell getting better.
+        The measurement policy differs, so the verdict is INCOMPARABLE."""
+        old = sc.evaluate(CASE, record(copy.deepcopy(HISTORICAL)))
+>       new = sc.evaluate(CASE, with_purpose(sc.DEFECT_CEILING))
+                                             ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'scorecard' has no attribute 'DEFECT_CEILING'
+
+tools/test_metric_purpose.py:152: AttributeError
+________________ test_the_ceiling_still_catches_gating_the_sum _________________
+
+    def test_the_ceiling_still_catches_gating_the_sum():
+        """DR 0010's defect -- one swing gate on the SUM of the two squares,
+        nl(a + b) -- put the difference tone 42 dB above the machine's. A
+        one-sided metric is only honest if it still fails that. Scored against
+        the machine's recorded -67.9664 dB."""
+        ref = HISTORICAL[NAME]["reference"]
+>       clean, bad = _diff_tone_of(None), _diff_tone_of("CB_GATE_THE_SUM")
+                     ^^^^^^^^^^^^^^^^^^^
+
+tools/test_metric_purpose.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+inject = None
+
+    def _diff_tone_of(inject: str | None) -> am.Estimate:
+>       x, sr = rc.render_drum_solo("CB", inject=inject)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: render_drum_solo() got an unexpected keyword argument 'inject'
+
+tools/test_metric_purpose.py:161: TypeError
+_____________ test_the_d13a_record_preserves_its_pre_rubric_score ______________
+
+    def test_the_d13a_record_preserves_its_pre_rubric_score():
+        """The old 11.34 is kept in the record, labelled a rubric change, so the
+        drop to the partial balance cannot be read as a sound improvement."""
+        res = json.loads((ROOT / "docs/scorecard/results/D13A.json").read_text())
+>       hist = res["rubric_history"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'rubric_history'
+
+tools/test_metric_purpose.py:190: KeyError
+=========================== short test summary info ============================
+FAILED tools/test_metric_purpose.py::test_the_cowbell_difference_tone_is_declared_a_defect_ceiling
+FAILED tools/test_metric_purpose.py::test_measure_pair_writes_the_purpose_into_the_record
+FAILED tools/test_metric_purpose.py::test_less_than_the_reference_is_no_distance_on_a_ceiling
+FAILED tools/test_metric_purpose.py::test_more_than_the_reference_by_more_than_the_tolerance_fails
+FAILED tools/test_metric_purpose.py::test_excess_inside_the_tolerance_passes_the_ceiling
+FAILED tools/test_metric_purpose.py::test_the_symmetric_control_reproduces_the_historical_11_34
+FAILED tools/test_metric_purpose.py::test_an_unknown_purpose_is_refused_not_scored
+FAILED tools/test_metric_purpose.py::test_a_rubric_change_is_incomparable_not_an_improvement
+FAILED tools/test_metric_purpose.py::test_the_ceiling_still_catches_gating_the_sum
+FAILED tools/test_metric_purpose.py::test_the_d13a_record_preserves_its_pre_rubric_score
+10 failed in 2.49s

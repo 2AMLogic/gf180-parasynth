@@ -1,0 +1,13 @@
+==============================================================================
+FAIL(1)         49.6s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref
+              D13A   fail           2.82  worst: Partial balance
+              ------------------------------------------------------------------------------------------------
+              fail: 1
+              exit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
+NO-VERDICT     108.7s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect fail --no-audio --results <scratchpad>/ctl
+              CONTROL BASELINE: complete
+              D13A   fail          15.81  worst: unwanted difference tone
+              ------------------------------------------------------------------------------------------------
+              fail: 1
+==============================================================================
+0/2 passed  --  FAIL /Users/joseph/dev/gf180-parasynth/.venv/bin/; NO-VERDICT /Users/joseph/dev/gf180-parasynth/.venv/bin/
