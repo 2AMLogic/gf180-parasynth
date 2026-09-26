@@ -235,10 +235,12 @@ module tb_voice;
             nout = nout + 1;
             end
         end
-        $fdisplay(ofd, "STATE %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
+        $fdisplay(ofd, "STATE %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
                   dut.phase[0], dut.phase[1], dut.phase[2], dut.inc_acc[0], dut.inc_acc[1], dut.inc_acc[2],
                   dut.level_a, dut.level_f, dut.seg_a, dut.seg_f,
-                  dut.phase_os2[0], dut.phase_os2[1], dut.phase_os2[2]);
+                  dut.phase_os2[0], dut.phase_os2[1], dut.phase_os2[2],
+                  dut.drift_cnt, $signed(dut.drift_acc[0]), $signed(dut.drift_acc[1]),
+                  $signed(dut.drift_acc[2]));
         $fclose(ofd);
         $display("tb_voice: %0d writes, %0d frames, %0d sample mismatches, worst |error| %0d LSB", nw, nout, mism, maxerr);
         $display("tb_voice: cycles from go to sample_valid: best %0d, mean %0d, worst %0d (chip: go at cycle 8 of 256)",

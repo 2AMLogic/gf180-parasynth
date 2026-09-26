@@ -157,6 +157,35 @@ def test_dr_0011_removed_the_drift_and_left_a_resonance_dependent_offset():
     assert abs(tab[2.00]["spread_pp"] - tab[1.05]["spread_pp"]) < 0.6, tab
 
 
+def test_the_resonance_offset_is_smooth_in_resonance_not_noise():
+    """**Sizes a correction without designing one -- issue #237.** Fitting
+    `resonance_offset_table`'s mean offset as a polynomial in RESONANCE ALONE
+    (no cutoff term at all) leaves under 0.35 pp unexplained at degree 2 and
+    under 0.12 pp at degree 3, against 0.95 pp for a straight line and the raw
+    5.9 pp (105 cents) of travel. So the offset is not an erratic residual --
+    it is a smooth, low-order function of the resonance knob, which is why a
+    per-frame term keyed on `k` (already available every frame; DR 0006's
+    compensation ROM already reads it) could in principle recover nearly all
+    of it.
+
+    That is a different question from whether it is free. `CUT_TRIM` and
+    `fcr` are ROM-BUILD-TIME changes -- a constant and a polynomial baked into
+    `make_g_rom` once, at no datapath cost. A term that depends on RESONANCE
+    cannot be baked in at build time, because resonance is a per-frame,
+    host-supplied value: it needs either a new small ROM addressed by `k` and
+    an extra per-frame multiply, or a widened address into the existing
+    tables. That is a datapath change, and this issue's decision record defers
+    it rather than building it here (`spec/decision-records
+    /0011-cutoff-tuning-polynomial.md`'s amendment for issue #237)."""
+    _, resid1 = lh.offset_vs_resonance_fit(1, cuts=(400.0, 1600.0))
+    _, resid2 = lh.offset_vs_resonance_fit(2, cuts=(400.0, 1600.0))
+    _, resid3 = lh.offset_vs_resonance_fit(3, cuts=(400.0, 1600.0))
+    assert resid1 == pytest.approx(0.95, abs=0.35), resid1
+    assert resid2 == pytest.approx(0.23, abs=0.15), resid2
+    assert resid3 == pytest.approx(0.06, abs=0.05), resid3
+    assert resid1 > 2.0 * resid2 > 2.0 * resid3, (resid1, resid2, resid3)
+
+
 def test_a_refitted_tuning_polynomial_recovers_most_of_the_remaining_drift():
     """**What is left for the tuning LAW, measured by inverting the loop.**
     `CUT_TRIM * fcr()` is the paper's cubic fitted to a different
@@ -247,6 +276,56 @@ def test_the_drive_stage_saturation_point_is_in_the_references_range():
 # =============================================================================
 # 3. the suite can fail: injected defects, one per axis
 # =============================================================================
+def _offset_pct_with_cut_skew(res: float, cuts, skew: float = 1.0) -> float:
+    """`mean_offset_pct` at one resonance, with the coefficient looked up at a
+    SKEWED cutoff (DR 0011's own injection mechanism, `OurLadder.cut_skew`) --
+    without changing the cutoff we claim to have commanded."""
+    dev = rr.OurLadder("ours", cut_skew=skew)
+    ratios = {c: lh._ring_ratio(dev, c, res) for c in cuts}
+    return lh.tracking_summary(ratios)["mean_offset_pct"]
+
+
+def _travel_cents(off_lo_pct: float, off_hi_pct: float) -> float:
+    return 1200.0 * math.log2((1.0 + off_lo_pct / 100.0) / (1.0 + off_hi_pct / 100.0))
+
+
+def test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot():
+    """**Issue #237's own control, and the property the suite had none of.**
+    DR 0011's `test_control_a_uniform_cutoff_skew_...` proves a drift metric is
+    blind to a UNIFORM offset. It says nothing about the resonance-offset
+    TRAVEL this issue measures, and cannot be reused to say it, because that
+    is exactly the gap: a uniform skew is blind to travel by the same
+    construction (it is a decision DR 0011's "What was NOT taken" section
+    names and does not measure) -- and a skew that VARIES with resonance is
+    not.
+
+    Shipped travel (quick 2-cutoff probe): about 105 cents, matching
+    `docs/ladder-rung1-audit.md` section 1's 7-cutoff figure. A uniform +2 %
+    retrim -- what refitting `CUT_TRIM` at a DIFFERENT single operating point
+    would look like -- leaves it within a couple of cents: no single constant
+    can close this, which is the algebraic reason
+    `spec/decision-records/0011-cutoff-tuning-polynomial.md`'s amendment gives
+    for not attempting one. A skew that scales with `(res - 1)` -- the shape a
+    genuine per-frame correction would have -- moves it by tens of cents, so
+    the travel IS a property that would have caught a resonance-dependent
+    regression, which is what this test demonstrates rather than assumes."""
+    cuts, res_lo, res_hi = lh.QUICK_CUTS, 1.02, 2.00
+    shipped = _travel_cents(_offset_pct_with_cut_skew(res_lo, cuts),
+                            _offset_pct_with_cut_skew(res_hi, cuts))
+    assert shipped == pytest.approx(105.0, abs=25.0), shipped
+
+    # a UNIFORM retrim (same skew at both resonances): blind, like DR 0011's
+    uniform = _travel_cents(_offset_pct_with_cut_skew(res_lo, cuts, skew=1.02),
+                            _offset_pct_with_cut_skew(res_hi, cuts, skew=1.02))
+    assert abs(uniform - shipped) < 3.0, (shipped, uniform)
+
+    # a RESONANCE-DEPENDENT skew: moved, and caught
+    dependent = _travel_cents(
+        _offset_pct_with_cut_skew(res_lo, cuts, skew=1.0 + 0.03 * (res_lo - 1.0)),
+        _offset_pct_with_cut_skew(res_hi, cuts, skew=1.0 + 0.03 * (res_hi - 1.0)))
+    assert shipped - dependent > 30.0, (shipped, dependent)
+
+
 def test_control_the_untuned_rom_turns_the_tuning_axis_red():
     """Defect: DR 0011 reverted -- `make_g_rom(tune=False)`. The drift the audit
     reports as nearly closed has to reopen. Without this, "1.1 pp of drift

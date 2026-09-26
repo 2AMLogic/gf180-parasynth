@@ -122,11 +122,37 @@ _K_ROM_CACHE = {}
 G_ROM_UNTUNED = vf.make_g_rom(tune=False)          # the ROM of contract revisions 1-6
 
 
+def _neutral_ogain() -> int:
+    """`ogain` with the passband compensation taken out -- the res = 0 value,
+    which is the state-units-to-Q1.15 conversion and nothing else
+    (`fixed.LadderFx.regs`: `ogain = 2Vt/vpu * (1 + 2 res)`).
+
+    Rendering with this is how the LOOP's own low-frequency gain is read: at
+    the shipped `ogain` the `(1 + 2 res)` factor is multiplied back in, and
+    the two must not be confused -- one is a property of the ladder, the other
+    is our level policy on top of it."""
+    return int(_REAL_LADDER(**vf.LADDER_CFG).regs(0.0, 1.0)[2])
+
+
+def _k_float(res, cut, compensated=True) -> float:
+    """The feedback coefficient the loop actually runs at, as a number: the
+    Q3.14 `k` register (after DR 0006's per-cutoff compensation, when it is
+    on) divided by 2^14. This is Stinchcombe's `k`, not the host's `res`."""
+    return _ladder_regs(res, drive=1.0, cut=cut, compensated=compensated)[1] / float(1 << 14)
+
+
 def ladder_render(x_q15, cut, res, drive, compensated=True, ladder=None,
-                  skew=1.0, g_rom=None, **cfg):
+                  skew=1.0, g_rom=None, ogain=None, **cfg):
     """`x_q15` through one ladder at a fixed operating point. `vf.LadderFx` is
-    looked up at call time so an injected defect is seen."""
-    g, k, gain, ogain = _ladder_regs(res, drive, cut, compensated, skew, g_rom)
+    looked up at call time so an injected defect is seen.
+
+    `ogain` overrides the output register the host would write, which is the
+    only way to measure the LOOP on its own: the shipped `ogain` carries DR
+    0005's `(1 + 2 res)` passband compensation, and a measurement that leaves
+    it in is measuring the instrument's level policy rather than the filter's
+    transfer function (`_neutral_ogain`, below)."""
+    g, k, gain, og = _ladder_regs(res, drive, cut, compensated, skew, g_rom)
+    ogain = og if ogain is None else int(ogain)
     lad = ladder if ladder is not None else vf.LadderFx(**{**vf.LADDER_CFG, **cfg})
     n = len(x_q15)
     return lad.process(np.asarray(x_q15, dtype=np.int16), None, res, drive,
@@ -638,6 +664,83 @@ def test_the_passband_compensation_is_partial_and_is_the_one_in_the_contract():
         assert got > uncomp + 2.0, f"res {res}: no compensation is visible"
 
 
+@pytest.mark.parametrize("compensated", [False, True])
+def test_the_ladders_low_frequency_gain_is_one_over_one_plus_k(compensated):
+    """[source-verified: Stinchcombe 2008 SS 2.3-2.4, equations 21 and 22]
+    **The small-signal ladder with a feedback loop, from a source outside this
+    repository.** Stinchcombe derives it from the block diagram and nothing
+    else (SS 2.3): with the core's transfer function `G(s)` and a feedback
+    gain `k`,
+
+        Vout = G(s)(Vin - k Vout)   =>   H(s) = G(s) / (1 + k G(s))
+
+    and with the normalised four-pole core `G(s) = 1 / (s + 1)^4` (eq. 21)
+    that is `Hstd(s) = 1 / ((s + 1)^4 + k)` (eq. 22). At `s = 0`, `G(0) = 1`
+    and therefore
+
+        H(0) = 1 / (1 + k)
+
+    -- the classic ladder bass loss, and the thing DR 0006's k_comp ROM is
+    compensating against. SS 2.4 is the author's own check that this model
+    tracks a SPICE simulation of the transistor circuit, which is why it is a
+    referent for us rather than one more restatement of our decision records.
+
+    Source: T. E. Stinchcombe, "Analysis of the Moog Transistor Ladder and
+    Derivative Filters", 25 Oct 2008,
+    <http://www.timstinchcombe.co.uk/synth/Moog_ladder_tf.pdf> (fetched and
+    read for this test; see docs/minimoog-reference.md SS 0, key STIN).
+
+    WHAT IS MEASURED, and why it is not the test above. The shipped `ogain`
+    multiplies `(1 + 2 res)` back in (DR 0005), so a probe that leaves it in
+    reads OUR LEVEL POLICY, not the ladder. This renders at `_neutral_ogain()`
+    -- `ogain` at its res = 0 value, the state-units conversion alone -- so
+    what comes back is the loop. And the abscissa is `k` itself, the Q3.14
+    register the loop runs on (`_k_float`), not the host's `res`: with DR
+    0006's compensation on, `k` is 4.25 at res = 1 and 2000 Hz, and the law
+    has to hold at THAT k or the ROM is not doing what it claims.
+
+    Measured, cutoff 2000 Hz probed at 100 Hz (a 20:1 ratio), relative to the
+    same probe at k = 0:
+
+        res   k (comp off)   measured    1/(1+k)    G/(1+kG) at 100 Hz
+        0.25    1.000        -5.954 dB   -6.021     -5.956
+        0.50    2.000        -9.473      -9.542     -9.475
+        0.75    3.000       -11.975     -12.041    -11.976
+        1.00    4.000       -13.916     -13.979    -13.917
+
+    The residual against `1/(1+k)` is +0.066 dB and it is NOT an error: it is
+    the finite-frequency term, `|1 + k G(j0.05)|` rather than `|1 + k|`, and
+    the last column -- the same `H(s)` evaluated at the probe frequency
+    instead of at DC -- reproduces the measurement to 0.003 dB. Probing a
+    decade down instead of a decade and a half (500 Hz cutoff, 50 Hz) moves
+    both the measurement and that column to +0.26 dB, together.
+
+    Tolerances: 0.05 dB against `H(j omega)/H_0(j omega)` from eq. 21, and
+    0.12 dB against the `H(0) = 1/(1 + k)` limit itself at the 20:1 probe.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
+    cut, f, drive = 2000.0, 100.0, 0.1
+    og = _neutral_ogain()
+    ref = probe_gain_db(f, cut, 0.0, drive, compensated=compensated, ogain=og)
+    for res in (0.25, 0.5, 0.75, 1.0):
+        k = _k_float(res, cut, compensated)
+        got = probe_gain_db(f, cut, res, drive, compensated=compensated, ogain=og) - ref
+        G = 1.0 / (1.0 + 1j * f / cut) ** 4                     # eq. 21, normalised core
+        exact = 20 * math.log10(abs((G / (1 + k * G)) / G))     # eq. 22 at the probe
+        dc = -20 * math.log10(1.0 + k)                          # H(0) = 1/(1+k)
+        assert abs(got - exact) < 0.05, \
+            f"res {res} (k {k:.3f}): {got:.3f} dB, H(jw)/H0 {exact:.3f} dB"
+        assert abs(got - dc) < 0.12, \
+            f"res {res} (k {k:.3f}): {got:.3f} dB, 1/(1+k) {dc:.3f} dB"
+        # and the shipped output register is exactly (1 + 2 res) on top of it:
+        # the two tests are measuring two different things, on purpose
+        shipped = (probe_gain_db(f, cut, res, drive, compensated=compensated)
+                   - probe_gain_db(f, cut, 0.0, drive, compensated=compensated))
+        assert abs((shipped - got) - 20 * math.log10(1 + 2 * res)) < 0.1, \
+            f"res {res}: ogain contributes {shipped - got:.3f} dB, not (1 + 2 res)"
+
+
 def test_opening_the_cutoff_makes_a_note_brighter():
     """[measured-here: cutoff-to-brightness ordering on the finished voice] **Acceptance, not diagnosis.** The cutoff control has to do the one
     thing a player expects: open it and the note gets brighter. Measured on
@@ -917,6 +1020,115 @@ def test_nothing_clips_at_the_reference_gain_structure():
             assert np.mean(np.abs((t["vca"] * 29491) >> 15) > 32767) > 0.03, name
     assert 1.5 < worst_ladder < 2.5, worst_ladder
     assert 0.8 < worst_out < 0.95, worst_out
+
+
+def test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it():
+    """[source-verified: contract 6 and 5.1] **The first node of the gain structure: one oscillator, before the
+    mixer.** Contract 6 makes every waveform a signed Q1.15 word, so the
+    reference level at this node is the word itself -- `-32768 .. +32767`,
+    nothing above it and nothing meaningfully below. The test above asserts
+    the MIXER SUM; this asserts what the mixer is handed, which is a different
+    number and the one the mixer's weight budget is sized against.
+
+    Both directions matter, and the second is the one that rots quietly:
+
+      * **Nothing leaves the word.** The risk is not the waveform -- a ramp
+        cannot overflow its own generator -- it is the PolyBLEP correction
+        added at each discontinuity (contract 6.5), which is a SUBTRACTION
+        near the edge and could push a full-scale step past the rail. It does
+        not: swept over MIDI 0..124, the worst sample of any shape is +32767
+        / -32768, i.e. exactly the word and never outside it.
+      * **The word is actually used.** A quiet oscillator satisfies any upper
+        bound. The smallest peak anywhere in that sweep is 19949 LSB (0.61 x
+        full scale), the saw at the top of the range where PolyBLEP has
+        rounded most of the ramp away; every other shape stays above 0.82.
+
+    Measured, worst over MIDI 0..124 (`max`, `min`, and the smallest peak):
+
+        saw      +32753  -32757   19949      shark    +27018  -32748   27019
+        square   +32767  -32768   32768      revsaw   +32757  -32753   19949
+        pulse25  +32767  -32768   32768      pulse29  +32767  -32768   32768
+        tri      +32767  -32768   32768      pulse15  +32767  -32768   32768
+        sine     +32767  -32767   32763
+
+    `shark` is 47/57 of the word by construction (`SHARK_W_TRI`), not a
+    defect; it is asserted at its own level.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    shapes = list(vf.WAVE_CODE)                      # every shape the register map can select
+    floor = {"shark": 0.80 * 27019}                  # 47/57 of the word, by construction
+    for shape in shapes:
+        worst_peak = None
+        for note in (0, 24, 45, 69, 93, 120):
+            inc = dsp.phase_inc(dsp.note_hz(note))
+            n = min(20000, max(2400, int(3 * SR / max(dsp.note_hz(note), 1.0))))
+            x = vf.OscFx(shape).render(n, inc)
+            assert x.max() <= 32767, f"{shape} at note {note}: {x.max()} is above the Q1.15 word"
+            assert x.min() >= -32768, f"{shape} at note {note}: {x.min()} is below the Q1.15 word"
+            pk = am.peak(x)
+            worst_peak = pk if worst_peak is None else min(worst_peak, pk)
+        assert worst_peak >= floor.get(shape, 0.60 * 32768), \
+            f"{shape} only reaches {worst_peak} LSB: the node is not at its reference level"
+
+
+def test_the_vca_node_has_headroom_and_never_adds_gain():
+    """[source-verified: DR 0005 item 2 and contract 12] **The node between the filter and the output rail, asserted on its
+    own.** `voice_fx._render` step 7 is `v = (y * ae) >> 15`: the amplitude
+    envelope applied to the ladder's 19-bit Q4.15 word, AFTER the filter (DR
+    0005 item 2). In the chip that `v` is what meets the drum buses, still
+    unsaturated (`synth_top_model.py` point 3), so its bound is a question
+    the output clamp cannot answer -- the clamp is downstream of `vol`, and at
+    the reference `vol = 0.45` an output that never rails is consistent with a
+    `v` more than twice full scale. It is, in fact: growl-bass runs this node
+    at 1.918 x full scale with a perfectly clean output.
+
+    Two properties, neither of them implied by the existing clipping test:
+
+      * **The word holds the loudest patch the REGISTER MAP can express**, not
+        just the loudest audition patch. At the register clamps -- `drive` 6
+        (the 20-bit `gain` clamp) and `res` 2.0 (the 17-bit `k` clamp), three
+        oscillators at full mix -- `y` reaches 3.456 x full scale and `v`
+        3.377, which is 0.43 of the Q4.15 word. 2.3 x of headroom left, and
+        the output rail is firing on 3.4 % of samples while it happens: the
+        two bounds are measuring different things, which is the point.
+      * **The VCA attenuates and never adds gain.** `ae` is Q0.15 in
+        `0 .. 32767`, so `|v| <= |y|` sample by sample -- asserted pointwise
+        rather than on peaks, because a gain jump at one frame is exactly
+        what a peak comparison would miss.
+
+    Measured on the audition patches, `v` relative to full scale: 1.172,
+    1.174, 0.845, 0.884, 0.972, 0.866, **1.918** (growl-bass), 0.412.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    import patches
+    name, seq, total = next(p for p in patches.MONO if p[0].endswith("growl-bass"))
+    v = vf.VoiceFx()
+    out = vf.render_mono_fx(seq, total, v)
+    y = np.asarray(v.trace["ladder"], dtype=np.int64)
+    vca = np.asarray(v.trace["vca"], dtype=np.int64)
+    ae = np.asarray(v.trace["amp_env"], dtype=np.int64)
+    assert ae.max() <= 32767 and ae.min() >= 0, (ae.min(), ae.max())
+    assert np.all(np.abs(vca) <= np.abs(y)), \
+        f"{name}: the VCA added gain at {int(np.sum(np.abs(vca) > np.abs(y)))} frames"
+    assert np.abs(vca).max() < (1 << 18), f"{name}: the VCA word saturates"
+    assert 1.5 < am.peak(vca) / FS < 2.5, am.peak(vca) / FS
+    assert am.peak(out) < 32767, f"{name}: the output rail fires; this is the clean case"
+
+    # the loudest thing the register map can ask for: both clamps, full mix
+    hot = vf.VoiceFx()
+    out_hot = hot.note(28, 0.6, waves=("saw", "saw", "square"), mix=(1.0, 1.0, 1.0),
+                       q=2.0, drive=6.0, cutoff=(400, 12000))
+    y_hot = np.asarray(hot.trace["ladder"], dtype=np.int64)
+    vca_hot = np.asarray(hot.trace["vca"], dtype=np.int64)
+    assert np.all(np.abs(vca_hot) <= np.abs(y_hot)), "the VCA added gain at the register clamps"
+    assert np.abs(vca_hot).max() < (1 << 18), \
+        f"the VCA word saturates at the register clamps: {np.abs(vca_hot).max()} LSB"
+    assert 3.0 < am.peak(vca_hot) / FS < 5.0, am.peak(vca_hot) / FS
+    # and it is NOT the output clamp keeping it there: that clamp is firing
+    assert np.mean(np.abs(out_hot) >= 32767) > 0.01, \
+        "the hot patch does not reach the output rail, so it is not the hot case"
 
 
 def test_the_drive_control_engages_the_ladders_saturation():
@@ -1407,6 +1619,89 @@ def test_control_a_silent_stub_is_not_mistaken_for_a_note_that_ended(monkeypatch
     monkeypatch.setattr(vf, "LadderFx", _SilentLadder)
     msg = _expect_red(test_a_high_resonance_note_reaches_exactly_zero_after_its_release)
     assert "not singing" in msg
+
+
+# ---- controls for the gain structure (issue #47) -----------------------------
+class _SkewedFeedbackLadder(_REAL_LADDER):
+    """Defect: the loop runs at 1.2 x the `k` the register holds. Every other
+    property of the filter survives -- it still self-oscillates, still falls at
+    24 dB/octave -- so only a test that reads the LEVEL against `k` can see
+    it."""
+
+    def process(self, x_q15, cutoff_hz, res, drive=1.0, *, k=None, k_q14=None, **kw):
+        if k_q14 is not None:
+            k_q14 = (np.asarray(k_q14, dtype=np.int64) * 6) // 5
+        if k is not None:
+            k = (int(k) * 6) // 5
+        return super().process(x_q15, cutoff_hz, res, drive, k=k, k_q14=k_q14, **kw)
+
+
+@pytest.mark.parametrize("compensated", [False, True])
+def test_control_a_feedback_gain_that_is_not_the_one_the_register_holds(monkeypatch,
+                                                                        compensated):
+    """[meta] Defect: 20 % more feedback inside the loop than the `k` register
+    says. Stinchcombe's `H(0) = 1/(1 + k)` is then read against the wrong `k`
+    -- 1.28 dB out at k = 4 -- and
+    test_the_ladders_low_frequency_gain_is_one_over_one_plus_k must go red.
+
+    This is the control that makes that test an EXTERNAL check rather than a
+    tautology: the law is asserted against the register the host wrote, so a
+    model that quietly runs a different feedback gain fails it.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
+    monkeypatch.setattr(vf, "LadderFx", _SkewedFeedbackLadder)
+    _expect_red(test_the_ladders_low_frequency_gain_is_one_over_one_plus_k, compensated)
+
+
+def _scaled_osc(factor):
+    real = vf.OscFx.render
+
+    def render(self, n, inc):
+        return (np.asarray(real(self, n, inc), dtype=np.int64) * factor).astype(np.int64)
+    return render
+
+
+def test_control_an_oscillator_at_the_wrong_reference_level(monkeypatch):
+    """[meta] Two defects at the first node of the gain structure, one on each
+    side of the bound, because a level check with only an upper bound is half
+    a check:
+
+      * **10 % hot.** The oscillator leaves the Q1.15 word and the mixer is
+        handed something it was not sized for.
+      * **6 dB quiet.** Nothing overflows anywhere, every downstream headroom
+        test goes greener, and the instrument is wrong -- this is the
+        direction a headroom suite rewards if nobody asserts the floor.
+
+    Both must turn test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it red.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    monkeypatch.setattr(vf.OscFx, "render", _scaled_osc(1.1))
+    msg = _expect_red(test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it)
+    assert "above the Q1.15 word" in msg or "below the Q1.15 word" in msg
+
+    monkeypatch.setattr(vf.OscFx, "render", _scaled_osc(0.5))
+    msg = _expect_red(test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it)
+    assert "not at its reference level" in msg
+
+
+def test_control_an_amplitude_envelope_that_adds_gain(monkeypatch):
+    """[meta] Defect: the amplitude envelope rendered at twice its Q0.15 word,
+    so the VCA multiplies UP. The output still sounds like the instrument at a
+    lower `vol`, and the existing clipping test can still pass at the
+    reference volume -- what has changed is that the node between the filter
+    and the rail now carries twice the level the contract gives it, which is
+    the case `test_the_vca_node_has_headroom_and_never_adds_gain` exists for.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    real = vf.AdsrFx.render
+
+    def render(self, n, gate, trig=None, q: int = 15):
+        return np.asarray(real(self, n, gate, trig, q), dtype=np.int64) * 2
+    monkeypatch.setattr(vf.AdsrFx, "render", render)
+    _expect_red(test_the_vca_node_has_headroom_and_never_adds_gain)
 
 
 # =============================================================================
@@ -2455,6 +2750,298 @@ def test_the_reference_noise_balance_is_reachable_from_the_register():
 
 
 # =============================================================================
+# per-oscillator drift (6.11, DR 0019; issue #56)
+# =============================================================================
+def _drift_note(cents, note=48, secs=0.7, detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
+                **kw):
+    """One note from reset at a drift depth. Cutoff wide open, no filter
+    envelope and no tracking, so nothing but the oscillator can move the
+    pitch -- the same isolation the frozen Mini V3 `osc*_open` controls use.
+    The gate is held for the WHOLE render and the sustain is 1.0, so the level
+    is flat: a release tail decaying into silence is not a held tone and the
+    probe refuses on it (correctly, and it did on the first attempt here)."""
+    v = vf.VoiceFx()
+    return v, v.note(note, secs, gate=secs, waves=("saw", "saw", "saw"),
+                     detune=detune, mix=mix,
+                     cutoff=(21000, 21000), q=0.0, drive=1.0, track=0.0,
+                     amp=(0.002, 0.2, 1.0, 0.05), fenv=(0.002, 0.2, 1.0, 0.05),
+                     drift_cents=cents, **kw)
+
+
+def _held(y, skip_s=0.15):
+    """The render past its attack, as float -- what the probe measures."""
+    return y.astype(np.float64)[int(skip_s * SR):] / 32768.0
+
+
+def test_drift_zero_is_bit_identical_to_no_drift_register_at_all():
+    """[method] The DRIFT register's default must be transparent. Every one of
+    this suite's other tests, every recorded scenario in `verify_voice.py` and
+    every frozen register image predates 6.11, so a mechanism that moved a
+    single LSB at DRIFT = 0 would have to be re-baselined against all of them
+    rather than reviewed on its own.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    v = vf.VoiceFx()
+    r = v.note_on(48, 0.3, drift_cents=0.0)
+    assert r["regs"]["drift"] == 0
+    with_reg = v.note(48, 0.3, drift_cents=0.0)
+    # the same image with the register absent entirely, as a pre-6.11 host wrote it
+    v2 = vf.VoiceFx()
+    regs = dict(r["regs"])
+    regs.pop("drift")
+    v2.reset()
+    without = v2.play(regs, r["writes"], r["n"])
+    assert np.array_equal(with_reg, without), "DRIFT = 0 is not transparent"
+
+
+def test_drift_is_deterministic_and_repeatable_from_the_seed():
+    """[method] Bit-exactness against the RTL requires the walk to be a
+    function of the seed and the frame count, nothing else. Two voices given
+    the same writes must render the same samples, and one voice must repeat
+    itself across RESET -- an oscillator that drifts differently in the model
+    and the RTL breaks `verify_voice.py`, which is why this is a constraint on
+    the design and not an afterthought (issue #56's own words).
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    _, a = _drift_note(vf.DRIFT_REF_CENTS)
+    _, b = _drift_note(vf.DRIFT_REF_CENTS)
+    assert np.array_equal(a, b), "two voices at the same seed differ"
+    v, c = _drift_note(vf.DRIFT_REF_CENTS)
+    d = v.note(48, 0.7, gate=0.7, waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+               mix=(1.0, 0.0, 0.0), cutoff=(21000, 21000), q=0.0, drive=1.0,
+               track=0.0, amp=(0.002, 0.2, 1.0, 0.05), fenv=(0.002, 0.2, 1.0, 0.05),
+               drift_cents=vf.DRIFT_REF_CENTS)
+    assert np.array_equal(c, d), "the same voice does not repeat across RESET"
+    _, off = _drift_note(0.0)
+    assert not np.array_equal(a, off), "drift at the reference depth changed nothing"
+
+
+def test_the_three_oscillators_drift_independently():
+    """[measured-here: the three walks' pairwise correlation over 2^18 updates]
+    Three oscillators in lockstep are vibrato, not drift -- issue #56 says so
+    and the shared MR_OSC path of 6.9 is exactly that, which is why 6.11 is a
+    separate mechanism rather than a depth on the old one. The three walks read
+    non-overlapping 5-bit fields of the same LFSR word, so they are samples of
+    one m-sequence 5 and 10 places apart; two shifts of an m-sequence
+    cross-correlate at -1/(2^31 - 1) (the DR 0012 argument, reused).
+
+    The CONTROL is the defect this would otherwise hide: one field driving all
+    three walks passes every single-oscillator measurement and fails here.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    n = 1 << 18
+    state = vf.VOICE_LFSR_SEED
+    steps = np.empty((3, n))
+    acc = [0, 0, 0]
+    walk = np.empty((3, n))
+    shared = np.empty((3, n))
+    sacc = [0, 0, 0]
+    for i in range(n):
+        state, _ = vf.lfsr_frame(state)
+        w = state & 0xFFFF
+        for k in range(3):
+            steps[k, i] = vf.drift_step(w, k)
+            acc[k] = vf.drift_acc_next(acc[k], vf.drift_step(w, k))
+            walk[k, i] = acc[k]
+            sacc[k] = vf.drift_acc_next(sacc[k], vf.drift_step(w, 0))   # the CONTROL
+            shared[k, i] = sacc[k]
+    pairs = ((0, 1), (0, 2), (1, 2))
+    cs = np.corrcoef(steps)
+    assert max(abs(cs[i, j]) for i, j in pairs) < 0.01, cs
+    cw = np.corrcoef(walk)
+    assert max(abs(cw[i, j]) for i, j in pairs) < 0.05, cw
+    # the steps must have zero mean: a biased step against the leak is a static
+    # detune, not drift (the DRIFT_MEANSTEP negative control in voice_dp.v)
+    assert max(abs(steps.mean(axis=1))) < 2.0, steps.mean(axis=1)
+    # and the CONTROL must be caught by the same bound
+    csh = np.corrcoef(shared)
+    assert min(csh[i, j] for i, j in pairs) > 0.99, (
+        "the shared-field control does not correlate, so this test cannot fail")
+
+
+def test_the_three_oscillators_run_on_different_increments_when_drifting():
+    """[method] The audible form of the test above, at the level that ships:
+    three oscillators started on the SAME increment (detune 0) must run on
+    different increments frame by frame once drift is on, and on identical ones
+    when it is off.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    for cents, want_same in ((0.0, True), (vf.DRIFT_REF_CENTS, False)):
+        v, _ = _drift_note(cents, secs=1.5, mix=(1.0, 1.0, 1.0))
+        inc = [np.asarray(a) for a in v.trace["incs"]]
+        same = (np.array_equal(inc[0], inc[1]) and np.array_equal(inc[0], inc[2]))
+        assert same == want_same, (cents, [a[:4] for a in inc])
+        if not want_same:
+            # not merely different: each pair must differ on most frames
+            for a, b in ((0, 1), (0, 2), (1, 2)):
+                frac = float(np.mean(inc[a] != inc[b]))
+                assert frac > 0.5, (a, b, frac)
+
+
+def test_the_walks_stationary_rms_is_the_constant_the_host_conversion_uses():
+    """[measured-here: 3394 LSB rms over 2^18 updates, largest |acc| 15403]
+    `drift_reg` turns a request in cents into the DRIFT register by dividing by
+    `DRIFT_ACC_RMS`, so that constant is part of the host conversion of 5.5 and
+    a drifted value silently rescales every drift depth ever written. It is
+    MEASURED from the shipped integer generator, not taken from the
+    continuous-time formula for an Ornstein-Uhlenbeck process, and the 16-bit
+    saturation must have real headroom over the largest state the generator
+    reaches -- a walk that saturates is a walk that has a maximum detune, which
+    is a different mechanism.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    _, rms, mx = vf.drift_walk(1 << 18, div=1)
+    assert abs(np.mean(rms) - vf.DRIFT_ACC_RMS) < 0.03 * vf.DRIFT_ACC_RMS, rms
+    assert max(mx) < (1 << (vf.DRIFT_ACC_BITS - 1)) / 2, mx
+    # the decimation does not change the stationary statistics, only the
+    # timescale: the shipped div = DRIFT_DIV must agree within its own error
+    _, rms_d, _ = vf.drift_walk(1 << 12, div=vf.DRIFT_DIV)
+    assert abs(np.mean(rms_d) - vf.DRIFT_ACC_RMS) < 0.12 * vf.DRIFT_ACC_RMS, rms_d
+    # and the register round-trips in cents across its useful range
+    for c in (0.2, 0.8, 1.5, 4.0, 5.5):
+        assert abs(vf.drift_cents(vf.drift_reg(c)) - c) < 0.01, c
+    assert vf.drift_reg(0.0) == 0 and vf.drift_reg(-1.0) == 0
+
+
+def test_drift_moves_the_rendered_pitch_by_the_commanded_cents():
+    """[measured-here: the deviation trace reads 0.920x the commanded rms at all
+    three depths and the probe recovers 0.935x of that trace's mean-removed rms]
+
+    The register is specified in cents, so the end-to-end claim is that the
+    AUDIO moves by the commanded amount -- not that an internal word does. But
+    this test was WRONG BEFORE IT WAS RIGHT and the wrong version is the
+    interesting one: comparing the probe's reading against the COMMANDED cents
+    read 0.601x at 1.0, 1.5 and 4.0 cents, which looks like a 40 % error in the
+    mechanism and is not one. Over a 14 s window -- ten correlation times -- a
+    bounded walk's own mean is NOT zero; this window's is -0.99 cents at the
+    reference depth. A constant offset is a STATIC DETUNE, and the probe removes
+    the mean f0 by construction, so it cannot see one and must not.
+
+    So the claim is split in two, each against a ground truth that is not the
+    other:
+
+      1. the register is LINEAR in cents, against the model's own Q0.20
+         deviation trace, which is what the register is defined in terms of.
+         The window's realised rms is 0.920x the generator's stationary rms at
+         every depth -- one number, because it is one trajectory -- and the
+         bound on it is the spread of 14 s windows MEASURED from the generator
+         in this test rather than a tolerance chosen to fit;
+      2. the probe recovers the part of that same trace a listener would call
+         drift -- its mean-removed rms -- to within 10 %. That is a check of
+         the probe against a deviation known independently of the audio, which
+         is the only direction in which it is a check at all.
+
+    Ground truth: test_osc_drift_probe.test_known_ou_wander_is_recovered
+    """
+    import osc_drift_probe as odp
+
+    def _rms(x):
+        return float(np.sqrt(np.mean(np.asarray(x, dtype=np.float64) ** 2)))
+
+    # the spread of realised rms over 14 s windows of the shipped generator,
+    # measured here: the bound below is this, not a round number.
+    trace, _, _ = vf.drift_walk(1 << 16, div=1)
+    w = int(14.0 * SR / vf.DRIFT_DIV)
+    seg = [_rms(trace[0][i:i + w]) / vf.DRIFT_ACC_RMS
+           for i in range(0, len(trace[0]) - w, w)]
+    lo, hi = min(seg), max(seg)
+    assert lo < 0.8 and hi > 1.2, ("a generator whose 14 s windows all read the "
+                                   "stationary rms would make bound below vacuous",
+                                   lo, hi)
+
+    f0 = dsp.note_hz(48)
+    ratios = []
+    for cents in (1.0, vf.DRIFT_REF_CENTS, 4.0):
+        v, y = _drift_note(cents, secs=14.0)
+        dev = np.asarray(v.trace["drift_dev"][0], dtype=np.float64) / vf.CENTS_TO_DEV
+        held = dev[int(0.15 * SR):]
+        ratios.append(_rms(held) / cents)
+        assert lo <= ratios[-1] <= hi, (cents, ratios[-1], lo, hi)
+        want = _rms(held - held.mean())
+        r = odp.drift_report(_held(y), SR, f0, label=f"drift-{cents}c")
+        assert r["verdict"] == odp.DRIFTING, r
+        assert abs(r["drift_rms_cents"] / want - 1.0) < 0.10, (cents, want, r)
+    # one trajectory scaled three ways: the register is linear in cents
+    assert max(ratios) - min(ratios) < 0.005, ratios
+
+
+def test_the_drift_walk_is_bounded_not_a_random_walk():
+    """[measured-here: the increment variance saturates at 2.00x Var[acc] by
+    eight correlation times; with the leak removed it reaches 0.36x and is still
+    growing]
+
+    "Bounded vs random walk" is one of the five things issue #56 asks to be
+    measured, and the mechanism's answer has to be measured the same way --
+    Var[acc(t+T) - acc(t)] against T, which saturates at exactly 2 Var[acc] for
+    a stationary process and grows without bound for a random walk.
+
+    It is measured HERE rather than read off `osc_drift_probe`'s
+    `walk_exponent`, and the reason is a precondition the probe cannot assert
+    for us: that exponent is fitted over lags of 0.05-0.8 s, chosen so the fit
+    does not read the window's own length, and this generator's correlation time
+    is 1.365 s. Every one of those lags is BELOW it, where a bounded walk is
+    indistinguishable from a random one -- the probe reads 1.29 on our own
+    drift, and would read about the same on a true random walk. Asserting
+    `walk_exponent < 0.9` on this generator is therefore an unsatisfiable gate,
+    and one was written here before this test replaced it.
+
+    The CONTROL is the same generator with the leak deleted, which is a genuine
+    random walk: it must fail the bound this test applies.
+
+    Ground truth: test_osc_drift_probe.test_bounded_and_unbounded_are_distinguished
+    """
+    tau = 1 << vf.DRIFT_LEAK_LOG2                       # updates, = 1.365 s
+
+    def _walk(n, leak):
+        from fixed import sat
+        state, acc, tr = vf.VOICE_LFSR_SEED, [0, 0, 0], [[], [], []]
+        for _ in range(n):
+            state, _ = vf.lfsr_frame(state)
+            word = state & 0xFFFF
+            for k in range(3):
+                step = vf.drift_step(word, k)
+                acc[k] = (vf.drift_acc_next(acc[k], step) if leak
+                          else sat(acc[k] + step, vf.DRIFT_ACC_BITS))
+                tr[k].append(acc[k])
+        return np.array(tr, dtype=np.float64)
+
+    for leak, want in ((True, True), (False, False)):
+        a = _walk(1 << 16, leak)
+        for k in range(3):
+            var = float(np.var(a[k]))
+            lag = 8 * tau
+            ratio = float(np.var(a[k][lag:] - a[k][:-lag])) / var
+            bounded = abs(ratio - 2.0) < 0.2
+            assert bounded == want, (leak, k, ratio, var)
+
+
+def test_drift_off_is_stable_and_a_static_detune_mix_is_not_called_drift():
+    """[method] The two negative controls of issue #138, on OUR OWN renders
+    rather than a synthetic stimulus. With DRIFT = 0 a single oscillator must
+    read STABLE; and the default three-oscillator patch with its 0.07-semitone
+    static detune -- which beats, and whose combined waveform therefore never
+    settles -- must not be reported as DRIFTING at any depth, including zero.
+
+    Ground truth: test_osc_drift_probe.test_static_detune_mix_is_not_drifting
+    """
+    import osc_drift_probe as odp
+    f0 = dsp.note_hz(48)
+    _, y = _drift_note(0.0, secs=14.0)
+    r = odp.drift_report(_held(y), SR, f0, label="drift-off")
+    assert r["verdict"] == odp.STABLE, r
+    for cents in (0.0, vf.DRIFT_REF_CENTS):
+        _, y = _drift_note(cents, secs=14.0, detune=(0.0, 0.07, -0.05),
+                           mix=(1.0, 0.8, 0.6))
+        r = odp.drift_report(_held(y), SR, f0, label=f"static-detune-mix-{cents}c")
+        assert r["verdict"] != odp.DRIFTING, r
+
+
+# =============================================================================
 # meta -- this suite must be able to fail, and must say what it claims
 # (#222, extending #45 item 1's gate beyond `test_808_acceptance.py`)
 # =============================================================================
@@ -2486,5 +3073,7 @@ def test_meta_every_test_declares_status_and_ground_truth():
     import test_moog_acceptance as mod
     import test_audio_measure as gt
     import test_reference_voice as gtr
+    import test_osc_drift_probe as gtd
     from acceptance_meta import assert_ground_truth_gate
-    assert_ground_truth_gate(mod, {gt.__name__: gt, gtr.__name__: gtr, mod.__name__: mod})
+    assert_ground_truth_gate(mod, {gt.__name__: gt, gtr.__name__: gtr,
+                                   gtd.__name__: gtd, mod.__name__: mod})

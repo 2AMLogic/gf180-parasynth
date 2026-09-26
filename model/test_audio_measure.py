@@ -523,6 +523,42 @@ def test_a_centroid_is_not_a_corner_frequency():
     assert abs(ca - cp) / cp > 0.02, f"the two weightings agreed ({cp:.0f} vs {ca:.0f}); they answer different questions"
 
 
+def test_amplitude_weighted_centroid_reads_a_quiet_wideband_floor_as_bright():
+    """docs/drum-verification.md 3, verbatim: 'the magnitude centroid ... is
+    what the earlier report used -- but it weights a wide, quiet noise floor
+    heavily, so a voice with 98 % of its energy below 700 Hz can still show a
+    6.5 kHz magnitude centroid.' That prose claim had no test anywhere in this
+    repository until now -- `drum_verify.centroid_hz` is the amplitude/magnitude
+    weighting this reproduces, `power_centroid_hz` the fix -- so it is built here
+    as a closed-form signal with the energy split known exactly, rather than
+    trusted on a real drum render where the split can only be estimated.
+
+    98 % of the ENERGY sits in a single 200 Hz tone; the other 2 % is white
+    noise spread from 700 Hz to 15 kHz, quiet in level but covering 35x the
+    tone's bandwidth. The power centroid must stay near where the energy is;
+    the amplitude-weighted one must read far into the noise floor it should
+    barely notice."""
+    sr = SR
+    rng = np.random.default_rng(7)
+    n = sr
+    t = np.arange(n) / sr
+    low = 0.5 * np.sin(2 * math.pi * 200.0 * t)
+    w = rng.normal(size=n)
+    F = np.fft.rfft(w)
+    fr = np.fft.rfftfreq(n, 1.0 / sr)
+    F[(fr < 700.0) | (fr > 15000.0)] = 0
+    hi = np.fft.irfft(F, n)
+    hi = hi / np.std(hi)
+    x = low + 0.05 * hi
+    frac_low = np.sum(low ** 2) / (np.sum(low ** 2) + np.sum((0.05 * hi) ** 2))
+    assert abs(frac_low - 0.98) < 0.01, f"the fixture drifted off its stated 98 %: {frac_low:.4f}"
+    cp = am.spectral_centroid(x, weight="power")
+    ca = am.spectral_centroid(x, weight="amplitude")
+    assert cp < 700.0, f"power centroid {cp:.0f} Hz should stay near the 200 Hz tone that holds 98 % of the energy"
+    assert ca > 5000.0, f"amplitude centroid {ca:.0f} Hz should read the quiet wideband floor as bright, not {ca:.0f}"
+    assert ca / cp > 10.0, f"the two weightings should disagree by an order of magnitude here ({cp:.0f} vs {ca:.0f})"
+
+
 # ===========================================================================
 # comparison: level and shape are separate claims
 # ===========================================================================

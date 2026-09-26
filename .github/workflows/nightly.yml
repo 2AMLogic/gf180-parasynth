@@ -112,16 +112,29 @@ jobs:
       # -- this model at a named commit. A lock that moves is a regression; a
       # target that misses is a defect. They are never mixed in a verdict, and
       # this step exists so a lock moving cannot pass quietly.
+      #
+      # KNOWN BROKEN, deliberately not fixed here (issue #242). This greps the
+      # report for "MOVED"/"REGRESS", words the plain (non-`--inject`) report
+      # never prints -- it prints "OUT ". So the step is an unconditional pass
+      # whatever the report says, and it stayed green while the report above
+      # already showed two out-of-tolerance properties. The fix is to read
+      # `main()`'s exit status (1 when anything is outside tolerance), but that
+      # turns this step red on the first night and stays red until the drift
+      # itself is resolved -- so gate and drift are fixed together, in #242,
+      # not separately here. An unsatisfiable gate is worse than no gate.
       - name: no locked property may have moved
         run: |
           if grep -qiE "\b(MOVED|REGRESS)" nightly-report/sound-report.txt; then
             echo "a locked property moved -- see the report"; exit 1
           fi
 
-      # Spot-check that the report can still go red. The full nine-injection
-      # sweep is roughly half an hour; two here, rotated, keeps the nightly
+      # Spot-check that the report can still go red. The full eleven-injection
+      # sweep is roughly half an hour; four here, rotated, keeps the nightly
       # honest without doubling its runtime. The full sweep belongs in the
-      # weekly tier.
+      # weekly tier. bd-ma-envelope and sd-centroid-amp-weighted (issue #52)
+      # are permanent injections of bugs that actually shipped, not invented
+      # defects -- see their descriptions in model/sound_report.py's
+      # INJECTIONS dict.
       - name: the report can still go red
         run: |
           # An injection that CRASHES is not a caught defect. This previously
@@ -129,14 +142,17 @@ jobs:
           # so a traceback mentioning any of those words counted as success --
           # a tool that could not run looked exactly like a control that worked.
           set -u
-          for inj in sd-noise-6db ladder-2pole; do
+          for inj in sd-noise-6db ladder-2pole bd-ma-envelope sd-centroid-amp-weighted; do
             out="/tmp/inj-$inj.txt"
             set +e
             python model/sound_report.py --inject "$inj" > "$out" 2>&1
             rc=$?
             set -e
-            # 0 = nothing moved (the control did NOT fire); 1 = it moved.
-            # Anything else means the tool did not run: no verdict, not a pass.
+            # cmd_inject returns 1 when NOTHING moved (the control did not
+            # fire -- a coverage hole) and 0 when at least one property moved
+            # by more than its tolerance (the control fired; this is the
+            # expected outcome here). Anything else means the tool did not
+            # run at all: no verdict, not a pass.
             if [ "$rc" -gt 1 ]; then
               echo "::error::$inj -- sound_report exited $rc; the control did not run"
               tail -20 "$out"; exit 1
