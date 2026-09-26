@@ -5,17 +5,25 @@ close, comment or issue creation was performed while preparing it. It is the
 "proposed diff first" that plan085 §7 asks for; the operator reviews it and
 then applies (or edits) the mutations.
 
-- Scope: every open issue on `2AMLogic/gf180-parasynth` at 2026-09-26
-  ~11:30Z — **64 issues** (the "~66" in the brief included PRs #255/#261,
-  which are pull requests, not issues).
-- Verified against: `origin/main` @ `b9c5223`, PR states via `gh`, issue
-  bodies and all comments. "Fixed" below always names a merged change on
-  `origin/main` (every SHA cited was checked with
+- **When the inventory was taken.** Issue and PR state was read on
+  2026-09-26 up to ~11:30Z (start time not recorded) against `origin/main` @
+  `b9c522352d6b32f6f2940bb4edd29773990b271b` (`b9c5223`); the first draft was
+  committed at 2026-09-26T11:42:53Z. **Rechecked** at 2026-09-26T11:59:00Z against
+  `origin/main` @ `ff1352e288c1b152280c854df12b87cc978f9e26` (`ff1352e`, the
+  #268 merge, after #267 and #266): only rows whose state changed in between were edited (§5).
+  **The recheck is the baseline for "Before applying" (§6).**
+- Scope: every open issue — **64 issues** at the inventory (the "~66" in the
+  brief included PRs #255/#261, which are pull requests, not issues). At the
+  recheck it is **63**: #263 and #254 closed; #271 opened.
+- Verified against: `origin/main` @ `b9c5223` (rechecked rows: `ff1352e`), PR
+  states via `gh`, issue bodies and all comments. "Fixed" below always names a
+  merged change on `origin/main` (every SHA cited was checked with
   `git merge-base --is-ancestor <sha> origin/main`). A plan, a trial name or
   an open PR is never cited as closure evidence.
-- Framework: `docs/trials.md` from PR #266 (draft), amended by plan085
-  (three verdicts PASS / FAIL / NO VERDICT; expected-evidence transitions
-  rather than mandatory FAIL→PASS; close the investigation, keep the goal).
+- Framework: `docs/trials.md`, **merged** by PR #266 as `2e6155a`, including
+  the plan085 amendments (three verdicts PASS / FAIL / NO VERDICT;
+  expected-evidence transitions rather than mandatory FAIL→PASS; close the
+  investigation, keep the goal). Scheduling boundary: plan086.
 - Labels: only labels that exist today (`gh label list`). Every
   `loom:operator-only` carries exactly one sub-kind, per
   `.loom/roles/curator.md` § "Applying `loom:operator-only`".
@@ -32,31 +40,55 @@ then applies (or edits) the mutations.
 | epic (tracking only) | 3 | #115 (new label), #207 (repurposed), #45 (unchanged) |
 | operator-only + sub-kind | 1 | #208 (`loom:operator-blocked`) |
 | promote to `loom:issue` (short queue) | 2 | #205, #225 |
-| in flight / automation-owned — no change | 9 | #23, #48, #213, #224, #239, #242, #245, #254, #263 |
+| in flight / automation-owned — no change | 7 | #23, #48, #213, #224, #239, #242, #245 (#263 closed by #267 and #254 closed by #268 since the inventory; §5) |
 | park — remove `loom:issue`, keep `loom:curated` | 2 | #33, #61 |
-| keep in triage/backlog | 31 | #71, #94, #102, #104, #107, #109, #114, #116, #124, #125, #127, #129, #131, #134, #136, #137, #138, #140, #143, #155, #158, #162, #165, #215, #220, #243, #247, #250, #257, #259, #264 |
-| **total** | **64** | |
+| keep in triage/backlog | 32 | #271 (new since the inventory; §5), #71, #94, #102, #104, #107, #109, #114, #116, #124, #125, #127, #129, #131, #134, #136, #137, #138, #140, #143, #155, #158, #162, #165, #215, #220, #243, #247, #250, #257, #259, #264 |
+| **total** | **63** (64 at the inventory) | |
 
 Plus **five proposed new issues** (§3). None has been created.
 
-### The short executable queue (priority order)
+### Priority shortlist, split by readiness (plan086)
 
-Only these items should be dispatchable. Everything else stays in
-triage/backlog or is already in flight.
+The eight items below are a **priority shortlist, not eight simultaneous
+assignments** and not eight ready tasks. They are split into four groups;
+**only group (a) is the executable queue.** An item moves to (a) when the
+dependency or action named for it is met, not before. The existing limits
+hold throughout: **at most two implementation owners at a time, and one shared
+heavy-work budget** (the EC2 build box: one heavy job at a time, order in Q9).
+
+**(a) Ready and dispatchable now — the executable queue**
 
 | # | Item | Trial | Expected evidence transition | Owner / constraint |
 |---|---|---|---|---|
-| 1 | **PR #255** release manifest (no issue; PR is the unit) | T-RELEASE-BOUND | NO VERDICT (draft, `make verify` not yet run on the build box) → PASS for the declared Arty baseline domain, with exclusions (PULSE2X=1, #247 domain) kept visible | release owner; build box; one heavy job |
-| 2 | **New issue N1**: D12A L2 final strike into the production model → RTL → I²S (plan081 D) | T-CLAP-L2 | acoustic ratio/decay: valid FAIL (baseline 0/8) → PASS (L2 8/8 on fresh offsets, PR #261); timing property stays **NO VERDICT — unqualified** and visible | sound owner; waits on operator go (Q2) and #261 merging |
-| 3 | **New issue N2**: trial pilot — `make trial` + bootstrap for T-RELEASE-BOUND, T-DEADLINE, T-PLAY-DIGITAL | T-DEADLINE, T-PLAY-DIGITAL (+ T-RELEASE-BOUND wrapper) | preserved PASS (deadline, #248), NO VERDICT → PASS (playback through UART→RTL→I²S), plus each negative control listed in plan085 §5 reaching its intended verdict | one integration owner, after #255 settles |
-| 4 | **New issue N3**: live MIDI, simulator half | T-LIVE-MIDI (sim) | not run → PASS/FAIL in simulation; physical half stays operator-only | after N2 |
-| 5 | **#208** first reproducible board recording | T-PHYSICAL | not run (operator-blocked) → valid capture reanalysed in CI | **operator-only** (rig, board) |
-| 6 | **#205** PULSE2X=1 Arty image | T-PULSE2X-IMAGE | NO VERDICT (no qualified image exists) → per-component PASS/FAIL (fit, timing, deadline, I²S) | build box; after #255; one heavy job |
-| 7 | **#225** transient detector default at MIDI 36 | T-MEASURE-QUAL (child) | valid FAIL (clean MIDI 36 saw flags every period) → PASS with injected-click control still caught | any builder; `model/reference_integrity.py` |
-| 8 | **New issue N4**: T-MEASURE-QUAL pilot — burst-timing estimator declares its domain and refuses on noise-excited envelopes | T-MEASURE-QUAL (child of #115) | clap timing currently consumed as if valid → **NO VERDICT (REFUSED)** on D12A timing; M1A `m1a-envelope-score-v3` preserved PASS as the qualified example | measurement owner; not the L2 sound owner |
+| 1 | **New issue N2**: trial pilot — `make trial` + bootstrap for T-DEADLINE and T-PLAY-DIGITAL, T-RELEASE-BOUND wrapper added when #255 merges | T-DEADLINE, T-PLAY-DIGITAL (+ T-RELEASE-BOUND wrapper) | preserved PASS (deadline, #248), NO VERDICT → PASS (playback through UART→RTL→I²S), plus each negative control listed in plan085 §5 reaching its intended verdict | one integration owner. **Software-only: does not wait on the board or rig**, and proceeds independently of review of this bulk table (plan086: approval of the bulk issue-change table is not a prerequisite for writing or testing the pilot). Its T-DEADLINE / T-PLAY-DIGITAL checkers are merged (#248 `d089c67`, #210 `aa13017` `fpga/verify_rolling_playback.py`). Only the T-RELEASE-BOUND wrapper and the held-note audibility check (`fpga/release/release_manifest.py`, `fpga/release/held_note_audible.py`) live on #255; they are added when it merges and do not hold the rest of the pilot |
+| 2 | **#225** transient detector default at MIDI 36 | T-MEASURE-QUAL (child) | valid FAIL (clean MIDI 36 saw flags every period) → PASS with injected-click control still caught | second owner (any builder); `model/reference_integrity.py`; light, no build box. Also the candidate for N2's no-relay Curator → Builder → Judge → Champion run. `+loom:issue` is the operator's to apply (§2.6) |
 
-Not in the queue, deliberately: #33 (LibreLane half slot), #61 (saw aliasing
-re-measure) — both approved but not on the product critical path; see "park".
+**(b) Waiting on a named dependency**
+
+| # | Item | Trial | Waiting on | Expected evidence transition | Owner / constraint |
+|---|---|---|---|---|---|
+| 3 | **PR #255** release manifest (no issue; PR is the unit) | T-RELEASE-BOUND | **its own `acceptance` check, currently failing** on head `b2ccc12` (`gh pr checks 255` at 11:57Z: `acceptance fail 20m16s`, run 36235340989; the run's conclusion is `cancelled` in step "the rest of the model suite" at the 20-minute `timeout-minutes` of `.github/workflows/moog-acceptance.yml`, the #264 pattern; the run started 10:17Z, before #186 moved runners to Blacksmith at 11:18Z). A cancelled check is NO VERDICT, not a model failure, but it is not a pass either. Then `make verify` on the build box | NO VERDICT (acceptance check cancelled; `make verify` not yet run on the build box) → PASS for the declared Arty baseline domain, with exclusions (PULSE2X=1, #247 domain) kept visible | release owner; build box; one heavy job. Not ready until `acceptance` is re-run green on the PR head |
+| 4 | **#205** PULSE2X=1 Arty image | T-PULSE2X-IMAGE | #255 merged; build box free | NO VERDICT (no qualified image exists) → per-component PASS/FAIL (fit, timing, deadline, I²S) | build box; one heavy job |
+| 5 | **New issue N4**: T-MEASURE-QUAL pilot — burst-timing estimator declares its domain and refuses on noise-excited envelopes | T-MEASURE-QUAL (child of #115) | PR #261 merged (its noise-excited fixtures and `tools/clap_burst_timing_qual.py` are not on main) | clap timing currently consumed as if valid → **NO VERDICT (REFUSED)** on D12A timing; M1A `m1a-envelope-score-v3` preserved PASS as the qualified example | measurement owner; not the L2 sound owner |
+| 6 | **New issue N3**: live MIDI, simulator half | T-LIVE-MIDI (sim) | N2 landed | not run → PASS/FAIL in simulation; physical half stays operator-only | — |
+
+**(c) Waiting on an actual operator or hardware action**
+
+| # | Item | Trial | Action needed | Expected evidence transition | Owner / constraint |
+|---|---|---|---|---|---|
+| 7 | **#208** first reproducible board recording | T-PHYSICAL | **operator confirms the Arty A7-100T has arrived and wires the PCM5102 + a capture interface with AGC/effects off (Q1)**; plus the baseline released (#255, row 3) so the capture names its image | not run (operator-blocked) → valid capture reanalysed in CI | **operator-only** (rig, board). Proceeds as soon as baseline and rig are ready; it does **not** wait on the PULSE2X=1 image (#205), a new clap image (N1) or any other measurement task |
+| 8 | **New issue N1**: D12A L2 final strike into the production model → RTL → I²S (plan081 D) | T-CLAP-L2 | **operator go / no-go on shipping L2 with timing unqualified (Q2)**; PR #261 merging follows from that go | acoustic ratio/decay: valid FAIL (baseline 0/8) → PASS (L2 8/8 on fresh offsets, PR #261); timing property stays **NO VERDICT — unqualified** and visible | sound owner; build box for RTL runs |
+
+**(d) Triage / deferred** — not dispatchable
+
+- Parked, approved but off the critical path (§2.8, Q3): #33 (LibreLane
+  half slot), #61 (saw aliasing re-measure).
+- Everything in §2.9 (32 issues, including #271 opened since the inventory).
+- Optional N5 (a tracking issue for #255) only if the operator asks for it.
+
+Already owned by automation or in flight, and therefore neither queued nor
+deferred: §2.7 (#48, #224, #239, #242, #245; #23 and #213 are
+tracking/digest).
 
 ### Needs operator answer (short form; full list in §4)
 
@@ -69,7 +101,7 @@ re-measure) — both approved but not on the product critical path; see "park".
 ## 2. The full table
 
 Column key. **Labels**: current → proposed (`+` add, `−` remove).
-**Evidence**: merged PRs / SHAs / paths on `origin/main` @ `b9c5223`.
+**Evidence**: merged PRs / SHAs / paths on `origin/main` @ `b9c5223` (rows marked "rechecked §5": `ff1352e`).
 **Transition**: the evidence change the issue is expected to produce, and its
 stop rule. "Keep" rows state why they are not dispatchable yet.
 
@@ -90,7 +122,7 @@ stop rule. "Keep" rows state why they are not dispatchable yet.
 | Issue | Current labels | Proposed | Superseded by | Evidence | Note |
 |---|---|---|---|---|---|
 | #79 The execution DAG: what can run in parallel | none | **close (not planned — superseded)** | #85, then `docs/dag.json` + `tools/compile_dag.py` (README DAG) | #57, #145 `5c8f16f`; every workstream it listed has since merged (#74, #30, #130, #87) | a 2026-09-18 plan snapshot; the trial registry (N2) replaces it as the operational source |
-| #85 The plan, as five steps | none | **close (not planned — superseded)** | `docs/dag.json`, `docs/milestones` (#78), trials catalogue (#266) | steps 1–3 landed (#74, #87/#121, #93) | plan snapshot; plan085 §0 says snapshots must not compete with the registry |
+| #85 The plan, as five steps | none | **close (not planned — superseded)** | `docs/dag.json`, `docs/milestones` (#78), trials catalogue (`docs/trials.md`, merged #266 `2e6155a`) | steps 1–3 landed (#74, #87/#121, #93) | plan snapshot; plan085 §0 says snapshots must not compete with the registry |
 | #100 Fitting policy: CMA-ES on a float surrogate | none | **close (not planned — superseded)** | DR 0015 (#157 `6347d45`) — #99's closing comment: "Supersedes #100" | DR 0015 text; #159 `0548ad5` implements "a surrogate proposes, the exact rule accepts" | holdout prerequisite stays in #116 |
 | #122 32 Mono cases rest on a reference that has never made a sound | none | **close (not planned — superseded)** | Mono cases are now scored against qualified Mini V3 frozen references: M5A (#180), M5B #187 `ce5b004`, M1A #194 `f269761` / #203 `fd0d339` / #214 `9b44785` | `docs/scorecard/mono-*` | Model D cross-check stays in #124. Wording drift to fix separately: `tools/refprofile.py` `RIG_VERDICTS["miniv3"]` still says Mono cases cannot use Mini V3 envelopes (#129 is the vehicle) |
 | #123 Root cause: configuration recorded as tool property | none | **close (not planned — superseded)** | #136 (verdict keyed on (rig, host, capability)) — **#136's body must absorb #123's environment-tuple rule before this closes** | the defect is still live: `tools/refprofile.py:247-252` still records Model D as "renders exact silence headlessly" with no host | not "fixed": moved to the concrete issue that would fix it |
@@ -119,7 +151,7 @@ merged check exercises its failure mode.
 
 | Issue | Current labels | Proposed | Trial | Evidence / prerequisites | Transition / stop rule |
 |---|---|---|---|---|---|
-| #208 First reproducible recording from the board | none | `+loom:operator-only` `+loom:operator-blocked` `+tier:goal-advancing` `+next`; retitle to drop "(BLOCKED: … not yet delivered)" **only if** Q1 says the board has arrived | T-PHYSICAL | staged: image `a66c9349…`, `fpga/uart_host.py run`, wiring in `fpga/ARTY.md`; `fpga/ARTY.md:532` on main: "the board has not arrived". Prereq: #255 merged (the capture must name the released image) | not run → a retained raw capture whose reanalysis CI can repeat (gain, latency, noise, repeatability). CI cannot manufacture the capture. If the board has arrived, swap the sub-kind to `loom:operator-mechanical` (the protocol is written; wiring/recording is a physical action) |
+| #208 First reproducible recording from the board | none | `+loom:operator-only` `+loom:operator-blocked` `+tier:goal-advancing` `+next`; retitle to drop "(BLOCKED: … not yet delivered)" **only if** Q1 says the board has arrived | T-PHYSICAL | staged: image `a66c9349…`, `fpga/uart_host.py run`, wiring in `fpga/ARTY.md`; `fpga/ARTY.md:532` on main: "the board has not arrived". Prereq: #255 merged (the capture must name the released image) and the rig (Q1). Does **not** wait on #205 (PULSE2X=1 image), a new clap image (N1) or other measurement tasks (plan086) | not run → a retained raw capture whose reanalysis CI can repeat (gain, latency, noise, repeatability). CI cannot manufacture the capture. If the board has arrived, swap the sub-kind to `loom:operator-mechanical` (the protocol is written; wiring/recording is a physical action) |
 
 ### 2.6 Promote to `loom:issue` (queue items that already have an issue)
 
@@ -140,10 +172,8 @@ Champion) to apply after the body is amended with the trial contract.
 | #213 Champion: Merge-Risk Hold Digest | `loom:blocked` | automation-owned digest, "not a work item" | leave |
 | #224 Sensitivity-sweep gate (#45 item 5) | `loom:issue` `loom:curated` `tier:goal-supporting` | PR #229 `loom:pr` + `loom:operator` (critical-file hold) | operator Q5 |
 | #239 Re-derive discrimination.md §8.4/§8.6 | `loom:issue` `loom:curated` `tier:maintenance` | PR #262 `loom:pr` | leave |
-| #242 sound_report locked properties drifted; nightly gate broken | `loom:building` `loom:curated` `tier:goal-supporting` | building | leave |
-| #245 Two build-tool bugs are not injections | `loom:issue` `loom:building` `loom:curated` `tier:goal-supporting` | building | leave |
-| #254 verify_ctl refusal paths | `loom:issue` `loom:building` `loom:curated` `tier:goal-supporting` | PR #268 | leave |
-| #263 Duplicate comment block in reference_rigs.py | `loom:building` `loom:curated` `tier:maintenance` | PR #267 | leave |
+| #242 sound_report locked properties drifted; nightly gate broken | `loom:building` `loom:curated` `tier:goal-supporting` | building; **PR #269 opened 11:41Z**, `loom:changes-requested` `loom:ci-failure` at 11:58Z — rechecked §5 | leave |
+| #245 Two build-tool bugs are not injections | `loom:building` `loom:curated` `tier:goal-supporting` (`loom:issue` removed 11:56:02Z — rechecked §5) | **PR #272 opened 11:55Z** (`loom:review-requested`) | leave |
 
 ### 2.8 Park — approved but not on the queue
 
@@ -193,7 +223,8 @@ Q4). Nothing here is dispatchable.
 | #250 Decision-record numbers collide | none | `+loom:triage` | repo hygiene | live now: PR #244 adds 0017, while 0017–0019 exist on main; no check in `tools/` or `Makefile` | — | a duplicate-number check that fails a fixture with two 0017 files |
 | #257 Per-frame resonance-keyed cutoff correction | `tier:goal-supporting` | none | #207 (filter) | datapath and contract-revision change; #237 declined it on purpose | operator objective | — |
 | #259 Manifest artifacts into CI | `loom:triage` | no change | N2 / plan085 §4 (retention) | follow-up from #260; none of the workflows uploads `runs/` or `jobs/` | fold into N2 if the pilot needs artifact persistence | one real case retained and uploaded with a documented retention policy |
-| #264 moog-acceptance.yml times out at 20 min | `loom:triage` | no change | CI health | 6 of the 12 most recent runs cancelled (08:39–10:17Z); runners moved to Blacksmith by #186 at 11:18Z, **after** every observed timeout. `timeout-minutes: 20` unchanged | re-measure on Blacksmith | close if ≥10 consecutive runs on Blacksmith finish under the cap; otherwise split or raise the cap |
+| #264 moog-acceptance.yml times out at 20 min | `loom:triage` | no change | CI health | 6 of the 12 most recent runs cancelled (08:39–10:17Z; the 10:17Z run is PR #255's `acceptance` check, run 36235340989, which is why #255 is not in the ready group); runners moved to Blacksmith by #186 at 11:18Z, **after** every observed timeout. `timeout-minutes: 20` unchanged | re-measure on Blacksmith | close if ≥10 consecutive runs on Blacksmith finish under the cap; otherwise split or raise the cap |
+| #271 reference_rigs.py oscillator-1 comment table disagrees with `docs/surge-waveform-mapping.txt` (**new**: opened 11:45:48Z, after the inventory — §5) | `loom:triage` | no change | #115 reference side (comment accuracy) | surfaced by the Judge on #267; the issue says it is not a regression from #267. The comment block is in `model/reference_rigs.py` on `ff1352e`; `docs/surge-waveform-mapping.txt` unchanged since `74ce6a0` (#87) | none; comment-only edit to `model/reference_rigs.py` | comment cells agree with the mapping doc (or the doc is shown wrong by re-running `model/reference_voice.py --stage shape`), and the nonexistent sweep-file citation removed. Stop at a comment fix; no rig re-qualification |
 
 ## 3. Proposed new issues (not created)
 
@@ -208,10 +239,10 @@ Q4). Nothing here is dispatchable.
   (f) image readiness stated separately (no image rebuild claimed).
 - Preservation set: the other 15 drum cases' current verdicts. Stop rule: if (b) or (c) cannot be met at the 0.5 dB tie band, stop and report. Do not retune.
 
-**N2. Trial pilot: `make trial T=` + box bootstrap for T-RELEASE-BOUND, T-DEADLINE, T-PLAY-DIGITAL**
+**N2. Trial pilot: `make trial T=` + box bootstrap for T-DEADLINE, T-PLAY-DIGITAL (T-RELEASE-BOUND when #255 merges)**
 - Scope and acceptance are plan085 §5, verbatim. Existing checkers only: `fpga/release/release_manifest.py` (#255), `rtl-sketch/verify_deadline.py` (#248), `fpga/verify_rolling_playback.py` (#210 `aa13017`) and the held-note path from #255. Registry fields that reference `docs/dag.json` rather than copy it.
 - Expected transitions: T-DEADLINE preserved PASS; T-PLAY-DIGITAL NO VERDICT → PASS; each control (asset removed → NO VERDICT; truncated I²S → not PASS; DUT counterexample → FAIL; cancellation → no reusable PASS).
-- Timebox: if it needs new general infrastructure, stop and shrink the wrapper. One integration owner, after #255 settles. Then run one narrow issue (candidate: #225) through Curator → Builder → Judge → Champion with no human relay.
+- Timebox: if it needs new general infrastructure, stop and shrink the wrapper. One integration owner; ready now (§1 group (a)). Software-only: it does not wait on the board or rig, nor on review of this bulk table (plan086). The #255 pieces (release wrapper, held-note path) are added when #255 merges. Then run one narrow issue (candidate: #225) through Curator → Builder → Judge → Champion with no human relay.
 
 **N3. T-LIVE-MIDI (simulator half): MIDI in → `LiveMusicHost` → UART bridge → RTL, bounded latency, no stuck notes**
 - Reuse `fpga/README.md`'s `LiveMusicHost` (#177 `d9f23e3`) and `fpga/uart_device_sim.py`.
@@ -231,7 +262,7 @@ Q4). Nothing here is dispatchable.
 
 1. **Board and rig (#208, T-PHYSICAL, N3 physical half).** Has the Arty A7-100T arrived? Is the PCM5102 breakout wired, and is a capture interface (the MOTU, or another) available with AGC and effects off? `fpga/ARTY.md:532` on main still says "the board has not arrived". The answer picks #208's sub-kind: `operator-blocked` (not arrived) or `operator-mechanical` (arrived).
 2. **L2 go (N1).** PR #261 says plan081 D "waits for the coordinator's go". Ship L2 with timing unqualified and visible, or wait for N4?
-3. **Park #33 and #61** by removing `loom:issue`, so Loom does not dispatch heavy or off-queue work ahead of the eight queue items (plan085 §5: at most two implementation owners and one heavy workload)?
+3. **Park #33 and #61** by removing `loom:issue`, so Loom does not dispatch heavy or off-queue work ahead of the shortlist (plan085 §5: at most two implementation owners and one heavy workload)?
 4. **Parking the speculative backlog.** The Curator's Priority-2 fallback query curates unlabeled issues, and Champion may then promote them. Apply `loom:operator-only` + `loom:operator-objective` to the speculative sound/estimator items (#102, #107, #114, #124, #125, #138, #143, #162, #220, #243, #257) until a product objective selects them, or leave them unlabeled?
 5. **PR #229 (#224)** carries `loom:operator` for a critical-file change (`.github/workflows/rungs.yml`) and has conflicted since 2026-09-25T21:15Z. Approve the workflow change, or send it back?
 6. **Second-unit 808 data (#111 residual).** Every reachable recording descends from one machine. Is there any plan to acquire a second unit or its recordings (`808_loops_from_mars.zip` gives repeats, not a second unit)? If not, record unit-to-unit spread as a permanent limitation of T-BOARD.
@@ -239,10 +270,79 @@ Q4). Nothing here is dispatchable.
 8. **#247 domain.** Should register-legal increments ≥ 2^23 be fixed (model/RTL glide agreement) or removed from the contract's supported domain (clamp, with a refusal)? #255 currently excludes the domain, which is honest but leaves the bug open.
 9. **Build-box budget.** #255, #205 and any N1 RTL runs each need the EC2 build box. Confirm the order (#255 → N1 → #205), and that only one heavy job runs at a time.
 
+## 5. Recheck log: `b9c5223` → `ff1352e` (2026-09-26T11:59:00Z)
+
+Only rows whose issue state, labels or cited evidence changed after the
+inventory were edited. Detected with the commands in §6.
+
+| Change since the inventory | Rows edited |
+|---|---|
+| PR #267 merged as `e553809` (11:46:45Z); **#263 closed** 11:46:46Z | #263 removed from §2.7 (count 9 → 8). Note: a Loom event re-added `loom:issue` to the *closed* #263 at 11:47:28Z; no action proposed here, but a closed issue carrying `loom:issue` is worth a Curator look |
+| PR #266 merged as `2e6155a` (11:48:30Z); `docs/trials.md` identical to its reviewed head `a081d26` | header framework line, #85 evidence, "Method and limits": "draft" → merged `docs/trials.md` |
+| **#271 opened** 11:45:48Z (`loom:triage`), from the Judge's review of #267 | new row in §2.9 (count 31 → 32) |
+| PR #268 merged as `ff1352e` (11:53:59Z); **#254 closed** 11:54:02Z. As with #263, `loom:issue` was re-added to the closed issue (11:54:43Z) | #254 removed from §2.7 (count 8 → 7) |
+| PR #272 opened 11:55Z for #245; #245 lost `loom:issue` 11:56:02Z | #245 labels and state |
+| PR #269 opened 11:41Z for #242; `loom:changes-requested` + `loom:ci-failure` by 11:58Z | #242 state |
+| PR #255: `gh pr checks 255` shows `acceptance` **fail** (run 36235340989, conclusion `cancelled` at the 20-minute cap) | #255 moved out of the ready group into (b); #264 evidence names the run |
+
+Unchanged on recheck: all other rows' labels and state (#68 shows as updated only because Loom edits its lease comment, 11:55Z; its row stands),
+PRs #261, #262, #244, #229 still open. Of the files this document cites, only
+`docs/trials.md` and `model/reference_rigs.py` changed between `b9c5223` and
+`ff1352e` (#268 touched `rtl-sketch/verify_ctl.py` and its test, neither cited);
+both are covered above.
+
+## 6. Before applying
+
+Do **not** redo the inventory when unrelated commits land on main (plan086).
+At apply time, recheck only the rows the following commands surface, taking
+`ff1352e` and `2026-09-26T11:59:00Z` as the baseline. Expect noise: Loom
+lease heartbeats edit a comment and bump `updated` (e.g. #68) without any
+state or label change; confirm with the issue timeline before editing a row.
+
+1. Issues and PRs whose state, labels or comments changed (a label, close,
+   reopen or comment all bump `updated`; new issues appear too):
+
+   ```bash
+   gh issue list --repo 2AMLogic/gf180-parasynth --state all --limit 200 \
+     --search "updated:>=2026-09-26T11:59:00Z" \
+     --json number,state,labels,title \
+     --jq '.[] | "\(.number) \(.state) [\([.labels[].name] | join(","))] \(.title)"'
+   gh pr list --repo 2AMLogic/gf180-parasynth --state all --limit 200 \
+     --search "updated:>=2026-09-26T11:59:00Z" \
+     --json number,state,mergedAt,title \
+     --jq '.[] | "\(.number) \(.state) \(.mergedAt) \(.title)"'
+   ```
+
+   Any number listed that this document cites: recheck its row. Any issue not
+   in the document: add a row. Also re-read `gh pr checks 255` and
+   `gh pr checks 261`: their check state decides groups (b) and (c) in §1.
+
+2. Cited evidence that moved on main (merged SHAs are immutable; cited paths
+   and line numbers are not):
+
+   ```bash
+   git fetch origin
+   git log --oneline ff1352e..origin/main
+   D=docs/backlog-curation-2026-09-26.md
+   git diff --name-only ff1352e origin/main -- $(grep -oE \
+     '[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+\.(py|md|json|yml|txt|csv)|Makefile' \
+     "$D" | sort -u)
+   ```
+
+   For each file listed, recheck only the rows that cite it (`grep -n
+   '<path>' "$D"`), including any `path:line` citation.
+
+3. Every proposed closure still rests on a merged SHA: re-run
+   `git merge-base --is-ancestor <sha> origin/main` only if main was
+   force-pushed or rewritten (it should never be).
+
+Apply the table only after this recheck, and record the SHA and time of the
+recheck in the apply commit or comment.
+
 ## Method and limits
 
-- Read every open issue body and comment thread (64 issues), `docs/trials.md`
-  at PR #266's head, plan085, `.loom/roles/curator.md` and the label list.
+- Read every open issue body and comment thread (64 issues at the inventory), `docs/trials.md`
+  at PR #266's head `a081d26` (merged unchanged as `2e6155a`), plan085, `.loom/roles/curator.md` and the label list.
   Checked claims against `origin/main` @ `b9c5223` with `git show`,
   `git grep` and `git merge-base --is-ancestor`, and PR state with `gh`.
   No tests, sims or builds were run; no verdict here comes from execution.
