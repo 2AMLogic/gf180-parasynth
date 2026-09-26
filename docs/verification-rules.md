@@ -96,7 +96,7 @@ Two suites print the matrix, and they are the only two that can:
 | suite | its "properties" | example |
 |---|---|---|
 | `model/sound_report.py --inject` | named acoustic properties per voice | `sd-centroid-amp-weighted` moves SD brightness 1918 → 5868 Hz and leaves SD's other **five** properties BLIND |
-| `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write | `SPI_ADDR7` moves `address` on 105 of 206 writes; `flag`, `section` and `data` are BLIND. `SPI_DATA24` moves `data` on 42 of 206; the other three are BLIND |
+| `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write, plus the write `count` and the `drain` window | `SPI_ADDR7` moves `address` on 105 of 206 writes and the other five are BLIND. `SPI_DATA24` moves `data` on 42 of 206. `SPI_ANYLEN` moves only `count` (208 writes reach the port for 206 sent) and `SPI_DRAIN_LATE` only `drain` (206 of 206 applied at `go`) — each row is printed against its OWN population, so `count` is over the 206 sent while `drain` is over the 208 that arrived |
 
 **Every other `--expect-fail` suite here is single-property by construction and
 a matrix would be a table with one column.** `verify_ladder.py`,
