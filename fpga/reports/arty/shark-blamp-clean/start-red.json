@@ -1,8 +1,8 @@
 {
-  "state": "PASS",
-  "exit_code": 0,
+  "state": "FAIL",
+  "exit_code": 1,
   "inject": null,
-  "scenario": "phrase",
+  "scenario": "held",
   "configuration": {
     "OSC2X": 1,
     "FILTER2X": 1,
@@ -10,35 +10,36 @@
   },
   "scope": "Arty wrapper UART-bridge digital check: device-scheduled events and live writes through the reserved UART pins vs the device contract and the integer model; MMCM bypassed; no physical timing claim",
   "comparison": {
-    "scenario": "phrase",
+    "scenario": "held",
     "inject": null,
-    "writes_sent": 87,
-    "writes_seen": 87,
+    "writes_sent": 26,
+    "writes_seen": 0,
     "writes_bad": 0,
     "frame_pred_bad": 0,
-    "frame_no_pred": 0,
+    "frame_no_pred": 26,
     "x_bad": 0,
-    "acks_seen": 87,
+    "acks_seen": 0,
     "errs_seen": 0,
     "err_codes": {},
-    "boots_seen": 1,
-    "ack_missing": 0,
+    "boots_seen": 0,
+    "ack_missing": 26,
     "status_bad": 0,
     "wire_mismatch": 0,
     "swap": 0,
     "width": 0,
     "core_bad": 0,
-    "periods": 6734,
+    "periods": 3418,
     "collisions": 0,
     "busy_at_tick": 0,
     "overrun": 0,
     "overflow": 0,
     "frames_no_sample": 0,
-    "worst_strobe_cycle": 175
+    "worst_strobe_cycle": 155,
+    "release_tail_peak": 0
   },
   "source_sha256": {
     "rtl-sketch/synth_top.v": "e4f8d97b9785f283439782c6bfc6a2f3981788a92723ac1329f09e94719fedd0",
-    "rtl-sketch/voice_dp.v": "2f4b0df41ed7759f6a84696951a687873ab37db510fa67809c8e77860b84c271",
+    "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
     "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
     "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
     "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
@@ -63,5 +64,5 @@
     "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
     "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
   },
-  "transcript_sha256": "9a96ebb387e26e61de9cc09a5d68c044c4d6f743f88bac4db004c206f493977e"
+  "transcript_sha256": "82cb5f40fefff35aa8e1022d6a6ab05469933312032f46668e18ac7efc625442"
 }

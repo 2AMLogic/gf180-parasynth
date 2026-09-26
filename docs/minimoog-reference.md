@@ -149,6 +149,28 @@ its PolyBLEP correction is the saw's scaled by the same weight — which is what
 `OscFx.render` computes, by mixing the *already-corrected* saw with the
 triangle exactly as the switch mixes the two buffered outputs.
 
+**And the triangle share needs a correction of its own, which is not the same
+correction** (DR 0017, issue #48). Its corners — the valley at phase 0 and the
+peak half a cycle later — are discontinuities in the **slope**, not in the
+value, so PolyBLEP cannot see them: the signal is continuous there and there is
+no step to subtract. Esqueda, Bilbao and Välimäki analyse this exact waveform
+and name both alias sources, BLEP *and* BLAMP. So the junction now sees two
+corrected buffers, not one:
+
+```
+tric = sat16( tri + blamp(p) − blamp(p + 2^23) )      valley up, peak down
+sawc = sat16( saw − blep(p) )
+osc  = sat16(( 5749·sawc + 27019·tric ) >> 15)
+```
+
+The ramp residual is the integral of the step residual PolyBLEP already
+computes, `(1 − |x|)^3 / 3` scaled by half the triangle's slope change — no new
+table and no new window (contract 6.6.5). Until #48 the triangle share went to
+the divider naive, which cost **0.3 dB of inharmonic energy at A4 and 6.3 dB at
+A7**, the pitch dependence being what identifies the corner as the source.
+Measured by `tools/measure_shark_blamp.py`; the 10/57 divider itself is
+untouched, and h2..h7 move by less than 0.05 dB.
+
 ### W3a. The square's duty is 50 %, and Moog hand-selected a resistor to make it so [verified: SM 2.3]
 
 Recorded because a reference emulation measured **52 %** with **h2 at −24 dB**,
