@@ -101,6 +101,16 @@ def cli_argv(command: str) -> list:
     return argv
 
 
+def rolling_fixture(command: str) -> str | None:
+    """The musical-length fixture a release command plays, if any."""
+    argv = shlex.split(command)
+    if "--fixture" in argv:
+        fx = argv[argv.index("--fixture") + 1]
+        if fx in ("demo", "bar808-full"):
+            return fx
+    return None
+
+
 def image_source_problems(manifest: dict, root=ROOT) -> list:
     """Every simulated source of the image, hashed in THIS tree."""
     probs = []
@@ -199,7 +209,30 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
     if got != spec["cmds_sha256"]:
         raise Refused(f"{key}: CLI bytes {got[:12]} differ from the manifest's pinned "
                       f"{spec['cmds_sha256'][:12]} -- not the released command")
-    run = vub.simulate_replay(str(prefix), work / "replay", tail_frames=int(tail_s * SR))
+    replay_prefix = prefix
+    fixture = rolling_fixture(spec["command"])
+    if fixture:
+        # A MUSICAL-length fixture is delivered in rolling windows, each
+        # anchored on a STATUS answer. The dry-run's virtual anchors are not a
+        # replayable stimulus (the first box run: all 306 events off-frame),
+        # so the replayed bytes are the CLI's transmit log against the
+        # scripted device -- exactly fpga/verify_rolling_playback.py's
+        # stimulus, which the release bound: REFUSE unless byte-identical.
+        import verify_rolling_playback as vrp
+        run_cli = vrp.run_cli(fixture)
+        chk = vrp.check(run_cli)
+        if not chk.get("ok"):
+            raise Refused(f"{key}: the CLI's run against the scripted device is not clean: "
+                          f"{chk.get('reasons')}")
+        replay_prefix = work / "rolling"
+        vrp.write_rtl_capture(run_cli, replay_prefix)
+        bound = (ROOT / "fpga/reports/arty/rolling-playback" / fixture / "rtl-replay"
+                 / f"{fixture}.cmds")
+        if sha256_file(f"{replay_prefix}.cmds") != sha256_file(bound):
+            raise Refused(f"{key}: the transmit log differs from the release-bound replay "
+                          f"capture {bound.relative_to(ROOT)}")
+    run = vub.simulate_replay(str(replay_prefix), work / "replay",
+                              tail_frames=int(tail_s * SR), timeout_s=4 * 3600)
     if run is None:
         raise Refused(f"{key}: the replay did not run (see its output)")
     rid = json.loads((work / "replay" / "run_identity.json").read_text())
@@ -212,6 +245,7 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
     lr = int(np.count_nonzero(i2s[:, 0] != i2s[:, 1]))
     rec = {"schema": SCHEMA, "command_id": key, "command": spec["command"],
            "cmds_sha256": got, "packets": spec.get("packets"),
+           "replayed_stimulus_sha256": sha256_file(f"{replay_prefix}.cmds"),
            "image": {k: manifest["image"][k] for k in ("bitstream_sha256", "routed_dcp_sha256",
                                                         "source_commit")},
            "release": manifest["release"],

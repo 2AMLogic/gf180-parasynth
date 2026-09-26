@@ -348,7 +348,15 @@ the synthetic defect suite, and writes a receipt under `build/trials/`.
   because you start each recording by hand.
 
 All three are then frozen. Local lags and local gains are *measured* against
-them and never used to re-align. A timing slip, a clock mismatch or a gain
+them and never used to re-align.
+
+Every waveform comparison happens inside one **declared analysis band**,
+100 Hz–16 kHz (`BAND_HZ`). The same zero-phase filter is applied to the capture
+and to the prediction alike, so it removes only what the analog path is allowed
+to do outside the audio band: AC coupling and the converters' anti-image
+filters. It is never fitted. Without it, the clean synthetic session failed:
+a 5 Hz coupling high-pass moved the kick's local lag by a full sample. Pitch,
+clipping and the noise floor are measured on the raw capture. A timing slip, a clock mismatch or a gain
 change therefore shows up as a failure. It is not absorbed.
 
 The checks and their limits are the `LIMITS` table in `tools/r0_capture.py`,
