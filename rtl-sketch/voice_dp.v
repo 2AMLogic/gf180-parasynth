@@ -137,7 +137,7 @@ module voice_dp #(
     reg [16:0] mant_p, mant_f;             // 2^frac, Q1.15 with 32768 = 1.0
     reg [4:0]  shf_p, shf_f;               // 15 - integer octaves: 12 .. 19
     reg [23:0] inc_mod [0:2];              // the increment each oscillator RUNS on
-    // per-oscillator drift (6.11, DR 0018): three bounded random walks off the
+    // per-oscillator drift (6.11, DR 0019): three bounded random walks off the
     // noise board's OWN LFSR -- no second generator -- decimated to one update
     // every 2^10 frames and split into three non-overlapping 5-bit fields of
     // the same word. Distinct from the mod bus above, which is one shared

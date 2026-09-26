@@ -66,7 +66,18 @@ def test_static_detune_mix_is_not_drifting(detune):
     assert r["verdict"] != odp.DRIFTING, r
     assert r["verdict"] in (odp.PERIODIC, odp.REFUSED), r
     if r["verdict"] == odp.REFUSED:
-        assert r["refusal"] in ("MULTI_PARTIAL", "SHORT_FOR_WOBBLE"), r
+        # WINDOW_SPANS_SILENCE is the code all three of these actually take,
+        # and it was missing here at first: THREE equal-gain partials beat
+        # through a near-total null, so the fundamental's level moves 37.9,
+        # 44.4 and 50.1 dB across the window -- past LEVEL_HEADROOM_DB (30),
+        # which is tested before the MULTI_PARTIAL ripple. The two-oscillator
+        # mix of test_refuses_a_mix_outright moves only 19.1 dB and so does
+        # reach MULTI_PARTIAL. Both are the probe declining to put a pitch
+        # number on a window it cannot defend, which is what this control
+        # demands; the teeth are the two assertions around this one (never
+        # DRIFTING, and no magnitude emitted), not the choice of code.
+        assert r["refusal"] in ("MULTI_PARTIAL", "SHORT_FOR_WOBBLE",
+                               "WINDOW_SPANS_SILENCE"), r
     assert "drift_rms_cents" not in r or r["verdict"] == odp.PERIODIC
 
 

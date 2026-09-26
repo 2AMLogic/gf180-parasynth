@@ -240,7 +240,7 @@ MMIX_FULL = 1 << 15              # mmix = 32768 is noise only; 0 is oscillator 3
 MPD_REF_OCT = 0.75
 MFD_REF_OCT = 1.30
 
-# ---- per-oscillator drift (DR 0018; contract 6.11) --------------------------
+# ---- per-oscillator drift (DR 0019; contract 6.11) --------------------------
 # The Model D's three VCOs are not stable against each other, and the beating
 # of three slowly-wandering oscillators is part of what it sounds like. Static
 # detune gives a PERIODIC beat; drift gives a moving one.
@@ -286,7 +286,7 @@ DRIFT_ACC_RMS = 3394.0            # measured over 2^18 updates: 3406.4 / 3343.0
                                   #   Largest |acc| seen 15403, so the 16-bit
                                   #   saturation has 2.1x headroom and never fires
 # The RANGE this project commits to as a target, and the reference value inside
-# it (DR 0018). It is a MUSICAL decision, not a reference measurement: the
+# it (DR 0019). It is a MUSICAL decision, not a reference measurement: the
 # frozen Mini V3 renders wander by 0.001-0.024 cents rms, 30-100x below this,
 # so the references bound drift rather than supplying an amount
 # (docs/scorecard/mono-osc-drift/). The default stays 0 -- switching it on moves
@@ -687,7 +687,7 @@ class NoiseFx:
         return w, p, r
 
 
-# ---- per-oscillator drift (contract 6.11; DR 0018) --------------------------
+# ---- per-oscillator drift (contract 6.11; DR 0019) --------------------------
 def drift_step(word: int, k: int) -> int:
     """Oscillator k's noise step from the LFSR's 16-bit word.
 

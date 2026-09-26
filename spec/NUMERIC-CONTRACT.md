@@ -416,7 +416,7 @@ ogain      = fit20( round(0.05 / 0.13 · (1 + 2 · res) · 2^16) )
 glide      = fit24( max(1, round((2^(1 / (T_oct · 48000)) − 1) · 2^24)) )    T_oct = seconds per octave;
                                                      T_oct ≤ 0 → 0, off; clamps below 1.7 µs per octave (DR 0004)
 vol        = fit16( round(volume · 2^15) )           reference 0.45 → 14746; clamps at volume ≥ 2 (DR 0005)
-drift      = fit16( round(drift_cents · CENTS_TO_DEV / DRIFT_ACC_RMS · 2^16) )      6.11, DR 0018
+drift      = fit16( round(drift_cents · CENTS_TO_DEV / DRIFT_ACC_RMS · 2^16) )      6.11, DR 0019
                                                      CENTS_TO_DEV = 2^20 · ln2 / 1200 = 605.681
                                                      DRIFT_ACC_RMS = 3394, MEASURED from the
                                                      integer generator, not the continuous-time
@@ -459,7 +459,7 @@ waveform — and pins the following:
   conversion here whose clamp sits inside a plausible request: the register is
   16 bits and the walk's measured rms is what scales it, so the top of the
   range is 5.604 rather than a round number. The range this project targets is
-  0.8–4.0 cents (DR 0018), comfortably inside it; anything past 5.604 is a
+  0.8–4.0 cents (DR 0019), comfortably inside it; anything past 5.604 is a
   different effect and the host is told by the clamp, not by silence.
 
 `a_inc` and `rate` are at least 1 by construction. `d_dec` is 0 only for
@@ -782,7 +782,7 @@ the same RMS because the instrument's do (drawing 1431 labels all three outputs
 pair: clear puts **white** in the mixer and **pink** on the modulation bus, set
 puts **pink** in the mixer and **red** on the bus.
 
-### 6.11 Per-oscillator drift (DR 0018)
+### 6.11 Per-oscillator drift (DR 0019)
 
 State, per oscillator: `drift_acc[k]`, 16-bit signed; plus one shared 10-bit
 `drift_cnt`. All four reset to 0 (section 14).
@@ -1987,7 +1987,7 @@ record that extends this document; none may be resolved by picking a reading.
     2.40 at k = 2 and 2.60 at k = 3, for two or three times the LFSR work and
     an adder tree, to reach what the filter already delivers.
 18. **Per-unit oscillator drift** (6.4, 6.11,
-    `docs/minimoog-reference.md` W3a) — **closed in rev 12 by DR 0018, in the
+    `docs/minimoog-reference.md` W3a) — **closed in rev 12 by DR 0019, in the
     half that is a mechanism, and the other half is answered rather than
     closed.** The mechanism is 6.11: three independent bounded walks on the
     three phase increments, one register (`DRIFT`), default 0 and
@@ -2003,7 +2003,7 @@ record that extends this document; none may be resolved by picking a reading.
     measure it (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
     Surge XT and Diva are REFUSED there, with the missing precondition named).
     The target range is therefore 0.8–4.0 cents rms per oscillator as a
-    **musical decision** (DR 0018), stated as a range because the service
+    **musical decision** (DR 0019), stated as a range because the service
     manual documents different oscillator boards per serial range, and the
     default stays off so that switching it on is always a reviewable change.
 
@@ -2124,7 +2124,7 @@ record that extends this document; none may be resolved by picking a reading.
 
 ## 18. Revision history
 
-- **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0018), closing
+- **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0019), closing
   17.18's mechanism half. One new register, `DRIFT` at 0x2D, 16 bits, Q0.16,
   reset 0; three new state registers per voice (`drift_cnt`, and
   `drift_acc[k]` signed 16); one new host conversion in 5.5, whose clamp at

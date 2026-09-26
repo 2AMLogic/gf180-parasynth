@@ -2455,7 +2455,7 @@ def test_the_reference_noise_balance_is_reachable_from_the_register():
 
 
 # =============================================================================
-# per-oscillator drift (6.11, DR 0018; issue #56)
+# per-oscillator drift (6.11, DR 0019; issue #56)
 # =============================================================================
 def _drift_note(cents, note=48, secs=0.7, detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
                 **kw):

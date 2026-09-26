@@ -79,7 +79,7 @@ A_K, A_GAIN, A_OGAIN, A_MROUTE = 0x1C, 0x1D, 0x1E, 0x1F
 A_MMIX, A_MWHEEL, A_MPD, A_MFD = 0x24, 0x25, 0x26, 0x27
 A_GATE_ON, A_GATE_OFF, A_TRIG, A_RESET = 0x20, 0x21, 0x22, 0x23
 A_DCUT, A_DK, A_DGAIN, A_DOGAIN, A_BVOL = 0x28, 0x29, 0x2A, 0x2B, 0x2C
-A_DRIFT = 0x2D                       # per-oscillator drift (6.11, DR 0018)
+A_DRIFT = 0x2D                       # per-oscillator drift (6.11, DR 0019)
 A_NOP = 0x3F
 
 # the widths the register keeps (DR 0007 section 3); the datum is 32 bits and

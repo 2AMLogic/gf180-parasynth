@@ -169,7 +169,7 @@ contract open item **18** (not 17: that is the uniform-noise item, and this
 line named the wrong number from rev 11 until this edit).
 
 **Taken, in the half that is three oscillators beating and not in the half that
-is the duty cycle** — contract 6.11 and DR 0018. One register, `DRIFT`, drives
+is the duty cycle** — contract 6.11 and DR 0019. One register, `DRIFT`, drives
 three independent bounded random walks on the three phase increments; the
 default is 0 and 0 is bit-identical to no drift path at all. It was worth
 measuring the references before choosing the amount, because they do not supply
@@ -596,7 +596,7 @@ Stated, because a list of what we added is not a claim of completeness.
 - **The temperature-compensated exponential converter** (§2.16). Ours is exact;
   a Model D's is not. Its *audible* consequence — three oscillators drifting
   independently against each other — **is** modelled, as of contract 6.11 and
-  DR 0018: three seeded bounded walks on the three phase increments, off by
+  DR 0019: three seeded bounded walks on the three phase increments, off by
   default, targeting 0.8–4.0 cents rms each. What is still not modelled is the
   converter itself: no temperature term, no per-unit trim, and no drift of the
   *duty cycle* (W3a) or of the filter's own tuning.

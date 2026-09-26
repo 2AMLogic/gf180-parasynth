@@ -1,4 +1,4 @@
-# 0018: Oscillator drift — the references bound it, so the amount is a chosen range
+# 0019: Oscillator drift — the references bound it, so the amount is a chosen range
 
 - **Status**: proposed
 - **Date**: 2026-09-26
