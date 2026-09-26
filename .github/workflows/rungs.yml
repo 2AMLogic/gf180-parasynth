@@ -95,7 +95,7 @@ jobs:
         run: make verify-fast
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # 30 was already marginal before the claim-checker steps below: the two
     # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
     # spends the cap on its own. The claim checker and its controls measured
@@ -231,7 +231,7 @@ jobs:
   # RTL bit-exactness. Separate job because iverilog is slow: the ladder is
   # ~1 min, the full voice is ~20 and does not belong on every push.
   rtl:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -279,7 +279,7 @@ jobs:
   # rather than per push.
   rtl-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
