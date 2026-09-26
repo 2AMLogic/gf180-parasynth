@@ -77,8 +77,11 @@ is sent:
   increment.** The slew is monotone between its endpoints (`OscFx.slew`,
   `voice_dp.v` `S_SL2`), so every increment it passes through is in range. A
   glide from reset (increment 0) or from an unknown device state is refused.
-- **#247's domain is refused under its own rule** (`GLIDE_247`, any endpoint
-  ≥ 2^23), even though the range rule already excludes it.
+- **#247 as filed is refused under its own rule** (`GLIDE_247`, any
+  endpoint ≥ 2^23), even though the range rule already excludes it.
+- **#247 as measured is refused too** (`ROUTE_DRUMFILTER`: ROUTE = 1 sends
+  the voice through the drum filter). No player-facing path writes ROUTE, so
+  it stays at its reset value 0. See below.
 - **Modulation is checked separately** (`MOD_EXCURSION`). Oscillator pitch
   modulation moves the effective increment every frame without the glide
   slew. Its worst-case excursion must keep the effective increment in range.
@@ -95,8 +98,8 @@ is sent:
   player-facing domain. The CLI says so on stderr.
 
 **Precondition that is declared but not verified:** fixture runs never write
-the modulation registers, and the host cannot read them back. The validator
-therefore assumes their reset value (0) on fixture runs. Reset the board with
+the modulation or ROUTE registers, and the host cannot read them back. The
+validator therefore assumes their reset value (0) on fixture runs. Reset the board with
 BTN0 after any engineering-interface session.
 
 ### RTL evidence for the boundary
@@ -119,11 +122,38 @@ GLIDE_BOUNDARY_RESULTS
 
 | Evidence | State | What it establishes |
 |---|---|---|
-| Three-saw production deadline, **#248** (`verify/three-saw-deadline`, head `b45bc5da` at binding) | **PENDING**: open, verifier repairs in progress | In the tested runs the baseline met every production deadline. The smallest measured slack was 6 cycles (extreme increments). The bound over the whole register space is unresolved. |
+| Three-saw production deadline, **#248** (merged `d089c67`; [docs/deadline/README.md](../../docs/deadline/README.md), bound by digest) | **landed** | In the tested runs the baseline met every production frame deadline: 0 missed, 0 overrun. The worst observed slack was 14 cycles under musical stress and 6 cycles in extreme-register runs. Every musical-range I2S comparison was exact and complete. The cost model is reconciled: C = 87 across 30,333 frames, 0 overlap exceptions. Incomplete evidence now returns NO VERDICT. **Not established:** a formal whole-register-space bound (the per-term bound is "not a formal proof"), and model agreement in the extreme runs (#247) |
 | Rolling playback RTL, #210 (merged) | bound | The manifest's check regenerates the CLI's `demo` and `bar808-full` transmit logs and confirms they are byte-identical to the replayed captures, whose RTL sources equal the image's |
 | Held note, [`evidence/held-note/`](evidence/held-note) | bound | Each release preset's held-note command, as the CLI emits it now, replayed through the Arty wrapper: bit-exact I2S, and **audible** (decoded I2S peak ≥ 1024 LSB) |
 | Wrapper digital proof ([uart-clean](../reports/arty/uart-clean)) | bound by digest in the publication | 7 scenarios and 5 controls at the pins |
 | Build / timing / publication / DSP | bound | see "What is released" |
+
+## #247 is not a glide defect, as far as its own stimulus shows
+
+#247 was filed as a mismatch in "glides between increments ≥ 2^23". Its
+stimulus (`verify_deadline.py` `_extreme`) also routes the voice through the
+drum filter (`route = 1`, `dcut = 600`) and strikes the whole kit under it.
+[`probe_247.py`](probe_247.py) imports that bench unchanged and varies one
+ingredient at a time
+([`evidence/probe-247/run_all.json`](evidence/probe-247/run_all.json), exit
+status per run):
+
+| Variant | I2S periods differing |
+|---|---:|
+| #247 verbatim | 1809 |
+| ROUTE = 0 (voice through its own ladder), strikes kept | **0** |
+| No strikes, ROUTE = 1 kept | **0** |
+| Every glide write replaced by a jump | 1809 |
+| Increments scaled into the release range (top = INC_HI), ROUTE = 1 | 1809 |
+| The same, ROUTE = 0 | **0** |
+
+In that stimulus the mismatch needs the drum-filter route and the strikes. It
+does not need a glide or an increment above Nyquist. The release therefore
+refuses ROUTE = 1 as well as the filed domain.
+
+The trigger inside the drum-filter path is **not isolated**. The deadline
+README's `stress-saw` also toggles the drum filter with strikes, and it
+matched exactly, so "route 1 plus strikes" is not sufficient by itself.
 
 ## A defect this manifest found: the documented first playback was silent
 
@@ -150,22 +180,22 @@ patch.
 | Excluded | Why | Enforced by |
 |---|---|---|
 | `PULSE2X=1` | Not in this image. #248 records missed deadlines at extreme increments; it needs its own correction and a rebuilt image (#205) | the image; `check_patch(pulse2x=True)` |
-| #247 glide domain (endpoint ≥ 2^23) | Exact model/RTL mismatch; open defect | `INC_RANGE`, `GLIDE_247` |
+| #247 as filed (a glide with an endpoint ≥ 2^23) | Exact model/RTL mismatch; open defect | `INC_RANGE`, `GLIDE_247` |
+| #247 as measured (voice through the drum filter, ROUTE = 1) | The mismatch needs this route in #247's stimulus (below) | `ROUTE_DRUMFILTER` |
 | Resonance with `surge-type2-clean-v1` | Qualified at resonance 0 only | `CALIBRATION_RESONANCE` |
 | `--preset` with a fixture | The fixture's patch plays under the preset's name | CLI refusal |
 | Standalone `note-on` | The device image is unknown to the command | `WAVES`; use `run` |
 
 ## What could not be bound
 
-- **#248's deadline evidence.** It is open and under repair, so it is cited
-  but not bound by digest.
 - **The m5a phrase.** Its RTL evidence (the uart-clean `phrase` scenario) is
   built by the bench from the same `phrase_events('m5a')` function. It is not a
   replay of the CLI's captured bytes.
 - **The voice-level glide runs.** `verify_voice` records no run identity. They
   ran on the tree whose sources the manifest verifies equal to the image's;
   the wrapper-level runs carry digests.
-- **Modulation registers on fixture runs.** They are assumed at reset.
+- **Modulation and ROUTE registers on fixture runs.** They are assumed at
+  reset.
 - **A numeric protocol version.** None exists.
 - **Physical audio.** No capture exists. The next step is plan076 §6: silence,
   held note and release, drum hits, the fixture and a repeat capture, taken
@@ -178,3 +208,5 @@ patch.
 | The accept bench looked adequate. Its GLIDE_FLOOR injection was **not caught**, because at HI the floor never engages. A glide = 1 case at LO was added. | the injected-bug control |
 | The voice-level probe and control runs gave **no verdict**: the component bench launches at cycle 48 and was busy at the end of frame 0. They moved to the shipped wrapper path. | exit status 2 |
 | The first waveform rule refused the m5a phrase: it counted silent oscillators. The rule now uses audible sets. | the fixture streams |
+| The #247 control at the wrapper (increments, glide shape and patch as #247, but **no drum route or strikes**) was **not caught**, because it matched the model. Varying #247's own stimulus then showed that the route, not the glide, carries the mismatch. The run is now recorded as a probe, not used as a control. | the control's exit status |
+| The first wrapper-level captures wrote the default image, not the case's (its glide rate, noise and modulation). The captures were fixed and every wrapper case re-run. | reading the capture code after the control failed |

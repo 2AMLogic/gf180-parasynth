@@ -276,6 +276,7 @@ def _sources_agree(sources: dict, pub_sources: dict, what: str) -> None:
 def evidence(image: dict) -> dict:
     pub_sources = image["source_sha256"]
     out = {"rolling_playback": {}, "held_note": {}, "glide_boundary": None}
+
     for fx in ROLLING:
         b = rolling_binding(fx)
         if not (b["cli_sim_clean"] and b["cli_bytes_equal_recorded_replay"] and b["state"] == "PASS"):
@@ -294,12 +295,23 @@ def evidence(image: dict) -> dict:
         out["held_note"][p] = {"record": _rel(d / "held_note_audible.json"),
                                "verdict": rec["verdict"], "i2s_peak_lsb": rec["i2s_peak_lsb"],
                                "replay_capture_sha256": cap_sha, "command": name}
+    dl = ROOT / "docs/deadline"
+    out["deadline"] = {"readme": _rel(dl / "README.md"), "readme_sha256": sha(_need(dl / "README.md")),
+                       "runs": _rel(dl / "runs/run_all.json"),
+                       "runs_sha256": sha(_need(dl / "runs/run_all.json"))}
+    pr = EVIDENCE_DIR / "probe-247" / "run_all.json"
+    probes = json.loads(_need(pr).read_text())
+    out["probe_247"] = {"record": _rel(pr), "sha256": sha(pr),
+                        "rc": {r["cmd"].split("--variant ")[1].split()[0]: r["rc"] for r in probes}}
     gb = EVIDENCE_DIR / "glide-boundary" / "summary.json"
     s = json.loads(_need(gb).read_text())
     for case, r in s["wrapper_identities"].items():
         _sources_agree(r, pub_sources, f"glide-boundary wrapper {case}")
+    if not s["all_expectations_met"]:
+        raise Refused("glide-boundary evidence: not every expectation was met")
     out["glide_boundary"] = {"record": _rel(gb), "sha256": sha(gb),
-                             "verdicts": s["verdicts"]}
+                             "verdicts": {k: {"rc": v["rc"], "expected": v["expected"], "met": v["met"]}
+                                          for k, v in s["verdicts"].items()}}
     return out
 
 
@@ -321,16 +333,21 @@ DECLARED = {
     },
     "runtime_qualification": {
         "deadline": {
-            "pr": "2AMLogic/gf180-parasynth#248", "branch": "verify/three-saw-deadline",
-            "head_at_binding": "b45bc5da0dff114a86223bf4e818d88c278eb59d",
-            "status": "PENDING: open, verifier repairs in progress (plan080 Repairs 1-2); "
-                      "cite as pending until merged",
-            "establishes": "in the tested runs the baseline (OSC2X=1 FILTER2X=1 PULSE2X=0) met "
-                           "every production deadline; the smallest measured slack was 6 cycles "
-                           "(extreme-increment run); the bound over the whole register space is "
-                           "unresolved",
-            "does_not_establish": "an exhaustive whole-register-space bound; PULSE2X=1 (missed "
-                                  "deadlines at extreme increments)",
+            "pr": "2AMLogic/gf180-parasynth#248 (merged d089c67, head b45bc5d)",
+            "record": "docs/deadline/README.md (runs: docs/deadline/runs/, reanalysis: "
+                      "docs/deadline/reanalysis/)",
+            "status": "LANDED",
+            "establishes": "the published baseline (OSC2X=1 FILTER2X=1 PULSE2X=0) met every "
+                           "production frame deadline in the tested runs: 0 missed, 0 overrun; "
+                           "worst observed slack 14 cycles in musical stress (SPI full kit and "
+                           "Arty UART), 6 in extreme-register runs; every musical-range I2S "
+                           "comparison exact and complete; cost model reconciled (C = 87 across "
+                           "30,333 frames, 0 overlap exceptions); incomplete I2S/schedule "
+                           "evidence returns NO VERDICT",
+            "does_not_establish": "a formal whole-register-space bound (the per-term cost-model "
+                                  "bound, 248 cycles, is 'not a formal proof'); model agreement "
+                                  "in the extreme runs (#247); PULSE2X=1 (observed misses above "
+                                  "Nyquist, zero-slack musical-range bound: excluded)",
         },
         "rolling_playback_rtl": {
             "pr": "2AMLogic/gf180-parasynth#210 (merged aa130175f9ada9afc4ac8b795eb3aaeed1e45fde)",
@@ -346,9 +363,15 @@ DECLARED = {
         {"what": "PULSE2X=1", "why": "not in this image; #248 records missed deadlines at extreme "
                                      "increments; needs its own correction and rebuilt image (#205)",
          "enforced": "the image is PULSE2X=0; qualified_domain.check_patch refuses pulse2x"},
-        {"what": "#247 glide domain: a glide with an endpoint at or above 2^23",
+        {"what": "#247 as filed: a glide with an endpoint at or above 2^23",
          "why": "exact model/RTL mismatch, open defect",
          "enforced": "rules INC_RANGE (every programmed increment <= INC_HI < 2^23) and GLIDE_247"},
+        {"what": "#247 as measured: the voice routed through the drum filter (ROUTE = 1)",
+         "why": "on #247's own bench its 1809-period mismatch disappears with route 0 or without "
+                "strikes, and is unchanged by jumps instead of glides or by in-range increments "
+                "(fpga/release/probe_247.py, evidence/probe-247/); the exact trigger inside the "
+                "drum-filter path is not isolated",
+         "enforced": "rule ROUTE_DRUMFILTER; no player-facing path writes ROUTE (reset 0)"},
         {"what": "resonance use of calibration surge-type2-clean-v1",
          "why": "qualified at resonance 0 only (plan076 section 3)",
          "enforced": "rule CALIBRATION_RESONANCE in check_patch; no release preset or fixture "
@@ -365,10 +388,10 @@ DECLARED = {
                                  "drum hits, the musical fixture, a repeat capture; MOTU M4, "
                                  "fixed gain, raw captures preserved"},
     "cannot_bind": [
-        "PR #248's deadline evidence: open and under repair; cited, not bound by digest",
         "the m5a phrase: its RTL evidence (uart-clean 'phrase') is bench-built from the same "
         "phrase_events function, not a replay of the CLI's captured bytes",
-        "the modulation registers on fixture runs: assumed at reset (not readable)",
+        "the modulation and ROUTE registers on fixture runs: assumed at reset (not readable)",
+        "the voice-level glide runs: verify_voice records no run identity (the wrapper runs do)",
         "a numeric host/protocol version: none exists; bytes are pinned instead",
         "physical audio: no capture exists",
         "the rollback image cannot be driven by the release CLI (SPI only)",

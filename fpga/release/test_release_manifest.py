@@ -51,11 +51,14 @@ def test_every_supported_command_passes_the_validator(fresh):
         assert c["validator"] and "release domain OK" in c["validator"], name
 
 
-def test_exclusions_and_pending_evidence_are_explicit(fresh):
+def test_exclusions_and_runtime_evidence_are_explicit(fresh):
     whats = " ".join(e["what"] for e in fresh["exclusions"])
-    for needle in ("PULSE2X=1", "#247", "surge-type2-clean-v1"):
+    for needle in ("PULSE2X=1", "#247 as filed", "#247 as measured", "surge-type2-clean-v1"):
         assert needle in whats
-    assert fresh["runtime_qualification"]["deadline"]["status"].startswith("PENDING")
+    dl = fresh["runtime_qualification"]["deadline"]
+    assert dl["status"] == "LANDED" and "not a formal proof" in dl["does_not_establish"]
+    assert fresh["evidence"]["probe_247"]["rc"] == {
+        "orig": 1, "no-drumfilter": 0, "no-strikes": 0, "jumps": 1, "inrange": 1, "inrange-route0": 0}
     assert fresh["physical_capture"]["status"] == "NONE"
 
 

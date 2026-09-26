@@ -348,6 +348,14 @@ phrase:
 .venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a
 ```
 
+**Release r1** ([fpga/release/RELEASE.md](release/RELEASE.md)) binds this image,
+these commands and their evidence in one manifest. It also enforces the
+player-facing domain on every command: the final oscillator increments, the
+glide transitions, the waveform sets and the drum-filter route. Until that
+release, the note-only command above was **silent**. Its image carried no
+mixer weights, and a replay of those bytes through the wrapper decodes an I2S
+peak of 0. The note-only image now writes them.
+
 `run` loads the patch image, starts the note, holds it, releases it and —
 with `--fixture m5a` — replays the scripted phrase, all as device-scheduled
 events, no host-side sleeps in the timing path (host sleeps pace BYTES onto

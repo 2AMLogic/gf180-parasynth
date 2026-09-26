@@ -12,9 +12,12 @@ THE DRUM FILTER (route = 1, dcut = 600, the drum ladder carrying the voice's
 k/gain/ogain), and the drum kit struck under it. The issue attributes the
 mismatch to the glide. This probe varies one ingredient at a time.
 
-The bench is imported, not copied or edited, from a checkout of that branch
-(--deadline-root, pinned by --expect-sha); the variants re-use its image,
-drum and Script helpers and its main(). Nothing on that branch is modified.
+The bench is imported, not copied or edited (#248 merged it to main at
+d089c67; --deadline-root defaults to this tree), pinned by the sha256 of
+verify_deadline.py as PR #248's head b45bc5d carried it; the variants re-use
+its image, drum and Script helpers and its main(). The recorded runs
+(evidence/probe-247/) used a detached checkout of b45bc5d, whose
+verify_deadline.py has the same digest.
 
 VARIANTS (increments as in #247 unless named):
 
@@ -29,19 +32,26 @@ VARIANTS (increments as in #247 unless named):
 Exit statuses are verify_deadline's (0 match, 1 differ, 2 no run); a run's
 verdict line is what this records, not a claim about the cause.
 
-    .venv/bin/python fpga/release/probe_247.py --deadline-root /tmp/wt-deadline-ro --variant orig
+    .venv/bin/python fpga/release/probe_247.py --variant orig
+
+RESULT (evidence/probe-247/run_all.json): orig 1809 differ; no-drumfilter 0;
+no-strikes 0; jumps 1809; inrange 1809; inrange-route0 0. Scope: this
+isolates the INGREDIENTS of #247's stimulus. docs/deadline/README.md's
+stress-saw also toggles the drum filter with strikes and matched exactly,
+so "route 1 + strikes" is not by itself sufficient; the trigger inside the
+drum-filter path is not isolated here.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import os
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-PINNED = "b45bc5da0dff114a86223bf4e818d88c278eb59d"      # PR #248 head at binding
+PINNED = "1a3569d6b5ad7e78489ddf39c57bc5b170f33f8b9b1aff3ade336041ba0dc0ea"   # verify_deadline.py @ b45bc5d
 
 LO247, HI247 = (0xC00000, 0xC80000, 0xD00000), (0xFF0000, 0xF80000, 0xF00000)
 
@@ -89,16 +99,16 @@ def main(argv=None) -> int:
     import qualified_domain as qd
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--deadline-root", required=True)
+    ap.add_argument("--deadline-root", default=os.path.dirname(os.path.dirname(HERE)))
     ap.add_argument("--expect-sha", default=PINNED)
     ap.add_argument("--variant", required=True,
                     choices=("orig", "no-drumfilter", "no-strikes", "jumps", "inrange", "inrange-route0"))
     ap.add_argument("--outdir", default=None)
     a = ap.parse_args(argv)
-    sha = subprocess.run(["git", "-C", a.deadline_root, "rev-parse", "HEAD"],
-                         capture_output=True, text=True).stdout.strip()
+    path = os.path.join(a.deadline_root, "rtl-sketch", "verify_deadline.py")
+    sha = hashlib.sha256(open(path, "rb").read()).hexdigest() if os.path.exists(path) else None
     if sha != a.expect_sha:
-        print(f"probe_247: REFUSED -- {a.deadline_root} is at {sha or '?'}, expected {a.expect_sha}")
+        print(f"probe_247: REFUSED -- {path} hashes to {sha or 'nothing'}, expected {a.expect_sha}")
         return 2
     vd = load_bench(a.deadline_root)
     s = qd.INC_HI / 0xFF0000
