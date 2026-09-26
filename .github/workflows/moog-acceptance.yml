@@ -17,6 +17,50 @@
 # analysers measures the analysers.
 name: acceptance
 
+# WHY BOTH `push` AND `pull_request` (issue #264, and please read this before
+# deleting one of them).
+#
+# #264 reported this job being cancelled at its 20-minute cap on ~20% of runs,
+# and proposed dropping one trigger on the theory that the two copies of a PR
+# commit contend for capacity. **That theory is refuted by measurement**; the
+# duplication is not what was costing the time, so both triggers stay.
+#
+# The measurement is `tools/ci_acceptance_timing.py`, which reads per-step
+# `started_at`/`completed_at` out of the jobs API -- run-level timing folds
+# queue, setup and every step into one number and cannot separate these cases.
+# Over the 100 most recent runs on 2026-09-26 it found, split by runner class:
+#
+#                      n   cancelled   job minutes (min/median/max)
+#   blacksmith        49       0 (0%)       10.4 / 11.1 / 12.3
+#   github-hosted     51      10 (20%)       8.9 / 15.3 / 20.0
+#
+# Every cancellation was on a GitHub-hosted runner, and all ten predate PR #186
+# (the Blacksmith migration, `runs-on:` below) landing on main at 11:18Z --
+# they are runs of branch snapshots that still said `runs-on: ubuntu-latest`.
+# Since that merge: 49 jobs, zero cancellations. Three things follow.
+#
+#   - It was not trigger duplication. Two of the ten cancellations were `main`
+#     pushes, which have no `pull_request` twin to contend with at all; and on
+#     Blacksmith the `push`/`pull_request` pair of a commit routinely runs
+#     concurrently with the whole distribution inside a 1.9-minute spread.
+#   - It was not the suite outgrowing the cap. In the cancelled runs *every*
+#     step stretched by the same ~2x, including short ones (the properties
+#     step 124s -> 240s, the TR-808 step 203s -> 406s), which is the signature
+#     of a slow machine, not of one test that grew.
+#   - The cap is right where it should be. 20 minutes against a measured
+#     worst case of 12.3 is 1.6x headroom; raising it would only slow the
+#     signal from a genuinely hung test.
+#
+# And the two triggers are not redundant in the first place: `push` verifies
+# the branch tip as committed, `pull_request` verifies it merged into the base.
+# Dropping `push` would also stop verifying branches with no open PR (the
+# `measure/*` and `release/*` branches do land work this way). Per
+# `.loom/docs/ci-principles.md` rule 1, the runner minutes are the cheaper
+# half of that trade.
+#
+# To re-check, at any time:
+#   python tools/ci_acceptance_timing.py --limit 100
+#   python tools/ci_acceptance_timing.py --require-clean --window 40
 on:
   push:
     paths:
@@ -34,7 +78,13 @@ on:
 
 jobs:
   acceptance:
+    # A branch that has not rebased past PR #186 still carries
+    # `runs-on: ubuntu-latest` in its own copy of this file and will keep
+    # hitting the 20-minute cap until it does -- the runner class comes from
+    # the branch's workflow file, not from main's.
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Measured worst case on this runner class is 12.3 min (n=49). See the
+    # header comment before changing this.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
