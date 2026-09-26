@@ -226,3 +226,55 @@ def test_a_re_measurement_under_the_same_rubric_adds_no_history(tmp_path):
     fresh = with_purpose(sc.DEFECT_CEILING)
     rc.carry_rubric_history(CASE, tmp_path / "absent.json", fresh)
     assert "rubric_history" not in fresh
+
+
+# --- a number that is not a number is no verdict, under EITHER purpose -----------
+#
+# Review of #241: `max(0, error) / tolerance` certified NaN and -inf errors as a
+# pass at distance 0, and a +inf tolerance divides anything down to 0. A
+# ceiling is a clamp, and a clamp swallows exactly the values that mean "this
+# measurement did not happen". Numbers are validated BEFORE any clamp or
+# division, and a bad one is refused -- never a pass, never a fail.
+
+NAN, INF = float("nan"), float("inf")
+BAD_FIELDS = [("error", NAN), ("error", INF), ("error", -INF),
+              ("tolerance", NAN), ("tolerance", INF), ("tolerance", -INF),
+              ("tolerance", 0.0), ("tolerance", -3.0),
+              ("value", NAN), ("value", INF), ("value", -INF),
+              ("reference", NAN), ("reference", INF), ("reference", -INF)]
+
+
+@pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING])
+@pytest.mark.parametrize("field,bad", BAD_FIELDS)
+def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+    res = with_purpose(purpose)
+    res["metrics"][NAME][field] = bad
+    r = sc.evaluate(CASE, res)
+    assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+    assert r["worst"] is None
+    assert NAME in r["why"] and "invalid number" in r["why"], r["why"]
+    with pytest.raises(ValueError, match="invalid number"):
+        sc.metric_distance(res["metrics"][NAME])
+
+
+@pytest.mark.parametrize("purpose", ["match", "defect ceiling"])
+def test_a_missing_value_or_reference_is_not_required(purpose):
+    """value/reference are checked WHEN PRESENT; a hand-written record that
+    carries only error and tolerance still scores (older records do)."""
+    res = with_purpose(purpose)
+    del res["metrics"][NAME]["value"], res["metrics"][NAME]["reference"]
+    assert sc.evaluate(CASE, res)["state"] == sc.FAIL
+
+
+@pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                      ("ref", NAN), ("ref", INF), ("ref", -INF)])
+def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+    """An estimator that says ok with a non-finite number is refused at the
+    point of use: the record gets valid=False and no error, so no NaN is ever
+    written as a distance."""
+    est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+    ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+    m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                        rc.tol_db, {}, est_ref=est(ref))
+    assert m["valid"] is False and "error" not in m, m
+    assert "non-finite" in m["why"], m

@@ -132,6 +132,16 @@ SR_OURS = 48000
 #   git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer /tmp/tr808-ref
 REFS_ENV = "GF180_TR808_REFS"
 REFS_DEFAULT = "/tmp/tr808-ref"
+# Set to 1 where the reference-integration tests are a REQUIRED gate: a missing
+# corpus then fails them (REFUSED) instead of skipping, because a required
+# job that goes green through skips has checked nothing.
+REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
+
+
+def configured_refs() -> pathlib.Path:
+    """The one place the corpus location is decided: ${GF180_TR808_REFS}, else
+    /tmp/tr808-ref. The CLI default and the tests both read it here."""
+    return pathlib.Path(os.environ.get(REFS_ENV) or REFS_DEFAULT)
 REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
           "s/n 103852, individual voice outputs, 16-bit/44.1 kHz")
 
@@ -2205,6 +2215,18 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
     one estimator and it is used on both sides, which is the rule."""
     a = est(*ours)
     b = (est if est_ref is None else est_ref)(*ref)
+    # An estimate that says ok with a non-finite number is refused HERE, at
+    # the point of use: json writes NaN happily and the board must never be
+    # handed one as an error (review of #241).
+    def _finite(v) -> bool:
+        try:
+            return math.isfinite(float(v))
+        except (TypeError, ValueError):
+            return False
+    for side, e in (("reference", b), ("ours", a)):
+        if e.ok and not _finite(e.value):
+            return invalid_metric(units, f"{side}: estimator returned a non-finite "
+                                         f"value {e.value!r}")
     if not b.ok:
         return invalid_metric(units, f"reference: {b.reason} {b.detail}")
     tol, basis = tol_rule(b.value, ctx)
@@ -2658,7 +2680,7 @@ def main(argv=None) -> int:
     ap.add_argument("--family", help="Drums | Mono | Filters | Ensemble")
     ap.add_argument("--all", action="store_true", help="every case in cases.csv")
     ap.add_argument("--list", action="store_true", help="print the plan and stop")
-    ap.add_argument("--refs", default=os.environ.get(REFS_ENV, REFS_DEFAULT),
+    ap.add_argument("--refs", default=str(configured_refs()),
                     help=f"the Fischer TR-808 corpus (default {REFS_DEFAULT}, ${REFS_ENV})")
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
