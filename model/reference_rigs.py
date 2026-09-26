@@ -603,7 +603,11 @@ class SurgeRig(_Plugin):
     # authority for these cells. Nothing here is re-derived or paraphrased:
     # `tools/check_surge_waveform_comment.py` parses the table back out of this
     # file and REFUSES unless every cell reproduces that file character for
-    # character, so the two cannot drift silently again. They had: six cells
+    # character, and the `python` job of .github/workflows/rungs.yml runs it
+    # (and its controls) on every pull request -- so the two cannot drift
+    # silently again. A comment claiming that guarantee while the checker ran
+    # only on the build box would be the same defect one level up. They had:
+    # six cells
     # disagreed with the sweep and the citation named a file that has never
     # existed in this repository (issue #271).
     #

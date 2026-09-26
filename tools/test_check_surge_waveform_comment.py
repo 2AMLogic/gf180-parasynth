@@ -67,6 +67,37 @@ def test_the_exemption_list_is_not_a_hole():
         assert ck.DEAD_CITATION in (REPO / path).read_text(), path
 
 
+def test_this_checker_is_invoked_by_a_ci_job_and_not_only_by_make():
+    """"A gate nothing invokes fails exactly the same way" (rungs.yml), applied
+    to this checker itself -- the same guard `tools/test_manifest.py` carries for
+    its own wiring, for the same reason.
+
+    As first written, this checker and these controls were reachable only through
+    the broad `pytest ... tools/ ...` in `make verify` / `make verify-full` and
+    through `make controls`, and **no workflow invokes any of those three**:
+    `nightly.yml`'s controls job is hand-listed steps, not `make controls`. So
+    the comment in `model/reference_rigs.py` asserted that the table and
+    `docs/surge-waveform-mapping.txt` "cannot drift silently again" while nothing
+    on a pull request re-derived it -- a claim without its apparatus, which is
+    the defect issue #271 was itself filed about. This test fails if that wiring
+    is removed, rather than letting the comment go quietly false again.
+    """
+    import yaml
+
+    workflow = yaml.safe_load((REPO / ".github/workflows/rungs.yml").read_text())
+    runs = [str(step.get("run", "")) for step in workflow["jobs"]["python"]["steps"]]
+
+    assert any("tools/check_surge_waveform_comment.py" in r
+               and "pytest" not in r for r in runs), (
+        "rungs.yml's `python` job no longer runs tools/check_surge_waveform_comment.py "
+        "-- the reference_rigs.py comment's drift guarantee has no CI apparatus, and "
+        "`make verify` is invoked by no workflow")
+    assert any("pytest" in r and "tools/test_check_surge_waveform_comment.py" in r
+               for r in runs), (
+        "rungs.yml's `python` job no longer runs these controls -- an unexercised "
+        "checker measures the checker, not the comment")
+
+
 # ---------------------------------------------------------------------------
 # the defect issue #271 was filed about, as a control
 # ---------------------------------------------------------------------------
