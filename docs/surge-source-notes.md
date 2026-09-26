@@ -113,6 +113,11 @@ ours (which moves per sample) sat at the floor, and it looked exactly like
 artefact out of band and reversed the conclusion. The table above is the
 16-sample run.
 
+This section sweeps the **cutoff** and holds everything else still. The other
+two moving controls — resonance swept continuously through the
+self-oscillation onset, and the filter-modulation bus driven at an audio rate
+— are **§8**, measured the same way and in the same band.
+
 **Differential check, ours only and the strongest evidence available**: render
 the same sweep twice through the same filter, once with the shipping integer
 control path and once with the cutoff and `g` in float. The difference is
@@ -267,3 +272,171 @@ choice against something that ships** — and take neither on trust, because
 this project already found that Surge's Vintage Ladder Type 2 cannot
 self-oscillate and never reaches its own nonlinearity at any usable level
 (§8.3 of `docs/discrimination.md`).
+
+---
+
+## 8. Movement, part two: the resonance moving, and modulation at audio rate (2026-09-26)
+
+§3 swept the **cutoff** and held everything else still. Issue #53 named two
+more moving controls that no test reached, and this section is both of them.
+`model/reference_movement.py --stage resonance` and `--stage audio-rate-mod`;
+standing checks in `model/test_moog_acceptance.py`
+(`test_a_continuous_resonance_sweep_through_self_oscillation_does_not_zipper`,
+`test_audio_rate_filter_modulation_adds_no_more_than_the_static_control_error`)
+with their injected controls beside them. Same estimators as §3, same 800 Hz
+band limit, so the numbers here and the numbers there are comparable.
+
+Two of #53's four proposals were already done when this was written and are
+**not** re-measured here: the sweep-rate ladder is §3, and the
+envelope-driven fast sweep is `test_a_cutoff_jump_mid_note_does_not_click`,
+which predates the issue.
+
+### 8.1 Resonance swept continuously through the self-oscillation onset
+
+`test_a_cutoff_jump_mid_note_does_not_click` already toggles `k_eff` between 0
+and the onset as a 5 ms square wave. That is two abrupt edges; #53 asked for
+the continuous crossing, where the loop sits at unity gain for as long as the
+ramp takes to pass through it. The cutoff is held at 2000 Hz, the carrier sits
+on it, and `res` ramps through the onset — which DR 0006's compensation ROM
+puts at **res = 1.0000**, computed rather than assumed. With the input muted
+half way the output still grows **+5.6 dB**, so the ramp genuinely reaches
+self-oscillation and this is not a measurement of a resonant peak.
+
+<!-- claim: test=model/test_moog_acceptance.py::test_a_continuous_resonance_sweep_through_self_oscillation_does_not_zipper -->
+
+| ramp | 4 res/s | 1 res/s | 0.25 res/s |
+|---|---|---|---|
+| 0.6 → 1.4 (up through onset) | −61.8 † | **−82.2** ‡ | **−90.2** ‡ |
+| 1.4 → 0.6 (down through onset) | −62.2 † | −82.9 ‡ | −90.6 ‡ |
+| 0.1 → 0.9 (same rate, never crosses) | −58.6 † | −78.2 ‡ | −85.3 ‡ |
+
+† the dominant residual rate is 20–27 Hz, i.e. the ramp's own trajectory
+leaking through the 40 Hz high-pass — an upper bound, not a measurement of
+stepping. ‡ the dominant rate is the 2 kHz carrier, i.e. the analytic
+envelope's own residual — also an upper bound. **Every cell in this table is a
+floor**, and the tool says so per-cell rather than leaving the reader to
+check; that is what `reference_movement.ripple_verdict` is for.
+
+Three findings:
+
+- **Nothing measurable happens at the crossing.** A ramp that never reaches
+  the onset reads 3–5 dB *worse* at every rate (it is quieter, so the same
+  residual is a larger fraction of it). If entering self-oscillation thumped,
+  the crossing rows would be the loud ones; they are the quiet ones.
+- **Direction does not matter**, 0.4–0.7 dB between up and down at every rate.
+- **The reading falls ~12 dB per halving of ramp rate**, the same
+  smooth-process signature §3 found for cutoff sweeps — which here is the
+  floor falling, not the artefact.
+
+**Injected control (START RED), and it is what makes the table usable.** Write
+`k` every N frames instead of every frame — a firmware updating the filter
+from a timer rather than from the sample clock:
+
+| `k` write interval | ripple | residual vs shipping | separation |
+|---|---|---|---|
+| every frame (shipping) | −82.2 ‡ | — | — |
+| every 96 frames (2 ms, 500 Hz) | −74.3 | −57.6 dB | **+7.9 dB** |
+| every 240 frames (5 ms, 200 Hz) | −58.3 | −49.1 dB | **+23.9 dB** |
+
+Both injected rows report their dominant rate as the write rate itself (500
+and 201 Hz), which is the estimator naming the staircase it was built to find.
+The measurement has power, it is graded rather than binary, and the shipping
+reading is 24 dB below the coarsest injection.
+
+### 8.2 Oscillator 3 on `MR_FILT` at an audio rate
+
+`test_the_mod_wheel_at_full_sweeps_the_cutoff_from_440_to_at_least_2400`
+already drives the filter-modulation bus from oscillator 3, but as a
+square-wave LFO, and it measures the *depth* of the swing. #53 asked for the
+same bus at an audio rate, "far harder than a hand on a knob". The trajectory
+is taken from `VoiceFx.trace['cut']` — the shipping code, not a
+reimplementation of the modulation arithmetic — and the carrier is the same
+2 kHz sine §3 used.
+
+**First result, and it is about the instrument rather than the filter:
+`envelope_ripple_db` cannot answer this question, at any of the nine operating
+points.** An audio-rate cutoff modulation *is* an envelope modulation: the
+estimator reads −4 to −41 dB, forty decibels above anything the control path
+could contribute, and what it is reading is the intended signal. The tool
+REFUSES all nine rather than printing them. Two independent preconditions
+catch it — the dominant residual rate matching the modulation rate or one of
+its first three harmonics, and, for the intermodulation products that test
+cannot enumerate, **the same estimator run on the artefact-free float render
+returning the same number**. The second is the general one: if a render with
+no control-path error in it by construction reads the same ripple, the ripple
+is not the control-path error.
+
+So the answer comes from §2's differential instead: the same carrier through
+the same ladder twice, once with the shipping control path and once with that
+arithmetic in float, `k` held identical between the two.
+
+<!-- claim: test=model/test_moog_acceptance.py::test_audio_rate_filter_modulation_adds_no_more_than_the_static_control_error -->
+
+| depth | cutoff reached | osc3 at 110 Hz | 440 Hz | 1760 Hz |
+|---|---|---|---|---|
+| 0.25 oct | 1681–2377 Hz | −53.1 dB | −53.1 | −53.1 |
+| 1.30 oct (`MFD_REF_OCT`) | 812–4923 Hz | −56.5 | −54.1 | −55.4 |
+| 3.90 oct (at the ±4 oct clamp) | 133–21600 Hz | −57.1 | −52.3 | −63.0 |
+
+- **Flat in rate and in depth**, −52 to −63 dB over a 16× range of modulation
+  rate and a 16× range of depth. That is the signature of a *static* control
+  error, which is the same conclusion §3 reached for cutoff sweeps by the same
+  argument. Audio-rate modulation is not a harder case for our control path
+  than a hand on a knob — because our control path has no rate-dependent term
+  in it at all.
+- **It is ~13 dB worse than §3's 500 Hz–8 kHz sweep differential (−66 dB), and
+  the extra is the modulation bus's own arithmetic**, which §3 never
+  contained. Splitting the −54.1 dB at 1.30 oct / 440 Hz by rendering the
+  intermediate that has one quantiser and not the other:
+
+  | contribution | residual |
+  |---|---|
+  | Q3.12 octave word + interpolated exp ROM | **−59.7 dB** |
+  | 16-bit integer-hertz register + g ROM | **−60.2 dB** |
+  | total | −54.1 dB |
+
+  **The two are equal to within half a decibel.** A change that improves only
+  the cutoff register or only the `g` ROM — the target §2 and §3 point at —
+  leaves half of the audio-rate modulation error in place. This is the first
+  measurement in the repository of the modulation path's own contribution.
+
+**Injected controls (START RED).** Two, because they break the control path in
+different places:
+
+| injection | residual | separation |
+|---|---|---|
+| shipping | −54.1 dB | — |
+| modulated cutoff rounded to 8 Hz | −54.0 | +0.1 dB |
+| modulated cutoff rounded to 32 Hz | −48.1 | **+6.0 dB** |
+| cutoff held 128 frames (375 Hz) | +0.9 | **+55.0 dB** |
+| cutoff held 512 frames (93.75 Hz) | +1.3 | **+55.4 dB** |
+
+The 8 Hz row is the honest bottom of this measurement's resolution: rounding
+the cutoff to 8 Hz is *invisible* to it at this operating point, so the
+smallest coarsening it can resolve is somewhere between 8 and 32 Hz.
+
+**The block-hold rows are a result, not only a control.** Holding the
+modulated cutoff for one 512-sample block — what a block-based plugin does,
+and the exact mechanism behind §3's 94 Hz harness artefact — does not merely
+coarsen the control at an audio modulation rate, it **aliases the modulation**:
+the "artefact" comes out 1.3 dB *larger than the signal*. §1 called our lack
+of coefficient smoothing "not obviously right, and not chosen deliberately".
+For audio-rate filter modulation it is not a preference: per-sample update is
+required, and Surge's 3 ms one-pole on the coefficient target would be a
+~53 Hz corner across a bus that routinely carries 1760 Hz.
+
+### 8.3 Wrong-then-right, for calibration
+
+Two of the five numbers in this section were wrong before they were right, and
+both were caught by a precondition rather than by inspection:
+
+- The first audio-rate ripple table printed **−30.5 dB** as a clean `ok`
+  reading at 3.90 oct / 1760 Hz. It was intermodulation of the intended
+  modulation. The harmonic check passed it because the product was not at
+  *n*·1760 Hz; the artefact-free-render check caught it, and is the
+  precondition that now ships.
+- `mod_trajectory`'s "is this the same modulation" assertion was first written
+  as an absolute 3 Hz bound and fired on the 3.90 oct case at 5 Hz — correctly,
+  in the sense that it refused rather than reported, but for the wrong reason:
+  at a modulated cutoff of 21.6 kHz the control path's own resolution *is*
+  more than 3 Hz. The bound is now relative.
