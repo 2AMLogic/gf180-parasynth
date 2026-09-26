@@ -117,3 +117,19 @@ def test_harness_drives_the_tree_image():
     oracle = vlm.Oracle(lambda t: 0)
     assert FRATE in _drums(oracle.static)
     assert oracle.static == _session(image=vlm.HARNESS_IMAGE).init_writes()
+
+
+def test_doc_and_start_command_log_state_the_measured_counts():
+    """docs/live-midi.md and the committed start-command evidence carry the
+    known-state sizes the code produces, per image: a kit change that moves
+    them turns this red instead of leaving a stale count in the doc."""
+    n_tree = len(_session(image="tree").init_writes())
+    n_rel = len(_session(image="release").init_writes())
+    doc = " ".join((ROOT / "docs/live-midi.md").read_text().split())
+    assert (f"That is {n_tree} writes on the tree image (revision 13) and {n_rel} "
+            f"on the release image") in doc
+    assert f"{n_tree} init writes acknowledged (kit for image tree" in doc
+    assert f"static image 0/{n_tree}" in doc
+    log = (ROOT / "fpga/reports/live-midi/start-command.log").read_text()
+    assert f"known state sent ({n_tree} writes, acknowledged; kit for image tree" in log
+    assert f"{n_tree} live;" in log

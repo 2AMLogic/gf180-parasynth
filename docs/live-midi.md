@@ -26,10 +26,12 @@ reads:
 .venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage
 ```
 
-The run exits 0 (`fpga/reports/live-midi/start-command.log`): 190 init writes
-acknowledged, 203 scheduled writes executed, 14 refusals printed by name,
-device errors 0, drops 0, queue peak 17. Its first run REFUSED at start: 48 of
-190 ACKs were counted. The fault was in `uart_host.Bridge._take`, which dropped
+The run exits 0 (`fpga/reports/live-midi/start-command.log`, regenerated on
+the revision-13 tree for #273): 191 init writes acknowledged (kit for image
+tree, contract revision 13), 203 scheduled writes executed, 14 refusals printed
+by name, device errors 0, drops 0, queue peak 17. Its first run (before #273,
+revision 12's 190-write known state) REFUSED at start: 48 of 190 ACKs were
+counted. The fault was in `uart_host.Bridge._take`, which dropped
 every ACK after the first in a chunk; it is fixed, with a regression test.
 
 The hardware form is the same command with a serial port and a Linux raw MIDI
@@ -38,6 +40,17 @@ not been exercised on a board.** Hardware MIDI-to-audio latency is a later
 capture measurement with its own endpoints (plan087 section 8). `--midi-in -`
 reads raw MIDI bytes from stdin. The raw input uses only the standard library
 (`os`, `select`); no MIDI package is required.
+
+**The image decides the kit (#273).** The drum kit in the known state is a
+property of the Arty image on the board, not of the tree the session runs
+from (`uart_host.image_kit`, as for `uart_host.py run`). `--image release`,
+the default on a serial port, sends the frozen revision-12 kit the published R1
+image plays: it has no `ENV_FRATE[8]`, which that image does not decode.
+`--image tree` sends this tree's revision-13 kit, for a board built from this
+tree. `--port sim` is this tree's device contract, so it implies `tree`, and
+`--port sim --image release` is REFUSED before anything is opened. The frozen
+kit refuses (`KitRefused`) if it no longer hashes to the image it was verified
+with. `fpga/test_midi_image_kit.py` holds all of this, with controls.
 
 ## Conventional defaults (chosen by the owner, per plan087 section 8)
 
@@ -106,7 +119,8 @@ A device reset is seen on the wire (BOOT) and reported.
 
 **Known state, once per session.** At start the session sends the whole image
 as live writes: patch, mixer weights, the modulation registers, kit, accents,
-gate off, stops clear. That is 190 writes. It waits for every ACK and then
+gate off, stops clear. That is 191 writes on the tree image (revision 13) and
+190 on the release image (revision 12, no `ENV_FRATE[8]`). It waits for every ACK and then
 anchors its time map with one STATUS. Nothing is reset per note.
 
 ## Timing contract (`fpga/live_midi_contract.py`, timing contract 2)
@@ -245,7 +259,10 @@ Each control prints the full MOVED/BLIND matrix (rule 4).
   contract.
 
 **RTL results** (`fpga/reports/live-midi/verification.json`; captures and run
-receipts under `rtl-replay/`):
+receipts under `rtl-replay/`). These were measured before #273, on contract
+revision 12 (190-write known state, no `ENV_FRATE[8]`), and have not been
+re-run on revision 13: the RTL replay is a build-box run of about an hour. The
+sim-mode trial below and the start-red run were regenerated on revision 13.
 
 | replay | writes | frame errors | I2S mismatch |
 |---|---|---|---|
@@ -259,7 +276,7 @@ receipts under `rtl-replay/`):
 caught (`trial-sim.log`, `trial-sim.receipt.json`).
 
 **Start red.** Against `fpga/stubs/midi_session_stub.py` every scenario FAILS
-by named property (static image 0/190, gates 0/19, strikes 0/14, refusals
+by named property (static image 0/191, gates 0/19, strikes 0/14, refusals
 0/14, ...; `fpga/reports/live-midi/start-red.log`). A first stub with a naive
 time map 34 frames off was refused as NO VERDICT by the precondition before
 any property was read.

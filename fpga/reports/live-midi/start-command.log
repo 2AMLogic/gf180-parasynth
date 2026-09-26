@@ -1,5 +1,5 @@
 midi_session: scripted keyboard `scripted:coverage` (190 messages) through a pipe
-midi_session: known state sent (190 writes, acknowledged); device frame 16642 at host 27238.585304 s
+midi_session: known state sent (191 writes, acknowledged; kit for image tree, contract revision 13); device frame 39488 at host 38172.297617 s
 midi_session: playing -- voice on MIDI channel 1, drums on 10, lookahead 16 ms; Ctrl-C ends with a panic
 midi_session: REFUSED simultaneous: CH within 1 ms of OH: one instrument, one strike (further simultaneous refusals are counted, not printed)
 midi_session: REFUSED sustain: sustain (CC64) is not supported: a held pedal would silently hold nothing (further sustain refusals are counted, not printed)
@@ -15,4 +15,4 @@ midi_session: REFUSED sysex: system exclusive is not supported (further sysex re
 midi_session: REFUSED realtime: real-time 0xf8 (clock/transport/reset are not supported; the session has no sequencer) (further realtime refusals are counted, not printed)
 midi_session: REFUSED poly-aftertouch: polyphonic aftertouch is not supported (further poly-aftertouch refusals are counted, not printed)
 midi_session: closed (end of input): 203 event packets, 14 refused {'simultaneous': 1, 'sustain': 1, 'pitch-bend': 1, 'program-change': 1, 'mod-unrouted': 1, 'channel': 1, 'unmapped-drum': 1, 'domain': 2, 'cc-unsupported': 1, 'aftertouch': 1, 'sysex': 1, 'realtime': 1, 'poly-aftertouch': 1}, 114 knob values superseded; device queue 0, drops 0, errors 0
-midi_session: simulated device executed 203 scheduled writes, 190 live; errors [], drops 0, queue peak 17
+midi_session: simulated device executed 203 scheduled writes, 191 live; errors [], drops 0, queue peak 17
