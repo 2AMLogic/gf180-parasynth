@@ -61,7 +61,7 @@ def jobs() -> list[str]:
         f"{v} --set quick --only waves3 --filter2x --outdir build/dl/tbv-w3-f2x",
         f"{v} --set quick --only waves3 --filter2x --pulse2x --outdir build/dl/tbv-w3-p2x",
         f"{v} --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/dl/tbv-osc2x-off",
-        f"{v} --set quick --only default --rtl stubs/voice_dp_stub.v --expect-fail --outdir build/dl/tbv-stub",
+        f"{v} --set quick --only default --rtl rtl-sketch/stubs/voice_dp_stub.v --expect-fail --outdir build/dl/tbv-stub",
         f"{PY} -m pytest tools/test_verify_deadline.py fpga/test_build_arty.py fpga/test_publish_arty.py "
         f"fpga/test_build_selected.py fpga/test_publish_selected.py -q",
     ]
