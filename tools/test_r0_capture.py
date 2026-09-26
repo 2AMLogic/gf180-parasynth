@@ -347,9 +347,19 @@ def _as_real(clean, tmp_path, transcript=GOOD_TRANSCRIPT):
     s = json.loads((d / "session.json").read_text())
     s.pop("synthetic")
     s["image"]["programmer"] = "openFPGALoader v1.1.1"
-    s["board"].update(revision="E", power="USB J10")
+    s["board"].update(model="Arty A7-100T", revision="E", power="USB J10")
+    s["dac"].update(model="Adafruit PCM5102 #6250", wiring="fpga/ARTY.md")
+    s["interface"].update(model="MOTU M4", recorder="sox -D -t coreaudio M4 -b 24")
+    for i, t in enumerate(s["takes"]):
+        t["started"] = f"2026-09-26T20:{i:02d}:00Z"
+        if t.get("host_capture"):                  # one run per take: distinct logs
+            hp = d / f"{t['host_capture']}.plan.json"
+            plan = json.loads(hp.read_text())
+            plan["origin"] = 1000 * (i + 1)
+            hp.write_text(json.dumps(plan))
     (d / "session.json").write_text(json.dumps(s))
     (d / "program.txt").write_text(transcript)
+    (d / "detect.txt").write_text("index 0: idcode 0x13631093 xc7a100t\nexit 0\n")
     return d
 
 
@@ -435,9 +445,9 @@ def test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused(clean, tmp_
     their release is not compared, and the session is not refused."""
     d = _as_real(clean, tmp_path)
     s = json.loads((d / "session.json").read_text())
-    for t in s["takes"]:
+    for i, t in enumerate(s["takes"]):
         if t["command_id"] != "silence":
-            _live_host_log(t["command_id"], d / t["host_capture"])
+            _live_host_log(t["command_id"], d / t["host_capture"], epoch=5000 * i)
     rec = rc.analyse(d)
     assert rec["verdict"] == rc.PASS, rec["reasons"]
     held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
@@ -474,3 +484,56 @@ def test_a_reference_that_is_not_the_releases_refuses_inside_the_analysis(clean,
     rec = rc.analyse(_as_real(clean, tmp_path), ref)
     assert rec["verdict"] == rc.REFUSED
     assert "held-default" in rec["reasons"][0] and "bitstream" in rec["reasons"][0]
+
+
+
+# ---- plan089: the relaxed ordering must not hide a real difference ----------
+def _live_plan(tmp_path, key="held-default"):
+    host, _ = _live_host_log(key, tmp_path / "h")
+    ref = json.loads((rc.REFERENCES / f"{key}.plan.json").read_text())
+    assert rc.command_identity(ref, host) == []
+    return ref, host
+
+
+def _rows(plan, kind):
+    return [r for r in plan["rows"] if r["kind"] == kind]
+
+
+def _mutate_wrong_value(p):
+    _rows(p, "write")[5]["expect"]["data"] ^= 1
+
+
+def _mutate_missing_write(p):
+    p["rows"].remove(_rows(p, "write")[7])
+
+
+def _mutate_duplicate_write(p):
+    w = _rows(p, "write")[7]
+    p["rows"].insert(p["rows"].index(w), json.loads(json.dumps(w)))
+
+
+def _mutate_reordered_writes(p):
+    w = _rows(p, "write")
+    i, j = p["rows"].index(w[3]), p["rows"].index(w[4])
+    p["rows"][i], p["rows"][j] = p["rows"][j], p["rows"][i]
+
+
+def _mutate_event_before_setup(p):
+    _rows(p, "event")[0]["due"] = _rows(p, "write")[-1]["apply_frame"] - 10
+
+
+@pytest.mark.parametrize("mutate", [_mutate_wrong_value, _mutate_missing_write,
+                                    _mutate_duplicate_write, _mutate_reordered_writes,
+                                    _mutate_event_before_setup])
+def test_the_identity_gate_still_sees_real_differences_in_a_live_log(tmp_path, mutate):
+    """Separating writes from events must keep write order, values and
+    multiplicity, and the setup -> event relationship on the device timeline."""
+    ref, host = _live_plan(tmp_path)
+    mutate(host)
+    assert rc.command_identity(ref, host) != []
+
+
+def test_a_changed_event_interval_is_seen(tmp_path):
+    ref, host = _live_plan(tmp_path, "phrase-m5a")
+    _rows(host, "event")[3]["due"] += 1                 # one frame late
+    assert rc.command_identity(ref, host) != []

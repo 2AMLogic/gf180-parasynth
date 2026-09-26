@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import re
 import hashlib
 import json
 import math
@@ -108,6 +109,8 @@ CLUSTER_S = 0.25      # coarse candidates closer than this are one placement
 # 0.5 dB without it: a first-order high-pass moves a 50 Hz kick's local lag.
 BAND_HZ = (100.0, 16000.0)
 DROPOUT_RUN = 96        # 2 ms of raw near-silence where the prediction sounds
+HOLD_UNCERTAINTY_FRAMES = 96   # host-planned vs device-applied hold (34 measured, scripted device)
+MIN_SCORED_S = 0.020    # a waveform comparison needs at least this much signal
 TIMING_MIN_WINDOWS = 3  # a slip must show in at least this many local-lag windows
 END_GUARD_S = 0.1     # not scored: the last 0.1 s of each reference (see analyse_take)
 PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
@@ -391,7 +394,42 @@ SESSION_REQUIRED = {
 TAKE_REQUIRED = ("id", "command_id", "wav")
 
 
-def check_session(bundle: pathlib.Path, s: dict, manifest: dict) -> list:
+def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False) -> list:
+    """docs/capture-r0.md step 5's pass conditions, read from program.txt
+    itself -- a non-empty file is not programming evidence (#299 B1):
+
+      1. `release_manifest: BOUND` followed by that command's `exit 0`;
+      2. a `shasum -a 256` line whose digest is R0's bitstream, for arty.bit;
+      3. the programmer's own exit status, the transcript's LAST line: `exit 0`.
+
+    A transcript that says SYNTHETIC is refused whatever else it holds."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    probs = []
+    if not synthetic_ok and any("SYNTHETIC" in ln for ln in lines):
+        probs.append("program transcript is SYNTHETIC: no board was programmed")
+    exits = [i for i, ln in enumerate(lines) if re.fullmatch(r"exit -?\d+", ln)]
+    bound = [i for i, ln in enumerate(lines) if ln.startswith("release_manifest: BOUND")]
+    if not bound:
+        probs.append("program transcript: no `release_manifest: BOUND` line")
+    else:
+        nxt = [i for i in exits if i > bound[0]]
+        if not nxt or lines[nxt[0]] != "exit 0":
+            probs.append("program transcript: release_manifest did not exit 0 "
+                         f"({lines[nxt[0]] if nxt else 'no exit line'})")
+    sha = [ln for ln in lines if re.match(r"^[0-9a-f]{64}\s+\S*arty\.bit$", ln)]
+    if not sha:
+        probs.append("program transcript: no `shasum -a 256 ... arty.bit` line")
+    elif sha[0].split()[0] != bitstream_sha256:
+        probs.append(f"program transcript: arty.bit hashes {sha[0].split()[0][:12]}, "
+                     f"not R0's {bitstream_sha256[:12]}")
+    if not lines or lines[-1] != "exit 0" or len(exits) < 2:
+        probs.append("program transcript: the programmer's final `exit 0` is missing "
+                     f"(last line {lines[-1] if lines else None!r})")
+    return probs
+
+
+def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
+                  synthetic_ok: bool = False) -> list:
     probs = []
     if s.get("schema") != SESSION_SCHEMA:
         probs.append(f"session schema {s.get('schema')!r} is not {SESSION_SCHEMA}")
@@ -411,6 +449,34 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict) -> list:
     t = img.get("program_transcript")
     if t and not ((bundle / t).is_file() and (bundle / t).stat().st_size > 0):
         probs.append(f"programming transcript {t} missing or empty")
+    elif t:
+        probs += transcript_problems((bundle / t).read_text(errors="replace"), want,
+                                     synthetic_ok=synthetic_ok)
+    if img.get("readback") is True:
+        probs.append("session.image.readback is true, but the procedure has no readback step: "
+                     "a programming transcript is not a readback")
+    dt = s.get("detect_transcript", "detect.txt")
+    dp = bundle / dt
+    if not dp.is_file():
+        probs.append(f"detect transcript {dt} missing (procedure step 2.2)")
+    else:
+        dl = [ln.strip() for ln in dp.read_text(errors="replace").splitlines() if ln.strip()]
+        if not dl or dl[-1] != "exit 0":
+            probs.append(f"detect transcript {dt}: openFPGALoader --detect did not exit 0")
+        if not synthetic_ok and any("SYNTHETIC" in ln for ln in dl):
+            probs.append(f"detect transcript {dt} is SYNTHETIC: no board was detected")
+        if not any("xc7a100t" in ln.lower() for ln in dl):
+            probs.append(f"detect transcript {dt}: no xc7a100t device named")
+    if "synthetic" not in s:
+        # a declaration copied from the synthetic generator is not an acquisition
+        for sec in ("image", "board", "dac", "interface"):
+            for k, v in (s.get(sec) or {}).items():
+                if isinstance(v, str) and "synthetic" in v.lower():
+                    probs.append(f"session.{sec}.{k} is declared synthetic")
+        for tk in s.get("takes") or []:
+            if not str(tk.get("started") or "").strip() or \
+                    "synthetic" in str(tk.get("started")).lower():
+                probs.append(f"take {tk.get('id')}: started time missing")
     itf = s.get("interface") or {}
     if itf.get("sample_rate") not in (None, SR):
         probs.append(f"session.interface.sample_rate {itf.get('sample_rate')} is not {SR}")
@@ -461,32 +527,54 @@ def planned_hold(plan: dict | None) -> int | None:
 
 
 def command_identity(plan_ref: dict | None, plan_cap: dict) -> list:
-    """The host's own log of what it sent vs the reference's pinned command:
-    the same register writes in the same order, and the same event spacing."""
+    """The host's own log of what it sent vs the reference's pinned command.
+
+    Compared: the LIVE WRITES as one sequence, in order (they apply in arrival
+    order, so their order is part of the command), and the SCHEDULED EVENTS
+    as a second sequence, in order, with each event's due frame relative to
+    the first event's. NOT compared: where the events sit among the writes in
+    the byte stream. An event fires at its due frame whatever byte position
+    carried it, and the live CLI deliberately sends a held note's gate-off
+    AFTER the writes (anchored to the observed gate), where the dry-run plan
+    lists it first -- the Judge measured every held-note take refused by the
+    row-by-row comparison this replaces (#299 B2). The hold itself, which
+    that anchoring changes, is carried separately by `planned_hold`."""
     if plan_ref is None:
         return ["the reference carries no plan to compare the host log against"]
 
-    def rows(p):
-        out, first_due = [], None
+    def split(p):
+        writes, events, first_due = [], [], None
         for r in p.get("rows", []):
-            if r.get("kind") not in ("write", "event"):
-                continue
             e = r.get("expect") or {}
-            due = r.get("due", -1)
-            if r["kind"] == "event":
-                first_due = due if first_due is None else first_due
-                due = due - first_due
-            else:
-                due = None
-            out.append((r["kind"], e.get("flag"), e.get("sec"), e.get("addr"), e.get("data"), due))
-        return out
-    a, b = rows(plan_ref), rows(plan_cap)
-    if a == b:
-        return []
-    for i, (x, y) in enumerate(zip(a, b)):
-        if x != y:
-            return [f"host log differs from the released command at write {i}: {y} vs {x}"]
-    return [f"host log has {len(b)} writes, the released command {len(a)}"]
+            key = (e.get("flag"), e.get("sec"), e.get("addr"), e.get("data"))
+            if r.get("kind") == "write":
+                writes.append(key)
+            elif r.get("kind") == "event":
+                first_due = r.get("due", -1) if first_due is None else first_due
+                events.append(key + (r.get("due", -1) - first_due,))
+        return writes, events
+    (wa, ea), (wb, eb) = split(plan_ref), split(plan_cap)
+    out = []
+    # the device timeline: every scheduled event must fall AFTER the live
+    # setup it depends on has applied (a gate-off before its gate-on is a
+    # different command, wherever the rows sit in the log)
+    live_apply = [r.get("apply_frame") for r in plan_cap.get("rows", [])
+                  if r.get("kind") == "write" and r.get("apply_frame") is not None]
+    ev_due = [r.get("due") for r in plan_cap.get("rows", [])
+              if r.get("kind") == "event" and r.get("due") is not None]
+    if live_apply and ev_due and min(ev_due) <= max(live_apply):
+        out.append(f"host log schedules an event at frame {min(ev_due)}, at or before the "
+                   f"last live write's frame {max(live_apply)}: the setup/event order differs")
+    for what, a, b in (("live write", wa, wb), ("scheduled event", ea, eb)):
+        if a == b:
+            continue
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                out.append(f"{what} {i} differs from the released command: {y} vs {x}")
+                break
+        else:
+            out.append(f"host log has {len(b)} {what}s, the released command {len(a)}")
+    return out
 
 
 # =============================================================================
@@ -576,14 +664,16 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
 
     `hold_offset`: frames by which this take's host log planned a different
     hold from the reference's. uart_host anchors a held note's gate-off to an
-    OBSERVED gate frame (a STATUS minus its round trip), so on hardware the
-    hold can differ from the dry-run's by a few frames, and the release then
-    lands that much later or earlier than the reference's. The offset is
-    read from the host log, never fitted from audio; when it is not zero the
-    release cannot be compared sample-for-sample with this reference, so
-    the waveform comparisons stop 5 ms before the reference's release and
-    the record says so (`release_compared: false`). The stuck-note check
-    still covers the whole take."""
+    OBSERVED gate frame (a STATUS minus its round trip); on the scripted
+    device its live path plans 3121 frames against the dry-run's 1920 --
+    1201 frames, 25 ms -- and the device fires 34 frames later still. The
+    offset is read from the host log, never fitted from audio and never
+    absorbed by a tolerance. When it is not zero the waveform comparisons
+    end before the earlier release (less HOLD_UNCERTAINTY_FRAMES), the take
+    records `release_compared: false` and the excluded interval, and an
+    interval shorter than MIN_SCORED_S is NOT EVALUATED rather than passed.
+    The stuck-output check covers the whole take: it shows the note ended,
+    not that the release matches."""
     out = {"id": take["id"], "command_id": take["command_id"], "fails": {}, "metrics": {}}
     F = out["fails"]
     M = out["metrics"]
@@ -674,20 +764,43 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
             F["silence"] = (F.get("silence", "") + f"input {c}: {lv:.1f} dBFS where "
                             f"{want:.1f} dBFS is predicted; ").strip()
     # residual over the evaluation region (after the calibration window)
+    e1_full = e1
     if hold_offset:
+        # the host's own timing record says this take's release is planned
+        # `hold_offset` frames away from the reference's; the waveform
+        # comparisons end before the EARLIER of the two releases, less the
+        # planned-vs-device uncertainty. Nothing is fitted or widened.
         nz = np.flatnonzero(x_raw)
-        rel = int(nz[0]) + int(ref["hold"]) - BLOCK if nz.size and ref.get("hold") else None
+        rel = (int(nz[0]) + int(ref["hold"]) + min(0, int(hold_offset))
+               - HOLD_UNCERTAINTY_FRAMES - BLOCK) if nz.size and ref.get("hold") else None
         M["hold_offset_frames"] = int(hold_offset)
+        M["hold_offset_ms"] = round(1e3 * hold_offset / sr, 2)
         M["release_compared"] = False
         if rel is not None:
             e1 = min(e1, int(d + rel / rho))
+    M["coverage"] = {"scored_s": [round(e0 / sr, 4), round(e1 / sr, 4)],
+                     "excluded_s": ([round(e1 / sr, 4), round(e1_full / sr, 4)]
+                                    if e1 < e1_full else None),
+                     "excluded_why": ("release not compared: the host planned a different "
+                                      "hold from the reference's" if e1 < e1_full else None)}
+    scored = (e1 - e0) >= MIN_SCORED_S * sr
+    M["waveform_scored"] = bool(scored)
+    if not scored:
+        # trimming away the region under test cannot create a PASS: these
+        # properties are NOT EVALUATED on this take, and the record says so
+        out["not_evaluated"] = {k: f"scored interval {(e1 - e0) / sr * 1e3:.1f} ms < "
+                                   f"{MIN_SCORED_S * 1e3:.0f} ms" for k in
+                                ("residual", "timing", "gain", "clock", "dropout")}
+        e1 = e0
     ev = slice(e0, e1)
-    er = float(np.sum((A[ev] - p[ev]) ** 2) / max(np.sum(p[ev] ** 2), 1e-30))
-    M["residual_db"] = round(10 * math.log10(max(er, 1e-30)), 2)
-    if M["residual_db"] > LIMITS["residual_db_max"]:
-        F["residual"] = f"{M['residual_db']} dB > {LIMITS['residual_db_max']} dB"
+    if scored:
+        er = float(np.sum((A[ev] - p[ev]) ** 2) / max(np.sum(p[ev] ** 2), 1e-30))
+        M["residual_db"] = round(10 * math.log10(max(er, 1e-30)), 2)
+        if M["residual_db"] > LIMITS["residual_db_max"]:
+            F["residual"] = f"{M['residual_db']} dB > {LIMITS['residual_db_max']} dB"
     # local lags and gains, measured AGAINST the frozen alignment
-    pts = _local_lags(x, A, d, rho, int(cal[1]), int(min(len(x), (e1 - d) * rho)))
+    pts = (_local_lags(x, A, d, rho, int(cal[1]), int(min(len(x), (e1 - d) * rho)))
+           if scored else [])
     if pts:
         dev = np.array([q[1] for q in pts])
         ms = np.array([q[0] for q in pts], dtype=np.float64)
@@ -736,7 +849,7 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
             if abs(M["gain_change_db"]) > LIMITS["gain_change_db_max"]:
                 F["gain"] = f"median local gain {M['gain_change_db']:+.2f} dB against the frozen gain"
     # dropouts and stuck output, 5 ms blocks over the evaluation region
-    pb, cb_ = block_rms(p[ev]), block_rms(A[ev])
+    pb, cb_ = block_rms(p[ev]), block_rms(A[ev])       # (empty when not scored)
     n = min(pb.size, cb_.size)
     pb, cb_ = pb[:n], cb_[:n]
     lim = 10 ** (LIMITS["dropout_ref_dbfs_min"] / 20)
@@ -746,6 +859,8 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     # sounds. The banded check alone missed a 20 ms gap placed on the loudest
     # block of bar808-full: the band filter rings a loud onset into the gap.
     raw_p = block_rms(g * warp_reference(x_raw, A_raw.size, d, rho)[ev])
+    if raw_p.size == 0:
+        raw_p = np.zeros(1)
     quiet_lin = 10 ** ((max(noise_floor_dbfs, -110.0) + 6.0) / 20)
     qr = np.abs(A_raw[ev]) <= quiet_lin
     dq = np.diff(np.concatenate([[0], qr.astype(np.int8), [0]]))
@@ -757,6 +872,19 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     if drop.size:
         F["dropout"] = (f"{drop.size} x 5 ms blocks {LIMITS['dropout_drop_db']:.0f} dB below "
                         f"prediction, first at {(e0 + drop[0] * BLOCK) / sr:.3f} s")
+    # stuck output over the WHOLE evaluation span, release included. With a
+    # planned hold offset the prediction is the running maximum over that
+    # offset (plus its uncertainty), i.e. "silent in the reference at every
+    # release time the host log allows" -- it checks the note ENDS; it does
+    # not compare release timing or shape.
+    evf = slice(e0, e1_full)
+    pb, cb_ = block_rms(p[evf]), block_rms(A[evf])
+    n = min(pb.size, cb_.size)
+    pb, cb_ = pb[:n], cb_[:n]
+    if hold_offset and n:
+        from scipy.ndimage import maximum_filter1d
+        w = 2 * int(math.ceil((abs(hold_offset) + HOLD_UNCERTAINTY_FRAMES) / BLOCK)) + 1
+        pb = maximum_filter1d(pb, size=w, mode="nearest")
     quiet = pb < 10 ** (LIMITS["stuck_ref_dbfs_max"] / 20)
     base = np.maximum(pb, 10 ** (max(noise_floor_dbfs, -100.0) / 20))
     loud = cb_ > base * 10 ** (LIMITS["stuck_rise_db"] / 20)
@@ -790,8 +918,13 @@ def _pitch(take, x_raw, A_raw, d, rho, M, F, sr=SR):
 
 
 def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
-            manifest_path=rr.MANIFEST) -> dict:
-    """The whole session -> a record with verdict PASS / FAIL / REFUSED."""
+            manifest_path=rr.MANIFEST, *, allow_synthetic: bool = False) -> dict:
+    """The whole session -> a record with verdict PASS / FAIL / REFUSED.
+
+    `allow_synthetic` is for the synthetic-defect controls and the tests
+    only; the CLI and therefore the trial never set it, so a synthetic
+    session is REFUSED as a physical capture (#299 B1: `synth` output placed
+    where the operator's bundle goes had made T-PHYSICAL PASS, exit 0)."""
     rec = {"schema": RECORD_SCHEMA, "criterion": CRITERION, "limits": LIMITS,
            "bundle": str(bundle), "references": str(refdir), "inputs_sha256": {},
            "verdict": REFUSED, "reasons": [], "takes": [], "properties": {}}
@@ -807,7 +940,11 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         except ValueError as exc:
             raise Refused(f"{sp}: unreadable ({exc})")
         rec["inputs_sha256"]["session.json"] = sha256_file(sp)
-        probs = check_session(bundle, s, manifest)
+        if "synthetic" in s and not allow_synthetic:
+            raise Refused("the session is synthetic (r0_capture.py synth): it is not a physical "
+                          "capture of the board")
+        rec["synthetic"] = "synthetic" in s
+        probs = check_session(bundle, s, manifest, synthetic_ok=rec["synthetic"])
         if probs:
             raise Refused("capture metadata incomplete: " + "; ".join(probs))
         rec["identity"] = {"bitstream_sha256": s["image"]["bitstream_sha256"],
@@ -818,6 +955,13 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             bundle / s["image"]["program_transcript"])
         dac = s["interface"]["dac_channels"]
         takes, refs, caps, capb, hold_offsets = s["takes"], {}, {}, {}, {}
+        seen_logs = {}
+        dt = s.get("detect_transcript", "detect.txt")
+        rec["inputs_sha256"][dt] = sha256_file(bundle / dt)
+        for cmd in sorted({tk["command_id"] for tk in takes} - {"silence"}):
+            bad = rr.reference_problems(refdir, cmd, manifest)
+            if bad:
+                raise Refused("the reference is not the release's: " + "; ".join(bad))
         for tk in takes:
             refs[tk["command_id"]] = refs.get(tk["command_id"]) or load_reference(
                 refdir, tk["command_id"])
@@ -836,6 +980,11 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                     raise Refused(f"take {tk['id']}: host log {hp} missing")
                 rec["inputs_sha256"][str(hp.relative_to(bundle))] = sha256_file(hp)
                 host_plan = json.loads(hp.read_text())
+                hh = rec["inputs_sha256"][str(hp.relative_to(bundle))]
+                if not rec["synthetic"] and hh in seen_logs:
+                    raise Refused(f"take {tk['id']}: host log is byte-identical to take "
+                                  f"{seen_logs[hh]}'s -- one run cannot be two takes")
+                seen_logs[hh] = tk["id"]
                 diff = command_identity(refs[tk["command_id"]].get("plan"), host_plan)
                 h_cap, h_ref = planned_hold(host_plan), refs[tk["command_id"]].get("hold")
                 if h_cap is not None and h_ref is not None:
@@ -919,6 +1068,17 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 props[p] = "FAIL"
                 reasons.append(f"{t['id']}: {p}: {why}")
         rec["properties"] = props
+        rec["coverage"] = {
+            "release_compared": {t["id"]: t["metrics"].get("release_compared", True)
+                                 for t in results if "_aligned" in t},
+            "excluded_intervals_s": {t["id"]: t["metrics"]["coverage"]["excluded_s"]
+                                     for t in results
+                                     if (t["metrics"].get("coverage") or {}).get("excluded_s")},
+            "not_evaluated": {t["id"]: t["not_evaluated"] for t in results
+                              if t.get("not_evaluated")},
+            "note": ("a take with release_compared false had its waveform compared only "
+                     "before the release; its release timing and shape were NOT compared, "
+                     "and the stuck-output check shows only that the note ended")}
         rec["reasons"] = reasons
         rec["verdict"] = FAIL if reasons else PASS
         return rec
@@ -1052,7 +1212,15 @@ def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
             shutil.copyfile(refdir / f"{cmd}.plan.json", out / "host" / f"{tid}.plan.json")
             t["host_capture"] = f"host/{tid}"
         tlist.append(t)
-    (out / "program.txt").write_text("SYNTHETIC: no board was programmed\n")
+    (out / "detect.txt").write_text("SYNTHETIC: no board was detected\n"
+                                    "index 0: idcode 0x13631093 xc7a100t\nexit 0\n")
+    # step 5's format, so the controls exercise the transcript checks too --
+    # and marked SYNTHETIC, which the real path refuses
+    (out / "program.txt").write_text(
+        "SYNTHETIC: no board was programmed\n"
+        "release_manifest: BOUND -- synthetic session\nexit 0\n"
+        f"{manifest['image']['bitstream_sha256']}  {manifest['image']['bitstream']}\n"
+        "exit 0\n")
     s = {"schema": SESSION_SCHEMA, "synthetic": {"defect": defect, "seed": seed, **CLEAN},
          "image": {"bitstream_sha256": manifest["image"]["bitstream_sha256"],
                    "programmer": "synthetic", "program_transcript": "program.txt",
@@ -1117,14 +1285,22 @@ def stub_analyse(bundle, refdir=REFERENCES, manifest_path=rr.MANIFEST) -> dict:
             "properties": {p: "PASS" for p in PROPERTIES}}
 
 
+def _run(analyser, bundle, refdir):
+    if analyser is analyse:
+        return analyse(bundle, refdir, allow_synthetic=True)
+    return analyser(bundle, refdir)
+
+
 def run_controls(out: pathlib.Path, *, refdir=REFERENCES, analyser=analyse,
                  defects=None) -> dict:
     """The clean synthetic session must PASS with its known answers recovered;
     each defect must FAIL with its own property among the failures; the swap
     must be reported, honestly, as unobservable (BLIND)."""
     res = {"clean": None, "defects": {}, "matrix": {}}
-    clean = analyser(synth_session(out / "clean", refdir=refdir), refdir)
-    ok_clean = clean["verdict"] == PASS
+    clean = _run(analyser, synth_session(out / "clean", refdir=refdir), refdir)
+    # the known answers are REQUIRED: a clean run with no calibration record
+    # (the stub's) recovered nothing and is not fine (#299 N1)
+    ok_clean = clean["verdict"] == PASS and bool(clean.get("calibration"))
     known = {}
     if clean.get("calibration"):
         c = clean["calibration"]
@@ -1136,7 +1312,7 @@ def run_controls(out: pathlib.Path, *, refdir=REFERENCES, analyser=analyse,
     all_ok = ok_clean
     for name in (defects or DEFECTS):
         prop, _ = DEFECTS[name]
-        r = analyser(synth_session(out / name, refdir=refdir, defect=name), refdir)
+        r = _run(analyser, synth_session(out / name, refdir=refdir, defect=name), refdir)
         failed = {p for p, v in (r.get("properties") or {}).items() if v == "FAIL"}
         res["matrix"][name] = {p: ("MOVED" if p in failed else "BLIND") for p in PROPERTIES}
         if prop is None:

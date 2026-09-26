@@ -341,31 +341,52 @@ def main(argv=None) -> int:
         return 2
 
 
+def reference_problems(d: pathlib.Path, key: str, manifest: dict) -> list:
+    """Why the committed reference for `key` is NOT the release's, or []:
+    the pinned bytes, the image's bitstream and every simulated source, the
+    replay verdict, the wav's hash. tools/r0_capture.py calls this inside the
+    analysis the trial runs (not only as a CI step), so a reference that has
+    drifted from the release REFUSES the verdict it would otherwise support."""
+    spec = manifest["commands"].get(key)
+    if spec is None:
+        return [f"{key}: not a command of release {manifest.get('release')!r}"]
+    p = d / f"{key}.json"
+    if not p.is_file():
+        return [f"{key}: no reference at {p}"]
+    try:
+        rec = json.loads(p.read_text())
+    except ValueError as exc:
+        return [f"{key}: reference record unreadable ({exc})"]
+    why = []
+    if rec.get("cmds_sha256") != spec["cmds_sha256"]:
+        why.append("bytes differ from the manifest's pinned command")
+    img = rec.get("image") or {}
+    if img.get("bitstream_sha256") != manifest["image"]["bitstream_sha256"]:
+        why.append(f"rendered for bitstream {str(img.get('bitstream_sha256'))[:12]}, the "
+                   f"release is {manifest['image']['bitstream_sha256'][:12]}")
+    if img.get("source_commit") != manifest["image"].get("source_commit"):
+        why.append(f"rendered for source commit {img.get('source_commit')}, the release is "
+                   f"{manifest['image'].get('source_commit')}")
+    ids = identity_problems({"identity": {"sources": rec.get("rtl_sources_sha256", {})}},
+                            manifest)
+    if ids:
+        why.append("sources: " + "; ".join(ids[:3]))
+    if (rec.get("replay") or {}).get("state") != "PASS":
+        why.append("replay not PASS")
+    wav = d / str(rec.get("wav"))
+    if not wav.is_file() or sha256_file(wav) != rec.get("wav_sha256"):
+        why.append("wav missing or altered")
+    return [f"{key}: {w}" for w in why]
+
+
 def check(d: pathlib.Path, manifest: dict) -> int:
     """Re-verify a committed reference set against the manifest, without
-    simulating: pinned bytes, the image's source hashes, the replay verdict,
-    the wav hash, dual-mono. Prints one line per command and a summary."""
+    simulating. Prints one line per command and a summary."""
     bad = []
-    for key, spec in manifest["commands"].items():
-        p = d / f"{key}.json"
-        if not p.is_file():
-            bad.append(f"{key}: no reference")
-            continue
-        rec = json.loads(p.read_text())
-        why = []
-        if rec.get("cmds_sha256") != spec["cmds_sha256"]:
-            why.append("bytes differ from the manifest's pinned command")
-        ids = identity_problems({"identity": {"sources": rec.get("rtl_sources_sha256", {})}},
-                                manifest)
-        if ids:
-            why.append("sources: " + "; ".join(ids[:3]))
-        if (rec.get("replay") or {}).get("state") != "PASS":
-            why.append("replay not PASS")
-        wav = d / str(rec.get("wav"))
-        if not wav.is_file() or sha256_file(wav) != rec.get("wav_sha256"):
-            why.append("wav missing or altered")
+    for key in manifest["commands"]:
+        why = reference_problems(d, key, manifest)
         print(f"r0_reference: {key}: {'OK' if not why else 'BAD -- ' + '; '.join(why)}")
-        bad += [f"{key}: {w}" for w in why]
+        bad += why
     if bad:
         print(f"r0_reference: REFUSED -- {len(bad)} problem(s)")
         return 2
