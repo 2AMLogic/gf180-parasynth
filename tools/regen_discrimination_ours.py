@@ -43,6 +43,19 @@ Refuses (exit 2, prints `REFUSED:`) rather than reporting if:
   * a device this script rebuilds fails to construct against the current
     `model/reference_rigs.OurLadder` signature (e.g. a future incompatible
     change to `g_rom` / `cut_skew` / `cfg`).
+  * a stage/device pair the 8.4/8.6 tables are built from produced **no
+    answer** -- either no file at all, or a file containing only
+    `reference_compare.py`'s `guard()` refusal stub
+    (`[{"ok": false, "not_answerable": "..."}]`). A file is not an answer:
+    asserting presence rather than content is exactly the "tool answers when
+    it cannot" failure CLAUDE.md names as worse than the tool being absent,
+    and it is what `answer_refusal_reason()` below exists to prevent.
+    `tools/test_regen_discrimination_ours.py` exercises each of these
+    branches, including the one that must NOT fire: a *non-required*
+    device's refusal (a control or probe that has nothing to say) is
+    reported and carried into the output file, not escalated -- and neither
+    is `selfosc-ours-2pole`, whose rows answer `ok: true` with a null
+    fingerprint because the 2-pole defect genuinely does not self-oscillate.
 
 Scope, and why it is narrower than "every stage for every ours device": the
 docs tables this issue must regenerate use exactly these (stage, device)
@@ -89,11 +102,18 @@ REF_DEVICES = rc.REFS
 # three devices the 8.6 peak table actually shows.
 STAGE_ALL_DEVICES = OURS_DEVICES
 PEAKDRIVE_DEVICES = ["ours", "ours-tanh256", "ours-2pole"]
-# 8.6's "input-referred saturation threshold (-6.6 dBFS) agrees with Mini
+# 8.6's "input-referred saturation threshold (-6.2 dBFS) agrees with Mini
 # V3's" sentence is read from `bigdrive-ours` (report() section 5), which is
 # also pre-DR-0011 in the frozen file -- so it is re-measured too, for `ours`
 # only: it is the only ours-prefixed device that sentence names.
 BIGDRIVE_DEVICES = ["ours"]
+
+# The stage/device pairs docs/discrimination.md 8.4 and 8.6 are actually built
+# from. A refusal in any of these is a REFUSED outcome for the whole script
+# (`required_gate`); a refusal anywhere else is announced and carried.
+REQUIRED_KEYS = ["tracking-ours", "response-ours", "response-ours-2pole",
+                 "peakdrive-ours", "peakdrive-ours-tanh256",
+                 "peakdrive-ours-2pole", "bigdrive-ours"]
 
 
 class Refused(RuntimeError):
@@ -127,12 +147,121 @@ def load_frozen():
 
 
 def stage_devices_present(out_dir, stage, devices):
-    """Which of `devices` actually produced a `{stage}-{device}.json` file --
-    a device that REFUSED at the point of use (guard() in reference_compare.py
-    writes a not_answerable stub, which still counts as present; a device that
-    raised before that point does not)."""
+    """Which of `devices` actually produced a `{stage}-{device}.json` file.
+
+    This is a FILE-level question only, and is deliberately NOT the gate for
+    the rows the docs tables are built from: a device that REFUSED at the
+    point of use (guard() in reference_compare.py writes a `not_answerable`
+    stub) still writes a file, so presence here means "there is something to
+    collect", never "there is an answer". `answer_refusal_reason()` is what
+    decides the latter, and `REQUIRED_KEYS` is checked with it in
+    `required_gate()`."""
     return [d for d in devices
             if os.path.exists(os.path.join(out_dir, f"{stage}-{d}.json"))]
+
+
+def answer_refusal_reason(rows):
+    """Why `rows` (the payload of one `{stage}-{device}.json`) is a REFUSAL
+    rather than an answer, or None if it carries an answer.
+
+    Three shapes count as a refusal, and one deliberately does not:
+
+      * no rows at all (`[]`, or a payload that is not a list) -- nothing was
+        measured;
+      * any row carrying a non-null `not_answerable` -- `guard()` in
+        `model/reference_compare.py` writes exactly
+        `[{"device": ..., "ok": false, "not_answerable": "<why>"}]` when a
+        stage raises `NotImplementedError`, i.e. when the estimator refused at
+        the point of use. One such row is enough: a stage that refused for
+        part of its sweep did not answer for that sweep;
+      * every row that *reports a status* reports `ok: false` -- the stage ran
+        and nothing in it succeeded, so there is nothing for `report()` to read
+        even though the file exists.
+
+    Two things are NOT refusals, and getting either wrong is worse than the
+    presence-only gate this replaces:
+
+      * a row that answers `ok: true` and reports a null *measurement* because
+        the answer is legitimately "none" -- e.g. `selfosc-ours-2pole`, whose
+        `f0_zc_ok` is false and whose `h2..h9` are null because the injected
+        2-pole defect does not self-oscillate at all. `report()` prints that as
+        `none`, which is the correct answer to the question asked, and this
+        repo's "carry every control" rule requires that row to exist;
+      * a stage whose rows carry no `ok` field at all. **Wrong-then-right, and
+        the reason the test file exists**: the first version of this predicate
+        refused unless some row had a truthy `ok`, which made the gate
+        unsatisfiable -- only the harmonic stages (`selfosc`, `bigdrive`) write
+        `ok`; `tracking`, `response` and `peakdrive` rows have no such field
+        (verified against the committed
+        `docs/reference-compare-results-shipped.json`), so six of the seven
+        `required` keys REFUSED on the very data this script had already
+        produced and the docs are built from. `tools/test_regen_discrimination_ours.py`
+        caught it on its first run. An unsatisfiable gate is worse than no gate
+        (CLAUDE.md), so a status is only read where one is reported."""
+    if not isinstance(rows, list) or not rows:
+        return "no rows were written"
+    for r in rows:
+        if isinstance(r, dict) and r.get("not_answerable") is not None:
+            return f"not answerable: {r['not_answerable']}"
+    statused = [r for r in rows if isinstance(r, dict) and "ok" in r]
+    if statused and not any(r.get("ok") for r in statused):
+        return "every row that reports a status reports ok: false"
+    return None
+
+
+def announce_refusals(shipped, required=None):
+    """Print every refusal in `shipped`, blocking or not, and return them.
+
+    A refusal is worth SAYING even where it does not block: a control or probe
+    that refused is a fact about the run, and a silently-dropped one is how a
+    control stops being carried."""
+    required = REQUIRED_KEYS if required is None else required
+    found = {}
+    for key in sorted(shipped):
+        why = answer_refusal_reason(shipped[key])
+        if why:
+            found[key] = why
+            tag = "blocking" if key in required else "not required for 8.4/8.6"
+            print(f"  refused ({tag}): {key} -- {why}", flush=True)
+    return found
+
+
+def required_gate(shipped, required=None):
+    """Raise `Refused` unless every key the 8.4/8.6 tables are built from
+    carries an ANSWER -- not merely a file.
+
+    `guard()` in `reference_compare.py` writes a `not_answerable` stub on a
+    refusal and that stub is a perfectly well-formed file, so a
+    presence-only check (which is what this script shipped with, and what
+    `stage_devices_present` still answers) would let it print a report over a
+    measurement that never happened: "a tool that answers when it cannot is
+    worse than one that is absent, because its output looks exactly like data"
+    (CLAUDE.md; issue #239 acceptance criterion 6).
+
+    Only `REQUIRED_KEYS` block. A refused control or probe is announced and
+    carried -- `announce_refusals` -- because a refusal in a device no table
+    quotes is information, not a reason to withhold the tables. (In practice
+    `reference_compare.py`'s own `report()` is not stub-tolerant for any device
+    in its `ORDER`, so a non-required stub still ends this script in REFUSED,
+    via a non-zero `--report` exit rather than via this gate. That fails in the
+    safe direction; the distinction this function draws is still the one that
+    matters, because it is the one that decides whether a *report* is printed
+    at all.)"""
+    required = REQUIRED_KEYS if required is None else required
+    missing = [k for k in required if k not in shipped]
+    if missing:
+        raise Refused(f"the fresh run did not produce: {missing} -- "
+                      "cannot regenerate the 8.4/8.6 tables from this")
+    refused = [f"{k} ({answer_refusal_reason(shipped[k])})" for k in required
+              if answer_refusal_reason(shipped[k])]
+    if refused:
+        raise Refused(
+            "a measurement the 8.4/8.6 tables are built from REFUSED rather "
+            f"than answering: {refused} -- not writing "
+            f"{os.path.basename(SHIPPED)} and not printing a report, because "
+            "a report built over a refusal stub reads exactly like one built "
+            "over data")
+    return required
 
 
 def main(argv=None) -> int:
@@ -169,20 +298,10 @@ def main(argv=None) -> int:
                 with open(os.path.join(a.out, f"{stage}-{dev}.json")) as f:
                     shipped[f"{stage}-{dev}"] = json.load(f)
 
-        # PRECONDITION: the two rows this issue's tables are actually built
-        # from must be present, or this is a REFUSED outcome, not a partial
-        # report rendered as if it were complete.
-        required = ["tracking-ours", "response-ours", "response-ours-2pole",
-                   "peakdrive-ours", "peakdrive-ours-tanh256",
-                   "peakdrive-ours-2pole", "bigdrive-ours"]
-        missing = [k for k in required if k not in shipped]
-        if missing:
-            raise Refused(f"the fresh run did not produce: {missing} -- "
-                          "cannot regenerate the 8.4/8.6 tables from this")
-
-        with open(SHIPPED, "w") as f:
-            json.dump(shipped, f, indent=1, default=str)
-        print(f"wrote {SHIPPED} ({len(shipped)} keys)", flush=True)
+        announce_refusals(shipped)
+        # PRECONDITION: the rows this issue's tables are actually built from
+        # must carry an ANSWER, not merely a file (see required_gate).
+        required_gate(shipped)
 
         # Build a merged --out directory for `reference_compare.py --report`:
         # fresh ours-prefixed files (already in a.out) + copies of the frozen
@@ -205,6 +324,14 @@ def main(argv=None) -> int:
                           cwd=ROOT, capture_output=True, text=True)
         if r.returncode != 0:
             raise Refused(f"--report exited {r.returncode}: {r.stderr}")
+
+        # Both artefacts are written only HERE, after a report was actually
+        # produced: `docs/reference-compare-results-shipped.json` is the file
+        # the docs cite, and a REFUSED run must leave no artefact a later
+        # reader could mistake for the product of a complete one.
+        with open(SHIPPED, "w") as f:
+            json.dump(shipped, f, indent=1, default=str)
+        print(f"wrote {SHIPPED} ({len(shipped)} keys)", flush=True)
         with open(report_path, "w") as f:
             f.write(r.stdout)
         print(r.stdout)

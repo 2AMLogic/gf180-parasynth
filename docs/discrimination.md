@@ -925,8 +925,14 @@ Surge Type 2 contributes nothing to the self-oscillation fingerprint.
 usable level.** With `thermal = 1/70`, a full-scale ±1.0 signal presents 0.014
 to a `tanh` that is linear to one part in 10⁴ there. Predicted h3 at 0 dBFS:
 −101 dB. **Measured: −102 dB.** It first produces −40 dB of third harmonic at
-**+18 dBFS** — 18 dB past the rail. Ours reaches that at **−6.6 dBFS**, Mini
+**+18 dBFS** — 18 dB past the rail. Ours reaches that at **−6.2 dBFS**, Mini
 V3 at **−5.7 dBFS**, Surge's RK model at **−0.6 dBFS**.
+
+> Our figure here is the **shipped** filter's, re-measured 2026-09-26 from
+> `bigdrive-ours` in `docs/reference-compare-results-shipped.json` — the same
+> row and the same quantity §8.6 quotes, which said −6.2 dBFS while this line
+> still said the pre-DR-0011 −6.6 dBFS (issue #239). The three reference
+> values are the frozen file's and are unchanged.
 
 So the honest verdict on Surge: **on the linear structure it is an excellent
 reference and we should agree with it exactly. On the nonlinearity it is not a
@@ -1022,29 +1028,59 @@ removes 87 % of the error.
 
 ### 8.5 Result: the shipped tanh table, not the structure, is what our fifth harmonic measures
 
+> ### Re-run 2026-09-26 — the fingerprint table's `ours` rows are the shipped filter; **the entry-count sweep below it is still revision 8**
+>
+> This subsection sits between §8.4's and §8.6's freshness banners and used to
+> be covered by the single banner they replaced, so it says for itself which of
+> its numbers are which (issue #239).
+>
+> **Fresh (post-DR-0011).** The three `ours`-prefixed rows of the fingerprint
+> table immediately below — `ours`, `ours, 256-entry tanh table`, and the
+> injected `one-tanh` control — are re-derived from
+> `docs/reference-compare-results-shipped.json`, the file `tools/regen_discrimination_ours.py`
+> writes and §8.4/§8.6 are built from. No new simulation was needed: the same
+> committed `selfosc-*` rows produce them. Seven cells moved, all by ≤0.4 dB:
+> `ours` h2 −95.5→−95.9 and h3 −40.0→−40.1; 256-entry h2 −95.9→−95.8, h7
+> −105.2→−105.1 and matched −46.0→−45.9; one-tanh h7 −97.2→−96.9 and matched
+> −38.7→−38.8. **No conclusion in this subsection changes**, and that is the
+> expected result rather than a lucky one: DR 0011 retuned the cutoff ROM, not
+> the nonlinearity or the structure, and this fingerprint is a measure of the
+> nonlinearity. The reference rows (Surge, Diva, Mini V3) are the frozen
+> `docs/reference-compare-results.json`'s and are untouched.
+>
+> **Still revision 8, deliberately not re-run.** Everything after the
+> fingerprint table — the tanh **entry-count sweep** (8…1024 entries at
+> res 1.1) and the prose derived from it — is a separate probe this issue did
+> not rescope to cover, measured pre-DR-0011 and quoted here as the historical
+> derivation. Its own res-1.1 cells drift by the same ≤0.1 dB where they
+> overlap the fresh data (16 entries: h5 −70.1 against −70.2 now), and its
+> conclusion — *128 entries converges* — is a statement about LUT resolution,
+> not about cutoff tuning. Re-run it before quoting it as a shipped-filter
+> number.
+
 The self-oscillation fingerprint at each device's own maximum resonance, and
 at **matched h3 = −42 dB** (equal drive into each nonlinearity):
 
 | filter | onset | h2 | h3 | h5 | h7 | h5 − h3 | **at matched h3** |
 |---|---|---|---|---|---|---|---|
-| **ours** | res 1.02 | −95.5 | −40.0 | −63.4 | −62.6 | −23.4 | **−20.4** |
-| ours, 256-entry tanh table | res 1.02 | −95.9 | −39.8 | −81.7 | −105.2 | −41.8 | **−46.0** |
+| **ours** | res 1.02 | −95.9 | −40.1 | −63.4 | −62.6 | −23.4 | **−20.4** |
+| ours, 256-entry tanh table | res 1.02 | −95.8 | −39.8 | −81.7 | −105.1 | −41.8 | **−45.9** |
 | Surge Type 1 (RK) | 0.90 | *< floor* | −50.4 | −100.6 | −138.3 | −50.3 | — |
 | Diva Ladder | 0.90 | **−33.9** | −36.0 | −71.4 | −107.1 | −35.3 | **−41.2** |
 | Mini V3 | 0.78 | *< floor* | −41.8 | −70.5 | −87.4 | −28.7 | **−28.7** |
 | Surge Type 2 (Huov) | **never** | — | — | — | — | — | — |
-| *one-tanh — injected defect* | 1.02 | −94.8 | −39.7 | −66.2 | −97.2 | −26.4 | *−38.7* |
+| *one-tanh — injected defect* | 1.02 | −94.8 | −39.7 | −66.2 | −96.9 | −26.4 | *−38.8* |
 
 Three things come out of this, and only the first is comfortable.
 
-**Our third harmonic sits inside the references' range** (−40.0 against −36.0,
+**Our third harmonic sits inside the references' range** (−40.1 against −36.0,
 −41.8 and −50.4). h3 is the measure of the nonlinearity's real curvature, and
 on it we agree.
 
 **Our fifth harmonic does not, and the excess is our tanh look-up table.**
 Rebuilding the identical filter with a 256-entry table instead of the shipped
-16 leaves h3 unchanged (−39.8 vs −40.0) and drops **h5 by 18 dB and h7 by
-43 dB**. The full sweep, at res 1.1:
+16 leaves h3 unchanged (−39.8 vs −40.1) and drops **h5 by 18 dB and h7 by
+43 dB**. The full sweep, at res 1.1 — **pre-DR-0011, see the banner above**:
 
 | entries | ROM bits | max table error | h3 | h5 |
 |---|---|---|---|---|
@@ -1065,9 +1101,9 @@ measuring our LUT resolution.
 
 **The fingerprint does not support DR 0001 on its own.** At matched drive ours
 sits at −20.4 dB, the references at −28.7 and −41.2, and **the injected
-one-tanh defect at −38.7 — closer to Diva than we are.** A discriminator that
+one-tanh defect at −38.8 — closer to Diva than we are.** A discriminator that
 ranks a structure we know is wrong above the one we ship cannot be used to
-argue the structure is right. With a 256-entry table ours moves to −46.0,
+argue the structure is right. With a 256-entry table ours moves to −45.9,
 inside the references' spread, but by then the argument is about the table.
 DR 0001 remains supported by circuit derivation; this measurement does not add
 to it, and revision 1's claim that it did was resting on the leakage of §8.1.
