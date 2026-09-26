@@ -107,6 +107,7 @@ CLUSTER_S = 0.25      # coarse candidates closer than this are one placement
 # 5 Hz AC-coupling high-pass, FAILED timing by 1.0 sample and residual by
 # 0.5 dB without it: a first-order high-pass moves a 50 Hz kick's local lag.
 BAND_HZ = (100.0, 16000.0)
+END_GUARD_S = 0.1     # not scored: the last 0.1 s of each reference (see analyse_take)
 PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
 ENV_LP_HZ = 100.0     # the alignment envelope: x^2, zero-phase low-pass, sqrt
 TONE_COMMANDS = {"held-m5a-saw", "held-m5a-pulse"}     # single-oscillator presets
@@ -641,7 +642,12 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
         raise Refused(f"take {take['id']} ends {(end_cap - A.size) / sr:.2f} s before its "
                       "reference does: record the whole tail")
     p = g * warp_reference(x, A.size, d, rho)
-    e0, e1 = int(math.ceil(d + cal[1] / rho)), int(d + len(x) / rho)
+    # the evaluation region ends END_GUARD_S before the reference does: a
+    # reference can end while still sounding (the m5a presets' release is at
+    # -27 dBFS when the 1 s render tail stops) and the capture goes on, so
+    # the analysis band's filter differs between the two near that edge
+    e0 = int(math.ceil(d + cal[1] / rho))
+    e1 = int(d + (len(x) - END_GUARD_S * sr) / rho)
     # the two DAC channels: dual-mono
     seg = slice(int(d + a_ref / rho), int(d + b_ref / rho))
     ca, cb = A[seg], Bc[seg]
@@ -856,6 +862,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 continue
             x = refs[cmd]["xb"]
             a, b = sounding_extent(x)
+            b = min(b, len(x) - int(END_GUARD_S * SR))
             if any(hold_offsets.get(k["id"]) for _, k in lst) and refs[cmd].get("hold"):
                 # the holds were planned differently: compare up to the release
                 b = min(b, int(np.flatnonzero(refs[cmd]["x"])[0]) + int(refs[cmd]["hold"]) - BLOCK)

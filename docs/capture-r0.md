@@ -356,7 +356,12 @@ and to the prediction alike, so it removes only what the analog path is allowed
 to do outside the audio band: AC coupling and the converters' anti-image
 filters. It is never fitted. Without it, the clean synthetic session failed:
 a 5 Hz coupling high-pass moved the kick's local lag by a full sample. Pitch,
-clipping and the noise floor are measured on the raw capture. A timing slip, a clock mismatch or a gain
+clipping and the noise floor are measured on the raw capture.
+
+Each reference carries 1 s of tail after its last write. The m5a presets'
+release is still sounding at about −27 dBFS when that tail ends. The comparison
+therefore stops 0.1 s before each reference ends (`END_GUARD_S`), and the
+capture must run at least that long. A timing slip, a clock mismatch or a gain
 change therefore shows up as a failure. It is not absorbed.
 
 The checks and their limits are the `LIMITS` table in `tools/r0_capture.py`,
