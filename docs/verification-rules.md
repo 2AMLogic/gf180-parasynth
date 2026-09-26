@@ -156,7 +156,8 @@ rule with the sign flipped and is equally valid.
 **Not yet injections** (each is a real bug this project shipped, so each is
 owed one): X-propagation quoted as a 1,917-cell area, and a die area recovered
 from its own utilization input. Both are build/report-tool bugs rather than
-model bugs.
+model bugs, and both are tracked in **issue #245**. This list is a debt marker,
+not coverage; it shrinks only when an entry becomes a control.
 
 ### The three conditions, because a control that cannot run looks like one that works
 
