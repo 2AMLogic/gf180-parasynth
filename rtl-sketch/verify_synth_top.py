@@ -315,6 +315,26 @@ def clap_script():
     return w, tail, dict(cp_hits=7, ma_hits=1, drum_reset=1)
 
 
+def pre_l2_clap_writes(model_writes) -> list:
+    """The same write list with the clap image it had before contract revision
+    13 (the clap settings of revision 10, unchanged through 12): ENV_CTL[8] back
+    to 3 bursts at period 480, ENV_FRATE[8] = 0, the tail back to tau 47 ms.
+    Every other write is untouched. Shared by clap_report and
+    tools/headroom_demo_mix.py so both counterfactuals are the same one."""
+    fa = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE + 3
+    out = []
+    for f, fl, sec, ad, v in model_writes:
+        if sec == SEC_D and ad == dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE and (v & 15) == dx.CP \
+                and ((v >> 16) & 3) == dx.CP_BURSTS:
+            v = dx.env_ctl(dx.CP, 15, 0, 2, 480)
+        elif sec == SEC_D and ad == fa:
+            v = 0
+        elif sec == SEC_D and ad == dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE + 2 and v == dx.rate_reg(dx.CP_TAIL_TAU):
+            v = dx.rate_reg(47e-3)
+        out.append((f, fl, sec, ad, v))
+    return out
+
+
 def clap_report(model_writes, n, exp_s, a) -> dict:
     """What the clap phrase actually reached, from the MODEL's own envelope
     state (a drums-only replay of the drum writes at the pin-predicted frames),
@@ -362,16 +382,7 @@ def clap_report(model_writes, n, exp_s, a) -> dict:
     if d.envs[dx.E_CPBURST].n_final < 3: refused.append("three completed final strikes")
     if not ma: refused.append("an MA strike on the shared circuit")
     # the same fixture with the revision-10 clap image, for the output-rail split
-    rev10 = []
-    for f, fl, sec, ad, v in model_writes:
-        if sec == SEC_D and ad == dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE and (v & 15) == dx.CP \
-                and ((v >> 16) & 3) == dx.CP_BURSTS:
-            v = dx.env_ctl(dx.CP, 15, 0, 2, 480)
-        elif sec == SEC_D and ad == fa:
-            v = 0
-        elif sec == SEC_D and ad == dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE + 2 and v == dx.rate_reg(dx.CP_TAIL_TAU):
-            v = dx.rate_reg(47e-3)
-        rev10.append((f, fl, sec, ad, v))
+    rev10 = pre_l2_clap_writes(model_writes)
     m10 = stm.SynthTopModel(oversample_2x=a.osc2x, filter_2x=a.filter2x, pulse_2x=a.pulse2x).run(rev10, n)
     s10 = m10["sample"]
     rail = lambda x: int(np.sum(np.abs(x) == 32767) + np.sum(np.asarray(x) == -32768))
