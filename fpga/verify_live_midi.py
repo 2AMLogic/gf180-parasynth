@@ -75,7 +75,6 @@ import voice_fx as vf                             # noqa: E402
 from dsp import note_hz, phase_inc                # noqa: E402
 
 SR = C.SR
-L = C.LOOKAHEAD_FRAMES
 BT = uh.BITS_PER_BYTE / uh.DEFAULT_BAUD            # one byte on the wire, seconds
 EVENT_PKT_S = 10 * BT
 REPORT_DIR = ROOT / "fpga/reports/live-midi"
@@ -311,7 +310,7 @@ class Oracle:
     # -- time
     def release(self, due: int) -> float:
         fa, ta = self.anchor
-        return ta + (due - L - fa) / SR
+        return ta + (due - C.LOOKAHEAD_FRAMES - fa) / SR
 
     # -- placement (contract: 2 slots a frame; heads in order from the start
     #    frame; tails at anchor + offset)
@@ -355,7 +354,7 @@ class Oracle:
     def _schedule(self, g: Group, head, tail, t, *, conditional, nominal=None,
                   deferred=False) -> bool:
         r = g.receipt_frame
-        base = r + L if nominal is None else nominal
+        base = r + C.LOOKAHEAD_FRAMES if nominal is None else nominal
         g0 = base if deferred else max(base, self.cursor)
         pending = sum(1 for e in self.plan if self.release(e.due) > t)
         if conditional and pending + len(head) + len(tail) > C.HOST_QUEUE_MAX_PACKETS:
@@ -419,8 +418,11 @@ class Oracle:
         g = self._group("panic", idx, t)
         self._schedule(g, [(0, 0, stm.A_GATE_OFF, 0), (0, 1, dx.A_STOPS, 0)], [], t,
                        conditional=False)
+        # the reference host's pitch memory survives a panic: a later note
+        # glides from the last pitch -- unless no note has sounded yet
+        if any(op == "on" for _i, op, _n in self.segment):
+            self.segment_first = False
         self.segment = []
-        self.segment_first = False
 
     def event(self, idx: int, t: float, e: Ev):
         V, D = C.VOICE_CHANNEL, C.DRUM_CHANNEL
@@ -530,7 +532,7 @@ class Oracle:
             p.value_event = idx
             return
         r = self.frame_of(t)
-        nominal = r + L
+        nominal = r + C.LOOKAHEAD_FRAMES
         deferred = False
         if cc in self.knob_last and self.knob_last[cc] + C.KNOB_INTERVAL_FRAMES > nominal:
             nominal = self.knob_last[cc] + C.KNOB_INTERVAL_FRAMES
@@ -591,9 +593,17 @@ def run_session(scenario: str, *, inject: str | None = None, epoch: int = 0,
 
 
 def truth_frame(run: dict, t: float) -> int:
-    """The device frame containing host instant t, on the device's own timeline."""
+    """The device frame containing host instant t, on the device's own
+    timeline, numbered as the session numbers frames (its anchor fixes which
+    65536-frame revolution is which; the counter itself is 16 bits)."""
     sim = run["sim"]
-    return run["epoch"] + math.floor((t - sim._t0) * SR)
+    return run["epoch"] + math.floor((t - sim._t0) * SR) + run.get("revolution", 0)
+
+
+def set_revolution(run: dict, anchor) -> None:
+    run["revolution"] = 0
+    d = anchor[0] - truth_frame(run, anchor[1])
+    run["revolution"] = 65536 * round(d / 65536)
 
 
 def _unwrap(frames16: list, start: int) -> list:
@@ -671,6 +681,7 @@ def check(run: dict, *, target: bool = False) -> dict:
         res["preconditions"].append("the session published no time anchor")
         res["verdict"] = "NO VERDICT"
         return res
+    set_revolution(run, anchor)
     worst = max((abs(s.frame_of(t) - truth_frame(run, t)) for t in run["times"]), default=0)
     res["time_map_worst_error_frames"] = worst
     if worst > 1:
@@ -753,31 +764,37 @@ def check(run: dict, *, target: bool = False) -> dict:
     # latency, from truth: the device frame containing the receipt instant to
     # the frame the anchor executed in, for every update whose value is its own
     lat, comp, stale = [], [], []
-    if not any(P[k]["moved"] for k in ("static_image", "voice_gate", "voice_pitch",
-                                       "drum_strikes", "drum_coeffs", "knobs")):
-        sent = [(t, pkt) for t, data in ser.tx_log for pkt in _packets(data)
-                if pkt[0] == dev.OP_EVENT]
-        acc = [v[0] for k, v in sim.received if k == "event"]
-        acc_u = _unwrap(acc, anchor[0])
-        for a in exp["anchors"]:
-            if a["value_event"] < 0 and a["event"] < 0:
-                continue
-            ev_i = a["value_event"]
-            t_r = run["times"][ev_i]
-            i = a["index"]
-            f_exec = got[i][0]
-            r_true = truth_frame(run, t_r)
-            t_send = sent[i][0]
-            lat.append((f_exec - r_true) * 1000.0 / SR)
-            comp.append({"kind": a["kind"],
-                         "host_hold_ms": (t_send - t_r) * 1000.0,
-                         "uart_ms": (acc_u[i] - truth_frame(run, t_send)) * 1000.0 / SR,
-                         "device_queue_ms": (f_exec - acc_u[i]) * 1000.0 / SR})
-        for old, new in exp["superseded"]:
-            a = next((x for x in exp["anchors"] if x["value_event"] == new), None)
-            if a is not None:
-                stale.append((got[a["index"]][0] - truth_frame(run, run["times"][old]))
-                             * 1000.0 / SR)
+    # latency from truth: the device frame containing the receipt instant to
+    # the frame the anchor executed in. Writes are paired with the schedule by
+    # VALUE alignment, so a control that moves some writes still measures the
+    # rest; an anchor with no counterpart has no latency.
+    sent = [(t, pkt) for t, data in ser.tx_log for pkt in _packets(data)
+            if pkt[0] == dev.OP_EVENT]
+    acc_u = _unwrap([v[0] for k, v in sim.received if k == "event"], anchor[0])
+    pair = {}
+    for blk in sm.get_matching_blocks():
+        for k in range(blk.size):
+            pair[blk.a + k] = blk.b + k
+    unpaired = 0
+    for a in exp["anchors"]:
+        if a["event"] < 0:
+            continue                                 # the session's own closing panic
+        j = pair.get(a["index"])
+        if j is None or j >= len(sent) or j >= len(acc_u):
+            unpaired += 1
+            continue
+        t_r = run["times"][a["value_event"]]
+        f_exec, r_true, t_send = got[j][0], truth_frame(run, t_r), sent[j][0]
+        lat.append((f_exec - r_true) * 1000.0 / SR)
+        comp.append({"kind": a["kind"],
+                     "host_hold_ms": (t_send - t_r) * 1000.0,
+                     "uart_ms": (acc_u[j] - truth_frame(run, t_send)) * 1000.0 / SR,
+                     "device_queue_ms": (f_exec - acc_u[j]) * 1000.0 / SR})
+    for old, new in exp["superseded"]:
+        a = next((x for x in exp["anchors"] if x["value_event"] == new), None)
+        if a is not None and pair.get(a["index"]) is not None:
+            stale.append((got[pair[a["index"]]][0] - truth_frame(run, run["times"][old]))
+                         * 1000.0 / SR)
     dist = {"n": len(lat), "min_ms": min(lat, default=None), "p50_ms": pctl(lat, 50),
             "p95_ms": pctl(lat, 95), "p99_ms": pctl(lat, 99), "max_ms": max(lat, default=None),
             "histogram_ms": _hist(lat),
@@ -789,10 +806,14 @@ def check(run: dict, *, target: bool = False) -> dict:
             if comp else {},
             "superseded_staleness": {"n": len(stale), "p50_ms": pctl(stale, 50),
                                      "p95_ms": pctl(stale, 95), "max_ms": max(stale, default=None)},
-            "pushed_events": sum(1 for a in exp["anchors"] if a["pushed"])}
+            "pushed_events": sum(1 for a in exp["anchors"] if a["pushed"]),
+            "anchors_unpaired": unpaired,
+            "by_kind_max_ms": {}}
+    for c, x in zip(comp, lat):
+        dist["by_kind_max_ms"][c["kind"]] = max(dist["by_kind_max_ms"].get(c["kind"], 0.0), x)
     res["latency"] = dist
     lbad = []
-    if not lat:
+    if target and not lat:
         lbad.append("no latency measured (the write streams did not match)")
     elif target:
         if dist["p95_ms"] > C.LATENCY_TARGET["p95_ms"]:
@@ -803,6 +824,12 @@ def check(run: dict, *, target: bool = False) -> dict:
         f"n {dist['n']}, p50 {dist['p50_ms']:.2f}, p95 {dist['p95_ms']:.2f}, "
         f"p99 {dist['p99_ms']:.2f}, max {dist['max_ms']:.2f} ms"
         + (" (target applies)" if target else " (reported; the target applies to `sustained`)"))
+    if target:
+        dropped = [c for _, c in exp["refusals"] if c == "queue-pressure"]
+        pushed = dist["pushed_events"]
+        put("load_admitted", bool(dropped or pushed),
+            f"{len(dropped)} events refused for queue pressure and {pushed} pushed late "
+            "under the DECLARED load (both must be 0: a supported load is played whole)")
     res["session_stats"] = st
     res["refusal_categories"] = sorted({c for _, c in exp["refusals"]})
     res["reasons"] = [f"{k}: {v['detail']}" for k, v in P.items() if v["moved"]]
@@ -840,17 +867,18 @@ CONTROLS = {
                       "one event's writes land 5 ms after their frame"),
 }
 PROPS = ("static_image", "voice_gate", "voice_pitch", "drum_strikes", "drum_coeffs", "knobs",
-         "timing", "stuck_notes", "refusals", "queues", "latency")
+         "timing", "stuck_notes", "refusals", "queues", "latency", "load_admitted")
 
 
 def run_control(name: str, *, stub: bool = False) -> dict:
     scenario, must, reason = CONTROLS[name]
     r = check(run_session(scenario, inject=name, stub=stub))
-    moved = {p: r["props"].get(p, {}).get("moved") for p in PROPS}
+    moved = {p: r["props"][p]["moved"] for p in PROPS if p in r["props"]}
     caught = (r["verdict"] == "FAIL" and all(moved.get(p) for p in must))
     return {"control": name, "scenario": scenario, "intended_reason": reason,
             "must_move": list(must), "caught": caught, "verdict": r["verdict"],
             "matrix": {p: ("MOVED" if m else "BLIND") for p, m in moved.items()},
+            "latency_max_ms": r.get("latency", {}).get("max_ms"),
             "reasons": r["reasons"], "preconditions": r["preconditions"]}
 
 
