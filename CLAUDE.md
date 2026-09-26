@@ -195,6 +195,40 @@ is whether the pieces are *independently verifiable*, not whether they are
 separately describable: `fcr` changes the cutoff mapping so everything measured
 after it must be re-baselined, and sequencing that inside one agent was right.
 
+### Heavy work runs on the build box, not the developer's laptop
+
+**`make verify`, `make verify-full`, `make reference-integration`, RTL
+simulations (iverilog/vvp), render or parameter sweeps, and whole-suite pytest
+runs go on the repo's pinned AWS build box.** The laptop is for editing,
+reading and single focused test files. On 2026-09-26 two agents ran `make
+verify` and an 8-worker probe render on the developer's MacBook at load
+average 70–100 for over an hour; the probe timed out and neither produced a
+verdict. The same work on the box has 8 dedicated cores.
+
+- **The box** is this repo's pinned instance (`REPO_REMOTE_INSTANCE_ID` in the
+  gitignored `.env`; ssh alias `repo-remote-gf180-parasynth`). Start and stop
+  it **only** through `.claude/skills/repo/scripts/repo-remote.sh up --yes
+  --json aws` / `down --yes` — see `~/.config/repo/README.md` for the rules
+  (≤ 8 vCPU, no raw `aws ec2 run-instances`, never `Fleet=loom` hosts).
+  **Stop it when the queued work is done.**
+- **Match CI, not your laptop:** Python 3.12 (`uv venv --python 3.12`, then
+  `numpy scipy pytest`, exactly what the workflows install) and the pinned
+  toolchain from `tools/setup_ci_oss_cad.py` (run with `GITHUB_PATH` set to a
+  file; it prints the bin dir to prepend to `PATH`). Install `make` if absent.
+  Run make with `PY=<that venv's python>`.
+- **Ship code as a `git bundle`** of the branches and clone it on the box. A
+  worktree's `.git` is a pointer file, and the provenance tooling needs real
+  commits and dirty flags.
+- **References:** copy `~/dev/refs/` (the Fischer TR-808 corpus and its
+  manifest, `GF180_TR808_REFS`) to the same path on the box; the clap probe
+  checks that manifest path and refuses without it.
+- **Coordinators run the box; subagent briefs say so.** A subagent that needs
+  a heavy run commits its branch and asks for it; it does not start the run
+  locally "just this once".
+
+The same waiting rules apply: launch the job with `nohup`, then block in one
+command that reads its exit code and chains the follow-up analysis.
+
 ### If you are stopping because you are blocked
 
 Say what you are blocked on and end the turn. Do not spin. The coordinator can
