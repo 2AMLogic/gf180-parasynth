@@ -132,7 +132,8 @@ def main(argv=None) -> int:
     src = summary["deadline-reanalyse-1"]["receipt"]
     if src:
         run_dir = (ROOT / src).parent
-        copy = OUT / "altered-bundle" / run_dir.name
+        # outside build/trials: a deliberately altered bundle is not a receipt of this run
+        copy = OUT.parent / "trials-altered" / run_dir.name
         shutil.rmtree(copy, ignore_errors=True)
         shutil.copytree(run_dir, copy)
         rec = copy / "arty-uart-retained" / "record.json"

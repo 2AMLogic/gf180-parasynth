@@ -581,6 +581,7 @@ def run_trial(tid: str, *, mode: str | None = None, as_candidate: str | None = N
             for rel in (c["stage"]["gunzip"], c["stage"]["hashes"]):
                 if not (root / rel).exists():
                     problems.append(f"missing retained evidence: {rel}")
+    problems = list(dict.fromkeys(problems))          # one line per distinct absence
     env_problems, env_ident = trial_env.preflight(spec, tools=m.get("tools", []), root=root,
                                                   python=python)
     problems += env_problems
