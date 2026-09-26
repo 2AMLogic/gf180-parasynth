@@ -1,4 +1,4 @@
-# 0017: DR 0001's reversal condition, measured — and the half-sample delay turns out to be load-bearing
+# 0018: DR 0001's reversal condition, measured — and the half-sample delay turns out to be load-bearing
 
 - **Status**: proposed
 - **Date**: 2026-09-26
@@ -103,15 +103,27 @@ at the cutoff clamp, which does not fit the Q0.16 word at all.
 
 <!-- claim: test=model/test_ladder_candidates.py::test_the_instrumented_cost_is_the_shape_each_core_declares -->
 
-Per oversampled sub-step, counted by the inner loop rather than declared, and
-per output sample at 2x oversampling:
+Operation counts are **per oversampled sub-step**, counted by the inner loop
+rather than declared; the clock columns are **per output sample** at 2×
+oversampling. The two unit systems are mixed deliberately here — the operation
+counts are a property of the solver, the clock budget is a property of the
+sample rate — so each column says which it is:
 
-| candidate | `tanh` | divide | multiply | clocks/sample @ d=1 | @ d=8 | @ d=17 |
+| candidate | `tanh`/sub-step | divide/sub-step | multiply/sub-step | clocks/sample @ d=1 | @ d=8 | @ d=17 |
 |---|---:|---:|---:|---:|---:|---:|
 | shipped (Huovilainen) | 5 | **0** | 6 | 35 | 35 | 35 |
 | implicit Newton, 2 iterations | 10 | **8** | 43 | 145 | **257** | 401 |
 | implicit Newton, 3 iterations | 15 | **12** | 60 | 207 | 375 | 591 |
 | explicit delay-free | 10 | **1** | 25 | 95 | 109 | 127 |
+
+**`docs/ladder-rungs-2-4.md` §4 gives the same operation counts per output
+sample, so every one of them is exactly 2× the value here** (2-iteration
+Newton: 20 `tanh`, 16 divides, 86 multiplies per sample against 10 / 8 / 43 per
+sub-step). That is the oversampling factor `lc.OVERSAMPLE`, not a disagreement;
+the clock columns are already per output sample in both documents and are
+identical. `docs/ladder-rungs-2-4-results.json` is the arbiter and it stores the
+per-output-sample form, `cost/<candidate>/per_sample` — divide those by
+`lc.OVERSAMPLE` to recover this table.
 
 DR 0001's budget is 256 clocks per sample at 12.288 MHz over 48 kHz. **The
 whole cost difference is divides**, and whether the 2-iteration solve fits

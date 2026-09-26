@@ -395,7 +395,7 @@ def stage_cost(names, **kw) -> dict:
     three-point grid is a place to read the wrong answer off. Cost is affine in
     the divider latency -- `clocks = fixed + divides * d` -- so the largest `d`
     that fits is arithmetic, and `max_divider_latency_that_fits` states it.
-    Reading it off the grid instead cost this record an off-by-one: DR 0017
+    Reading it off the grid instead cost this record an off-by-one: DR 0018
     first wrote the 2-iteration solve's reversal condition as "a reciprocal
     unit of <= 8 clocks" because 8 was the grid point below 17, when the solve
     needs 129 + 16 d <= 256, i.e. **d <= 7** -- at exactly 8 it is 257 clocks

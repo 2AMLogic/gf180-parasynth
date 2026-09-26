@@ -209,7 +209,7 @@ def test_the_divider_latency_the_budget_allows_is_exact_not_read_off_the_grid():
         zdf-newton-2   20 tanh x 2 + 86 mult + 3 coefficient-update + 16 d
                      = 129 + 16 d <= 256   ->   d <= 7
 
-    **DR 0017 first said "<= 8 clocks", because 8 was the grid point below 17.**
+    **DR 0018 first said "<= 8 clocks", because 8 was the grid point below 17.**
     At exactly 8 it is 257 clocks against a 256 budget and misses by one. This
     test exists because that is the single number the whole reversal condition
     hangs on, and it was wrong the first time it was written down."""
@@ -246,7 +246,7 @@ def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
     Above that the delay-free explicit ladder CANNOT self-oscillate at any
     feedback. The half-sample delay the shipped filter carries is what supplies
     the missing phase, which makes it load-bearing rather than an
-    approximation (DR 0017).
+    approximation (DR 0018).
 
     **AND THE CLOSED FORM IS A CEILING, NOT THE CEILING A PLAYER MEETS.** This
     test asserted the converse -- that below 5295.6 Hz the filter does sing --
@@ -264,7 +264,7 @@ def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
 
     So the delay-free ladder's usable ceiling is between 4000 and 4800 Hz, the
     closed form's 5295.6 Hz is a loose upper bound on it, and the contrast with
-    the shipped filter at the same cutoffs is the measurement DR 0017 rests
+    the shipped filter at the same cutoffs is the measurement DR 0018 rests
     on."""
     limit = lc.delay_free_oscillation_limit_hz("expo")
     assert 5295.0 < limit < 5296.0, limit

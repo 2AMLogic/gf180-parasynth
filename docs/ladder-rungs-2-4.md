@@ -44,7 +44,7 @@ and it is the more useful one, because it names the single thing that would
 change the answer.
 
 All three are recorded as
-[DR 0017](../spec/decision-records/0017-the-half-sample-delay-is-load-bearing.md),
+[DR 0018](../spec/decision-records/0018-the-half-sample-delay-is-load-bearing.md),
 which answers DR 0001's stated reversal condition rather than re-deciding it.
 
 ---
@@ -155,6 +155,8 @@ cannot see a dropped pole cannot see an algorithm change either:
 | a 6 % cutoff skew | linear | reads as 72.2 cents of movement (the skew is ~101) |
 | a 4-entry `tanh` | drive | moves the saturation point 4.22 dB, inharmonic 4.6 dB |
 | a 32 Hz control quantum | movement | raises the sweep residual 24.51 dB |
+
+<!-- claim: test=model/test_ladder_candidates.py::test_control_a_dropped_pole_turns_the_linear_stage_red -->
 
 One of these does not behave the way it was written to behave, and the way it
 actually behaves is better; see §7.
@@ -268,7 +270,11 @@ terms, which is the same resonance-dependent offset #237 is about — it is a
 property of how any single correction constant is fitted, not of the structure.
 
 **cleanliness** — foldback aliasing of a hot 2093 Hz tone through an open
-filter, state clamping, and whether a sub-onset ring decays:
+filter, state clamping, and whether a sub-onset ring decays. The probe
+frequency is 2093 Hz rather than a submultiple of the sample rate precisely so
+its images can be attributed (§7 item 6):
+
+<!-- claim: test=model/test_ladder_candidates.py::test_the_aliasing_probe_frequency_is_one_its_estimator_can_attribute -->
 
 | candidate | foldback aliases | clamped samples | ring tail |
 |---|---:|---:|---:|
@@ -289,10 +295,17 @@ and it is not a discriminator.
 
 ## 4. Cost, including the part that is usually left out
 
-Per output sample, at 2× oversampling. `tanh` and divide counts are
+Per output sample, at 2× oversampling — **every operation count in this table
+is `lc.OVERSAMPLE` = 2 sub-steps' worth**. `tanh` and divide counts are
 **counted by the inner loop**; multiply and add are declared from each core's
 source and pinned against the instrumented count by a test, so a core that
 changes shape cannot keep a stale cost.
+
+DR 0018 §3 tabulates the same operations **per oversampled sub-step**, so its
+figures are exactly half of these (2-iteration Newton: 10 / 8 / 43 there, 20 /
+16 / 86 here). The clock columns are per output sample in both and agree
+exactly. `docs/ladder-rungs-2-4-results.json` stores the per-output-sample form
+under `cost/<candidate>/per_sample`.
 
 | candidate | `tanh` | divide | multiply | add | clocks @ d=1 | @ d=8 | @ d=17 |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -314,6 +327,8 @@ central number came out wrong the first time (§7):
 | implicit Newton, 2 iterations | **≤ 7 clocks** |
 | implicit Newton, 3 iterations | ≤ 3 clocks |
 | explicit delay-free | ≤ 81 clocks |
+
+<!-- claim: test=model/test_ladder_candidates.py::test_the_divider_latency_the_budget_allows_is_exact_not_read_off_the_grid -->
 
 **Coefficient-update cost under moving controls, measured rather than
 assumed.** Issue #46 calls this out as where a "cheap" algorithm hides real
@@ -355,7 +370,7 @@ Taken clause by clause:
 | *inside the clock budget* | 401 clocks against 256 at a 17-clock restoring divider; needs **≤ 7 clocks** | **no** |
 
 **Partially met, and the part that is not met is the clock budget.** The full
-reasoning and what would now reverse *it* is DR 0017. The short version: the
+reasoning and what would now reverse *it* is DR 0018. The short version: the
 2-iteration solve costs `129 + 16·d` clocks per sample against a 256-clock
 budget, so it needs a divider of **7 clocks or fewer**. That is a question
 about one arithmetic unit, not about the filter.
@@ -407,6 +422,9 @@ only half the job; the other half is that it has to survive being printed.
    closed form remains correct as the frequency above which no feedback
    whatsoever suffices — it is simply not the number a player meets.
    (`model/probe_rungs_2_4_gaps.py` probe 3.)
+
+   <!-- claim: test=model/test_ladder_candidates.py::test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff -->
+
 2. **The reversal condition's divider threshold was written as "≤ 8 clocks"**,
    because 8 was the grid point below 17 on a three-point sweep. The solve
    needs `129 + 16·d ≤ 256`, so `d ≤ 7`; at exactly 8 it is **257 clocks
@@ -480,7 +498,7 @@ discretisation. It carries its own control now.
   audit found (105 cents of travel across the resonance knob, #237). No
   candidate here addresses it either: where the loop sings is set by how the
   correction was fitted against the loop's own gain, and every candidate has a
-  loop gain. If that ROM is rebuilt, DR 0017 §3 notes the marginal cost of also
+  loop gain. If that ROM is rebuilt, DR 0018 §3 notes the marginal cost of also
   emitting the `tanh(w/2)` law is one line, and the two should be sequenced
   together rather than paying the contract-revision blast radius twice.
 - **The movement dimension is incomplete** in the two specific ways §6 names.
