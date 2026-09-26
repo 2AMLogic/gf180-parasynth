@@ -23,9 +23,13 @@ fpga/release/glide_boundary.py):
     monotone between its source and target, so every increment it passes
     through is inside the range too. A glide from reset (inc 0) or from an
     unknown device state is refused;
-  * #247's domain -- a glide with either endpoint at or above 2^23 -- is
+  * #247 as FILED -- a glide with either endpoint at or above 2^23 -- is
     named separately (`in_247_domain`) and refused with its own reason even
-    though the range check already excludes it;
+    though the range check already excludes it. Measured on #247's own bench
+    (fpga/release/probe_247.py) the mismatch needs the voice routed through
+    the drum filter (ROUTE = 1) with the kit struck, and needs neither a
+    glide nor a high increment: ROUTE = 1 is refused (ROUTE_DRUMFILTER). No
+    player-facing path writes ROUTE; it resets to 0;
   * MODULATION is a separate question. Oscillator pitch modulation (MROUTE
     bit 0 with nonzero wheel and depth) moves the effective increment every
     frame WITHOUT the glide slew; #247 reproduced identically with it on and
@@ -66,6 +70,7 @@ assert INC_LO > 0 and INC_HI < NYQUIST_INC, "the admitted range must sit below #
 SEC_VOICE = 0
 A_INC0, A_INC2 = 0x00, 0x02
 A_WAVE = 0x04
+A_ROUTE = 0x0F
 A_W0 = 0x08
 A_GLIDE = 0x0C
 A_MROUTE = 0x1F
@@ -84,7 +89,7 @@ _WAVES_TXT = ", ".join(sorted(str(w) for w in SUPPORTED_WAVES))
 EXCLUDED_CALIBRATION_WITH_RESONANCE = "surge-type2-clean-v1"
 
 RULES = ("INC_WIDTH", "INC_RANGE", "GLIDE_SOURCE", "GLIDE_247", "MOD_EXCURSION",
-         "WAVES", "CALIBRATION_RESONANCE", "PULSE2X")
+         "WAVES", "CALIBRATION_RESONANCE", "PULSE2X", "ROUTE_DRUMFILTER")
 
 
 class Rejected(ValueError):
@@ -251,6 +256,14 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
         if addr == A_RESET:
             osc = [_Osc("reset") for _ in range(3)]
             glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
+            continue
+        if addr == A_ROUTE:
+            if data & 1:
+                raise Rejected("ROUTE_DRUMFILTER",
+                               "ROUTE = 1 sends the voice through the drum filter; with the kit "
+                               "struck this is where #247's mismatch lives (fpga/release/"
+                               "probe_247.py: 1809 differing periods with route 1, 0 with route 0, "
+                               "unchanged by glide vs jump or by in-range increments)", i)
             continue
         if A_W0 <= addr <= A_W0 + 2:
             weights[addr - A_W0] = data & 0xFFFF

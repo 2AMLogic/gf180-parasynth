@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": ".venv/bin/python fpga/release/held_note_audible.py --preset default",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[default]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 3752 periods, errs 0 {}\nheld_note_audible[default]: replay PASS, decoded I2S peak 12760 LSB (floor 1024) -> PASS\n",
+    "secs": 380.3577060699463
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/held_note_audible.py --preset m5a-saw",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[m5a-saw]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 3752 periods, errs 0 {}\nheld_note_audible[m5a-saw]: replay PASS, decoded I2S peak 7345 LSB (floor 1024) -> PASS\n",
+    "secs": 347.48625802993774
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/held_note_audible.py --preset m5a-pulse",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[m5a-pulse]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 3752 periods, errs 0 {}\nheld_note_audible[m5a-pulse]: replay PASS, decoded I2S peak 10376 LSB (floor 1024) -> PASS\n",
+    "secs": 317.2996163368225
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/held_note_audible.py --preset default --legacy-image --expect-fail",
+    "state": "PASS",
+    "rc": 0,
+    "out": "uart_host: ENGINEERING -- release-domain validator skipped; this traffic is OUTSIDE the qualified player-facing domain\nverify_uart_bridge[default-legacy]: PASS -- writes 26/26, timing bad 0, corrupt 0, I2S mismatch 0 over 3412 periods, errs 0 {}\nheld_note_audible[default-legacy]: replay PASS, decoded I2S peak 0 LSB (floor 1024) -> FAIL\nheld_note_audible: control CAUGHT (the check failed as required)\n",
+    "secs": 244.64372611045837
+  }
+]

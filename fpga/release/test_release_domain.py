@@ -280,3 +280,18 @@ def test_held_note_image_is_audible_and_the_legacy_image_was_silent():
     so this level check can see the defect; then the fixed image sounds."""
     assert _held_peak(mixer=False) == 0
     assert _held_peak(mixer=True) >= 1024
+
+
+# ---- #247 as measured: the drum-filter route ------------------------------------------------
+def test_voice_through_the_drum_filter_is_refused():
+    s = image() + [(0, 0, 0x0F, 1)]
+    assert rule_of(qd.check_stream, s) == "ROUTE_DRUMFILTER"
+    qd.check_stream(image() + [(0, 0, 0x0F, 0)] + incs([qd.INC_HI] * 3, True))
+
+
+def test_no_player_path_writes_the_route():
+    import uart_host as uh
+    for fx in ("demo", "bar808-full", "bar808"):
+        st, ev, _ = uh.phrase_static_and_events(fx)
+        assert all(a != 0x0F for f, s_, a, d in st) and all(w[3] != 0x0F for w in ev), fx
+    assert all(a != 0x0F for f, s_, a, d in uh.voice_image_writes(None) + uh.voice_mixer_writes(None))
