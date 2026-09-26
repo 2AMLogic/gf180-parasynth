@@ -525,6 +525,11 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--rtl", default=os.path.join(REPO, "rtl-sketch"))
     c.add_argument("--out", default=os.path.join(HERE, "evidence", "flop-census.json"))
 
+    mx = sub.add_parser(
+        "metrics", help="final metrics + the step that wrote each, as committable evidence")
+    mx.add_argument("run_dir")
+    mx.add_argument("--out", default=os.path.join(HERE, "evidence", "halfslot-metrics.json"))
+
     v = sub.add_parser("verify", help="compare a run's DEF against the census")
     v.add_argument("run_dir")
     v.add_argument("--census", default=os.path.join(HERE, "evidence", "flop-census.json"))
@@ -538,6 +543,34 @@ def main(argv: list[str] | None = None) -> int:
             os.makedirs(os.path.dirname(a.out), exist_ok=True)
             payload = run_census(a.rtl, a.out)
             print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        if a.cmd == "metrics":
+            # The whole run directory is gigabytes and is gitignored, so the numbers in
+            # docs/pnr-shuttle-halfslot.md would otherwise have no committed source.
+            # This is the small file that backs them -- and it carries the WRITING STEP
+            # per key, because a value without that cannot be told from one the flow
+            # stopped updating thirty steps ago.
+            step, metrics = read_metrics(a.run_dir)
+            src = metric_source_step(a.run_dir)
+            post = post_route_keys(a.run_dir)
+            payload = {
+                "run": os.path.basename(os.path.abspath(a.run_dir)),
+                "last_step_with_metrics": step,
+                "steps": [n for n, _ in metrics_by_step(a.run_dir)],
+                "note": ("`written_by` is the last step whose metrics CHANGED the key; "
+                         "LibreLane's metrics are cumulative, so a key not in "
+                         "`post_route_keys` is not a post-route measurement however "
+                         "current it looks."),
+                "post_route_keys": sorted(post),
+                "metrics": {k: {"value": v, "written_by": src.get(k)}
+                            for k, v in sorted(metrics.items())},
+            }
+            os.makedirs(os.path.dirname(a.out), exist_ok=True)
+            with open(a.out, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=1, sort_keys=True)
+                f.write("\n")
+            print(f"wrote {a.out}: {len(metrics)} metrics from {step}, "
+                  f"{len(post)} of them post-route")
             return 0
         if not os.path.exists(a.census):
             raise Refusal(f"{a.census} does not exist; run `check_route.py census` first")

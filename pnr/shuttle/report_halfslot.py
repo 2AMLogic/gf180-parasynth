@@ -153,7 +153,7 @@ def timing_section(m: dict, post: set, src: dict) -> str:
         h = m.get(hk)
         imp = CLOCK_PERIOD_NS - s
         bold = "**" if "ss_" in c else ""
-        fresh = "yes" if sk in post else "**NO — pre-route**"
+        fresh = "yes" if sk in post else "**NO — written before the router ran**"
         lines.append(f"| {bold}`{c}`{bold} | {bold}{s:+.3f}{bold} | "
                      f"{('%+.3f' % h) if h is not None else '—'} | {imp:.2f} ns | "
                      f"`{src.get(sk, '?')}` | {fresh} |")
@@ -163,7 +163,7 @@ def timing_section(m: dict, post: set, src: dict) -> str:
     if worst_s is None:
         lines += [
             "",
-            f"**This run has no post-route timing at any corner.** {worst_c}. The "
+            f"**This run has no post-route timing at any corner** — {worst_c}. The "
             "un-suffixed `timing__setup__ws` reads "
             f"**{m['timing__setup__ws']:+.3f} ns** and was written by "
             f"`{src.get('timing__setup__ws', '?')}` — it is the **nominal corner only**, so "

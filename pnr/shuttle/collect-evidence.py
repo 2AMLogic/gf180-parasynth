@@ -123,10 +123,17 @@ def main():
     os.makedirs(keep, exist_ok=True)
     pats = ("*.rpt", "*drc*", "*.log", "*antenna*", "*.min.rpt", "*.max.rpt", "summary.rpt", "*.csv")
     kept = 0
+    skipped_big = 0
     for s in steps:
         for pat in pats:
             for p in glob.glob(os.path.join(run, s, "**", pat), recursive=True):
+                # `*drc*` matches DIRECTORIES too -- e.g. 41-.../2-openroad-checkantennas.
+                # copy2 on one raises IsADirectoryError and abandons the collection
+                # part-written, which is how this crashed on its first real run.
+                if not os.path.isfile(p):
+                    continue
                 if os.path.getsize(p) > 12_000_000:
+                    skipped_big += 1
                     continue
                 rel = os.path.relpath(p, run).replace(os.sep, "__")
                 shutil.copy2(p, os.path.join(keep, rel)); kept += 1
@@ -177,7 +184,7 @@ def main():
                 "Area, timing and DRC only. Nothing here shows the chip computes anything\n"
                 "(`docs/verification-rules.md` rule 3). Say which DRC: a router DRC count is\n"
                 "the detailed router checking its own work, not a sign-off deck.\n")
-    print(f"evidence -> {out}  ({kept} reports, {len(per_step)} steps)")
+    print(f"evidence -> {out}  ({kept} reports, {skipped_big} skipped as >12 MB, {len(per_step)} steps)")
     print(open(os.path.join(out, "SUMMARY.md")).read())
 
 if __name__ == "__main__":
