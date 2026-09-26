@@ -1,0 +1,15 @@
+{
+  "flops_declared_per_module": {
+    "drum_dp": 3148,
+    "drum_kit": 0,
+    "drum_regs": 3520,
+    "i2s_tx": 65,
+    "ladder_dp_n": 535,
+    "modal_dp": 2091,
+    "recip_div": 79,
+    "spi_ctl": 344,
+    "synth_top": 29,
+    "voice_dp": 2732
+  },
+  "source": "yosys stat on rtl-sketch, proc + opt_clean, not flattened"
+}

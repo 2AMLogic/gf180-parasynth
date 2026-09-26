@@ -21,6 +21,13 @@ pnr/orfs/joined.sh
 # plain-file CI artifacts with their own retention rules, not committed here.
 /runs/
 /jobs/
+# LibreLane writes its run directory beside the config it was given, so a shuttle
+# run lands inside the tree. Gigabytes of ODB/DEF per run; the evidence that is
+# worth keeping is extracted into pnr/shuttle/evidence/ by collect-evidence.py.
+pnr/shuttle/librelane/runs/
+# PL_TARGET_DENSITY_PCT, written by run_librelane.py --density. An INPUT to global
+# placement; not committed, so it can never be read back as a measurement.
+pnr/shuttle/librelane/density.yaml
 # ...with ONE exception, deliberately. `*.wav` above is right for renders in
 # general, but docs/provenance/bd-decay-demo/ is the committed evidence that the
 # corrected estimator can be re-run on old audio, and an evidence directory with
