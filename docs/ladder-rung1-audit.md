@@ -83,8 +83,8 @@ own gain, which every one of them also has.
 datapath already, so a resonance-dependent term in the cutoff mapping is
 conceivable — but it is not the free ROM-build-time change `fcr` was, it moves
 DR 0006's compensation ROM with it, and choosing which operating point is
-"right" is a decision record and not a measurement. Filed separately rather than
-decided here.
+"right" is a decision record and not a measurement. Filed as **#237**, bundled
+with the two ROM-build-time wins of §3 and §4 so that blast radius is paid once.
 
 ## 2. The external reference, and exactly how far it can be trusted
 
@@ -131,7 +131,7 @@ DR 0011's class of change.
 <!-- claim: test=model/test_ladder_headroom.py::test_a_refitted_tuning_polynomial_recovers_most_of_the_remaining_drift -->
 
 **Reported as available-but-small.** 0.75 pp is about 13 cents, against §1's
-105. It is worth taking *with* the offset work, because both are edits to
+105. It is worth taking *with* the offset work (#237), because both are edits to
 `make_g_rom` and both move DR 0006's ROM, the contract revision and every
 bit-exact expectation — and paying that blast radius twice would be wasteful.
 
@@ -173,7 +173,8 @@ no datapath change at all.
 
 <!-- claim: test=model/test_ladder_headroom.py::test_refitting_the_existing_129_entries_beats_a_1025_entry_table -->
 
-Measured, not shipped, for the same reason as §3: it moves the same tables.
+Measured, not shipped, for the same reason as §3: it moves the same tables. Also
+filed into #237; `ladder_headroom.refit_rom_entries()` computes the words.
 
 ## 5. Numerical precision: closed, with four bits of margin
 
@@ -222,13 +223,13 @@ They are correct as history and are labelled as measured on 2026-09-18, but
 §8.4's headline "7.92 pp against Surge Type 2's 0.62" is **revision 8's**
 filter. The shipped figure at the same operating point is 1.26 pp. Re-deriving
 the whole of §8 is a separate job — most of it needs the plugins — so it is
-filed rather than done here; this document is the shipped filter's number in
-the meantime.
+filed into **#239** rather than done here; this document is the shipped filter's
+number in the meantime.
 
 ## 8. What this audit does not settle
 
-- **It does not compare any candidate algorithm.** That is rungs 2–4 and needs
-  the harness issue #46's acceptance criteria describe. The one thing this audit
+- **It does not compare any candidate algorithm.** That is rungs 2–4, filed as
+  **#239** with the harness issue #46's acceptance criteria describe. The one thing this audit
   contributes to that decision is negative and useful: neither arithmetic
   precision nor the coefficient table is our limit, so a candidate has to win on
   the *law* and the *nonlinearity*, where the available margin is about 13 cents
