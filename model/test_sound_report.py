@@ -326,6 +326,28 @@ def _in_a_git_checkout() -> bool:
     return _git("rev-parse", "--git-dir").returncode == 0
 
 
+def _history_is_truncated() -> bool:
+    """A shallow clone has not fetched the ancestors these tests resolve, so
+    `git cat-file -t <real ancestor sha>` fails there with exactly the error a
+    dangling sha gives. That is the apparatus in a wrong state, not a finding:
+    the first CI run of these tests went red on `28dfd55`/`50d7aaf`, both of
+    which resolve fine in a full clone, because `moog-acceptance.yml` checked
+    out at the default depth of 1.
+
+    Report it as its own outcome -- named, and still red. Skipping instead
+    would hand back a green run for the one check #242 exists to install, which
+    is the blind spot rather than a fix for it."""
+    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+
+
+def _assert_history_reaches_the_shas():
+    assert not _history_is_truncated(), (
+        "REFUSED: this is a shallow clone, so the lock table's ancestor commits "
+        "were never fetched and `git cat-file` cannot answer whether they exist. "
+        "Not a provenance failure -- a checkout-depth one. Clone with full "
+        "history, or set `fetch-depth: 0` on the workflow's checkout step.")
+
+
 def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
     """`LOCK = "ce400a6"` for months and `git cat-file -t ce400a6` fails: it
     was a pre-squash commit on #51's branch. Every "locked at ..." line in the
@@ -336,6 +358,7 @@ def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
     if not _in_a_git_checkout():
         import pytest
         pytest.skip("not a git checkout")
+    _assert_history_reaches_the_shas()
     r = _git("cat-file", "-t", sr.LOCK)
     assert r.returncode == 0 and r.stdout.strip() == "commit", (
         f'sound_report.LOCK = "{sr.LOCK}" is not a commit in this repository '
@@ -354,6 +377,7 @@ def test_every_relock_names_a_real_property_and_a_real_commit():
             f"RELOCKS says {key} moved away from {was}, but LOCKS still holds {was}")
         assert len(why) > 40, f"{key}'s re-lock gives no reason"
         if _in_a_git_checkout():
+            _assert_history_reaches_the_shas()
             r = _git("cat-file", "-t", commit)
             assert r.returncode == 0 and r.stdout.strip() == "commit", (
                 f"{key} is re-locked against '{commit}', which is not a commit here")

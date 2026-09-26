@@ -37,7 +37,17 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
+      # fetch-depth: 0, same as dag.yml / fpga_selected.yml / rungs.yml.
+      # `model/test_sound_report.py`'s provenance tests resolve the shas in
+      # sound_report.py's LOCK/RELOCKS with `git cat-file -t`, and those are
+      # ancestor commits. A default depth-1 checkout has not fetched them, so
+      # `cat-file` reports "Not a valid object name" for a sha that is perfectly
+      # real -- CI red with a message blaming the lock table for the checkout's
+      # depth. Those tests refuse rather than skip on a shallow clone (they are
+      # the gate that #242 exists to install), so this depth is load-bearing.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
