@@ -27,6 +27,15 @@ Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
                            SPI_ANYLEN     accept any bit count  (drops DR 0007 section 1)
                            SPI_DRAIN_LATE drain from cycle 8, i.e. at `go`
   --expect-fail          exit 0 only if the comparison gave 1
+
+Every `--inject` or `--link dr7rev1` run also prints a blindness matrix: which
+of the four fields (flag, section, address, data) the defect MOVED and which
+stayed BLIND to it -- the same MOVED/BLIND distinction
+`model/sound_report.py --inject` reports for the sound model, extended here to
+a second suite whose "properties" are bit-fields rather than acoustic ones.
+SPI_ADDR7 (address truncated to 7 bits) should show `address` MOVED and the
+other three BLIND; a defect that moves all four, or none, is worth reading
+even when the pass/fail verdict alone would look ordinary.
 """
 from __future__ import annotations
 import argparse, os, subprocess, sys
@@ -220,6 +229,33 @@ def compare_writes(writes: list, rtl_out: str) -> int:
     return 1
 
 
+def print_blindness(tag: str) -> None:
+    """Which of the four fields this control moved and which it did not --
+    the same MOVED/BLIND distinction `model/sound_report.py --inject` makes
+    for the sound model, extended here to a second, differently-shaped suite
+    (four bit-fields rather than named acoustic properties). `LAST` is
+    populated by `compare_writes` for any run that reached the register port
+    at all; a control whose write count never matched (LAST empty) has
+    nothing to report a matrix over, which is itself worth saying rather than
+    printing a table of zeros that would look like data."""
+    if not LAST:
+        print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- "
+              "the link never delivered enough writes to compare fields at all")
+        return
+    n = LAST.get("total", 0)
+    fields = [("flag", LAST.get("bad_flag", 0)), ("section", LAST.get("bad_sec", 0)),
+              ("address", LAST.get("bad_addr", 0)), ("data", LAST.get("bad_data", 0))]
+    print(f"\nverify_ctl: blindness matrix for '{tag}' -- which of the 4 fields moved, of {n} writes sent")
+    for name, count in fields:
+        if count:
+            print(f"  MOVED   {name:8s} {count} of {n} writes wrong -- this field sees the defect")
+        else:
+            print(f"  BLIND   {name:8s} 0 of {n} writes wrong -- this field cannot see this defect")
+    if not any(c for _, c in fields):
+        print(f"  NO FIELD MOVED for '{tag}'. Either the defect does not change what reaches the "
+              "register port, or the coverage has a hole.")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--link", choices=("rev2", "dr7rev1"), default="rev2")
@@ -242,6 +278,8 @@ def main(argv=None) -> int:
           f"at {bits} bits per transaction{' with ' + defines[0] if defines else ''}")
     out = simulate(a.link, defines, a.outdir, bits)
     status = 2 if out is None else compare_writes(writes, out)
+    if a.inject or a.link != "rev2":
+        print_blindness(a.inject or a.link)
     if a.expect_fail:
         tag = a.inject or a.link
         if status == 1:

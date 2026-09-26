@@ -1,7 +1,8 @@
 # Verification rules
 
-Short, because there are only three, and they exist because each was learned
-the expensive way in this repository on 2026-09-17.
+Short, because there are only five, and they exist because each was learned
+the expensive way in this repository — the first three on 2026-09-17, rules 4
+and 5 on 2026-09-26 (issue #52).
 
 ---
 
@@ -70,3 +71,110 @@ area, and it was reported here three times before anyone simulated it.
 Quote area only alongside a simulation result, and say which flow produced it —
 `klt` allows `*_1` cells and ORFS excludes them by default, which is a 22–42 %
 difference on the same RTL.
+
+---
+
+## 4. A multi-property suite reports what it is BLIND to, not just what failed
+
+Rule 2 asks whether a control turns the bench red. That is a yes/no about the
+**bench**. It does not say which of the bench's properties actually saw the
+defect, and a property that never sees anything is decoration wearing the
+costume of coverage.
+
+So: **when a suite measures more than one property, every injected control
+prints a properties × defects matrix — MOVED for the properties that saw it,
+BLIND for the ones that did not.**
+
+This is not a proposal; it has already caught a hole in a metric that looked
+rigorous. `model/sound_report.py --inject ladder-cut30` — a uniform 30 %
+cutoff error — put `corner ratio drift` in the BLIND column, because a
+**non-uniformity** metric cannot by construction see a **uniform** skew. Both
+properties were correct. One of them could never have failed for that defect.
+
+Two suites print the matrix, and they are the only two that can:
+
+| suite | its "properties" | example |
+|---|---|---|
+| `model/sound_report.py --inject` | named acoustic properties per voice | `sd-centroid-amp-weighted` moves SD brightness 1918 → 5868 Hz and leaves SD's other **five** properties BLIND |
+| `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write | `SPI_ADDR7` moves `address` on 105 of 206 writes; `flag`, `section` and `data` are BLIND. `SPI_DATA24` moves `data` on 42 of 206; the other three are BLIND |
+
+**Every other `--expect-fail` suite here is single-property by construction and
+a matrix would be a table with one column.** `verify_ladder.py`,
+`verify_modal.py`, `verify_voice.py`, `verify_synth_top.py`, `verify_drums.py`,
+`tools/verify_rate_conv_2x.py` and `fpga/verify_fixture.py` all compare an RTL
+sample stream against the Python model **with no tolerance**, sample for
+sample. There is exactly one question — "is the stream identical" — so there is
+exactly one property, and "which property saw it" has one possible answer.
+Those suites already report the thing a matrix would add: the first mismatching
+sample, the mismatch count, and the error in LSB.
+
+The test for whether this rule applies is therefore: *does the suite reduce its
+comparison to more than one named quantity?* If yes, print the matrix. If it is
+one bit-exact stream comparison, do not invent columns to fill.
+
+`verify_ctl.py` is the one that was **not** obvious — its verdict is pass/fail
+like the others, but `compare_writes` had already been decomposing the failure
+into four per-field counters for its own error message. The matrix was one
+function away and nobody had asked for it.
+
+---
+
+## 5. A bug is not closed until it is an injection
+
+**The failure mode of injection testing is that you inject the bugs you already
+thought of.** That is `docs/failure-modes.md`'s root cause wearing a lab coat:
+validating against our own imagination. An injection suite grown only from
+what its authors imagined is as internally consistent, and as ungrounded, as an
+estimator calibrated on our own model.
+
+There is one source of defects guaranteed **not** to come from our imagination:
+the bugs this project actually made. So when a bug is fixed, the fix is half
+the work; the other half is reinstating the exact broken behaviour as a
+permanent control that must stay red.
+
+Four already work this way, two at each layer:
+
+| the bug, as it shipped | the injection it became |
+|---|---|
+| the SPI address truncated to 7 bits | `verify_ctl.py --inject SPI_ADDR7` — the exact broken frame |
+| the SPI datum truncated to 24 bits | `verify_ctl.py --inject SPI_DATA24` |
+| a 5 ms moving average used as an envelope on a 56 Hz carrier — 0.28 of a cycle | `sound_report.py --inject bd-ma-envelope` |
+| an amplitude-weighted centroid read where a power-weighted one belonged | `sound_report.py --inject sd-centroid-amp-weighted` |
+
+The last two are the measurement layer, which is where most of this project's
+errors actually lived, and both were already pinned by a helper-function unit
+test before this rule existed. **A unit test on the helper is not the same
+control**: it proves the broken function is broken, not that the acceptance
+path would have noticed someone using it. Reinstating them through
+`sound_report.py` puts them where the verdict is issued.
+
+A third historical measurement bug — the Hann-windowed 700 Hz noise-share
+split, wrong by 15× — is kept the other way round, as a method retained
+*because it must stay wrong*, in `model/test_drum_fit.py`. That is the same
+rule with the sign flipped and is equally valid.
+
+**Not yet injections** (each is a real bug this project shipped, so each is
+owed one): X-propagation quoted as a 1,917-cell area, and a die area recovered
+from its own utilization input. Both are build/report-tool bugs rather than
+model bugs.
+
+### The three conditions, because a control that cannot run looks like one that works
+
+A control counts as caught only if **all three** hold, and anything else is
+`NO VERDICT` — which is red, and is *not* a fail:
+
+1. the clean run passes;
+2. the mutant **builds, activates and actually executes**;
+3. the intended assertion is the one that fails.
+
+Condition 2 is not theoretical. The nightly's injection check once swallowed
+the exit status with `|| true` and then grepped the output for `MISS`/`FAIL`/
+`MOVED` — so **a traceback containing any of those words counted as a caught
+defect.** A tool that could not run was indistinguishable from a control that
+worked. Separately, this repository has shipped a "negative control" that
+mutated a function signature into invalid Python and passed, proving only that
+Python rejects syntax errors.
+
+And per `CLAUDE.md`: **run the gate against the current state before committing
+it.** An unsatisfiable gate is worse than no gate — it trains everyone to
+ignore gates, including the working ones.

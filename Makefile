@@ -31,7 +31,7 @@ help:
 ## NO-VERDICT twice. verify-full already used 7200.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -75,7 +75,7 @@ verify-fast:
 ## Adds the runs that take an hour. Still one turn.
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -155,6 +155,21 @@ verify-full:
 ## other's intermediate files and the results would be meaningless in a way
 ## that still looks like a clean run. Any future concurrent variants of one
 ## verifier need the same treatment.
+##
+## THE TWO sound_report CONTROLS reinstate defects this project actually
+## SHIPPED at the measurement layer, rather than defects someone invented --
+## the same principle as SPI_ADDR7/SPI_DATA24 above, which replay the exact
+## broken SPI frame that shipped (issue #52, docs/verification-rules.md 4).
+## Their exit convention is sound_report's own and is the inverse of
+## `--expect-fail`: 0 means at least one property MOVED past its tolerance --
+## the control fired -- and 1 means nothing moved, i.e. a coverage hole. So
+## they are listed bare, with no `--expect-fail`. They write no files and so
+## need no --outdir; each takes about 90 s (two full kit renders, clean and
+## injected). Measured on this tree, 2026-09-26:
+##   bd-ma-envelope            BD T20 308 -> 207 ms, BD attack 14.56 -> 9.94 ms
+##                             (BD fundamental and decay tau stay BLIND)
+##   sd-centroid-amp-weighted  SD brightness 1918 -> 5868 Hz
+##                             (all five other SD properties stay BLIND)
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
@@ -200,10 +215,12 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-noclip --expect 'no verdict'" \
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'" \
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
-	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'"
+	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
+	  "$(PY) model/sound_report.py --inject bd-ma-envelope" \
+	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted"
 
 test:
-	@$(PY) -m pytest model/ spec/ tools/ fpga/ -q
+	@$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q
 
 ## Re-derive every marked prose claim in docs/ from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts
