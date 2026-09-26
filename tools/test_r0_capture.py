@@ -292,3 +292,25 @@ def test_t_physical_trial_without_a_capture_is_no_verdict_with_its_control_caugh
     assert rec["controls"][0]["caught"] is True, rec["controls"][0]["reasons"]
     ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
     assert ok, problems
+
+
+def test_a_held_tone_is_placed_on_its_own_period_not_a_neighbour():
+    """The first dev run locked the 523 Hz held note one period (91.7 samples)
+    off: neighbouring periods correlate within 0.1 % of the true one. The
+    envelope must choose the period, the waveform only the fraction. The
+    plain waveform argmax is asserted to fail on the same case, so this test
+    is shown able to see the defect (the delay that exposed it, 22222.75)."""
+    ref = rc.load_reference(rc.REFERENCES, "held-m5a-saw")
+    x, cal = ref["xb"], ref["cal"]
+    rng = np.random.default_rng(1)
+    for d in (22222.75, 1500.25, 777.6):
+        y = rc.synth_take(ref["x"], delay=d, gain=0.3, ppm=35, noise_dbfs=-100, hpf_hz=5,
+                          rng=rng)
+        A = rc.band(y[:, 2])
+        want = d + cal[0] / (1 + 35e-6)
+        lag, _, _, _ = rc._coarse(x, cal, A, ref_env=ref["env"])
+        assert abs(lag - want) < 0.5, (d, lag - want)
+        if d == 22222.75:
+            t = x[cal[0]:cal[0] + 24000]
+            naive, _, _ = rc.ncc_lag(t, A, 0, A.size - t.size)
+            assert abs(naive - want) > 80          # the defect, reproduced
