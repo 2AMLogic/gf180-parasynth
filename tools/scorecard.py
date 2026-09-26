@@ -428,6 +428,18 @@ def main() -> int:
     engines = sorted({r["engine"] for _, r in rows if r["engine"]})
     if engines:
         print(f"\nEngines represented: {', '.join(engines)}")
+        # PER FAMILY, because the whole-board answer hides the one that matters.
+        # One integrated-rtl case anywhere silences the note below, and a reader
+        # of the Drums section then has no way to see that every Drums row is
+        # still a model. #94's four anchors are one per family for that reason.
+        for fam in ["Drums", "Mono", "Filters", "Ensemble"]:
+            sub = sorted({r["engine"] for c, r in rows
+                          if c["family"] == fam and r["engine"]})
+            if not sub:
+                continue
+            print(f"  {fam:<9} {', '.join(sub)}"
+                  + ("" if "integrated-rtl" in sub
+                     else "  -- no case on the integrated RTL"))
         if "integrated-rtl" not in engines:
             print("  NOTE: no case has been measured on the integrated RTL. Results "
                   "describe a model, not the instrument.")
@@ -488,7 +500,25 @@ def main() -> int:
             L.append(f"| **{fam}** | {fn} | {fv} | {fst[PASS]} | {fst[FAIL]} | "
                      f"{fst[NO_VERDICT]} | {fst[NOT_RUN]} |")
         L += [f"| **total** | {n} | {valid} | {st[PASS]} | {st[FAIL]} | "
-              f"{st[NO_VERDICT]} | {st[NOT_RUN]} |", "",
+              f"{st[NO_VERDICT]} | {st[NOT_RUN]} |", ""]
+        # Engines PER FAMILY. One integrated-rtl case anywhere on the board
+        # silences the whole-board warning above, and a reader of the Drums
+        # rows would then have no way to see that every Drums row is still a
+        # model. #94 asks for one anchor per family for exactly this reason.
+        L += ["## What produced each family's numbers", "",
+              "| family | engines | measured on the integrated RTL |",
+              "|---|---|---|"]
+        for fam in ["Drums", "Mono", "Filters", "Ensemble"]:
+            sub = sorted({r["engine"] for c, r in rows
+                          if c["family"] == fam and r["engine"]})
+            if not sub:
+                continue
+            anchored = [c["case_id"] for c, r in rows
+                        if c["family"] == fam and r["engine"] == "integrated-rtl"]
+            L.append(f"| **{fam}** | {', '.join(sub)} | "
+                     + (", ".join(f"`{cid}`" for cid in anchored) if anchored
+                        else "**no case**") + " |")
+        L += ["",
               "## Every case", "",
               "`worst` is the largest metric error divided by its own tolerance, so it is",
               "dimensionless and passes at or below 1. A blank means no distance exists --",

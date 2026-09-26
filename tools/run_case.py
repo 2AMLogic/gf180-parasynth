@@ -2279,6 +2279,40 @@ def write_wav16(path: pathlib.Path, x, sr: int):
         w.writeframes(y.tobytes())
 
 
+def drum_measurements(voice: str, ours_x, ours_sr: int, ref_x, ref_sr: int,
+                      rel: str, required: list) -> tuple:
+    """The drum plan applied to one pair of recordings: the metrics and the
+    windowing convention both sides were measured under.
+
+    Split out of `run_drum_case` so that an engine OTHER than the fixed model
+    can be scored through exactly this estimator chain -- the integrated-RTL
+    anchor (tools/score_drum_i2s.py) passes the samples it decoded off the I2S
+    pins as `ours_x`. Nothing here knows which engine produced them, which is
+    the point: a second copy of this loop is a second measurement contract."""
+    # Each side names itself, so a refused lead says WHICH recording could not
+    # supply one. A reference that was cut into the strike and a render that
+    # was need opposite responses.
+    ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
+    ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
+    ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
+    windowing = {"ours": lead_report(ours_x, ours_sr),
+                 "reference": lead_report(ref_x, ref_sr)}
+
+    ctx = {}
+    f0 = _f0(voice, 0.010, 0.200)(*ref)
+    if f0.ok:
+        ctx["ref_f0"] = f0.value
+
+    metrics = {}
+    for name, units, est, tol_rule in DRUM_PLAN[voice]:
+        metrics[name] = measure_pair(name, units, est, ours, ref, tol_rule, ctx)
+        if (voice, name) in UNQUALIFIED:
+            metrics[name] = unqualified_metric(units, UNQUALIFIED[(voice, name)], metrics[name])
+    for m in [m for m in required if m not in metrics]:
+        metrics[m] = invalid_metric("", "this runner has no estimator for it")
+    return metrics, windowing
+
+
 def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: bool) -> dict:
     voice = DRUM_CASE_VOICE[case["case_id"]]
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
@@ -2303,29 +2337,7 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
 
     ref_x, ref_sr, rel, setting = load_reference(voice, refdir, inject)
     ours_x, ours_sr = render_drum_solo(voice, inject=inject or None)
-
-    # Each side names itself, so a refused lead says WHICH recording could not
-    # supply one. A reference that was cut into the strike and a render that
-    # was need opposite responses.
-    ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
-    ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
-    ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
-    windowing = {"ours": lead_report(ours_x, ours_sr),
-                 "reference": lead_report(ref_x, ref_sr)}
-
-    ctx = {}
-    f0 = _f0(voice, 0.010, 0.200)(*ref)
-    if f0.ok:
-        ctx["ref_f0"] = f0.value
-
-    metrics = {}
-    for name, units, est, tol_rule in DRUM_PLAN[voice]:
-        metrics[name] = measure_pair(name, units, est, ours, ref, tol_rule, ctx)
-        if (voice, name) in UNQUALIFIED:
-            metrics[name] = unqualified_metric(units, UNQUALIFIED[(voice, name)], metrics[name])
-    missing = [m for m in required if m not in metrics]
-    for m in missing:
-        metrics[m] = invalid_metric("", "this runner has no estimator for it")
+    metrics, windowing = drum_measurements(voice, ours_x, ours_sr, ref_x, ref_sr, rel, required)
 
     import drums_fx as dx
     audio_path, audio = "not written (--no-audio)", f"reference {rel}; ours not written"
