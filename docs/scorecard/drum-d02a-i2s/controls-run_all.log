@@ -1,0 +1,73 @@
+### python3 rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --simulator verilator --outdir rtl-sketch/build/drum-ctl-lfsr --inject DRUM_LFSR_TAP --expect-fail
+### state PASS rc 0
+verify_synth_top: 154 writes over the pins (3 voice, 151 drum), 8224 frames after the last
+verify_synth_top: drum solo SD (circuit 1 of 11) at accent 1.00, 0.15 s / 7200 frames, both drum buses 0.45, the voice silent; ROUTE = 0
+verify_synth_top: selected legacy single-rate waveform; compile defines: INJECT_BUG_DRUM_LFSR_TAP
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 154 writes sent, 9010 frames, 9009 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 154, writes drained 154, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 9010 frames, MISSING in 0, worst strobe cycle 134 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 99637db-dirty, outdir /Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-290/rtl-sketch/build/drum-ctl-lfsr; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 134 of 256, past the LRCLK transition at 128 (48 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..784; modelling 9009 frames
+verify_synth_top: drum solo SD struck in frame 782 at accent register 32768; wire lag 1 period(s) behind the core; scored window [303, 7503) of 9009 decoded periods
+verify_synth_top: drum solo SD decoded window against the fixed model struck in the SAME frame (782): 6684 of 7200 samples differ, max |difference| 5198 LSB; bit-exact False
+verify_synth_top: drum solo SD decoded window against run_case.render_drum_solo (strike in frame 480, the free-running noise LFSR at a different phase): 6684 of 7200 samples differ, max |difference| 4975 LSB
+verify_synth_top: drum solo window sha256 5b0944860620d552afcd914bd5c9ae1fd7c5675dfa4cecd59dfac51a038e6938
+verify_synth_top: model peak |sample| 6849 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 15221, DFILT engaged in 0 frames
+verify_synth_top: FAIL -- of 9009 decoded I2S periods: 8108 differ from the model, 0 have L != R, 0 have a slot that is not 32 BCLK
+  first wire mismatch at period 783: model -700, wire 750, error +1450 LSB
+  the core's own sample stream: 8108 of 9010 frames differ from the model; first at frame 782: model -700, core 750
+  the core is already wrong: the defect is upstream of the serialiser
+verify_synth_top: negative control DRUM_LFSR_TAP CAUGHT (comparison failed as required)
+
+### python3 rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --simulator verilator --outdir rtl-sketch/build/drum-ctl-envfloor --inject DRUM_ENV_FLOOR --expect-fail
+### state FAIL rc 1
+verify_synth_top: 154 writes over the pins (3 voice, 151 drum), 8224 frames after the last
+verify_synth_top: drum solo SD (circuit 1 of 11) at accent 1.00, 0.15 s / 7200 frames, both drum buses 0.45, the voice silent; ROUTE = 0
+verify_synth_top: selected legacy single-rate waveform; compile defines: INJECT_BUG_DRUM_ENV_FLOOR
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 154 writes sent, 9010 frames, 9009 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 154, writes drained 154, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 9010 frames, MISSING in 0, worst strobe cycle 134 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 99637db-dirty, outdir /Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-290/rtl-sketch/build/drum-ctl-envfloor; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 134 of 256, past the LRCLK transition at 128 (48 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..784; modelling 9009 frames
+verify_synth_top: drum solo SD struck in frame 782 at accent register 32768; wire lag 1 period(s) behind the core; scored window [303, 7503) of 9009 decoded periods
+verify_synth_top: drum solo SD decoded window against the fixed model struck in the SAME frame (782): 0 of 7200 samples differ, max |difference| 0 LSB; bit-exact True
+verify_synth_top: drum solo SD decoded window against run_case.render_drum_solo (strike in frame 480, the free-running noise LFSR at a different phase): 6684 of 7200 samples differ, max |difference| 4522 LSB
+verify_synth_top: drum solo window sha256 7cf4f73750a75985bd4534470916d52543a99b630494895cbb6a22056412bc2b
+verify_synth_top: model peak |sample| 6849 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 15221, DFILT engaged in 0 frames
+verify_synth_top: PASS -- 9009 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+verify_synth_top: SD drum path verified from SPI pins through the production drum engine and I2S pins
+verify_synth_top: NEGATIVE CONTROL NOT CAUGHT (status 0)
+
+### python3 rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --simulator verilator --outdir rtl-sketch/build/drum-ctl-i2sshift --inject I2S_SHIFT --expect-fail
+### state PASS rc 0
+verify_synth_top: 154 writes over the pins (3 voice, 151 drum), 8224 frames after the last
+verify_synth_top: drum solo SD (circuit 1 of 11) at accent 1.00, 0.15 s / 7200 frames, both drum buses 0.45, the voice silent; ROUTE = 0
+verify_synth_top: selected legacy single-rate waveform; compile defines: INJECT_BUG_I2S_SHIFT
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 154 writes sent, 9010 frames, 9009 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 154, writes drained 154, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 9010 frames, MISSING in 0, worst strobe cycle 134 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 99637db-dirty, outdir /Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-290/rtl-sketch/build/drum-ctl-i2sshift; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 134 of 256, past the LRCLK transition at 128 (48 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: writes landed in frames 2..784; modelling 9009 frames
+verify_synth_top: drum solo SD struck in frame 782 at accent register 32768; wire lag 1 period(s) behind the core; scored window [303, 7503) of 9009 decoded periods
+verify_synth_top: drum solo SD decoded window against the fixed model struck in the SAME frame (782): 6683 of 7200 samples differ, max |difference| 35644 LSB; bit-exact False
+verify_synth_top: drum solo SD decoded window against run_case.render_drum_solo (strike in frame 480, the free-running noise LFSR at a different phase): 6702 of 7200 samples differ, max |difference| 37034 LSB
+verify_synth_top: drum solo window sha256 cfabd20aacb1c6af839c98ce29dcc13b2468c772ac2781d5ebe76cb9cc21b16d
+verify_synth_top: model peak |sample| 6849 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 15221, DFILT engaged in 0 frames
+verify_synth_top: FAIL -- of 9009 decoded I2S periods: 8125 differ from the model, 0 have L != R, 0 have a slot that is not 32 BCLK
+  first wire mismatch at period 783: model -700, wire 32418, error +33118 LSB
+  the core's own sample stream: 0 of 9010 frames differ from the model
+  the core is right and the wire is wrong: the defect is in i2s_tx or its timing
+verify_synth_top: negative control I2S_SHIFT CAUGHT (comparison failed as required)
+

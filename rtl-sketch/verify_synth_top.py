@@ -403,6 +403,211 @@ def clap_report(model_writes, n, exp_s, a) -> dict:
                 refused=refused)
 
 
+# ---- the drum scorecard stimulus (one sound, solo, at the scorecard's gains) ----
+# tools/run_case.py's `render_drum_solo` is the fixed-model engine every Drums
+# row on the board was measured with: one hit of one sound from the kit that
+# ships, struck at frame int(0.01 * SR), both drum buses at 0.45, the voice
+# silent, for SOLO_SECONDS. These two constants are ITS constants; the scoring
+# script re-derives them from run_case and refuses if they have moved, so this
+# copy cannot drift into a different render that still looks like the same case.
+DRUM_SOLO_LEAD_FRAMES = 480                     # run_case: int(0.01 * dx.SR)
+DRUM_SOLO_SECONDS = {"CY": 3.6, "OH": 3.6}      # run_case.SOLO_SECONDS
+DRUM_SOLO_DEFAULT_SECONDS = 2.2
+# The strike must land at least DRUM_SOLO_LEAD_FRAMES into the decoded stream,
+# because the scored window starts that far BEFORE it (run_case windows the lead
+# silence in). The kit image is ~150 writes and takes a few hundred frames to
+# clock through the link, so the gap is measured from the last image write.
+DRUM_SOLO_SETTLE_FRAMES = DRUM_SOLO_LEAD_FRAMES + 64
+
+
+def drum_solo_script(sound: str, accent: float = 1.0, seconds: float | None = None):
+    """run_case.render_drum_solo's stimulus, sent over the SPI PINS instead of
+    written into the model's register file.
+
+    The voice is silent -- VOL is 0 out of reset and no gate is ever sent -- so
+    the only thing on the wire is the drum mix and body buses under the
+    scorecard's DVOL = BVOL = 0.45, with ROUTE = 0 (the raw buses, no drum
+    filter), exactly as `output_fx(zeros, 0, dmix, g, body, g)` does.
+
+    The kit image is sent first and the strike follows after a settling gap, so
+    the frame the hit LANDS in is the link's business (it is read back from the
+    pin and reported) rather than something this script asserts. Alignment is
+    done afterwards against the realised strike, which is why the gap does not
+    have to be exact.
+
+    THIS IS A SCORING STIMULUS, NOT A COVERAGE BENCH, and the difference is
+    measured rather than asserted. One solo hit reaches only the corners that
+    one sound reaches: of the controls run against it (see
+    docs/scorecard/drum-d02a-i2s/controls-run_all.log) `DRUM_LFSR_TAP` and
+    `I2S_SHIFT` are both CAUGHT, and `DRUM_ENV_FLOOR` is NOT -- the snare solo
+    never drives an envelope to the `dec = 0, level > 0` corner that defect
+    lives in. The coverage bench is `verify_synth_top` with no `--drum-solo`,
+    whose stimulus strikes all eleven circuits, resets both pages while they
+    sound and REFUSES if it did not; nothing here replaces it."""
+    if sound not in dx.SOUND_NAMES:
+        raise ValueError(f"{sound} is not one of the sixteen sounds the kit implements "
+                         f"({', '.join(dx.SOUND_NAMES)})")
+    stop = dx.SOUND_STOP[sound]
+    kit = dx.kit_with_sounds(sound)
+    gain = dx.accent_reg(0.45)
+    hit_frame = DRUM_SOLO_LEAD_FRAMES
+    model_writes = dx.hit_writes([(hit_frame, stop, accent)], kit)
+    image = [(a, v) for f, a, v in model_writes if f < hit_frame]
+    timed = [(f, a, v) for f, a, v in model_writes if f >= hit_frame]
+
+    w = []
+    def put(wait, flag, sec, addr, data): w.append((wait, flag, sec, addr, data))
+    put(0, 0, SEC_V, A.A_DVOL, gain)          # the scorecard's drum-bus gains
+    put(0, 0, SEC_V, A.A_BVOL, gain)
+    put(0, 0, SEC_V, A.A_ROUTE, 0)            # raw buses: render_drum_solo has no drum filter
+    for a_, v in image:
+        put(0, 0, SEC_D, a_, v)
+    prev = None
+    for f, a_, v in timed:
+        put(DRUM_SOLO_SETTLE_FRAMES if prev is None else f - prev, 0, SEC_D, a_, v)
+        prev = f
+    if seconds is None:
+        seconds = DRUM_SOLO_SECONDS.get(sound, DRUM_SOLO_DEFAULT_SECONDS)
+    n_render = int(seconds * dx.SR)
+    # enough frames after the last write for the aligned window plus its lead
+    tail = n_render + DRUM_SOLO_LEAD_FRAMES + DRUM_SOLO_SETTLE_FRAMES
+    # The trigger pair (STOPS and this stop's ACCENT) is deliberately NOT part of
+    # the schedule that has to be reproduced: the circuit fires on the 0->1 edge
+    # of its stop bit, so an extra frame of hold or an accent that arrives a
+    # frame early changes nothing. What must keep its offset from the strike is
+    # the COEFFICIENT SEQUENCE -- the BD's attack window and the toms' pitch drop
+    # -- which is a change over time and would be a different sound if it slipped.
+    trigger = {dx.A_STOPS, dx.A_ACCENT + stop}
+    return w, tail, dict(sound=sound, stop=stop, accent=accent, seconds=seconds,
+                         n_render=n_render, lead_frames=DRUM_SOLO_LEAD_FRAMES,
+                         requested_coef_offsets=sorted({f - hit_frame for f, a_, _ in timed
+                                                        if a_ not in trigger}),
+                         bus_gain_reg=gain)
+
+
+def i2s_lag(exp_i2s, exp_s, max_lag: int = 4):
+    """How many LRCLK periods the wire runs behind the core's sample stream, from
+    the MODEL's two streams -- not assumed. i2s_tx holds a frame's word and sends
+    it in the next period (D = 1 in the contract), so a strike in sample frame F
+    is on the wire in period F + 1. The drum window is cut from the wire and the
+    strike frame is found in the core's timeline, so getting this wrong shifts
+    every scored window by a frame; it is measured here and REFUSED if the two
+    streams are not a pure delay of each other."""
+    a = np.asarray(exp_i2s, dtype=np.int64)
+    b = np.asarray(exp_s, dtype=np.int64)
+    m = min(len(a), len(b))
+    for k in range(max_lag + 1):
+        if m - k > 0 and np.array_equal(a[k:m], b[:m - k]):
+            return k
+    return None
+
+
+def drum_solo_report(model_writes, n, wire, spec, lag: int) -> dict:
+    """What the solo actually was, from the MODEL's own drum trace at the
+    pin-predicted frames -- which stop fired, in which frame, at what accent --
+    plus the aligned window and a sample-for-sample comparison of that window
+    against run_case.render_drum_solo, the engine every other Drums row used.
+
+    The bit-exactness comparison is REPORTED, never required: a difference
+    between the chip and the fixed model is the finding this case exists to
+    surface, not a reason to refuse."""
+    import numpy as _np
+    dw = [(f, ad, v) for f, fl, sec, ad, v in model_writes if sec == SEC_D]
+    d = dx.DrumsFx()
+    d.play(dw, n)
+    fire = d.trace["fire"]
+    stop = spec["stop"]
+    fired = [f for f in range(n) if (int(fire[f]) >> stop) & 1]
+    others = sorted({s for f in range(n) for s in range(dx.N_STOPS)
+                     if s != stop and (int(fire[f]) >> s) & 1})
+    refused = []
+    if len(fired) != 1:
+        refused.append(f"exactly one strike of {spec['sound']} (saw {len(fired)})")
+    if others:
+        refused.append(f"no other circuit struck (saw {[dx.STOP_NAMES[s] for s in others]})")
+    strike = fired[0] if fired else None
+    # the coefficient sequence, if this sound has one, must have kept its offset
+    # from the strike: a sequence that slipped is a different sound
+    trigger = {dx.A_STOPS, dx.A_ACCENT + stop}
+    realised = (sorted({f - strike for f, ad, _ in dw if f >= strike and ad not in trigger})
+                if strike is not None else [])
+    wanted = [o for o in spec["requested_coef_offsets"] if o >= 0]
+    # the accent write is scheduled in the strike's own frame and is allowed to
+    # land earlier (the link sends it first); what matters is the value at the fire
+    accent_at_fire = None
+    if strike is not None:
+        acc = 0
+        for f, ad, v in sorted(dw):
+            if f > strike: break
+            if ad == dx.A_ACCENT + stop: acc = v
+            if ad == dx.A_RESET: acc = 0
+        accent_at_fire = acc
+        if acc != dx.accent_reg(spec["accent"]):
+            refused.append(f"accent {dx.accent_reg(spec['accent'])} in force at the strike (saw {acc})")
+    lead, n_render = spec["lead_frames"], spec["n_render"]
+    # the strike frame is in the CORE's timeline; the window is cut from the WIRE,
+    # which runs `lag` periods behind it
+    start = None if strike is None else strike + lag - lead
+    if start is None or start < 0 or start + n_render > len(wire):
+        refused.append(f"{n_render + lead} frames of decoded I2S around the strike "
+                       f"(strike {strike}, wire lag {lag}, {len(wire)} periods)")
+    window = (_np.asarray(wire[start:start + n_render], dtype=_np.int64)
+              if not refused else _np.zeros(0, dtype=_np.int64))
+    rep = dict(sound=spec["sound"], stop=stop, accent=spec["accent"],
+               seconds=spec["seconds"], strike_frame=strike, wire_lag_periods=lag,
+               accent_reg_at_strike=accent_at_fire,
+               window_start=start, window_frames=n_render,
+               requested_coef_offsets=wanted, realised_coef_offsets=realised,
+               other_circuits_struck=[dx.STOP_NAMES[s] for s in others],
+               refused=refused)
+    if realised != wanted:
+        rep["refused"].append(f"the coefficient schedule {wanted} (realised {realised})")
+    if not rep["refused"]:
+        if os.path.join(ROOT, "tools") not in sys.path:
+            sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import run_case as rc
+
+        def _render(**kw):
+            x, sr = rc.render_drum_solo(spec["sound"], accent=spec["accent"], **kw)
+            if sr != 48000:
+                raise rc.Refused(f"a 48 kHz fixed-model render (saw {sr})")
+            return _np.round(_np.asarray(x, dtype=_np.float64) * 32768.0).astype(_np.int64)
+
+        def _delta(a_, b_):
+            d_ = a_ - b_
+            nz = _np.nonzero(d_)[0]
+            return dict(differing_samples=int(nz.size),
+                        first_difference_frame=(int(nz[0]) if nz.size else None),
+                        max_abs_difference=int(_np.abs(d_).max()) if d_.size else 0,
+                        identical=bool(nz.size == 0))
+        try:
+            # (a) THE CONTROLLED COMPARISON. The same render with the strike in
+            # the frame the link actually put it in: the only thing left that
+            # can differ is the chip. This is the one that must be identical.
+            # The render is in the CORE's timeline, the window is in the WIRE's,
+            # so the slice is taken `lag` periods earlier.
+            core_start = start - lag
+            at_strike = _render(hit_frame=strike,
+                                frames=core_start + n_render)[core_start:core_start + n_render]
+            # (b) the scorecard's own render, strike at frame 480. The drum
+            # noise LFSR free-runs, so this differs from (a) whenever the link
+            # did not land the strike in frame 480 -- a phase difference, not a
+            # defect, and it is reported as its own number rather than folded
+            # into (a).
+            scorecard = _render()[:n_render]
+        except rc.Refused as exc:
+            rep["refused"].append(str(exc))
+        else:
+            rep.update(fixed_model_at_realised_strike=_delta(window, at_strike),
+                       scorecard_render_strike_frame=rc.DRUM_SOLO_HIT_FRAME,
+                       fixed_model_scorecard_render=_delta(window, scorecard),
+                       bit_exact_against_fixed_model=_delta(window, at_strike)["identical"],
+                       window_sha256=hashlib.sha256(window.tobytes()).hexdigest(),
+                       fixed_model_at_realised_strike_sha256=hashlib.sha256(at_strike.tobytes()).hexdigest(),
+                       fixed_model_scorecard_render_sha256=hashlib.sha256(scorecard.tobytes()).hexdigest())
+    return rep, window
+
+
 def m5a_script(manifest_path: str, *, smoke: bool = False,
                pulse_shape: str = "pulse29", saw_cutoff_hz: int | None = None,
                saw_volume_correction_db: float = 0.0):
@@ -788,7 +993,20 @@ def main(argv=None) -> int:
                          "through SPI and I2S; writes clap-phrase.json with coverage and headroom")
     ap.add_argument("--envtrace", action="store_true",
                     help="write diagnostic voice gate/envelope registers per frame")
+    ap.add_argument("--drum-solo", default=None, metavar="SOUND",
+                    help="one hit of SOUND from the shipped kit, solo, at the scorecard's "
+                         "DVOL = BVOL = 0.45 with the voice silent, through SPI and I2S; "
+                         "writes drum-solo.json and, with --wav-out, the aligned window "
+                         "run_case.render_drum_solo measures")
+    ap.add_argument("--drum-accent", type=float, default=1.0,
+                    help="accent of the solo strike (run_case uses 1.0)")
+    ap.add_argument("--drum-seconds", type=float, default=None,
+                    help="shorten the solo for a smoke run; the scoring script refuses a "
+                         "window that is not the case's full SOLO_SECONDS, so a short run "
+                         "cannot be scored as the case")
     a = ap.parse_args(argv)
+    if a.drum_solo and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase):
+        ap.error("--drum-solo is its own stimulus")
     if a.f1cal_fault and not a.f1cal_smoke:
         ap.error("--f1cal-fault requires --f1cal-smoke")
     if a.f1cal_smoke:
@@ -837,12 +1055,20 @@ def main(argv=None) -> int:
     elif a.clap_phrase:
         cmds, tail, clap = clap_script()
         cover = {}
+    elif a.drum_solo:
+        try:
+            cmds, tail, drum_spec = drum_solo_script(a.drum_solo, accent=a.drum_accent,
+                                                     seconds=a.drum_seconds)
+        except (ValueError, KeyError) as exc:
+            print(f"verify_synth_top: REFUSED -- drum solo stimulus: {exc}")
+            return 2
+        cover = {}
     else:
         cmds, tail, cover = script(a.short)
     # The stimulus must reach the cases this bench claims, or it is not the
     # bench it says it is. Checked BEFORE the simulation, so a stimulus edit
     # that quietly drops a circuit refuses instead of passing.
-    focused = a.m5a or bool(a.f1cal_smoke) or a.clap_phrase
+    focused = a.m5a or bool(a.f1cal_smoke) or a.clap_phrase or bool(a.drum_solo)
     if not focused:
         missing = [dx.STOP_NAMES[i] for i in range(dx.N_STOPS) if i not in cover["stops"]]
         pairs = {b for _, b in dx.PAIRS}
@@ -880,6 +1106,11 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: F1 calibration stimulus: saw note 45, drive 1.0, cutoff "
               f"{' / '.join(str(c) for c in F1CAL_CUTOFFS)} Hz at res 0 then res 0.5 at 1 kHz, "
               f"{F1CAL_SEGMENT_S * 1000:.0f} ms each; no drum section")
+    elif a.drum_solo:
+        print(f"verify_synth_top: drum solo {drum_spec['sound']} "
+              f"(circuit {drum_spec['stop']} of {dx.N_STOPS}) at accent {drum_spec['accent']:.2f}, "
+              f"{drum_spec['seconds']:.2f} s / {drum_spec['n_render']} frames, both drum buses 0.45, "
+              f"the voice silent; ROUTE = 0")
     elif a.clap_phrase:
         print(f"verify_synth_top: clap phrase: {clap['cp_hits']} CP strikes around the final-strike "
               f"boundary, CP<->MA while sounding, a drum RESET mid-train, every stop at accent 2 "
@@ -1033,13 +1264,46 @@ def main(argv=None) -> int:
             if first is None: first = (p, e, left)
         if right != left:
             swap += 1
+    wav_samples = np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int64)
+    if a.drum_solo:
+        lag = i2s_lag(exp_i2s[:nper], exp_s[:nper])
+        if lag is None:
+            print("verify_synth_top: REFUSED -- the wire is not a pure delay of the core's sample "
+                  "stream, so the drum window cannot be aligned to the strike")
+            return 2
+        rep_d, window = drum_solo_report(model_writes, n, wav_samples.tolist(), drum_spec, lag)
+        LAST.update(drum_solo=rep_d)
+        rep_d.update(periods=nper, wire_mismatch=mism, writes_sent=len(cmds),
+                     provenance=pv, compile_defines=defines)
+        with open(os.path.join(a.outdir, "drum-solo.json"), "w") as fh:
+            json.dump(rep_d, fh, indent=1, default=int)
+        if rep_d["refused"]:
+            print(f"verify_synth_top: REFUSED -- the drum solo did not reach: {rep_d['refused']}")
+            return 2
+        print(f"verify_synth_top: drum solo {rep_d['sound']} struck in frame {rep_d['strike_frame']} at "
+              f"accent register {rep_d['accent_reg_at_strike']}; wire lag {rep_d['wire_lag_periods']} "
+              f"period(s) behind the core; scored window "
+              f"[{rep_d['window_start']}, {rep_d['window_start'] + rep_d['window_frames']}) "
+              f"of {nper} decoded periods")
+        ctl, sc = rep_d["fixed_model_at_realised_strike"], rep_d["fixed_model_scorecard_render"]
+        print(f"verify_synth_top: drum solo {rep_d['sound']} decoded window against the fixed model "
+              f"struck in the SAME frame ({rep_d['strike_frame']}): "
+              f"{ctl['differing_samples']} of {rep_d['window_frames']} samples differ, "
+              f"max |difference| {ctl['max_abs_difference']} LSB; bit-exact "
+              f"{rep_d['bit_exact_against_fixed_model']}")
+        print(f"verify_synth_top: drum solo {rep_d['sound']} decoded window against "
+              f"run_case.render_drum_solo (strike in frame {rep_d['scorecard_render_strike_frame']}, "
+              f"the free-running noise LFSR at a different phase): "
+              f"{sc['differing_samples']} of {rep_d['window_frames']} samples differ, "
+              f"max |difference| {sc['max_abs_difference']} LSB")
+        print(f"verify_synth_top: drum solo window sha256 {rep_d['window_sha256']}")
+        wav_samples = window
     if a.wav_out:
-        if not a.m5a:
-            print("verify_synth_top: REFUSED -- --wav-out requires --m5a")
+        if not (a.m5a or a.drum_solo):
+            print("verify_synth_top: REFUSED -- --wav-out requires --m5a or --drum-solo")
             return 2
         os.makedirs(os.path.dirname(os.path.abspath(a.wav_out)), exist_ok=True)
-        wavfile.write(a.wav_out, 48000,
-                      np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int16))
+        wavfile.write(a.wav_out, 48000, wav_samples.astype(np.int16))
         print(f"verify_synth_top: decoded I2S WAV written to {a.wav_out}")
         with open(a.wav_out, "rb") as fh:
             wav_sha256 = hashlib.sha256(fh.read()).hexdigest()
@@ -1102,6 +1366,9 @@ def main(argv=None) -> int:
               f"to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too")
         if a.m5a:
             print(f"verify_synth_top: {case_id} path verified from SPI pins through the production voice and I2S pins")
+        if a.drum_solo:
+            print(f"verify_synth_top: {a.drum_solo} drum path verified from SPI pins through the "
+                  f"production drum engine and I2S pins")
         if a.f1cal_smoke:
             print(f"verify_synth_top: F1 calibration {a.f1cal_smoke} words verified at the register "
                   f"port and its output verified from SPI pins to I2S pins")
