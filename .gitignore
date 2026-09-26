@@ -21,6 +21,12 @@ pnr/orfs/joined.sh
 # plain-file CI artifacts with their own retention rules, not committed here.
 /runs/
 /jobs/
+# ...with ONE exception, deliberately. `*.wav` above is right for renders in
+# general, but docs/provenance/bd-decay-demo/ is the committed evidence that the
+# corrected estimator can be re-run on old audio, and an evidence directory with
+# no audio in it is summary statistics wearing a manifest. 211 kB, regenerated
+# by `tools/stage_case.py demo --out docs/provenance/bd-decay-demo`.
+!docs/provenance/bd-decay-demo/*.wav
 # no trailing slash: `.venv/` matches a directory but NOT a symlink to one,
 # which is how a venv symlink got staged by `git add -A` on another branch
 .venv

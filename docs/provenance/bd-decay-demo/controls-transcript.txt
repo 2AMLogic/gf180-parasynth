@@ -1,0 +1,17 @@
+clean: accept -> pass (code 0)
+
+injected control          stage    outcome   bound rationale     bound-change ledger measurement field   render precondition retained WAV hash  
+BOUND_NO_RATIONALE        accept   REFUSED   CAUGHT              BLIND               BLIND               BLIND               BLIND              
+BOUND_SILENT_CHANGE       accept   REFUSED   BLIND               CAUGHT              BLIND               BLIND               BLIND              
+MEASUREMENT_NO_UNITS      analyse  REFUSED   BLIND               BLIND               CAUGHT              BLIND               BLIND              
+RENDER_SILENCE            render   REFUSED   BLIND               BLIND               BLIND               CAUGHT              BLIND              
+TAMPER_RETAINED_AUDIO     analyse  REFUSED   BLIND               BLIND               BLIND               BLIND               CAUGHT             
+
+what each one is:
+  BOUND_NO_RATIONALE       blank the rationale on the T20 bound: a number somebody chose, with no record of why
+  BOUND_SILENT_CHANGE      move the T20 bound onto 207 ms -- exactly what the withdrawn estimator reports -- so the v1 defect goes green with no measurement code touched
+  MEASUREMENT_NO_UNITS     drop `units` from the T20 record: `decay = 127.4` with no statement of whether that is tau, T20 or a threshold duration
+  RENDER_SILENCE           render exact silence: the apparatus in a wrong state, which CLAUDE.md names as a Model D rendering silence
+  TAMPER_RETAINED_AUDIO    flip one sample of the retained WAV: the analysis must refuse on the hash, not measure the file it was handed
+
+5/5 injected controls were REFUSED by the stage that owns them

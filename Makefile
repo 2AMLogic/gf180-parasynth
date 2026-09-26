@@ -37,7 +37,7 @@ help:
 ## 0.2s, naming the source file that moved, is worth a job slot.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -80,19 +80,20 @@ verify:
 ## pytest files DO need iverilog and stay in `make verify` only.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
 	  "$(PY) tools/check_workflows.py" \
+	  "$(PY) model/sound_report.py --check-locks" \
 	  "$(PY) tools/inject_manifest_defects.py"
 
 ## Adds the runs that take an hour. Still one turn.
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -195,6 +196,35 @@ verify-full:
 ##                             (BD fundamental and decay tau stay BLIND)
 ##   sd-centroid-amp-weighted  SD brightness 1918 -> 5868 Hz
 ##                             (all five other SD properties stay BLIND)
+##
+## THE TWO BUILD/REPORT-TOOL CONTROLS (issue #245) are the other half of rule 5:
+## the two bugs its debt marker named, X-propagation quoted as an area and a die
+## area recovered from its own utilisation input. Both are REFUSAL controls, so
+## their exit convention is 0 = the tool refused as intended, 1 = it answered
+## anyway, 2 = nothing was measured -- and `--expect` names the REASON, so a
+## missing yosys cannot look like a control that fired.
+##
+## THEIR CLEAN BASELINES ARE LISTED HERE TOO, next to the injections rather than
+## in `verify`, because a refusal control whose clean case also refuses proves
+## nothing (condition 1) and the pair is only readable together. Measured on
+## this tree, 2026-09-26 (yosys 0.67+post, Icarus 13.0):
+##   report_synth_area clean            PASS, 1,679 cells
+##   report_synth_area TANH_INDEX_OOR   REFUSED (outputs-are-x), 1,677 cells
+##                                      WITHHELD. rtl-simulation MOVED (y is x on
+##                                      506 of 512 cycles); netlist-simulation,
+##                                      netlist-constant-x and the cell count
+##                                      itself all BLIND -- yosys resolves the
+##                                      don't-care, so the netlist simulates
+##                                      x-free and the area moves 0.1 %
+##   area_provenance clean              summarize.py exit 0, ratio 1.87 printed
+##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
+##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
+##
+## report_synth_area is THE ONLY JOB IN THIS FILE THAT NEEDS yosys (it also needs
+## iverilog, which everything here already needs). It REFUSES rather than skips
+## when either is absent, which is why it is not in the nightly's controls job:
+## that image installs iverilog only. The area_provenance jobs are pure Python
+## and DO run there.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
@@ -251,10 +281,16 @@ controls:
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) model/sound_report.py --inject bd-ma-envelope" \
 	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted" \
-	  "$(PY) tools/inject_manifest_defects.py"
+	  "$(PY) tools/stage_case.py controls --root build/provenance-controls" \
+	  "$(PY) tools/inject_manifest_defects.py" \
+	  "$(PY) pnr/report_synth_area.py --expect area --outdir build/pnr-area-clean" \
+	  "$(PY) pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x --outdir build/pnr-area-tanh-oor" \
+	  "$(PY) pnr/orfs/area_provenance.py --expect ok --outdir build/pnr-die-clean" \
+	  "$(PY) pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular --outdir build/pnr-die-utilreq" \
+	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk"
 
 test:
-	@$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q
+	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
 
 ## Re-derive every marked prose claim in docs/ from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts

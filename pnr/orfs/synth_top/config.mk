@@ -7,6 +7,12 @@
 # that target, which is an assumption wearing the clothes of a measurement. Here the die is
 # fixed and the UTILISATION IS THE MEASURED QUANTITY.
 #
+# THIS PARAGRAPH IS NO LONGER THE ENFORCEMENT (issue #245). ../area_provenance.py reads this
+# file -- and any par_request.json archived with a run -- and ../summarize.py REFUSES to print
+# a die/cell-area ratio, exit 2, for a run whose die came from a target. Adding CORE_UTILIZATION
+# below will therefore turn the report into a refusal rather than into a confident wrong number.
+# ../ladder_dp/config.mk and ../synth_core/config.mk do set it, deliberately, and are refused.
+#
 # Two dice have been floorplanned with this config, both aspect ~1 on the 7t site grid
 # (0.56 x 3.92 um):
 #

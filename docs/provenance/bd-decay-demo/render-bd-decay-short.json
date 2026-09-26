@@ -1,0 +1,43 @@
+{
+ "stage": "render",
+ "render_id": "BD-solo-7156d23-ac67474d-156c39bccf05",
+ "case_id": "BD-solo",
+ "config": {
+  "voice": "BD",
+  "variant": "bd-decay-short",
+  "variant_means": "the kick's body Q 40 % low, so it decays 40 % faster",
+  "renderer": "model/drums_fx.py via tools/stage_case.py render_voice",
+  "drums_fx_sha256": "sha256:4a0177412ff464a3",
+  "sound_report_sha256": "sha256:7a4c3981a40c6473",
+  "seconds": 2.2,
+  "accent": 1.0,
+  "bus_gain": 0.45,
+  "hit_at_s": 0.01,
+  "hits": 1,
+  "n_stops": 11,
+  "sample_rate_hz": 48000
+ },
+ "sample_rate": 48000,
+ "n_samples": 105600,
+ "requested_peak": 0.18463134765625,
+ "clipped_samples": 0,
+ "allow_silence": false,
+ "allow_clipping": false,
+ "wav_path": "raw.wav",
+ "wav_sha256": "sha256:4144d54580ca3f13",
+ "trace_paths": {
+  "bus_dm_peak_per_ms": "traces/bus_dm_peak_per_ms.json",
+  "bus_bd_peak_per_ms": "traces/bus_bd_peak_per_ms.json"
+ },
+ "provenance": {
+  "worktree": {
+   "commit": "7156d23",
+   "described": "node/D-drums-bitexact-537-g7156d23-dirty",
+   "branch": "feature/issue-68",
+   "dirty": true,
+   "uncommitted_sha256": "ac67474d1d4fe2cd",
+   "untracked_files": 5
+  },
+  "run_at": "2026-09-26T12:11:56Z"
+ }
+}

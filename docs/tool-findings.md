@@ -186,7 +186,32 @@ the correct home so the next pass does not re-derive them.
   fixed and documented in `fpga/scripts/x1_report.py`.
 - **yosys optimised an all-X datapath down to 1,917 cells and reported a
   plausible area.** Correct behaviour on a design that was don't-care. **Our**
-  RTL bug; it is the origin of `docs/verification-rules.md` rule 3.
+  RTL bug; it is the origin of `docs/verification-rules.md` rule 3. Reproduced
+  and now permanently injected (`pnr/report_synth_area.py --inject
+  TANH_INDEX_OOR`, issue #245), and the reproduction sharpens the finding: on
+  the fixture the collapse is **invisible from the netlist**. It contains no
+  `x`, it simulates `x`-free at the gate level against the same bench, and its
+  cell count moves 0.1 % (1,677 against 1,679) — yosys resolved the don't-care
+  to concrete values, as it is entitled to. The **behavioural** simulation of
+  the sources is the only thing that sees it (`y` is `x` on 506 of 512 cycles).
+  So "check the netlist for X before quoting its area" is not a weaker version
+  of the right check; it is not a check at all.
+- **`iverilog -Ptb.dut.IDX_BITS=5` silently does nothing.** `-P` assigns
+  parameters of a **root module instance** only, so a hierarchical path through
+  an instance is accepted on the command line, applied to nothing, and reported
+  with no warning: `iverilog -g2012 -o x.vvp -Ptb.dut.IDX_BITS=5 tb.v dut.v` &&
+  `vvp x.vvp` printed `IDX_BITS=4`. Icarus Verilog 13.0 (stable, v13_0).
+  Documented semantics, arguably, and **our** misuse — recorded because the
+  *shape* is the one `docs/verification-rules.md` rule 5 condition 2 exists for:
+  an injection that never activates while every log looks clean, and the run
+  reports the clean design's numbers under the mutant's name. It cost about
+  twenty minutes here and only surfaced because the fixture was expected to go
+  X and did not. The workaround is not to use `-P`: `pnr/report_synth_area.py`
+  writes parameter overrides into a generated wrapper that **both** yosys and
+  iverilog read, and refuses the run unless two independent receipts — the
+  `$paramod\<mod>\<P>=…` module yosys derived, and the value the running
+  simulation prints from inside the elaborated hierarchy — agree with what was
+  asked for.
 - **`FREQUENCY PORT "clk" 12.288 MHz` on the ULX3S's 25 MHz oscillator pin,
   with no PLL, and nextpnr reported PASS.** Documented LPF semantics — a
   `FREQUENCY PORT` is an assertion the checker verifies, not a clock the board

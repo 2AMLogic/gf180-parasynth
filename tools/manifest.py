@@ -415,12 +415,21 @@ MEASUREMENT_FIELDS = (
 def measurement(name: str, units: str, value: float | None, *, analyser: str,
                  analyser_version: str, method: str, interval_s, channel: str,
                  resample_hz, filter, normalisation, fft, fit_quality,
-                 reference_identity: str, why: str | None = None) -> dict:
+                 reference_identity: str, why: str | None = None,
+                 **extra) -> dict:
     """Build one measurement record. Every field is a required keyword with
     no default, so an omission is a `TypeError` at the call site -- not a key
     quietly absent from JSON six months later. `value=None` is a valid,
     explicit refusal (`why` should then say why); it is not the same as the
-    key being missing."""
+    key being missing.
+
+    `**extra` is recorded as given, for the parts of an audit trail that are
+    specific to one kind of estimator: `tools/stage_case.py` uses it for
+    `selection` (which hit, and the onset the interval is measured from --
+    issue #68's "the selected hit, onset and analysis interval", of which
+    `interval_s` is only the third). It is NOT a way to add a field that
+    should have been required: `MEASUREMENT_FIELDS` is the floor, and
+    `validate_measurement` enforces it whatever else a record carries."""
     rec = {
         "name": name, "units": units, "value": value,
         "analyser": analyser, "analyser_version": analyser_version,
@@ -431,6 +440,7 @@ def measurement(name: str, units: str, value: float | None, *, analyser: str,
     }
     if why is not None:
         rec["why"] = why
+    rec.update(extra)
     return rec
 
 

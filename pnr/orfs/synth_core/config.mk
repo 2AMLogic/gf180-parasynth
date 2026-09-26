@@ -28,6 +28,11 @@ export LATCH_MAP_FILE = $(DESIGN_DIR)/../gf180_7t/cells_latch.v
 export SYNTH_SCRIPT = $(DESIGN_DIR)/../gf180_7t/synth_unsigned.tcl
 
 export ABC_AREA          = 1
+# THE DIE AND CORE AREAS OF THIS RUN ARE NOT MEASUREMENTS: a target makes them the cell area
+# divided by 0.50, so a die/cell ratio recovers 2.00 and nothing else (docs/pnr-synth-top.md
+# section 2). ../summarize.py REFUSES to print it for this design -- exit 2, via
+# ../area_provenance.py, issue #245. Deliberate here: a per-block area probe, not a product
+# floorplan. The fixed-die design is ../synth_top.
 export CORE_UTILIZATION  = 50
 export CORE_ASPECT_RATIO = 1
 export CORE_MARGIN       = 2
