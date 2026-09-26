@@ -11,11 +11,22 @@ the model. This bench runs them, through the existing voice bench
 simulation and its every-tap comparison), with its scenario list replaced by
 the cases below. Nothing in verify_voice.py is edited.
 
-Build flags are the release's: --osc2x --filter2x (OSC2X=1 FILTER2X=1,
-PULSE2X=0). SCOPE: voice_dp at its register write port. The link (SPI/UART)
-delivering those writes is qualified separately (reports/arty/uart-clean,
-rolling-playback); this bench is about the increment/glide arithmetic, which
-lives in voice_dp.
+Build flags are the release's: OSC2X=1 FILTER2X=1, PULSE2X=0. Two levels:
+
+  --level voice    voice_dp at its register write port through verify_voice:
+                   every tap of every frame compared. Only the ADMITTED cases
+                   run here: the component bench launches the voice at cycle
+                   48, and at increments near 2^23 three 2x saws do not finish
+                   in that window ("datapath still busy at the end of frame
+                   0") -- #248's late component launch, not a result about the
+                   production schedule.
+  --level wrapper  the SHIPPED path: the case's writes are planned by
+                   fpga/uart_host.py (setup as live writes, transitions as
+                   device-scheduled events), captured as the exact bytes, and
+                   replayed through the Arty wrapper's UART pins by
+                   fpga/verify_uart_bridge.py --replay, I2S decoded from the
+                   wire and compared with the integer model. Production
+                   launch; this is where #247 was found.
 
 CASES, and the verdict each must give (exit status is the verdict):
 
@@ -37,9 +48,11 @@ CASES, and the verdict each must give (exit status is the verdict):
                    locate the boundary, they do not move the validator's.
 
     .venv/bin/python fpga/release/glide_boundary.py --case accept-default
-    .venv/bin/python fpga/release/glide_boundary.py --case control-247 --expect-fail
+    .venv/bin/python fpga/release/glide_boundary.py --case accept-default --inject GLIDE_FLOOR --expect-fail
+    .venv/bin/python fpga/release/glide_boundary.py --level wrapper --case control-247 --expect-fail
 
-Exit statuses are verify_voice's: 0 identical, 1 differed, 2 did not run.
+Exit statuses are the benches': 0 identical, 1 differed, 2 did not run.
+--expect-fail exits 0 only when the comparison gave 1.
 """
 from __future__ import annotations
 
@@ -93,6 +106,10 @@ def accept_writes():
     w += [(f, "GLIDE", REF)] + _set(f, _incs3(HI), True); f += 10
     w += _set(f, _incs3(LO), False); f += 200
     w += _set(f, _incs3(HI), False); f += 1200
+    # 6. the glide = 1 floor at the BOTTOM: (acc * 1) >> 24 == 0 below 65536,
+    #    so only the max(1, .) floor moves it -- 1 LSB of Q24.8 per frame
+    w += [(f, "GLIDE", REF)] + _set(f, _incs3(LO + 3000), True); f += 10
+    w += [(f, "GLIDE", 1)] + _set(f, _incs3(LO), False); f += 800
     return w, f
 
 
@@ -125,12 +142,71 @@ def scenarios_for(case):
     waves, make, _expect = CASES[case]
 
     def scenarios(which, only=None):
-        regs = vf.VoiceFx.patch_regs(waves=waves, detune=(0.0, 0.0, 0.0), mix=(0.6, 0.5, 0.4),
-                                     cutoff=(400, 12000), q=0.3, glide_s=vf.GLIDE_REF_S)
+        regs = _regs(waves)
         writes, n = make()
         assert all(0 <= w[0] < n for w in writes), case
         return [(case, f"{case}: {waves}", regs, writes, n)]
     return scenarios
+
+
+# ---- the wrapper level: the shipped UART path ---------------------------------
+def wrapper_capture(case, prefix):
+    """Plan the case's writes through uart_host exactly as the CLI would and
+    write the capture. Frame-0 writes are the live setup (preceded by the
+    release's voice image); later writes are device-scheduled events, spaced
+    at least one event packet apart (the wire's own pacing) in their order."""
+    sys.path.insert(0, os.path.join(ROOT, "fpga"))
+    import uart_host as uh
+    import synth_top_model as stm
+    waves, make, _ = CASES[case]
+    regs = _regs(waves)
+    writes, n = make()
+    gap = -(-10 * uh.byte_cycles(uh.DEFAULT_BAUD) // uh.CYC_PER_FRAME)
+
+    def reg(w):
+        f, op, *a = w
+        if op == "INC":
+            return (1 if a[2] else 0, 0, stm.A_INC + a[0], int(a[1]))
+        if op == "GLIDE":
+            return (0, 0, stm.A_GLIDE, int(a[0]))
+        if op == "GATE":
+            return (0, 0, stm.A_GATE_ON if a[0] else stm.A_GATE_OFF, 0)
+        raise ValueError(op)
+    cmds = [("write", *w) for w in uh.voice_image_writes(None)]
+    cmds += [("write", 0, 0, stm.A_WAVE + k, vf.WAVE_CODE[s]) for k, s in enumerate(regs["waves"])]
+    cmds += [("write", 0, 0, stm.A_W + k, int(g)) for k, g in enumerate(regs["weights"])]
+    cmds += [("write", *reg(w)) for w in writes if w[0] == 0]
+    prev = None
+    for w in sorted((w for w in writes if w[0] > 0), key=lambda w: w[0]):
+        due = w[0] if prev is None else max(w[0], prev + gap)
+        cmds.append(("event", due, *reg(w)))
+        prev = due
+    rows = uh.plan_show(cmds)
+    verdict = uh.preflight(rows)
+    if verdict["verdict"] != "FEASIBLE":
+        raise SystemExit(f"glide_boundary: REFUSED -- {case} is not deliverable: {verdict['reason']}")
+    uh.write_capture(prefix, rows, origin=0)
+    return prefix
+
+
+def run_wrapper(case, outdir, expect_fail):
+    sys.path.insert(0, os.path.join(ROOT, "fpga"))
+    import verify_uart_bridge as vub
+    os.makedirs(outdir, exist_ok=True)
+    prefix = wrapper_capture(case, os.path.join(outdir, "capture"))
+    status = vub.main(["--replay", prefix, "--replay-name", case, "--outdir", outdir])
+    if expect_fail:
+        if status == 1:
+            print(f"glide_boundary: control {case} CAUGHT (comparison failed as required)")
+            return 0
+        print(f"glide_boundary: CONTROL NOT CAUGHT (status {status})")
+        return 1 if status == 0 else 2
+    return status
+
+
+def _regs(waves):
+    return vf.VoiceFx.patch_regs(waves=waves, detune=(0.0, 0.0, 0.0), mix=(0.6, 0.5, 0.4),
+                                 cutoff=(400, 12000), q=0.3, glide_s=vf.GLIDE_REF_S)
 
 
 def main(argv=None) -> int:
@@ -139,10 +215,16 @@ def main(argv=None) -> int:
     ap.add_argument("--case", required=True, choices=sorted(CASES))
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--expect-fail", action="store_true")
-    ap.add_argument("--inject", default=None, help="passed through to verify_voice")
+    ap.add_argument("--inject", default=None, help="voice level: passed through to verify_voice")
+    ap.add_argument("--level", choices=("voice", "wrapper"), default="voice")
     a = ap.parse_args(argv)
+    outdir = a.outdir or os.path.join(ROOT, "build", "release-glide", f"{a.level}-{a.case}")
+    if a.level == "wrapper":
+        if a.inject:
+            ap.error("--inject is a voice-level option")
+        print(f"glide_boundary: wrapper case {a.case}; INC_LO {LO}, INC_HI {HI}")
+        return run_wrapper(a.case, os.path.abspath(outdir), a.expect_fail)
     vv.scenarios = scenarios_for(a.case)
-    outdir = a.outdir or os.path.join(ROOT, "build", "release-glide", a.case)
     args = ["--osc2x", "--filter2x", "--outdir", outdir]
     if a.expect_fail:
         args.append("--expect-fail")

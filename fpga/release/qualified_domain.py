@@ -66,6 +66,7 @@ assert INC_LO > 0 and INC_HI < NYQUIST_INC, "the admitted range must sit below #
 SEC_VOICE = 0
 A_INC0, A_INC2 = 0x00, 0x02
 A_WAVE = 0x04
+A_W0 = 0x08
 A_GLIDE = 0x0C
 A_MROUTE = 0x1F
 A_MWHEEL, A_MPD = 0x25, 0x26
@@ -73,10 +74,13 @@ A_RESET = 0x23
 W24 = (1 << 24) - 1
 
 WAVE_NAME = {v: k for k, v in vf.WAVE_CODE.items()}
-# the release's waveform sets: the default patch (and the fixtures, which use
-# it), m5a-saw, m5a-pulse. After reset every WAVE register is 0 = saw.
-SUPPORTED_WAVES = frozenset({("saw", "saw", "square"), ("saw", "saw", "saw"),
-                             ("pulse29", "pulse29", "pulse29")})
+# the release's AUDIBLE waveform sets (an oscillator whose mixer weight is 0
+# is None): the default patch, which bar808/demo also use, all three audible;
+# m5a-saw / m5a-pulse and the m5a phrase, oscillator 0 alone. After reset
+# every WAVE register is 0 (saw) and every weight 0.
+SUPPORTED_WAVES = frozenset({("saw", "saw", "square"), ("saw", None, None),
+                             ("pulse29", None, None)})
+_WAVES_TXT = ", ".join(sorted(str(w) for w in SUPPORTED_WAVES))
 EXCLUDED_CALIBRATION_WITH_RESONANCE = "surge-type2-clean-v1"
 
 RULES = ("INC_WIDTH", "INC_RANGE", "GLIDE_SOURCE", "GLIDE_247", "MOD_EXCURSION",
@@ -91,6 +95,11 @@ class Rejected(ValueError):
         assert rule in RULES, rule
         self.rule, self.index = rule, index
         super().__init__(f"[{rule}] " + (f"write {index}: " if index is not None else "") + message)
+
+
+def audible(waves, weights) -> tuple:
+    """The waveform set as heard: None for an oscillator the mixer silences."""
+    return tuple((w if int(g) else None) for w, g in zip(tuple(waves)[:3], tuple(weights)[:3]))
 
 
 def inc_hz(inc: int) -> float:
@@ -133,10 +142,10 @@ def check_patch(regs: dict, *, name: str = "patch", pulse2x: bool = False) -> di
     the playable MIDI range; raises Rejected."""
     if pulse2x:
         raise Rejected("PULSE2X", f"{name}: PULSE2X=1 is excluded from this release")
-    waves = tuple(regs["waves"])
+    waves = audible(regs["waves"], regs["weights"])
     if waves not in SUPPORTED_WAVES:
         raise Rejected("WAVES", f"{name}: waveform set {waves} is not one of the release's "
-                       f"{sorted(SUPPORTED_WAVES)}")
+                       f"{_WAVES_TXT}")
     cal = regs.get("filter_calibration")
     if cal == EXCLUDED_CALIBRATION_WITH_RESONANCE and float(regs.get("res", 0.0)) != 0.0:
         raise Rejected("CALIBRATION_RESONANCE",
@@ -193,21 +202,32 @@ class _Osc:
     hi: int = 0
 
 
-def check_stream(writes, *, initial: str = "reset") -> dict:
+def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = None) -> dict:
     """Validate register writes in the order they APPLY: (flag, sec, addr,
     data). `initial` is "reset" (the device's reset image: incs 0, glide 0,
-    waves saw, mroute 0) or "unknown" (the device was left in some earlier
-    state). Returns counts; raises Rejected at the first violation."""
+    waves saw, weights 0, mroute/mwheel/mpd 0) or "unknown" (the device was
+    left in some earlier state). `mod_initial` (default: `initial`) states the
+    modulation registers separately: the player-facing fixtures never write
+    them, so a fixture run ASSUMES their reset value -- a precondition the
+    host cannot read back, declared in RELEASE.md, not verified here. With
+    "unknown" modulation state an INC is refused. Returns counts; raises
+    Rejected at the first violation."""
     assert initial in ("reset", "unknown")
+    mod_initial = mod_initial or initial
+    assert mod_initial in ("reset", "unknown")
     known = initial == "reset"
     osc = [_Osc("reset" if known else "unknown") for _ in range(3)]
     glide = 0 if known else None
-    waves = ["saw"] * 3 if known else [None] * 3
-    mroute, mwheel, mpd = (0, 0, 0) if known else (None, None, None)
+    waves = ["saw"] * 3 if known else ["?"] * 3
+    weights = [0] * 3 if known else [None] * 3
+    mroute, mwheel, mpd = (0, 0, 0) if mod_initial == "reset" else (None, None, None)
     n_inc = n_glide = 0
 
-    def mod_check(i):
+    def mod_check(i, programming=False):
         if None in (mroute, mwheel, mpd):
+            if programming:
+                raise Rejected("MOD_EXCURSION", "an oscillator is programmed while the pitch-"
+                               "modulation registers (MROUTE/MWHEEL/MPD) are in an unknown state", i)
             return
         octs = mod_octaves(mroute, mwheel, mpd)
         if not octs:
@@ -230,7 +250,10 @@ def check_stream(writes, *, initial: str = "reset") -> dict:
         addr &= 0xFF
         if addr == A_RESET:
             osc = [_Osc("reset") for _ in range(3)]
-            glide, waves, mroute, mwheel, mpd = 0, ["saw"] * 3, 0, 0, 0
+            glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
+            continue
+        if A_W0 <= addr <= A_W0 + 2:
+            weights[addr - A_W0] = data & 0xFFFF
             continue
         if A_WAVE <= addr <= A_WAVE + 2:
             waves[addr - A_WAVE] = WAVE_NAME.get(data & 0xF, f"code{data & 0xF}")
@@ -247,9 +270,11 @@ def check_stream(writes, *, initial: str = "reset") -> dict:
         if A_INC0 <= addr <= A_INC2:
             k = addr
             v = check_inc(int(data), index=i, osc=k)
-            if None in waves or tuple(waves) not in SUPPORTED_WAVES:
-                raise Rejected("WAVES", f"osc {k} programmed while the waveform set is {tuple(waves)}; "
-                               f"release sets are {sorted(SUPPORTED_WAVES)}", i)
+            heard = None if None in weights else audible(waves, weights)
+            if heard not in SUPPORTED_WAVES:
+                raise Rejected("WAVES", f"osc {k} programmed while the audible waveform set is "
+                               f"{heard if heard else 'unknown'}; "
+                               f"release sets are {_WAVES_TXT}", i)
             o = osc[k]
             jump = bool(flag) or glide == 0
             if not jump:
@@ -265,5 +290,5 @@ def check_stream(writes, *, initial: str = "reset") -> dict:
             else:
                 o.state, o.lo, o.hi = "in", v, v
             n_inc += 1
-            mod_check(i)
+            mod_check(i, programming=True)
     return dict(writes=len(writes), inc_writes=n_inc, glide_transitions=n_glide)
