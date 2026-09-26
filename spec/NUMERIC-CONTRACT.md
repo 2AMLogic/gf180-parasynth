@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 11 — 2026-09-19 — status: PROPOSED. Not ratified.**
+**Revision 12 — 2026-09-26 — status: PROPOSED. Not ratified.**
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -10,7 +10,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 11,
+through the two-key process this fleet uses; until then it is revision 12,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -261,6 +261,7 @@ product the host's job (5.5).
 | `k` | 17 u | voice | ladder resonance, 4·res in Q3.14, before the compensation of 10.2 | `LadderFx.regs`, `VoiceFx.k_reg` |
 | `gain` | 20 u | voice | ladder input gain, drive·2.6 in Q4.16 | same |
 | `ogain` | 20 u | voice | ladder output gain, (1+2·res)/2.6 in Q4.16 | same |
+| `drift` | 16 u | voice | per-oscillator drift depth, Q0.16; 0 is off and bit-identical to no drift at all (6.11) | `VoiceFx.drift` |
 
 The two envelopes are `amp` (section 9) and `filt` (section 10); each has its
 own `a_inc`, `d_dec`, `sus`, `rate`.
@@ -290,7 +291,8 @@ the datapath width of 11.4.
 State registers (not host-writable except by RESET): `phase[k]` (24),
 `inc_acc[k]` (32, section 6.7), `e[k]` and `r[k]` (section 6.6.1), `level`
 and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
-`d1`, `d2` (section 11.2).
+`d1`, `d2` (section 11.2), and the drift generator's `drift_cnt` (10) and
+`drift_acc[k]` (16 signed, section 6.11).
 
 ### 5.2 Writes and their semantics
 
@@ -304,6 +306,7 @@ and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
 | SET_LADDER k/gain/ogain | the named coefficient ← v. Held for the whole frame (both passes). |
 | SET_GLIDE v | `glide ← v`. |
 | SET_VOL v | `vol ← v`. |
+| SET_DRIFT v | `drift ← v`. Takes effect on the next frame's deviation (6.11), not at the next walk update: the three walks advance whether `drift` is zero or not, so when drift was switched on does not change what it does. |
 | GATE_ON | `gate ← 1`, and for both envelopes `seg ← ATTACK` with `level` unchanged (8.5, DR 0003). Nothing else changes: no phase, no ladder state. |
 | TRIG | for both envelopes `seg ← ATTACK` with `level` and `gate` unchanged (8.5): the multi-trigger retrigger while a key is held. |
 | GATE_OFF | `gate ← 0`. Both envelopes take the release branch of 8.3 from wherever their level is. |
@@ -319,7 +322,7 @@ measurement is in that record). `SEC` = 0 is this page. The addresses
 `a_inc, d_dec, sus, rate` 0x10–0x13 and filter envelope 0x14–0x17;
 `CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `K, GAIN, OGAIN` 0x1C–0x1E; `GATE_ON`
 0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `NOP` 0x3F.
-`BVOL` is 0x2C and `DVOL` 0x0E (12). A register narrower than 32 bits takes
+`BVOL` is 0x2C, `DVOL` 0x0E (12) and `DRIFT` 0x2D (6.11). A register narrower than 32 bits takes
 the low bits of `D`; the rest MUST be zero. `SEC` = 1 selects the drum
 section's page, whose map is 15.1's unchanged. **`wave[k]`: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, and 5–7 also
 sine** (bit 2 set selects sine, so every 3-bit value is defined). The chip
@@ -413,6 +416,11 @@ ogain      = fit20( round(0.05 / 0.13 · (1 + 2 · res) · 2^16) )
 glide      = fit24( max(1, round((2^(1 / (T_oct · 48000)) − 1) · 2^24)) )    T_oct = seconds per octave;
                                                      T_oct ≤ 0 → 0, off; clamps below 1.7 µs per octave (DR 0004)
 vol        = fit16( round(volume · 2^15) )           reference 0.45 → 14746; clamps at volume ≥ 2 (DR 0005)
+drift      = fit16( round(drift_cents · CENTS_TO_DEV / DRIFT_ACC_RMS · 2^16) )      6.11, DR 0019
+                                                     CENTS_TO_DEV = 2^20 · ln2 / 1200 = 605.681
+                                                     DRIFT_ACC_RMS = 3394, MEASURED from the
+                                                     integer generator, not the continuous-time
+                                                     formula; drift_cents ≤ 0 → 0, off
 ```
 
 **Where the clamps fire.** (Rev 2; this was OPEN 17.7.)
@@ -447,6 +455,12 @@ waveform — and pins the following:
 - `glide` (rev 3) clamps only below 1.7 µs per octave, a ratio of 2 per
   frame; `vol` clamps at a volume of 2.0 and above. Neither is inside any
   host's plausible range.
+- `drift` (rev 12) clamps at **5.604 cents rms** and above, and is the one
+  conversion here whose clamp sits inside a plausible request: the register is
+  16 bits and the walk's measured rms is what scales it, so the top of the
+  range is 5.604 rather than a round number. The range this project targets is
+  0.8–4.0 cents (DR 0019), comfortably inside it; anything past 5.604 is a
+  different effect and the host is told by the clamp, not by silence.
 
 `a_inc` and `rate` are at least 1 by construction. `d_dec` is 0 only for
 `sustain = 1.0`, where DECAY ends at once because `level = FULL ≤ sus`.
@@ -767,6 +781,80 @@ the same RMS because the instrument's do (drawing 1431 labels all three outputs
 −4 dBm), and pink's crest factor of 4.6 needs the headroom. `NSEL` selects the
 pair: clear puts **white** in the mixer and **pink** on the modulation bus, set
 puts **pink** in the mixer and **red** on the bus.
+
+### 6.11 Per-oscillator drift (DR 0019)
+
+State, per oscillator: `drift_acc[k]`, 16-bit signed; plus one shared 10-bit
+`drift_cnt`. All four reset to 0 (section 14).
+
+The Model D's three VCOs are not stable against each other. 6.9's modulation
+bus carries **one** signal to all three oscillators by construction, so no
+depth on it can make them drift apart; this section is the separate mechanism
+that can. Each oscillator carries a bounded random walk and the walk scales
+its phase increment **multiplicatively**, so the deviation is a constant number
+of *cents* at every pitch rather than a constant number of Hz.
+
+Per frame, immediately after 6.9's increments and before anything reads them
+(`voice_fx.VoiceFx._modulate`):
+
+```
+if drift_cnt == 0:                                       one update in 2^10 frames = 21.33 ms
+    b_k          = w[15 − 5k : 11 − 5k]                  three NON-OVERLAPPING 5-bit fields of
+                                                         6.10's 16-bit word w, k = 0, 1, 2
+    step_k       = ((2·b_k + 1) − 32) << 5               odd·32, in ±992, mean EXACTLY 0
+    drift_acc[k] = sat16( drift_acc[k] + step_k
+                          − ((drift_acc[k] + 32) >> 6) ) the leak, rounded to NEAREST
+drift_cnt  = (drift_cnt + 1) mod 2^10
+dev_k      = sat16( ( drift_acc[k] · DRIFT ) >> 16 )     Q0.20 relative frequency, every frame
+inc_k      = clamp24( inc_k + ( ( inc_k · dev_k ) >> 20 ) )
+```
+
+All shifts are arithmetic (floor). `clamp24` clamps to 0 … 2^24 − 1; it is the
+clamp of 5.5 applied again, because an oscillator already at the top of the
+register can be drifted upward.
+
+`DRIFT = 0` gives `dev_k = 0` and `inc_k + ((inc_k · 0) >> 20) = inc_k`
+exactly, so a voice that never writes `DRIFT` is **bit-identical to one with no
+drift mechanism at all** — which is what makes every register image, recorded
+scenario and pinned table that predates revision 12 unchanged, and why the
+reset value is 0.
+
+Four properties an implementation MUST reproduce, each with the reason it is
+specified rather than left to taste:
+
+1. **The three walks are independent.** They read fields 5 and 10 bits apart in
+   the same word, so they are three reads of one m-sequence at fixed offsets,
+   which cross-correlate at −1/(2^31 − 1) — the DR 0012 argument for the
+   voice/drum seed separation, reused. Measured on the shipped generator over
+   2^18 updates, the realised pairwise correlation is below 0.01 for the steps
+   and 0.05 for the walks. Bit 0 of `w` is deliberately unused so the three
+   fields are symmetric. One field driving all three walks is
+   `INJECT_BUG_VOICE_DRIFT_SHARED`: it passes every measurement of a *single*
+   oscillator and is vibrato, not drift.
+2. **The step's mean is exactly zero.** `2·b + 1 − 32` over uniform `b` has
+   mean 0; the field taken as a plain signed number (`b − 16`) has mean −0.5,
+   and a −0.5 mean step against a leak of `acc/64` parks every walk at −32 — a
+   small *permanent* detune wearing drift's clothes.
+   `INJECT_BUG_VOICE_DRIFT_MEANSTEP`.
+3. **The leak is rounded to nearest, not floored.** A floor pulls every
+   negative state up by one LSB per update, which is a bias rather than a
+   rounding difference. `INJECT_BUG_VOICE_DRIFT_LEAKFLOOR`.
+4. **The walk is bounded, and never saturates.** The leak makes the process
+   stationary with a correlation time of 64 updates = 1.365 s; its measured
+   stationary rms is 3394 LSB and the largest state seen over 2^18 updates is
+   15 403, so `sat16` has 2.1× headroom and does not fire. A walk that
+   saturates has a maximum detune and is a different mechanism. Measured as
+   `Var[acc(t+T) − acc(t)]`, which saturates at 2.00× `Var[acc]` by eight
+   correlation times; the same generator with the leak deleted reaches 0.36×
+   and is still growing.
+
+*Informative:* the walk's rms in cents is `DRIFT / 2^16 · 3394 / 605.681`, so
+the register spans 0 … 5.604 cents rms per oscillator and the reference depth
+is 1.5 cents (`DRIFT` = 17543). Over a window of a few correlation times a
+bounded walk's own mean is not zero, so a pitch estimator that removes the mean
+f0 — every one does, including `model/osc_drift_probe.py` — reads less than the
+register's rms and the difference is a static detune it cannot see. That is not
+an error in either.
 
 ---
 
@@ -1235,6 +1323,8 @@ is no other observable state.
 | `cut_lo`, `cut_hi`, `track_hz` | 0 | the clamp makes the cutoff 30 Hz |
 | `k`, `gain`, `ogain` | 0 | |
 | ladder `y[0..3]`, `w[0..3]`, `d1`, `d2` | 0 | `LadderFx.reset()` |
+| `drift` | 0 | off, and bit-identical to no drift mechanism at all (6.11) |
+| `drift_cnt`, `drift_acc[k]` | 0 | 6.11: the three walks start at no deviation, and the first update lands on the frame after reset |
 | `dvol`, `bvol` | 0 | the drum buses are silent until the host writes a gain (17.8) |
 | every drum register of 15.1, every envelope level, `strike`, `t`, `stops_prev`, the six phases | 0 | 15.8; all-zero paths are OFF, so the section is silent |
 | LFSR state | 1 | 15.4: frame 0's noise word is 1 |
@@ -1725,8 +1815,13 @@ continuous voice by `render_mono_fx`, whose write lists (from `KeyHost`,
 `rtl-sketch/ladder_dp.v` (`INJECT_BUG_LADDER_FB`, `_SAT`, `_TANH_CLAMP`) are
 the pattern, and the voice's are `INJECT_BUG_VOICE_SQUARE_SIGN` (6.6.4),
 `_ENV_FLOOR` (8.3), `_KEFF` (10.2), `_MIX_SAT` (7), `_GLIDE_FLOOR` (6.7),
-`_RECIP_CLAMP` (6.6.1), `_TRIG_RESET` (8.5) and `_OUT_SAT` (12), each run on
-the scenario of `rtl-sketch/verify_voice.py` that reaches it. A voice bench
+`_RECIP_CLAMP` (6.6.1), `_TRIG_RESET` (8.5), `_OUT_SAT` (12) and, since
+revision 12, `_DRIFT_SHARED`, `_DRIFT_MEANSTEP` and `_DRIFT_LEAKFLOOR` (6.11's
+four properties 1–3), each run on the scenario of
+`rtl-sketch/verify_voice.py` that reaches it. **The drift defects need the
+`drift` scenario specifically**: every other scenario runs `DRIFT = 0`, which
+6.11 makes bit-identical to no drift path at all, so on any of them all three
+controls are silent — an unsatisfiable gate rather than a passing one. A voice bench
 MUST compare the taps of item 4 as well as the sample and MUST report an
 undefined (X) output as a mismatch, never a pass: a sample-only comparison
 is blind while the tail is quiet (with the release floor of 8.3 removed the
@@ -1891,14 +1986,34 @@ record that extends this document; none may be resolved by picking a reading.
     cheap fix was measured and rejected: summing k independent slices buys
     2.40 at k = 2 and 2.60 at k = 3, for two or three times the LFSR work and
     an adder tree, to reach what the filter already delivers.
-18. **Per-unit oscillator drift is not modelled** (6.4,
-    `docs/minimoog-reference.md` W3a). Our square is a true 50 % and has no
-    even harmonics; a reference emulation measures 52 % with h2 at −24 dB.
-    SM 2.3 is explicit that 50 % is the design and that Moog hand-selected
-    R137 per unit to hit it, so 52 % is a unit out of trim rather than the
-    instrument. Whether to model drift anyway — three oscillators beating
-    against each other is part of the sound — is a musical decision and one
-    constant.
+18. **Per-unit oscillator drift** (6.4, 6.11,
+    `docs/minimoog-reference.md` W3a) — **closed in rev 12 by DR 0019, in the
+    half that is a mechanism, and the other half is answered rather than
+    closed.** The mechanism is 6.11: three independent bounded walks on the
+    three phase increments, one register (`DRIFT`), default 0 and
+    bit-identical to no drift path at all when off.
+
+    What the rev-11 text asked — "whether to model drift anyway … is a musical
+    decision and one constant" — turned out to be the right framing for a
+    reason that had to be measured to be known. **The references cannot supply
+    the amount.** Every single-oscillator window in the frozen Mini V3 set
+    wanders by 0.001–0.024 cents rms and the same commanded note 13.6 s apart
+    in one continuous render differs by 0.0011 cents: 30–100× below anything a
+    player could hear, so the frozen references *bound* drift rather than
+    measure it (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
+    Surge XT and Diva are REFUSED there, with the missing precondition named).
+    The target range is therefore 0.8–4.0 cents rms per oscillator as a
+    **musical decision** (DR 0019), stated as a range because the service
+    manual documents different oscillator boards per serial range, and the
+    default stays off so that switching it on is always a reviewable change.
+
+    The square's duty cycle, which rev 11 filed under this item, is a separate
+    and still-open question: ours is a true 50 % with no even harmonics, a
+    reference emulation measures 52 % with h2 at −24 dB, and SM 2.3 is explicit
+    that 50 % is the design and that Moog hand-selected R137 per unit to hit
+    it — so 52 % is a unit out of trim rather than the instrument. 6.11 does
+    not model it: a drifting *duty cycle* is a second mechanism and nothing
+    measured here argues for it.
 19. **The drum section's size** (15.9) — **closed in rev 10** at 16 modes /
     11 with numerators / 18 envelopes / 23 paths / 11 stops, which is the
     complete TR-808: all sixteen named sounds on eleven circuits. Rev 8 asked
@@ -2008,6 +2123,44 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0019), closing
+  17.18's mechanism half. One new register, `DRIFT` at 0x2D, 16 bits, Q0.16,
+  reset 0; three new state registers per voice (`drift_cnt`, and
+  `drift_acc[k]` signed 16); one new host conversion in 5.5, whose clamp at
+  5.604 cents rms is the first in that list to sit inside a plausible request.
+  No existing width, clamp or formula changes.
+
+  **No pinned table, hash or reference sequence moves, and that is a property
+  of the design rather than a claim about it:** `DRIFT = 0` makes `dev_k = 0`
+  and `inc_k + ((inc_k · 0) >> 20) = inc_k` exactly, so the drift path is
+  bit-identical to its own absence and every image that predates this revision
+  renders sample for sample as before. `test_drift_zero_is_bit_identical_to_no_drift_register_at_all`
+  plays the same image with the register present and absent and requires
+  equality.
+
+  **Measured, and one of the numbers was wrong before it was right.** The
+  references were measured FIRST and did not give the answer expected: the
+  frozen Mini V3 set's isolated oscillators wander by 0.001–0.024 cents rms,
+  30–100× below audibility, so they bound drift rather than supply it and the
+  amount is a musical decision (17.18). The end-to-end cents check first
+  compared a pitch probe's reading against the *commanded* rms and read 0.601×
+  at three depths — which looks like a 40 % error in the mechanism and is not
+  one: over ten correlation times a bounded walk's own mean is not zero, and a
+  mean offset is a static detune that any mean-removing estimator must not
+  report as drift. The claim is now split between the register's linearity
+  (against the model's own Q0.20 deviation trace) and the probe's recovery of
+  that trace's mean-removed part.
+
+  Bit-exact against `model/voice_fx.py` on a new `drift` scenario set in
+  `rtl-sketch/verify_voice.py` — the reference depth, the register maximum
+  together with the shared modulation bus at full wheel, an oscillator drifted
+  into the increment clamp, and a window straddling a walk-update boundary:
+  9 728 frames, every sample, every tap and the final state including
+  `drift_cnt` and all three `drift_acc`. Three injected defects added (16) and
+  each caught on that scenario; all three are silent on every other scenario by
+  construction, which is why 16 names the scenario they must be run on. Not
+  ratified.
 
 - **Rev 1 (2026-09-17)** — initial proposal, written from `model/voice_fx.py`
   and `model/fixed.py` as committed; appendices generated by

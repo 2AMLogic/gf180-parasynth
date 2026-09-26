@@ -29,6 +29,12 @@ help:
 ## 2026-09-22 M2 (2026-09-23), the broad pytest job alone runs 2631s solo and
 ## exceeded the old 3600s cap under this target's parallel fan-out, reporting
 ## NO-VERDICT twice. verify-full already used 7200.
+##
+## check_arty_evidence_binding.py is here for legibility, not coverage: the
+## broad pytest job already catches a stale wrapper proof, but it catches it
+## 39 minutes in as 23 failures across three files, and the one sentence that
+## explains all 23 is buried in a traceback. The same question answered in
+## 0.2s, naming the source file that moved, is worth a job slot.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
@@ -46,6 +52,7 @@ verify:
 	  "$(PY) fpga/verify_uart_bridge.py --scenario all --outdir build/uart-controls" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
+	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -158,6 +165,14 @@ verify-full:
 ##   test_rtl.py's, and it fires there. An unsatisfiable gate is worse than no
 ##   gate, so it is not listed as one.
 ##
+## THE THREE DRIFT CONTROLS MUST NAME `--only drift`, and this is not a speed
+## optimisation. Contract 6.11 makes DRIFT = 0 bit-identical to no drift path at
+## all, and every other scenario runs DRIFT = 0 -- so on `default`, `gate` or
+## any other key all three are silent and would be three more unsatisfiable
+## gates. Measured on the `drift` key: SHARED first differs at frame 56,
+## LEAKFLOOR at 3444, MEANSTEP at 1066, and each also moves the final
+## drift_acc state.
+##
 ## NOTE the per-variant --outdir. These are several VARIANTS OF THE SAME
 ## verifier running concurrently, and the verifiers here write fixed filenames
 ## under their output directory -- so without this they would overwrite each
@@ -186,6 +201,9 @@ controls:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
 	  "$(PY) tools/verify_rate_conv_2x.py --inject-clamp --expect-fail" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --inject OSC_SMOOTH_ON --expect-fail --outdir build/voice-smooth-on" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_SHARED --expect-fail --outdir build/voice-drift-shared" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \

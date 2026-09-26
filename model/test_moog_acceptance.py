@@ -2750,6 +2750,298 @@ def test_the_reference_noise_balance_is_reachable_from_the_register():
 
 
 # =============================================================================
+# per-oscillator drift (6.11, DR 0019; issue #56)
+# =============================================================================
+def _drift_note(cents, note=48, secs=0.7, detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
+                **kw):
+    """One note from reset at a drift depth. Cutoff wide open, no filter
+    envelope and no tracking, so nothing but the oscillator can move the
+    pitch -- the same isolation the frozen Mini V3 `osc*_open` controls use.
+    The gate is held for the WHOLE render and the sustain is 1.0, so the level
+    is flat: a release tail decaying into silence is not a held tone and the
+    probe refuses on it (correctly, and it did on the first attempt here)."""
+    v = vf.VoiceFx()
+    return v, v.note(note, secs, gate=secs, waves=("saw", "saw", "saw"),
+                     detune=detune, mix=mix,
+                     cutoff=(21000, 21000), q=0.0, drive=1.0, track=0.0,
+                     amp=(0.002, 0.2, 1.0, 0.05), fenv=(0.002, 0.2, 1.0, 0.05),
+                     drift_cents=cents, **kw)
+
+
+def _held(y, skip_s=0.15):
+    """The render past its attack, as float -- what the probe measures."""
+    return y.astype(np.float64)[int(skip_s * SR):] / 32768.0
+
+
+def test_drift_zero_is_bit_identical_to_no_drift_register_at_all():
+    """[method] The DRIFT register's default must be transparent. Every one of
+    this suite's other tests, every recorded scenario in `verify_voice.py` and
+    every frozen register image predates 6.11, so a mechanism that moved a
+    single LSB at DRIFT = 0 would have to be re-baselined against all of them
+    rather than reviewed on its own.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    v = vf.VoiceFx()
+    r = v.note_on(48, 0.3, drift_cents=0.0)
+    assert r["regs"]["drift"] == 0
+    with_reg = v.note(48, 0.3, drift_cents=0.0)
+    # the same image with the register absent entirely, as a pre-6.11 host wrote it
+    v2 = vf.VoiceFx()
+    regs = dict(r["regs"])
+    regs.pop("drift")
+    v2.reset()
+    without = v2.play(regs, r["writes"], r["n"])
+    assert np.array_equal(with_reg, without), "DRIFT = 0 is not transparent"
+
+
+def test_drift_is_deterministic_and_repeatable_from_the_seed():
+    """[method] Bit-exactness against the RTL requires the walk to be a
+    function of the seed and the frame count, nothing else. Two voices given
+    the same writes must render the same samples, and one voice must repeat
+    itself across RESET -- an oscillator that drifts differently in the model
+    and the RTL breaks `verify_voice.py`, which is why this is a constraint on
+    the design and not an afterthought (issue #56's own words).
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    _, a = _drift_note(vf.DRIFT_REF_CENTS)
+    _, b = _drift_note(vf.DRIFT_REF_CENTS)
+    assert np.array_equal(a, b), "two voices at the same seed differ"
+    v, c = _drift_note(vf.DRIFT_REF_CENTS)
+    d = v.note(48, 0.7, gate=0.7, waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+               mix=(1.0, 0.0, 0.0), cutoff=(21000, 21000), q=0.0, drive=1.0,
+               track=0.0, amp=(0.002, 0.2, 1.0, 0.05), fenv=(0.002, 0.2, 1.0, 0.05),
+               drift_cents=vf.DRIFT_REF_CENTS)
+    assert np.array_equal(c, d), "the same voice does not repeat across RESET"
+    _, off = _drift_note(0.0)
+    assert not np.array_equal(a, off), "drift at the reference depth changed nothing"
+
+
+def test_the_three_oscillators_drift_independently():
+    """[measured-here: the three walks' pairwise correlation over 2^18 updates]
+    Three oscillators in lockstep are vibrato, not drift -- issue #56 says so
+    and the shared MR_OSC path of 6.9 is exactly that, which is why 6.11 is a
+    separate mechanism rather than a depth on the old one. The three walks read
+    non-overlapping 5-bit fields of the same LFSR word, so they are samples of
+    one m-sequence 5 and 10 places apart; two shifts of an m-sequence
+    cross-correlate at -1/(2^31 - 1) (the DR 0012 argument, reused).
+
+    The CONTROL is the defect this would otherwise hide: one field driving all
+    three walks passes every single-oscillator measurement and fails here.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    n = 1 << 18
+    state = vf.VOICE_LFSR_SEED
+    steps = np.empty((3, n))
+    acc = [0, 0, 0]
+    walk = np.empty((3, n))
+    shared = np.empty((3, n))
+    sacc = [0, 0, 0]
+    for i in range(n):
+        state, _ = vf.lfsr_frame(state)
+        w = state & 0xFFFF
+        for k in range(3):
+            steps[k, i] = vf.drift_step(w, k)
+            acc[k] = vf.drift_acc_next(acc[k], vf.drift_step(w, k))
+            walk[k, i] = acc[k]
+            sacc[k] = vf.drift_acc_next(sacc[k], vf.drift_step(w, 0))   # the CONTROL
+            shared[k, i] = sacc[k]
+    pairs = ((0, 1), (0, 2), (1, 2))
+    cs = np.corrcoef(steps)
+    assert max(abs(cs[i, j]) for i, j in pairs) < 0.01, cs
+    cw = np.corrcoef(walk)
+    assert max(abs(cw[i, j]) for i, j in pairs) < 0.05, cw
+    # the steps must have zero mean: a biased step against the leak is a static
+    # detune, not drift (the DRIFT_MEANSTEP negative control in voice_dp.v)
+    assert max(abs(steps.mean(axis=1))) < 2.0, steps.mean(axis=1)
+    # and the CONTROL must be caught by the same bound
+    csh = np.corrcoef(shared)
+    assert min(csh[i, j] for i, j in pairs) > 0.99, (
+        "the shared-field control does not correlate, so this test cannot fail")
+
+
+def test_the_three_oscillators_run_on_different_increments_when_drifting():
+    """[method] The audible form of the test above, at the level that ships:
+    three oscillators started on the SAME increment (detune 0) must run on
+    different increments frame by frame once drift is on, and on identical ones
+    when it is off.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    for cents, want_same in ((0.0, True), (vf.DRIFT_REF_CENTS, False)):
+        v, _ = _drift_note(cents, secs=1.5, mix=(1.0, 1.0, 1.0))
+        inc = [np.asarray(a) for a in v.trace["incs"]]
+        same = (np.array_equal(inc[0], inc[1]) and np.array_equal(inc[0], inc[2]))
+        assert same == want_same, (cents, [a[:4] for a in inc])
+        if not want_same:
+            # not merely different: each pair must differ on most frames
+            for a, b in ((0, 1), (0, 2), (1, 2)):
+                frac = float(np.mean(inc[a] != inc[b]))
+                assert frac > 0.5, (a, b, frac)
+
+
+def test_the_walks_stationary_rms_is_the_constant_the_host_conversion_uses():
+    """[measured-here: 3394 LSB rms over 2^18 updates, largest |acc| 15403]
+    `drift_reg` turns a request in cents into the DRIFT register by dividing by
+    `DRIFT_ACC_RMS`, so that constant is part of the host conversion of 5.5 and
+    a drifted value silently rescales every drift depth ever written. It is
+    MEASURED from the shipped integer generator, not taken from the
+    continuous-time formula for an Ornstein-Uhlenbeck process, and the 16-bit
+    saturation must have real headroom over the largest state the generator
+    reaches -- a walk that saturates is a walk that has a maximum detune, which
+    is a different mechanism.
+
+    Ground truth: test_moog_acceptance.test_meta_band_power_db_recovers_known_band_powers
+    """
+    _, rms, mx = vf.drift_walk(1 << 18, div=1)
+    assert abs(np.mean(rms) - vf.DRIFT_ACC_RMS) < 0.03 * vf.DRIFT_ACC_RMS, rms
+    assert max(mx) < (1 << (vf.DRIFT_ACC_BITS - 1)) / 2, mx
+    # the decimation does not change the stationary statistics, only the
+    # timescale: the shipped div = DRIFT_DIV must agree within its own error
+    _, rms_d, _ = vf.drift_walk(1 << 12, div=vf.DRIFT_DIV)
+    assert abs(np.mean(rms_d) - vf.DRIFT_ACC_RMS) < 0.12 * vf.DRIFT_ACC_RMS, rms_d
+    # and the register round-trips in cents across its useful range
+    for c in (0.2, 0.8, 1.5, 4.0, 5.5):
+        assert abs(vf.drift_cents(vf.drift_reg(c)) - c) < 0.01, c
+    assert vf.drift_reg(0.0) == 0 and vf.drift_reg(-1.0) == 0
+
+
+def test_drift_moves_the_rendered_pitch_by_the_commanded_cents():
+    """[measured-here: the deviation trace reads 0.920x the commanded rms at all
+    three depths and the probe recovers 0.935x of that trace's mean-removed rms]
+
+    The register is specified in cents, so the end-to-end claim is that the
+    AUDIO moves by the commanded amount -- not that an internal word does. But
+    this test was WRONG BEFORE IT WAS RIGHT and the wrong version is the
+    interesting one: comparing the probe's reading against the COMMANDED cents
+    read 0.601x at 1.0, 1.5 and 4.0 cents, which looks like a 40 % error in the
+    mechanism and is not one. Over a 14 s window -- ten correlation times -- a
+    bounded walk's own mean is NOT zero; this window's is -0.99 cents at the
+    reference depth. A constant offset is a STATIC DETUNE, and the probe removes
+    the mean f0 by construction, so it cannot see one and must not.
+
+    So the claim is split in two, each against a ground truth that is not the
+    other:
+
+      1. the register is LINEAR in cents, against the model's own Q0.20
+         deviation trace, which is what the register is defined in terms of.
+         The window's realised rms is 0.920x the generator's stationary rms at
+         every depth -- one number, because it is one trajectory -- and the
+         bound on it is the spread of 14 s windows MEASURED from the generator
+         in this test rather than a tolerance chosen to fit;
+      2. the probe recovers the part of that same trace a listener would call
+         drift -- its mean-removed rms -- to within 10 %. That is a check of
+         the probe against a deviation known independently of the audio, which
+         is the only direction in which it is a check at all.
+
+    Ground truth: test_osc_drift_probe.test_known_ou_wander_is_recovered
+    """
+    import osc_drift_probe as odp
+
+    def _rms(x):
+        return float(np.sqrt(np.mean(np.asarray(x, dtype=np.float64) ** 2)))
+
+    # the spread of realised rms over 14 s windows of the shipped generator,
+    # measured here: the bound below is this, not a round number.
+    trace, _, _ = vf.drift_walk(1 << 16, div=1)
+    w = int(14.0 * SR / vf.DRIFT_DIV)
+    seg = [_rms(trace[0][i:i + w]) / vf.DRIFT_ACC_RMS
+           for i in range(0, len(trace[0]) - w, w)]
+    lo, hi = min(seg), max(seg)
+    assert lo < 0.8 and hi > 1.2, ("a generator whose 14 s windows all read the "
+                                   "stationary rms would make bound below vacuous",
+                                   lo, hi)
+
+    f0 = dsp.note_hz(48)
+    ratios = []
+    for cents in (1.0, vf.DRIFT_REF_CENTS, 4.0):
+        v, y = _drift_note(cents, secs=14.0)
+        dev = np.asarray(v.trace["drift_dev"][0], dtype=np.float64) / vf.CENTS_TO_DEV
+        held = dev[int(0.15 * SR):]
+        ratios.append(_rms(held) / cents)
+        assert lo <= ratios[-1] <= hi, (cents, ratios[-1], lo, hi)
+        want = _rms(held - held.mean())
+        r = odp.drift_report(_held(y), SR, f0, label=f"drift-{cents}c")
+        assert r["verdict"] == odp.DRIFTING, r
+        assert abs(r["drift_rms_cents"] / want - 1.0) < 0.10, (cents, want, r)
+    # one trajectory scaled three ways: the register is linear in cents
+    assert max(ratios) - min(ratios) < 0.005, ratios
+
+
+def test_the_drift_walk_is_bounded_not_a_random_walk():
+    """[measured-here: the increment variance saturates at 2.00x Var[acc] by
+    eight correlation times; with the leak removed it reaches 0.36x and is still
+    growing]
+
+    "Bounded vs random walk" is one of the five things issue #56 asks to be
+    measured, and the mechanism's answer has to be measured the same way --
+    Var[acc(t+T) - acc(t)] against T, which saturates at exactly 2 Var[acc] for
+    a stationary process and grows without bound for a random walk.
+
+    It is measured HERE rather than read off `osc_drift_probe`'s
+    `walk_exponent`, and the reason is a precondition the probe cannot assert
+    for us: that exponent is fitted over lags of 0.05-0.8 s, chosen so the fit
+    does not read the window's own length, and this generator's correlation time
+    is 1.365 s. Every one of those lags is BELOW it, where a bounded walk is
+    indistinguishable from a random one -- the probe reads 1.29 on our own
+    drift, and would read about the same on a true random walk. Asserting
+    `walk_exponent < 0.9` on this generator is therefore an unsatisfiable gate,
+    and one was written here before this test replaced it.
+
+    The CONTROL is the same generator with the leak deleted, which is a genuine
+    random walk: it must fail the bound this test applies.
+
+    Ground truth: test_osc_drift_probe.test_bounded_and_unbounded_are_distinguished
+    """
+    tau = 1 << vf.DRIFT_LEAK_LOG2                       # updates, = 1.365 s
+
+    def _walk(n, leak):
+        from fixed import sat
+        state, acc, tr = vf.VOICE_LFSR_SEED, [0, 0, 0], [[], [], []]
+        for _ in range(n):
+            state, _ = vf.lfsr_frame(state)
+            word = state & 0xFFFF
+            for k in range(3):
+                step = vf.drift_step(word, k)
+                acc[k] = (vf.drift_acc_next(acc[k], step) if leak
+                          else sat(acc[k] + step, vf.DRIFT_ACC_BITS))
+                tr[k].append(acc[k])
+        return np.array(tr, dtype=np.float64)
+
+    for leak, want in ((True, True), (False, False)):
+        a = _walk(1 << 16, leak)
+        for k in range(3):
+            var = float(np.var(a[k]))
+            lag = 8 * tau
+            ratio = float(np.var(a[k][lag:] - a[k][:-lag])) / var
+            bounded = abs(ratio - 2.0) < 0.2
+            assert bounded == want, (leak, k, ratio, var)
+
+
+def test_drift_off_is_stable_and_a_static_detune_mix_is_not_called_drift():
+    """[method] The two negative controls of issue #138, on OUR OWN renders
+    rather than a synthetic stimulus. With DRIFT = 0 a single oscillator must
+    read STABLE; and the default three-oscillator patch with its 0.07-semitone
+    static detune -- which beats, and whose combined waveform therefore never
+    settles -- must not be reported as DRIFTING at any depth, including zero.
+
+    Ground truth: test_osc_drift_probe.test_static_detune_mix_is_not_drifting
+    """
+    import osc_drift_probe as odp
+    f0 = dsp.note_hz(48)
+    _, y = _drift_note(0.0, secs=14.0)
+    r = odp.drift_report(_held(y), SR, f0, label="drift-off")
+    assert r["verdict"] == odp.STABLE, r
+    for cents in (0.0, vf.DRIFT_REF_CENTS):
+        _, y = _drift_note(cents, secs=14.0, detune=(0.0, 0.07, -0.05),
+                           mix=(1.0, 0.8, 0.6))
+        r = odp.drift_report(_held(y), SR, f0, label=f"static-detune-mix-{cents}c")
+        assert r["verdict"] != odp.DRIFTING, r
+
+
+# =============================================================================
 # meta -- this suite must be able to fail, and must say what it claims
 # (#222, extending #45 item 1's gate beyond `test_808_acceptance.py`)
 # =============================================================================
@@ -2781,5 +3073,7 @@ def test_meta_every_test_declares_status_and_ground_truth():
     import test_moog_acceptance as mod
     import test_audio_measure as gt
     import test_reference_voice as gtr
+    import test_osc_drift_probe as gtd
     from acceptance_meta import assert_ground_truth_gate
-    assert_ground_truth_gate(mod, {gt.__name__: gt, gtr.__name__: gtr, mod.__name__: mod})
+    assert_ground_truth_gate(mod, {gt.__name__: gt, gtr.__name__: gtr,
+                                   gtd.__name__: gtd, mod.__name__: mod})

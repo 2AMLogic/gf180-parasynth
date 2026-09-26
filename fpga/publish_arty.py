@@ -5,7 +5,9 @@ The publication binds its proofs at publish time (refusing drift):
   * the digital verification record is derived from the WRAPPER the build
     actually compiled (parsed from build.tcl's -top), never a free-form
     path; a wrapper with no bound evidence is refused, and the record is
-    hash-validated against the wrapper's COMPILED source set;
+    hash-validated against the wrapper's COMPILED source set -- so a
+    record captured before a compiled source changed cannot bind, and
+    VERIFICATION_BY_WRAPPER must name a run of the CURRENT tree;
   * the compiled source set (read_verilog list) must equal the build
     record's source_sha256 -- an artifact whose build.tcl reads sources
     the record (and proof) never covered is refused;
@@ -31,11 +33,22 @@ ROOT = Path(__file__).resolve().parents[1]
 # a wrapper absent from this map has NO evidence and publication refuses.
 # Since the UART bridge merged, arty_a7_top IS the UART wrapper (uart_rxd/
 # uart_txd ports, uart_bridge.v in the compiled set), so its proof is the
-# UART-bridge clean run; the pre-uart clean run's source set no longer
-# matches the compiled tree and cannot bind. No arty_a7_uart_top module
-# exists in this tree -- a build.tcl claiming it has no evidence.
+# UART-bridge clean run. No arty_a7_uart_top module exists in this tree --
+# a build.tcl claiming it has no evidence.
+#
+# The proof must cover the tree it is bound to, so this entry MOVES whenever
+# a compiled source changes; validate_verification hash-checks it against the
+# live source set and refuses otherwise. Superseded runs stay where they are:
+#   reports/arty/clean       the pre-uart SPI wrapper (fpga/verify_arty.py)
+#   reports/arty/uart-clean  the pre-drift UART wrapper -- still the proof the
+#                            PUBLISHED integrated baseline bitstream cites by
+#                            hash, so it is never rewritten in place
+#   reports/arty/drift-clean this tree: per-oscillator drift in voice_dp.v
+#                            (contract 6.11, DR 0019) moved the frame's sample
+#                            strobe from cycle 175 to 176 and left the audio
+#                            byte-identical. See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/uart-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/drift-clean/verification.json",
 }
 
 
