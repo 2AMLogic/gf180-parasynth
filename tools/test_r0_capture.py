@@ -249,3 +249,22 @@ def test_start_red_the_stub_analyser_catches_nothing(tmp_path):
                           defects=["dropout", "clipping", "noise"])
     assert not res["all_caught"]
     assert not any(d["caught"] for d in res["defects"].values())
+
+
+def test_a_host_planned_hold_offset_is_read_from_the_log_and_stops_the_release_compare(
+        clean, tmp_path):
+    """On hardware uart_host anchors the gate-off to an OBSERVED frame, so its
+    planned hold can differ from the dry-run's; the release then cannot be
+    compared with this reference, and the record must say so rather than
+    FAIL the take for timing it was never asked to reproduce."""
+    d = _copy(clean, tmp_path)
+    p = d / "host" / "held-2.plan.json"
+    plan = json.loads(p.read_text())
+    ev = [r for r in plan["rows"] if r["kind"] == "event"][0]
+    ev["due"] += 30
+    p.write_text(json.dumps(plan))
+    rec = rc.analyse(d)
+    t = {x["id"]: x for x in rec["takes"]}["held-2"]
+    assert t["metrics"]["hold_offset_frames"] == 30
+    assert t["metrics"]["release_compared"] is False
+    assert rec["verdict"] == rc.PASS, rec["reasons"]

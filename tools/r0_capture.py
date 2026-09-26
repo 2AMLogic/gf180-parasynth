@@ -331,8 +331,9 @@ def load_reference(refdir: pathlib.Path, command_id: str) -> dict:
     if cal.get("start") is None:
         raise Refused(f"reference {command_id} declares no calibration window")
     plan = refdir / f"{command_id}.plan.json"
+    pl = json.loads(plan.read_text()) if plan.is_file() else None
     return {"record": rec, "x": x[:, 0] / 32768.0, "cal": (int(cal["start"]), int(cal["stop"])),
-            "plan": json.loads(plan.read_text()) if plan.is_file() else None}
+            "plan": pl, "hold": planned_hold(pl)}
 
 
 SESSION_REQUIRED = {
@@ -399,6 +400,19 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict) -> list:
     if cal and cal not in ids:
         probs.append(f"calibration take {cal!r} is not a take")
     return probs
+
+
+def planned_hold(plan: dict | None) -> int | None:
+    """A held-note command's hold, in device frames, as its own host log
+    planned it: the gate-off event's due minus the last live write's apply
+    frame. None for commands that are not live-writes-then-one-event."""
+    if not plan:
+        return None
+    ev = [r for r in plan.get("rows", []) if r.get("kind") == "event"]
+    live = [r for r in plan.get("rows", []) if r.get("kind") == "write"]
+    if len(ev) != 1 or not live:
+        return None
+    return int(ev[0]["due"]) - int(live[-1]["apply_frame"])
 
 
 def command_identity(plan_ref: dict | None, plan_cap: dict) -> list:
@@ -485,9 +499,21 @@ def calibrate(ref, cal, cap, sr=SR) -> dict:
             "line_residual_max": float(np.max(np.abs(res[keep])))}
 
 
-def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR) -> dict:
+def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
+                 hold_offset=None) -> dict:
     """Every property of one take. `frozen` = {rho, gain}; d_t is estimated
-    here from the declared window only."""
+    here from the declared window only.
+
+    `hold_offset`: frames by which this take's host log planned a different
+    hold from the reference's. uart_host anchors a held note's gate-off to an
+    OBSERVED gate frame (a STATUS minus its round trip), so on hardware the
+    hold can differ from the dry-run's by a few frames, and the release then
+    lands that much later or earlier than the reference's. The offset is
+    read from the host log, never fitted from audio; when it is not zero the
+    release cannot be compared sample-for-sample with this reference, so
+    the waveform comparisons stop 5 ms before the reference's release and
+    the record says so (`release_compared: false`). The stuck-note check
+    still covers the whole take."""
     out = {"id": take["id"], "command_id": take["command_id"], "fails": {}, "metrics": {}}
     F = out["fails"]
     M = out["metrics"]
@@ -562,13 +588,20 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR) -> di
             F["silence"] = (F.get("silence", "") + f"input {c}: {lv:.1f} dBFS where "
                             f"{want:.1f} dBFS is predicted; ").strip()
     # residual over the evaluation region (after the calibration window)
+    if hold_offset:
+        nz = np.flatnonzero(x)
+        rel = int(nz[0]) + int(ref["hold"]) - BLOCK if nz.size and ref.get("hold") else None
+        M["hold_offset_frames"] = int(hold_offset)
+        M["release_compared"] = False
+        if rel is not None:
+            e1 = min(e1, int(d + rel / rho))
     ev = slice(e0, e1)
     er = float(np.sum((A[ev] - p[ev]) ** 2) / max(np.sum(p[ev] ** 2), 1e-30))
     M["residual_db"] = round(10 * math.log10(max(er, 1e-30)), 2)
     if M["residual_db"] > LIMITS["residual_db_max"]:
         F["residual"] = f"{M['residual_db']} dB > {LIMITS['residual_db_max']} dB"
     # local lags and gains, measured AGAINST the frozen alignment
-    pts = _local_lags(x, A, d, rho, int(cal[1]), len(x))
+    pts = _local_lags(x, A, d, rho, int(cal[1]), int(min(len(x), (e1 - d) * rho)))
     if pts:
         dev = np.array([q[1] for q in pts])
         ms = np.array([q[0] for q in pts], dtype=np.float64)
@@ -667,7 +700,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         rec["inputs_sha256"][s["image"]["program_transcript"]] = sha256_file(
             bundle / s["image"]["program_transcript"])
         dac = s["interface"]["dac_channels"]
-        takes, refs, caps = s["takes"], {}, {}
+        takes, refs, caps, hold_offsets = s["takes"], {}, {}, {}
         for tk in takes:
             refs[tk["command_id"]] = refs.get(tk["command_id"]) or load_reference(
                 refdir, tk["command_id"])
@@ -684,8 +717,11 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 if not hp.is_file():
                     raise Refused(f"take {tk['id']}: host log {hp} missing")
                 rec["inputs_sha256"][str(hp.relative_to(bundle))] = sha256_file(hp)
-                diff = command_identity(refs[tk["command_id"]].get("plan"),
-                                        json.loads(hp.read_text()))
+                host_plan = json.loads(hp.read_text())
+                diff = command_identity(refs[tk["command_id"]].get("plan"), host_plan)
+                h_cap, h_ref = planned_hold(host_plan), refs[tk["command_id"]].get("hold")
+                if h_cap is not None and h_ref is not None:
+                    hold_offsets[tk["id"]] = h_cap - h_ref
                 if diff:
                     raise Refused(f"take {tk['id']} is not the released command "
                                   f"{tk['command_id']}: " + "; ".join(diff))
@@ -723,7 +759,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             if tk["command_id"] == "silence":
                 continue
             results.append(analyse_take(tk, refs[tk["command_id"]], caps[tk["id"]], dac,
-                                        frozen, floor))
+                                        frozen, floor, hold_offset=hold_offsets.get(tk["id"])))
         # repeat-take stability, on the reference timeline
         by_cmd = {}
         for t, tk in zip(results, [*[x for x in takes if x["command_id"] == "silence"],
@@ -735,6 +771,9 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 continue
             x = refs[cmd]["x"]
             a, b = sounding_extent(x)
+            if any(hold_offsets.get(k["id"]) for _, k in lst) and refs[cmd].get("hold"):
+                # the holds were planned differently: compare up to the release
+                b = min(b, int(np.flatnonzero(x)[0]) + int(refs[cmd]["hold"]) - BLOCK)
             (t0, k0) = lst[0]
             u0 = unwarp_capture(caps[k0["id"]][:, dac[0] - 1], len(x), *t0["_aligned"])[a:b]
             for t1, k1 in lst[1:]:
