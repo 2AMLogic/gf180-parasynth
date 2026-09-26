@@ -151,3 +151,88 @@ row locks is that the corner is a *fixed fraction* of the commanded cutoff, and
 which fraction. `docs/discrimination.md` §8 locks its own corner-ratio number
 (0.7860) under different probe conditions — a different resonance, drive and
 level — so the two are not comparable and neither is a restatement of the other.
+
+## Amendment (2026-09-26, issue #237): the operating point stays at res = 1.05, and why one constant cannot do more
+
+Issue #237 asked three things of the 105-cent travel measured above: is it
+worth correcting, is a resonance-dependent term actually free, and does
+picking a different single operating point help. Answered here with
+evidence, not just decided.
+
+**Which operating point the cutoff control is exactly right at: res = 1.05,
+unchanged.** That is where `CUT_TRIM` is fitted and it is still the point
+with an unambiguous physical meaning — the frequency the loop actually sings
+at, just past the onset, where the ring amplitude is small enough that the
+tanh table's bin-0 slope (the same small-signal assumption DR 0006's
+compensation ROM rests on) is still a good description of the loop. Every
+other resonance is a larger-amplitude limit cycle the small-signal model
+does not fully capture, which is the root cause of the drift this section is
+about.
+
+**No single constant can reduce the travel — proved, not asserted.** A
+uniform retrim is exactly what choosing a *different* single operating point
+looks like: the same multiplicative correction applied regardless of
+resonance. Injecting one (DR 0011's own mechanism, `OurLadder.cut_skew`, at
+two resonances instead of one) leaves the travel unchanged to within a couple
+of cents whatever the retrim's size or sign:
+
+| retrim | travel (quick 2-cutoff probe) |
+|---|---:|
+| none (shipped) | 104.5 cents |
+| +2 % uniform | 104.5 cents |
+| −2 % uniform | 104.5 cents |
+
+`model/test_ladder_headroom.py::test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot`
+locks this. Algebraically this has to be true: a constant multiplies every
+resonance's coefficient lookup by the same factor, so it shifts every
+resonance's offset by (approximately) the same amount in cents, and a shift
+common to both ends of the travel does not change their difference. **"Correct
+at a different operating point" is therefore not a third option distinct from
+"leave it": it only relocates where the residual crosses zero, never shrinks
+it.**
+
+**Is a resonance-dependent term worth building: yes, in principle, and it is
+not free.** `model/ladder_headroom.py::offset_vs_resonance_fit` fits the mean
+offset as a polynomial in resonance ALONE (no cutoff term) and finds the
+part no such polynomial can remove: about 0.95 pp for a straight line, 0.23
+pp (≈4 cents) for a quadratic, 0.06 pp (≈1 cent) for a cubic — against the
+raw 5.9 pp (105 cents). So the offset is a smooth, low-order function of the
+resonance knob, not large-signal noise, and a per-frame term keyed on `k`
+(already available every frame; DR 0006's compensation ROM already reads it)
+could recover nearly all of it. But unlike `fcr` and `CUT_TRIM` — a
+polynomial and a constant baked into `make_g_rom` **once, at ROM-build time,
+with no datapath change at all** — a term that depends on resonance depends
+on a per-frame, host-supplied value, so it needs either a new small ROM
+addressed by `k` plus an extra per-frame multiply, or a widened address into
+an existing table. That is a datapath change: new RTL in `voice_dp.v`'s
+ladder context, a new contract revision, and the full regen blast radius this
+record paid the first time — every bit-exact expectation, `verify_voice.py`,
+`verify_synth_top.py`, every rendered `.wav`.
+
+**The decision.** Not built here. `CUT_TRIM = 1.030` and `fcr()` are
+unchanged; `voice_fx.make_g_rom`, `make_k_rom`, `g_from_cut`, `k_onset` are
+unchanged; `G_ROM128`/`K_ROM32` do not move and neither does the contract
+revision. `spec/reference/test_tables.py`'s revision-3 hashes continue to
+reproduce from `make_g_rom(tune=False)` because that code path was never
+touched, and DR 0006's "`res = 1` is the onset everywhere" property is
+unaffected for the same reason. The two other ROM-build-time wins
+`docs/ladder-rung1-audit.md` §3 and §4 record (refitting `fcr`'s cubic to
+this loop, refitting the 129 stored ROM entries) are, on their own merits,
+free — but they touch the same `make_g_rom` and would pay the same
+regeneration cost this record paid, and issue #237's own framing is explicit
+that paying that blast radius three times (once per win) is wasteful. They
+are deferred alongside the resonance-dependent term rather than taken alone,
+so the whole cost is paid once, in **issue #257**, which also carries the
+resonance-dependent term's own decision record (the RTL shape, its area and
+timing cost) since that is a datapath decision this record does not make.
+
+**The property that would have caught a resonance-dependent regression, and
+did not exist before this issue.** DR 0011's own control above
+(`test_control_a_uniform_cutoff_skew_...`) proves a drift metric is blind to
+a *uniform* offset; nothing tested whether anything was watching an offset
+that *varies* with resonance, which is exactly the gap this section closes.
+`test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot`
+injects a skew that scales with `(res − 1)` and shows the measured travel
+moves by tens of cents where a uniform retrim of the same magnitude moves it
+by under three — the travel is a property that would have caught this
+issue's own defect, and now does.

@@ -86,6 +86,22 @@ DR 0006's compensation ROM with it, and choosing which operating point is
 "right" is a decision record and not a measurement. Filed as **#237**, bundled
 with the two ROM-build-time wins of §3 and §4 so that blast radius is paid once.
 
+**Resolved by issue #237.** The operating point stays at res = 1.05 (§1's own
+table is unchanged): a uniform retrim — what choosing a different single
+operating point looks like — leaves the 105 cents of travel unchanged to
+within a couple of cents whatever its size, so no single constant was ever
+going to close it. A resonance-dependent term is measurably tractable
+(`model/ladder_headroom.py::offset_vs_resonance_fit` finds under 4 cents left
+over after fitting the offset as a quadratic in resonance alone), but it is a
+datapath change and not the ROM-build-time class `fcr`/`CUT_TRIM` are, so it
+is deferred, bundled with §3 and §4 as planned, to **issue #257**.
+`spec/decision-records/0011-cutoff-tuning-polynomial.md`'s amendment has the
+evidence and the reasoning; the new injected control is
+`test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot`,
+which the previous paragraph's own uniform-skew control (DR 0011) could not
+have caught.
+<!-- claim: test=model/test_ladder_headroom.py::test_control_a_resonance_dependent_cutoff_skew_moves_the_travel_a_uniform_one_cannot -->
+
 ## 2. The external reference, and exactly how far it can be trusted
 
 `docs/discrimination.md` §8.4 is the strongest external evidence this project

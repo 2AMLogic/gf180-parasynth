@@ -16,15 +16,42 @@ bitstream to its source inputs, digital verification and implementation
 reports. Physical playback remains under review; this is not yet a
 qualified hardware audio result.
 
+**The published baseline predates per-oscillator drift, and only a real
+Vivado run can change that.** Contract 6.11 / DR 0019 added drift to
+`rtl-sketch/voice_dp.v` (five datapath states, three 16-bit walk
+accumulators, three deviations, a 10-bit decimation counter and register
+`0x2D`). Every figure in the table below — LUTs, registers, DSPs, both slack
+numbers, the DRC census, the DPREG-4 disposition and the bitstream hash —
+describes the **pre-drift** netlist, and the publisher knows it: `publish()`
+compares a build record's `source_sha256` against the live tree and would
+refuse to re-publish this artifact. Refreshing it is not a document edit and
+is not available in a sandbox. It needs, in order:
+
+1. `python fpga/build_arty.py` on the x86-64 Linux build box with Vivado
+   2025.1 on `PATH` — a real synthesis, place, route and bitstream from the
+   drift tree, bound to `reports/arty/drift-clean/verification.json`;
+2. `python tools/dsp_dpreg_extract.py` against the **new** `routed.dcp`, to
+   re-derive the DPREG-4 DSP-feedback disposition for that image (the
+   committed evidence is bound by digest to routed checkpoint
+   `6c3c22c5…` and correctly refuses any other);
+3. `python fpga/publish_arty.py`, then a fresh table here.
+
+Until that happens, the digital evidence in this document is current with the
+tree and **the routed/hardware evidence is not**. `python3
+tools/check_arty_evidence_binding.py --list-historical` prints the split.
+
 Since 2026-09-22 the publisher additionally binds, at publication time and
 refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 
 - the digital verification record is **derived from the wrapper the build
   compiled** (`build.tcl` `-top` → `VERIFICATION_BY_WRAPPER`:
   `arty_a7_top` — which, since the bridge merged, IS the UART wrapper —
-  → `reports/arty/uart-clean/verification.json`; an
+  → `reports/arty/drift-clean/verification.json`; an
   unlisted wrapper has no evidence and is refused), and the proof is
-  hash-validated against the wrapper's compiled source set;
+  hash-validated against the wrapper's compiled source set, so **the map
+  moves whenever a compiled source changes** and superseded runs stay where
+  they are (`reports/arty/clean` pre-uart, `reports/arty/uart-clean`
+  pre-drift);
 - the compiled `read_verilog`/`read_xdc` set must equal the build record's
   `source_sha256` minus ROM data files — an artifact whose build script
   reads sources the proof never covered is refused;
@@ -394,13 +421,29 @@ real wrapper at the pins — 7 scenarios (held note to envelope floor, the
 scripted phrase, queue overflow, note-off during queue-full, reset
 mid-phrase, dropped byte, corrupted byte) all bit-exact against the integer
 model with exact device-frame timing, plus 5 injected-bug controls each
-demonstrated to turn the bench red. The evidence lives in
-[reports/arty/uart-clean](reports/arty/uart-clean). No physical playback has
-been attempted. The integrated baseline bitstream above CONTAINS the bridge
-and is published: Vivado 2025.1 routed it from the merged tree with
-`fpga/build_arty.py --verification
-fpga/reports/arty/uart-clean/verification.json`, and the publication passed
-the publisher's active UART disposition gates. The bridge-only build remains
+demonstrated to turn the bench red. The controls are bench-logic controls
+(parser, event queue, reset) and are unaffected by the voice datapath:
+[reports/arty/uart-controls](reports/arty/uart-controls).
+
+The clean run for the **current** tree is
+[reports/arty/drift-clean](reports/arty/drift-clean) — 87/87 writes
+delivered, 6,734 I2S periods bit-exact, carried with its own start-red run
+against `stubs/arty_a7_uart_stub.v` (`FAIL`, 0 of 26 writes). Drift moved one
+number and no others: the same bench on a pristine `main` tree reproduces
+[reports/arty/uart-clean](reports/arty/uart-clean) exactly, and between the
+two trees the decoded I2S wire, the sampled audio, the TX capture and the
+write log are **byte-identical** while `worst_strobe_cycle` goes 175 → 176 of
+256 — the one unconditional `S_DA0` cycle per frame. No physical playback has
+been attempted.
+
+The integrated baseline bitstream above CONTAINS the bridge and is published:
+Vivado 2025.1 routed it from the then-current tree with `fpga/build_arty.py
+--verification fpga/reports/arty/uart-clean/verification.json`, and the
+publication passed the publisher's active UART disposition gates. That
+bitstream predates drift — see "the published baseline predates
+per-oscillator drift" at the head of this document — and
+`reports/arty/uart-clean` is never rewritten because it is the proof that
+image cites by hash. The bridge-only build remains
 as history in
 [reports/arty/uart-bridge-2025.1](reports/arty/uart-bridge-2025.1)
 (bitstream 3,825,912 bytes, SHA-256
@@ -439,12 +482,14 @@ To reuse the committed digital evidence on that host, without rerunning the
 same unchanged RTL smoke:
 
 ```text
-python fpga/build_arty.py --verification fpga/reports/arty/uart-clean/verification.json
+python fpga/build_arty.py --verification fpga/reports/arty/drift-clean/verification.json
 ```
 
-(the wrapper's compiled source set includes `rtl-sketch/uart_bridge.v`, so
-the pre-uart `clean/verification.json` no longer binds and the preparer
-refuses it).
+(the preparer hash-checks the record against the live source set, so only a
+run of the current tree binds: the pre-uart `clean/verification.json` misses
+`rtl-sketch/uart_bridge.v`, and the pre-drift `uart-clean/verification.json`
+refuses with `verification source differs: rtl-sketch/voice_dp.v`. Ask before
+the 39-minute suite does: `python3 tools/check_arty_evidence_binding.py`.)
 
 This produces a batch Tcl script, tool log, input hashes, utilization, clock,
 DRC and timing reports, checkpoints and `arty.bit`. Missing Vivado returns
