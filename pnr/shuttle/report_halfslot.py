@@ -254,11 +254,8 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
     comps = cr.parse_def_components(def_path)
     if not comps:
         raise cr.Refusal(f"{def_path} has no COMPONENTS section")
-    import collections
-    seq = collections.Counter()
-    for inst, master in comps:
-        if cr.SEQ_MASTER.search(master):
-            seq[cr.bucket_of(inst)] += 1
+    dregs_nets = cr.dregs_output_nets(os.path.join(REPO, "rtl-sketch", "synth_top.v"))
+    seq = cr.flops_by_block(def_path, dregs_nets)
     declared = census["flops_declared_per_module"]
     lines = [
         "A DRC count cannot tell a real result from a collapsed netlist: **both are "
@@ -270,33 +267,39 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
         f"From `{os.path.relpath(def_path, run_dir)}` ({len(comps):,} components), by "
         "`pnr/shuttle/check_route.py verify`:",
         "",
-        "| block | flops placed | flops declared (RTL) |",
-        "|---|---:|---:|",
+        "| block | flops placed | flops declared (RTL) | |",
+        "|---|---:|---:|---|",
     ]
     pairs = [
-        ("u_dregs          (drum_regs)", "drum_regs"),
-        ("u_drums.bank     (modal_dp)", "modal_dp"),
-        ("u_drums.src      (drum_dp)", "drum_dp"),
-        ("u_voice          (own)", None),
-        ("u_voice.u_ladder (ladder_dp_n, NCH=2)", "ladder_dp_n"),
-        ("u_voice.u_div    (recip_div)", "recip_div"),
-        ("u_spi            (spi_ctl)", "spi_ctl"),
-        ("u_i2s            (i2s_tx)", "i2s_tx"),
-        ("synth_top own", "synth_top"),
+        (cr.DREGS_BUCKET, "drum_regs", "**the discriminator**"),
+        ("u_drums.src      (drum_dp)", "drum_dp", ""),
+        ("u_drums.bank     (modal_dp)", "modal_dp", ""),
+        ("u_voice          (voice_dp + submodules)", "voice_dp", ""),
+        ("u_voice.u_ladder (ladder_dp_n, NCH=2)", "ladder_dp_n", ""),
+        ("u_voice.u_div    (recip_div)", "recip_div", ""),
+        ("u_spi            (spi_ctl)", "spi_ctl", ""),
+        ("u_i2s            (i2s_tx)", "i2s_tx", ""),
+        (cr.SYNTH_OWN, "synth_top", ""),
     ]
-    for label, mod in pairs:
+    for label, mod, note in pairs:
         if label not in seq:
             continue
         want = declared.get(mod) if mod else None
-        # voice_dp's census covers the whole voice including its submodules, so the
-        # own-logic row has no single declared counterpart; say so rather than
-        # inventing a comparison.
         lines.append(f"| `{label.split()[0]}` | {num(seq[label])} | "
-                     f"{num(want) if want is not None else 'see below'} |")
+                     f"{num(want) if want is not None else '—'} | {note} |")
     total = sum(seq.values())
-    lines.append(f"| **total under `synth_top`** | **{num(total - seq.get('outside synth_top (padframe, wrapper, fill, tap)', 0))}** | |")
+    lines.append(f"| **total placed** | **{num(total)}** | | |")
     lines.append("")
-    got = seq.get("u_dregs          (drum_regs)", 0)
+    lines.append(
+        "**Only the `u_dregs` row is expected to match exactly, and only that row is "
+        "asserted on.** Synthesis flattens `synth_top` and optimises across module "
+        "boundaries, so a per-module census taken *before* flattening does not have to "
+        "agree block by block with what survives after it — every other row here is "
+        "lower than its census figure and that is the normal amount. `drum_regs` is "
+        "different because it is a register file: every bit is architecturally visible "
+        "at a port, so nothing can be merged away without changing the chip.")
+    lines.append("")
+    got = seq.get(cr.DREGS_BUCKET, 0)
     want = declared.get("drum_regs")
     verdict = "**equal**" if got == want else f"**{got - want:+,} against the census**"
     lines.append(f"`drum_regs` places **{num(got)}** flops; the RTL declares "
@@ -304,10 +307,17 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
                  "design: it is the largest register file and every bit of it is a declared "
                  "`reg`, so a collapsed netlist cannot produce the number by accident.")
     lines.append("")
-    lines.append("`voice_dp`'s census figure (**"
-                 f"{num(declared.get('voice_dp'))}**) covers the whole voice including "
-                 "`ladder_dp_n` and `recip_div`, so it has no single row here; the three voice "
-                 "rows sum against it.")
+    lines.append(
+        "The flop is attributed to a block by **the name of the net its `Q` drives**, not "
+        "by its instance name: the netlist is flattened before placement, so every "
+        "instance in the DEF is an auto-name (`_141690_`) and no hierarchy survives "
+        "there. An earlier version of this check keyed on instance names, bucketed all "
+        f"{num(total)} placed flops as 'outside `synth_top`', and reported the collapse "
+        "signature for a layout that is fine. `drum_regs`'s own internal names do not "
+        "survive either (`memory` rewrites its `reg [25:0] a1 [0:MODES-1]` arrays), so "
+        "its bucket is the set of nets `u_dregs` drives — read out of "
+        "`rtl-sketch/synth_top.v` on every run rather than listed here, so a port rename "
+        "cannot quietly shrink it.")
     if "design__instance__count__class:sequential_cell" in m:
         lines.append("")
         lines.append("The flow's own count of sequential cells anywhere on the die is "

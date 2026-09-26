@@ -48,21 +48,33 @@ CENSUS_MODULES = [
     "voice_dp", "recip_div", "ladder_dp_n", "i2s_tx",
 ]
 
-# (regex on the DEF instance name, bucket label).  First match wins.  The paths
-# are chip_top -> core (chip_core) -> u_synth (synth_top) -> ...  See
-# pnr/orfs/blockarea.py for the same buckets one level shallower (ORFS ran
-# synth_top as the top, this flow wraps it in the padframe).
+# A FLOP IS BUCKETED BY THE NET ITS Q DRIVES, NOT BY ITS INSTANCE NAME.
+#
+# WRONG-THEN-RIGHT, and it was a false RED.  The first version of this matched the
+# RTL hierarchy in DEF *instance* names, the way pnr/orfs/blockarea.py does.  Against
+# this flow's DEF it bucketed all 12,275 placed sequential cells into "outside
+# synth_top", reported drum_regs as placing ZERO flops, and printed the collapse
+# signature -- for a layout that is completely fine.  The netlist is flattened before
+# placement, so every instance is an auto-name (`_141690_`); no hierarchy survives
+# there at all.  It survives in NET names (`i_chip_core.u_synth.u_drums....`), which
+# is why the bucketing keys on them.
+#
+# A checker that cries collapse at a healthy design is not "safely conservative": it
+# is the thing that trains a reader to skip the check.
+DEF_TOP = r"i_chip_core\.u_synth\."
 BUCKETS = [
-    (r"u_synth\.u_voice\.u_ladder\b", "u_voice.u_ladder (ladder_dp_n, NCH=2)"),
-    (r"u_synth\.u_voice\.u_div\b",    "u_voice.u_div    (recip_div)"),
-    (r"u_synth\.u_voice\b",           "u_voice          (own)"),
-    (r"u_synth\.u_drums\.src\b",      "u_drums.src      (drum_dp)"),
-    (r"u_synth\.u_drums\.bank\b",     "u_drums.bank     (modal_dp)"),
-    (r"u_synth\.u_dregs\b",           "u_dregs          (drum_regs)"),
-    (r"u_synth\.u_spi\b",             "u_spi            (spi_ctl)"),
-    (r"u_synth\.u_i2s\b",             "u_i2s            (i2s_tx)"),
-    (r"u_synth\b",                    "synth_top own"),
+    (DEF_TOP + r"u_voice\.u_ladder\b", "u_voice.u_ladder (ladder_dp_n, NCH=2)"),
+    (DEF_TOP + r"u_voice\.u_div\b",    "u_voice.u_div    (recip_div)"),
+    (DEF_TOP + r"u_voice\b",           "u_voice          (voice_dp + submodules)"),
+    (DEF_TOP + r"u_drums\.src\b",      "u_drums.src      (drum_dp)"),
+    (DEF_TOP + r"u_drums\.bank\b",     "u_drums.bank     (modal_dp)"),
+    (DEF_TOP + r"u_drums\b",           "u_drums          (drum_kit)"),
+    (DEF_TOP + r"u_spi\b",             "u_spi            (spi_ctl)"),
+    (DEF_TOP + r"u_i2s\b",             "u_i2s            (i2s_tx)"),
 ]
+DREGS_BUCKET = "u_dregs          (drum_regs)"
+SYNTH_OWN = "synth_top own"
+OUTSIDE = "outside synth_top (padframe, wrapper, fill, tap)"
 
 # gf180mcu_fd_sc_mcu7t5v0 sequential masters: dff*/sdff*/latch*.  Matching on the
 # master name and not on the instance name matters -- an instance name proves
@@ -230,11 +242,115 @@ def parse_def_components(path: str) -> list[tuple[str, str]]:
     return comps
 
 
-def bucket_of(inst: str) -> str:
+DEF_NET_PIN = re.compile(r"\(\s*([^\s()]+)\s+([^\s()]+)\s*\)")
+
+
+def parse_def_nets(path: str):
+    """Yield (net name, [(instance, pin), ...]) for every net in the DEF.
+
+    DEF wraps a long net over many lines and ends it with ';', so the statement is
+    accumulated rather than read line by line -- a per-line parse silently drops the
+    connections of exactly the high-fanout nets that matter most.
+    """
+    inside = False
+    buf = ""
+    with open(path, errors="ignore") as f:
+        for line in f:
+            s = line.strip()
+            if s.startswith("NETS "):
+                inside = True
+                continue
+            if s.startswith("END NETS"):
+                break
+            if not inside:
+                continue
+            buf = s if s.startswith("- ") else (buf + " " + s)
+            if not s.endswith(";") or not buf.startswith("- "):
+                continue
+            name = buf[2:].split()[0]
+            yield name, DEF_NET_PIN.findall(buf)
+            buf = ""
+
+
+# drum_regs' own internal net names do NOT survive synthesis: its register map is
+# declared as `reg [25:0] a1 [0:MODES-1]` arrays, which yosys' `memory` pass rewrites
+# into flops with generated names.  What does survive is the net each of those flops
+# DRIVES -- synth_top's `d_a1`, `d_path`, ... wires, which are exactly u_dregs' output
+# ports (rtl-sketch/synth_top.v, the `u_dregs (` instantiation).
+#
+# So the drum_regs bucket is an OUTPUT-NAME attribution, not a hierarchy path, and
+# that distinction is worth stating: it counts the flops whose output is a bit of the
+# register file, which for a register file is the same set.  The port list is read
+# back out of the RTL rather than typed here, so renaming a port cannot silently
+# shrink the bucket into a false pass.
+DREGS_INST = re.compile(r"\bdrum_regs\b[^;]*?\bu_dregs\s*\((.*?)\)\s*;", re.S)
+PORT_CONN = re.compile(r"\.\s*\w+\s*\(\s*([A-Za-z_]\w*)\s*\)")
+
+
+def dregs_output_nets(synth_top_v: str) -> set:
+    """The synth_top-scope net names u_dregs drives, read from the RTL."""
+    try:
+        with open(synth_top_v, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        raise Refusal(f"cannot read {synth_top_v}: {e}")
+    m = DREGS_INST.search(text)
+    if not m:
+        raise Refusal(f"no `drum_regs ... u_dregs (...)` instantiation in {synth_top_v}; "
+                      "the bucketing cannot be derived from the RTL")
+    # clk/rst_n/wr_* are u_dregs INPUTS and are driven from elsewhere; a flop on them
+    # is not a drum_regs flop.  Everything else on this instance is an output.
+    inputs = {"clk", "rst_n", "rst_n_drum", "wr_valid", "wr_drum", "wr_addr", "wr_data"}
+    nets = {n for n in PORT_CONN.findall(m.group(1)) if n not in inputs}
+    if not nets:
+        raise Refusal(f"u_dregs in {synth_top_v} has no output connections")
+    return nets
+
+
+def net_stem(net: str) -> str:
+    r"""`i_chip_core.u_synth.d_a1\[0\]` -> `d_a1`.
+
+    DEF escapes the bracket of a bit-select inside a hierarchical name, so the name is
+    literally `d_a1\[0\]`.  Splitting on '[' without removing the escapes leaves a
+    trailing backslash on every stem -- which silently sent all 3,520 drum_regs flops
+    into the "synth_top own" bucket and kept the drum_regs row at zero, i.e. it
+    preserved the false collapse report through the FIRST attempt at this fix.
+    """
+    s = net.replace("\\", "").split("[")[0]
+    prefix = "i_chip_core.u_synth."
+    return s[len(prefix):] if s.startswith(prefix) else s
+
+
+def bucket_of(net: str, dregs_nets: set) -> str:
+    """Which block a flop belongs to, from the name of the net its Q drives."""
+    clean = net.replace("\\", "")
     for rx, label in BUCKETS:
-        if re.search(rx, inst):
+        if re.search(rx, clean):
             return label
-    return "outside synth_top (padframe, wrapper, fill, tap)"
+    if net_stem(net) in dregs_nets:
+        return DREGS_BUCKET
+    if clean.startswith("i_chip_core.u_synth."):
+        return SYNTH_OWN
+    return OUTSIDE
+
+
+def flops_by_block(def_path: str, dregs_nets: set) -> collections.Counter:
+    """{bucket: placed sequential cells}, each flop counted once, by its Q net."""
+    masters = dict(parse_def_components(def_path))
+    seq = {i for i, mstr in masters.items() if SEQ_MASTER.search(mstr)}
+    counted: set = set()
+    out: collections.Counter = collections.Counter()
+    for name, conns in parse_def_nets(def_path):
+        for inst, pin in conns:
+            if pin in ("Q", "QN") and inst in seq and inst not in counted:
+                counted.add(inst)
+                out[bucket_of(name, dregs_nets)] += 1
+    # A sequential cell whose Q drives nothing is still placed; not counting it would
+    # make the totals disagree with design__instance__count__class:sequential_cell for
+    # a reason no reader could find.
+    for inst in seq - counted:
+        out["placed but Q drives no net"] += 1
+    return out
 
 
 # LibreLane 3 carries the cumulative metrics inside each step's `state_out.json`
@@ -312,7 +428,6 @@ def verify(run_dir: str, census: dict, min_pads: int, expect_ws_ip: int) -> int:
     if not comps:
         raise Refusal(f"{def_path} has no COMPONENTS section")
 
-    seq = collections.Counter()
     pads = 0
     ws_ip = 0
     for inst, master in comps:
@@ -320,8 +435,9 @@ def verify(run_dir: str, census: dict, min_pads: int, expect_ws_ip: int) -> int:
             pads += 1
         if WS_IP_MASTER.search(master):
             ws_ip += 1
-        if SEQ_MASTER.search(master):
-            seq[bucket_of(inst)] += 1
+
+    dregs_nets = dregs_output_nets(os.path.join(REPO, "rtl-sketch", "synth_top.v"))
+    seq = flops_by_block(def_path, dregs_nets)
 
     declared = census["flops_declared_per_module"]
     placed_total = sum(seq.values())
@@ -343,7 +459,7 @@ def verify(run_dir: str, census: dict, min_pads: int, expect_ws_ip: int) -> int:
     # design and every one of its bits is a declared reg, so a collapsed netlist
     # cannot produce the number by accident.
     want = declared.get("drum_regs")
-    got = seq.get("u_dregs          (drum_regs)", 0)
+    got = seq.get(DREGS_BUCKET, 0)
     print(f"drum_regs flops: RTL declares {want}, layout places {got}")
     if want is None:
         problems.append("census has no drum_regs entry")

@@ -147,13 +147,22 @@ def test_sequential_is_keyed_on_the_master_not_the_instance():
     assert cr.SEQ_MASTER.search("gf180mcu_fd_sc_mcu7t5v0__dffrnq_1")
 
 
-def test_buckets_reach_through_the_padframe_wrapper():
-    # The instance path is chip_top -> core -> u_synth -> ...; the buckets must
-    # match on the synth_top-relative part, not anchor at the start of the name.
-    assert "drum_regs" in cr.bucket_of("core.u_synth.u_dregs.a1_reg[0][0]")
-    assert "modal_dp" in cr.bucket_of("core.u_synth.u_drums.bank.y_reg[3]")
-    assert "ladder_dp_n" in cr.bucket_of("core.u_synth.u_voice.u_ladder.s[1]")
-    assert "outside synth_top" in cr.bucket_of("clk_pad")
+def test_an_rtl_instance_path_is_not_what_the_def_contains():
+    """The retired assumption, kept as the record of a false RED.
+
+    This test used to assert that `core.u_synth.u_dregs.a1_reg[0][0]` buckets as
+    drum_regs, because that is what the RTL hierarchy looks like. No such name exists
+    in the DEF: synthesis flattens before placement and every instance is an
+    auto-name. Keying on instance names put ALL 12,275 placed flops in "outside
+    synth_top", reported drum_regs at zero, and printed the collapse signature for a
+    layout that turned out to place exactly the 3,520 flops the RTL declares.
+    """
+    assert cr.bucket_of("_141690_", DREGS_NETS) == cr.OUTSIDE
+    assert cr.bucket_of("clk_pad", DREGS_NETS) == cr.OUTSIDE
+    # and the names that ARE in the DEF resolve
+    assert "modal_dp" in cr.bucket_of("i_chip_core.u_synth.u_drums.bank.y", DREGS_NETS)
+    assert "ladder_dp_n" in cr.bucket_of(r"i_chip_core.u_synth.u_voice.u_ladder.s\[1\]",
+                                         DREGS_NETS)
 
 
 def test_pad_and_ws_ip_masters_are_distinguished():
@@ -358,3 +367,86 @@ def test_verdict_marks_an_unfinished_route_not_measured_rather_than_failed(tmp_p
     assert "NOT MEASURED is not FAILED" in body
     # the pre-route -178.5 must not be presented as a failed post-route corner
     assert "-178.500" not in body
+
+
+# --------------------------------------------------------------------------- #
+# bucketing a flop by the net its Q drives
+# --------------------------------------------------------------------------- #
+#
+# The false RED this replaced: keying on DEF *instance* names put all 12,275 placed
+# sequential cells in "outside synth_top" and reported drum_regs at zero -- the
+# collapse signature, for a healthy layout.  The netlist is flattened before
+# placement, so instances are auto-names and only NET names carry hierarchy.
+
+DREGS_NETS = {"d_a1", "d_a2", "d_path", "d_stops", "d_soft_rst"}
+
+
+def test_net_stem_removes_the_def_escapes_on_a_bit_select():
+    r"""DEF writes `d_a1\[0\]`.  Splitting on '[' without unescaping leaves a
+    trailing backslash on the stem -- which kept the drum_regs row at ZERO through
+    the first attempt at this very fix."""
+    assert cr.net_stem(r"i_chip_core.u_synth.d_a1\[0\]") == "d_a1"
+    assert cr.net_stem("i_chip_core.u_synth.d_stops") == "d_stops"
+    assert cr.net_stem("_000123_") == "_000123_"
+
+
+def test_bucket_of_uses_net_hierarchy_and_the_dregs_port_set():
+    assert cr.bucket_of(r"i_chip_core.u_synth.u_drums.bank.foo\[3\]",
+                        DREGS_NETS).startswith("u_drums.bank")
+    assert cr.bucket_of("i_chip_core.u_synth.u_voice.u_ladder.acc",
+                        DREGS_NETS).startswith("u_voice.u_ladder")
+    assert cr.bucket_of(r"i_chip_core.u_synth.d_a1\[100\]", DREGS_NETS) == cr.DREGS_BUCKET
+    assert cr.bucket_of("i_chip_core.u_synth.cyc", DREGS_NETS) == cr.SYNTH_OWN
+    assert cr.bucket_of("_000042_", DREGS_NETS) == cr.OUTSIDE
+
+
+def test_dregs_output_nets_is_read_from_the_rtl_and_excludes_inputs(tmp_path):
+    v = tmp_path / "synth_top.v"
+    v.write_text(
+        "drum_regs #(.ENVS(E), .MODES(M)) u_dregs (\n"
+        "    .clk(clk), .rst_n(rst_n_drum), .wr_valid(wr_drum), .wr_addr(wr_addr),\n"
+        "    .wr_data(wr_data), .soft_rst(d_soft_rst), .stops(d_stops),\n"
+        "    .a1_bus(d_a1), .num_bus(d_num));\n")
+    nets = cr.dregs_output_nets(str(v))
+    assert nets == {"d_soft_rst", "d_stops", "d_a1", "d_num"}
+    assert "clk" not in nets and "wr_data" not in nets
+
+
+def test_dregs_output_nets_refuses_when_the_instance_is_renamed(tmp_path):
+    """REFUSED, not an empty set.  An empty set silently reports drum_regs at zero,
+    which is indistinguishable from a collapsed netlist."""
+    v = tmp_path / "synth_top.v"
+    v.write_text("drum_regs #(.MODES(M)) u_registers (.clk(clk), .stops(d_stops));\n")
+    with pytest.raises(cr.Refusal):
+        cr.dregs_output_nets(str(v))
+
+
+DEF_TEXT = r"""
+COMPONENTS 5 ;
+    - _000001_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+    - _000002_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+    - _000003_ gf180mcu_fd_sc_mcu7t5v0__sdffq_1 + PLACED ( 0 0 ) N ;
+    - _000004_ gf180mcu_fd_sc_mcu7t5v0__nand2_1 + PLACED ( 0 0 ) N ;
+    - _000005_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+END COMPONENTS
+NETS 3 ;
+    - i_chip_core.u_synth.d_a1\[0\] ( _000001_ Q ) ( _000004_ A1 )
+      + USE SIGNAL ;
+    - i_chip_core.u_synth.u_drums.bank.busy ( _000002_ Q ) + USE SIGNAL ;
+    - i_chip_core.u_synth.d_stops ( _000003_ Q ) + USE SIGNAL ;
+END NETS
+"""
+
+
+def test_flops_by_block_counts_each_flop_once_and_spans_wrapped_nets(tmp_path):
+    """A DEF wraps a long net over several lines. A per-line parse drops exactly the
+    high-fanout nets that matter; this one is deliberately wrapped."""
+    d = tmp_path / "chip.def"
+    d.write_text(DEF_TEXT)
+    got = cr.flops_by_block(str(d), DREGS_NETS)
+    assert got[cr.DREGS_BUCKET] == 2                      # d_a1[0] and d_stops
+    assert got["u_drums.bank     (modal_dp)"] == 1
+    # the combinational cell is not counted, and the flop whose Q drives nothing is
+    # reported rather than dropped, so the total reconciles with the flow's own count
+    assert got["placed but Q drives no net"] == 1
+    assert sum(got.values()) == 4

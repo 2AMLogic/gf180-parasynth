@@ -11,5 +11,5 @@
     "synth_top": 29,
     "voice_dp": 2732
   },
-  "source": "yosys stat on rtl-sketch, proc + opt_clean, not flattened"
+  "source": "yosys stat -width on rtl-sketch; hierarchy -top synth_top, proc, memory, opt_clean; NOT flattened, NOT technology-mapped"
 }
