@@ -382,8 +382,19 @@ def test_the_profile_records_what_produced_it():
             continue
         assert r["plugin"]["present"] is True, name
         assert r["plugin"]["binary_sha256"], name
-        assert r["qualification"]["pins_held_after_render"] is True, name
-        assert r["qualification"]["n_pins"] > 0, name
+        q = r["qualification"]
+        if b["builder_sha256"] == "4bbd8e90c0a58e52a2f38d68174e71c8a73cd62180b2c6b018687a0d61136f77":
+            # #233: the frozen profile's renderer wrote the flag as a constant
+            # and never checked after a render. It must not be read as having
+            # made the per-clip check; a re-render replaces this branch.
+            assert not rp.post_render_checked(r), name
+        else:
+            assert rp.post_render_checked(r), name
+            chk = q["post_render_check"]
+            n = sum(c["rig"] == name for c in prof["clips"].values())
+            assert q["pins_held_after_render"] is True, name
+            assert chk["clips_checked"] == chk["clips_rendered"] == n, name
+        assert q["n_pins"] > 0, name
         assert r["parameters_after_setup"], name
 
 

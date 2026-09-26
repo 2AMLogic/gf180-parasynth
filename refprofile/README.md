@@ -134,6 +134,53 @@ rate, the block size. Those are pinned by the rig and recorded in
 run. A clip that does not reproduce is not frozen, and the tool refuses to
 install it.
 
+## Pins after rendering: what the frozen profile does and does not show (#233)
+
+**The committed `profile.json` makes no post-render pin claim, although its
+`pins_held_after_render` field says `true`.** The renderer that built it
+(builder `4bbd8e90…`, at `daf9e64`) checked the pinned Surge parameters once,
+*before* any clip was rendered, and wrote that field as a constant. Nothing
+re-read the pins after a clip. `profile.json` and the frozen audio are left
+byte-unchanged here: rewriting the field would change the historical record,
+and re-rendering the profile would add nothing a reproduction does not
+already show. `tools/refprofile.py --list` says this about the profile, and
+`refprofile.post_render_checked()` returns false for it.
+
+Since #233, `--render` re-reads every pinned name and readback after **each**
+clip render, before that clip is written, and refuses on any change. The one
+name change it accepts is the Classic→Audio In rename that #231 measured at
+**259, 260, 264 and 265**. The readback is still required to match exactly.
+`pins_held_after_render` is now derived from those checks. The per-clip
+results are recorded in `qualification.post_render_check` and in each clip's
+`pins_after_render`.
+
+**The builder hash changed, and nothing is re-pinned to it.** Any profile
+rendered from now on records the new `builder_sha256`. The committed profile
+still records `4bbd8e90…`. `tools/run_case.py` hashes `tools/refprofile.py` as
+a model input, so a run_case result from before this change no longer covers
+the tree. That is the intended effect of a hashed input.
+
+At `9f106f7` (clean), same host, Surge XT 1.2.3 and dawdreamer 0.9.0 as above,
+the new renderer checked every clip in two independent renders
+([`post-233-check/`](post-233-check/)):
+
+```
+16/16 clips bit-identical across 2 independent renders
+16 reproduced the committed sha256, 0 changed, 0 new, 0 dropped   (exit 0)
+pins_held_after_render: true, derived; 16/16 clips checked in each run
+name aliases observed on every clip: 259, 260, 264, 265 (readbacks unchanged)
+```
+
+The last line re-observes #231 independently. From the first clip onward,
+Surge reports all four indices under their Audio In names. So the pre-#233
+check, had it re-read the pins by exact name, would have refused every clip.
+The frozen audio remains the same audio: the 16 committed hashes reproduce
+under the new check. That reproduction is evidence about the *current* rig.
+It does not show that the 2026-09-18 capture had a post-render check.
+`profile.render1.json` in that folder is a run's output, kept for its
+`qualification` and `pins_after_render` records. It is **not** the frozen
+profile, and nothing reads clips through it.
+
 ## The probe level, and the floor it comes from
 
 Every stepped-tone clip is at **−12.04 dBFS** (`amp = 0.25`), the level
