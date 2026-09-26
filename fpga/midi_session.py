@@ -39,8 +39,9 @@ fpga/live_midi_contract.py):
   * REFUSED, explicitly, never silently ignored: sustain (CC64), every other
     CC, pitch bend, program change, channel and poly aftertouch, system
     exclusive, system common and real-time messages other than Active
-    Sensing, notes outside the release domain (every oscillator's increment
-    must sit in [phase_inc(MIDI 0), phase_inc(MIDI 127)], the #255 rule), and
+    Sensing, notes outside the release domain (fpga/release/qualified_domain
+    .check_note, #255: every oscillator's increment in [phase_inc(MIDI 0),
+    phase_inc(MIDI 127)]; a patch outside the release refuses to start), and
     note-ons / drum hits the link cannot deliver on time (queue pressure).
     Each refusal is recorded with its reason; the live CLI prints the first of
     each kind and a count at exit.
@@ -73,11 +74,13 @@ from dataclasses import dataclass, field
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-for _p in (HERE, os.path.join(ROOT, "model"), os.path.join(ROOT, "audition")):
+for _p in (HERE, os.path.join(HERE, "release"), os.path.join(ROOT, "model"),
+           os.path.join(ROOT, "audition")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 import live_midi_contract as C                           # noqa: E402
+import qualified_domain as qd                            # noqa: E402
 import uart_host as uh                                   # noqa: E402
 
 SR = C.SR
@@ -280,11 +283,12 @@ class MidiSession:
                 selected_preset.definition(preset)["registers"] if preset else
                 vf.VoiceFx.patch_regs())
         self.regs = regs
+        # the release's player-facing domain (#255): a patch outside it is
+        # refused before anything is sent
+        self.patch_summary = qd.check_patch(regs, name=preset or "default")
         self.mh = sh.MusicHost(patch=dict(regs))
         self.keys = MonoKeys(regs)
         self.mod_routed = bool(int(regs["mroute"]) & (vf.MR_OSC | vf.MR_FILT))
-        from dsp import note_hz, phase_inc
-        self.inc_lo, self.inc_hi = phase_inc(note_hz(0)), phase_inc(note_hz(127))
         self.parser = MidiParser()
         self.anchor = None
         self.anchors: list = []
@@ -639,9 +643,11 @@ class MidiSession:
         return self._refuse(t, m, "system", f"status 0x{st:02x} not understood")
 
     def _voice_key(self, t: float, m: bytes, on: bool, note: int) -> None:
-        if on and not all(self.inc_lo <= v <= self.inc_hi for v in self.keys.incs(note)):
-            return self._refuse(t, m, "domain", f"note {note}: an oscillator's increment "
-                                "leaves the release domain [MIDI 0, MIDI 127]")
+        if on:
+            try:
+                qd.check_note(note, self.regs)
+            except qd.Rejected as exc:
+                return self._refuse(t, m, "domain", str(exc))
         planned = self.keys.plan(on, note)
         if planned is None:
             self.stats["noops"] += 1                     # release of a key not held

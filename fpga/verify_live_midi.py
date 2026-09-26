@@ -35,6 +35,8 @@ PROPERTIES (rule 4: every control prints which saw it, MOVED or BLIND):
   timing        every write that matches in value lands in its expected frame
   stuck_notes   frames a gate is open that the schedule says are closed
   refusals      what was refused, and why, equals the schedule's refusals
+  release_domain  fpga/release/qualified_domain.check_stream (#255) accepts
+                every write the device executed
   queues        device queue peak, host queue peak, zero drops / ERR / late
   latency       receipt -> applied distribution (the target on `sustained`)
 
@@ -59,7 +61,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-for _p in ("fpga", "rtl-sketch", "model", "audition"):
+for _p in ("fpga", "fpga/release", "rtl-sketch", "model", "audition"):
     if str(ROOT / _p) not in sys.path:
         sys.path.insert(0, str(ROOT / _p))
 
@@ -758,6 +760,16 @@ def check(run: dict, *, target: bool = False) -> dict:
         qbad.append(f"device errors {sorted({e[0] for e in sim.errors})}, drops {sim.drops}")
     if st.get("deadline_misses", 0):
         qbad.append(f"{st['deadline_misses']} packets projected past their deadline")
+    # the release's own validator (#255, written for the CLI, not for this
+    # session) over everything the device executed, in apply order
+    import qualified_domain as qd
+    try:
+        dom = qd.check_stream(got_static + [g[1:] for g in got], initial="unknown",
+                              mod_initial="unknown")
+        put("release_domain", False, f"{dom['inc_writes']} increment writes, "
+            f"{dom['glide_transitions']} glides, all inside the qualified domain")
+    except qd.Rejected as exc:
+        put("release_domain", True, f"qualified_domain REJECTED the executed stream: {exc}")
     put("queues", qbad, "; ".join(qbad) or
         f"device queue peak {sim.evq_peak}, host queue peak {st.get('host_queue_peak')}, "
         "no drops, errors or late packets")
@@ -868,7 +880,8 @@ CONTROLS = {
                       "one event's writes land 5 ms after their frame"),
 }
 PROPS = ("static_image", "voice_gate", "voice_pitch", "drum_strikes", "drum_coeffs", "knobs",
-         "timing", "stuck_notes", "refusals", "queues", "latency", "load_admitted")
+         "timing", "stuck_notes", "refusals", "release_domain", "queues", "latency",
+         "load_admitted")
 
 
 def run_control(name: str, *, stub: bool = False) -> dict:
@@ -997,8 +1010,25 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl-sustained-s", type=float, default=3.0,
                     help="length of the sustained session replayed through the RTL")
     ap.add_argument("--json", type=Path, default=None)
+    ap.add_argument("--control", choices=sorted(CONTROLS), default=None,
+                    help="run ONE injected control on the sim and record it (trial child)")
+    ap.add_argument("--expect-fail", action="store_true",
+                    help="with --control: exit 0 only when it is caught by its own property")
     a = ap.parse_args(argv)
     a.outdir.mkdir(parents=True, exist_ok=True)
+    if a.control:
+        c = run_control(a.control)
+        rec = {"tool": "fpga/verify_live_midi.py", "trial": "T-LIVE-MIDI",
+               "criterion_version": C.CRITERION_VERSION, "control": c,
+               "verdict": c["verdict"]}
+        (a.json or a.outdir / "verification.json").write_text(
+            json.dumps(_clean(rec), indent=1, default=str) + "\n")
+        cols = " ".join(f"{p}={'M' if v == 'MOVED' else '.'}" for p, v in c["matrix"].items())
+        print(f"live-midi control {a.control}: {'CAUGHT' if c['caught'] else 'MISSED'} "
+              f"(must move {c['must_move']}) -- {cols}")
+        if a.expect_fail:
+            return 0 if c["caught"] else 1
+        return {"PASS": 0, "FAIL": 1}.get(c["verdict"], 2)
     record = {"tool": "fpga/verify_live_midi.py", "trial": "T-LIVE-MIDI",
               "criterion_version": C.CRITERION_VERSION, "timing_contract": C.TIMING_CONTRACT,
               "lookahead_ms": C.LOOKAHEAD_MS, "target": C.LATENCY_TARGET,

@@ -209,3 +209,13 @@ def test_a_wrong_time_map_is_no_verdict_not_a_result():
     s = run["session"]
     s.anchor = (s.anchor[0] + 3, s.anchor[1])
     assert vlm.check(run)["verdict"] == "NO VERDICT"
+
+
+def test_release_domain_property_moves_when_the_session_lets_a_note_out(monkeypatch):
+    """#255's validator is an external check: with the session's own domain
+    refusal disabled, MIDI 127 reaches the device and check_stream rejects it."""
+    monkeypatch.setattr(ms.qd, "check_note", lambda note, regs: None)
+    run = vlm.run_session("coverage")
+    r = vlm.check(run)
+    assert r["props"]["release_domain"]["moved"], r["props"]["release_domain"]
+    assert "INC_RANGE" in r["props"]["release_domain"]["detail"]

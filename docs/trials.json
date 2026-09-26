@@ -197,6 +197,171 @@
      ]
     }
    }
+  },
+  "T-LIVE-MIDI": {
+   "question": "Does a live MIDI stream, through the real host session and its bytes, drive the instrument with the documented note, drum and controller behaviour, explicit refusals, bounded queues, no stuck note, and receipt-to-update latency p95 <= 20 ms / p99 <= 30 ms under the declared load?",
+   "criterion_version": "live-midi/1 (fpga/live_midi_contract.py: target, endpoints and declared load frozen before measurement; timing contract 2)",
+   "scope": {
+    "configuration": {
+     "OSC2X": 1,
+     "FILTER2X": 1,
+     "PULSE2X": 0
+    },
+    "path": "deterministic MIDI -> fpga/midi_session.py -> UART bytes -> device contract (sim) and arty_a7_top UART pins (rtl) -> decoded I2S",
+    "excluded": [
+     "hardware MIDI-to-audio latency (a later capture measurement)",
+     "USB/FTDI host latency"
+    ]
+   },
+   "dag_nodes": [
+    "I1",
+    "I2"
+   ],
+   "preservation": [
+    "T-PLAY-DIGITAL"
+   ],
+   "resource_class": "light",
+   "modes": {
+    "sim": {
+     "description": "the session against the device contract on simulated time: coverage, counter wrap, pressure, the declared load; seconds",
+     "timeout_s": 900,
+     "tools": [],
+     "requires": [
+      "fpga/midi_session.py",
+      "fpga/live_midi_contract.py"
+     ],
+     "required": [
+      {
+       "id": "session-sim",
+       "property": "every scenario equals the independently built schedule on eleven properties and the declared load meets the latency target",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      }
+     ],
+     "controls": [
+      {
+       "id": "drop-note-off",
+       "intended_reason": "a lost note-off is caught by voice_gate and stuck_notes",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "DROP_NOTE_OFF",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "wrong-drum-map",
+       "intended_reason": "GM 38 struck as the clap is caught by drum_strikes",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "WRONG_DRUM_MAP",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "delayed-event",
+       "intended_reason": "one event 5 ms late is caught by timing",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "DELAYED_EVENT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      }
+     ]
+    },
+    "rtl": {
+     "description": "adds the session's own bytes replayed through the Arty UART wrapper, I2S compared with the model on the expected schedule, and two I2S controls",
+     "timeout_s": 14400,
+     "tools": [
+      "iverilog",
+      "vvp"
+     ],
+     "requires": [
+      "fpga/midi_session.py",
+      "rtl-sketch/tb_uart_bx.v"
+     ],
+     "required": [
+      {
+       "id": "session-rtl",
+       "property": "as sim, and the RTL wire I2S equals the model on the expected schedule for coverage, pressure and 3 s of the declared load",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--rtl",
+        "coverage",
+        "pressure",
+        "sustained",
+        "--rtl-inject",
+        "WRONG_DRUM_MAP",
+        "DELAYED_EVENT"
+       ],
+       "interpret": "live_midi_record",
+       "fixtures": [
+        "coverage",
+        "pressure",
+        "sustained"
+       ]
+      }
+     ],
+     "controls": [
+      {
+       "id": "drop-note-off",
+       "intended_reason": "a lost note-off is caught by voice_gate and stuck_notes",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "DROP_NOTE_OFF",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "wrong-drum-map",
+       "intended_reason": "GM 38 struck as the clap is caught by drum_strikes",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "WRONG_DRUM_MAP",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "delayed-event",
+       "intended_reason": "one event 5 ms late is caught by timing",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "DELAYED_EVENT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      }
+     ]
+    }
+   }
   }
  }
 }
