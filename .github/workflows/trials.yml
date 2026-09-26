@@ -10,12 +10,18 @@
 # uploaded, so the published bundle can be re-checked with
 #   python tools/trial.py check-receipt <bundle>/T-DEADLINE/<run>/receipt.json
 #
-# NOT gated: T-RELEASE-BOUND. Its manifest (fpga/release/baseline-2025.1.json)
-# is in open PR #255, so on main it is an honest NO VERDICT (missing asset),
-# and a gate that cannot pass trains everyone to ignore gates. It runs and its
-# receipt is checked for integrity. It also declares no control yet, and a
-# mode with no control is NO VERDICT, never PASS. Gate it only after #255 lands
-# and a STALE-manifest control is added (docs/trials.json).
+# Gated: T-RELEASE-BOUND, in its own job (trial-release-bound) so it is fast,
+# separately visible and separately requirable. Since #278 it declares two
+# STALE controls (fpga/release/stale_controls.py: a manifest bound to the
+# pre-fix CLI bytes, and an isolated tree holding the image's pre-#252
+# voice_dp.v), so a PASS means both required children were BOUND AND the
+# apparatus was shown to fail on each counterexample. Before #278 it was
+# report-only: with no control it could only be NO VERDICT.
+#
+# "Gated" means the job fails. It is not yet a REQUIRED status check: main
+# has no branch protection or ruleset at all (2026-09-26), and requiring a job
+# before it exists on main would block every open PR based on older main.
+# Requiring it is a follow-up step after this workflow lands.
 name: trials
 
 on: [push, pull_request, workflow_dispatch]
@@ -44,9 +50,6 @@ jobs:
         run: python tools/trial.py run T-DEADLINE --mode reanalyse
       - name: T-DEADLINE, simulation of this tree
         run: python tools/trial.py run T-DEADLINE --mode sim
-      - name: T-RELEASE-BOUND (report only until #255 lands the manifest)
-        continue-on-error: true
-        run: python tools/trial.py run T-RELEASE-BOUND
       - name: every receipt is intact and matches its artifacts
         if: always()
         run: python tools/trial.py check-all build/trials
@@ -54,4 +57,34 @@ jobs:
         if: always()
         with:
           name: trial-receipts
+          path: build/trials/
+
+  trial-release-bound:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: trials-release-${{ github.event.pull_request.number || github.sha }}
+      # superseding is for PR branches; every default-branch commit is verified
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # release_manifest.py reads the image's sources at its pinned source
+          # commit (git show), and receipts record origin/main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: bootstrap from the one environment spec (no simulator needed)
+        run: python tools/trial_env.py bootstrap --no-toolchain
+      - name: the release tests (manifest, domain, stale controls)
+        run: python -m pytest fpga/release -q
+      - name: T-RELEASE-BOUND (blocking; two STALE controls must be caught)
+        run: python tools/trial.py run T-RELEASE-BOUND
+      - name: every receipt is intact and matches its artifacts
+        if: always()
+        run: python tools/trial.py check-all build/trials
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-receipts-release-bound
           path: build/trials/

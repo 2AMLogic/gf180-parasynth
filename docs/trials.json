@@ -69,8 +69,25 @@
        "token_prefix": ""
       }
      ],
-     "controls": [],
-     "_controls_pending": "No control yet, so this mode is NO VERDICT even when both children print BOUND (tools/trial.py composite; docs/trials.md rule 2). The control it needs is a STALE counterexample -- a manifest or binding fixture that release_manifest.py prints STALE for with exit 1 (interpret bound_text catches exactly that). release_manifest.py arrives with #255 and check_arty_evidence_binding.py takes no input path, so no such control can be written on this tree."
+     "controls": [
+      {
+       "id": "stale-manifest",
+       "intended_reason": "a copy of the committed manifest bound to the PRE-FIX CLI bytes of `run --note 45 --fixture none` (evidence/held-note/default-legacy/capture.cmds) is STALE at exactly commands.held-default.cmds_sha256/.packets, while the unmodified copy is BOUND",
+       "checker": "fpga/release/stale_controls.py",
+       "args": ["manifest", "--out", "{out}"],
+       "interpret": "bound_text",
+       "token_prefix": "stale_control: "
+      },
+      {
+       "id": "stale-binding",
+       "intended_reason": "an isolated copy of the binding checker's inputs holding the published image's pre-#252 rtl-sketch/voice_dp.v is STALE against the bound drift-clean record, naming exactly that file, while the unmodified copy is BOUND",
+       "checker": "fpga/release/stale_controls.py",
+       "args": ["binding", "--out", "{out}"],
+       "interpret": "bound_text",
+       "token_prefix": "stale_control: "
+      }
+     ],
+     "_controls": "Both controls work on copies: the committed manifest and the real tree are only read (fpga/release/stale_controls.py). A control that cannot show its counterexample -- missing or unreadable input, an unmodified copy that is not BOUND, STALE for another field or file -- prints REFUSED, which is NO VERDICT and not caught, never a catch. `--as-candidate stale-manifest` / `stale-binding` runs one as THE candidate: FAIL."
     }
    }
   },

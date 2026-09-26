@@ -478,7 +478,12 @@ def check(manifest_path: Path = MANIFEST) -> tuple:
         return "REFUSED", str(exc)
     if not Path(manifest_path).exists():
         return "REFUSED", f"no manifest at {manifest_path}"
-    committed = json.loads(Path(manifest_path).read_text())
+    try:
+        committed = json.loads(Path(manifest_path).read_text())
+    except (OSError, ValueError) as exc:
+        # unreadable evidence is not a STALE manifest: nothing was compared
+        # (before #278 this was a traceback that exited 1, the STALE code)
+        return "REFUSED", f"the manifest at {manifest_path} is unreadable: {exc}"
     diffs = _diff(committed, fresh)
     if diffs:
         return "STALE", "differs from a fresh derivation at: " + ", ".join(diffs[:20])
