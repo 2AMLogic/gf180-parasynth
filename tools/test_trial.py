@@ -879,3 +879,12 @@ def test_physical_controls_are_caught_only_by_the_real_analyser(repo, controls, 
     _, r = _physical(repo, _capture_rec("PASS"), 0, controls=controls, crc=crc)
     assert r["controls"][0]["caught"] is False
     assert r["verdict"] == trial.NO_VERDICT
+
+
+def test_physical_execution_error_exit_3_is_no_verdict(repo):
+    """plan090: r0_capture.py exits 3 with an ERROR record on an unexpected
+    exception -- an execution error, never a product verdict."""
+    rec = _capture_rec("ERROR", reasons=["execution error (no verdict): KeyError: 'x'"])
+    _, r = _physical(repo, rec, 3)
+    assert r["children"][0]["verdict"] == trial.NO_VERDICT
+    assert r["verdict"] == trial.NO_VERDICT

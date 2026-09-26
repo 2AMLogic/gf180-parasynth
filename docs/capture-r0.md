@@ -212,6 +212,15 @@ The session file records `"readback": false`, and the analysis labels the image
 identity "programming transcript only -- NOT a readback". Set `readback` to
 true only if you performed an actual configuration readback and compared it.
 
+**If programming fails** (the last line is not `exit 0`), fix the cause (the
+cable, the board, or a Vivado Hardware Manager still holding the JTAG port),
+then **repeat the last three lines, and only those**: `shasum`, `--Version`
+and the program command, all appending to the same `program.txt`. Each attempt
+is then a complete block that names its image. The analysis accepts the
+session only if the last attempt succeeded, and it keeps every earlier failed
+attempt in `analysis.json` (`identity.programming_attempts`). Never delete a
+failed attempt from the transcript, and never append a bare `exit 0`.
+
 Programming is volatile. A power cycle returns the FPGA to its flash image.
 Complete the whole session in one power-on, and if the board loses power,
 repeat this step and note it.
@@ -436,10 +445,14 @@ consistent passed its qualified measurements. That means:
     digest, before that version line.
   - The last programmer block exits 0.
 
-  A failed programmer block is admitted only when a later programmer block (a
-  retry that reruns `--Version` and the program command) succeeds. A bare
-  `exit 0`, a manifest check re-run after the programmer, or output after the
-  last exit line all refuse;
+  Each attempt must be complete: R0's digest line, then the programmer
+  version line, then its output, then its own exit status. A failed attempt
+  is admitted only when a later complete attempt for the same image
+  succeeds, and it stays in the record. The following all refuse:
+  - a bare `exit 0`;
+  - a manifest check re-run;
+  - an attempt that names no image, or names another image;
+  - output after the last exit line;
 - every take has its own host log, and the log is the released command;
 - every take has a start time and a 48 kHz WAV;
 - the references are bound to the release inside the analysis.
@@ -454,8 +467,17 @@ The analysis REFUSES the following:
   `apply_frame` or register fields, or an event without its `due`. This is
   checked before any comparison.
 
-No error inside the analysis is ever reported as FAIL. An analysis that
-cannot finish is NO VERDICT (exit 2) and records the exception.
+There are three outcomes that are not a PASS, and they stay distinct:
+
+| Outcome | Exit | Meaning | Trial result |
+|---|---|---|---|
+| **REFUSED** | 2 | a stated precondition is missing or malformed | NO VERDICT, with the reason |
+| **ERROR** | 3 | an unexpected exception, recorded with its traceback | NO VERDICT; never a measured FAIL, never relabelled as a refusal |
+| **FAIL** | 1 | a completed, qualified measurement missed its limit | FAIL |
+
+`analysis.json` is written atomically. It first holds an in-progress ERROR
+record, so a crash can never leave an older run's PASS or FAIL in place as
+the current result.
 
 **A declared limit of the host-log check.** Scheduled events are compared by
 order, value and due frame **relative to the first event**. A whole block of

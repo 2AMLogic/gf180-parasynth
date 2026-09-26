@@ -231,7 +231,7 @@ def test_clean_synthetic_session_passes_with_its_known_answers(clean):
         if cmd != "silence":
             assert abs(delays[tid] - rc.CLEAN["delays"][i]) < 0.25, (tid, delays[tid])
     assert rec["identity"]["programming"].startswith("programming transcript only")
-    assert "UNOBSERVABLE" in rec["properties"]["channel-identity"]
+    assert rec["properties"]["channel-identity"]["verdict"] == "UNOBSERVABLE"
 
 
 def test_start_red_the_stub_analyser_catches_nothing(tmp_path):
@@ -250,18 +250,11 @@ def _env_spec(tmp_path):
 
 
 def test_t_physical_required_child_without_a_capture_is_operator_blocked(tmp_path, monkeypatch):
-    """The registered required child alone (its control stripped, so this runs
-    in seconds): no session -> NO VERDICT for the operator-blocked reason."""
+    """The registered required child alone: no session -> NO VERDICT for the
+    operator-blocked reason."""
     import trial
-    reg = json.loads((rc.ROOT / "docs/trials.json").read_text())
-    reg["trials"]["T-PHYSICAL"]["modes"]["capture"]["controls"] = []
-    rp = tmp_path / "trials.json"
-    rp.write_text(json.dumps(reg))
-    monkeypatch.setenv("R0_CAPTURE_BUNDLE", str(tmp_path / "no-session-here"))
-    _, rec = trial.run_trial("T-PHYSICAL", registry=rp, env_spec=_env_spec(tmp_path),
-                             out_base=tmp_path / "trials")
-    child = rec["children"][0]
-    assert rec["verdict"] == trial.NO_VERDICT and child["verdict"] == trial.NO_VERDICT
+    child = _required_only_trial(tmp_path, monkeypatch, tmp_path / "no-session-here")
+    assert child["verdict"] == trial.NO_VERDICT
     assert "operator-blocked" in child["reasons"][0]
 
 
@@ -566,9 +559,17 @@ def test_the_programmer_block_must_itself_exit_0(name):
     assert rc.transcript_problems(STRUCTURE_BAD[name], _SHA) != [], name
 
 
-@pytest.mark.parametrize("text", [_HEAD + _PROG_OK,
-                                  _HEAD + _PROG_FAIL + "openFPGALoader v1.1.1\n" + _PROG_OK],
-                         ids=["procedure", "programmer retried after a failure"])
+_RETRY = (f"{_SHA}  fpga/reports/arty/integrated-baseline-2025.1/arty.bit\n"
+          "openFPGALoader v1.1.1\n" + _PROG_OK)
+STRUCTURE_BAD["retry that names no image"] = _HEAD + _PROG_FAIL + "openFPGALoader v1.1.1\n" \
+    + _PROG_OK
+STRUCTURE_BAD["retry for another image"] = _HEAD + _PROG_FAIL + _RETRY.replace("a66c9349",
+                                                                             "1a562b42")
+STRUCTURE_BAD["truncated: programmer output with no exit"] = _HEAD + "Load SRAM: [==\n"
+
+
+@pytest.mark.parametrize("text", [_HEAD + _PROG_OK, _HEAD + _PROG_FAIL + _RETRY],
+                         ids=["procedure", "complete retry after a failure"])
 def test_the_procedures_transcript_and_a_programmer_retry_are_accepted(text):
     """The structural gate must stay satisfiable, including a legitimate retry."""
     assert rc.transcript_problems(text, _SHA) == []
@@ -619,16 +620,82 @@ def test_a_host_log_missing_a_timing_field_is_no_verdict_not_a_crash(clean, tmp_
     assert "held-1" in out and field in out
 
 
-def test_no_exception_inside_analyse_is_scored_as_fail(clean, tmp_path, monkeypatch):
-    """The general rule: an unhandled error is NO VERDICT, never FAIL."""
+def test_an_internal_exception_is_an_execution_error_not_a_fail_nor_stale(
+        clean, tmp_path, monkeypatch):
+    """plan090: an unexpected exception is an EXECUTION ERROR -- not a measured
+    FAIL (exit 1), not relabelled as a refusal -- with its diagnostics kept;
+    and an OLD result already in the bundle is replaced by this run's record,
+    never reused as the current result."""
     d = _as_real(clean, tmp_path)
+    (d / "analysis.json").write_text(json.dumps({"verdict": "PASS", "reasons": []}))
 
     def boom(*a, **k):
         raise ZeroDivisionError("an estimator blew up")
     monkeypatch.setattr(rc, "calibrate", boom)
-    rec = rc.analyse(d)
-    assert rec["verdict"] == rc.REFUSED
-    assert "ZeroDivisionError" in rec["reasons"][0]
+    code = rc.main(["analyse", "--bundle", str(d)])
+    rec = json.loads((d / "analysis.json").read_text())
+    assert code == 3
+    assert rec["verdict"] == rc.ERROR and "ZeroDivisionError" in rec["reasons"][0]
+    assert any("ZeroDivisionError" in ln for ln in rec["traceback"])
+
+
+def test_a_retry_keeps_the_failed_attempt_in_the_record(clean, tmp_path):
+    """plan090: a genuine retry is accepted, and the failure is not dropped."""
+    rec = rc.analyse(_as_real(clean, tmp_path, _HEAD + _PROG_FAIL + _RETRY))
+    assert rec["verdict"] == rc.PASS, rec["reasons"]
+    att = rec["identity"]["programming_attempts"]
+    assert [a["result"] for a in att] == ["FAILED", "success"]
+    assert att[0]["exit"] == 1 and att[1]["image_sha256"] == _SHA
+
+
+def _required_only_trial(tmp_path, monkeypatch, bundle):
+    """T-PHYSICAL's registered required child through tools/trial.py, with the
+    (12-minute) control stripped so each entry-point check runs in seconds."""
+    import trial
+    reg = json.loads((rc.ROOT / "docs/trials.json").read_text())
+    reg["trials"]["T-PHYSICAL"]["modes"]["capture"]["controls"] = []
+    rp = tmp_path / "trials-required-only.json"
+    rp.write_text(json.dumps(reg))
+    monkeypatch.setenv("R0_CAPTURE_BUNDLE", str(bundle))
+    _, rec = trial.run_trial("T-PHYSICAL", registry=rp, env_spec=_env_spec(tmp_path),
+                             out_base=tmp_path / "trials")
+    return rec["children"][0]
+
+
+def test_a_missing_timing_field_is_no_verdict_at_both_entry_points(clean, tmp_path,
+                                                                   monkeypatch):
+    """plan090: the same malformed bundle, direct CLI and trial wrapper; and
+    an old PASS in the bundle is replaced by this run's refusal."""
+    import trial
+    d = _live_session(clean, tmp_path)
+    p = d / "host" / "held-1.plan.json"
+    plan = json.loads(p.read_text())
+    for r in plan["rows"]:
+        if r["kind"] == "write":
+            r.pop("apply_frame", None)
+    p.write_text(json.dumps(plan))
+    (d / "analysis.json").write_text(json.dumps({"verdict": "PASS", "reasons": []}))
+    code, out = _cli_analyse(d)
+    assert code == 2 and "apply_frame" in out, out[-500:]
+    assert json.loads((d / "analysis.json").read_text())["verdict"] == rc.REFUSED
+    child = _required_only_trial(tmp_path, monkeypatch, d)
+    assert child["verdict"] == trial.NO_VERDICT
+    assert "apply_frame" in child["reasons"][0]
+
+
+def test_a_real_sound_defect_is_still_a_measured_fail_at_both_entry_points(tmp_path,
+                                                                           monkeypatch):
+    """plan090: the repair must not turn every bad outcome into NO VERDICT. A
+    real-looking session with a 20 ms dropout is FAIL through the CLI (exit
+    1) and through the trial wrapper."""
+    import trial
+    src = rc.synth_session(tmp_path / "dropout-src", defect="dropout")
+    d = _as_real(src, tmp_path)
+    code, out = _cli_analyse(d)
+    assert code == 1 and "dropout" in out, out[-500:]
+    child = _required_only_trial(tmp_path, monkeypatch, d)
+    assert child["verdict"] == trial.FAIL
+    assert any("dropout" in r for r in child["reasons"])
 
 
 def test_session_properties_say_where_they_were_not_evaluated(clean, tmp_path):
@@ -638,4 +705,6 @@ def test_session_properties_say_where_they_were_not_evaluated(clean, tmp_path):
     assert rec["verdict"] == rc.PASS, rec["reasons"]
     for p in ("residual", "timing", "gain", "clock", "dropout"):
         v = rec["properties"][p]
-        assert v.startswith("PASS") and "not evaluated on" in v and "held-1" in v, (p, v)
+        assert v["verdict"] == "PASS", (p, v)
+        assert {"held-1", "held-2", "tone-1", "pulse-1"} <= set(v["not_evaluated_on"]), (p, v)
+        assert "held-1" not in v["evaluated_on"] and v["evaluated_on"], (p, v)
