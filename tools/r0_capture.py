@@ -394,38 +394,135 @@ SESSION_REQUIRED = {
 TAKE_REQUIRED = ("id", "command_id", "wav")
 
 
+_EXIT = re.compile(r"exit (-?\d+)")
+_SHA_LINE = re.compile(r"^([0-9a-f]{64})\s+\S*arty\.bit$")
+
+
+def command_blocks(text: str) -> tuple:
+    """A transcript in the procedure's `cmd >> file 2>&1; echo "exit $?" >>
+    file` shape, split into command blocks: (lines, exit_code) for every block
+    that `exit N` closes, and the lines left over after the last exit."""
+    blocks, cur = [], []
+    for ln in (x.strip() for x in text.splitlines()):
+        if not ln:
+            continue
+        m = _EXIT.fullmatch(ln)
+        if m:
+            blocks.append((cur, int(m.group(1))))
+            cur = []
+        else:
+            cur.append(ln)
+    return blocks, cur
+
+
 def transcript_problems(text: str, bitstream_sha256: str, *, synthetic_ok=False) -> list:
-    """docs/capture-r0.md step 5's pass conditions, read from program.txt
-    itself -- a non-empty file is not programming evidence (#299 B1):
+    """docs/capture-r0.md step 5, read as COMMAND BLOCKS -- not a tail and
+    not a count of `exit 0` lines (#299 B1, then C1: a failed programmer
+    followed by any stray `exit 0` was accepted). Step 5 writes, in order:
 
-      1. `release_manifest: BOUND` followed by that command's `exit 0`;
-      2. a `shasum -a 256` line whose digest is R0's bitstream, for arty.bit;
-      3. the programmer's own exit status, the transcript's LAST line: `exit 0`.
+      block 1  release_manifest.py ...      -> must say BOUND, its own exit 0
+      (no exit) shasum -a 256 arty.bit      -> R0's digest
+      (no exit) openFPGALoader --Version    -> `openFPGALoader v...`
+      block 2  openFPGALoader -b ... arty.bit -> its own exit 0
 
+    So: exactly one manifest block, first, BOUND, exit 0; then PROGRAMMER
+    blocks only (a block is the programmer's when it carries the
+    `openFPGALoader v` line the procedure prints before programming); the
+    first programmer block carries the shasum line before that version line;
+    the LAST block is a programmer block that exits 0. A programmer block
+    that failed is admitted only when a later programmer block succeeded (a
+    retry, rerunning --Version and the program command). Anything else -- a
+    bare `exit 0`, a manifest re-run, lines after the last exit -- refuses.
     A transcript that says SYNTHETIC is refused whatever else it holds."""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     probs = []
-    if not synthetic_ok and any("SYNTHETIC" in ln for ln in lines):
+    if not synthetic_ok and "SYNTHETIC" in text:
         probs.append("program transcript is SYNTHETIC: no board was programmed")
-    exits = [i for i, ln in enumerate(lines) if re.fullmatch(r"exit -?\d+", ln)]
-    bound = [i for i, ln in enumerate(lines) if ln.startswith("release_manifest: BOUND")]
-    if not bound:
-        probs.append("program transcript: no `release_manifest: BOUND` line")
+    blocks, tail = command_blocks(text)
+    if tail:
+        probs.append(f"program transcript: {len(tail)} line(s) after the last exit status "
+                     f"(an unfinished command: {tail[-1]!r})")
+    if not blocks:
+        return probs + ["program transcript: no command block (no `exit N` line)"]
+    m_lines, m_exit = blocks[0]
+    if not any(ln.startswith("release_manifest: BOUND") for ln in m_lines):
+        probs.append("program transcript: the first block is not `release_manifest: BOUND`")
+    if m_exit != 0:
+        probs.append(f"program transcript: release_manifest exited {m_exit}, not 0")
+    prog = blocks[1:]
+    if not prog:
+        return probs + ["program transcript: no openFPGALoader programming block"]
+    for i, (lines, code) in enumerate(prog):
+        if not any(ln.startswith("openFPGALoader v") for ln in lines):
+            probs.append(f"program transcript: block {i + 2} (exit {code}) is not a "
+                         "programmer block -- only programmer retries may follow the manifest "
+                         "check")
+        if any(ln.startswith("release_manifest:") for ln in lines):
+            probs.append(f"program transcript: block {i + 2} re-runs the manifest check")
+    first = prog[0][0]
+    shas = [j for j, ln in enumerate(first) if _SHA_LINE.match(ln)]
+    ver = [j for j, ln in enumerate(first) if ln.startswith("openFPGALoader v")]
+    if not shas:
+        probs.append("program transcript: no `shasum -a 256 ... arty.bit` line before the "
+                     "programmer")
     else:
-        nxt = [i for i in exits if i > bound[0]]
-        if not nxt or lines[nxt[0]] != "exit 0":
-            probs.append("program transcript: release_manifest did not exit 0 "
-                         f"({lines[nxt[0]] if nxt else 'no exit line'})")
-    sha = [ln for ln in lines if re.match(r"^[0-9a-f]{64}\s+\S*arty\.bit$", ln)]
-    if not sha:
-        probs.append("program transcript: no `shasum -a 256 ... arty.bit` line")
-    elif sha[0].split()[0] != bitstream_sha256:
-        probs.append(f"program transcript: arty.bit hashes {sha[0].split()[0][:12]}, "
-                     f"not R0's {bitstream_sha256[:12]}")
-    if not lines or lines[-1] != "exit 0" or len(exits) < 2:
-        probs.append("program transcript: the programmer's final `exit 0` is missing "
-                     f"(last line {lines[-1] if lines else None!r})")
+        dig = _SHA_LINE.match(first[shas[0]]).group(1)
+        if dig != bitstream_sha256:
+            probs.append(f"program transcript: arty.bit hashes {dig[:12]}, not R0's "
+                         f"{bitstream_sha256[:12]}")
+        if ver and shas[0] > ver[0]:
+            probs.append("program transcript: the shasum line follows the programmer")
+    if prog[-1][1] != 0:
+        probs.append(f"program transcript: the programmer's own last block exited "
+                     f"{prog[-1][1]}, not 0")
     return probs
+
+
+def detect_problems(text: str, *, synthetic_ok=False) -> list:
+    """Step 2.2's detect transcript, as one command block: it names an
+    xc7a100t and exits 0, with nothing after its exit line."""
+    probs = []
+    if not synthetic_ok and "SYNTHETIC" in text:
+        probs.append("detect transcript is SYNTHETIC: no board was detected")
+    blocks, tail = command_blocks(text)
+    if tail or not blocks:
+        probs.append("detect transcript: openFPGALoader --detect has no exit status line")
+        return probs
+    lines, code = blocks[-1]
+    if code != 0:
+        probs.append(f"detect transcript: openFPGALoader --detect exited {code}, not 0")
+    if not lines:
+        probs.append("detect transcript: its exit line closes no command output")
+    if not any("xc7a100t" in ln.lower() for ln in lines):
+        probs.append("detect transcript: no xc7a100t device named")
+    return probs
+
+
+def host_log_problems(plan) -> list:
+    """The host log's schema, asserted BEFORE any comparison (#299 C2: a log
+    without `apply_frame` was silently skipped by one check and crashed the
+    next, which exited 1 -- this tool's FAIL code). Every write needs its
+    `expect` register fields and an integer `apply_frame`; every event its
+    `expect` and an integer `due`."""
+    if not isinstance(plan, dict) or not isinstance(plan.get("rows"), list):
+        return ["host log has no `rows` list"]
+    probs = []
+    for i, r in enumerate(plan["rows"]):
+        if not isinstance(r, dict):
+            probs.append(f"row {i} is not an object")
+            continue
+        kind = r.get("kind")
+        if kind not in ("write", "event", "status", "abort"):
+            probs.append(f"row {i}: kind {kind!r}")
+            continue
+        if kind in ("write", "event"):
+            e = r.get("expect")
+            if not isinstance(e, dict) or not all(isinstance(e.get(k), int)
+                                                  for k in ("flag", "sec", "addr", "data")):
+                probs.append(f"row {i} ({kind}): `expect` missing or malformed")
+            need = "apply_frame" if kind == "write" else "due"
+            if not isinstance(r.get(need), int):
+                probs.append(f"row {i} ({kind}): `{need}` missing or not an integer")
+    return probs[:5] + ([f"... {len(probs) - 5} more"] if len(probs) > 5 else [])
 
 
 def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
@@ -460,13 +557,9 @@ def check_session(bundle: pathlib.Path, s: dict, manifest: dict, *,
     if not dp.is_file():
         probs.append(f"detect transcript {dt} missing (procedure step 2.2)")
     else:
-        dl = [ln.strip() for ln in dp.read_text(errors="replace").splitlines() if ln.strip()]
-        if not dl or dl[-1] != "exit 0":
-            probs.append(f"detect transcript {dt}: openFPGALoader --detect did not exit 0")
-        if not synthetic_ok and any("SYNTHETIC" in ln for ln in dl):
-            probs.append(f"detect transcript {dt} is SYNTHETIC: no board was detected")
-        if not any("xc7a100t" in ln.lower() for ln in dl):
-            probs.append(f"detect transcript {dt}: no xc7a100t device named")
+        probs += [p.replace("detect transcript", f"detect transcript {dt}", 1)
+                  for p in detect_problems(dp.read_text(errors="replace"),
+                                           synthetic_ok=synthetic_ok)]
     if "synthetic" not in s:
         # a declaration copied from the synthetic generator is not an acquisition
         for sec in ("image", "board", "dac", "interface"):
@@ -979,7 +1072,14 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 if not hp.is_file():
                     raise Refused(f"take {tk['id']}: host log {hp} missing")
                 rec["inputs_sha256"][str(hp.relative_to(bundle))] = sha256_file(hp)
-                host_plan = json.loads(hp.read_text())
+                try:
+                    host_plan = json.loads(hp.read_text())
+                except ValueError as exc:
+                    raise Refused(f"take {tk['id']}: host log {hp.name} unreadable ({exc})")
+                bad = host_log_problems(host_plan)
+                if bad:
+                    raise Refused(f"take {tk['id']}: host log {hp.name} is incomplete: "
+                                  + "; ".join(bad))
                 hh = rec["inputs_sha256"][str(hp.relative_to(bundle))]
                 if not rec["synthetic"] and hh in seen_logs:
                     raise Refused(f"take {tk['id']}: host log is byte-identical to take "
@@ -1050,6 +1150,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 r = 10 * math.log10(max(float(np.sum((u1 - u0) ** 2)) /
                                         max(float(np.sum(u0 ** 2)), 1e-30), 1e-30))
                 t1["metrics"]["repeat_db_vs_" + k0["id"]] = round(r, 2)
+                t0["metrics"]["repeat_db_vs_" + k1["id"]] = round(r, 2)
                 if r > LIMITS["repeat_db_max"]:
                     t1["fails"]["repeat"] = (f"differs from take {k0['id']} by {r:.1f} dB "
                                              f"(limit {LIMITS['repeat_db_max']} dB)")
@@ -1067,6 +1168,21 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             for p, why in t["fails"].items():
                 props[p] = "FAIL"
                 reasons.append(f"{t['id']}: {p}: {why}")
+        # scope-qualify each PASS: which sounding takes it did NOT cover (#299
+        # re-Judge N1: `residual: PASS` read as unqualified although no held
+        # take was scored for it)
+        sounding = [t for t in results if "_aligned" in t]
+        for prop, present in EVALUATED_BY.items():
+            if props[prop] != "PASS":
+                continue
+            miss = [t["id"] for t in sounding
+                    if prop in (t.get("not_evaluated") or {}) or not present(t["metrics"])]
+            done = len(sounding) - len(miss)
+            if prop == "noise":
+                continue
+            if miss:
+                props[prop] = (f"PASS (evaluated on {done} of {len(sounding)} sounding takes; "
+                               f"not evaluated on: {', '.join(miss)})")
         rec["properties"] = props
         rec["coverage"] = {
             "release_compared": {t["id"]: t["metrics"].get("release_compared", True)
@@ -1086,6 +1202,28 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         rec["verdict"] = REFUSED
         rec["reasons"] = [str(exc)]
         return rec
+    except Exception as exc:                        # noqa: BLE001 -- deliberately total
+        # No exception may surface as FAIL (exit 1 is a MEASURED failure): an
+        # analysis that could not finish has no verdict (#299 re-Judge C2).
+        import traceback
+        rec["verdict"] = REFUSED
+        rec["reasons"] = [f"the analysis could not complete (NO VERDICT, not a FAIL): "
+                          f"{type(exc).__name__}: {exc}"]
+        rec["traceback"] = traceback.format_exc().splitlines()[-12:]
+        return rec
+
+
+# the metric each scope-qualified property leaves when a take WAS evaluated for it
+EVALUATED_BY = {
+    "residual": lambda m: "residual_db" in m,
+    "timing": lambda m: "timing_scatter" in m,
+    "gain": lambda m: "gain_change_db" in m,
+    "clock": lambda m: "clock_drift_ppm" in m,
+    "dropout": lambda m: m.get("waveform_scored", False),
+    "pitch": lambda m: "pitch" in m,
+    "repeat": lambda m: any(k.startswith("repeat_db_vs_") for k in m),
+    "noise": lambda m: True,
+}
 
 
 # =============================================================================
@@ -1220,7 +1358,7 @@ def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
         "SYNTHETIC: no board was programmed\n"
         "release_manifest: BOUND -- synthetic session\nexit 0\n"
         f"{manifest['image']['bitstream_sha256']}  {manifest['image']['bitstream']}\n"
-        "exit 0\n")
+        "openFPGALoader v0.0.0-synthetic\nSYNTHETIC: nothing was loaded\nexit 0\n")
     s = {"schema": SESSION_SCHEMA, "synthetic": {"defect": defect, "seed": seed, **CLEAN},
          "image": {"bitstream_sha256": manifest["image"]["bitstream_sha256"],
                    "programmer": "synthetic", "program_transcript": "program.txt",
@@ -1400,6 +1538,12 @@ def main(argv=None) -> int:
         (out / "analysis.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
     for r in rec["reasons"][:12]:
         print(f"  {r}")
+    for prop, v in (rec.get("properties") or {}).items():
+        if isinstance(v, str) and v.startswith("PASS ("):
+            print(f"  {prop}: {v}")
+    for tid, ok in ((rec.get("coverage") or {}).get("release_compared") or {}).items():
+        if ok is False:
+            print(f"  {tid}: release NOT compared (host-planned hold differs)")
     print(f"r0_capture: {rec['verdict']}"
           + (" (NO VERDICT)" if rec["verdict"] == REFUSED else ""))
     return {PASS: 0, FAIL: 1}.get(rec["verdict"], 2)
