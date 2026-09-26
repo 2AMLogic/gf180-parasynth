@@ -101,6 +101,18 @@ F1CAL = "surge-type2-clean-v1"
 F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
         "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
+#: The production launch. tb_voice.v's GO must equal synth_top.v's GO_CYCLE:
+#: a bench that launches later than the chip refuses configurations the chip
+#: runs (PR #235's three-saw refusal, docs/deadline/README.md), and one that
+#: launches earlier passes configurations the chip cannot. Checked, not assumed.
+import re as _re
+def _param(path, name):
+    m = _re.search(rf"parameter\s+{name}\s*=\s*(\d+)", open(os.path.join(HERE, path)).read())
+    return int(m.group(1)) if m else None
+#: What the last simulation's deadline check found (tb_voice's OVERRUN / LATE
+#: SAMPLE / DEADLINE lines), so a negative control can be checked against the
+#: failure it was recorded to cause.
+DEADLINE: dict = {}
 
 
 # ---- the model's writes as register writes -----------------------------------
@@ -160,6 +172,27 @@ def scenarios(which: str, only=None) -> list:
         assert all(0 <= int(w[0]) < n for w in writes), (key, n, [w for w in writes if not 0 <= int(w[0]) < n])
         if only is None or key in only:
             S.append((key, name, regs, writes, n))
+
+    # -- threesaw: plan075 T1 (docs/deadline/). OPT-IN ONLY (name it in --only).
+    # The configuration PR #235's f1cal scenario could not run here under the
+    # old launch (go at cycle 48): THREE 2x SAW oscillators with the 2x filter,
+    # at the calibrated surge-type2-clean-v1 words (the image names the
+    # calibration; the words are asserted equal to PR #235's record), at its
+    # five F1 points. Frame 0 carries the whole image plus the note, the
+    # burst that was refused.
+    if only is not None and "threesaw" in only:
+        n = int((0.03 if q else 0.1) * SR)
+        cal_words = {0.0: (42598, 100825), 1.0: (42598, 302474), 1.1: (42598, 322639)}
+        for i, (cut, res) in enumerate(((250, 0.0), (1000, 0.0), (4000, 0.0),
+                                        (1000, 1.0), (1000, 1.1))):
+            regs = v.patch_regs(waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+                                mix=(1.0, 0.0, 0.0), cutoff=(cut, cut), q=res, drive=1.0,
+                                track=0.0, amp=(0.001, 0.25, 1.0, 0.05),
+                                filter_calibration=F1CAL)
+            assert (regs["gain"], regs["ogain"]) == cal_words[res], (res, regs["gain"], regs["ogain"])
+            writes = _note_writes(45, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+            add("threesaw", f"three 2x saws at {cut} Hz, res {res}, calibrated words "
+                            f"(gain {regs['gain']}, ogain {regs['ogain']})", regs, writes, n)
 
     # -- default: the default patch, one note from reset --------------------------
     d = 0.025 if q else 0.3
@@ -396,6 +429,8 @@ def scenarios(which: str, only=None) -> list:
     # of 256; synth_top pulses go at cycle 8) -- "datapath still busy at the
     # end of frame 0", measured with the legacy words too, so it is not the
     # calibration. The ladder sees a sawtooth either way.
+    # RESOLVED (plan075 T1, docs/deadline/README.md): the bench now launches at
+    # synth_top's cycle 8, and the saw case runs as the opt-in `threesaw`.
     if only is not None and "f1cal" in only:
         n = int((0.03 if q else 0.1) * SR)
         for i, (cut, res) in enumerate(((250, 0.0), (1000, 0.0), (4000, 0.0),
@@ -562,8 +597,18 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
 
 
 def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0,
-             simulator: str = "iverilog") -> str | None:
+             simulator: str = "iverilog", go: int | None = None) -> str | None:
     import shutil
+    DEADLINE.clear()
+    bench_go, chip_go = _param("tb_voice.v", "GO"), _param("synth_top.v", "GO_CYCLE")
+    if bench_go is None or chip_go is None:
+        print("verify_voice: REFUSED -- cannot read tb_voice.v's GO or synth_top.v's GO_CYCLE"); return None
+    if go is None and bench_go != chip_go:
+        print(f"verify_voice: REFUSED -- tb_voice.v launches at cycle {bench_go}, synth_top.v at "
+              f"{chip_go}: the bench would not be measuring the chip's deadline"); return None
+    if go is not None and go != chip_go:
+        print(f"verify_voice: DIAGNOSTIC launch at cycle {go}, NOT the chip's cycle {chip_go}: "
+              f"a deadline result from this run says nothing about the chip")
     iverilog, vvp = tool("iverilog"), tool("vvp")
     if simulator == "iverilog" and (not iverilog or not vvp):
         print("verify_voice: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
@@ -577,9 +622,11 @@ def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 360
             print("verify_voice: Verilator not on PATH"); return None
         compiler = [verilator, "--binary", "--timing", "-Wno-fatal", "--top-module", "tb_voice",
                     "--Mdir", os.path.join(outdir, "obj_voice"), "-o", vvp_file]
+        if go is not None: compiler.append(f"-GGO={go}")
         runner = [vvp_file]
     else:
         compiler = [iverilog, "-g2012", "-o", vvp_file]
+        if go is not None: compiler.append(f"-Ptb_voice.GO={go}")
         runner = [vvp, "-n", vvp_file]
     r = subprocess.run(compiler + [f"-D{d}" for d in defines] + files,
                        cwd=HERE, capture_output=True, text=True)
@@ -592,6 +639,17 @@ def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 360
     except subprocess.TimeoutExpired:
         print("verify_voice: simulation timed out"); return None
     sys.stdout.write("".join("  sim: " + l + "\n" for l in r.stdout.splitlines() if l.startswith("tb_voice")))
+    m = _re.search(r"tb_voice: OVERRUN at frame (\d+)", r.stdout)
+    if m: DEADLINE["overrun_frame"] = int(m.group(1))
+    m = _re.search(r"tb_voice: LATE SAMPLE: (\d+) frame\(s\) strobed after cycle 254, first frame (\d+) at cycle (\d+)", r.stdout)
+    if m: DEADLINE.update(late_samples=int(m.group(1)), late_first=int(m.group(2)), late_cycle=int(m.group(3)))
+    m = _re.search(r"DEADLINE go at cycle (\d+); worst strobe cycle (-?\d+) \(sample slack (-?\d+) to cycle 254\); "
+                   r"worst last-busy cycle (-?\d+) \(busy slack (-?\d+)", r.stdout)
+    if m:
+        DEADLINE.update(go=int(m.group(1)), worst_strobe=int(m.group(2)), sample_slack=int(m.group(3)),
+                        worst_busy=int(m.group(4)), busy_slack=int(m.group(5)))
+    if "tb_voice: REFUSED" in r.stdout:
+        DEADLINE["refused"] = True
     if r.returncode != 0 or not os.path.exists(out_file):
         print(f"verify_voice: {simulator} run failed:\n" + r.stdout + r.stderr); return None
     return out_file
@@ -613,6 +671,12 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
+    ap.add_argument("--go", type=int, default=None,
+                    help="DIAGNOSTIC: launch at this cycle instead of synth_top's GO_CYCLE")
+    ap.add_argument("--expect-deadline-fail", action="store_true",
+                    help="exit 0 only if the run FAILED its frame deadline (an overrun or a "
+                         "late sample) -- the late-completion control, e.g. with --rtl pointing "
+                         "at verify_deadline.py's late mutant; a value mismatch does not count")
     ap.add_argument("--f1cal-fault", default=None, choices=("LEGACY_WORDS",),
                     help="with --only f1cal: deliver the legacy gain/ogain words while the "
                          "image names the calibration; must mismatch (use --expect-fail)")
@@ -644,8 +708,35 @@ def main(argv=None) -> int:
         print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}; "
               f"defines {', '.join(defines) or '(none)'}), {len(expected)} frames, "
               f"{len(writes)} writes at the register port")
-        out = simulate(a.outdir, defines, rtl, simulator=a.simulator)
-        status = 2 if out is None else compare(expected, state, report, out)
+        out = simulate(a.outdir, defines, rtl, simulator=a.simulator, go=a.go)
+        if out is not None and "overrun_frame" in DEADLINE:
+            # the frame's computation did not finish before the next tick at the
+            # production launch: a FAILED deadline, which is a result, not a refusal
+            print(f"verify_voice: FAIL -- DEADLINE: overrun at frame {DEADLINE['overrun_frame']} "
+                  f"(datapath busy at the tick, go at cycle {a.go or _param('tb_voice.v', 'GO')})")
+            status = 1
+        elif out is None and "overrun_frame" in DEADLINE:
+            print(f"verify_voice: FAIL -- DEADLINE: overrun at frame {DEADLINE['overrun_frame']} "
+                  f"(datapath busy at the tick, go at cycle {a.go or _param('tb_voice.v', 'GO')})")
+            status = 1
+        else:
+            status = 2 if out is None else compare(expected, state, report, out)
+            if status == 0 and DEADLINE.get("late_samples"):
+                status = 1
+            if "late_samples" in DEADLINE:
+                print(f"verify_voice: FAIL -- DEADLINE: {DEADLINE['late_samples']} late sample(s), first at "
+                      f"frame {DEADLINE['late_first']} cycle {DEADLINE['late_cycle']} (> 254)")
+            if "sample_slack" in DEADLINE:
+                print(f"verify_voice: deadline at launch cycle {DEADLINE['go']}: worst strobe cycle "
+                      f"{DEADLINE['worst_strobe']} (slack {DEADLINE['sample_slack']}), worst last-busy "
+                      f"cycle {DEADLINE['worst_busy']} (slack {DEADLINE['busy_slack']})")
+    if a.expect_deadline_fail:
+        # the late-completion control is caught only by the DEADLINE check, never by a value mismatch
+        if status == 1 and ("overrun_frame" in DEADLINE or DEADLINE.get("late_samples")):
+            print("verify_voice: late-completion control CAUGHT by the deadline check")
+            return 0
+        print(f"verify_voice: LATE-COMPLETION CONTROL NOT CAUGHT FOR ITS REASON (status {status}, {DEADLINE})")
+        return 1 if status != 2 else 2
     if a.expect_fail:
         if status == 1:
             print(f"verify_voice: negative control {a.inject or ''} CAUGHT (comparison failed as required)")
