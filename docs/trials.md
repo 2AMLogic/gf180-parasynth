@@ -170,3 +170,53 @@ naming the case/property and its preservation set.
    missed declared checks, human relay interventions, reruns caused only by
    provenance, setup failures found after expensive work began, time from
    implementation to qualified result. Not PR count or trial count.
+
+## 5. Running a trial (pilot, implemented)
+
+From a fresh checkout, on the build box or in CI (the laptop is not a
+supported environment; its Python and Icarus differ from the spec):
+
+```
+python3 tools/trial_env.py bootstrap --venv ~/work/trials-venv   # box; CI omits --venv
+~/work/trials-venv/bin/python tools/trial.py run T-DEADLINE      # or: make trial T=T-DEADLINE PY=...
+~/work/trials-venv/bin/python tools/trial.py check-receipt build/trials/T-DEADLINE/<run>/receipt.json
+```
+
+`bootstrap` installs `spec/trial-environment.json` (Python 3.12, pinned
+packages, oss-cad-suite via `tools/setup_ci_oss_cad.py`) and is a no-op when it
+is already satisfied. `tools/trial.py` refuses with NO VERDICT, before any child
+starts, when the environment, a checker, or a required asset is absent.
+`docs/trials.json` is the registry; `.github/workflows/trials.yml` runs the
+same bootstrap and gates on T-DEADLINE. Receipts live under `build/trials/` and
+are uploaded by CI as `trial-receipts`; `tools/trial.py compare A B` checks two
+environments reached the same numbers from the same inputs.
+
+### Pilot receipts, 2026-09-26 (a snapshot, not maintained state)
+
+`docs/trials/pilot-2026-09-26.tgz` holds every receipt bundle the pilot
+produced on the build box. At the time, `python3 tools/trial.py check-all
+pilot` reported 12/12 valid. They are `trial-receipt/1` receipts, and the
+current checker **rejects** them. A /1 receipt does not record each child's
+interpreter, so a child's verdict cannot be re-derived from its evidence. That
+was the defect: a re-sealed receipt with a FAIL child flipped to PASS was
+reported valid (review of 4eb4e72). The table below is what the pilot printed.
+It is kept as a record, not as receipts the current checker accepts. `main-c50abf9/` is this branch's own tree;
+`cand255-5a8f87d/` is this branch merged locally with open PR #255's head
+`b2ccc12` (never pushed), to show what the two #255-dependent trials return
+once its manifest and held-note checker land. CI's receipts for the same
+commit are the `trial-receipts` artifact of `.github/workflows/trials.yml`;
+`tools/trial.py compare` reports AGREE between CI and the box for both
+T-DEADLINE modes.
+
+| trial | tree | verdict | what it shows |
+|---|---|---|---|
+| T-RELEASE-BOUND | main | NO VERDICT (preflight) | manifest and `release_manifest.py` absent until #255 |
+| T-RELEASE-BOUND | +#255 | ~~PASS~~ NO VERDICT | manifest BOUND; Arty evidence binding BOUND. It was reported PASS with **no control declared**, a vacuous pass. The composite now refuses that. It stays NO VERDICT until a STALE counterexample control exists (after #255) |
+| T-DEADLINE reanalyse | main | PASS | retained traces: slack 14, 3300/3300 I2S periods; late160 control caught |
+| T-DEADLINE sim | main | PASS | this tree's RTL: slack 13 (one cycle less than the published image's 14), 3300/3300 periods; control caught |
+| T-DEADLINE sim, candidate late160 | main | FAIL | 3496 missed frames, overrun: the deadline reason |
+| T-DEADLINE sim, 45 s budget | main | NO VERDICT (timeout) | no PASS left behind |
+| T-DEADLINE sim, SIGTERM at 60 s | main | NO VERDICT (cancelled) | children killed, none surviving |
+| T-DEADLINE reanalyse, truncated trace | main | NO VERDICT | staging refused the altered trace before the checker ran |
+| T-PLAY-DIGITAL | main | NO VERDICT (preflight) | `held_note_audible.py` absent until #255 |
+| T-PLAY-DIGITAL | +#255 | PASS | three held notes audible (peaks 12760/7345/10376 LSB) and bit-exact; demo phrase 257,185 I2S periods, 508/508 writes, 0 mismatches; silent-image control caught |
