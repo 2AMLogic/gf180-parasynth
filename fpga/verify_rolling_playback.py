@@ -368,18 +368,23 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
         return {"state": "REFUSED", "reason": "RTL replay did not run",
                 "capture": cap}
     ok, comp, detail = vub.analyze(rr)
+    # completeness (#300 review): every period the stimulus requires, and a
+    # control showing the check can fail
+    trunc = vub.truncation_control(rr)
     # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
     # digests) is published beside the result it produced
     receipt = Path(rr["outdir"]) / "run_identity.json"
     published = outdir / f"{fixture}.run_identity.json"
     published.write_bytes(receipt.read_bytes())
-    out = {"state": "PASS" if ok else "FAIL", "capture": cap,
+    out = {"state": ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
+                     else "PASS" if ok else "FAIL"), "capture": cap,
+           "truncation_control": trunc,
            "comparison": comp, "detail": detail[:10],
            "reused_rtl_run": bool(rr.get("reused")),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
     out["control"] = rtl_control(fixture, outdir, vub, work)
-    if not out["control"]["caught"]:
+    if not out["control"]["caught"] and out["state"] == "PASS":
         out["state"] = "FAIL"
     return out
 
@@ -403,7 +408,7 @@ def rtl_control(fixture: str, outdir: Path, vub, work: str = "rolling-rtl") -> d
     if rr is None:
         return {"caught": False, "reason": "control could not re-analyse"}
     ok, comp, detail = vub.analyze(rr)
-    caught = (not ok) and comp.get("frame_pred_bad") == 1
+    caught = (not ok) and comp.get("frame_pred_bad") == 1 and not comp.get("i2s_incomplete")
     return {"caught": caught, "victim_index": victim["index"],
             "frame_pred_bad": comp.get("frame_pred_bad"),
             "wire_mismatch": comp.get("wire_mismatch"), "detail": detail[:3]}
@@ -504,6 +509,9 @@ def main(argv=None) -> int:
                          "stimulus is byte-identical to this capture's)")
     ap.add_argument("--epochs", default="0,32000,65300",
                     help="device frame counter at the host's first STATUS")
+    ap.add_argument("--reuse-rtl-if-identical", action="store_true",
+                    help="re-analyse the RTL run on disk when its full identity (sources, "
+                         "defines, stimulus, length, outputs) is this run's; else simulate")
     ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
                     help="the SENDER's image selector (uart_host --image); default release")
     ap.add_argument("--expect-image", default=None, choices=sorted(uh.IMAGE_REVISION),
@@ -582,7 +590,8 @@ def main(argv=None) -> int:
     if a.rtl is not None:
         rtl = {}
         for fx in (a.rtl or ["demo"]):
-            rr = rtl_replay(fx, a.outdir / "rtl-replay", reuse=a.reuse_rtl,
+            rr = rtl_replay(fx, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl,
                             image=image, target=target)
             rtl[fx] = rr
             ok &= rr["state"] == "PASS"
@@ -597,7 +606,12 @@ def main(argv=None) -> int:
                   + (f" -- {rr.get('detail') or rr.get('reason')}"
                      if rr["state"] != "PASS" else ""))
         record["rtl"] = rtl
-        record["state"] = "PASS" if ok else "FAIL"
+        nv = any(r["state"] in ("NO VERDICT", "REFUSED") for r in rtl.values())
+        record["state"] = "NO VERDICT" if nv else "PASS" if ok else "FAIL"
+        if nv:
+            (a.outdir / "verification.json").write_text(
+                json.dumps(record, indent=2, default=str) + "\n")
+            return 2
     (a.outdir / "verification.json").write_text(
         json.dumps(record, indent=2, default=str) + "\n")
     return 0 if ok else 1

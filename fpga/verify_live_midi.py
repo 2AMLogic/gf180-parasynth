@@ -973,10 +973,13 @@ def rtl_replay(res: dict, outdir: Path, *, reuse: bool = False, timeout_s: int =
     if rr is None:
         return {"state": "NO VERDICT", "reason": "the RTL replay did not run", "capture": cap}
     ok, comp, detail = vub.analyze(rr)
+    trunc = vub.truncation_control(rr)          # completeness can fail (#300 review)
     receipt = Path(rr["outdir"]) / "run_identity.json"
     published = outdir / f"{name}.run_identity.json"
     published.write_bytes(receipt.read_bytes())
-    return {"state": "PASS" if ok else "FAIL", "capture": cap, "comparison": comp,
+    state = ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
+             else "PASS" if ok else "FAIL")
+    return {"state": state, "capture": cap, "comparison": comp, "truncation_control": trunc,
             "detail": detail[:10], "reused_rtl_run": bool(rr.get("reused")),
             "run_receipt": {"path": published.name,
                             "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
@@ -1018,6 +1021,9 @@ def main(argv=None) -> int:
                          "so its bytes cannot be paired with the schedule write for write; "
                          "it is caught at the device contract.)")
     ap.add_argument("--reuse-rtl", action="store_true")
+    ap.add_argument("--reuse-rtl-if-identical", action="store_true",
+                    help="re-analyse the RTL run on disk when its full identity is this "
+                         "run's; else simulate")
     ap.add_argument("--sustained-s", type=float, default=C.SUSTAINED_S)
     ap.add_argument("--rtl-sustained-s", type=float, default=3.0,
                     help="length of the sustained session replayed through the RTL")
@@ -1069,7 +1075,8 @@ def main(argv=None) -> int:
         for sc in ([] if a.rtl is None else (a.rtl or ["coverage"])):
             kw = {"seconds": a.rtl_sustained_s} if sc == "sustained" else {}
             r = check(run_session(sc, **kw))
-            rr = rtl_replay(r, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
+            rr = rtl_replay(r, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl)
             record["rtl"][sc] = rr
             verdicts.append(rr["state"])
             comp = rr.get("comparison", {})
@@ -1079,7 +1086,8 @@ def main(argv=None) -> int:
                   + (f" -- {rr.get('detail') or rr.get('reason')}" if rr["state"] != "PASS" else ""))
         for ctl in a.rtl_inject:
             r = check(run_session(CONTROLS[ctl][0], inject=ctl))
-            rr = rtl_replay(r, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
+            rr = rtl_replay(r, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl)
             comp = rr.get("comparison", {})
             caught = rr["state"] == "FAIL" and (comp.get("wire_mismatch", 0) > 0)
             rr["caught_by_i2s"] = caught

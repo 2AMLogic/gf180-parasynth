@@ -234,14 +234,15 @@ def test_held_note_with_no_decoded_i2s_is_no_verdict_not_fail(repo):
 
 def test_rolling_rtl_with_zero_periods_is_no_verdict(repo):
     clean = {"demo@0": {"ok": True}}
-    rr = {"state": "PASS", "comparison": {"periods": 0, "writes_sent": 508, "writes_seen": 508},
-          "control": {"caught": True}}
+    rr = {"state": "PASS", "comparison": {"periods": 0, "periods_required": 257185,
+                                          "writes_sent": 508, "writes_seen": 508},
+          "control": {"caught": True}, "truncation_control": {"caught": True}}
     repo.child({"rc": 0, "files": {"verification.json": {
         "state": "PASS", "clean": clean, "controls": {}, "rtl": {"demo": rr}}}},
         interpret="rolling_record", fixtures=["demo"])
     _, rec = repo.run()
     assert rec["verdict"] == trial.NO_VERDICT
-    assert "compared 0 I2S periods" in rec["children"][0]["reasons"][0]
+    assert any("compared 0 I2S periods" in r for r in rec["children"][0]["reasons"])
 
 
 # ---- a known valid DUT counterexample -> FAIL for the intended reason --------
@@ -294,10 +295,12 @@ def test_control_that_crashed_is_not_caught(repo):
 
 def test_held_note_silent_control_caught_only_when_replay_bit_exact(repo):
     rec_ok = {"preset": "default", "note": 45, "legacy_image": True, "replay_status": 0,
-              "i2s_peak_lsb": 3, "min_peak_lsb": 1024, "verdict": "FAIL"}
+              "i2s_peak_lsb": 3, "min_peak_lsb": 1024, "verdict": "FAIL",
+              "periods": 2, "periods_required": 2, "truncation_control": {"caught": True}}
     repo.child({"rc": 0, "files": {"held_note_audible.json": {
         "preset": "default", "note": 45, "legacy_image": False, "replay_status": 0,
-        "i2s_peak_lsb": 12760, "min_peak_lsb": 1024, "verdict": "PASS"},
+        "i2s_peak_lsb": 12760, "min_peak_lsb": 1024, "verdict": "PASS",
+        "periods": 2, "periods_required": 2, "truncation_control": {"caught": True}},
         "default/uart_i2s.txt": "0 12760 12760\n1 5 5\n"}}, interpret="held_note_record")
     repo.child({"rc": 0, "files": {"held_note_audible.json": rec_ok,
                                    "default-legacy/uart_i2s.txt": "0 3 3\n"}},
@@ -360,8 +363,10 @@ def test_binding_checker_format_is_read(repo):
 def test_rolling_missed_control_is_no_verdict_but_a_real_mismatch_is_fail(repo):
     base = {"state": "FAIL", "clean": {"demo@0": {"ok": True}},
             "controls": {"corrupt-byte": {"caught": False}},
-            "rtl": {"demo": {"state": "PASS", "control": {"caught": True}, "comparison": {
-                "periods": 257185, "writes_sent": 508, "writes_seen": 508}}}}
+            "rtl": {"demo": {"state": "PASS", "control": {"caught": True},
+                             "truncation_control": {"caught": True}, "comparison": {
+                "periods": 257185, "periods_required": 257185, "writes_sent": 508,
+                "writes_seen": 508}}}}
     repo.child({"rc": 1, "files": {"verification.json": base}},
                interpret="rolling_record", fixtures=["demo"])
     _, rec = repo.run()
@@ -812,8 +817,10 @@ def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
 # ---- R1 (#279, plan088): the image a record ran is the image the child declares
 def _r1_rolling(image):
     return {"state": "PASS", "image": image, "clean": {"demo@0": {"ok": True}}, "controls": {},
-            "rtl": {"demo": {"state": "PASS", "control": {"caught": True}, "comparison": {
-                "periods": 257185, "writes_sent": 510, "writes_seen": 510}}}}
+            "rtl": {"demo": {"state": "PASS", "control": {"caught": True},
+                             "truncation_control": {"caught": True}, "comparison": {
+                "periods": 257427, "periods_required": 257427, "writes_sent": 510,
+                "writes_seen": 510}}}}
 
 
 def test_rolling_record_of_another_image_is_no_verdict(repo):
@@ -845,3 +852,45 @@ def test_rolling_wrong_kit_control_is_caught_only_at_the_init_bytes(repo):
                 role="control")
     _, rec2 = repo2.run()
     assert rec2["verdict"] == trial.NO_VERDICT and not rec2["controls"][0]["caught"]
+
+
+# ---- #300 review: coverage is the stimulus-derived count, and it must be complete
+def test_rolling_partial_i2s_is_no_verdict_not_pass(repo):
+    """[red on e2dc705] 50 of 257,427 periods compared equal was a PASS."""
+    rec = _r1_rolling({"sender": "tree", "target": "tree"})
+    rec["rtl"]["demo"]["comparison"].update(periods=50, periods_required=257427)
+    repo.child({"rc": 0, "files": {"verification.json": rec}}, interpret="rolling_record",
+               fixtures=["demo"])
+    _, r = repo.run()
+    assert r["verdict"] == trial.NO_VERDICT
+    assert any("50 of 257427" in x for x in r["children"][0]["reasons"])
+    assert r["children"][0]["coverage"]["expected"]["i2s_periods"] == {"demo": 257427}
+
+
+def test_rolling_without_a_required_count_or_truncation_control_is_no_verdict(repo):
+    rec = _r1_rolling({"sender": "tree", "target": "tree"})
+    del rec["rtl"]["demo"]["comparison"]["periods_required"]
+    rec["rtl"]["demo"]["truncation_control"] = {"caught": False}
+    repo.child({"rc": 0, "files": {"verification.json": rec}}, interpret="rolling_record",
+               fixtures=["demo"])
+    _, r = repo.run()
+    reasons = " ".join(r["children"][0]["reasons"])
+    assert r["verdict"] == trial.NO_VERDICT
+    assert "no stimulus-derived" in reasons and "truncation control" in reasons
+
+
+def test_held_note_partial_i2s_is_no_verdict_not_pass(repo):
+    """[red on e2dc705] the held note cut to 2026 of 4052 rows still passed."""
+    repo.child({"rc": 0, "files": {"held_note_audible.json": {
+        "preset": "default", "note": 45, "legacy_image": False, "replay_status": 0,
+        "i2s_peak_lsb": 12760, "min_peak_lsb": 1024, "verdict": "PASS",
+        "periods": 2026, "periods_required": 3820, "truncation_control": {"caught": True}},
+        "default/uart_i2s.txt": "0 12760 12760\n"}}, interpret="held_note_record")
+    repo.child({"rc": 0, "files": {"held_note_audible.json": {
+        "preset": "default", "note": 45, "legacy_image": True, "replay_status": 0,
+        "i2s_peak_lsb": 3, "min_peak_lsb": 1024, "verdict": "FAIL", "periods": 2,
+        "periods_required": 2, "truncation_control": {"caught": True}},
+        "default-legacy/uart_i2s.txt": "0 3 3\n"}}, interpret="held_note_record", role="control")
+    _, r = repo.run()
+    assert r["verdict"] == trial.NO_VERDICT
+    assert "2026 of 3820" in r["children"][0]["reasons"][0]

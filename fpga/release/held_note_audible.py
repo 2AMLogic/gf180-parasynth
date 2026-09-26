@@ -109,8 +109,19 @@ def main(argv=None) -> int:
     import verify_uart_bridge as vub
     status = vub.main(["--replay", prefix, "--replay-name", name, "--outdir", outdir])
     i2s = os.path.join(outdir, name, "uart_i2s.txt")
+    vrec_path = os.path.join(outdir, name, "verification.json")
+    vrec = json.load(open(vrec_path)) if os.path.exists(vrec_path) else {}
+    vcomp = vrec.get("comparison") or {}
+    coverage = {"periods": vcomp.get("periods"),
+                "periods_required": vcomp.get("periods_required"),
+                "truncation_control": vrec.get("truncation_control")}
     if status == 2 or not os.path.exists(i2s):
-        print("held_note_audible: NO VERDICT -- the replay did not run")
+        print(f"held_note_audible: NO VERDICT -- the replay did not run, or its I2S "
+              f"coverage is incomplete ({coverage})")
+        with open(os.path.join(outdir, "held_note_audible.json"), "w") as fh:
+            json.dump({"name": name, "preset": a.preset, "image": a.image,
+                       "replay_status": status, "verdict": "NO VERDICT", **coverage},
+                      fh, indent=2)
         return 2
     peak = 0
     for line in open(i2s):
@@ -126,7 +137,7 @@ def main(argv=None) -> int:
            "command": ["run", "--note", str(NOTES[a.preset]), "--fixture", a.fixture,
                        "--image", a.image] + (["--preset", a.preset]
                                               if a.preset != "default" else []),
-           "init_problems": init_problems,
+           "init_problems": init_problems, **coverage,
            "replay_status": status, "i2s_peak_lsb": peak, "min_peak_lsb": MIN_PEAK,
            "verdict": "PASS" if verdict else "FAIL"}
     with open(os.path.join(outdir, "held_note_audible.json"), "w") as fh:

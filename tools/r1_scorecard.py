@@ -54,6 +54,10 @@ def gate_verdict(rows: list) -> str:
 def trust_rows(summary: dict) -> list:
     out = []
     for r in summary["runs"]:
+        if r.get("receipt_valid") is None:      # an exit status, not a receipt
+            out.append({"name": r["name"], "verdict": r["verdict"],
+                        "detail": "no receipt (pytest exit status)"})
+            continue
         ok = r.get("receipt_valid", True) and all(r.get("controls", {}).values())
         out.append({"name": r["name"], "verdict": "PASS" if ok else "NO VERDICT",
                      "detail": f"receipt valid {r.get('receipt_valid')}; controls caught "

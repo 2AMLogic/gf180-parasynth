@@ -229,21 +229,24 @@
        "property": "uart_host.py run --note 45 --fixture none is bit-exact at the pins and audible",
        "checker": "fpga/release/held_note_audible.py",
        "args": ["--preset", "default", "--outdir", "{out}"],
-       "interpret": "held_note_record"
+       "interpret": "held_note_record",
+       "image": "release"
       },
       {
        "id": "held-m5a-saw",
        "property": "uart_host.py run --preset m5a-saw --note 72 is bit-exact at the pins and audible",
        "checker": "fpga/release/held_note_audible.py",
        "args": ["--preset", "m5a-saw", "--outdir", "{out}"],
-       "interpret": "held_note_record"
+       "interpret": "held_note_record",
+       "image": "release"
       },
       {
        "id": "held-m5a-pulse",
        "property": "uart_host.py run --preset m5a-pulse --note 72 is bit-exact at the pins and audible",
        "checker": "fpga/release/held_note_audible.py",
        "args": ["--preset", "m5a-pulse", "--outdir", "{out}"],
-       "interpret": "held_note_record"
+       "interpret": "held_note_record",
+       "image": "release"
       },
       {
        "id": "phrase-demo",
@@ -251,6 +254,7 @@
        "checker": "fpga/verify_rolling_playback.py",
        "args": ["--outdir", "{out}", "--rtl", "demo"],
        "interpret": "rolling_record",
+       "image": {"sender": "release", "target": "release"},
        "fixtures": ["demo"]
       }
      ],
@@ -260,7 +264,8 @@
        "intended_reason": "the pre-fix image (no mixer writes) replays bit-exact but is SILENT, and the level floor rejects it",
        "checker": "fpga/release/held_note_audible.py",
        "args": ["--preset", "default", "--legacy-image", "--expect-fail", "--outdir", "{out}"],
-       "interpret": "held_note_record"
+       "interpret": "held_note_record",
+       "image": "release"
       }
      ]
     },
@@ -351,7 +356,8 @@
         "--expect-image",
         "tree",
         "--rtl",
-        "demo"
+        "demo",
+        "--reuse-rtl-if-identical"
        ],
        "interpret": "rolling_record",
        "fixtures": [
@@ -374,7 +380,8 @@
         "--expect-image",
         "tree",
         "--rtl",
-        "bar808-full"
+        "bar808-full",
+        "--reuse-rtl-if-identical"
        ],
        "interpret": "rolling_record",
        "fixtures": [
@@ -538,7 +545,8 @@
         "sustained",
         "--rtl-inject",
         "WRONG_DRUM_MAP",
-        "DELAYED_EVENT"
+        "DELAYED_EVENT",
+        "--reuse-rtl-if-identical"
        ],
        "interpret": "live_midi_record",
        "fixtures": [

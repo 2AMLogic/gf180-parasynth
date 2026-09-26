@@ -79,12 +79,13 @@ def coverage_text(child: dict) -> str:
         bits.append(f"frames {m.get('frames')}, missed {m.get('missed')}, worst sample slack "
                     f"{m.get('worst_sample_slack')}")
     if "i2s_peak_lsb" in m:
-        bits.append(f"{m.get('decoded_samples')} decoded samples, peak {m.get('i2s_peak_lsb')} "
-                    f"LSB (floor {m.get('min_peak_lsb')})")
+        bits.append(f"I2S {m.get('periods')}/{m.get('periods_required')} periods, peak "
+                    f"{m.get('i2s_peak_lsb')} LSB (floor {m.get('min_peak_lsb')})")
     for fx, v in (m.items() if isinstance(m, dict) else []):
         if isinstance(v, dict) and "writes_sent" in v:
             bits.append(f"{fx}: writes {v.get('writes_seen')}/{v.get('writes_sent')}, I2S "
-                        f"{v.get('periods')} periods, mismatch {v.get('wire_mismatch')}, "
+                        f"{v.get('periods')}/{v.get('periods_required')} periods, mismatch "
+                        f"{v.get('wire_mismatch')}, "
                         f"off-frame {v.get('frame_pred_bad')}, worst strobe "
                         f"{v.get('worst_strobe_cycle')}")
     if "latency_sustained" in m:
@@ -94,7 +95,9 @@ def coverage_text(child: dict) -> str:
                     f"{r2(lat.get('p99_ms'))} ms")
     per = obs.get("i2s_periods")
     if isinstance(per, dict) and per and not any("writes_sent" in str(v) for v in m.values()):
-        bits.append("RTL I2S periods compared " + ", ".join(f"{k} {v}" for k, v in per.items()))
+        req = exp.get("i2s_periods") if isinstance(exp.get("i2s_periods"), dict) else {}
+        bits.append("RTL I2S periods compared/required " + ", ".join(
+            f"{k} {v}/{req.get(k, '?')}" for k, v in per.items()))
     if not bits:
         bits.append(f"expected {exp}, observed {obs}")
     return "; ".join(bits)
@@ -136,7 +139,7 @@ def harvest(runs: Path, to: Path) -> dict:
                              "controls", "level": "host code (no RTL)",
                  "identity": f"`{_git('rev-parse', 'HEAD')[:8]}`; R1 host (--image tree)",
                  "verdict": "PASS" if dom.returncode == 0 else "FAIL",
-                 "coverage": f"pytest exit {dom.returncode}: {tail}", "receipt_valid": True,
+                 "coverage": f"pytest exit {dom.returncode}: {tail}", "receipt_valid": None,
                  "controls": {}})
     to.mkdir(parents=True, exist_ok=True)
     ids = to / "rtl-run-identities"
@@ -166,7 +169,7 @@ def main(argv=None) -> int:
     for r in s["runs"]:
         print(f"{r['name']:<42} {r['verdict']:<11} receipt_valid={r['receipt_valid']} "
               f"controls={r['controls']}")
-    bad = [r for r in s["runs"] if not r["receipt_valid"]]
+    bad = [r for r in s["runs"] if r["receipt_valid"] is False]
     return 1 if bad else 0
 
 

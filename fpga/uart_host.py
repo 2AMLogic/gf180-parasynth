@@ -1869,7 +1869,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
         return 2
     try:
         bridge = open_bridge(a.port, a.baud)
-        bridge.require_idle = a.image == "tree"
+        # only a command that establishes R1's known state asserts it: a
+        # standalone note-off must never be refused for a busy queue
+        bridge.require_idle = a.image == "tree" and image_sent
         rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
     except Refused as exc:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
