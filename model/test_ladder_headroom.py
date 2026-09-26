@@ -302,6 +302,28 @@ def test_the_rig_refuses_to_apply_the_tuning_polynomial_twice():
     assert rr.OurLadder("ours").huov_fcr is False
 
 
+def test_the_huovtune_device_means_the_pre_dr_0011_candidate_again():
+    """`reference_compare.build('ours-huovtune')` is the candidate
+    `docs/discrimination.md` section 8.4 reported -- our ladder BEFORE DR 0011,
+    plus the polynomial -- so it has to be built against the untuned cutoff ROM
+    now that the shipped one carries the correction. Restored rather than
+    deleted: the rung 2-4 comparison this audit hands on needs a harness whose
+    devices mean what they say.
+
+    And the compensation ROM has to move with it: DR 0006's table is DERIVED
+    from the cutoff coefficients, so substituting one and not the other would
+    measure two defects at once."""
+    import reference_compare as rc
+    dev = rc.build("ours-huovtune")
+    assert np.array_equal(dev.g_rom, vf.make_g_rom(tune=False))
+    assert not np.array_equal(dev.k_rom, vf.make_k_rom())
+    # every other ours-* device is byte-identical to before this parameter existed
+    for name in ("ours", "ours-1tanh", "ours-2pole", "ours-skew30", "ours-tanh256"):
+        d = rc.build(name)
+        assert np.array_equal(d.g_rom, vf.make_g_rom()), name
+        assert np.array_equal(d.k_rom, vf.make_k_rom()), name
+
+
 def test_the_rig_still_carries_the_papers_constant_not_surges_typo():
     """`OurLadder.fcr` documents that the quadratic term is the paper's 0.4955
     where `sst-filters` ships 0.4995, and `voice_fx` has to agree with it or the

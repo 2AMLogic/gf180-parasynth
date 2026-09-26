@@ -105,6 +105,23 @@ import audio_measure as am                                          # noqa: E402
 G_ROM = vf.make_g_rom()
 K_ROM = vf.make_k_rom()
 _REAL_LADDER = vf.LadderFx
+_K_ROM_CACHE: dict[int, np.ndarray] = {}
+
+
+def _k_rom_for(g_rom: np.ndarray) -> np.ndarray:
+    """DR 0006's compensation ROM built against a SUBSTITUTED cutoff ROM. The
+    compensation is derived from the cutoff coefficients, so a device that
+    changes one has to change the other or it measures two defects at once.
+    Byte for byte the same construction as `_k_rom_for` in
+    `model/test_moog_acceptance.py`."""
+    key = id(g_rom)
+    if key not in _K_ROM_CACHE:
+        step = (1 << 15) >> vf.KROM_BITS
+        _K_ROM_CACHE[key] = np.array(
+            [int(round(vf.k_onset(min(max(vf.CUT_MIN, i * step), vf.CUT_MAX),
+                                  g_rom, vf.GROM_BITS, 2)[0] / 4.0 * 32768))
+             for i in range((1 << vf.KROM_BITS) + 1)], dtype=np.int64)
+    return _K_ROM_CACHE[key]
 
 
 class _Variant(_REAL_LADDER):
@@ -171,23 +188,34 @@ class OurLadder:
     cutoff_in_hz = True
 
     def __init__(self, name="ours", stages=4, nonlin="every", compensated=True,
-                 cut_skew=1.0, drive=1.0, cfg=None, huov_fcr=False):
+                 cut_skew=1.0, drive=1.0, cfg=None, huov_fcr=False, g_rom=None):
         self.name = name
         self.stages, self.nonlin = stages, nonlin
         self.compensated, self.cut_skew, self.drive = compensated, cut_skew, drive
         self.cfg = dict(vf.LADDER_CFG, **(cfg or {}))
+        # `g_rom` substitutes a different cutoff ROM. Default None is the shipped
+        # module-level pair, so every device built before this parameter existed
+        # is byte-identical to what it was. The resonance compensation is DERIVED
+        # from the cutoff coefficients (DR 0006, make_k_rom -> k_onset ->
+        # g_from_cut), so substituting one and not the other would measure two
+        # defects at once -- the same rule `model/test_moog_acceptance.py`'s
+        # `_k_rom_for` follows.
+        self.g_rom = G_ROM if g_rom is None else np.asarray(g_rom, dtype=np.int64)
+        self.k_rom = K_ROM if g_rom is None else _k_rom_for(self.g_rom)
         # PRECONDITION, asserted at the point of use rather than assumed.
         # `huov_fcr` exists to answer "what would applying Huovilainen's tuning
-        # polynomial buy us", and it answers that only while G_ROM does NOT
-        # already carry it. Since DR 0011 it does, so the flag would silently
-        # apply the correction twice and the `ours-huovtune` device would be a
-        # doubly-tuned filter reported as a candidate. A correct instrument in a
-        # wrong state is worse than an absent one, so this refuses.
-        if huov_fcr and not np.array_equal(G_ROM, vf.make_g_rom(tune=False)):
+        # polynomial buy us", and it answers that only while the cutoff ROM does
+        # NOT already carry it. Since DR 0011 the shipped ROM does, so against
+        # that ROM the flag applies the correction a SECOND time and the
+        # `ours-huovtune` device would be a doubly-tuned filter reported as a
+        # candidate. A correct instrument in a wrong state is worse than an
+        # absent one, so this refuses instead of measuring it; `build()` passes
+        # the untuned ROM, which is what that device always meant.
+        if huov_fcr and not np.array_equal(self.g_rom, vf.make_g_rom(tune=False)):
             raise AssertionError(
                 "huov_fcr=True would apply Huovilainen's tuning polynomial on top of "
                 "a cutoff ROM that already carries it (DR 0011). To measure the "
-                "pre-DR-0011 candidate, build this rig against make_g_rom(tune=False); "
+                "pre-DR-0011 candidate, pass g_rom=vf.make_g_rom(tune=False); "
                 "to measure the shipped filter, use huov_fcr=False.")
         self.huov_fcr = huov_fcr
 
@@ -224,9 +252,9 @@ class OurLadder:
         ref = _REAL_LADDER(**self.cfg)
         k, gain, ogain = ref.regs(res, drive)
         skew = self.cut_skew * (self.fcr(cut) if self.huov_fcr else 1.0)
-        g = int(vf.g_from_cut(np.array([cut * skew]), G_ROM)[0])
+        g = int(vf.g_from_cut(np.array([cut * skew]), self.g_rom)[0])
         if self.compensated:
-            kc = int(vf.kc_from_cut(np.array([cut * skew]), K_ROM)[0])
+            kc = int(vf.kc_from_cut(np.array([cut * skew]), self.k_rom)[0])
             k = int(vf.k_effective(k, kc))
         return g, k, gain, ogain
 
