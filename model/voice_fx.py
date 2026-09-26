@@ -465,6 +465,82 @@ def blep_fx(ph: np.ndarray, inc, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BIT
     return c
 
 
+# ---- PolyBLAMP (DR 0016) ----------------------------------------------------
+# The shark-tooth has TWO kinds of discontinuity and PolyBLEP corrects one of
+# them. Esqueda, Bilbao and Valimaki analyse this exact waveform (ISMRA 2016
+# section 3): the saw share STEPS at the wrap -- an amplitude discontinuity,
+# which is what BLEP is for -- and the triangle share CORNERS, at the valley
+# (phase 0) and the peak (half a cycle). A corner is a SLOPE discontinuity and
+# a step correction does nothing for it; the correction it needs is the
+# INTEGRAL of the step's, which is polyBLAMP.
+#
+# The derivation, so the constants below are checkable rather than quoted.
+# Write x for the time of a sample relative to the discontinuity, in samples.
+# `blep_fx` above is, in these terms, the residual
+#
+#     B(x) = (1 + x)^2   for -1 <= x < 0        (subtracted from a step of -2)
+#          = -(1 - x)^2  for  0 <= x < 1
+#
+# Integrating once, R(x) = integral of B from -1 to x, gives the ramp residual
+#
+#     R(x) = (1 - |x|)^3 / 3      for |x| <= 1, and 0 outside
+#
+# -- a non-negative bump peaking at 1/3, which is the published two-point
+# polyBLAMP residual (the paper's d^3/6 per-sample form is this with the
+# slope-change factor of 2 taken out). A naive signal whose slope JUMPS by
+# `ds` per sample at x = 0 is band-limited by ADDING (ds/2) * R(x). For the
+# triangle, |slope| = inc/128 in Q1.15 LSBs per sample (`_tri_fx` reads
+# ph >> 7), so ds = +-inc/64 and ds/2 = +-inc/128: the valley is RAISED by
+# (inc/128) * R and the peak LOWERED by the same amount, which is what
+# rounding a corner looks like.
+#
+# Fixed point, integer end to end so the RTL can be bit-exact against it (this
+# is not a float prototype that was quantised afterwards):
+#
+#     m3 = (inc * BLAMP_THIRD) >> 15      once per oscillator per frame; the
+#                                         |slope|/3 term, 8 extra fraction bits
+#     s  = 65536 - ph/inc  in Q0.16       the SAME window word PolyBLEP forms
+#     s3 = (((s*s) >> 16) * s) >> 16      Q0.16 of (1-|x|)^3
+#     blamp = (m3 * s3) >> 24             Q1.15 LSBs, >= 0
+#
+# BLAMP_THIRD is a constant multiply, not a divider, and the model is DEFINED
+# by that multiply: the RTL performs the identical one, so "exactly 1/3" never
+# enters the bit-exactness question. Widths: m3 < 2^24, s3 <= 2^16, so the
+# product fits the voice datapath's one 25 x 21 multiplier and blamp <= 43690.
+BLAMP_THIRD = 21845              # Q0.16 approximation of 1/3 (65536/3 = 21845.33)
+HALF_CYCLE = CYCLE >> 1          # the triangle's peak: its second corner
+
+
+def blamp_slope(inc):
+    """The triangle's |slope| / 3, with 8 fraction bits below a Q1.15 LSB.
+    `inc` scalar or per-sample; one multiply per oscillator per frame."""
+    return (np.asarray(inc, dtype=np.int64) * BLAMP_THIRD) >> 15
+
+
+def blamp_fx(ph: np.ndarray, inc, m3, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BITS):
+    """The ramp residual at the corner at phase 0, Q1.15, NEVER NEGATIVE --
+    the sign belongs to the caller, because the same residual raises a valley
+    and lowers a peak. `m3` is `blamp_slope(inc)`. Windowed exactly as
+    `blep_fx` is: the sample either side of the corner and no other."""
+    inc = np.asarray(inc); e = np.asarray(e); r = np.asarray(r)
+    m3 = np.asarray(m3)
+    out = np.zeros_like(ph)
+    a = ph < inc
+    if a.any():
+        ea = e if e.ndim == 0 else e[a]; ra = r if r.ndim == 0 else r[a]
+        ma = m3 if m3.ndim == 0 else m3[a]
+        s = 65536 - frac_q16(ph[a], ea, ra, mant_bits, recip_bits)      # 1 .. 65536
+        out[a] = (ma * ((((s * s) >> 16) * s) >> 16)) >> 24
+    q = CYCLE - ph
+    b = q < inc
+    if b.any():
+        eb = e if e.ndim == 0 else e[b]; rb = r if r.ndim == 0 else r[b]
+        mbb = m3 if m3.ndim == 0 else m3[b]
+        s = 65536 - frac_q16(q[b], eb, rb, mant_bits, recip_bits)       # 1 .. 65535
+        out[b] = (mbb * ((((s * s) >> 16) * s) >> 16)) >> 24
+    return out
+
+
 class OscFx:
     """One oscillator: 24-bit phase accumulator, waveform, PolyBLEP on the
     discontinuous shapes, and an optional causal 3-tap output filter. `inc` may
@@ -562,10 +638,21 @@ class OscFx:
             return self._smooth(raw) if self.smooth else raw
         if self.shape == "shark":
             # The switch mixes the two BUFFERED waveform outputs through R030
-            # and R031, so the correction the saw already carries is what the
-            # junction sees. The step at the wrap is 10/57 of the saw's.
+            # and R031, so whatever correction each one already carries is what
+            # the junction sees. Both of them need one, and they are different
+            # corrections (DR 0016): the saw STEPS at the wrap, so its share of
+            # the step is 10/57 of the saw's and PolyBLEP is what removes it;
+            # the triangle CORNERS twice per cycle, at the valley (phase 0) and
+            # the peak (half a cycle), and a corner is a slope discontinuity
+            # that BLEP cannot see. polyBLAMP raises the valley and lowers the
+            # peak by the same non-negative residual.
+            m3 = blamp_slope(inc_a)
+            tri = sat16(_tri_fx(ph)
+                        + blamp_fx(ph, inc_a, m3, e, r, self.MB, self.RB)
+                        - blamp_fx((ph + HALF_CYCLE) & PHASE_MASK, inc_a, m3, e, r,
+                                   self.MB, self.RB))
             raw = sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
-                         + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+                         + SHARK_W_TRI * tri) >> 15)
             return self._smooth(raw) if self.smooth else raw
         ph2 = (ph + (CYCLE - DUTY[self.shape])) & PHASE_MASK
         raw = sat16(naive_fx(self.shape, ph) + c

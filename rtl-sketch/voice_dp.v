@@ -163,6 +163,10 @@ module voice_dp #(
     localparam signed [24:0] PA0 = -25'sd28689,  PA1 =  25'sd12348;                        // Q14
     localparam signed [24:0] RED_G = 25'sd904, RED_GAIN = 25'sd29841;
     localparam signed [24:0] SHK_SAW = 25'sd5749, SHK_TRI = 25'sd27019;
+    // polyBLAMP (DR 0016): Q0.16 approximation of 1/3, the ramp residual's
+    // leading coefficient. The MODEL performs this same constant multiply, so
+    // "exactly 1/3" never enters the bit-exactness question.
+    localparam signed [20:0] BLAMP_THIRD = 21'sd21845;
 `ifdef VOICE_FILTER_2X
     localparam [23:0] DUTY_WIDE = 24'd8036286, DUTY_NARROW = 24'd2516582; // pulse479 candidate
 `else
@@ -242,11 +246,21 @@ module voice_dp #(
         S_RD0 = 65, S_RD1 = 66, S_RD2 = 67, S_RD3 = 68, S_RD4 = 69, S_RD5 = 70,
         S_PN0 = 71, S_PN1 = 72, S_PN2 = 73, S_OSCWAIT = 74,
         // appended again, for the same reason: tb_voice.v tracks state NUMBERS
-        S_DA0 = 75, S_DV0 = 76, S_DV1 = 77, S_DR0 = 78, S_DR1 = 79;
+        S_DA0 = 75, S_DV0 = 76, S_DV1 = 77, S_DR0 = 78, S_DR1 = 79,
+        // appended after S_DR1, for the same reason
+        S_SKM = 80, S_W3 = 81, S_W4 = 82;   // polyBLAMP: the slope word, then s^3, then m3*s^3
     reg [6:0]  state;
     reg [1:0]  kk;                     // oscillator index
     reg [1:0]  win;                    // PolyBLEP window 0..3
     reg signed [16:0] c_pp, c_ps;      // corrections at the two edges
+    // polyBLAMP (DR 0016): the shark-tooth's triangle share CORNERS twice per
+    // cycle and a corner is a slope discontinuity, which c_pp/c_ps cannot see.
+    // b_pp is the ramp residual at the valley (phase 0), b_ps at the peak (half
+    // a cycle); both are non-negative -- the sign is applied where they are used.
+    reg [16:0] b_pp, b_ps;
+    reg [23:0] m3;                     // |slope|/3 with 8 fraction bits below a Q1.15 LSB
+    reg        m3_valid;               // one multiply per shark oscillator per frame
+    reg [16:0] s_r;                    // the window word s, held across the cube
     reg signed [34:0] mixacc;
     reg signed [51:0] bacc, facc;      // the pink biquad's two accumulators, Q36 and Q41
     reg signed [51:0] racc;            // red: the one-pole step, then the make-up product
@@ -277,7 +291,10 @@ module voice_dp #(
                 is_p29 = (wv == 4'd7), is_p15 = (wv == 4'd8);
     wire        two_edge = is_sq | is_p25 | is_p29 | is_p15;
     wire        blep     = is_saw | is_rev | is_shark | two_edge;
-    wire [23:0] dutyv = is_sq  ? 24'h800000 : is_p25 ? 24'h400000
+    // For the rectangles this is the duty point -- the second EDGE. For the
+    // shark-tooth it is the triangle's PEAK, half a cycle from its valley, so
+    // windows 2 and 3 land on the second corner (DR 0016).
+    wire [23:0] dutyv = (is_sq | is_shark) ? 24'h800000 : is_p25 ? 24'h400000
                       : is_p29 ? DUTY_WIDE : DUTY_NARROW;
     // naive waveforms (6.4, 6.5)
     wire [16:0] tq = ph[23:7];
@@ -307,7 +324,10 @@ module voice_dp #(
     wire [15:0] u   = mr[30:15];                                  // (p * r) >> 15, < 2^16
     wire [16:0] s   = 18'h10000 - {1'b0, u};                      // 1..65536
     wire [15:0] c   = mr[32:17];                                  // (s * s) >> 17, 0..32768
-    wire        last_win = (win == 2'd3) || (win == 2'd1 && !two_edge);
+    // Four windows for the rectangles (two edges) AND for the shark-tooth (two
+    // corners); two for everything else.
+    wire        four_win = two_edge | is_shark;
+    wire        last_win = (win == 2'd3) || (win == 2'd1 && !four_win);
     // the oscillator sample (6.6.4) and the mixer term (7). The square and
     // pulse step UP at the wrap where the saw steps DOWN, so their correction
     // at p = 0 has the OPPOSITE sign to the saw's; the second edge, at the
@@ -324,6 +344,19 @@ module voice_dp #(
     wire signed [15:0] sawc = (sawc_raw > 18'sd32767) ? 16'sd32767
                             : (sawc_raw < -18'sd32768) ? -16'sd32768 : sawc_raw[15:0];
     wire signed [17:0] revc = -$signed({{2{sawc[15]}}, sawc});
+    // the band-limited TRIANGLE the shark-tooth's 47/57 share is taken from
+    // (DR 0016): the valley raised and the peak lowered by the ramp residual.
+    // Getting those two the wrong way round SHARPENS both corners, which is the
+    // negative control below.
+`ifdef INJECT_BUG_VOICE_SHARK_BLAMP_SIGN
+    wire signed [17:0] tri_bl_raw = $signed({{2{triv[15]}}, triv})
+                                  - $signed({1'b0, b_pp}) + $signed({1'b0, b_ps});
+`else
+    wire signed [17:0] tri_bl_raw = $signed({{2{triv[15]}}, triv})
+                                  + $signed({1'b0, b_pp}) - $signed({1'b0, b_ps});
+`endif
+    wire signed [15:0] tri_bl = (tri_bl_raw > 18'sd32767) ? 16'sd32767
+                              : (tri_bl_raw < -18'sd32768) ? -16'sd32768 : tri_bl_raw[15:0];
     wire signed [17:0] osc_raw = is_saw ? sawc_raw
                                : is_rev ? revc
                                : two_edge ? osc_two
@@ -609,6 +642,7 @@ module voice_dp #(
             k <= 0; gain <= 0; ogain <= 0; dcut <= 0; dk <= 0; dgain <= 0; dogain <= 0;
             level_a <= 0; level_f <= 0; seg_a <= 0; seg_f <= 0;
             state <= S_IDLE; kk <= 0; win <= 0; c_pp <= 0; c_ps <= 0; mixacc <= 0; y_seen <= 0; d_seen <= 0;
+            b_pp <= 0; b_ps <= 0; m3 <= 0; m3_valid <= 0; s_r <= 0;
             g0 <= 0; g1 <= 0; kc0 <= 0; kc1 <= 0; kd <= 0; pacc <= 0; dacc <= 0; macc <= 0; tacc <= 0; d19 <= 0;
             ma <= 0; mb <= 0; div_start <= 0; div_inc <= 0; lad_sv <= 0; lad_ch <= 0; g <= 0; g2 <= 0; k_eff2 <= 0; dx <= 0;
             sample <= 0; sample_valid <= 0; mixed <= 0; ae <= 0; fe <= 0; cut <= 0; k_eff <= 0; y19 <= 0;
@@ -735,23 +769,29 @@ module voice_dp #(
                         div_start <= 1'b1; div_inc <= inc; state <= S_RWAIT;
                     end else if (kk == 2'd2) begin
                         state <= S_WIN; kk <= 2'd0; win <= 2'd0; c_pp <= 0; c_ps <= 0;
+                                 b_pp <= 0; b_ps <= 0; m3_valid <= 1'b0;
                     end else kk <= kk + 2'd1;
                 end
                 S_RWAIT: if (div_done) begin
                     sh[kk] <= div_sh; r[kk] <= div_r; inc_er[kk] <= inc;
-                    if (kk == 2'd2) begin state <= S_WIN; kk <= 2'd0; win <= 2'd0; c_pp <= 0; c_ps <= 0; end
+                    if (kk == 2'd2) begin state <= S_WIN; kk <= 2'd0; win <= 2'd0; c_pp <= 0; c_ps <= 0;
+                                     b_pp <= 0; b_ps <= 0; m3_valid <= 1'b0; end
                     else begin kk <= kk + 2'd1; state <= S_RCHK; end
                 end
                 // ---- 2. oscillators ----
                 S_WIN: begin
                     if (!blep) state <= S_MIX;
-                    else if (!active) begin
+                    else if (is_shark && !m3_valid) begin
+                        // one multiply per shark oscillator: the triangle's |slope|/3
+                        ma <= {1'b0, inc}; mb <= BLAMP_THIRD; state <= S_SKM;
+                    end else if (!active) begin
                         if (last_win) state <= is_shark ? S_SK0 : S_MIX; else win <= win + 2'd1;
                     end else begin
                         ma <= {9'b0, p}; mb <= {5'b0, r[kk]}; state <= S_W1;
                     end
                 end
-                S_W1: begin ma <= {8'b0, s}; mb <= {4'b0, s}; state <= S_W2; end
+                S_SKM: begin m3 <= mr[38:15]; m3_valid <= 1'b1; state <= S_WIN; end
+                S_W1: begin ma <= {8'b0, s}; mb <= {4'b0, s}; s_r <= s; state <= S_W2; end
                 S_W2: begin
                     case (win)
                         2'd0: c_pp <= -$signed({1'b0, c});
@@ -759,7 +799,17 @@ module voice_dp #(
                         2'd2: c_ps <= -$signed({1'b0, c});
                         default: c_ps <= $signed({1'b0, c});
                     endcase
-                    if (last_win) state <= is_shark ? S_SK0 : S_MIX;
+                    if (is_shark) begin                      // s^2 is in mr; cube it
+                        ma <= {8'b0, mr[32:16]}; mb <= {4'b0, s_r}; state <= S_W3;
+                    end else if (last_win) state <= S_MIX;
+                    else begin win <= win + 2'd1; state <= S_WIN; end
+                end
+                // s^3 is in mr[32:16]; the residual is (m3 * s^3) >> 24
+                S_W3: begin ma <= {1'b0, m3}; mb <= {4'b0, mr[32:16]}; state <= S_W4; end
+                S_W4: begin
+                    if (win[1]) b_ps <= mr[40:24];           // the peak, half a cycle on
+                    else        b_pp <= mr[40:24];           // the valley, at phase 0
+                    if (last_win) state <= S_SK0;
                     else begin win <= win + 2'd1; state <= S_WIN; end
                 end
                 // the shark-tooth: the switch mixes the two BUFFERED waveform
@@ -767,10 +817,10 @@ module voice_dp #(
                 // band-limited and the mix is 10/57 of it plus 47/57 triangle.
                 S_SK0: begin ma <= {{9{sawc[15]}}, sawc}; mb <= SHK_SAW[20:0]; state <= S_SK1; end
 `ifdef INJECT_BUG_VOICE_SHARK_MIX
-                S_SK1: begin mixacc_shk <= mr; ma <= {{9{triv[15]}}, triv};
+                S_SK1: begin mixacc_shk <= mr; ma <= {{9{tri_bl[15]}}, tri_bl};
                              mb <= SHK_SAW[20:0]; state <= S_SK2; end   // NEGATIVE CONTROL: R030 = R031
 `else
-                S_SK1: begin mixacc_shk <= mr; ma <= {{9{triv[15]}}, triv};
+                S_SK1: begin mixacc_shk <= mr; ma <= {{9{tri_bl[15]}}, tri_bl};
                              mb <= SHK_TRI[20:0]; state <= S_SK2; end
 `endif
                 S_SK2: begin shk <= shk_n; state <= S_MIX; end
@@ -800,7 +850,8 @@ module voice_dp #(
                     mixacc <= mixacc + {{3{mr[31]}}, mr[31:0]};
                     if (kk == 2'd2) begin
                         ma <= {{9{nz_audio[15]}}, nz_audio}; mb <= {5'b0, wn}; state <= S_NMIX;
-                    end else begin kk <= kk + 2'd1; win <= 2'd0; c_pp <= 0; c_ps <= 0; state <= S_WIN; end
+                    end else begin kk <= kk + 2'd1; win <= 2'd0; c_pp <= 0; c_ps <= 0;
+                                   b_pp <= 0; b_ps <= 0; m3_valid <= 1'b0; state <= S_WIN; end
                 end
                 S_NMIX: begin                                                 // the mixer's fourth source
                     mixacc <= mixacc + {{3{mr[31]}}, mr[31:0]};

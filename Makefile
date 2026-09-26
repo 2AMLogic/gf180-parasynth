@@ -205,6 +205,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_SHARED --expect-fail --outdir build/voice-drift-shared" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \

@@ -2019,6 +2019,186 @@ def test_the_shark_tooth_is_the_divider_on_the_drawing():
     assert abs(got - want) < 0.5, f"shark h2 is {got:.2f} dB under the saw's, the divider says {want:.2f}"
 
 
+def _shark(note, third, n=int(0.5 * SR)):
+    """A shark-tooth rendered with `vf.BLAMP_THIRD` forced to `third`. `third =
+    0` makes every BLAMP residual truncate to zero, so the render is EXACTLY
+    the pre-DR-0016 expression -- a BLEP-corrected saw mixed with a plain
+    triangle -- and no second copy of the old code has to be trusted."""
+    old = vf.BLAMP_THIRD
+    vf.BLAMP_THIRD = third
+    try:
+        inc = dsp.phase_inc(dsp.note_hz(note))
+        return (vf.OscFx("shark", True).render(n, inc).astype(np.float64) / FS,
+                inc * SR / (1 << 24))
+    finally:
+        vf.BLAMP_THIRD = old
+
+
+def test_the_blamp_residual_is_the_cubic_the_derivation_says_it_is():
+    """[source-verified: DR 0016; Esqueda, Bilbao and Valimaki, ISMRA 2016 section 3] **DR 0016.** The shark-tooth has two kinds of discontinuity and BLEP
+    corrects one of them. The triangle share's corners are SLOPE
+    discontinuities, and the residual that band-limits a slope discontinuity is
+    the integral of the one that band-limits a step:
+
+        blep_fx is   B(x) = (1+x)^2 for -1 <= x < 0, -(1-x)^2 for 0 <= x < 1
+        integrated,  R(x) = (1 - |x|)^3 / 3       for |x| <= 1, 0 outside
+
+    This checks the SHIPPING integer kernel against that closed form rather
+    than against another copy of itself: `blamp_fx` is evaluated at every
+    phase in the window at a high note, and compared with (slope) * R(x)
+    computed in float from the same increment. Tolerance 1.5 Q1.15 LSB, which
+    is the fixed-point truncation and nothing else.
+
+    Also pinned, because they are the properties the sign convention rests on:
+    the residual is never negative, and it is exactly zero more than one
+    sample from a corner.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    inc = dsp.phase_inc(dsp.note_hz(96))
+    e, r = vf.recip_of(inc)
+    m3 = vf.blamp_slope(inc)
+    # every phase the window can hold, exhaustively, and nothing else: the
+    # kernel is zero elsewhere and that is asserted separately below.
+    ph = np.concatenate([np.arange(0, inc, dtype=np.int64),
+                         np.arange(vf.CYCLE - inc + 1, vf.CYCLE, dtype=np.int64)])
+    got = vf.blamp_fx(ph, inc, m3, e, r)
+    assert got.min() >= 0, "the ramp residual is never negative; the sign is the caller's"
+    # the closed form: (slope change / 2) * R(x), slope = inc/128 Q1.15 LSB/sample
+    x = np.where(ph < inc, ph / inc, (ph.astype(np.float64) - vf.CYCLE) / inc)
+    want = (inc / 128.0) * (1.0 - np.abs(x)) ** 3 / 3.0
+    err = np.abs(got - want)
+    assert err.max() < 1.5, f"worst |kernel - closed form| = {err.max():.2f} LSB"
+    assert got.max() > 100, "the kernel is not doing anything at this pitch; nothing is proved"
+    out = np.arange(inc, vf.CYCLE - inc + 1, 1 << 8, dtype=np.int64)
+    assert np.all(vf.blamp_fx(out, inc, m3, e, r) == 0), \
+        "the window is one sample either side of the corner and nowhere else"
+
+
+def test_the_shark_tooths_corner_is_corrected_and_its_step_still_is():
+    """[source-verified: DR 0016 -- the correction each share of the divider needs] **DR 0016.** `OscFx.render`'s shark-tooth is the junction of two
+    BUFFERED outputs (W3), and BOTH of them arrive needing a correction --
+    different ones. The saw share STEPS at the wrap: PolyBLEP, already there.
+    The triangle share CORNERS at the valley (phase 0) and the peak (half a
+    cycle): polyBLAMP, and this is what asserts it is applied.
+
+    Three properties, so that "a correction is applied" cannot pass on its own:
+
+    1. DIRECTION. The valley is raised and the peak lowered -- rounding a
+       corner, not sharpening it. Asserted on the samples inside each window.
+    2. THE WINDOWS. Exactly the sample either side of each of the two corners
+       differs from the BLEP-only render, and nothing else. A correction
+       leaking outside its window is the #61 class of defect.
+    3. MAGNITUDE, against the naive triangle's own corner geometry: the peak
+       sample's correction is at most one full slope step (inc/128 LSB), which
+       is what makes this a corner rounding and not a waveform change.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    for note in (69, 96, 108):
+        inc = dsp.phase_inc(dsp.note_hz(note))
+        n = 4 * int((1 << 24) / inc) + 8
+        third = vf.BLAMP_THIRD
+        try:
+            vf.BLAMP_THIRD = 0
+            a = vf.OscFx("shark", True).render(n, inc)
+        finally:
+            vf.BLAMP_THIRD = third
+        b = vf.OscFx("shark", True).render(n, inc)
+        ph = (inc * np.arange(n, dtype=np.int64)) & vf.PHASE_MASK
+        near_val = (ph < inc) | (vf.CYCLE - ph < inc)
+        near_pk = np.abs(ph - vf.HALF_CYCLE) < inc
+        d = b - a
+        # >= not > : a sample landing a full increment from the corner has
+        # s = 0 and therefore no correction at all, which is correct.
+        assert np.all(d[near_val] >= 0), f"note {note}: the valley must be RAISED"
+        assert d[near_val].max() > 0, f"note {note}: no valley sample was corrected at all"
+        assert np.all(d[near_pk] <= 0), f"note {note}: the peak must be LOWERED"
+        assert d[near_pk].min() < 0, f"note {note}: no peak sample was corrected at all"
+        outside = ~(near_val | near_pk)
+        assert np.all(d[outside] == 0), \
+            f"note {note}: {int((d[outside] != 0).sum())} samples changed outside a corner window"
+        step = inc / 128.0 * vf.SHARK_W_TRI / 32768.0
+        assert np.abs(d).max() <= step + 1, \
+            f"note {note}: worst correction {np.abs(d).max()} LSB, one slope step is {step:.1f}"
+
+
+@pytest.mark.parametrize("note", [69, 81, 93, 105])
+def test_the_blamp_takes_inharmonic_energy_off_the_shark_tooth(note):
+    """[measured-here: DR 0001's estimator, before and after, four octaves] **DR 0016's reason for existing, measured.** The uncorrected corner is a
+    second alias source, so removing it must show up in DR 0001's own
+    inharmonic-energy measure -- and must show up MORE at higher pitch, because
+    a corner's alias energy grows with the number of its images that fold.
+
+    Measured with `vf.BLAMP_THIRD` forced to 0 for the "before" arm, which
+    reproduces the BLEP-only expression exactly (every residual truncates to
+    zero), so this is not two implementations being compared:
+
+        note  69 (A4,   440 Hz)   -48.89 -> -49.21   ( 0.3 dB)
+        note  81 (A5,   880 Hz)   -45.28 -> -46.42   ( 1.1 dB)
+        note  93 (A6,  1760 Hz)   -39.64 -> -42.70   ( 3.1 dB)
+        note 105 (A7,  3520 Hz)   -30.75 -> -37.07   ( 6.3 dB)
+
+    Four octaves, so the trend is a measurement and not two points. The
+    tolerance is deliberately loose (no regression anywhere, at least 2 dB at
+    note 93 and 5 dB at note 105) because the value being defended is the
+    DIRECTION and the pitch dependence, not a digit.
+
+    THE ESTIMATOR'S OWN FLOOR IS READ PER ROW (#61's trap: a floor-limited
+    estimator hid a real 3 dB effect for a whole comment thread). Both arms
+    must sit at least 10 dB above `detail['headroom_db']`, or the row proves
+    nothing and says so.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
+    a, f0 = _shark(note, 0)
+    b, _ = _shark(note, vf.BLAMP_THIRD)
+    ea = am.inharmonic_fraction_db(a, f0)
+    eb = am.inharmonic_fraction_db(b, f0)
+    before = ea.require(f"shark note {note}, BLEP only")
+    after = eb.require(f"shark note {note}, BLEP + BLAMP")
+    for tag, est in (("before", ea), ("after", eb)):
+        assert est.detail["headroom_db"] > 10.0, \
+            f"note {note} {tag}: {est.value:.1f} dB is only " \
+            f"{est.detail['headroom_db']:.1f} dB above the estimator's own floor"
+    gain = before - after
+    assert gain > -0.1, f"note {note}: BLAMP made it WORSE by {-gain:.2f} dB"
+    need = {93: 2.0, 105: 5.0}.get(note)
+    if need is not None:
+        assert gain >= need, f"note {note}: BLAMP bought {gain:.2f} dB, needed {need}"
+
+
+def test_the_blamp_does_not_move_the_shark_tooths_harmonics():
+    """[source-verified: docs/minimoog-reference.md W3 -- the 10/57 divider is a separate fact] **The divider and the corrections are independent facts, and this is
+    what keeps them independent.** DR 0016 adds a correction; it must not
+    change the SHAPE. h2..h7 at 110 Hz are compared against the closed form of
+    10/57 saw + 47/57 triangle -- saw harmonics are sine terms and the
+    triangle's are cosine, so they add in quadrature -- before and after.
+
+    Measured: every harmonic within 0.05 dB of the BLEP-only render and within
+    0.1 dB of the closed form. Tolerance 0.3 dB, which is still far tighter
+    than the 4.8 dB even-harmonic disagreement W3 records against the
+    reference emulation (contract open item 16) -- so this test cannot be what
+    hides a change in the mix.
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    """
+    def closed(k):
+        saw = (vf.SHARK_W_SAW / 32768.0) * (2 / math.pi) / k
+        tri = (vf.SHARK_W_TRI / 32768.0) * ((8 / math.pi ** 2) / k ** 2 if k % 2 else 0.0)
+        return math.sqrt(saw * saw + tri * tri)
+    a, f0 = _shark(45, 0, n=1 << 15)
+    b, _ = _shark(45, vf.BLAMP_THIRD, n=1 << 15)
+    ks = list(range(1, 8))
+    pa, pb = am.harmonic_powers(a, f0, ks), am.harmonic_powers(b, f0, ks)
+    for k, qa, qb in zip(ks[1:], pa[1:], pb[1:]):
+        da = 10 * math.log10(qa / pa[0])
+        db = 10 * math.log10(qb / pb[0])
+        want = 20 * math.log10(closed(k) / closed(1))
+        assert abs(db - da) < 0.3, f"h{k} moved {db - da:+.2f} dB when BLAMP was added"
+        assert abs(db - want) < 0.3, f"h{k} is {db:.2f} dB, the divider's closed form says {want:.2f}"
+
+
 def test_the_three_rectangular_widths_are_50_29_and_15_percent():
     """[source-verified: docs/minimoog-reference.md W4] **docs/minimoog-reference.md W4.** SW6's width deck selects 0 V, -1.5 V
     or -2.5 V (drawing 1448's 1.5 k / 1 k / 7.5 k divider), and SM 2.3 pins the
@@ -2242,7 +2422,11 @@ def test_the_modulation_tap_is_the_same_signal_band_limited_or_not_at_lo_rates()
         inc = dsp.phase_inc(hz)
         cycles = math.ceil(n * inc / (1 << 24))
         for shape in ("saw", "revsaw", "square", "tri", "shark"):
-            edges = 2 if shape in vf.TWO_EDGE else (1 if shape in vf.BLEP_SHAPES else 0)
+            # the shark-tooth has TWO corrected discontinuities since DR 0016:
+            # the wrap (BLEP on its saw share, BLAMP on its triangle's valley)
+            # and the triangle's peak half a cycle later (BLAMP alone).
+            edges = 2 if (shape in vf.TWO_EDGE or shape == "shark") \
+                else (1 if shape in vf.BLEP_SHAPES else 0)
             a = vf.OscFx(shape, blep=False).render(n, inc)
             b = vf.OscFx(shape, blep=True).render(n, inc)
             diff = int((a != b).sum())
@@ -2326,6 +2510,38 @@ def test_control_a_shark_tooth_mixed_in_the_wrong_proportion(monkeypatch):
     monkeypatch.setattr(vf, "SHARK_W_SAW", 27019)
     monkeypatch.setattr(vf, "SHARK_W_TRI", 5749)
     _expect_red(test_the_shark_tooth_is_the_divider_on_the_drawing)
+
+
+def test_control_the_shark_tooths_blamp_with_its_two_corners_swapped(monkeypatch):
+    """[meta] Defect: the ramp residual added at the peak and subtracted at the valley
+    -- the one sign error a BLAMP implementation is most likely to make, and
+    the one that looks like a correction from the outside. It SHARPENS both
+    corners instead of rounding them, so the shark-tooth aliases worse than
+    with no BLAMP at all. Measured at note 105: -30.75 dB with no BLAMP,
+    -37.07 with it, -29.09 with the signs swapped.
+
+    `rtl-sketch/voice_dp.v` carries the same defect as
+    INJECT_BUG_VOICE_SHARK_BLAMP_SIGN, where verify_voice.py catches it as a
+    bit-exactness failure; this is the half that shows it is audibly wrong and
+    not merely different.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
+    monkeypatch.setattr(vf, "BLAMP_THIRD", -vf.BLAMP_THIRD)
+    msg = _expect_red(test_the_blamp_takes_inharmonic_energy_off_the_shark_tooth, 105)
+    assert "WORSE" in msg or "needed" in msg
+
+
+def test_control_the_shark_tooths_triangle_left_uncorrected(monkeypatch):
+    """[meta] Defect: DR 0016 never happened -- the shark-tooth's triangle share goes
+    to the divider with its corners intact, which is exactly what `main` did
+    before #48. The aliasing test must go red on the pitch dependence, because
+    that is the property the corner controls.
+
+    Ground truth: test_audio_measure.test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor
+    """
+    monkeypatch.setattr(vf, "BLAMP_THIRD", 0)
+    _expect_red(test_the_blamp_takes_inharmonic_energy_off_the_shark_tooth, 105)
 
 
 def test_control_rectangular_widths_left_at_the_shipped_25_percent(monkeypatch):
