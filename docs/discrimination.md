@@ -1037,7 +1037,11 @@ Rebuilding the identical filter with a 256-entry table instead of the shipped
 A 16-segment piecewise-linear `tanh` has 16 corners in its derivative, and the
 corners — not the saturation — are what emit the fifth and seventh. **128
 entries converges** (2048 ROM bits against 256, a 1792-bit increase: the whole
-ladder is 1,917 cells, so this is worth costing rather than guessing at). At
+ladder is **5,428 cells** / 113,619 µm² on gf180 7t, `docs/area-budget.md` row
+"ladder, time-shared", so this is worth costing rather than guessing at — the
+1,917 cells this line used to quote was the area of the all-X `ladder_dp_t16`
+netlist and is withdrawn, `docs/DESIGN.md` and `docs/verification-rules.md`
+rule 3). At
 16 entries, the "structural fingerprint" this section was built around is
 measuring our LUT resolution.
 
@@ -1140,7 +1144,9 @@ as in the acceptance suite: a control that has drifted measures its own drift.
    references in the same direction and the fix is published.
 2. **Cost a wider `tanh` table.** 16 → 128 entries removes 25 dB of excess
    fifth harmonic and 43 dB of seventh at self-oscillation, for 1792 extra ROM
-   bits against a 1,917-cell datapath. Whether that is audible is a separate
+   bits against a **5,428-cell** datapath (`docs/area-budget.md`; the
+   1,917 cells previously quoted here was the all-X `ladder_dp_t16` netlist's
+   area and is withdrawn). Whether that is audible is a separate
    question and should be asked with a listening test, not asserted here;
    whether it is affordable is an area question and should be measured, not
    guessed.
