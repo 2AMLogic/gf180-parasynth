@@ -213,9 +213,13 @@ verdict. The same work on the box has 8 dedicated cores.
   **Stop it when the queued work is done.**
 - **Match CI, not your laptop:** Python 3.12 (`uv venv --python 3.12`, then
   `numpy scipy pytest pyyaml`, what the workflows install) and the pinned
-  toolchain from `tools/setup_ci_oss_cad.py` (run with `GITHUB_PATH` set to a
-  file; it prints the bin dir to prepend to `PATH`). Install `make` if absent.
-  Run make with `PY=<that venv's python>`.
+  toolchain from `tools/setup_ci_oss_cad.py`. That script writes the tool
+  directory into the file named by `GITHUB_PATH` (stdout is version JSON, not
+  the path), so run it as `GITHUB_PATH=$HOME/oss-path.txt python
+  tools/setup_ci_oss_cad.py` and then, in every shell that runs tools,
+  `export PATH="$(cat $HOME/oss-path.txt):$PATH"` — an ssh shell does not do
+  this for you. Install `make` if absent. Run make with `PY=<that venv's
+  python>`.
 - **Ship code as a `git bundle`** of the branches and clone it on the box. A
   worktree's `.git` is a pointer file, and the provenance tooling needs real
   commits and dirty flags.
@@ -225,6 +229,11 @@ verdict. The same work on the box has 8 dedicated cores.
 - **Coordinators run the box; subagent briefs say so.** A subagent that needs
   a heavy run commits its branch and asks for it; it does not start the run
   locally "just this once".
+- **The coordinator owns the box's compute budget.** Default to ONE heavy
+  workload at a time; if two must overlap, divide the workers explicitly
+  (e.g. `--jobs 4` each on the 8 cores) and say so in both briefs. A broad
+  pytest run beside an 8-worker sweep reproduces the contention this section
+  exists to prevent, just on a different machine.
 
 The same waiting rules apply: launch the job with `nohup`, then block in one
 command that reads its exit code and chains the follow-up analysis.
