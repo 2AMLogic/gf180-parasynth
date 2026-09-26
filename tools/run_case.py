@@ -1102,6 +1102,35 @@ def _burst_span_ms(sound: str):
     return f
 
 
+#: Metrics whose estimator is shown UNQUALIFIED for the voice's domain. The
+#: value is still computed and kept in the record (`unqualified_value`), but the
+#: metric is REFUSED -- valid: false -- so it can neither pass nor fail and the
+#: case cannot be a whole-case pass by it (plan084 section 5: "Do not claim a
+#: whole-case pass by dropping the problematic property"). A measurement-version
+#: change: `carry_rubric_history` keeps the verdict it replaces.
+UNQUALIFIED = {
+    ("CP", "Burst timing"): (
+        "UNQUALIFIED for noise-excited clap envelopes (measurement version 2026-09-26): "
+        "the accepted-peak span of a 4 ms RMS envelope misreads noise inside a sustained "
+        "strike as extra strikes -- it failed every condition of an independent known-schedule "
+        "check at both rates, and is exact on a noise-free carrier "
+        "(docs/scorecard/clap-d12a/burst-timing-qual.json, plan081 B). Programmed strike "
+        "times are model/RTL state and are not a comparison with the recording"),
+}
+
+
+def unqualified_metric(units: str, why: str, measured: dict) -> dict:
+    """An UNQUALIFIED metric: refused (valid false, no `error` key -- no distance,
+    not zero), with what the estimator read kept beside it, labelled, so the
+    number is on record without being usable as evidence either way."""
+    m = invalid_metric(units, why, measured.get("tolerance"))
+    m["qualification"] = "UNQUALIFIED"
+    for k in ("value", "reference", "error"):
+        if k in measured:
+            m[f"unqualified_{k}"] = measured[k]
+    return m
+
+
 def _early_late_db(t_split: float, t_end: float):
     def f(y, sr):
         e_early = float(np.sum(window(y, sr, 0.0, t_split) ** 2))
@@ -2295,6 +2324,8 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
     metrics = {}
     for name, units, est, tol_rule in DRUM_PLAN[voice]:
         metrics[name] = measure_pair(name, units, est, ours, ref, tol_rule, ctx)
+        if (voice, name) in UNQUALIFIED:
+            metrics[name] = unqualified_metric(units, UNQUALIFIED[(voice, name)], metrics[name])
     missing = [m for m in required if m not in metrics]
     for m in missing:
         metrics[m] = invalid_metric("", "this runner has no estimator for it")

@@ -1480,16 +1480,37 @@ def test_clap_is_three_bursts_about_ten_ms_apart_inside_thirty_ms():
         assert 0.008 <= gap <= 0.014, f"burst spacing {gap*1e3:.1f} ms outside the inferred 8-14 ms"
     levels = [lv for _, lv in bursts]
     assert levels == sorted(levels, reverse=True), f"bursts do not descend: {[round(v, 2) for v in levels]}"
-    everything = am.envelope_bursts(e, SR, level_frac=0.4, min_sep_s=0.005)
-    late = [t - PRE_ROLL_S for t, _ in everything if t > PRE_ROLL_S + 0.030]
-    assert not late, \
-        f"bursts at {[round(t*1e3, 1) for t in late]} ms, after the 30 ms window the comparator closes"
+    # REVISED, contract revision 11 (plan084). This used to assert NO burst after
+    # the 30 ms window "the comparator closes". The hardware says otherwise:
+    # cp8/CP.WAV has a FOURTH, sustained event from ~31 ms that is the loudest part
+    # of the clap (+2.2 dB re its first burst, a -20 dB duration of ~46 ms;
+    # docs/scorecard/clap-d12a/README.md section 3 and final-strike.json). That is
+    # consistent with SN's own account -- the oscillator stops "in the middle of the
+    # third time", and the last ramp then completes -- and it is what the L2 final
+    # strike implements. [hardware-measured, one recording] So: one late event, it
+    # starts at 30-34 ms, and it is not weaker than 3 dB below the first burst.
+    # Its PEAK is located from the averaged envelope, not counted as bursts:
+    # counting peaks inside a sustained noisy strike is the thing plan081 B showed
+    # the burst detector cannot do (burst-timing-qual.json).
+    i30, i45 = int((PRE_ROLL_S + 0.030) * SR), int((PRE_ROLL_S + 0.045) * SR)
+    i0 = int(PRE_ROLL_S * SR)
+    early_pk = float(np.max(e[i0:i30]))
+    j = i30 + int(np.argmax(e[i30:i45]))
+    late_db = am.db(float(e[j]), early_pk)
+    assert late_db >= -3.0, f"the final strike peaks {late_db:.1f} dB re the first burst; the machine's is +2.2"
+    k = i30 + int(np.argmax(e[i30:i45] > 0.5 * float(e[j])))
+    assert 0.030 <= k / SR - PRE_ROLL_S <= 0.034, \
+        f"the final strike rises at {(k / SR - PRE_ROLL_S) * 1e3:.1f} ms, not 30-34 ms"
 
 
 def test_clap_tail_time_constant():
-    """[source-inferred: reference 7, Q69 charges C138 0.047 uF and it decays
-    through R348 1 M] tau about 47 ms, and Roland's chart says 100 ms, which is
-    2.1 tau. Inferred, so +-40 %, fitted after the bursts have stopped.
+    """[hardware-measured, contract revision 11: cp8/CP.WAV's tail on 80-200 ms
+    fits an amplitude tau of 80.2 ms (docs/scorecard/clap-d12a/README.md section
+    4, fit validated on synthetic exponentials)] SUPERSEDES the source-inferred
+    47 ms (reference 7, Q69 charging C138 0.047 uF through R348 1 M; Roland's
+    chart "100 ms" is 2.1 x 47 or 1.25 x 80, so it does not decide between them).
+    One recording, so the same +-40 %, fitted from 80 ms -- after the final
+    strike (tau 20 ms from 31.9 ms) has fallen well below the tail.
 
     Fitted with is_envelope=True: this is already an envelope, and taking the
     analytic envelope of an envelope reads a 47 ms tail as 89 ms.
@@ -1498,9 +1519,9 @@ def test_clap_tail_time_constant():
     test_audio_measure.test_envelope_bursts_finds_known_restrikes
     """
     e = clap_envelope()
-    tau = am.decay_tau(e, SR, start_s=PRE_ROLL_S + 0.040, is_envelope=True,
+    tau = am.decay_tau(e, SR, start_s=PRE_ROLL_S + 0.080, is_envelope=True,
                        max_residual_db=9.0).require("clap tail")
-    assert abs(tau / 0.047 - 1) <= 0.40, f"clap tail tau {tau*1e3:.1f} ms, reference 47 ms"
+    assert abs(tau / 0.080 - 1) <= 0.40, f"clap tail tau {tau*1e3:.1f} ms, the machine's 80 ms"
 
 
 def test_clap_band_pass():
@@ -1912,14 +1933,15 @@ def test_maracas_and_clap_cannot_sound_at_once():
     """[source-verified: SN p.6, switch SW12 selects CP or MA into the shared
     buffer IC19] The two are one circuit, so selecting one must silence the
     other's behaviour rather than layering it. The clap's signature is three
-    bursts; the maracas position must have one.
+    short bursts inside 30 ms (then its final strike, which a burst COUNT cannot
+    read -- plan081 B); the maracas position must have one.
 
     Ground truth: test_audio_measure.test_envelope_bursts_finds_known_restrikes
     """
     for name, want in (("CP", 3), ("MA", 1)):
         x = sound(name, 1.0, 0.30).after_hit(0, 0.20, "dmix")
         env = am.rms_envelope(x, 1.0, SR)
-        n = len(am.envelope_bursts(env, SR, window_s=0.060, min_sep_s=0.005, level_frac=0.45))
+        n = len(am.envelope_bursts(env, SR, window_s=0.030, min_sep_s=0.005, level_frac=0.45))
         assert n == want, f"{name} shows {n} bursts, expected {want}"
 
 

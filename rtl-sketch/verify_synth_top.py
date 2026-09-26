@@ -854,6 +854,10 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: F1 calibration stimulus: saw note 45, drive 1.0, cutoff "
               f"{' / '.join(str(c) for c in F1CAL_CUTOFFS)} Hz at res 0 then res 0.5 at 1 kHz, "
               f"{F1CAL_SEGMENT_S * 1000:.0f} ms each; no drum section")
+    elif a.clap_phrase:
+        print(f"verify_synth_top: clap phrase: {clap['cp_hits']} CP strikes around the final-strike "
+              f"boundary, CP<->MA while sounding, a drum RESET mid-train, every stop at accent 2 "
+              f"under the held note at DVOL = BVOL = 0.45")
     else:
         print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
               f"{cover['sounds']} of {len(dx.SOUND_NAMES)} sounds "
