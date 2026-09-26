@@ -173,7 +173,7 @@ def test_no_session_is_operator_blocked_no_verdict(tmp_path):
 def test_incomplete_metadata_or_diagnostic_set_refuses(clean, tmp_path, mutate, why):
     d = _copy(clean, tmp_path)
     _edit(d, mutate)
-    rec = rc.analyse(d)
+    rec = rc.analyse(d, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED, rec["reasons"]
     assert why in rec["reasons"][0]
 
@@ -181,7 +181,7 @@ def test_incomplete_metadata_or_diagnostic_set_refuses(clean, tmp_path, mutate, 
 def test_missing_wav_refuses(clean, tmp_path):
     d = _copy(clean, tmp_path)
     (d / "takes" / "tone-1.wav").unlink()
-    rec = rc.analyse(d)
+    rec = rc.analyse(d, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED and "tone-1.wav not found" in rec["reasons"][0]
 
 
@@ -189,14 +189,14 @@ def test_wrong_sample_rate_file_refuses(clean, tmp_path):
     d = _copy(clean, tmp_path)
     from scipy.io import wavfile
     wavfile.write(str(d / "takes" / "tone-1.wav"), 44100, np.zeros((44100, 4), np.int32))
-    rec = rc.analyse(d)
+    rec = rc.analyse(d, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED and "44100 Hz, not 48000" in rec["reasons"][0]
 
 
 def test_host_log_of_another_command_refuses(clean, tmp_path):
     d = _copy(clean, tmp_path)
     shutil.copyfile(rc.REFERENCES / "held-m5a-pulse.plan.json", d / "host" / "tone-1.plan.json")
-    rec = rc.analyse(d)
+    rec = rc.analyse(d, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED and "is not the released command" in rec["reasons"][0]
 
 
@@ -204,7 +204,7 @@ def test_truncated_take_refuses(clean, tmp_path):
     d = _copy(clean, tmp_path)
     sr, y = rc.read_capture(d / "takes" / "held-1.wav")
     rc.write_capture_wav(d / "takes" / "held-1.wav", y[: y.shape[0] // 3])
-    rec = rc.analyse(d)
+    rec = rc.analyse(d, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED and "before its reference does" in rec["reasons"][0]
 
 
@@ -215,13 +215,13 @@ def test_altered_reference_refuses(clean, tmp_path):
     b = bytearray(p.read_bytes())
     b[-2] ^= 1
     p.write_bytes(bytes(b))
-    rec = rc.analyse(clean, ref)
+    rec = rc.analyse(clean, ref, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED and "missing or altered" in rec["reasons"][0]
 
 
 # ---- the controls -------------------------------------------------------------
 def test_clean_synthetic_session_passes_with_its_known_answers(clean):
-    rec = rc.analyse(clean)
+    rec = rc.analyse(clean, allow_synthetic=True)
     assert rec["verdict"] == rc.PASS, rec["reasons"]
     c = rec["calibration"]
     assert abs(c["ppm"] - rc.CLEAN["ppm"]) < 2.0
@@ -241,44 +241,48 @@ def test_start_red_the_stub_analyser_catches_nothing(tmp_path):
     assert not any(d["caught"] for d in res["defects"].values())
 
 
-def test_a_host_planned_hold_offset_is_read_from_the_log_and_stops_the_release_compare(
-        clean, tmp_path):
-    """On hardware uart_host anchors the gate-off to an OBSERVED frame, so its
-    planned hold can differ from the dry-run's; the release then cannot be
-    compared with this reference, and the record must say so rather than
-    FAIL the take for timing it was never asked to reproduce."""
-    d = _copy(clean, tmp_path)
-    p = d / "host" / "held-2.plan.json"
-    plan = json.loads(p.read_text())
-    ev = [r for r in plan["rows"] if r["kind"] == "event"][0]
-    ev["due"] += 30
-    p.write_text(json.dumps(plan))
-    rec = rc.analyse(d)
-    t = {x["id"]: x for x in rec["takes"]}["held-2"]
-    assert t["metrics"]["hold_offset_frames"] == 30
-    assert t["metrics"]["release_compared"] is False
-    assert rec["verdict"] == rc.PASS, rec["reasons"]
-
-
-def test_t_physical_trial_without_a_capture_is_no_verdict_with_its_control_caught(
-        tmp_path, monkeypatch):
-    """The registered trial, end to end through tools/trial.py: with no capture
-    session it is NO VERDICT for the operator-blocked reason, never PASS, and
-    its synthetic-defect control is caught. The environment spec is this
-    interpreter's (the trial's own pins are checked by the CI job that
-    bootstraps them); nothing else is stubbed."""
-    import trial
+def _env_spec(tmp_path):
     spec = tmp_path / "env.json"
     spec.write_text(json.dumps({
         "version": "test-env/1", "python": "%d.%d" % sys.version_info[:2], "packages": {},
         "toolchain": {"installer": "none", "bin": "nobin", "record": "none", "tools": {}}}))
+    return spec
+
+
+def test_t_physical_required_child_without_a_capture_is_operator_blocked(tmp_path, monkeypatch):
+    """The registered required child alone (its control stripped, so this runs
+    in seconds): no session -> NO VERDICT for the operator-blocked reason."""
+    import trial
+    reg = json.loads((rc.ROOT / "docs/trials.json").read_text())
+    reg["trials"]["T-PHYSICAL"]["modes"]["capture"]["controls"] = []
+    rp = tmp_path / "trials.json"
+    rp.write_text(json.dumps(reg))
     monkeypatch.setenv("R0_CAPTURE_BUNDLE", str(tmp_path / "no-session-here"))
-    run_dir, rec = trial.run_trial("T-PHYSICAL", env_spec=spec, out_base=tmp_path / "trials")
+    _, rec = trial.run_trial("T-PHYSICAL", registry=rp, env_spec=_env_spec(tmp_path),
+                             out_base=tmp_path / "trials")
+    child = rec["children"][0]
+    assert rec["verdict"] == trial.NO_VERDICT and child["verdict"] == trial.NO_VERDICT
+    assert "operator-blocked" in child["reasons"][0]
+
+
+def test_t_physical_on_a_synthetic_bundle_is_no_verdict_with_its_control_caught(
+        tmp_path, monkeypatch):
+    """Judge B1 (#299): `r0_capture.py synth` output placed where the operator's
+    bundle goes made T-PHYSICAL PASS, exit 0, with no board. The registered
+    trial, end to end through tools/trial.py, must be NO VERDICT on it -- the
+    session is synthetic -- and its synthetic-defect control still caught.
+    The environment spec is this interpreter's (the trial's own pins are
+    checked by the CI job that bootstraps them); nothing else is stubbed."""
+    import trial
+    bundle = rc.synth_session(tmp_path / "synthetic-bundle")
+    monkeypatch.setenv("R0_CAPTURE_BUNDLE", str(bundle))
+    run_dir, rec = trial.run_trial("T-PHYSICAL", env_spec=_env_spec(tmp_path),
+                                   out_base=tmp_path / "trials")
     assert rec["execution"]["status"] == "complete", rec["execution"]
     assert rec["verdict"] == trial.NO_VERDICT
     child = rec["children"][0]
     assert child["verdict"] == trial.NO_VERDICT
-    assert "operator-blocked" in child["reasons"][0]
+    assert "synthetic" in child["reasons"][0]
     assert rec["controls"][0]["caught"] is True, rec["controls"][0]["reasons"]
     # the control's own record, defect by defect (the suite runs once, here)
     ctl = json.loads((run_dir / "synthetic-defects" / "controls.json").read_text())
@@ -313,3 +317,160 @@ def test_a_held_tone_is_placed_on_its_own_period_not_a_neighbour():
             t = x[cal[0]:cal[0] + 24000]
             naive, _, _ = rc.ncc_lag(t, A, 0, A.size - t.size)
             assert abs(naive - want) > 80          # the defect, reproduced
+
+
+
+# ---- Judge #299: the analysis the trial runs, on inputs that are not a capture --
+def test_a_synthetic_session_is_refused_as_a_physical_capture(clean):
+    """Judge B1: the default analysis (the one `analyse` and the trial run)
+    must refuse a synthetic session outright."""
+    rec = rc.analyse(clean)
+    assert rec["verdict"] == rc.REFUSED, rec["reasons"]
+    assert "synthetic" in rec["reasons"][0]
+
+
+GOOD_TRANSCRIPT = (
+    "release_manifest: BOUND -- fpga/release/baseline-2025.1.json equals a fresh derivation\n"
+    "exit 0\n"
+    "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95  "
+    "fpga/reports/arty/integrated-baseline-2025.1/arty.bit\n"
+    "openFPGALoader v1.1.1\n"
+    "Load SRAM: [====] 100.00%\nDone\n"
+    "exit 0\n")
+
+
+def _as_real(clean, tmp_path, transcript=GOOD_TRANSCRIPT):
+    """The synthetic session with its synthetic markers removed and a
+    programming transcript in procedure step 5's format: the audio is still
+    synthetic, but every check the real path applies to metadata applies."""
+    d = _copy(clean, tmp_path)
+    s = json.loads((d / "session.json").read_text())
+    s.pop("synthetic")
+    s["image"]["programmer"] = "openFPGALoader v1.1.1"
+    s["board"].update(revision="E", power="USB J10")
+    (d / "session.json").write_text(json.dumps(s))
+    (d / "program.txt").write_text(transcript)
+    return d
+
+
+BAD_TRANSCRIPTS = {
+    "manifest not BOUND": GOOD_TRANSCRIPT.replace("BOUND", "STALE", 1),
+    "manifest exit": GOOD_TRANSCRIPT.replace("exit 0", "exit 1", 1),
+    "wrong image hash": GOOD_TRANSCRIPT.replace("a66c9349", "1a562b42"),
+    "programmer exit": GOOD_TRANSCRIPT[::-1].replace("0 tixe", "1 tixe", 1)[::-1],
+    "no programmer exit": GOOD_TRANSCRIPT.rsplit("exit 0", 1)[0],
+    "non-empty only": "programmed it, looked fine\n",
+    "synthetic transcript": "SYNTHETIC: no board was programmed\n" + GOOD_TRANSCRIPT,
+}
+
+
+@pytest.mark.parametrize("name", sorted(BAD_TRANSCRIPTS))
+def test_the_programming_transcript_must_show_step_5s_pass_conditions(clean, tmp_path, name):
+    """Judge B1: a non-empty program.txt is not programming evidence. The
+    manifest BOUND with exit 0, R0's shasum line and the programmer's own
+    final exit 0 must all be in it, or the analysis refuses."""
+    rec = rc.analyse(_as_real(clean, tmp_path, BAD_TRANSCRIPTS[name]))
+    assert rec["verdict"] == rc.REFUSED, (name, rec["reasons"])
+    assert "program" in rec["reasons"][0], rec["reasons"][0]
+
+
+def test_a_good_transcript_on_real_looking_metadata_is_accepted(clean, tmp_path):
+    """The gate above is satisfiable: run it against the current state."""
+    rec = rc.analyse(_as_real(clean, tmp_path))
+    assert rec["verdict"] == rc.PASS, rec["reasons"]
+
+
+def _live_host_log(key, prefix, epoch=0):
+    """What the shipped CLI's LIVE path writes with --capture, driven against
+    the repository's scripted device (fpga/verify_rolling_playback.Harness):
+    the closest thing to hardware this checkout has."""
+    import contextlib
+    import io
+    import r0_reference as rr
+    import uart_host as uh
+    import verify_rolling_playback as vrp
+    man = rr.load_manifest()
+    argv = rr.cli_argv(man["commands"][key]["command"]) + ["--port", "sim",
+                                                           "--capture", str(prefix)]
+    h = vrp.Harness(epoch)
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        code = uh.main(argv, bridge_factory=h.factory)
+    assert code == 0, (key, code)
+    live = [w for w in h.sim.writes if w[5] == "live"]
+    ev = [w for w in h.sim.writes if w[5] == "event"]
+    device_hold = ((ev[0][0] - live[-1][0]) & 0xFFFF) if (live and ev) else None
+    return json.loads(pathlib.Path(f"{prefix}.plan.json").read_text()), device_hold
+
+
+@pytest.mark.parametrize("key", ["held-default", "held-m5a-saw", "held-m5a-pulse",
+                                 "phrase-m5a", "demo", "bar808-full"])
+def test_the_live_cli_host_log_passes_the_identity_gate(key, tmp_path):
+    """Judge B2: the gate compared the dry-run plan with the live log row by
+    row, and the live CLI sends a held note's gate-off event AFTER its writes
+    (the dry-run lists it first), so every held-note take would have been
+    refused on the first real session. Every pinned command, through the live
+    path, must pass."""
+    host, _ = _live_host_log(key, tmp_path / "h")
+    ref = json.loads((rc.REFERENCES / f"{key}.plan.json").read_text())
+    assert rc.command_identity(ref, host) == []
+
+
+def test_the_live_held_note_hold_offset_is_measured_not_assumed(tmp_path):
+    """Judge B2: the live planned hold is 3121 frames against the dry-run's
+    1920 -- 1201 frames, 25 ms, not "a few". On the scripted device the gate-
+    off actually fires 3155 frames after the gate, so the host log's planned
+    hold is itself 34 frames off what the device did. Recorded here as
+    measured numbers, so a change in the CLI's anchoring shows up."""
+    ref = json.loads((rc.REFERENCES / "held-default.plan.json").read_text())
+    host, device_hold = _live_host_log("held-default", tmp_path / "h")
+    assert rc.planned_hold(ref) == 1920
+    assert rc.planned_hold(host) == 3121
+    assert device_hold == 3155
+    assert abs(device_hold - rc.planned_hold(host)) <= rc.HOLD_UNCERTAINTY_FRAMES
+
+
+def test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused(clean, tmp_path):
+    """Judge B2, end to end: the clean session with every host log replaced by
+    what the live CLI writes. The held takes carry the measured hold offset,
+    their release is not compared, and the session is not refused."""
+    d = _as_real(clean, tmp_path)
+    s = json.loads((d / "session.json").read_text())
+    for t in s["takes"]:
+        if t["command_id"] != "silence":
+            _live_host_log(t["command_id"], d / t["host_capture"])
+    rec = rc.analyse(d)
+    assert rec["verdict"] == rc.PASS, rec["reasons"]
+    held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
+    assert held["hold_offset_frames"] == 1201 and held["release_compared"] is False
+
+
+def test_a_live_host_log_of_another_command_is_still_refused(clean, tmp_path):
+    """The control for the relaxed ordering: a genuinely foreign command (the
+    pulse preset's live log under the saw take) must still be refused."""
+    d = _as_real(clean, tmp_path)
+    _live_host_log("held-m5a-pulse", d / "host" / "tone-1")
+    rec = rc.analyse(d)
+    assert rec["verdict"] == rc.REFUSED
+    assert "tone-1 is not the released command held-m5a-saw" in rec["reasons"][0]
+
+
+def test_the_stub_analysers_clean_run_is_not_counted_as_fine(tmp_path):
+    """Judge N1: with no calibration record the known answers were skipped and
+    the stub's clean run counted as ok."""
+    res = rc.run_controls(tmp_path, analyser=rc.stub_analyse, defects=["noise"])
+    assert res["clean"]["ok"] is False
+
+
+def test_a_reference_that_is_not_the_releases_refuses_inside_the_analysis(clean, tmp_path):
+    """Judge N2: the reference binding (pinned bytes, image bitstream, image
+    sources) is checked in the analysis the trial runs, not only in CI. The
+    wav is untouched, so the old wav-hash check alone passed this."""
+    ref = tmp_path / "ref"
+    shutil.copytree(rc.REFERENCES, ref)
+    p = ref / "held-default.json"
+    r = json.loads(p.read_text())
+    r["image"]["bitstream_sha256"] = "1a562b42" + r["image"]["bitstream_sha256"][8:]
+    p.write_text(json.dumps(r))
+    rec = rc.analyse(_as_real(clean, tmp_path), ref)
+    assert rec["verdict"] == rc.REFUSED
+    assert "held-default" in rec["reasons"][0] and "bitstream" in rec["reasons"][0]
