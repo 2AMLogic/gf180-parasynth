@@ -43,7 +43,17 @@ def test_selected_artifacts_agree(fresh):
     for p, h in fresh["evidence"]["held_note"].items():
         assert h["verdict"] == "PASS" and h["i2s_peak_lsb"] >= 1024, p
         assert h["replay_capture_sha256"] == fresh["commands"][h["command"]]["cmds_sha256"]
-    assert fresh["evidence"]["glide_boundary"]["verdicts"]["wrapper:control-247"]["met"]
+    # the glide bench's control is the injected glide-floor bug (a wrapper-level
+    # #247 control was tried and NOT caught without the drum route; it is
+    # recorded as the probe `wrapper:probe-247-incs`). #247 itself is
+    # reproduced by probe_247's `orig` variant (exit 1).
+    v = fresh["evidence"]["glide_boundary"]["verdicts"]
+    assert "wrapper:control-247" not in v
+    assert v["voice:accept-default+GLIDE_FLOOR"] == {"rc": 0, "expected": "CAUGHT", "met": True}
+    for k in ("voice:accept-default", "wrapper:accept-default", "wrapper:accept-pulse29",
+              "wrapper:accept-247-shape"):
+        assert v[k] == {"rc": 0, "expected": "PASS", "met": True}, k
+    assert fresh["evidence"]["probe_247"]["rc"]["orig"] == 1
 
 
 def test_every_supported_command_passes_the_validator(fresh):

@@ -54,7 +54,7 @@ CASES, and the verdict each must give (exit status is the verdict):
 
     .venv/bin/python fpga/release/glide_boundary.py --case accept-default
     .venv/bin/python fpga/release/glide_boundary.py --case accept-default --inject GLIDE_FLOOR --expect-fail
-    .venv/bin/python fpga/release/glide_boundary.py --level wrapper --case control-247 --expect-fail
+    .venv/bin/python fpga/release/glide_boundary.py --level wrapper --case accept-247-shape
 
 Exit statuses are the benches': 0 identical, 1 differed, 2 did not run.
 --expect-fail exits 0 only when the comparison gave 1.

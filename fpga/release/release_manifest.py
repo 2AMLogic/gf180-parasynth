@@ -83,7 +83,10 @@ def sha_json(obj) -> str:
 
 
 def _rel(p: Path) -> str:
-    return str(Path(p).resolve().relative_to(ROOT))
+    """Repo-relative for the committed manifest; a path outside the tree (a
+    test's substituted copy) stays absolute rather than crashing the check."""
+    p = Path(p).resolve()
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
 
 
 def _need(path: Path) -> Path:
