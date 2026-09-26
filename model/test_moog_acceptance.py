@@ -71,6 +71,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import dsp                                                          # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 import audio_measure as am                                          # noqa: E402
+import reference_movement as rm                                     # noqa: E402
 import alias_probe as ap                                            # noqa: E402
 from audio_measure import InsufficientEvidence      # noqa: E402,F401  (the stub controls below rely on it being an AssertionError)
 from dsp import SR                                                  # noqa: E402
@@ -1056,6 +1057,136 @@ def test_a_cutoff_jump_mid_note_does_not_click():
     assert am.max_sample_step(y) < 4.0 * np.abs(np.diff(y)).mean() * 20.0, "resonance steps click"
 
 
+# -----------------------------------------------------------------------------
+# movement, the two cases the test above cannot reach (#53). Both reuse
+# `model/reference_movement.py`'s measurement rather than a second one, so the
+# numbers here and the numbers in `docs/surge-source-notes.md` section 6 are
+# the same numbers. Each has an injected control in section 4 below.
+# -----------------------------------------------------------------------------
+RES_SWEEP_BOUND_DB = -75.0       # shipping measures -82.2; the control reads -58.3
+MOD_RESIDUAL_BOUND_DB = -45.0    # shipping measures -52 to -63
+
+
+def _resonance_sweep_ripple(hold=1, seconds=0.8, span=None):
+    """Envelope ripple over a CONTINUOUS resonance ramp through the
+    self-oscillation onset, `hold` frames between `k` writes."""
+    lo, hi = rm.RES_SPAN if span is None else span
+    y = rm.resonance_render(lo, hi, seconds, hold)
+    e = am.envelope_ripple_db(am.analytic_envelope(y), SR, lp_hz=rm.RES_LP_HZ)
+    value, verdict = rm.ripple_verdict(e, rm.RES_LP_HZ)
+    assert value is not None, f"the ripple estimator refused: {verdict}"
+    return value, verdict
+
+
+def _assert_a_resonance_sweep_through_onset_is_quiet(hold=1):
+    up, verdict = _resonance_sweep_ripple(hold)
+    assert up < RES_SWEEP_BOUND_DB, \
+        f"a resonance sweep through onset ripples at {up:.1f} dB ({verdict})"
+    return up
+
+
+def _assert_audio_rate_filter_modulation_is_quiet(quant=1, hold=1):
+    worst = None
+    for depth, f3 in ((0.25, 1760.0), (1.30, 440.0)):
+        cut, cut_f, _ = rm.mod_trajectory(depth, f3, seconds=0.2)
+        a, b = rm.mod_pair(cut, cut_f, quant=quant, hold=hold)
+        resid = am.db(am.rms(a - b), am.rms(b))
+        worst = resid if worst is None else max(worst, resid)
+        assert resid < MOD_RESIDUAL_BOUND_DB, (
+            f"audio-rate filter modulation at {depth:.2f} oct / {f3:.0f} Hz leaves "
+            f"{resid:.1f} dB of control-path error against the float control path")
+    return worst
+
+
+def test_a_continuous_resonance_sweep_through_self_oscillation_does_not_zipper():
+    """[measured-here: #53 -- no source states a bound; this is our own floor] **#53, and the case `test_a_cutoff_jump_mid_note_does_not_click` cannot
+    reach.** That test steps `k_eff` between 0 and the onset as a 5 ms square
+    wave -- two abrupt toggles. This one ramps `res` CONTINUOUSLY from 0.6 to
+    1.4 through the onset (DR 0006 puts the onset at res = 1.000 by
+    construction, and that is asserted here rather than assumed), which is the
+    case #53 calls "most likely to click or thump" because the loop sits at
+    unity gain for as long as the ramp takes to cross it.
+
+    Measured with `reference_movement.resonance_render` /
+    `audio_measure.envelope_ripple_db`, band-limited to the same 800 Hz as the
+    section-3 sweep table so the numbers compare. Shipping reads **-82.2 dB**
+    at a 1 res/s ramp and **-90.2 dB** at 0.25 res/s -- both at the estimator's
+    own floor, so they are upper bounds -- against **-58.3 dB** when `k` is
+    written every 5 ms instead of every frame
+    (test_control_a_coarse_resonance_write_interval_zippers).
+
+    Both directions, because the crossing is not symmetric: entering
+    self-oscillation and leaving it are different transients.
+
+    Ground truth: test_reference_voice.test_envelope_ripple_matches_the_closed_form_of_a_known_staircase, test_reference_voice.test_envelope_ripple_under_reads_when_the_steps_are_slower_than_its_window, test_audio_measure.test_analytic_envelope_of_a_damped_sinusoid_is_the_exponential
+    """
+    onset = rm.onset_res()
+    assert abs(onset - 1.0) < 0.004, f"DR 0006 puts the onset at res 1.000; it is {onset:.4f}"
+    assert rm.RES_SPAN[0] < onset < rm.RES_SPAN[1], "the ramp does not cross the onset"
+
+    # apparatus precondition: the ramp has to reach self-oscillation, or this
+    # measures a resonant peak and answers a different question.
+    y = rm.resonance_render(*rm.RES_SPAN, 0.8, mute_from=0.5)
+    env = am.analytic_envelope(y)
+    n = len(env)
+    grew = env[int(0.95 * n):].mean() / max(env[int(0.55 * n):int(0.6 * n)].mean(), 1e-9)
+    assert grew > 1.0, ("with the input muted the output decays: the ramp never "
+                        f"reaches self-oscillation ({20 * math.log10(grew):+.1f} dB)")
+
+    up = _assert_a_resonance_sweep_through_onset_is_quiet()
+    down, _ = _resonance_sweep_ripple(1, span=rm.RES_SPAN[::-1])
+    assert down < RES_SWEEP_BOUND_DB, f"the downward crossing ripples at {down:.1f} dB"
+    assert abs(up - down) < 6.0, f"the two directions differ by {abs(up - down):.1f} dB"
+
+    # and the crossing itself is not the expensive part: the same ramp rate
+    # over a span that never reaches onset is no quieter.
+    below, _ = _resonance_sweep_ripple(1, span=rm.RES_BELOW)
+    assert below > up - 6.0, (f"crossing the onset reads {up:.1f} dB against "
+                              f"{below:.1f} dB for a ramp that never crosses it")
+
+
+def test_audio_rate_filter_modulation_adds_no_more_than_the_static_control_error():
+    """[measured-here: #53 -- the differential of section 2, at audio rate] **#53, and the case `test_the_mod_wheel_at_full_sweeps_the_cutoff_from_
+    440_to_at_least_2400` cannot reach.** That test drives `MR_FILT` from
+    oscillator 3 as a square-wave LFO and checks the DEPTH of the swing. This
+    one runs the same bus at an AUDIO rate -- 440 Hz and 1760 Hz -- which #53
+    calls "far harder than a hand on a knob", and measures the artefact
+    instead of the depth.
+
+    The estimator is the differential of section 2, not the envelope ripple:
+    the same carrier through the same ladder twice, once with the shipping
+    control path (Q3.12 octave word -> interpolated exp ROM -> integer-hertz
+    register -> g ROM) and once with that arithmetic in float. **Envelope
+    ripple cannot answer this question at all** -- an audio-rate cutoff
+    modulation IS an envelope modulation, 40 dB larger than any artefact, and
+    `reference_movement.stage_audio_rate_mod` refuses it at all nine of its
+    operating points. The refusal is asserted here, not assumed, because a
+    number from that estimator would look exactly like data.
+
+    Measured: **-52 to -63 dB** across 0.25/1.30/3.90 octaves and
+    110/440/1760 Hz, flat in both -- the signature of a static control error,
+    the same conclusion section 3 reached for cutoff sweeps. Holding the
+    cutoff for one 512-sample block instead reads **+1.3 dB**
+    (test_control_a_block_rate_cutoff_hold_breaks_audio_rate_modulation).
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two, test_reference_voice.test_envelope_ripple_band_limit_attenuates_the_hilbert_artefact
+    """
+    _assert_audio_rate_filter_modulation_is_quiet()
+
+    # the apparatus's own limit, asserted: at audio rate the envelope-ripple
+    # estimator reads the intended modulation, and must say so.
+    cut, cut_f, _ = rm.mod_trajectory(1.30, 440.0, seconds=0.2)
+    a, b = rm.mod_pair(cut, cut_f)
+    ea = am.envelope_ripple_db(am.analytic_envelope(a), SR, lp_hz=rm.MOD_LP_HZ)
+    eb = am.envelope_ripple_db(am.analytic_envelope(b), SR, lp_hz=rm.MOD_LP_HZ)
+    value, verdict = rm.ripple_verdict(ea, rm.MOD_LP_HZ, avoid_hz=440.0)
+    assert value is None, f"the ripple estimator answered where it cannot: {ea.value:.1f} dB"
+    assert verdict.startswith("REFUSED"), verdict
+    assert abs(ea.value - eb.value) < 3.0, (
+        "the artefact-free render should read the same ripple, since the ripple "
+        f"is the intended modulation: {ea.value:.1f} against {eb.value:.1f} dB")
+
+
 # =============================================================================
 # 4. THE SUITE CAN FAIL
 #
@@ -1954,6 +2085,42 @@ def test_control_oscillator_3_left_on_the_modulation_bus(monkeypatch):
     _expect_red(test_osc_3_control_takes_oscillator_3_off_the_modulation_bus)
 
 
+def test_control_a_coarse_resonance_write_interval_zippers():
+    """[meta] Defect: the host writes `k` every 5 ms instead of every frame --
+    a block-rate resonance control, which is what a firmware that updated the
+    filter from a timer rather than from the sample clock would do. The
+    continuous-sweep property must go red.
+
+    The separation is what makes the green reading usable: shipping measures
+    **-82.2 dB** and this measures **-58.3 dB**, a **+23.9 dB** move, so the
+    estimator is not sitting at a floor that nothing can lift. A 2 ms write
+    interval reads -74.3 dB, so the control is graded rather than binary.
+
+    Ground truth: test_reference_voice.test_envelope_ripple_matches_the_closed_form_of_a_known_staircase
+    """
+    msg = _expect_red(_assert_a_resonance_sweep_through_onset_is_quiet, hold=240)
+    assert "ripples at" in msg, msg
+
+
+def test_control_a_block_rate_cutoff_hold_breaks_audio_rate_modulation():
+    """[meta] Defect: the modulated cutoff is held across a 512-sample host
+    block instead of being written per frame -- the exact artefact that
+    inverted the section-3 plugin conclusion until it was found (dawdreamer's
+    default block, 93.75 Hz). At an audio modulation rate this does not merely
+    coarsen the control, it ALIASES the modulation, and the differential must
+    go red.
+
+    Shipping measures -52 to -63 dB; held for one block it measures **+1.3
+    dB**, a **+55 dB** move. The same control at 128 frames (375 Hz) reads
+    +0.9 dB, and rounding the cutoff to 32 Hz -- a far milder injection --
+    reads +6.0 dB, which is the smallest injection this measurement resolves.
+
+    Ground truth: test_audio_measure.test_rms_of_a_sinusoid_is_amplitude_over_root_two
+    """
+    msg = _expect_red(_assert_audio_rate_filter_modulation_is_quiet, hold=512)
+    assert "control-path error" in msg, msg
+
+
 # =============================================================================
 # 7. THE ALIASING GAP (contract open item 15)
 #
@@ -2305,7 +2472,10 @@ def test_meta_every_test_declares_status_and_ground_truth():
     convenience estimators this file defines and validates itself
     (`band_power_db`, `octave_slope_db`, pinned by
     `test_meta_band_power_db_recovers_known_band_powers`) rather than adding
-    to `audio_measure.py`.
+    to `audio_measure.py`. `test_reference_voice.<fn>` is the third accepted
+    module: `audio_measure.envelope_ripple_db` -- the movement estimator the
+    two #53 tests measure through -- is ground-truthed there, against a
+    staircase of known step size, not in `test_audio_measure.py`.
 
     The checking logic is shared with `test_808_acceptance.py`'s own
     meta-test, in `model/acceptance_meta.py`, so this suite and that one
@@ -2315,5 +2485,6 @@ def test_meta_every_test_declares_status_and_ground_truth():
     absent from the file), so those escape hatches are not passed here."""
     import test_moog_acceptance as mod
     import test_audio_measure as gt
+    import test_reference_voice as gtr
     from acceptance_meta import assert_ground_truth_gate
-    assert_ground_truth_gate(mod, {gt.__name__: gt, mod.__name__: mod})
+    assert_ground_truth_gate(mod, {gt.__name__: gt, gtr.__name__: gtr, mod.__name__: mod})
