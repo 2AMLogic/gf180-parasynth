@@ -1,0 +1,41 @@
+{
+ "bars": 2,
+ "bpm": 124.0,
+ "bus_gain": 0.45,
+ "case_frames": 288000,
+ "case_id": "E1A",
+ "dense": false,
+ "gains": {
+  "bvol": 14746,
+  "dvol": 14746,
+  "vol": 0
+ },
+ "i2s_delay_periods": 1,
+ "part": "stop:HT",
+ "patch": "01-bass-classic",
+ "sample_rate_hz": 48000,
+ "scheduled_hits": 2,
+ "seconds": 6.0,
+ "stops": {
+  "HT": [
+   {
+    "accent": 1.0,
+    "i2s_period": 66292,
+    "intended_frame": 66271,
+    "landed_frame": 66291,
+    "latency_frames": 20
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 159194,
+    "intended_frame": 159174,
+    "landed_frame": 159193,
+    "latency_frames": 19
+   }
+  ]
+ },
+ "voice_notes": 8,
+ "worst_latency_frames": 20,
+ "worst_latency_intended_frame": 66271,
+ "worst_latency_stop": "HT"
+}

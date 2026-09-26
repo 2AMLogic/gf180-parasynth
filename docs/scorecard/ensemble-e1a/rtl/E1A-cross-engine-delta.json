@@ -1,0 +1,91 @@
+{
+  "schema": "ensemble-integrated-rtl-delta-v1",
+  "valid": true,
+  "comparison_mode": "cross-engine",
+  "case_id": "E1A",
+  "baseline": {
+    "engine": "fixed-model",
+    "state": "pass",
+    "worst": 0.1958,
+    "source_commit": "d42ac140"
+  },
+  "candidate": {
+    "engine": "integrated-rtl",
+    "state": "pass",
+    "worst": 0.1958,
+    "source_commit": "76d246f",
+    "decoded_i2s_sha256": {
+      "body": "4610b4ed0f661e6b0155ce2e093144e4a140a2b0dcac12ca8f927bf7b9519bb0",
+      "drum-mix": "cd7de05ddd849daf5edeea1896a54c50664707531cb84652b15a4a4562278923",
+      "mix": "2b0ba80343cad4825d4dc92da1b30dc423a2a928285053750b189a72e81ed94d",
+      "stop:BD": "38551fd01dc56f9c2286576de169a04326f0f269635c79510fc46d936b23914a",
+      "stop:CB": "f5f6131bf0eb4955e0c66480cfea7ad4c624b585f91d9b166e3728de194a523d",
+      "stop:CH": "25421dcfbfc84e9258425a30a0ab0b99c8f0ccae3dace5be488001b7db6618fc",
+      "stop:CP": "6e3ae4d0be08d71020708a505ba19477699832ff099ee94b1a73ecacd61da0e7",
+      "stop:HT": "28887ed8e653d9896088cbbdb9954da211c65005ef2c9d4045ad46c46ac2333d",
+      "stop:LT": "297f35f3e327ecc7857086a950980e7341cb7b1fccb91c802f0f6d8afcba3112",
+      "stop:OH": "e1bc5805f8ff065167b7f5a32abfe22418e0de7fc51f5cbb1db7e0a9f5d02199",
+      "stop:SD": "40e55b997ef904f54b185f600dd0944cad6610863c1a8dd67042073c3dbcd02a",
+      "voice": "30b70ecca71744390774ddaa3d4364be585f804c08d918b46f1805e0136334ed"
+    },
+    "negative_control": {
+      "inject": "DRUM_BUS_STALE",
+      "caught": true
+    }
+  },
+  "comparison": {
+    "states_agree": true,
+    "case_passes": true,
+    "metrics": {
+      "Event timing": {
+        "units": "ms",
+        "limit": 10.0,
+        "baseline_error": 1.9583,
+        "candidate_error": 1.9583,
+        "baseline_inside_tolerance": true,
+        "candidate_inside_tolerance": true,
+        "delta": 0.0,
+        "delta_fraction_of_tolerance": 0.0
+      },
+      "bus balance": {
+        "units": "dB",
+        "limit": 0.5,
+        "baseline_error": 0.0,
+        "candidate_error": 0.0,
+        "baseline_inside_tolerance": true,
+        "candidate_inside_tolerance": true,
+        "delta": 0.0,
+        "delta_fraction_of_tolerance": 0.0
+      },
+      "output artifacts": {
+        "units": "% of samples",
+        "limit": 0.01,
+        "baseline_error": 0.0,
+        "candidate_error": 0.0,
+        "baseline_inside_tolerance": true,
+        "candidate_inside_tolerance": true,
+        "delta": 0.0,
+        "delta_fraction_of_tolerance": 0.0
+      }
+    },
+    "improved_components": [],
+    "regressed_components": [],
+    "lost_passes": [],
+    "accepts_candidate": true
+  },
+  "provenance": {
+    "source_commit": "76d246fadf1c59eb24ee710a5ffc1821ecea1edd",
+    "source_dirty": true,
+    "input_sha256": {
+      "baseline_record": "414188ebcc7adc287001b55e127b80ef45af310e84a0ad7e9e9e0f239993ecb1",
+      "candidate_record": "47491f25b498ec143b2e2dbe04eed185ae27611cab0d84cbf5534ba1960c344c"
+    },
+    "source_sha256": {
+      "tools/compare_ensemble_candidate.py": "e1ea147d5fec4d1d99aa83c42d2e8853189680785d8f729e93956a2045800224",
+      "tools/score_ensemble_i2s.py": "1a08f6bcfefd05f79a74a45de4dd4ac2ff0075e65cfe305d2509aeda2462ecdb",
+      "tools/run_case.py": "679a787be5fd58fdb6655c2b6f156e187dd29cdff005f33a515103a11d002f81",
+      "tools/scorecard.py": "aa365a0cdcafb6c711f86be755cf5019558bdacefa4d066e256af2734fa3db45"
+    },
+    "run_at_utc": "2026-09-26T23:09:24.117252+00:00"
+  }
+}

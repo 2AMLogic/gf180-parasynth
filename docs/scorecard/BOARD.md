@@ -119,7 +119,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `F6B` | Filters | Development | Audio-rate modulation / mid | Surge Type 2 / qualified path | — | ⬜ not run |  |  |
 | `F6C` | Filters | Development | Audio-rate modulation / high | Surge Type 2 / qualified path | — | ⬜ not run |  |  |
 | `F6D` | Filters | Development | Audio-rate modulation / new setting | Surge Type 2 / qualified path | — | ⬜ not run |  |  |
-| `E1A` | Ensemble | Development | Bass and kit / sparse | Qualified mono and drum stems | fixed-model | ✅ pass | 0.20 |  |
+| `E1A` | Ensemble | Development | Bass and kit / sparse | Qualified mono and drum stems | integrated-rtl | ✅ pass | 0.20 |  |
 | `E1B` | Ensemble | Development | Bass and kit / dense | Qualified mono and drum stems | fixed-model | ✅ pass | 0.20 |  |
 | `E1C` | Ensemble | Development | Bass and kit / live controls | Qualified mono and drum stems | — | ⬜ not run |  |  |
 | `E1D` | Ensemble | Holdout | Bass and kit / new phrase | Qualified mono and drum stems | — | ⬜ not run |  |  |

@@ -1,70 +1,13 @@
 {
-  "engine": "fixed-model",
+  "engine": "integrated-rtl",
   "case_id": "E1A",
   "subject": "Bass and kit / sparse",
-  "source_commit": "d42ac140",
-  "analysis_run": "run_case@1ce265479a2c + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T11:53:40Z",
-  "provenance": {
-    "engine": "fixed-model",
-    "worktree": {
-      "commit": "d42ac140",
-      "described": "d42ac140-dirty",
-      "branch": "feature/clap-final-strike-l2",
-      "dirty": true,
-      "uncommitted_sha256": "496657134d41167b",
-      "untracked_files": 64
-    },
-    "base_check": {
-      "checked": true,
-      "origin_main": "55bf490a76ff",
-      "behind_commits": 0,
-      "ahead_commits": 11,
-      "n_stops_here": 11,
-      "n_stops_origin_main": 11,
-      "stale_dependencies": {},
-      "ahead_dependencies": {
-        "model/drums_fx.py": {
-          "origin_main": "4a0177412ff4",
-          "here": "5c61662c8158"
-        }
-      },
-      "allow_stale": false,
-      "problems": [],
-      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
-    },
-    "command": "tools/run_case.py D12A E1A E1B E2A",
-    "config": {
-      "patch": "01-bass-classic",
-      "dense": false,
-      "bpm": 124.0,
-      "seconds": 6.0,
-      "bus_gain": 0.45,
-      "limiter": false
-    },
-    "python": "3.12.14",
-    "run_at": "2026-09-26T11:53:40Z",
-    "inputs": {
-      "model/drums_fx.py": "sha256:5c61662c81583c38",
-      "model/voice_fx.py": "sha256:85f80f46481be1a8",
-      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
-      "model/reference_rigs.py": "sha256:4222305718828edf",
-      "tools/run_case.py": "sha256:1ce265479a2c9d27",
-      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
-      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
-      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
-      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
-      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc"
-    },
-    "artefacts": {
-      "mix": "build/scorecard/E1A-mix.wav"
-    },
-    "outcome_code": 0,
-    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
-  },
-  "reference_profile": "our own per-bus stems and the written hit schedule; no external reference is involved in this case",
-  "render_run": "voice_fx 01-bass-classic + drums_fx sparse groove, 124 BPM, 2 bars, buses 0.45/0.45, no limiter",
-  "audio": "build/scorecard/E1A-mix.wav",
+  "source_commit": "76d246f",
+  "source_dirty": true,
+  "analysis_run": "run_case@679a787be5fd + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T23:03:59Z",
+  "reference_profile": "our own per-bus stems and the register schedule the CS_N pin predicted; no external reference is involved in this case",
+  "render_run": "synth_top.v over the SPI pins: 01-bass-classic bass line and the sparse 808 groove, 124 BPM, 2 bars, buses 0.45/0.45, no limiter; 12 parts decoded from the I2S pins",
+  "audio": "docs/scorecard/ensemble-e1a/rtl/E1A-mix-i2s.wav",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -105,11 +48,11 @@
     }
   },
   "diagnostics": {
-    "peak_fs": 0.81839,
+    "peak_fs": 0.831207,
     "stem_peaks_fs": {
-      "voice": 0.527618,
-      "drum-mix": 0.378143,
-      "body": 0.585175
+      "voice": 0.527466,
+      "drum-mix": 0.387787,
+      "body": 0.548096
     },
     "scheduled_events": 42,
     "stops_timed": [
@@ -123,8 +66,355 @@
       "SD"
     ],
     "onsets_outside_the_schedule": 1,
-    "dc_offset_fs": 0.00153096,
+    "dc_offset_fs": 0.0019271,
     "patch": "01-bass-classic",
-    "bpm": 124.0
-  }
+    "bpm": 124.0,
+    "case_frames": 288000,
+    "per_stop_event_timing": {
+      "BD": {
+        "scheduled": 10,
+        "valid": true,
+        "offset_ms": 1.9583,
+        "why": "",
+        "worst_host_latency_frames": 29
+      },
+      "CB": {
+        "scheduled": 2,
+        "valid": true,
+        "offset_ms": 0.6458,
+        "why": "",
+        "worst_host_latency_frames": 24
+      },
+      "CH": {
+        "scheduled": 16,
+        "valid": true,
+        "offset_ms": 0.4583,
+        "why": "",
+        "worst_host_latency_frames": 27
+      },
+      "CP": {
+        "scheduled": 2,
+        "valid": true,
+        "offset_ms": 1.2083,
+        "why": "",
+        "worst_host_latency_frames": 17
+      },
+      "HT": {
+        "scheduled": 2,
+        "valid": true,
+        "offset_ms": 0.3333,
+        "why": "",
+        "worst_host_latency_frames": 20
+      },
+      "LT": {
+        "scheduled": 2,
+        "valid": true,
+        "offset_ms": 0.0625,
+        "why": "",
+        "worst_host_latency_frames": 20
+      },
+      "OH": {
+        "scheduled": 4,
+        "valid": true,
+        "offset_ms": 0.625,
+        "why": "",
+        "worst_host_latency_frames": 26
+      },
+      "SD": {
+        "scheduled": 4,
+        "valid": true,
+        "offset_ms": 1.3125,
+        "why": "",
+        "worst_host_latency_frames": 26
+      }
+    },
+    "stem_sum_minus_mix_samples": 77422,
+    "stem_sum_minus_mix_max_abs": 2,
+    "host_to_register_latency_frames": {
+      "body": 34,
+      "drum-mix": 34,
+      "mix": 34,
+      "stop:BD": 29,
+      "stop:CB": 24,
+      "stop:CH": 27,
+      "stop:CP": 17,
+      "stop:HT": 20,
+      "stop:LT": 20,
+      "stop:OH": 26,
+      "stop:SD": 26,
+      "voice": 34
+    },
+    "decoded_i2s_sha256": {
+      "body": "4610b4ed0f661e6b0155ce2e093144e4a140a2b0dcac12ca8f927bf7b9519bb0",
+      "drum-mix": "cd7de05ddd849daf5edeea1896a54c50664707531cb84652b15a4a4562278923",
+      "mix": "2b0ba80343cad4825d4dc92da1b30dc423a2a928285053750b189a72e81ed94d",
+      "stop:BD": "38551fd01dc56f9c2286576de169a04326f0f269635c79510fc46d936b23914a",
+      "stop:CB": "f5f6131bf0eb4955e0c66480cfea7ad4c624b585f91d9b166e3728de194a523d",
+      "stop:CH": "25421dcfbfc84e9258425a30a0ab0b99c8f0ccae3dace5be488001b7db6618fc",
+      "stop:CP": "6e3ae4d0be08d71020708a505ba19477699832ff099ee94b1a73ecacd61da0e7",
+      "stop:HT": "28887ed8e653d9896088cbbdb9954da211c65005ef2c9d4045ad46c46ac2333d",
+      "stop:LT": "297f35f3e327ecc7857086a950980e7341cb7b1fccb91c802f0f6d8afcba3112",
+      "stop:OH": "e1bc5805f8ff065167b7f5a32abfe22418e0de7fc51f5cbb1db7e0a9f5d02199",
+      "stop:SD": "40e55b997ef904f54b185f600dd0944cad6610863c1a8dd67042073c3dbcd02a",
+      "voice": "30b70ecca71744390774ddaa3d4364be585f804c08d918b46f1805e0136334ed"
+    },
+    "schedule_sha256": {
+      "body": "c89af577d0048e0348154935f69d290dee8673e60c5faf141b71d15a3bd542e9",
+      "drum-mix": "1325ed2eea113aed86cd74ead9236e28b317239e24bac49b45aa594ef881d88f",
+      "mix": "826b4917c03431b8397931130e40b0981cc2bd974b9af7f48376e3d29c26c70a",
+      "stop:BD": "92b45dc043ca5ba83e4f90d683de2496a9e3d92494e738106c0ceb0a38a03acf",
+      "stop:CB": "eedd1f8c4040a3b4b64a882627e5deb46994217674a7f24078e520378cd84557",
+      "stop:CH": "d96525a348ddf0558a76d063a12f8e0c36517c1258bc4a1e13d5186fa03ea1e7",
+      "stop:CP": "d4ae5b45e64e56a9889c3b50e5608a32cc5c93067b2093a7605edddae070d0f6",
+      "stop:HT": "427d36137ddd0ec8acb0838586c0b81050d64afbdb1911b301418d1047db556b",
+      "stop:LT": "ff62648f73175e6691c080fb62fd601222165f1ba1b6efaf851cfdec560c6070",
+      "stop:OH": "4f0075042e9b2e20d7998c21dda32842331806ac9256a6b982e8c67446668b5d",
+      "stop:SD": "a4b4fd19646676512de1f38cd635c2e3425961c0b8c4c657c209d4a4b9b45e0d",
+      "voice": "28df90af67114503f9b996e48f4adf5e4323b46a9308f0049a8f7b8df2e04a45"
+    },
+    "simulator": [
+      "verilator"
+    ],
+    "note": "Every number here is computed from I2S words decoded from BCLK, LRCLK and SDATA, and every part's wire was bit-identical to model/synth_top_model.py over the whole phrase.",
+    "negative_control": {
+      "inject": "DRUM_BUS_STALE",
+      "part": "mix",
+      "expect": "the bench turns red",
+      "caught": true,
+      "exit_status": 0,
+      "report": "build/ensemble-E1A/control-DRUM_BUS_STALE/mix.txt",
+      "report_sha256": "42727a7a3dcd53c3d792b4687dd9565ec55e7ed688fac26cd8e0a8c894807163",
+      "periods": 288033,
+      "periods_differing_from_the_model": 198223,
+      "audio_vs_clean_mix": {
+        "samples_compared": 288000,
+        "samples_differing": 198223,
+        "max_abs_difference_lsb": 12781,
+        "rail_percent_injected": 0.0,
+        "rail_percent_clean": 0.0,
+        "rms_ratio_db": -0.0007
+      },
+      "what_the_case_metrics_do_about_it": {
+        "bus balance": {
+          "clean_db": 0.0,
+          "tolerance_db": 0.5,
+          "injected_mix_rms_shift_db": -0.0007,
+          "note": "the mutation shifts BOTH drum buses, and the stems are summed through the same shift, so an RMS ratio is close to blind to it by construction"
+        },
+        "output artifacts": {
+          "clean_percent": 0.0,
+          "injected_percent": 0.0,
+          "tolerance_percent": 0.01
+        },
+        "Event timing": {
+          "stop": "BD",
+          "measured": true,
+          "valid": true,
+          "offset_ms": 1.9792,
+          "why": "",
+          "exit_status": 0,
+          "clean_ms": 1.9583,
+          "tolerance_ms": 10.0,
+          "delta_ms": 0.0209,
+          "moves_the_metric_past_its_tolerance": false
+        }
+      },
+      "where_the_evidence_comes_from": "the bit-exact wire-versus-model comparison, which this mutation fails on 198223 of 288033 periods. The three scorecard metrics are coarse next to that by design -- they are tolerances on a sound, not on a bus schedule -- so this control is reported as protecting the comparison the anchor rests on, and only as far as measured for each metric above."
+    }
+  },
+  "provenance": {
+    "engine": "integrated-rtl",
+    "worktree": {
+      "commit": "76d246f",
+      "described": "node/D-drums-bitexact-618-g76d246f-dirty",
+      "branch": "feature/issue-292",
+      "dirty": true,
+      "uncommitted_sha256": "7f5dcdee1774eb34",
+      "untracked_files": 29
+    },
+    "base_check": {},
+    "command": "tools/score_ensemble_i2s.py --case E1A --simulator verilator --jobs 2 --reuse",
+    "config": {
+      "patch": "01-bass-classic",
+      "dense": false,
+      "bpm": 124.0,
+      "seconds": 6.0,
+      "bus_gain": 0.45,
+      "limiter": false,
+      "parts": [
+        "body",
+        "drum-mix",
+        "mix",
+        "stop:BD",
+        "stop:CB",
+        "stop:CH",
+        "stop:CP",
+        "stop:HT",
+        "stop:LT",
+        "stop:OH",
+        "stop:SD",
+        "voice"
+      ],
+      "simulator": [
+        "verilator"
+      ],
+      "measurement_source_sha256": {
+        "tools/score_ensemble_i2s.py": "1a08f6bcfefd05f79a74a45de4dd4ac2ff0075e65cfe305d2509aeda2462ecdb",
+        "tools/compare_ensemble_candidate.py": "e1ea147d5fec4d1d99aa83c42d2e8853189680785d8f729e93956a2045800224",
+        "tools/run_case.py": "679a787be5fd58fdb6655c2b6f156e187dd29cdff005f33a515103a11d002f81",
+        "tools/scorecard.py": "aa365a0cdcafb6c711f86be755cf5019558bdacefa4d066e256af2734fa3db45",
+        "model/audio_measure.py": "ff1ae641f70752d181dfb2dc2fbcbedc713dcaf456150a38fc3064c1f6bb91db",
+        "model/drums_fx.py": "9c4eebbd42eeb591a22c2a617d47e26734b978f686713ca91c9b78c2c3b27d1d",
+        "model/voice_fx.py": "876b31f280fd3ef453228c2bb74384325a09b4d7ecb8261eca7cf2d6cec2e46c",
+        "model/synth_top_model.py": "144ac659b899e243a1cfcf0c5ee091b096052acc18c2e5ca7246cd7678e049f4",
+        "audition/patches.py": "37c1a7c89c1e2bbe7d1aafb4ed7fa4b664e47522e11c68994dc575de63a97fb7",
+        "rtl-sketch/verify_synth_top.py": "259d151436fb22b41067fc37b30f8b5a6342d5f160db956a016ab2aa0f28aaba",
+        "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
+        "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+        "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+        "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
+        "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+        "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+        "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+        "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+        "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+        "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202"
+      },
+      "scored_audio_artifact_sha256": "4aec40e813ad01f5be953c3e798475d4e2a81e52d9205321c6ab8b768ef684f1"
+    },
+    "python": "3.12.3",
+    "run_at": "2026-09-26T23:03:59Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:9c4eebbd42eeb591",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:78de333e7ecb2d6f",
+      "tools/run_case.py": "sha256:679a787be5fd58fd",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
+      "decoded:E1A:body": "sha256:4610b4ed0f661e6b0155ce2e093144e4a140a2b0dcac12ca8f927bf7b9519bb0",
+      "decoded:E1A:drum-mix": "sha256:cd7de05ddd849daf5edeea1896a54c50664707531cb84652b15a4a4562278923",
+      "decoded:E1A:mix": "sha256:2b0ba80343cad4825d4dc92da1b30dc423a2a928285053750b189a72e81ed94d",
+      "decoded:E1A:stop:BD": "sha256:38551fd01dc56f9c2286576de169a04326f0f269635c79510fc46d936b23914a",
+      "decoded:E1A:stop:CB": "sha256:f5f6131bf0eb4955e0c66480cfea7ad4c624b585f91d9b166e3728de194a523d",
+      "decoded:E1A:stop:CH": "sha256:25421dcfbfc84e9258425a30a0ab0b99c8f0ccae3dace5be488001b7db6618fc",
+      "decoded:E1A:stop:CP": "sha256:6e3ae4d0be08d71020708a505ba19477699832ff099ee94b1a73ecacd61da0e7",
+      "decoded:E1A:stop:HT": "sha256:28887ed8e653d9896088cbbdb9954da211c65005ef2c9d4045ad46c46ac2333d",
+      "decoded:E1A:stop:LT": "sha256:297f35f3e327ecc7857086a950980e7341cb7b1fccb91c802f0f6d8afcba3112",
+      "decoded:E1A:stop:OH": "sha256:e1bc5805f8ff065167b7f5a32abfe22418e0de7fc51f5cbb1db7e0a9f5d02199",
+      "decoded:E1A:stop:SD": "sha256:40e55b997ef904f54b185f600dd0944cad6610863c1a8dd67042073c3dbcd02a",
+      "decoded:E1A:voice": "sha256:30b70ecca71744390774ddaa3d4364be585f804c08d918b46f1805e0136334ed",
+      "schedule:E1A:body": "sha256:c89af577d0048e0348154935f69d290dee8673e60c5faf141b71d15a3bd542e9",
+      "schedule:E1A:drum-mix": "sha256:1325ed2eea113aed86cd74ead9236e28b317239e24bac49b45aa594ef881d88f",
+      "schedule:E1A:mix": "sha256:826b4917c03431b8397931130e40b0981cc2bd974b9af7f48376e3d29c26c70a",
+      "schedule:E1A:stop:BD": "sha256:92b45dc043ca5ba83e4f90d683de2496a9e3d92494e738106c0ceb0a38a03acf",
+      "schedule:E1A:stop:CB": "sha256:eedd1f8c4040a3b4b64a882627e5deb46994217674a7f24078e520378cd84557",
+      "schedule:E1A:stop:CH": "sha256:d96525a348ddf0558a76d063a12f8e0c36517c1258bc4a1e13d5186fa03ea1e7",
+      "schedule:E1A:stop:CP": "sha256:d4ae5b45e64e56a9889c3b50e5608a32cc5c93067b2093a7605edddae070d0f6",
+      "schedule:E1A:stop:HT": "sha256:427d36137ddd0ec8acb0838586c0b81050d64afbdb1911b301418d1047db556b",
+      "schedule:E1A:stop:LT": "sha256:ff62648f73175e6691c080fb62fd601222165f1ba1b6efaf851cfdec560c6070",
+      "schedule:E1A:stop:OH": "sha256:4f0075042e9b2e20d7998c21dda32842331806ac9256a6b982e8c67446668b5d",
+      "schedule:E1A:stop:SD": "sha256:a4b4fd19646676512de1f38cd635c2e3425961c0b8c4c657c209d4a4b9b45e0d",
+      "schedule:E1A:voice": "sha256:28df90af67114503f9b996e48f4adf5e4323b46a9308f0049a8f7b8df2e04a45"
+    },
+    "artefacts": {
+      "mix": "docs/scorecard/ensemble-e1a/rtl/E1A-mix-i2s.wav",
+      "verification:body": "build/ensemble-E1A/body.txt",
+      "verification:drum-mix": "build/ensemble-E1A/drum-mix.txt",
+      "verification:mix": "build/ensemble-E1A/mix.txt",
+      "verification:stop:BD": "build/ensemble-E1A/stop-BD.txt",
+      "verification:stop:CB": "build/ensemble-E1A/stop-CB.txt",
+      "verification:stop:CH": "build/ensemble-E1A/stop-CH.txt",
+      "verification:stop:CP": "build/ensemble-E1A/stop-CP.txt",
+      "verification:stop:HT": "build/ensemble-E1A/stop-HT.txt",
+      "verification:stop:LT": "build/ensemble-E1A/stop-LT.txt",
+      "verification:stop:OH": "build/ensemble-E1A/stop-OH.txt",
+      "verification:stop:SD": "build/ensemble-E1A/stop-SD.txt",
+      "verification:voice": "build/ensemble-E1A/voice.txt"
+    },
+    "outcome_code": 0,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "fixed_model_comparison": {
+    "twin_engine": "fixed-model",
+    "twin_source_commit": "d42ac140",
+    "twin_analysis_run": "run_case@1ce265479a2c + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T11:53:40Z",
+    "twin_sha256": "414188ebcc7adc287001b55e127b80ef45af310e84a0ad7e9e9e0f239993ecb1",
+    "fixed_model_state": "pass",
+    "fixed_model_worst": 0.1958,
+    "integrated_rtl_state": "pass",
+    "integrated_rtl_worst": 0.1958,
+    "engines_agree_on_state": true,
+    "metrics": {
+      "Event timing": {
+        "integrated_rtl": 1.9583,
+        "fixed_model": 1.9583,
+        "units": "ms",
+        "tolerance": 10.0
+      },
+      "bus balance": {
+        "integrated_rtl": 0.0,
+        "fixed_model": 0.0,
+        "units": "dB",
+        "tolerance": 0.5
+      },
+      "output artifacts": {
+        "integrated_rtl": 0.0,
+        "fixed_model": 0.0,
+        "units": "% of samples",
+        "tolerance": 0.01
+      }
+    },
+    "per_stop_event_timing": {
+      "BD": {
+        "integrated_rtl_ms": 1.9583,
+        "fixed_model_ms": 1.9583,
+        "difference_ms": 0.0
+      },
+      "CB": {
+        "integrated_rtl_ms": 0.6458,
+        "fixed_model_ms": 0.7292,
+        "difference_ms": -0.0834
+      },
+      "CH": {
+        "integrated_rtl_ms": 0.4583,
+        "fixed_model_ms": 0.5417,
+        "difference_ms": -0.0834
+      },
+      "CP": {
+        "integrated_rtl_ms": 1.2083,
+        "fixed_model_ms": 0.8542,
+        "difference_ms": 0.3541
+      },
+      "HT": {
+        "integrated_rtl_ms": 0.3333,
+        "fixed_model_ms": 0.3333,
+        "difference_ms": 0.0
+      },
+      "LT": {
+        "integrated_rtl_ms": 0.0625,
+        "fixed_model_ms": 0.0625,
+        "difference_ms": 0.0
+      },
+      "OH": {
+        "integrated_rtl_ms": 0.625,
+        "fixed_model_ms": 0.4167,
+        "difference_ms": 0.2083
+      },
+      "SD": {
+        "integrated_rtl_ms": 1.3125,
+        "fixed_model_ms": 1.3125,
+        "difference_ms": 0.0
+      }
+    },
+    "worst_per_stop_difference_ms": 0.3541,
+    "per_stop_note": "Both engines measure each stop's onset against the frame that stop's register write was applied in -- the intended frame for the model, the frame the CS_N pin predicted for the chip -- so an agreement here says the chip places the onset the same number of frames after the write, and says nothing about the link's own delivery latency. That is recorded separately in diagnostics.host_to_register_latency_frames.",
+    "twin_kept_at": "docs/scorecard/ensemble-e1a/rtl/E1A-fixed-model-twin.json"
+  },
+  "scorecard_state": "pass",
+  "scorecard_reason": ""
 }

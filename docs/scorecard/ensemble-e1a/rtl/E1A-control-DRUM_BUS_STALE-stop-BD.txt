@@ -1,0 +1,23 @@
+verify_synth_top: 302 writes over the pins (84 voice, 218 drum), 111220 frames after the last
+verify_synth_top: ENSEMBLE E1A part stop:BD: patch 01-bass-classic, sparse groove, 124 BPM, 2 bars, 6.000 s (288000 frames), no limiter
+verify_synth_top: E1A ensemble gains: vol=0, dvol=14746, bvol=14746; 8 voice notes and 10 drum hits over 1 stop(s): BD
+verify_synth_top: selected legacy single-rate waveform; compile defines: INJECT_BUG_DRUM_BUS_STALE
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 302 writes sent, 288026 frames, 288025 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 302, writes drained 302, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 288026 frames, MISSING in 0, worst strobe cycle 113 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 76d246f-dirty, outdir /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/control-DRUM_BUS_STALE-timing/rtl-stop-BD; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: E1A ensemble part stop:BD: register schedule from the CS_N pin, 10 raises; worst host-to-register latency +29 frame(s) (+0.604 ms) on BD at intended frame 25626
+verify_synth_top: ensemble schedule written to /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/control-DRUM_BUS_STALE-timing/stop-BD-schedule.json
+verify_synth_top: ensemble schedule sha256 92b45dc043ca5ba83e4f90d683de2496a9e3d92494e738106c0ceb0a38a03acf
+verify_synth_top: writes landed in frames 2..176804; modelling 288025 frames
+verify_synth_top: decoded I2S WAV written to /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/control-DRUM_BUS_STALE-timing/stop-BD.wav
+verify_synth_top: decoded I2S WAV sha256 391167b7d32f569fa30f8db4e558c9555f93eedb7a90e4ac39fb1ef3cf2c93b6
+verify_synth_top: model peak |sample| 10360 of 32768 (0 frames at the rail); drums |dmix| max 2751, |body| max 23020, DFILT engaged in 0 frames
+verify_synth_top: FAIL -- of 288025 decoded I2S periods: 196370 differ from the model, 0 have L != R, 0 have a slot that is not 32 BCLK
+  first wire mismatch at period 2425: model 1254, wire 0, error -1254 LSB
+  the core's own sample stream: 196370 of 288026 frames differ from the model; first at frame 2424: model 1254, core 0
+  the core is already wrong: the defect is upstream of the serialiser
+verify_synth_top: negative control DRUM_BUS_STALE CAUGHT (comparison failed as required)

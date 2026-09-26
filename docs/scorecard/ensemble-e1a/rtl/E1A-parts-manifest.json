@@ -1,0 +1,81 @@
+{
+ "case_id": "E1A",
+ "engine": "integrated-rtl",
+ "parts": {
+  "body": {
+   "decoded_i2s_wav_bytes": 576110,
+   "decoded_i2s_wav_sha256": "4610b4ed0f661e6b0155ce2e093144e4a140a2b0dcac12ca8f927bf7b9519bb0",
+   "report_sha256": "84723775244177375c0a9124eeed7f0e435ca483bc632332d145d6a93be5289e",
+   "schedule_sha256": "c89af577d0048e0348154935f69d290dee8673e60c5faf141b71d15a3bd542e9"
+  },
+  "drum-mix": {
+   "decoded_i2s_wav_bytes": 576110,
+   "decoded_i2s_wav_sha256": "cd7de05ddd849daf5edeea1896a54c50664707531cb84652b15a4a4562278923",
+   "report_sha256": "143a10f2a2f2d6354a37acd1760460b6c754494f0b78a7d68527bce01c15d20f",
+   "schedule_sha256": "1325ed2eea113aed86cd74ead9236e28b317239e24bac49b45aa594ef881d88f"
+  },
+  "mix": {
+   "decoded_i2s_wav_bytes": 576110,
+   "decoded_i2s_wav_sha256": "2b0ba80343cad4825d4dc92da1b30dc423a2a928285053750b189a72e81ed94d",
+   "report_sha256": "7d3e3e237a22a54f7be3df84ae14ac53cfaab507f094d669c72ecb1534189b06",
+   "schedule_sha256": "826b4917c03431b8397931130e40b0981cc2bd974b9af7f48376e3d29c26c70a"
+  },
+  "stop-BD": {
+   "decoded_i2s_wav_bytes": 576094,
+   "decoded_i2s_wav_sha256": "38551fd01dc56f9c2286576de169a04326f0f269635c79510fc46d936b23914a",
+   "report_sha256": "b7df2c081df031cf719184874200dc0af376e440edd34017c0e45fb89addaef0",
+   "schedule_sha256": "92b45dc043ca5ba83e4f90d683de2496a9e3d92494e738106c0ceb0a38a03acf"
+  },
+  "stop-CB": {
+   "decoded_i2s_wav_bytes": 576090,
+   "decoded_i2s_wav_sha256": "f5f6131bf0eb4955e0c66480cfea7ad4c624b585f91d9b166e3728de194a523d",
+   "report_sha256": "c9b8e1dfa230c5cc82716e21eb43e83a01fc953edabdc63b546aeffd0916f82d",
+   "schedule_sha256": "eedd1f8c4040a3b4b64a882627e5deb46994217674a7f24078e520378cd84557"
+  },
+  "stop-CH": {
+   "decoded_i2s_wav_bytes": 576094,
+   "decoded_i2s_wav_sha256": "25421dcfbfc84e9258425a30a0ab0b99c8f0ccae3dace5be488001b7db6618fc",
+   "report_sha256": "a4a552cbaf3f661e6088054aae53e56f66eb1175fc4625662378e3277aa0af03",
+   "schedule_sha256": "d96525a348ddf0558a76d063a12f8e0c36517c1258bc4a1e13d5186fa03ea1e7"
+  },
+  "stop-CP": {
+   "decoded_i2s_wav_bytes": 576090,
+   "decoded_i2s_wav_sha256": "6e3ae4d0be08d71020708a505ba19477699832ff099ee94b1a73ecacd61da0e7",
+   "report_sha256": "0e968296c9d2880b561af27ce9afedc8920b0faf7e8eb7db0315b9d64c3544b3",
+   "schedule_sha256": "d4ae5b45e64e56a9889c3b50e5608a32cc5c93067b2093a7605edddae070d0f6"
+  },
+  "stop-HT": {
+   "decoded_i2s_wav_bytes": 576092,
+   "decoded_i2s_wav_sha256": "28887ed8e653d9896088cbbdb9954da211c65005ef2c9d4045ad46c46ac2333d",
+   "report_sha256": "2c34262225202b95913b37ec8c0a0f5f278e8786274751ba40c7879473eff85d",
+   "schedule_sha256": "427d36137ddd0ec8acb0838586c0b81050d64afbdb1911b301418d1047db556b"
+  },
+  "stop-LT": {
+   "decoded_i2s_wav_bytes": 576094,
+   "decoded_i2s_wav_sha256": "297f35f3e327ecc7857086a950980e7341cb7b1fccb91c802f0f6d8afcba3112",
+   "report_sha256": "392bbac58b7a208aaeb57a824b76709ed91001224359219dddd38f453a7b4870",
+   "schedule_sha256": "ff62648f73175e6691c080fb62fd601222165f1ba1b6efaf851cfdec560c6070"
+  },
+  "stop-OH": {
+   "decoded_i2s_wav_bytes": 576090,
+   "decoded_i2s_wav_sha256": "e1bc5805f8ff065167b7f5a32abfe22418e0de7fc51f5cbb1db7e0a9f5d02199",
+   "report_sha256": "45c0a4f8e04b5704d267af5b2ffdb4fa14a082be343ecdb6dd0c4e7dfa1b6f7b",
+   "schedule_sha256": "4f0075042e9b2e20d7998c21dda32842331806ac9256a6b982e8c67446668b5d"
+  },
+  "stop-SD": {
+   "decoded_i2s_wav_bytes": 576090,
+   "decoded_i2s_wav_sha256": "40e55b997ef904f54b185f600dd0944cad6610863c1a8dd67042073c3dbcd02a",
+   "report_sha256": "53ef0e2d2ad88d7df1284da323777eb0aeb02e55ae86e851c9c9a6432694815c",
+   "schedule_sha256": "a4b4fd19646676512de1f38cd635c2e3425961c0b8c4c657c209d4a4b9b45e0d"
+  },
+  "voice": {
+   "decoded_i2s_wav_bytes": 576110,
+   "decoded_i2s_wav_sha256": "30b70ecca71744390774ddaa3d4364be585f804c08d918b46f1805e0136334ed",
+   "report_sha256": "fb126851d2cc4db26e37e930ade2b0de325e0a3eb75530c3eef5e987c5ecdfb8",
+   "schedule_sha256": "28df90af67114503f9b996e48f4adf5e4323b46a9308f0049a8f7b8df2e04a45"
+  }
+ },
+ "regenerate": "tools/score_ensemble_i2s.py --case E1A --simulator verilator --jobs 2",
+ "simulator": "verilator",
+ "why": "The twelve per-part verification reports and pin-predicted register schedules that produced docs/scorecard/results/E1A.json, plus the DRUM_BUS_STALE control. The decoded I2S WAVs themselves are 576 KB each and are NOT committed -- their sha256 is here and in each report, and `tools/score_ensemble_i2s.py --case E1A` re-derives them. Only the mix WAV the record scores is kept, as E1A-mix-i2s.wav."
+}

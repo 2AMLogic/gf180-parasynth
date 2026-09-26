@@ -119,6 +119,14 @@ def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _repo_rel(path: pathlib.Path) -> str:
+    """A path a later reader can actually open, or the absolute one said plainly.
+
+    An artefact list holding `./mix.txt` is worse than one holding nothing: it
+    looks like a path and resolves somewhere else."""
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
+
+
 def read_wav_int16(path: pathlib.Path) -> np.ndarray:
     """The decoded I2S words back as integers, mono, at 48 kHz, or Refused."""
     try:
@@ -325,37 +333,96 @@ def measure(case_id: str, evidence: dict) -> tuple[dict, dict]:
     return metrics, diagnostics
 
 
-def control_report(case_id: str, clean_mix: np.ndarray, outdir: pathlib.Path,
-                   *, simulator: str, timeout_s: float) -> dict:
+def _reusable_control_run(paths: dict, case_id: str, part: str) -> bool:
+    """An injected run already on disk that is THIS case, THIS part and THIS
+    mutation, and that turned the bench red. A control whose report does not
+    say all four is re-run: reuse must never be able to launder a stale or
+    foreign result into a fired control."""
+    if not (paths["report"].is_file() and paths["wav"].is_file()
+            and paths["schedule"].is_file()):
+        return False
+    text = paths["report"].read_text()
+    return (f"ENSEMBLE {case_id} part {part}:" in text
+            and f"INJECT_BUG_{CONTROL_INJECT}" in text
+            and f"negative control {CONTROL_INJECT} CAUGHT" in text)
+
+
+def _injected_event_timing(case_id: str, stop: str, outdir: pathlib.Path, *,
+                           simulator: str, timeout_s: float, reuse: bool = False) -> dict:
+    """Event timing on one stop's row with the mutation compiled in.
+
+    The run FAILS by construction, so it is not validated as evidence -- the
+    decoded WAV and the schedule sidecar are both written before the comparison
+    is made, and all that is asked of them here is whether the case's own
+    estimator can see the mutation. That is a question about the METRIC, not
+    about the chip."""
+    part = f"stop:{stop}"
+    paths = part_paths(outdir, part)
+    if reuse and _reusable_control_run(paths, case_id, part):
+        status = 0
+    else:
+        run = run_part(case_id, part, outdir, simulator=simulator,
+                       inject=CONTROL_INJECT, timeout_s=timeout_s, expect_fail=True)
+        paths, status = run["paths"], run["status"]
+    if not (paths["wav"].is_file() and paths["schedule"].is_file()):
+        return {"stop": stop, "measured": False,
+                "why": "the injected run produced no decoded WAV or schedule"}
+    schedule = json.loads(paths["schedule"].read_text())
+    rows = schedule.get("stops", {}).get(stop) or []
+    if not rows:
+        return {"stop": stop, "measured": False, "why": "no raise in the injected schedule"}
+    samples = read_wav_int16(paths["wav"]).astype(np.float64)
+    scheduled = [int(row["i2s_period"]) / SR for row in rows]
+    est = rc.worst_event_offset_ms(samples / 32768.0, SR, scheduled)
+    return {"stop": stop, "measured": True, "valid": bool(est.ok),
+            "offset_ms": None if not est.ok else round(float(est.value), 4),
+            "why": "" if est.ok else f"{est.reason} {est.detail}",
+            "exit_status": status}
+
+
+def control_report(case_id: str, evidence: dict, metrics: dict, outdir: pathlib.Path,
+                   *, simulator: str, timeout_s: float, reuse: bool = False) -> dict:
     """The DRUM_BUS_STALE control, and what it is and is not sensitive to.
 
-    The mutation makes the master mix read the previous frame's drum buses.
-    Two separate questions, answered separately because they have different
-    answers: does the bench's bit-exact wire-versus-model comparison catch it
-    (it must, and that is the precondition every metric here rests on), and do
-    the case's three metrics move (they largely do not -- a one-frame shift of
-    both drum buses is 20.8 us against a 10 ms event-timing tolerance, and it
-    moves the mix and the stems together). Saying the second out loud is the
-    point: a control that is reported as protecting a metric it cannot see is
-    the false green docs/verification-rules.md exists to prevent."""
+    The mutation makes the master mix read the PREVIOUS frame's drum buses --
+    the mix-timing hazard issues #82/#85 raised. Two questions, asked and
+    answered separately because they have different answers:
+
+      1. does the bench's bit-exact wire-versus-model comparison catch it? It
+         must. Every number in this record rests on that comparison being
+         discriminating on THIS stimulus, so a run where it does not fire makes
+         the whole anchor not-evidence and `main` refuses.
+      2. do the case's three METRICS move? Measured here rather than asserted,
+         by re-running the worst stop's row with the mutation compiled in and
+         asking the case's own estimator. A control reported as protecting a
+         metric it cannot actually see is the false green
+         docs/verification-rules.md exists to prevent -- and reasoning about
+         whether a one-frame bus shift clears a 10 ms tolerance is exactly the
+         kind of reasoning this repository has been wrong about before."""
     part = f"control-{CONTROL_INJECT}"
-    run = run_part(case_id, "mix", outdir / part, simulator=simulator,
-                   inject=CONTROL_INJECT, timeout_s=timeout_s, expect_fail=True)
-    text = run["paths"]["report"].read_text()
-    caught = (run["status"] == 0
+    clean_mix = evidence["mix"]["samples"]
+    paths = part_paths(outdir / part, "mix")
+    if reuse and _reusable_control_run(paths, case_id, "mix"):
+        status = 0
+    else:
+        run = run_part(case_id, "mix", outdir / part, simulator=simulator,
+                       inject=CONTROL_INJECT, timeout_s=timeout_s, expect_fail=True)
+        paths, status = run["paths"], run["status"]
+    text = paths["report"].read_text()
+    caught = (status == 0
               and f"negative control {CONTROL_INJECT} CAUGHT" in text
               and "FAIL -- of " in text)
     out = {"inject": CONTROL_INJECT, "part": "mix", "expect": "the bench turns red",
-           "caught": bool(caught), "exit_status": run["status"],
-           "report": str(run["paths"]["report"].relative_to(ROOT))
-                     if run["paths"]["report"].is_relative_to(ROOT) else str(run["paths"]["report"]),
+           "caught": bool(caught), "exit_status": status,
+           "report": str(paths["report"].relative_to(ROOT))
+                     if paths["report"].is_relative_to(ROOT) else str(paths["report"]),
            "report_sha256": hashlib.sha256(text.encode()).hexdigest()}
     mism = re.search(r"FAIL -- of (\d+) decoded I2S periods: (\d+) differ from the model", text)
     if mism:
         out["periods"] = int(mism.group(1))
         out["periods_differing_from_the_model"] = int(mism.group(2))
-    if run["paths"]["wav"].is_file():
-        injected = read_wav_int16(run["paths"]["wav"]).astype(np.float64)
+    if paths["wav"].is_file():
+        injected = read_wav_int16(paths["wav"]).astype(np.float64)
         n = min(len(injected), len(clean_mix))
         delta = injected[:n] - clean_mix[:n]
         out["audio_vs_clean_mix"] = {
@@ -366,22 +433,88 @@ def control_report(case_id: str, clean_mix: np.ndarray, outdir: pathlib.Path,
             "rail_percent_clean": round(100.0 * rc.am.clipped_fraction(clean_mix[:n], 32767.0), 6),
             "rms_ratio_db": (round(20.0 * math.log10(rc.am.rms(injected[:n]) / rc.am.rms(clean_mix[:n])), 4)
                              if rc.am.rms(clean_mix[:n]) > 0 else None)}
+    # ---- and what the case's own metrics do about it -----------------------
+    timing = metrics.get("Event timing", {})
+    stop = timing.get("worst_stop")
+    sensitivity = {"bus balance": {
+        "clean_db": metrics.get("bus balance", {}).get("value"),
+        "tolerance_db": metrics.get("bus balance", {}).get("tolerance"),
+        "injected_mix_rms_shift_db": out.get("audio_vs_clean_mix", {}).get("rms_ratio_db"),
+        "note": ("the mutation shifts BOTH drum buses, and the stems are summed through "
+                 "the same shift, so an RMS ratio is close to blind to it by construction")},
+        "output artifacts": {
+            "clean_percent": metrics.get("output artifacts", {}).get("value"),
+            "injected_percent": out.get("audio_vs_clean_mix", {}).get("rail_percent_injected"),
+            "tolerance_percent": metrics.get("output artifacts", {}).get("tolerance")}}
+    if stop:
+        injected_timing = _injected_event_timing(
+            case_id, stop, outdir / f"{part}-timing", simulator=simulator,
+            timeout_s=timeout_s, reuse=reuse)
+        injected_timing["clean_ms"] = timing.get("value")
+        injected_timing["tolerance_ms"] = timing.get("tolerance")
+        if injected_timing.get("offset_ms") is not None and timing.get("value") is not None:
+            injected_timing["delta_ms"] = round(
+                float(injected_timing["offset_ms"]) - float(timing["value"]), 4)
+            injected_timing["moves_the_metric_past_its_tolerance"] = (
+                abs(float(injected_timing["offset_ms"])) > float(timing["tolerance"]))
+        sensitivity["Event timing"] = injected_timing
+    out["what_the_case_metrics_do_about_it"] = sensitivity
+    out["where_the_evidence_comes_from"] = (
+        "the bit-exact wire-versus-model comparison, which this mutation fails on "
+        f"{out.get('periods_differing_from_the_model')} of {out.get('periods')} periods. "
+        "The three scorecard metrics are coarse next to that by design -- they are "
+        "tolerances on a sound, not on a bus schedule -- so this control is reported as "
+        "protecting the comparison the anchor rests on, and only as far as measured for "
+        "each metric above.")
     return out
 
 
-def fixed_model_comparison(case_id: str, record: dict, twin_path: pathlib.Path) -> dict | None:
+def model_per_stop_event_timing(case_id: str) -> dict:
+    """The SAME estimator on the SAME stops, rendered by the fixed model.
+
+    The committed `fixed-model` record reports only the WORST stop, so "1.9583
+    on both engines" on its own is one number agreeing with one number -- and
+    two engines that place every onset a constant number of frames after the
+    register write will produce that agreement whether or not anything else
+    about the mix is right. This re-renders the model's per-stop rows (a
+    Python-only render, tens of seconds) so the comparison is eight numbers
+    against eight, which is a claim the per-stop table can actually falsify."""
+    patch, dense = rc.ENSEMBLE_CASES[case_id]
+    render = rc.render_ensemble(patch, dense)
+    out = {}
+    for stop, (signal, scheduled) in sorted(render["per_stop"].items()):
+        est = rc.worst_event_offset_ms(signal / 32768.0, render["sr"], scheduled)
+        out[stop] = {"scheduled": len(scheduled), "valid": bool(est.ok),
+                     "offset_ms": None if not est.ok else round(float(est.value), 4)}
+    return out
+
+
+def fixed_model_comparison(case_id: str, record: dict, *candidates: pathlib.Path) -> dict | None:
     """The `fixed-model` twin this anchor is about to stand next to, compared
     metric by metric and SAID OUT LOUD. Without this the RTL record simply
     replaces the model's at the same path and a disagreement between the two
-    engines would leave no trace at all."""
-    if not twin_path.is_file():
+    engines would leave no trace at all.
+
+    `candidates` are searched in order, which is what makes a SECOND run of this
+    tool still carry the comparison: the first candidate is the board's result
+    path (which by then holds the previous anchor, not the model), and the
+    second is the copy this tool kept the first time. A re-run that silently
+    dropped the cross-engine comparison because it had already succeeded once
+    would be the worst kind of regression -- invisible, and only in the record."""
+    twin, twin_path = None, None
+    for candidate in candidates:
+        if not candidate or not candidate.is_file():
+            continue
+        try:
+            held = json.loads(candidate.read_text())
+        except json.JSONDecodeError:
+            continue
+        if held.get("engine") == "integrated-rtl":
+            continue                         # an earlier anchor, not the model twin
+        twin, twin_path = held, candidate
+        break
+    if twin is None:
         return None
-    try:
-        twin = json.loads(twin_path.read_text())
-    except json.JSONDecodeError:
-        return None
-    if twin.get("engine") == "integrated-rtl":
-        return None                          # an earlier anchor, not the model twin
     case = next(c for c in rc.load_cases() if c["case_id"] == case_id)
     twin_verdict = scorecard.evaluate(case, twin)
     rtl_verdict = scorecard.evaluate(case, record)
@@ -392,7 +525,20 @@ def fixed_model_comparison(case_id: str, record: dict, twin_path: pathlib.Path) 
             "integrated_rtl": metric.get("value") if metric.get("valid") else None,
             "fixed_model": other.get("value") if other.get("valid") else None,
             "units": metric.get("units"), "tolerance": metric.get("tolerance")}
+    rtl_stops = (record.get("diagnostics") or {}).get("per_stop_event_timing") or {}
+    model_stops = model_per_stop_event_timing(case_id)
+    per_stop = {}
+    for stop in sorted(set(rtl_stops) | set(model_stops)):
+        rtl = (rtl_stops.get(stop) or {}).get("offset_ms")
+        model = (model_stops.get(stop) or {}).get("offset_ms")
+        per_stop[stop] = {"integrated_rtl_ms": rtl, "fixed_model_ms": model,
+                          "difference_ms": (None if rtl is None or model is None
+                                            else round(float(rtl) - float(model), 4))}
+    worst_difference = max((abs(row["difference_ms"]) for row in per_stop.values()
+                           if row["difference_ms"] is not None), default=None)
     return {"twin_engine": twin.get("engine"),
+            "twin_read_from": str(twin_path.relative_to(ROOT)
+                                  if twin_path.is_relative_to(ROOT) else twin_path),
             "twin_source_commit": twin.get("source_commit"),
             "twin_analysis_run": twin.get("analysis_run"),
             "twin_sha256": _sha256(twin_path),
@@ -403,11 +549,21 @@ def fixed_model_comparison(case_id: str, record: dict, twin_path: pathlib.Path) 
             "integrated_rtl_worst": (None if rtl_verdict["worst"] is None
                                      else round(rtl_verdict["worst"], 4)),
             "engines_agree_on_state": twin_verdict["state"] == rtl_verdict["state"],
-            "metrics": per_metric}
+            "metrics": per_metric,
+            "per_stop_event_timing": per_stop,
+            "worst_per_stop_difference_ms": worst_difference,
+            "per_stop_note": (
+                "Both engines measure each stop's onset against the frame that stop's "
+                "register write was applied in -- the intended frame for the model, the "
+                "frame the CS_N pin predicted for the chip -- so an agreement here says "
+                "the chip places the onset the same number of frames after the write, and "
+                "says nothing about the link's own delivery latency. That is recorded "
+                "separately in diagnostics.host_to_register_latency_frames.")}
 
 
 def build_record(case_id: str, evidence: dict, metrics: dict, diagnostics: dict,
-                 *, audio_rel: str, control: dict | None) -> dict:
+                 *, audio_rel: str, control: dict | None,
+                 outdir: pathlib.Path) -> dict:
     case = next(c for c in rc.load_cases() if c["case_id"] == case_id)
     commit = rc.source_commit()
     worktree = rc.worktree_state()
@@ -420,7 +576,7 @@ def build_record(case_id: str, evidence: dict, metrics: dict, diagnostics: dict,
     provenance = rc.provenance(
         inputs,
         {"mix": audio_rel,
-         **{f"verification:{name}": str(part_paths(pathlib.Path("."), name)["report"])
+         **{f"verification:{name}": _repo_rel(part_paths(outdir, name)["report"])
             for name in sorted(evidence)}},
         {"patch": schedule["patch"], "dense": schedule["dense"], "bpm": schedule["bpm"],
          "seconds": schedule["seconds"], "bus_gain": schedule["bus_gain"],
@@ -547,8 +703,9 @@ def main(argv=None) -> int:
     control = None
     if a.control:
         try:
-            control = control_report(a.case, evidence["mix"]["samples"], outdir,
-                                     simulator=a.simulator, timeout_s=a.timeout)
+            control = control_report(a.case, evidence, metrics, outdir,
+                                     simulator=a.simulator, timeout_s=a.timeout,
+                                     reuse=a.reuse)
         except Refused as exc:
             print(f"score_ensemble_i2s: REFUSED -- the negative control did not run: {exc}")
             return 2
@@ -562,6 +719,17 @@ def main(argv=None) -> int:
               f"periods differ from the model; audio differs in "
               f"{control.get('audio_vs_clean_mix', {}).get('samples_differing')} samples, "
               f"worst {control.get('audio_vs_clean_mix', {}).get('max_abs_difference_lsb')} LSB")
+        seen = control.get("what_the_case_metrics_do_about_it", {})
+        timing_seen = seen.get("Event timing", {})
+        print(f"score_ensemble_i2s: and what the CASE METRICS do about it -- Event timing on "
+              f"{timing_seen.get('stop')}: {timing_seen.get('clean_ms')} ms clean vs "
+              f"{timing_seen.get('offset_ms')} ms injected (tolerance "
+              f"{timing_seen.get('tolerance_ms')} ms, past it: "
+              f"{timing_seen.get('moves_the_metric_past_its_tolerance')}); bus balance RMS "
+              f"shift {seen.get('bus balance', {}).get('injected_mix_rms_shift_db')} dB of "
+              f"{seen.get('bus balance', {}).get('tolerance_db')} dB; rail "
+              f"{seen.get('output artifacts', {}).get('injected_percent')} % vs "
+              f"{seen.get('output artifacts', {}).get('clean_percent')} % clean")
     else:
         diagnostics["negative_control"] = {
             "inject": CONTROL_INJECT, "caught": None,
@@ -573,19 +741,23 @@ def main(argv=None) -> int:
     rc.write_wav16(audio, evidence["mix"]["samples"] / 32768.0, SR)
     audio_rel = str(audio.relative_to(ROOT))
     record = build_record(a.case, evidence, metrics, diagnostics,
-                          audio_rel=audio_rel, control=control)
+                          audio_rel=audio_rel, control=control, outdir=outdir)
     record["provenance"]["config"]["scored_audio_artifact_sha256"] = _sha256(audio)
 
     # ---- the fixed-model twin, preserved and compared -----------------------
-    comparison = fixed_model_comparison(a.case, record, out)
+    comparison = fixed_model_comparison(a.case, record, out, twin)
     if comparison is not None:
         twin.parent.mkdir(parents=True, exist_ok=True)
-        twin.write_text(out.read_text())
+        source = ROOT / comparison.pop("twin_read_from")
+        if source != twin:
+            twin.write_text(source.read_text())
         comparison["twin_kept_at"] = str(twin.relative_to(ROOT))
         record["fixed_model_comparison"] = comparison
         print(f"score_ensemble_i2s: the {comparison['twin_engine']} twin "
               f"({comparison['fixed_model_state']}, worst {comparison['fixed_model_worst']}) "
-              f"is kept at {comparison['twin_kept_at']}")
+              f"is kept at {comparison['twin_kept_at']}; worst per-stop event-timing "
+              f"difference between the engines {comparison['worst_per_stop_difference_ms']} ms "
+              f"over {len(comparison['per_stop_event_timing'])} stops")
     elif out.is_file():
         print(f"score_ensemble_i2s: {out.name} already holds an integrated-rtl record; "
               f"no fixed-model twin to preserve")
