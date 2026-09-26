@@ -269,3 +269,92 @@ def test_docker_argv_maps_host_paths_onto_themselves(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# metric provenance: the carried-forward pre-route number
+# --------------------------------------------------------------------------- #
+#
+# LibreLane's metrics are cumulative, so a key no later step updates survives into
+# the final payload looking like a fresh measurement.  In the halfslot run,
+# `timing__setup__ws__corner:nom_ss_125C_4v50` = -178.5 ns was written ONCE by step
+# 12 (OpenROAD.STAPrePNR, unplaced and unrouted, ideal clock) and is byte-identical
+# in every step after it.  Read naively it says the routed chip misses the slow
+# corner by more than two clock periods.  There is no routed slow corner in that run
+# at all.  These tests pin the discriminator.
+
+def _fake_run(tmp_path, steps):
+    """steps = [(dirname, metrics dict)] -- writes a minimal LibreLane run tree."""
+    for name, metrics in steps:
+        d = tmp_path / name
+        d.mkdir()
+        (d / "state_out.json").write_text(__import__("json").dumps({"metrics": metrics}))
+    return str(tmp_path)
+
+
+def test_metric_source_step_names_the_step_that_last_changed_a_key(tmp_path):
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5, "a": 1}),
+        ("30-openroad-stamidpnr", {"timing__setup__ws__corner:ss": -178.5, "a": 2}),
+        ("43-openroad-detailedrouting", {"timing__setup__ws__corner:ss": -178.5, "a": 2,
+                                         "route__drc_errors": 0}),
+    ])
+    src = cr.metric_source_step(run)
+    # carried forward unchanged for two steps -- still attributed to step 12
+    assert src["timing__setup__ws__corner:ss"] == "12-openroad-staprepnr"
+    assert src["a"] == "30-openroad-stamidpnr"
+    assert src["route__drc_errors"] == "43-openroad-detailedrouting"
+
+
+def test_post_route_keys_excludes_the_carried_forward_pre_route_corner(tmp_path):
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5}),
+        ("43-openroad-detailedrouting", {"timing__setup__ws__corner:ss": -178.5,
+                                         "route__drc_errors": 7}),
+    ])
+    post = cr.post_route_keys(run)
+    assert "route__drc_errors" in post
+    assert "timing__setup__ws__corner:ss" not in post
+
+
+def test_post_route_keys_is_empty_before_detailed_routing(tmp_path):
+    """A run that never reached the router has NOTHING post-route in it.
+
+    Returning anything here would let a placement-only run be reported as a route.
+    """
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5}),
+        ("27-openroad-globalplacement", {"design__instance__utilization": 0.73}),
+    ])
+    assert cr.post_route_keys(run) == set()
+
+
+def test_worst_setup_refuses_to_fall_back_to_the_nominal_corner(tmp_path):
+    """The whole point: NOT MEASURED must not become "fine".
+
+    `timing__setup__ws` is the nominal corner.  On the halfslot run it is +34 ns
+    while the only per-corner numbers present are pre-route.  A fallback would
+    report +34 as the design's worst slack.
+    """
+    import report_halfslot as rh
+    m = {"timing__setup__ws": 34.06, "timing__setup__ws__corner:ss": -178.5}
+    slack, why = rh.worst_setup(m, post=set())
+    assert slack is None
+    assert "after detailed routing" in why
+    # ...and with a post-route corner present it does report it
+    slack, corner = rh.worst_setup(m, post={"timing__setup__ws__corner:ss"})
+    assert (slack, corner) == (-178.5, "ss")
+
+
+def test_verdict_marks_an_unfinished_route_not_measured_rather_than_failed(tmp_path):
+    """NOT MEASURED and FAILED are different outcomes and must read differently."""
+    import report_halfslot as rh
+    m = {"design__instance__utilization": 0.73,
+         "design__instance__count__padcells": 754,
+         "timing__setup__ws": 34.06,
+         "timing__setup__ws__corner:nom_ss_125C_4v50": -178.5}
+    body = rh.verdict_section(m, post=set(), src={})
+    assert "*not measured*" in body
+    assert "NOT MEASURED is not FAILED" in body
+    # the pre-route -178.5 must not be presented as a failed post-route corner
+    assert "-178.500" not in body

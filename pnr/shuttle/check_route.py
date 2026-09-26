@@ -241,9 +241,9 @@ def bucket_of(inst: str) -> str:
 # under a "metrics" key.  There is no top-level metrics.json -- looking for one
 # (as collect-evidence.py's HEADLINE table does) finds nothing and reports nothing,
 # which is a silence that reads like "no violations".
-def read_metrics(run_dir: str) -> tuple[str, dict]:
-    """(step name, cumulative metrics) from the last step that recorded any."""
-    best = None
+def metrics_by_step(run_dir: str) -> list[tuple[str, dict]]:
+    """[(step name, cumulative metrics)] in step order, for steps that recorded any."""
+    out = []
     for name in sorted(os.listdir(run_dir)):
         if not name[:2].isdigit():
             continue
@@ -253,10 +253,57 @@ def read_metrics(run_dir: str) -> tuple[str, dict]:
         with open(p, encoding="utf-8") as f:
             payload = json.load(f)
         if payload.get("metrics"):
-            best = (name, payload["metrics"])
-    if best is None:
+            out.append((name, payload["metrics"]))
+    return out
+
+
+def read_metrics(run_dir: str) -> tuple[str, dict]:
+    """(step name, cumulative metrics) from the last step that recorded any."""
+    steps = metrics_by_step(run_dir)
+    if not steps:
         raise Refusal(f"no step under {run_dir} recorded metrics in state_out.json")
-    return best
+    return steps[-1]
+
+
+# LibreLane's metrics are CUMULATIVE: every step's state_out.json carries forward every
+# key any earlier step set.  So a key the flow stopped updating stays in the final
+# payload, looking exactly like a fresh measurement.
+#
+# THIS IS NOT HYPOTHETICAL AND IT NEARLY SHIPPED FROM THIS DIRECTORY.  In the run this
+# checker was written against, `timing__setup__ws__corner:nom_ss_125C_4v50` reads
+# -178.5 ns in the LAST step's metrics.  It was written ONCE, by step 12,
+# `OpenROAD.STAPrePNR` -- an unplaced, unrouted netlist with an ideal clock -- and is
+# byte-identical in every step after it, because the mid-PnR STA steps update only the
+# un-suffixed `timing__setup__ws`.  Read naively, that run reports a post-route slow
+# corner missing by more than two clock periods.  It has no post-route slow corner at
+# all.  Reporting one would be a fabricated measurement with a real key next to it.
+def metric_source_step(run_dir: str) -> dict:
+    """{metric key: name of the last step whose metrics CHANGED that key}."""
+    src: dict[str, str] = {}
+    prev: dict = {}
+    for name, m in metrics_by_step(run_dir):
+        for k, v in m.items():
+            if k not in prev or prev[k] != v:
+                src[k] = name
+        prev = m
+    return src
+
+
+ROUTE_STEP = re.compile(r"detailedrouting", re.I)
+
+
+def post_route_keys(run_dir: str) -> set:
+    """Keys last written by a step that ran AFTER detailed routing began.
+
+    Empty if the run has not reached detailed routing -- in which case nothing in it
+    is a post-route measurement and a caller must not present anything as one.
+    """
+    steps = [n for n, _ in metrics_by_step(run_dir)]
+    route_idx = max((i for i, n in enumerate(steps) if ROUTE_STEP.search(n)), default=None)
+    if route_idx is None:
+        return set()
+    after = set(steps[route_idx:])
+    return {k for k, s in metric_source_step(run_dir).items() if s in after}
 
 
 def verify(run_dir: str, census: dict, min_pads: int, expect_ws_ip: int) -> int:

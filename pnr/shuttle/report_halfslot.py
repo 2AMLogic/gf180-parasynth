@@ -110,29 +110,38 @@ def area_section(m: dict) -> str:
     return "\n".join(lines)
 
 
-def worst_setup(m: dict) -> tuple[float, str]:
-    """(worst setup slack over every per-corner key, corner name).
+def worst_setup(m: dict, post: set) -> tuple[float | None, str]:
+    """(worst POST-ROUTE setup slack over the per-corner keys, corner name).
 
-    NOT `timing__setup__ws`: LibreLane records that for the run's nominal corner, and
-    on this design it is +34 ns while the slow corner is -178 ns.
+    ``(None, reason)`` when the run has no post-route per-corner slack. It is not
+    acceptable to fall back to `timing__setup__ws` there: that key is the *nominal*
+    corner, and falling back silently turns "we did not measure the slow corner" into
+    "the slow corner is fine". On the run this was written against the difference is
+    +34 ns against -178 ns.
     """
     per = {k.split("corner:")[1]: v for k, v in m.items()
-           if k.startswith("timing__setup__ws__corner:")}
+           if k.startswith("timing__setup__ws__corner:") and k in post}
     if not per:
-        return m["timing__setup__ws"], "(nominal corner only)"
+        return None, "no per-corner setup slack was recorded after detailed routing"
     c = min(per, key=per.get)
     return per[c], c
 
 
-def timing_section(m: dict) -> str:
+def timing_section(m: dict, post: set, src: dict) -> str:
     if "timing__setup__ws" not in m:
         raise cr.Refusal("the run has no timing__setup__ws")
     lines = [
         f"Clock period {CLOCK_PERIOD_NS} ns (12.288 MHz). Slack in ns; "
-        "positive closes. `WNS` is the worst negative slack over the whole design.",
+        "positive closes.",
         "",
-        "| corner | setup WNS | hold WNS | implied min period |",
-        "|---|---:|---:|---:|",
+        "**The `written by` column is the point of this table.** LibreLane's metrics are "
+        "cumulative, so a per-corner key that no step has updated since synthesis is still "
+        "present in the final payload and reads exactly like a fresh measurement. A row "
+        "whose step is not a post-route one is **not a post-route number** and is marked "
+        "so; see §5.",
+        "",
+        "| corner | setup WNS | hold WNS | implied min period | written by | post-route? |",
+        "|---|---:|---:|---:|---|---|",
     ]
     any_corner = False
     for c in CORNERS:
@@ -144,16 +153,42 @@ def timing_section(m: dict) -> str:
         h = m.get(hk)
         imp = CLOCK_PERIOD_NS - s
         bold = "**" if "ss_" in c else ""
+        fresh = "yes" if sk in post else "**NO — pre-route**"
         lines.append(f"| {bold}`{c}`{bold} | {bold}{s:+.3f}{bold} | "
-                     f"{('%+.3f' % h) if h is not None else '—'} | {imp:.2f} ns |")
+                     f"{('%+.3f' % h) if h is not None else '—'} | {imp:.2f} ns | "
+                     f"`{src.get(sk, '?')}` | {fresh} |")
     if not any_corner:
         raise cr.Refusal("the run recorded no per-corner setup slack")
-    worst_s, worst_c = worst_setup(m)
+    worst_s, worst_c = worst_setup(m, post)
+    if worst_s is None:
+        lines += [
+            "",
+            f"**This run has no post-route timing at any corner.** {worst_c}. The "
+            "un-suffixed `timing__setup__ws` reads "
+            f"**{m['timing__setup__ws']:+.3f} ns** and was written by "
+            f"`{src.get('timing__setup__ws', '?')}` — it is the **nominal corner only**, so "
+            "it is not the design's slack and must not be quoted as one. The per-corner "
+            "rows above are `OpenROAD.STAPrePNR`'s: an unplaced, unrouted netlist with an "
+            "ideal clock. The step that would produce real per-corner numbers is "
+            "`OpenROAD.STAPostPNR`, which runs after detailed routing with extracted "
+            "parasitics. This run has not reached it.",
+            "",
+            "So **the 12.288 MHz question is open**, in both directions: this page neither "
+            "shows the chip closing timing nor shows it failing to.",
+        ]
+        for label, key in [("setup TNS", "timing__setup__tns"),
+                           ("max-slew violations", "design__max_slew_violation__count"),
+                           ("max-cap violations", "design__max_cap_violation__count")]:
+            if key in m:
+                lines.append(f"\n- {label}: **{num(m[key], 3 if isinstance(m[key], float) else 0)}**"
+                             f" (`{key}`, written by `{src.get(key, '?')}`)")
+        return "\n".join(lines)
     worst_h = m.get("timing__hold__ws")
     lines += [
-        f"| **worst over all corners** | **{worst_s:+.3f}** | "
+        f"| **worst post-route corner** | **{worst_s:+.3f}** | "
         f"{('**%+.3f**' % worst_h) if worst_h is not None else '—'} | "
-        f"{CLOCK_PERIOD_NS - worst_s:.2f} ns |",
+        f"{CLOCK_PERIOD_NS - worst_s:.2f} ns | `{src.get(f'timing__setup__ws__corner:{worst_c}', '?')}` "
+        "| yes |",
         "",
         '"Implied min period" is `period − WNS`, an estimate from one run and not a '
         "closure sweep — the same caveat `docs/pnr-synth-top.md` §3.1 attaches to it.",
@@ -288,7 +323,7 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
-def verdict_section(m: dict) -> str:
+def verdict_section(m: dict, post: set, src: dict) -> str:
     """#33's question, answered from the metrics rather than from the narrative.
 
     Three independent conditions, each printed with the key it came from and each
@@ -299,24 +334,25 @@ def verdict_section(m: dict) -> str:
     util = m.get("design__instance__utilization")
     drc = m.get("route__drc_errors")
     pads = m.get("design__instance__count__padcells")
-    worst_s, worst_c = worst_setup(m)
+    worst_s, worst_c = worst_setup(m, post)
 
     checks = [
-        ("placed and routed inside the template's own die and core",
+        ("placed inside the template's own die and core",
          (util is not None and util < 1.0),
          f"`design__instance__utilization` = {util * 100:.2f} %" if util is not None
          else "no utilisation metric"),
         ("detailed router reports no violations",
          (drc == 0) if drc is not None else None,
-         f"`route__drc_errors` = {num(drc)}" if drc is not None
-         else "the run did not reach a completed detailed route"),
+         f"`route__drc_errors` = {num(drc)} (`{src.get('route__drc_errors', '?')}`)"
+         if drc is not None
+         else "the run has not completed a detailed route — no `route__drc_errors`"),
         ("a populated padframe (S2's own condition)",
          (pads is not None and pads > 0),
          f"`design__instance__count__padcells` = {num(pads)}" if pads is not None
          else "no padcell metric"),
-        (f"setup closes at every corner against {CLOCK_PERIOD_NS} ns",
-         worst_s >= 0,
-         f"worst `{worst_c}` = {worst_s:+.3f} ns"),
+        (f"setup closes post-route at every corner against {CLOCK_PERIOD_NS} ns",
+         None if worst_s is None else worst_s >= 0,
+         f"worst `{worst_c}` = {worst_s:+.3f} ns" if worst_s is not None else worst_c),
     ]
     lines = ["| condition | verdict | measured |", "|---|---|---|"]
     for label, ok, ev in checks:
@@ -336,10 +372,11 @@ def verdict_section(m: dict) -> str:
         for u in unknown:
             lines.append(f"\n- NOT MEASURED: {u}")
         lines.append(
-            "\nWhat this does *not* say is that the design is too big: see §4.1 — the cells "
-            "are inside the core with room left. A failure here is a claim about **this "
-            "configuration of this flow**, and the next step is to read which condition "
-            "failed, not to re-open the area question.")
+            "\n**NOT MEASURED is not FAILED**, and neither is evidence that the design is too "
+            "big: §4.1 shows the cells placed inside the core with room left. Every condition "
+            "above is a claim about **this run of this flow**. Read which condition is which "
+            "before re-opening the area question — and in particular do not read an unfinished "
+            "run as a negative result.")
     return "\n".join(lines)
 
 
@@ -377,11 +414,14 @@ def growth_section(m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
+# name -> (fn, what it is called with).  "prov" means (metrics, post_route_keys,
+# source_step_by_key); the provenance arguments exist so no section can print a
+# carried-forward pre-route metric as a post-route one.
 SECTIONS = {
-    "measured:verdict": verdict_section,
-    "measured:area": area_section,
-    "measured:timing": timing_section,
-    "measured:padframe": padframe_section,
+    "measured:verdict": (verdict_section, "prov"),
+    "measured:area": (area_section, "metrics"),
+    "measured:timing": (timing_section, "prov"),
+    "measured:padframe": (padframe_section, "metrics"),
 }
 
 
@@ -406,11 +446,14 @@ def main(argv=None) -> int:
     try:
         import json
         step, metrics = cr.read_metrics(a.run_dir)
+        post = cr.post_route_keys(a.run_dir)
+        src = cr.metric_source_step(a.run_dir)
         with open(a.census, encoding="utf-8") as f:
             census = json.load(f)
         doc = open(a.doc, encoding="utf-8").read()
-        for name, fn in SECTIONS.items():
-            doc = splice(doc, name, fn(metrics))
+        for name, (fn, kind) in SECTIONS.items():
+            doc = splice(doc, name,
+                         fn(metrics, post, src) if kind == "prov" else fn(metrics))
         doc = splice(doc, "measured:growth", growth_section(metrics, census))
         doc = splice(doc, "measured:crosscheck",
                      crosscheck_section(a.run_dir, metrics, census))
