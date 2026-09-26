@@ -222,7 +222,7 @@ def _stress(waves, short, *, alt_waves=None):
     return s.cmds, int(200 * S) + 60, dict(regs=regs, claim="three_2x_audible", drums=True)
 
 
-def _extreme(waves, short):
+def _extreme(waves, short, osc_mod=False):
     """The REGISTER-LEGAL worst case, beyond the musical range: every
     increment >= 2^23 (half the phase circle), so both PolyBLEP windows of
     every edge open in almost every frame; a slow glide between two such
@@ -235,7 +235,7 @@ def _extreme(waves, short):
                                  noise=0.3, nsel=1, cutoff=(200, 12000), q=0.9, drive=1.6,
                                  amp=(0.002, 0.2, 0.8, 0.1), fenv=(0.001, 0.2, 0.5, 0.1),
                                  track=0.0, vol=0.45, glide_s=2.0, mod_mix=0.5, mod_wheel=1.0,
-                                 mod_pitch=0.05, osc_mod=True, filt_mod=True, osc3_ctl=True)
+                                 mod_pitch=0.05, osc_mod=osc_mod, filt_mod=True, osc3_ctl=True)
     s = Script()
     s.put(0, image_writes(regs, dvol=dx.accent_reg(0.3), bvol=dx.accent_reg(0.3), route=1, dcut=600))
     s.put(0, drum_image_writes())
@@ -259,6 +259,17 @@ def sc_extreme_pulse(short=False):
     return _extreme(("square", "pulse29", "pulse15"), short)
 
 
+def sc_extreme_saw_mod(short=False):
+    """extreme-saw with oscillator modulation on: +1 cycle per oscillator
+    (S_IM1). Also the reproduction of a MODEL/RTL divergence found here, not a
+    deadline question: see docs/deadline/README.md."""
+    return _extreme(("saw", "saw", "saw"), short, osc_mod=True)
+
+
+def sc_extreme_pulse_mod(short=False):
+    return _extreme(("square", "pulse29", "pulse15"), short, osc_mod=True)
+
+
 def sc_stress_saw(short=False):
     return _stress(("saw", "saw", "saw"), short, alt_waves=("saw", "pulse29", "saw"))
 
@@ -269,7 +280,8 @@ def sc_stress_pulse(short=False):
 
 SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_saw,
                  "stress-pulse": sc_stress_pulse, "extreme-saw": sc_extreme_saw,
-                 "extreme-pulse": sc_extreme_pulse}
+                 "extreme-pulse": sc_extreme_pulse, "extreme-saw-mod": sc_extreme_saw_mod,
+                 "extreme-pulse-mod": sc_extreme_pulse_mod}
 
 
 # ---- coverage: what the landed writes say the chip was doing, frame by frame --------
@@ -323,7 +335,8 @@ def coverage(tl, pulse2x):
 
 # ---- the schedule rows ----------------------------------------------------------
 FIELDS = ("frame", "go", "v_start", "v_last", "strobe", "d_start", "d_last",
-          "wr_n", "wr_first", "wr_last", "wr_in_compute", "busy_at_tick", "rwait", "oscwait", "dwait")
+          "wr_n", "wr_first", "wr_last", "wr_in_compute", "busy_at_tick", "rwait", "oscwait", "dwait",
+          "win", "w1", "im1", "sk", "ywait")
 
 
 def read_sched(path):
@@ -334,6 +347,19 @@ def read_sched(path):
             if len(p) == len(FIELDS) + 1 and p[0] == "F":
                 rows.append(dict(zip(FIELDS, (int(x) for x in p[1:]))))
     return rows
+
+
+def cost_model(use):
+    """The voice's completion as a sum of its data-dependent parts. If
+    strobe - (rwait + oscwait + dwait + ywait + 2*w1 + win + im1 + 3*sk) is the
+    SAME constant in every frame, the schedule is fully explained by those
+    counts and its worst case is that constant plus each part's maximum --
+    which is how a worst case is bounded rather than sampled."""
+    if not use or any(r["strobe"] < 0 for r in use):
+        return None
+    base = Counter(r["strobe"] - (r["rwait"] + r["oscwait"] + r["dwait"] + r["ywait"]
+                                  + 2 * r["w1"] + r["win"] + r["im1"] + 3 * r["sk"]) for r in use)
+    return dict(base_values=dict(base.most_common(6)), explained=len(base) == 1)
 
 
 def analyse_sched(rows, go_cycle, skip=2):
@@ -371,6 +397,8 @@ def analyse_sched(rows, go_cycle, skip=2):
                 max_rwait=max((r["rwait"] for r in use), default=0),
                 max_oscwait=max((r["oscwait"] for r in use), default=0),
                 max_dwait=max((r["dwait"] for r in use), default=0),
+                max_active_windows=max((r["w1"] for r in use), default=0),
+                cost_model=cost_model(use),
                 write_cycles=[min((r["wr_first"] for r in use if r["wr_n"]), default=-1),
                               max((r["wr_last"] for r in use if r["wr_n"]), default=-1)],
                 max_writes_per_frame=max((r["wr_n"] for r in use), default=0),
@@ -619,11 +647,13 @@ def main(argv=None) -> int:
           f"{sched['drum_start'][:4]}; writes in cycles {sched['write_cycles']} (max "
           f"{sched['max_writes_per_frame']} per frame), {sched['writes_in_compute']} during computation")
     print(f"verify_deadline: max per-frame waits: reciprocal {sched['max_rwait']}, 2x bank "
-          f"{sched['max_oscwait']}, drum handshake {sched['max_dwait']} cycles")
+          f"{sched['max_oscwait']}, drum handshake {sched['max_dwait']} cycles; max active PolyBLEP "
+          f"windows {sched['max_active_windows']}; cost model {sched['cost_model']}")
     for r in sched["worst_frames"][:3]:
         print(f"  worst frame {r['frame']}: strobe {r['strobe']} (slack {r['sample_slack']}), voice "
-              f"{r['v_start']}..{r['v_last']}, drum {r['d_start']}..{r['d_last']}, waits r/osc/d "
-              f"{r['rwait']}/{r['oscwait']}/{r['dwait']}")
+              f"{r['v_start']}..{r['v_last']}, drum {r['d_start']}..{r['d_last']}, waits r/osc/d/y "
+              f"{r['rwait']}/{r['oscwait']}/{r['dwait']}/{r['ywait']}, windows {r['w1']}/{r['win']}, "
+              f"im1 {r['im1']}, sk {r['sk']}")
     if res.get("coverage") is not None:
         print(f"verify_deadline: coverage (frames): {res['coverage']}")
     print(f"verify_deadline: I2S: {res.get('periods')} periods, {res.get('wire_mismatch')} differ from "

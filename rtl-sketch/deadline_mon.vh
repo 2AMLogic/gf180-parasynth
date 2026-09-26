@@ -14,6 +14,7 @@
 //
 //   F frame go_cyc v_start v_last_busy strobe d_start d_last_busy
 //     wr_n wr_first wr_last wr_in_compute busy_at_tick rwait oscwait dwait
+//     win w1 im1 sk ywait
 //
 // Every cycle field is the frame-cycle index (dut.cyc, 0..255) of the cycle in
 // which the condition was OBSERVED (sampled at the rising edge that ends that
@@ -25,6 +26,9 @@
 // which production's drain window (writes before go) is meant to forbid.
 // rwait / oscwait / dwait: cycles voice_dp spent waiting on the reciprocal
 // divider, the 2x oscillator bank, and the drum handshake (attribution only).
+// win / w1 / im1 / sk / ywait: cycles in S_WIN (PolyBLEP windows examined),
+// S_W1 (windows ACTIVE: each costs S_W1 + S_W2), S_IM1 (a modulated
+// increment), S_SK0 (a shark-tooth), S_YWAIT (the ladder / drum_done wait).
 //
 // Deadlines, from the RTL rather than asserted here (verify_deadline.py
 // computes them from these rows):
@@ -38,6 +42,7 @@ reg [8*512-1:0] dl_wrs;
 reg [8*520-1:0] dl_path;
 integer dl_frame = -1;
 integer dl_go, dl_vs, dl_vl, dl_st, dl_ds, dl_dl, dl_wn, dl_wf, dl_wl, dl_wc, dl_bt, dl_rw, dl_ow, dl_dw;
+integer dl_win, dl_w1, dl_im, dl_sk, dl_yw;
 reg dl_vb_q = 0, dl_db_q = 0;
 initial begin
     if ($value$plusargs("wrs=%s", dl_wrs)) begin
@@ -48,6 +53,7 @@ end
 task dl_clear; begin
     dl_go = -1; dl_vs = -1; dl_vl = -1; dl_st = -1; dl_ds = -1; dl_dl = -1;
     dl_wn = 0; dl_wf = -1; dl_wl = -1; dl_wc = 0; dl_bt = 0; dl_rw = 0; dl_ow = 0; dl_dw = 0;
+    dl_win = 0; dl_w1 = 0; dl_im = 0; dl_sk = 0; dl_yw = 0;
 end endtask
 initial dl_clear;
 always @(posedge `DL_DUT.clk) begin
@@ -79,9 +85,15 @@ always @(posedge `DL_DUT.clk) begin
         if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_RWAIT)   dl_rw = dl_rw + 1;
         if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_OSCWAIT) dl_ow = dl_ow + 1;
         if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_DWAIT)   dl_dw = dl_dw + 1;
+        if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_WIN)     dl_win = dl_win + 1;
+        if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_W1)      dl_w1 = dl_w1 + 1;
+        if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_IM1)     dl_im = dl_im + 1;
+        if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_SK0)     dl_sk = dl_sk + 1;
+        if (`DL_DUT.u_voice.state == `DL_DUT.u_voice.S_YWAIT)   dl_yw = dl_yw + 1;
         if (`DL_DUT.cyc == 8'd255 && dl_fd && dl_frame >= 0)
-            $fdisplay(dl_fd, "F %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
+            $fdisplay(dl_fd, "F %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
                       dl_frame, dl_go, dl_vs, dl_vl, dl_st, dl_ds, dl_dl,
-                      dl_wn, dl_wf, dl_wl, dl_wc, dl_bt, dl_rw, dl_ow, dl_dw);
+                      dl_wn, dl_wf, dl_wl, dl_wc, dl_bt, dl_rw, dl_ow, dl_dw,
+                      dl_win, dl_w1, dl_im, dl_sk, dl_yw);
     end
 end

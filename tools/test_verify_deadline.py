@@ -22,7 +22,8 @@ def row(frame, *, go=GO, strobe=150, v_last=150, d_last=100, wr_n=0, wr_first=-1
         wr_in_compute=0, busy_at_tick=0):
     return dict(frame=frame, go=go, v_start=go + 1, v_last=v_last, strobe=strobe, d_start=go + 1,
                 d_last=d_last, wr_n=wr_n, wr_first=wr_first, wr_last=wr_last,
-                wr_in_compute=wr_in_compute, busy_at_tick=busy_at_tick, rwait=0, oscwait=0, dwait=0)
+                wr_in_compute=wr_in_compute, busy_at_tick=busy_at_tick, rwait=0, oscwait=0, dwait=0,
+                win=0, w1=0, im1=0, sk=0, ywait=0)
 
 
 def clean_res(claim_frames=500):
@@ -112,3 +113,12 @@ def test_the_component_bench_launches_where_the_chip_does():
         return int(re.search(rf"parameter\s+{name}\s*=\s*(\d+)",
                              open(os.path.join(ROOT, "rtl-sketch", path)).read()).group(1))
     assert param("tb_voice.v", "GO") == param("synth_top.v", "GO_CYCLE") == vd.chip_go_cycle()
+
+
+def test_the_cost_model_is_explained_only_when_one_constant_remains():
+    rows = [row(f, strobe=100 + 2 * (f % 3)) for f in range(20)]
+    for r in rows:
+        r["w1"] = r["frame"] % 3                       # each active window costs two cycles
+    assert vd.cost_model(rows[2:])["explained"]
+    rows[10]["strobe"] += 1                             # a cycle the counts do not explain
+    assert not vd.cost_model(rows[2:])["explained"]
