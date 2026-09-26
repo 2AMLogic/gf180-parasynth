@@ -26,13 +26,25 @@ SR = 48_000
 # Every accepted MIDI event is scheduled at a FIXED lookahead from its receipt:
 # its first write's nominal frame is receipt_frame + LOOKAHEAD_FRAMES. A fixed
 # lookahead makes latency constant (no jitter) and lets the device's event
-# queue land every write in EXACTLY its due frame. 15 ms is sized from the
+# queue land every write in EXACTLY its due frame. The lookahead is sized from the
 # wire, not chosen for the target: an event packet is 10 bytes at 115200 baud,
-# 41.7 frames, and the heaviest musically ordinary cluster -- a note-on (5
-# writes) with a kick (4 head writes) and a hat (2) -- is 11 packets, 458
-# frames of wire, which must be accepted before its dues.
-LOOKAHEAD_MS = 15.0
-LOOKAHEAD_FRAMES = int(round(LOOKAHEAD_MS * 1e-3 * SR))          # 720
+# 41.7 frames, and the heaviest cluster of the declared load -- a note-on (5
+# writes) with a kick (4 head writes), a hat (2) and a crash (2) on a downbeat
+# -- is 13 packets, 542 frames of wire, and a note-on or hit is admitted only
+# with ADMISSION_RESERVE_PACKETS more (709 frames), accepted before its dues.
+#
+# TIMING CONTRACT 2 (the latency TARGET, endpoints and declared load are
+# unchanged, so CRITERION_VERSION is too): contract 1 had 15 ms, sized for a
+# three-event cluster, and the declared load REFUSED five downbeat crashes in
+# 20 s (the crash needed 721 frames of 720). fpga/sweep_live_midi.py measured
+# the three levers #281 names: 16 ms admits the load at every reserve 2..4;
+# eliding redundant writes cannot (549 of 2648 writes re-write a held value,
+# 545 of them knob registers, none in the refused clusters); batching strikes
+# would need a deliberate hold, i.e. more latency. Evidence:
+# fpga/reports/live-midi/sweep.json.
+TIMING_CONTRACT = 2
+LOOKAHEAD_MS = 16.0
+LOOKAHEAD_FRAMES = int(round(LOOKAHEAD_MS * 1e-3 * SR))          # 768
 
 WRITE_SLOTS = 2                  # device register writes per frame (uart_host)
 DEADLINE_MARGIN_FRAMES = 12      # accept <= due - 1 - margin: MIN_LEAD, one

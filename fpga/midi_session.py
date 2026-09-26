@@ -49,7 +49,7 @@ fpga/live_midi_contract.py):
     Ctrl-C, a lost connection) always sends the panic.
 
 THE TIMING CONTRACT. A MIDI message received at host time t, which the host's
-map puts in device frame r, schedules its first write at frame r + 15 ms
+map puts in device frame r, schedules its first write at frame r + 16 ms
 (LOOKAHEAD_FRAMES) and later writes behind it, two to a frame. Each packet is
 sent exactly one lookahead before its due frame, so the device's single FIFO
 event queue sees dues in order; latency is constant rather than jittered. A

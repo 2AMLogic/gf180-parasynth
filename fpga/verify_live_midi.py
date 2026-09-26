@@ -995,7 +995,8 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     a.outdir.mkdir(parents=True, exist_ok=True)
     record = {"tool": "fpga/verify_live_midi.py", "trial": "T-LIVE-MIDI",
-              "criterion_version": C.CRITERION_VERSION, "target": C.LATENCY_TARGET,
+              "criterion_version": C.CRITERION_VERSION, "timing_contract": C.TIMING_CONTRACT,
+              "lookahead_ms": C.LOOKAHEAD_MS, "target": C.LATENCY_TARGET,
               "stub": a.start_red, "clean": {}, "controls": {}}
     verdicts = []
     for name, kw in (("coverage", {}), ("coverage@65000", {"epoch": 65000}),
