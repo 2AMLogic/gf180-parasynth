@@ -23,7 +23,7 @@ def row(frame, *, go=GO, strobe=150, v_last=150, d_last=100, wr_n=0, wr_first=-1
     return dict(frame=frame, go=go, v_start=go + 1, v_last=v_last, strobe=strobe, d_start=go + 1,
                 d_last=d_last, wr_n=wr_n, wr_first=wr_first, wr_last=wr_last,
                 wr_in_compute=wr_in_compute, busy_at_tick=busy_at_tick, rwait=0, oscwait=0, dwait=0,
-                win=0, w1=0, im1=0, sk=0, ywait=0)
+                win=0, w1=0, im1=0, sk=0, ywait=5)
 
 
 def clean_res(claim_frames=500):
@@ -137,3 +137,108 @@ def test_every_mutant_anchor_occurs_exactly_once_in_the_current_voice(tmp_path):
     assert mutated.count("MUTANT late") == 3 and "9'd37" in mutated
     # the stall is in S_OUT2, after every wait, so it cannot overlap one and be absorbed
     assert "S_OUT2: if (late_cnt != 9'd37)" in mutated
+
+
+# ---- analysis version 2: the reconciled cost model (plan080 Repair 1) --------------
+def _committed_rows(record, frames):
+    import json
+    d = json.load(open(os.path.join(ROOT, "docs", "deadline", "runs", record)))
+    by = {r["frame"]: r for r in d["schedule"]["worst_frames"]}
+    return [dict(by[f]) for f in frames]
+
+
+def test_paired_frames_with_different_ywait_and_equal_completion_are_one_constant():
+    """stress-saw frames 538 and 840: every serial term equal, ywait 5 vs 11,
+    strobe 240 in both. ywait trades with shadow work; it is not a serial term.
+    Version 1 subtracted it and reported 82 / 76 -- `explained` False."""
+    rows = _committed_rows("prod-stress-saw.json", (538, 840))
+    assert rows[0]["ywait"] != rows[1]["ywait"] and rows[0]["strobe"] == rows[1]["strobe"]
+    cm = vd.cost_model(rows)
+    assert cm["explained"] and cm["constant"] == 87 and cm["residuals"] == {87: 2}
+    v1 = {r["strobe"] - (r["rwait"] + r["oscwait"] + r["dwait"] + r["ywait"] + 2 * r["w1"]
+                         + r["win"] + r["im1"] + 3 * r["sk"]) for r in rows}
+    assert v1 == {82, 76}                      # what the superseded formula said
+
+
+def test_a_frame_where_the_shadow_work_ends_the_wait_is_an_exception_not_explained():
+    rows = _committed_rows("prod-stress-saw.json", (538, 840))
+    rows[1]["ywait"] = 1                       # no wait: the overlap condition is not met
+    cm = vd.cost_model(rows)
+    assert not cm["explained"] and cm["exceptions"] == 1
+
+
+# ---- evidence completeness (plan080 Repair 2): red first on a real capture ------------
+import gzip, shutil  # noqa: E402
+
+TRACE = os.path.join(ROOT, "docs", "deadline", "traces")
+
+
+def _capture(tmp_path, record):
+    d = tmp_path / record
+    d.mkdir()
+    for gz in os.listdir(os.path.join(TRACE, record)):
+        with gzip.open(os.path.join(TRACE, record, gz), "rb") as src, open(d / gz[:-3], "wb") as dst:
+            shutil.copyfileobj(src, dst)
+    wrs = [f for f in os.listdir(d) if f.startswith("top_wrs_") and f.endswith(".txt")][0]
+    i2s = [f for f in os.listdir(d) if f.startswith("top_i2s_")][0]
+    return dict(i2s=str(d / i2s), wrs=str(d / wrs), sched=str(d / (wrs + ".sched")))
+
+
+def _judge(files, scenario="stress-saw", overflow=0):
+    cmds, tail, meta = vd.SPI_SCENARIOS[scenario](False)
+    res = vd.evaluate_spi(files, cmds, tail, meta, osc2x=True, filter2x=True, pulse2x=False,
+                          bench_report=None, recorded_overflow=overflow)
+    rows = res.get("sched_rows", [])
+    return (res,) + vd.verdict(res, vd.analyse_sched(rows, GO), GO)
+
+
+def _edit(path, fn):
+    lines = open(path).read().splitlines(keepends=True)
+    open(path, "w").write("".join(fn(lines)))
+
+
+def test_verdict_refuses_zero_compared_periods_even_with_clean_facts():
+    """The reviewer's probe: clean facts with periods 0 or 1 used to PASS."""
+    s = vd.analyse_sched([row(f) for f in range(20)], GO)
+    for n in (0, 1):
+        res = clean_res(); res["evidence"] = vd.i2s_completeness(list(range(n)), 2156)
+        st, reasons, deadline = vd.verdict(res, s, GO)
+        assert st == 2 and not deadline and "incomplete" in reasons[0]
+
+
+def test_i2s_completeness_names_every_defect():
+    good = list(range(10))
+    assert vd.i2s_completeness(good, 10) == []
+    assert vd.i2s_completeness([], 10)
+    assert vd.i2s_completeness(good[:7], 10)                       # truncated
+    assert vd.i2s_completeness(good[:4] + good[5:], 9)             # interior gap
+    assert vd.i2s_completeness(good[:5] + [4] + good[5:], 10)      # duplicate
+    assert vd.i2s_completeness([1, 0] + good[2:], 10)              # out of order
+
+
+def test_the_retained_clean_capture_passes_and_each_corruption_refuses(tmp_path):
+    files = _capture(tmp_path, "prod-stress-saw")
+    res, st, reasons, dl = _judge(files)
+    assert st == 0 and res["periods"] == res["periods_required"] == 2156
+    corruptions = {
+        "i2s-empty": ("i2s", lambda L: []),
+        "i2s-truncated": ("i2s", lambda L: L[:1000]),
+        "i2s-interior-period-dropped": ("i2s", lambda L: L[:700] + L[701:]),
+        "i2s-duplicated": ("i2s", lambda L: L[:700] + [L[700]] + L[700:]),
+        "sched-empty": ("sched", lambda L: []),
+        "sched-interior-frame-dropped": ("sched", lambda L: L[:538] + L[539:]),
+        "sched-malformed-line": ("sched", lambda L: L[:300] + ["F 300 8 9\n"] + L[301:]),
+    }
+    for name, (key, fn) in corruptions.items():
+        (tmp_path / name).mkdir()
+        bad = _capture(tmp_path / name, "prod-stress-saw")
+        _edit(bad[key], fn)
+        r, st, reasons, dl = _judge(bad)
+        assert st == 2 and not dl and "incomplete" in reasons[0], (name, st, reasons)
+
+
+def test_a_late_but_complete_capture_is_still_a_deadline_fail(tmp_path):
+    """late:15 on stress-saw: complete evidence, 41 frames strobed at 255."""
+    files = _capture(tmp_path, "ctl-prod-stress-late15")
+    res, st, reasons, dl = _judge(files)
+    assert res["evidence"] == [] and st == 1 and dl and "missed" in reasons[0]

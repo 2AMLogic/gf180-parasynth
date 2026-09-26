@@ -31,6 +31,10 @@ VERDICT, from checked facts only:
              `go` of its frame and never while a datapath was busy, and every
              decoded I2S period equals model/synth_top_model.py's
   FAIL (1)   any of those failed -- a RESULT
+  NO VERDICT (2) the evidence is incomplete: an I2S period the bench contract
+             requires (0 .. n_model - I2S_DRAIN - 1) is absent, duplicated or out
+             of order, or the schedule trace has a malformed or missing frame.
+             Checked BEFORE any deadline or model judgement (analysis v2)
   REFUSED (2) the apparatus could not establish the result: the simulation did
              not run, the monitor file is missing or short, the scenario did
              not reach what it claims to cover (e.g. three active 2x saws with
@@ -393,27 +397,109 @@ FIELDS = ("frame", "go", "v_start", "v_last", "strobe", "d_start", "d_last",
           "win", "w1", "im1", "sk", "ywait")
 
 
+#: The analysis's own version, recorded apart from the simulator run's identity:
+#: a re-analysis of a retained capture changes this, never the run it analyses.
+#:   1  (4433cf8) cost model subtracted ywait: contradicted by paired frames
+#:   2  cost model without ywait + overlap condition; evidence completeness
+ANALYSIS_VERSION = 2
+#: I2S periods the SPI bench leaves undecoded at the end of a run, by its
+#: contract: tb_top_bx stops `tail` ticks after its last SPI transaction and
+#: the serializer (D = 1) still holds the last periods -- verify_synth_top.py
+#: gives M5A three drain frames for exactly this. Every period before
+#: n_model - I2S_DRAIN must be decoded and compared; none of them may be absent.
+I2S_DRAIN = 3
+
+
 def read_sched(path):
-    rows = []
+    """Rows of a schedule record, STRICT: returns (rows, problems). A line that
+    is not a complete `F` row, or frames that are not exactly 0, 1, 2, ... in
+    order, is a problem -- never silently skipped."""
+    rows, problems = [], []
     with open(path) as fh:
-        for ln in fh:
+        for i, ln in enumerate(fh, 1):
+            if not ln.strip():
+                continue
             p = ln.split()
-            if len(p) == len(FIELDS) + 1 and p[0] == "F":
+            try:
+                if len(p) != len(FIELDS) + 1 or p[0] != "F":
+                    raise ValueError
                 rows.append(dict(zip(FIELDS, (int(x) for x in p[1:]))))
-    return rows
+            except ValueError:
+                problems.append(f"malformed schedule line {i}: {ln.strip()[:60]!r}")
+    frames = [r["frame"] for r in rows]
+    if frames != list(range(len(frames))):
+        bad = next((k for k, f in enumerate(frames) if f != k), None)
+        problems.append(f"schedule frames are not 0..{len(frames) - 1} in order "
+                        f"(first break at row {bad}: frame {frames[bad] if bad is not None else '?'})")
+    return rows, problems
+
+
+def i2s_completeness(indices, required):
+    """Problems with a decoded I2S period list against a required count. The
+    periods must be exactly 0, 1, ..., P-1 -- in order, no duplicate, no gap --
+    and P >= required. Empty, truncated, gapped, duplicated or reordered
+    evidence is incomplete, whatever it would have compared equal to."""
+    problems = []
+    if not indices:
+        return [f"no I2S periods decoded ({required} required)"]
+    if indices != list(range(len(indices))):
+        seen, dup, gap, order = set(), None, None, None
+        for k, p in enumerate(indices):
+            if p in seen and dup is None: dup = p
+            if k and p < indices[k - 1] and order is None: order = k
+            if k and p > indices[k - 1] + 1 and gap is None: gap = indices[k - 1] + 1
+            seen.add(p)
+        problems.append(f"I2S periods are not 0..{len(indices) - 1} in order "
+                        f"(duplicate {dup}, first gap at {gap}, out of order at row {order}, "
+                        f"first index {indices[0]})")
+    if len(indices) < required:
+        problems.append(f"I2S capture truncated: {len(indices)} periods, {required} required")
+    return problems
 
 
 def cost_model(use):
-    """The voice's completion as a sum of its data-dependent parts. If
-    strobe - (rwait + oscwait + dwait + ywait + 2*w1 + win + im1 + 3*sk) is the
-    SAME constant in every frame, the schedule is fully explained by those
-    counts and its worst case is that constant plus each part's maximum --
-    which is how a worst case is bounded rather than sampled."""
-    if not use or any(r["strobe"] < 0 for r in use):
+    """The voice's strobe as a sum of its SERIAL data-dependent parts:
+
+        strobe = C + R + O + D + W + 2A + I + 3K
+        R rwait, O oscwait, D dwait, W win, A w1, I im1, K sk
+
+    ywait is NOT a term. S_YWAIT is where the sequencer waits for the voice
+    ladder, which runs in parallel from S_LGO while the envelope updates,
+    glide slews (two extra states per gliding oscillator), red noise, the mod
+    pan and the drum-filter coefficients run in its shadow. ywait is what is
+    left of the ladder's latency after that shadow work, so it trades one for
+    one with the shadow work and completion does not move -- provided the
+    ladder, not the shadow work, ends the wait: the OVERLAP CONDITION, checked
+    here as ywait >= 2 in every frame (1 is the state's own cycle: no wait).
+    Paired frames 538 and 840 of stress-saw (ywait 5 and 11, every serial term
+    equal, strobe 240 in both) are the observation; version 1 subtracted ywait
+    and reported 82 / 76 for them.
+
+    `explained` only if ONE value of C and no frame breaks the overlap
+    condition. Otherwise the exceptions are counted, never forced."""
+    if not use:
         return None
-    base = Counter(r["strobe"] - (r["rwait"] + r["oscwait"] + r["dwait"] + r["ywait"]
-                                  + 2 * r["w1"] + r["win"] + r["im1"] + 3 * r["sk"]) for r in use)
-    return dict(base_values=dict(base.most_common(6)), explained=len(base) == 1)
+    strobed = [r for r in use if r["strobe"] >= 0]
+    resid = Counter()
+    exc = []
+    for r in strobed:
+        c = r["strobe"] - (r["rwait"] + r["oscwait"] + r["dwait"] + r["win"]
+                           + 2 * r["w1"] + r["im1"] + 3 * r["sk"])
+        resid[c] += 1
+        r["_c"] = c
+    mode = resid.most_common(1)[0][0] if resid else None
+    for r in strobed:
+        if r["_c"] != mode or r["ywait"] < 2:
+            exc.append(dict(frame=r["frame"], residual=r["_c"], ywait=r["ywait"]))
+        del r["_c"]
+    return dict(analysis_version=ANALYSIS_VERSION,
+                formula="strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; "
+                        "overlap condition ywait >= 2",
+                checked_frames=len(strobed), frames_without_strobe=len(use) - len(strobed),
+                constant=mode, residuals=dict(resid.most_common(8)),
+                ywait_range=[min(r["ywait"] for r in strobed), max(r["ywait"] for r in strobed)] if strobed else None,
+                exceptions=len(exc), first_exceptions=exc[:5],
+                explained=bool(strobed) and len(resid) == 1 and not exc)
 
 
 def analyse_sched(rows, go_cycle, skip=2):
@@ -492,36 +578,92 @@ def run_spi(scenario, *, osc2x, filter2x, pulse2x, inject, outdir, short, rtl_di
         out = vst.simulate(defines, outdir, tail, rtl_dir=rtl_dir)
     if out is None:
         return None
-    rep = "\n".join(out["report"])
-    res = dict(bench="tb_top_bx (SPI pins)", report=out["report"], defines=defines,
-               sources=out["sources"], sched=out["wrs"] + ".sched", meta=meta, cmds=len(cmds))
-    mb, ms = vst.RE_BUSY.search(rep), vst.RE_STRB.search(rep)
-    if not mb or not ms:
-        res["refused"] = "the bench did not report its frame budget"
-        return res
-    res["busy_at_tick"], res["overrun"], res["overflow"] = (int(x) for x in mb.groups())
-    res["strobed"], res["frames_no_sample"], res["worst_strobe_cycle"] = (int(x) for x in ms.groups())
-    wr = vst.rows(out["wrs"])
+    files = dict(i2s=out["i2s"], wrs=out["wrs"], sched=out["wrs"] + ".sched")
+    res = evaluate_spi(files, cmds, tail, meta, osc2x=osc2x, filter2x=filter2x, pulse2x=pulse2x,
+                       bench_report=out["report"])
+    res.update(defines=defines, sources=out["sources"])
+    return res
+
+
+def trace_facts(rows):
+    """The facts the bench prints, re-derived from the schedule trace (so a
+    retained capture can be re-judged without the simulator's stdout)."""
+    use = [r for r in rows if r["frame"] >= 1]
+    return dict(busy_at_tick=sum(r["busy_at_tick"] for r in use),
+                overrun=int(any(r["busy_at_tick"] for r in use)),
+                frames_no_sample=sum(1 for r in use if r["strobe"] < 0),
+                worst_strobe_cycle=max((r["strobe"] for r in use), default=-1))
+
+
+def evaluate_spi(files, cmds, tail, meta, *, osc2x, filter2x, pulse2x, bench_report=None,
+                 recorded_overflow=None):
+    """Judge one SPI capture from its FILES: the pin-side write log, the decoded
+    I2S periods and the schedule trace. Used live (bench_report = the bench's
+    stdout) and on a retained capture (bench_report None: the bench-only fact,
+    link overflow, is taken from the run's own record and labelled so)."""
+    res = dict(bench="tb_top_bx (SPI pins)", report=list(bench_report or []), sched=files["sched"],
+               meta=meta, cmds=len(cmds), evidence=[])
+    rows, sched_problems = read_sched(files["sched"]) if os.path.exists(files["sched"]) \
+        else ([], [f"no schedule record at {files['sched']}"])
+    res["sched_rows"], res["evidence"] = rows, list(sched_problems)
+    tf = trace_facts(rows)
+    if bench_report is not None:
+        rep = "\n".join(bench_report)
+        mb, ms = vst.RE_BUSY.search(rep), vst.RE_STRB.search(rep)
+        if not mb or not ms:
+            res["refused"] = "the bench did not report its frame budget"
+            return res
+        res["busy_at_tick"], res["overrun"], res["overflow"] = (int(x) for x in mb.groups())
+        res["strobed"], res["frames_no_sample"], res["worst_strobe_cycle"] = (int(x) for x in ms.groups())
+        if (res["overrun"] != 0) != (tf["overrun"] != 0):
+            res["evidence"].append(f"bench overrun {res['overrun']} disagrees with the trace ({tf['overrun']})")
+    else:
+        res.update(tf)
+        res["overflow"] = recorded_overflow
+        res["facts_source"] = "schedule trace; overflow from the run record"
+    wr = vst.rows(files["wrs"])
     bad = sum(1 for want, got in zip(cmds, wr)
               if (int(got[1]), int(got[2]), int(got[3]), int(got[4])) != (want[1], want[2], want[3], want[4] & 0xFFFFFFFF))
     pred_bad = sum(1 for g in wr if len(g) <= 5 or int(g[5]) < 0 or int(g[5]) != int(g[0]))
     res.update(writes_sent=len(cmds), writes_seen=len(wr), writes_bad=bad, frame_pred_bad=pred_bad)
+    if not wr:
+        res["evidence"].append("no writes reached the register port")
+        return res
     model_writes = [(int(g[5]), int(g[1]), int(g[2]), int(g[3]), int(g[4])) for g in wr]
     n = max(f for f, *_ in model_writes) + tail + 1
+    required = n - I2S_DRAIN                      # periods 0 .. required-1, every one compared
+    i2s = vst.rows(files["i2s"]) if os.path.exists(files["i2s"]) else []
+    try:
+        idx = [int(r[0]) for r in i2s]
+    except (ValueError, IndexError):
+        idx = []
+        res["evidence"].append("an I2S row is malformed or undefined")
+    res["evidence"] += i2s_completeness(idx, required)
+    if len(rows) < len(idx):
+        res["evidence"].append(f"schedule trace has {len(rows)} frames for {len(idx)} decoded periods")
+    res.update(periods_required=required, periods_decoded=len(idx), n_model=n)
+    if res["evidence"]:
+        return res                                # no verdict: nothing is compared
     m = stm.SynthTopModel(oversample_2x=osc2x, filter_2x=filter2x, pulse_2x=pulse2x).run(model_writes, n)
-    i2s = vst.rows(out["i2s"])
-    mism = swap = width = 0
+    mism = swap = width = compared = 0
     first = None
     for r in i2s:
-        p, left, right, nbl, nbr = (int(x) for x in r[:5])
-        if p >= n:
-            break
+        try:
+            p, left, right, nbl, nbr = (int(x) for x in r[:5])
+        except ValueError:
+            mism += 1; continue
+        if p >= required:
+            continue
+        compared += 1
         if nbl != 32 or nbr != 32: width += 1
         if left != int(m["i2s"][p]):
             mism += 1
             if first is None: first = (p, int(m["i2s"][p]), left)
         if right != left: swap += 1
-    res.update(periods=min(len(i2s), n), wire_mismatch=mism, swap=swap, width=width,
+    if compared != required and not any("I2S" in e for e in res["evidence"]):
+        res["evidence"].append(f"{compared} periods compared, {required} required")
+    res.update(periods=compared, periods_required=required, periods_decoded=len(idx),
+               wire_mismatch=mism, swap=swap, width=width,
                first_mismatch=first, model_peak=int(np.abs(m["sample"]).max()),
                model_writes=model_writes, n_model=n)
     res["coverage"] = coverage(image_timeline(model_writes, n), pulse2x)
@@ -580,25 +722,84 @@ def run_arty(*, inject, outdir, rtl_dir=None):
         os.chdir(cwd)
     if run is None:
         return None
+    return evaluate_arty(run, regs)
+
+
+def evaluate_arty(run, regs):
+    """Judge one Arty-wrapper capture: fpga/verify_uart_bridge.py's own contract
+    and model comparison, plus the completeness it does not check -- every
+    period of the model interval it compares must have been decoded, once, in
+    order."""
+    import verify_uart_bridge as vub
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         ok, comp, detail = vub.analyze(run)
     res = dict(bench="tb_uart_bx (Arty wrapper, UART pins)", report=run["report"],
                defines=run["defines"], sched=run["files"]["wrs"] + ".sched",
                meta=dict(regs=regs, claim="three_2x_audible", drums=True), uart_ok=ok,
-               uart_detail=detail)
+               uart_detail=detail, evidence=[])
     for k in ("busy_at_tick", "overrun", "overflow", "frames_no_sample", "worst_strobe_cycle",
               "wire_mismatch", "swap", "width", "writes_bad", "frame_pred_bad", "frame_no_pred",
               "collisions", "periods", "writes_seen", "writes_sent", "core_bad"):
         res[k] = comp.get(k)
-    res["coverage"] = None            # the UART contract's frames are checked by analyze()
+    rows, problems = read_sched(res["sched"]) if os.path.exists(res["sched"]) \
+        else ([], [f"no schedule record at {res['sched']}"])
+    res["sched_rows"], res["evidence"] = rows, list(problems)
+    # the interval analyze() compares, re-derived from the same contract it uses
+    segs = [(int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
+            for m in vub.RE_SEG.finditer("\n".join(run["report"]))]
+    if len(segs) != 1 or run["reset_frames"]:
+        res["evidence"].append(f"expected one segment and no reset, got {len(segs)} / {run['reset_frames']}")
+        return res
+    items = [it for body in run["bodies"] for it in body]
+    rows_flat = [r for rows_ in run["planned"] for r in rows_]
+    expected = vub.expected_execution(items, rows_flat)
+    origin = segs[0][1] >> 8
+    n = max(e[0] - origin for e in expected) + run.get("model_tail", 600)
+    p0 = segs[0][2]
+    i2s = vub._rows(run["files"]["i2s"]) if os.path.exists(run["files"]["i2s"]) else []
+    try:
+        idx = [int(r[0]) for r in i2s]
+    except (ValueError, IndexError):
+        idx = []
+        res["evidence"].append("an I2S row is malformed or undefined")
+    res["evidence"] += i2s_completeness(idx, p0 + n)
+    if comp.get("periods") != n:
+        res["evidence"].append(f"{comp.get('periods')} periods compared, {n} required")
+    if len(rows) < len(idx):
+        res["evidence"].append(f"schedule trace has {len(rows)} frames for {len(idx)} decoded periods")
+    res.update(periods_required=n, periods_decoded=len(idx), coverage=None)
     return res
+
+
+def arty_run_from_capture(outdir, inject=None):
+    """Rebuild verify_uart_bridge's run dict for a RETAINED capture: the plan is
+    re-derived from the same items and must reproduce the capture's own
+    uart_cmds.txt byte for byte, or the capture is not this scenario's."""
+    import verify_uart_bridge as vub
+    items, regs = arty_items()
+    bodies, planned, reset_frames = vub._lay_out(items)
+    probe = os.path.join(outdir, ".uart_cmds.reanalysis")
+    vub.build_cmd_file(planned, reset_frames, probe)
+    same = open(probe, "rb").read() == open(os.path.join(outdir, "uart_cmds.txt"), "rb").read()
+    os.remove(probe)
+    if not same:
+        return None, regs
+    last_due = max([r.due for rows in planned for r in rows if r.due >= 0] + [0])
+    report = [ln for ln in open(os.path.join(outdir, "transcript.txt")).read().splitlines() if ln]
+    files = {k: os.path.join(outdir, f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
+    return dict(outdir=outdir, items=items, bodies=bodies, planned=planned,
+                reset_frames=reset_frames, report=report, files=files,
+                scenario="deadline-arty", inject=inject,
+                defines=["VOICE_OSC_2X", "VOICE_FILTER_2X"]), regs
 
 
 # ---- verdict ---------------------------------------------------------------------
 def verdict(res, sched, go_cycle, claim_min=100):
     """(status, reasons, deadline_failed)."""
     reasons, deadline = [], []
+    if res.get("evidence"):
+        return 2, ["NO VERDICT -- evidence incomplete: " + "; ".join(res["evidence"][:4])], False
     if sched["frames"] < 10:
         return 2, [f"REFUSED -- only {sched['frames']} frames in the schedule record"], False
     if sched["bad_go"]:
@@ -659,11 +860,24 @@ def main(argv=None) -> int:
                          "(the candidate correction); generated from voice_dp.v at run time")
     ap.add_argument("--write-mutant", default=None, metavar="SPEC",
                     help="only write the mutant voice_dp.v under --outdir and print its path")
+    ap.add_argument("--analyse-capture", default=None, metavar="DIR",
+                    help="re-judge a RETAINED capture (no simulation); needs --record, the run's "
+                         "own JSON, from which scenario, flags and controls are taken")
+    ap.add_argument("--record", default=None, metavar="JSON")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--short", action="store_true")
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--json", default=None)
     a = ap.parse_args(argv)
+    capture = None
+    if a.analyse_capture:
+        if not a.record:
+            ap.error("--analyse-capture needs --record")
+        capture = json.load(open(a.record))
+        a.scenario, a.inject, a.mutant = capture["scenario"], capture.get("inject"), capture.get("mutant")
+        a.pulse2x = bool(capture["configuration"]["PULSE2X"])
+        a.no_osc2x = not capture["configuration"]["OSC2X"]
+        a.no_filter2x = not capture["configuration"]["FILTER2X"]
     osc2x, filter2x = not a.no_osc2x, not a.no_filter2x
     if not a.scenario and not a.write_mutant:
         ap.error("--scenario is required")
@@ -675,13 +889,18 @@ def main(argv=None) -> int:
     tag = a.scenario + ("-p2x" if a.pulse2x else "") + (f"-{a.inject}" if a.inject else "") \
         + (f"-{a.mutant.replace(':', '')}" if a.mutant else "")
     outdir = os.path.abspath(a.outdir or os.path.join(HERE, "build", "deadline", tag))
-    rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
-    if a.scenario == "arty-uart":
+    if capture is not None:
+        res = analyse_capture(os.path.abspath(a.analyse_capture), capture, a)
+        if res is None:
+            return _exit(2, a)
+    elif a.scenario == "arty-uart":
         if a.pulse2x or a.no_osc2x or a.no_filter2x:
             print("verify_deadline: REFUSED -- arty-uart runs the published Arty configuration "
                   "(OSC2X=1 FILTER2X=1 PULSE2X=0) only"); return 2
+        rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
         res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir)
     else:
+        rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
         res = run_spi(a.scenario, osc2x=osc2x, filter2x=filter2x, pulse2x=a.pulse2x,
                       inject=a.inject, outdir=outdir, short=a.short, rtl_dir=rtl_dir)
     if res is None:
@@ -690,10 +909,7 @@ def main(argv=None) -> int:
         print("  sim: " + ln)
     if "refused" in res:
         print(f"verify_deadline: REFUSED -- {res['refused']}"); return _exit(2, a)
-    if not os.path.exists(res["sched"]):
-        print(f"verify_deadline: REFUSED -- no schedule record at {res['sched']}: the monitor did not run")
-        return _exit(2, a)
-    rows = read_sched(res["sched"])
+    rows = res.get("sched_rows", [])
     sched = analyse_sched(rows, go)
     status, reasons, deadline_failed = verdict(res, sched, go)
     cfg = dict(OSC2X=int(osc2x), FILTER2X=int(filter2x), PULSE2X=int(a.pulse2x))
@@ -717,7 +933,8 @@ def main(argv=None) -> int:
               f"im1 {r['im1']}, sk {r['sk']}")
     if res.get("coverage") is not None:
         print(f"verify_deadline: coverage (frames): {res['coverage']}")
-    print(f"verify_deadline: I2S: {res.get('periods')} periods, {res.get('wire_mismatch')} differ from "
+    print(f"verify_deadline: I2S: {res.get('periods')} of {res.get('periods_required')} required periods "
+          f"compared ({res.get('periods_decoded')} decoded), {res.get('wire_mismatch')} differ from "
           f"the model; L!=R {res.get('swap')}; bad width {res.get('width')}; writes "
           f"{res.get('writes_seen')}/{res.get('writes_sent')}, corrupted {res.get('writes_bad')}, "
           f"off-prediction {res.get('frame_pred_bad')}")
@@ -730,12 +947,23 @@ def main(argv=None) -> int:
                    inject=a.inject, mutant=a.mutant, status=word, reasons=reasons,
                    deadline_failed=deadline_failed,
                    schedule={k: v for k, v in sched.items()},
+                   analysis_version=ANALYSIS_VERSION, evidence_problems=res.get("evidence"),
                    facts={k: res.get(k) for k in ("busy_at_tick", "overrun", "overflow",
                                                   "frames_no_sample", "worst_strobe_cycle",
-                                                  "periods", "wire_mismatch", "swap", "width",
+                                                  "periods", "periods_required", "periods_decoded",
+                                                  "wire_mismatch", "swap", "width",
                                                   "writes_sent", "writes_seen", "writes_bad",
                                                   "frame_pred_bad", "collisions", "model_peak")},
-                   coverage=res.get("coverage"), provenance=provenance(res["defines"]))
+                   coverage=res.get("coverage"),
+                   provenance=(capture or {}).get("provenance") if capture else provenance(res["defines"]))
+        if capture is not None:
+            rec["reanalysis"] = dict(analysis_version=ANALYSIS_VERSION, capture_dir=a.analyse_capture,
+                                     capture_sha256=res.get("capture_sha256"),
+                                     original_record=a.record, original_status=capture.get("status"),
+                                     original_analysis_version=capture.get("analysis_version", 1),
+                                     facts_source=res.get("facts_source"),
+                                     note="re-judged from retained files; no simulation. provenance is "
+                                          "the ORIGINAL run's identity")
         os.makedirs(os.path.dirname(os.path.abspath(a.json)), exist_ok=True)
         with open(a.json, "w") as fh:
             json.dump(rec, fh, indent=1, default=str)
@@ -747,6 +975,40 @@ def main(argv=None) -> int:
               f"deadline failed {deadline_failed})")
         return 1 if status == 0 else 2 if status == 2 else 1
     return status
+
+
+def analyse_capture(d, record, a):
+    """Re-judge a retained capture directory from its files alone."""
+    import glob
+    def sha(f):
+        return hashlib.sha256(open(f, "rb").read()).hexdigest()
+    if a.scenario == "arty-uart":
+        run, regs = arty_run_from_capture(d, a.inject)
+        if run is None:
+            print(f"verify_deadline: REFUSED -- {d}/uart_cmds.txt is not this scenario's plan"); return None
+        res = evaluate_arty(run, regs)
+        names = ["uart_cmds.txt", "transcript.txt", "uart_i2s.txt", "uart_wrs.txt", "uart_wrs.txt.sched",
+                 "uart_txd.txt", "uart_samp.txt"]
+    else:
+        cmds, tail, meta = SPI_SCENARIOS[a.scenario](a.short)
+        probe = os.path.join(d, ".cmds.reanalysis")
+        vst.write_cmds(probe, cmds)
+        same = open(probe, "rb").read() == open(os.path.join(d, "top_bx_cmds.txt"), "rb").read()
+        os.remove(probe)
+        if not same:
+            print(f"verify_deadline: REFUSED -- {d}/top_bx_cmds.txt is not this scenario's stimulus"); return None
+        pick = lambda pat: (sorted(glob.glob(os.path.join(d, pat))) or [os.path.join(d, pat)])[0]
+        wrs = [f for f in glob.glob(os.path.join(d, "top_wrs_*.txt"))]
+        if len(wrs) != 1:
+            print(f"verify_deadline: REFUSED -- {len(wrs)} write logs in {d}"); return None
+        files = dict(i2s=pick("top_i2s_*.txt"), wrs=wrs[0], sched=wrs[0] + ".sched")
+        res = evaluate_spi(files, cmds, tail, meta, osc2x=not a.no_osc2x, filter2x=not a.no_filter2x,
+                           pulse2x=a.pulse2x, bench_report=None,
+                           recorded_overflow=record.get("facts", {}).get("overflow"))
+        names = ["top_bx_cmds.txt"] + [os.path.basename(files[k]) for k in ("i2s", "wrs", "sched")]
+    res["capture_sha256"] = {n: sha(os.path.join(d, n)) for n in names if os.path.exists(os.path.join(d, n))}
+    res["defines"] = record.get("provenance", {}).get("defines", [])
+    return res
 
 
 def _exit(st, a):
