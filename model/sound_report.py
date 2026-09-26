@@ -630,6 +630,34 @@ LOCK_CHANGELOG = [
             ("SD", "brightness (power centroid)"): (None, 1918.08),
         },
     },
+    {
+        "at": "28dfd55",
+        "recorded_by": "50d7aaf",
+        "issue": 242,
+        "reason": "DR 0011 baked CUT_TRIM * Huovilainen's fcr() into "
+                  "voice_fx.make_g_rom(), so the shipped cutoff ROM is the tuned "
+                  "one and the cutoff scaling became more uniform, 9.40 % -> "
+                  "4.21 %. This property is the defect contract 17.12 records "
+                  "and DR 0011 is its identified fix, so the lock falling is the "
+                  "fix landing, not a regression -- see RELOCKS above for the "
+                  "full rationale.",
+        "locks": {
+            ("LADDER", "corner ratio drift"): (9.40462, 4.21473),
+        },
+    },
+    {
+        "at": "28dfd55",
+        "recorded_by": "80b3756",
+        "issue": 242,
+        "reason": "the toms' pitch drop was corrected from the inferred x1.7 to "
+                  "the x1.06 measured over 99 clean-digital TR-808 files, which "
+                  "removed a delayed envelope peak that drum_verify.attack_ms "
+                  "had been reading as a longer attack -- see RELOCKS above for "
+                  "the full rationale.",
+        "locks": {
+            ("LT", "attack"): (16.625, 6.27083),
+        },
+    },
 ]
 
 

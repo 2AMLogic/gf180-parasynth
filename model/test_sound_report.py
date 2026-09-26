@@ -289,13 +289,15 @@ def test_a_changelog_entry_for_a_property_that_is_not_a_lock_is_flagged(monkeypa
     assert any("gone" in p for p in sr.check_lock_changelog())
 
 
-def test_the_changelog_records_the_two_commits_that_actually_moved_the_locks():
+def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
     """Recovered with `git log -L` on the LOCKS block, not from memory: 28dfd55
-    introduced the table (#51) and bf13fdd added the power-centroid lock (#251)
-    so that --inject sd-centroid-amp-weighted had something to turn red."""
+    introduced the table (#51), bf13fdd added the power-centroid lock (#251),
+    and 50d7aaf / 80b3756 are the two re-locks #242 traced with drift_probe.py."""
     by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
-    assert set(by) == {"28dfd55", "bf13fdd"}
+    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756"}
     assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
+    assert list(by["50d7aaf"]["locks"]) == [("LADDER", "corner ratio drift")]
+    assert list(by["80b3756"]["locks"]) == [("LT", "attack")]
     assert all(was is None for was, _ in by["28dfd55"]["locks"].values()), (
         "nothing was pinned before 28dfd55, so every entry there is a first lock")
 
