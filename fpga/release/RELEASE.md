@@ -116,7 +116,25 @@ are:
 - the glide = 1 floor at HI and at LO;
 - a retarget mid-glide.
 
-GLIDE_BOUNDARY_RESULTS
+| Run (OSC2X=1 FILTER2X=1) | Exit | Result |
+|---|---:|---|
+| voice: admitted boundary transitions, (saw, saw, square) / pulse29 | 0 / 0 | 13,730 frames, every tap identical |
+| voice: #247's glide shape scaled to INC_HI | 0 | 1,080 frames identical |
+| voice: the same, `--inject GLIDE_FLOOR` (control) | 0 (`--expect-fail`) | **caught** at the LO floor case |
+| wrapper (the CLI's bytes through the Arty UART pins): admitted transitions, both waveform sets | 0 / 0 | 72/72 writes, 0 I2S mismatches over 15,258 periods |
+| wrapper: #247's glide shape scaled to INC_HI | 0 | 0 mismatches over 4,203 periods |
+| wrapper probes (recorded, not gates): #247's own increments and glide shape **without** the drum route; the shape just under 2^23; a fast glide at #247's increments; a glide just under 2^23; one across 2^23; MIDI 127 + 12 | all 0 | every one matches the model |
+
+The probes are the evidence behind the next section. A glide above Nyquist,
+by itself, **matches**. The release still excludes increments above INC_HI,
+because it keeps its qualified range inside the musical span and because
+#247 is filed there. The exclusion is conservative, and it is not what
+prevents the mismatch.
+
+The voice-level cases run at voice_dp's register port, and the component
+bench launches the voice at cycle 48. At increments near 2^23 that bench is
+still busy at the end of frame 0, so it gives NO VERDICT. The above-Nyquist
+probes therefore run only at the wrapper, with the production launch.
 
 ## Runtime qualification
 
