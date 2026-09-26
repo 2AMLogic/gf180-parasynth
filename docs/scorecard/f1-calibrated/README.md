@@ -89,8 +89,9 @@ Controls (by exit status, `run_all.json` and `control-corner2x-run_all.*`):
 | `REF_PROFILE_MISSING` F1A–C `--expect 'no verdict'` | fired, 3/3 |
 | `REF_PROFILE_TAMPERED` F1A–C `--expect 'no verdict'` | fired, 3/3 |
 | `F1_LEGACY_SUBSTITUTE` F1A–C `--expect 'no verdict'` (legacy ladder under the selected label) | fired, 3/3, refused by identity |
-| `REF_CORNER_2X` F1A–C `--expect fail` | **NO-VERDICT**. F1A/F1B measured fail (8.72, 9.29). F1C measured the corner failure (error 806 Hz vs 86 Hz tolerance), but *our* rolloff went invalid: the injection halves the tone grid our side is rendered on too (top tone 6 kHz), leaving 3 points in F1C's band. It did not crash, but it is not a measured case failure. Not fitted around. |
-| `REF_CORNER_2X` F1A F1B `--expect fail` (clean pass required, injected fail) | fired, 2/2 (worst 8.72, 9.29), exit 0 |
+| `REF_CORNER_2X` F1A–C `--expect fail`, **after the plan075 repair** (reference axis only; DUT on the frozen grid) | **fired, 3/3, all 9 metrics valid**: worst 8.76 / 9.39 / 9.33, corner. DUT grid sha `449ca4205ccd35f3` identical clean vs injected; reference axis `449ca4205ccd35f3` → `1c688263b94ab167`. `settled-run_all.*` |
+| (history) `REF_CORNER_2X` F1A–C before the repair | **NO-VERDICT**. F1A/F1B measured fail (8.72, 9.29). F1C measured the corner failure (error 806 Hz vs 86 Hz tolerance), but *our* rolloff went invalid: the injection halves the tone grid our side is rendered on too (top tone 6 kHz), leaving 3 points in F1C's band. It did not crash, but it is not a measured case failure. Not fitted around. |
+| (history) `REF_CORNER_2X` F1A F1B before the repair | fired, 2/2 (worst 8.72, 9.29), exit 0 |
 
 ## D. Register transport and component RTL
 
@@ -169,12 +170,33 @@ frozen Surge Type 2 clips, at res 0, drive 1.0, −12 dBFS. It is a development
 result: the scale was selected on the same cases (#231). M1A attack remains
 unqualified and nothing about M1A/M5A/M5B changed.
 
-## Not done / follow-ups
+## Settled re-run after merging main (#234) — plan075 §4
 
-- `tools/run_case.py`'s section comment still says "Our side is
-  `reference_rigs.OurLadder`". Fixing it would change the file hash the new
-  records carry, so it belongs with the next runner change.
-- The `REF_CORNER_2X` injection also moves our stimulus grid, so it cannot
-  discriminate F1C's rolloff. A reference-only shift would.
+Merged `origin/main` (`c3a8797`, #234: `tools/refprofile.py` per-clip
+post-render checks; `profile.json` and the frozen audio unchanged). The
+runner comment now names the selected path. `REF_CORNER_2X` shifts only the
+reference axis (`run_case.dut_probe_grid`), with an invariant test and
+recorded grid hashes. One batch at `e356498` (`settled-run_all.*`), **6/6 by
+exit status**: F1A–C exit 0 (pass 0.76 / 0.42 / 0.36); missing, tampered and
+legacy-substitute controls 3/3 each; shifted-corner 3/3 measured failures;
+focused tests 172 passed, 4 skipped. All nine record values are
+**identical** to the pre-merge records. The inputs bind to the new tree,
+including `tools/refprofile.py` `bde30e5f0a93e3e4` (was `a5c5196a1ecc952b`).
+F1A's record is clean. F1B and F1C say `dirty: true` because F1A.json,
+written moments earlier by the same batch, was uncommitted. That is a
+generated output, not a consumed input.
+
+## Operating domain (plan075 §4, resonance boundary)
+
+`surge-type2-clean-v1` is **qualified at resonance 0 only**. It stays out of
+any resonance-enabled factory preset until an output-level policy is
+qualified. The low-level host API (`filter_calibration=`) may exercise it
+for tests. A musical frontend must not treat the zero-resonance
+qualification as permission for the whole resonance range. The ~12 dB
+self-oscillation increase is what the fourfold reciprocal output gain does
+to an internally sustained oscillation. It is not evidence of a broken
+ladder.
+
+## Not done / follow-ups
 - tb_voice's cycle budget with 3×2x saw plus the 2x filter (above).
 - Global default (plan074 G): not attempted.
