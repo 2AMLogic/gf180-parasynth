@@ -74,7 +74,9 @@ def test_control_tree_session_sends_revision_14():
     assert FRATE in drums
     tree = dict(dx.kit_808())
     assert drums[BURST] == tree[BURST] and drums[TAIL_RATE] == tree[TAIL_RATE]
-    assert len(s.init_writes()) == len(_session().init_writes()) + 1
+    # one more kit write (ENV_FRATE[8]) and R1's known-state preamble (#279)
+    assert len(s.init_writes()) == len(_session().init_writes()) + 1 + len(uh.known_state_preamble())
+    assert s.init_writes()[:2] == list(uh.known_state_preamble())
 
 
 def test_control_release_session_refuses_a_drifted_kit(monkeypatch):

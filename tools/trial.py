@@ -253,9 +253,23 @@ def interpret_rolling_record(spec, run, out, role):
     `state` folds a missed CONTROL into FAIL; this separates a failing candidate
     (FAIL) from an apparatus that did not show it can fail (NO VERDICT)."""
     rec, err = _load_json(out / "verification.json")
+    nv_caught = False if role == "control" else None
     if rec is None:
-        return _result(NO_VERDICT, [err])
+        return _result(NO_VERDICT, [err], caught=nv_caught)
     state = rec.get("state")
+    want = spec.get("image")          # {"sender": ..., "target": ...}, declared per child
+    got = rec.get("image") or {"sender": "release", "target": "release"}
+    if want and {k: got.get(k) for k in want} != want:
+        return _result(NO_VERDICT, [f"the record ran sender/target {got}, this child declares "
+                                    f"{want}"], caught=nv_caught)
+    if role == "control":
+        ef = rec.get("expect_fail") or {}
+        caught = bool(ef.get("caught")) and run["rc"] == 0 and state == "FAIL"
+        return _result(FAIL if state == "FAIL" else NO_VERDICT,
+                       [f"sender {got.get('sender')} vs target {got.get('target')}: "
+                        + ("caught at the init bytes" if caught else
+                           f"NOT caught (state {state}, exit {run['rc']})")],
+                       metrics={"init_check": ef.get("init_check")}, caught=caught)
     if run["rc"] != {"PASS": 0, "FAIL": 1}.get(state):
         return _result(NO_VERDICT, [f"exit status {run['rc']} disagrees with the record's "
                                     f"state {state!r}"])
@@ -318,7 +332,8 @@ def interpret_held_note_record(spec, run, out, role):
     rec, err = _load_json(out / "held_note_audible.json")
     if rec is None:
         return _result(NO_VERDICT, [err], caught=False if role == "control" else None)
-    name = rec.get("preset", "?") + ("-legacy" if rec.get("legacy_image") else "")
+    name = rec.get("name") or (rec.get("preset", "?") + ("-legacy" if rec.get("legacy_image")
+                                                           else ""))
     i2s = out / name / "uart_i2s.txt"
     samples = 0
     try:
@@ -346,7 +361,14 @@ def interpret_held_note_record(spec, run, out, role):
     if rec.get("verdict") not in ("PASS", "FAIL") or peak is None or floor is None:
         return _result(NO_VERDICT, ["record lacks verdict/peak/floor"], metrics=metrics,
                        caught=nv_caught, **cov)
+    want_image = spec.get("image")
+    if want_image and rec.get("image", "release") != want_image:
+        return _result(NO_VERDICT, [f"the record ran image {rec.get('image', 'release')!r}, "
+                                    f"this child declares {want_image!r}"], metrics=metrics,
+                       caught=nv_caught, **cov)
     reasons = []
+    if rec.get("init_problems"):
+        reasons.append("init bytes are not the frozen target: " + "; ".join(rec["init_problems"]))
     if rec["replay_status"] == 1:
         reasons.append("the UART replay is not bit-exact against the model")
     if peak < floor:

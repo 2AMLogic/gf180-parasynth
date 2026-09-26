@@ -74,6 +74,7 @@ import spi_host as sh                             # noqa: E402
 import synth_top_model as stm                     # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import voice_fx as vf                             # noqa: E402
+import r1_candidate as r1c                        # noqa: E402
 from dsp import note_hz, phase_inc                # noqa: E402
 
 SR = C.SR
@@ -289,9 +290,14 @@ class Oracle:
     def __init__(self, frame_of, patch: dict | None = None):
         self.frame_of = frame_of
         self.regs = dict(patch or vf.VoiceFx.patch_regs())
-        self.mh = sh.MusicHost(patch=dict(self.regs), kit=uh.image_kit(HARNESS_IMAGE))
+        # the R1 target is FROZEN (fpga/release/r1_candidate.py), never read
+        # from the image selector the session under test was given (plan088):
+        # the revision-14 kit by digest, after the known-state preamble
+        assert HARNESS_IMAGE == r1c.HOST_IMAGE, (HARNESS_IMAGE, r1c.HOST_IMAGE)
+        self.mh = sh.MusicHost(patch=dict(self.regs), kit=r1c.frozen_kit())
         self.mh.load(0)
-        self.static = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
+        self.static = [tuple(w) for w in r1c.PREAMBLE]
+        self.static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
         for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
                           (stm.A_MWHEEL, "mwheel"), (stm.A_MPD, "mpd"), (stm.A_MFD, "mfd")):
             self.static.append((0, 0, addr, int(self.regs[key])))

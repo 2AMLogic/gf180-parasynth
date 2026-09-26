@@ -807,3 +807,41 @@ def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
     (tmp_path / "verification.json").write_text(json.dumps(rec))
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
+
+
+# ---- R1 (#279, plan088): the image a record ran is the image the child declares
+def _r1_rolling(image):
+    return {"state": "PASS", "image": image, "clean": {"demo@0": {"ok": True}}, "controls": {},
+            "rtl": {"demo": {"state": "PASS", "control": {"caught": True}, "comparison": {
+                "periods": 257185, "writes_sent": 510, "writes_seen": 510}}}}
+
+
+def test_rolling_record_of_another_image_is_no_verdict(repo):
+    """A PASS for the release kit cannot answer an R1 child."""
+    repo.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "release", "target": "release"})}}, interpret="rolling_record",
+        fixtures=["demo"], image={"sender": "tree", "target": "tree"})
+    _, rec = repo.run()
+    assert rec["verdict"] == trial.NO_VERDICT
+    assert "declares" in rec["children"][0]["reasons"][0]
+
+
+def test_rolling_wrong_kit_control_is_caught_only_at_the_init_bytes(repo):
+    repo.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "tree", "target": "tree"})}}, interpret="rolling_record",
+        fixtures=["demo"], image={"sender": "tree", "target": "tree"})
+    ctl = {"state": "FAIL", "image": {"sender": "release", "target": "tree"}, "clean": {},
+           "controls": {}, "expect_fail": {"caught": True, "init_check": {"demo@0": ["kit"]}}}
+    repo.child({"rc": 0, "files": {"verification.json": ctl}}, interpret="rolling_record",
+               role="control", image={"sender": "release", "target": "tree"})
+    _, rec = repo.run()
+    assert rec["verdict"] == trial.PASS and rec["controls"][0]["caught"]
+    (repo.root / "second").mkdir()
+    repo2 = Repo(repo.root / "second")
+    repo2.child({"rc": 0, "files": {"verification.json": _r1_rolling(
+        {"sender": "tree", "target": "tree"})}}, interpret="rolling_record", fixtures=["demo"])
+    miss = dict(ctl, expect_fail={"caught": False})
+    repo2.child({"rc": 1, "files": {"verification.json": miss}}, interpret="rolling_record",
+                role="control")
+    _, rec2 = repo2.run()
+    assert rec2["verdict"] == trial.NO_VERDICT and not rec2["controls"][0]["caught"]

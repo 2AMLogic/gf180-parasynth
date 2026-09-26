@@ -97,7 +97,7 @@
    "scope": {
     "configuration": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0},
     "domain": "the Arty wrapper driven at its UART pins (scenario arty-uart); drum page at its reset image",
-    "excluded": ["PULSE2X=1 (T-PULSE2X-IMAGE)", "the SPI full-kit stress scenarios (docs/deadline/README.md section 3)"]
+    "excluded": ["PULSE2X=1 (T-PULSE2X-IMAGE)", "the SPI full-kit stress scenarios, except in mode `stress` (docs/deadline/README.md section 3)"]
    },
    "dag_nodes": ["I2"],
    "preservation": ["T-PLAY-DIGITAL"],
@@ -152,6 +152,53 @@
        "interpret": "deadline_record"
       }
      ]
+    },
+    "stress": {
+     "description": "the heavy workload at the SPI pins on the CURRENT tree: three audible 2x oscillators with glide, oscillator and filter modulation, noise, the full kit loaded and struck (all eleven stops), control writes (cutoff, resonance, volume, wheel, waveform) and the drum filter toggled -- a superset of the player domain (ROUTE = 1 is refused for players). Plus the late-completion control",
+     "timeout_s": 5400,
+     "tools": [
+      "iverilog",
+      "vvp"
+     ],
+     "requires": [
+      "rtl-sketch/deadline_mon_top.v",
+      "rtl-sketch/tb_top_bx.v"
+     ],
+     "required": [
+      {
+       "id": "stress-saw",
+       "property": "zero missed frames and I2S identical to the model over every required period, with the full kit struck under three gliding, modulated oscillators",
+       "checker": "rtl-sketch/verify_deadline.py",
+       "args": [
+        "--scenario",
+        "stress-saw",
+        "--outdir",
+        "{out}/capture",
+        "--json",
+        "{out}/record.json"
+       ],
+       "interpret": "deadline_record"
+      }
+     ],
+     "controls": [
+      {
+       "id": "late15",
+       "intended_reason": "a completion 15 cycles late is rejected as a DEADLINE miss under the heavy workload, not as an I2S mismatch",
+       "checker": "rtl-sketch/verify_deadline.py",
+       "args": [
+        "--scenario",
+        "stress-saw",
+        "--mutant",
+        "late:15",
+        "--expect-fail",
+        "--outdir",
+        "{out}/capture",
+        "--json",
+        "{out}/record.json"
+       ],
+       "interpret": "deadline_record"
+      }
+     ]
     }
    }
   },
@@ -162,7 +209,11 @@
     "configuration": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0},
     "path": "uart_host CLI bytes -> arty_a7_top UART pins (RTL) -> decoded I2S",
     "presets": ["default", "m5a-saw", "m5a-pulse"],
-    "phrase": "demo"
+    "phrase": "demo",
+    "modes": {
+     "sim": "R0 host bytes (--image release, the default) through the current tree's RTL: a compatibility test, never a claim about the R0 image",
+     "r1": "the R1 candidate's bytes (--image tree) against the frozen R1 target"
+    }
    },
    "dag_nodes": ["I1", "I2"],
    "preservation": ["T-DEADLINE"],
@@ -210,6 +261,167 @@
        "checker": "fpga/release/held_note_audible.py",
        "args": ["--preset", "default", "--legacy-image", "--expect-fail", "--outdir", "{out}"],
        "interpret": "held_note_record"
+      }
+     ]
+    },
+    "r1": {
+     "description": "the R1 candidate (#279, fpga/release/r1_candidate.py): every supported R1 quick-start command as the CLI emits it with --image tree, through the CURRENT tree's Arty wrapper RTL. The target is frozen independently of the sender (plan088); `sim` stays the R0-bytes mode",
+     "timeout_s": 12600,
+     "tools": [
+      "iverilog",
+      "vvp"
+     ],
+     "requires": [
+      "fpga/release/held_note_audible.py",
+      "fpga/verify_rolling_playback.py",
+      "fpga/release/r1_candidate.py"
+     ],
+     "required": [
+      {
+       "id": "held-default",
+       "property": "uart_host.py run --note 45 --fixture none --image tree: the R1 bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "tree",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "tree"
+      },
+      {
+       "id": "held-m5a-saw",
+       "property": "uart_host.py run --preset m5a-saw --note 72 --fixture none --image tree: the R1 bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "m5a-saw",
+        "--image",
+        "tree",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "tree"
+      },
+      {
+       "id": "held-m5a-pulse",
+       "property": "uart_host.py run --preset m5a-pulse --note 72 --fixture none --image tree: the R1 bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "m5a-pulse",
+        "--image",
+        "tree",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "tree"
+      },
+      {
+       "id": "run-m5a",
+       "property": "uart_host.py run --note 45 --fixture m5a --image tree: the held note then the M5A phrase, the CLI's own bytes (not the bench-built phrase) bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "tree",
+        "--fixture",
+        "m5a",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "tree"
+      },
+      {
+       "id": "phrase-demo",
+       "property": "uart_host.py run --fixture demo --image tree: the setup bytes equal the FROZEN R1 target (preamble, revision-14 kit by digest, clap ENV_FRATE[8] nonzero), every write on its frame, and the RTL wire I2S equals the model over the whole phrase",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "tree",
+        "--expect-image",
+        "tree",
+        "--rtl",
+        "demo"
+       ],
+       "interpret": "rolling_record",
+       "fixtures": [
+        "demo"
+       ],
+       "image": {
+        "sender": "tree",
+        "target": "tree"
+       }
+      },
+      {
+       "id": "phrase-bar808-full",
+       "property": "uart_host.py run --fixture bar808-full --image tree: the setup bytes equal the FROZEN R1 target (preamble, revision-14 kit by digest, clap ENV_FRATE[8] nonzero), every write on its frame, and the RTL wire I2S equals the model over the whole phrase",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "tree",
+        "--expect-image",
+        "tree",
+        "--rtl",
+        "bar808-full"
+       ],
+       "interpret": "rolling_record",
+       "fixtures": [
+        "bar808-full"
+       ],
+       "image": {
+        "sender": "tree",
+        "target": "tree"
+       }
+      }
+     ],
+     "controls": [
+      {
+       "id": "held-legacy-silent",
+       "intended_reason": "the pre-fix image (no mixer writes) under --image tree replays bit-exact but is SILENT, and the level floor rejects it",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "tree",
+        "--legacy-image",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "tree"
+      },
+      {
+       "id": "wrong-kit-demo",
+       "intended_reason": "the sender on the release image (revision-11 kit, no preamble) against the frozen R1 target is a host-correctness FAIL at the init bytes, before any RTL",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "release",
+        "--expect-image",
+        "tree",
+        "--expect-fail"
+       ],
+       "interpret": "rolling_record",
+       "image": {
+        "sender": "release",
+        "target": "tree"
+       }
       }
      ]
     }

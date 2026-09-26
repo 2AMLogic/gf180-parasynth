@@ -338,7 +338,11 @@ class MidiSession:
         import synth_top_model as stm
         import drums_fx as dx
         self.mh.load(0)
-        w = [(x.flag, x.sec, x.addr, x.data & 0xFFFFFFFF) for x in self.mh.w]
+        # R1 (image tree, #279): the known-state preamble first -- voice and
+        # drum RESET zero every register and state, so routing, modulation,
+        # drift and the drum registers the kit does not write are KNOWN
+        w = list(uh.known_state_preamble()) if self.image == "tree" else []
+        w += [(x.flag, x.sec, x.addr, x.data & 0xFFFFFFFF) for x in self.mh.w]
         self.mh.w.clear()
         self.mh.events.clear()
         for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
@@ -348,6 +352,9 @@ class MidiSession:
         return w
 
     def start(self, *, timeout_s: float = 5.0) -> None:
+        if self.image == "tree":
+            # nothing an earlier session queued may fire into this one
+            self.bridge.assert_idle()
         writes = self.init_writes()
         acks0 = self.bridge.acks_seen
         # the write queue drains two a frame and a write packet takes 33 frames
