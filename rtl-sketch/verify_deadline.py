@@ -209,7 +209,54 @@ def _stress(waves, short, *, alt_waves=None):
         strike(gap)
     s.put(gap, [(0, SEC_V, stm.A_ROUTE, 0), (0, SEC_V, stm.A_K, regs["k"])])
     strike(gap)
+    # then the keyboard: legato runs across the whole MIDI range (glides between
+    # far notes keep every increment moving), the drum filter toggled, the
+    # cutoff swept -- more frames, more PolyBLEP-window phases, more overlaps
+    rounds = (range(24, 128, 13), range(127, 20, -17), range(36, 128, 7)) if not short \
+        else (range(60, 128, 17),)
+    for ri, notes in enumerate(rounds):
+        s.put(gap, [(0, SEC_V, stm.A_ROUTE, (ri + 1) & 1), (0, SEC_V, stm.A_CUT_HI, 3000 + 4000 * ri)])
+        for j, nt in enumerate(notes):
+            s.put(gap // 2, note_writes(nt, regs, jump=False, gate="trig" if j % 3 == 0 else None))
+            strike(2, all_stops if j % 2 == 0 else (1 << dx.BD) | (1 << dx.OH))
     return s.cmds, int(200 * S) + 60, dict(regs=regs, claim="three_2x_audible", drums=True)
+
+
+def _extreme(waves, short):
+    """The REGISTER-LEGAL worst case, beyond the musical range: every
+    increment >= 2^23 (half the phase circle), so both PolyBLEP windows of
+    every edge open in almost every frame; a slow glide between two such
+    values plus oscillator modulation, so all three reciprocals are recomputed
+    every frame; noise, filter modulation, the drum filter engaged and the kit
+    struck under it. Reached by INC writes (the register accepts any 24-bit
+    increment; note 127 is 0x42xxxx), not by a note."""
+    S = 0.4 if short else 1.0
+    regs = vf.VoiceFx.patch_regs(waves=waves, detune=(0.0, 0.0, 0.0), mix=(1.0, 0.8, 0.7),
+                                 noise=0.3, nsel=1, cutoff=(200, 12000), q=0.9, drive=1.6,
+                                 amp=(0.002, 0.2, 0.8, 0.1), fenv=(0.001, 0.2, 0.5, 0.1),
+                                 track=0.0, vol=0.45, glide_s=2.0, mod_mix=0.5, mod_wheel=1.0,
+                                 mod_pitch=0.05, osc_mod=True, filt_mod=True, osc3_ctl=True)
+    s = Script()
+    s.put(0, image_writes(regs, dvol=dx.accent_reg(0.3), bvol=dx.accent_reg(0.3), route=1, dcut=600))
+    s.put(0, drum_image_writes())
+    all_stops = (1 << dx.N_STOPS) - 1
+    lo, hi = (0xC00000, 0xC80000, 0xD00000), (0xFF0000, 0xF80000, 0xF00000)
+    s.put(4, [(1, SEC_V, stm.A_INC + k, lo[k]) for k in range(3)] + [(0, SEC_V, stm.A_GATE_ON, 0)])
+    gap = max(16, int(40 * S))
+    for i in range(int(30 * S) + 2):
+        tgt = hi if i % 2 == 0 else lo
+        s.put(gap, [(0, SEC_V, stm.A_INC + k, tgt[k]) for k in range(3)])     # glide, flag 0
+        s.put(2, [(0, SEC_D, dx.A_STOPS, all_stops)])
+        s.put(2, [(0, SEC_D, dx.A_STOPS, 0)])
+    return s.cmds, int(200 * S) + 60, dict(regs=regs, claim="three_2x_audible", drums=True)
+
+
+def sc_extreme_saw(short=False):
+    return _extreme(("saw", "saw", "saw"), short)
+
+
+def sc_extreme_pulse(short=False):
+    return _extreme(("square", "pulse29", "pulse15"), short)
 
 
 def sc_stress_saw(short=False):
@@ -221,7 +268,8 @@ def sc_stress_pulse(short=False):
 
 
 SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_saw,
-                 "stress-pulse": sc_stress_pulse}
+                 "stress-pulse": sc_stress_pulse, "extreme-saw": sc_extreme_saw,
+                 "extreme-pulse": sc_extreme_pulse}
 
 
 # ---- coverage: what the landed writes say the chip was doing, frame by frame --------

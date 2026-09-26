@@ -692,6 +692,13 @@ def main(argv=None) -> int:
                 print(f"verify_voice: deadline at launch cycle {DEADLINE['go']}: worst strobe cycle "
                       f"{DEADLINE['worst_strobe']} (slack {DEADLINE['sample_slack']}), worst last-busy "
                       f"cycle {DEADLINE['worst_busy']} (slack {DEADLINE['busy_slack']})")
+    if a.expect_fail and a.inject == "LATE_DONE":
+        # the deadline control is caught only by the DEADLINE check, never by a value mismatch
+        if status == 1 and ("overrun_frame" in DEADLINE or DEADLINE.get("late_samples")):
+            print("verify_voice: negative control LATE_DONE CAUGHT by the deadline check")
+            return 0
+        print(f"verify_voice: NEGATIVE CONTROL LATE_DONE NOT CAUGHT FOR ITS REASON (status {status}, {DEADLINE})")
+        return 1 if status != 2 else 2
     if a.expect_fail:
         if status == 1:
             print(f"verify_voice: negative control {a.inject or ''} CAUGHT (comparison failed as required)")
