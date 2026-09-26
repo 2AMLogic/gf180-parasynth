@@ -280,3 +280,166 @@ These were caught by controls or refusals, not by inspection.
 7. One exploratory render showed "Burst timing 31.9 ms, pass" with three
    strikes. The estimator was counting a noise dip as a fourth burst, which is
    the qualification failure in §7.
+
+---
+
+# plan081 B and C (branch `measure/d12a-final-strike`)
+
+All heavy runs were on the build box, and the records are in this folder:
+
+| file | what |
+|---|---|
+| `burst-timing-qual.json` | B's per-condition statistics |
+| `final-strike.json` | C's full record |
+| `c-run_all.json` / `.log` | the committed C run at `50214bb` |
+| `b-and-first-c-run_all.json` / `.log` | B's verdict run, plus a first C run at `4059834` |
+
+The first C run is identical to the committed one in every number. The only
+differences are the programmed-strike lists, which it printed with a doubled
+first strike (see wrong-then-right 8), and the basis head.
+
+## 9. B: burst-timing apparatus check. Verdict: UNQUALIFIED for this domain
+
+**Three quantities, kept apart.**
+
+1. **Programmed strike times.** These are the excitation schedule, read from
+   model or RTL envelope state. They are exact for our renders and unknown for
+   the reference.
+2. **Peaks in a noisy envelope.** This is what `_burst_span_ms` returns: the
+   first-to-last span of peaks that `envelope_bursts` accepts in a 4 ms RMS
+   envelope.
+3. **The audible transient's duration or energy distribution.** Not measured
+   here.
+
+B asked whether quantity 2 recovers quantity 1's span and count.
+
+**Generator.** It is independent of the detector and of the model: Gaussian
+noise (seeded PCG64), a float Butterworth band-pass around 1071 Hz, and a
+piecewise re-strike envelope built from a declared strike list. There were 24
+realisations per condition, at 44.1 and 48 kHz. Truth is the strike list, never
+the peak finder's output.
+
+**Conditions:**
+- three short strikes
+- four short strikes
+- three short strikes plus a sustained final strike with τ 20 ms or τ 40 ms
+- three short strikes plus a slow tail and no 4th trigger
+
+**Controls:** missing final strike, missing 2nd strike, final strike delayed
+by 8 ms, and an extra strike at 55 ms.
+
+**Budget.** Frozen before the run: |median error| ≤ 2 ms, 95th percentile ≤ 5 ms,
+and at most 1 false extra strike in 24.
+
+| detector | result |
+|---|---|
+| official (2 dB dip) | **fails every condition at both rates**. Baseline-like S3: p95 11 ms, 5–6/24 strikes missed, 2–3/24 extras. Sustained final τ 20 ms: median +12 to +19 ms, 14–15/24 false extras. τ 40 ms: median +29 ms, 20–23/24 extras |
+| pre-declared correction (6 dB dip) | fails every condition. It trades extras for misses (up to 22/24 missed) |
+| official on a **noise-free** carrier (reference point) | exact everywhere: error ≤ 0.011 ms, 0 extra, 0 missed |
+
+- **The detector reads envelope shapes correctly. Noise is what breaks it.** No
+  small correction qualifies, so per the stop rule "Burst timing" is marked
+  **unqualified** for noise-excited clap envelopes. No estimator work was
+  started.
+- **Consequence for preservation.** The baseline's 8/8 "Burst timing pass" was
+  produced by an estimator this check shows to be unsuitable. Under plan082
+  that pass is **not a preservation obligation**. Timing is reported in C
+  below, labelled unqualified, and is not used as a gate.
+- **Limitation.** The generator's carrier is un-saturated Gaussian noise. Our
+  model's path has a tanh, which lowers the envelope's fluctuation; that may be
+  why our renders read more stably (18.7–20.0 ms over 8 offsets) than S3 does.
+  The reference's analogue "distorted noise" has unknown crest statistics, so
+  model stability does not qualify the detector on the reference either.
+- **Narrow follow-up (one).** Timing should be two separate checks, as plan081
+  says: exact programmed strike times from model or RTL state (C reports them),
+  and a declared acoustic envelope-shape measurement, such as the anchored
+  window energies and late-event level and duration below. A replacement peak
+  detector is not the follow-up.
+
+## 10. C: one bounded final-strike experiment. Result: L2 selected and confirmed; model improvement, promotion incomplete
+
+**Mechanism.** `FinalStrikeEnv`, a subclass of `EnvFx` that lives only in
+`tools/clap_final_strike_experiment.py`, gives the **last** re-strike an
+explicit level (`fire_level × L`) and its own decay rate. Every other strike
+keeps the shipped 13/16 rule. Precondition: with no final level set, the
+subclass renders bit-identically to `render_drum_solo("CP")`. This was
+asserted, and it passed.
+
+**Frozen at `4059834`, before any render.**
+- Conditions: B0; T (tail τ 80 ms); L1, L2 and L3 (T plus 4 strikes at period
+  511 plus a final strike at 0.75, 1.00 and 1.25 of the first, with τ 20 ms);
+  C2 archived.
+- Development offsets: the #253 set. Fresh offsets:
+  `3301 5557 8803 10501 14009 16411 18503 20011`.
+- Anchor: each side's own 0–30 ms energy at **fixed gain**. There is no
+  per-candidate peak normalisation.
+- Selection rule: stated in the tool's docstring.
+- **Selection used DEV only.** The fresh set was rendered afterwards, in the
+  same process, for B0 and the one selected level only, and no human looked at
+  results in between. The fresh set is therefore untouched confirmation data.
+
+**DEV, 8 offsets.** Ratio and decay are qualified; timing is shown but is
+unqualified (B).
+
+| condition | ratio pass | decay pass | timing* | median \|ratio err\| dB | anchored − ref: 30–50 / 50–80 / 80–200 dB | late event re early peak, −20 dB duration | peak FS @ acc 1 / 2 | rail |
+|---|---|---|---|---|---|---|---|---|
+| B0 baseline | 0/8 | 3/8 | 8/8 | 14.16 | −15.06 / −12.20 / −8.69 | −9.2 dB, 74 ms (tail) | 0.243 / 0.389 | 0 |
+| T tail-only | 0/8 | 8/8 | 8/8 | 10.32 | −12.93 / −7.86 / −1.03 | −7.8 dB, 122 ms | 0.243 / 0.390 | 0 |
+| L1 final 0.75 | 7/8 | 8/8 | 7/8 | 2.59 | **−3.27** / −0.95 / +0.94 | +1.2 dB, 67 ms | 0.243 / 0.390 | 0 |
+| **L2 final 1.00** | **8/8** | **8/8** | 7/8 | 0.89 | −1.40 / +0.53 / +1.56 | +3.2 dB, 53 ms | 0.274 / 0.425 | 0 |
+| L3 final 1.25 | 8/8 | 7/8 | 7/8 | 0.55 | +0.14 / +1.79 / +2.15 | +4.8 dB, 53 ms | 0.330 / 0.425 | 0 |
+| C2 archived | 8/8 | 8/8 | 2/8 | 2.41 | −4.50 / +0.76 / **+4.64** | −0.6 dB, 102 ms | 0.243 / 0.390 | 0 |
+| *reference* | — | — | — | — | (anchored: +2.02 / −4.87 / −11.96) | +2.2 dB at 38.8 ms, 46 ms | — | — |
+
+\* Timing is unqualified (section 9) and is not a gate.
+
+- **Programmed strike times, from envelope state:**
+  - B0 and T: 0, 10.0, 20.0 ms
+  - L1–L3 and C2: 0, 10.646, 21.292, 31.938 ms
+- **Accent response** (level-matched ratio at accents 0.5 / 1 / 2): L2 gives
+  −2.14 / −2.14 / −1.74 dB, which is flat to a small tanh effect at accent 2,
+  as the baseline's is.
+- **Selection.**
+  - L1 is ineligible: its anchored 30–50 ms window is 3.27 dB short, beyond the
+    3 dB limit.
+  - L2 and L3 are both eligible. L3's median error is lower by 0.34 dB, which
+    is inside the 0.5 dB tie band, so the rule picks the lower level: **L2**.
+- **Fresh confirmation (untouched offsets).**
+
+  | condition | ratio | decay | median \|ratio err\| | anchored − ref: 30–50 / 50–80 / 80–200 |
+  |---|---|---|---|---|
+  | L2 | 8/8 | 8/8 | 0.47 dB | −1.06 / +0.92 / +1.30 dB |
+  | B0 on the same offsets | 0/8 | **0/8** | 13.62 dB | −14.51 / −11.86 / −9.24 dB |
+
+  **Confirmed.**
+- **Separating the contributions.**
+  - The tail alone (T) moves the error by only 3.8 dB and passes 0/8.
+  - The explicit final strike supplies the remaining ~9.3 dB.
+  - L2 is **not** a long-tail shift: its 80–200 ms window is +1.3 to +1.6 dB of
+    the reference, against C2's +4.6 dB.
+  - L2's late event lasts 53 ms, close to the reference's 46 ms. C2's lasts
+    102 ms, which is the smear C2 used to get its energy.
+- **Headroom.** L2 raises the accent-1 peak from 0.243 to 0.274 FS (+1.0 dB) and
+  the accent-2 peak from 0.389 to 0.425 FS (+0.8 dB), with 0 rail samples at any
+  accent. At accent 2, L3 and L2 peak identically at 0.4247, because the 24-bit
+  envelope saturates.
+- **Decay.** L2 passes 8/8 on DEV and 8/8 on fresh, against the baseline's 3/8
+  and 0/8. The baseline's decay "pass" is fragile, as §7 found; L2's T20
+  (109–126 ms) sits inside tolerance on both sets.
+
+**Label: model improvement; promotion incomplete.** Burst timing is
+unqualified (§9); the change exists only as an experiment-local `EnvFx`
+subclass, with no production model, RTL, image or release binding. The next
+step is plan081 D: an explicit final-strike implementation in model and RTL,
+repeated hits and stale updates, CP/MA switching, accent and headroom checks,
+deadline checks, and I2S proof. That waits for the coordinator.
+
+## Wrong-then-right, B and C (2 more; 9 in total)
+
+8. C's first run reported programmed strikes with a doubled first strike
+   (`[0.0, 0.0, 10.0, 20.0]`). The fire frame is already a rise from 0, and the
+   code also prepended 0. This was a reporting bug and did not affect any
+   render. It was fixed at `50214bb` and re-run, and every other number was
+   identical.
+9. The first C run used `--jobs 7`, before the coordinator's cap of 4 arrived.
+   The committed re-run used 4. Both were on the build box.
