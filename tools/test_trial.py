@@ -655,13 +655,19 @@ def test_no_control_declared_still_reports_a_conclusive_fail(repo):
     assert rec["verdict"] == trial.FAIL
 
 
-def test_committed_release_bound_is_no_verdict_until_it_has_a_control():
-    """T-RELEASE-BOUND declares no control (none can exist until #255 lands
-    release_manifest.py), so even with every required child BOUND it is NO VERDICT."""
+def test_committed_release_bound_can_pass_only_with_its_stale_controls_caught():
+    """T-RELEASE-BOUND was NO VERDICT with every child BOUND while it declared no
+    control; #278 added two STALE counterexamples (fpga/release/stale_controls.py,
+    tested on the real tree in fpga/release/test_stale_controls.py). It PASSes only
+    when both are caught; an uncaught one is NO VERDICT, never PASS."""
     mode = trial.load_registry()["trials"]["T-RELEASE-BOUND"]["modes"]["check"]
-    assert mode["controls"] == []
+    assert {c["id"] for c in mode["controls"]} == {"stale-manifest", "stale-binding"}
     passing = [{"id": c["id"], "verdict": trial.PASS, "reasons": []} for c in mode["required"]]
     assert trial.composite(passing, [])[0] == trial.NO_VERDICT
+    caught = [{"id": c["id"], "caught": True, "reasons": []} for c in mode["controls"]]
+    assert trial.composite(passing, caught)[0] == trial.PASS
+    caught[1]["caught"] = False
+    assert trial.composite(passing, caught)[0] == trial.NO_VERDICT
 
 
 @pytest.mark.parametrize("line,rc,caught", [
