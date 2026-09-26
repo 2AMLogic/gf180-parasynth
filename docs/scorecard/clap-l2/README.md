@@ -86,6 +86,44 @@ The combined fixture is the clap phrase at the intended gains (DVOL = BVOL =
   output only. The accent-compression attribution to "a small tanh effect" was
   not shown causally. The envelope saturation above is what was measured.
 
+### Disposition (plan087 B1): the nominal demo mix is qualified, no gain change
+
+The stress result above stays as it is: **327 output-rail samples with L2
+against 324 pre-L2**, all within 50 ms of the all-stops-at-accent-2 hit. It is
+an extreme case and is not claimed to be clean.
+
+The mix a player hears was measured separately with
+`tools/headroom_demo_mix.py`, which reads the master sum **before** the final
+clamp (`synth_top_model` step 6) rather than counting samples that equal the
+rail. Integer model, Arty configuration (OSC2X=1, FILTER2X=1, PULSE2X=0), the
+`fpga/fixtures.py` fixtures at their own gains (DVOL = BVOL = 0.45, the
+reference kit, the fixture's accents; each fires CP twice). Build box, commit
+`3886191`, `tools/run_all.py` 4/4 exit 0; records in `headroom/`.
+
+| fixture | clap | clamp events | rail samples | peak before clamp | headroom | envelope-rail fires (internal) |
+|---|---|---|---|---|---|---|
+| `demo` | L2 | **0** | 0 | 26,072 | **+1.99 dB** | 16 |
+| `demo` | pre-L2 | 0 | 0 | 26,159 | +1.96 dB | 16 |
+| `bar808-full` | L2 | **0** | 0 | 19,971 | **+4.30 dB** | 16 |
+| `bar808-full` | pre-L2 | 0 | 0 | 19,971 | +4.30 dB | 16 |
+| control: `demo`, every accent 2.0, DVOL/BVOL full | L2 | 30,595 | 30,601 | 147,419 | −13.06 dB | 22 |
+| control: `bar808-full`, same | L2 | 27,132 | 27,135 | 143,326 | −12.82 dB | 22 |
+
+- **No gain change.** Neither nominal mix reaches the final clamp with either
+  clap. L2 does not reduce the demo's headroom (+1.99 dB vs +1.96 dB), so the
+  gains stay where they are and there is nothing to bind.
+- **The controls make the zero meaningful.** On the same material, the
+  hot variant clips before the clamp on about 30,000 frames. The tool refuses
+  (exit 2) if the control does not clip, if the fixture never fires the clap,
+  if the output is not music, or if the L2 and pre-L2 renders are identical.
+- **Internal saturation is separate, and it happens in nominal play too.**
+  Sixteen strikes in each nominal fixture reach the 24-bit envelope rail, the
+  same number with either clap. That is `usat24` at fire on accented hits. It
+  is not an output clip, and L2 does not change it.
+- **Scope.** Model only. No RTL run of these fixtures and no image. The
+  digital-playback pilot's UART evidence for `demo` belongs to R1 (B2), not to
+  this PR.
+
 ## Official D12A, rescored through the normal runner
 
 `tools/run_case.py D12A` at `d42ac14`: **no verdict**.
@@ -118,6 +156,21 @@ The combined fixture is the clap phrase at the intended gains (DVOL = BVOL =
 - Any acoustic-envelope replacement for Burst timing (plan084: a later, bounded
   rubric change).
 - A physical recording.
+
+## Integration for review (plan087 B1)
+
+CI failed on four jobs. All of them were stale inputs, and each guard was kept:
+
+1. **Contract revision (python, acceptance).** L2 was written as "contract
+   revision 11", but revision 11 (the tom rebalance) and revision 12 (drift)
+   already existed. The kit changed without the pins changing, so
+   `spec/reference/test_tables.py` failed 5 tests. The change is renumbered as
+   **revision 13**, and KIT808 is re-pinned `a43fe2a7…` → `321a9354…` (147 →
+   148 writes). A new test rebuilds revision 11's image from the live one by
+   undoing exactly the three clap writes, and requires revision 11's hash.
+2. **Arty binding (spi-i2s, m5a-fast).** The live-tree UART proof still named
+   `drift-clean`. A new `fpga/reports/arty/l2-clean` run is bound instead. R0
+   stays pinned to `uart-clean`, now by an explicit test.
 
 ## Wrong-then-right, this rung (5)
 
