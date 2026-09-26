@@ -273,7 +273,7 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
             heard = None if None in weights else audible(waves, weights)
             if heard not in SUPPORTED_WAVES:
                 raise Rejected("WAVES", f"osc {k} programmed while the audible waveform set is "
-                               f"{heard if heard else 'unknown'}; "
+                               f"{heard if heard else 'unknown (this stream does not write the image; use `run`, which loads it)'}; "
                                f"release sets are {_WAVES_TXT}", i)
             o = osc[k]
             jump = bool(flag) or glide == 0
