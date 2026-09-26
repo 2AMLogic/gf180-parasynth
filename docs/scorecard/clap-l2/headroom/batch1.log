@@ -1,0 +1,22 @@
+==============================================================================
+PASS            54.8s  /home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --scenario phrase --outdir build/uart-l2
+              verify_uart_bridge[phrase]: PASS -- writes 87/87, timing bad 0, corrupt 0, I2S mismatch 0 over 6734 periods, errs 0 {}
+              {"state": "PASS", "runs": {"phrase": "PASS"}}
+PASS            23.2s  /home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --start-red --outdir build/uart-startred
+              verify_uart_bridge: START RED against /home/ubuntu/work/b1-l2/fpga/stubs/arty_a7_uart_stub.v
+                  0 writes drained, 26 expected
+              verify_uart_bridge: start-red run state FAIL (writes_seen 0 of 26, wire_mismatch 0, periods 3418)
+              verify_uart_bridge: start red confirmed -- the bench fails against a behaviour-free stub, as it must
+PASS           108.4s  /home/ubuntu/work/venv/bin/python tools/headroom_demo_mix.py --fixture demo --out build/b1/headroom-demo.json
+              demo         l2           pre-clamp over      0  rail      0  peak(pre)  26072  headroom   +1.99 dB  env-sat fires  16  CP fires 2
+              demo         pre_l2       pre-clamp over      0  rail      0  peak(pre)  26159  headroom   +1.96 dB  env-sat fires  16  CP fires 2
+              demo         control_hot  pre-clamp over  30595  rail  30601  peak(pre) 147419  headroom  -13.06 dB  env-sat fires  22  CP fires 2
+              headroom_demo_mix: QUALIFIED
+PASS           114.8s  /home/ubuntu/work/venv/bin/python tools/headroom_demo_mix.py --fixture bar808-full --out build/b1/headroom-bar808-full.json
+              bar808-full  l2           pre-clamp over      0  rail      0  peak(pre)  19971  headroom   +4.30 dB  env-sat fires  16  CP fires 2
+              bar808-full  pre_l2       pre-clamp over      0  rail      0  peak(pre)  19971  headroom   +4.30 dB  env-sat fires  16  CP fires 2
+              bar808-full  control_hot  pre-clamp over  27132  rail  27135  peak(pre) 143326  headroom  -12.82 dB  env-sat fires  22  CP fires 2
+              headroom_demo_mix: QUALIFIED
+==============================================================================
+4/4 passed
+run_all exit 0

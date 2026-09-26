@@ -94,9 +94,9 @@ FULL24 = (1 << ENV_BITS) - 1
 # from 0x80 to 0x90 and MODE from 0xC0 to 0xB0: at 0xC0 the last mode's `num`
 # register would have been 0xFF, which is RESET.
 A_STOPS, A_ACCENT, A_OSC, A_ENV, A_PATH, A_MODE, A_RESET = 0x00, 0x10, 0x20, 0x40, 0x90, 0xB0, 0xFF
-ENV_STRIDE, MODE_STRIDE = 4, 4   # ENV: +0 ctl, +1 peak, +2 rate; MODE: +0 a1, +1 a2, +2 amp, +3 num
+ENV_STRIDE, MODE_STRIDE = 4, 4   # ENV: +0 ctl, +1 peak, +2 rate, +3 frate; MODE: +0 a1, +1 a2, +2 amp, +3 num
 REG_BITS = dict(stops=N_STOPS, accent=ACCENT_BITS, osc_inc=PHASE_BITS, env_ctl=27, peak=ENV_BITS,
-                rate=RATE_Q, path=25, a1=26, a2=26, amp=16, num=2)
+                rate=RATE_Q, frate=RATE_Q, path=25, a1=26, a2=26, amp=16, num=2)
 
 
 def env_ctl(stop: int, choke: int = 15, hold: int = 0, bursts: int = 0, period: int = 0) -> int:
@@ -182,22 +182,37 @@ class EnvFx:
         choked (its choke stop went 0->1 this frame): level <- 0
         ENV = level >> 9                      (Q0.15, what the paths multiply by)
 
+    THE FINAL STRIKE (contract revision 13, 15.3; plan084, the clap's L2).
+    With FRATE = 0 -- the reset value, and every envelope but the clap's burst
+    -- nothing below changes and the envelope is bit-identical to revision 10.
+    With FRATE != 0:
+        fired:     fcap <- level (the accent-scaled fire level, captured ONCE)
+        re-strike k == bursts (the LAST one):
+                   strike <- fcap; level <- strike       (not 13/16 of the last)
+        decay once t > bursts * period:  rate FRATE instead of RATE
+        choked:    fcap <- 0 as well, so no final strike can follow a choke
+    PEAK and ACCENT are read only when the envelope fires, so a mid-note write
+    of either cannot change the final strike; RATE and FRATE are read on every
+    decay frame, so a mid-note write of either applies from the next frame.
+    `fcap` is state, cleared by RESET.
+
     The `max(1, dec)` is the voice's (8.3): below level = 2^16 / rate the
     product truncates to zero and the tail would never end; with it the tail
     below that floor is one LSB per frame and reaches exactly zero. `floor`
     exists to measure that, like LadderFx's `interp`."""
-    __slots__ = ("stop", "choke", "hold", "bursts", "period", "peak", "rate",
-                 "level", "strike", "t", "floor", "n_fire", "n_choke", "n_restrike", "n_floor")
+    __slots__ = ("stop", "choke", "hold", "bursts", "period", "peak", "rate", "frate",
+                 "level", "strike", "t", "fcap", "floor", "n_fire", "n_choke", "n_restrike",
+                 "n_final", "n_floor")
 
     def __init__(self, floor: bool = True):
         self.stop = self.choke = self.hold = self.bursts = self.period = 0
-        self.peak = self.rate = 0
+        self.peak = self.rate = self.frate = 0
         self.floor = floor
-        self.n_fire = self.n_choke = self.n_restrike = self.n_floor = 0   # coverage, not state
+        self.n_fire = self.n_choke = self.n_restrike = self.n_final = self.n_floor = 0   # coverage, not state
         self.reset()
 
     def reset(self):
-        self.level = self.strike = self.t = 0
+        self.level = self.strike = self.t = self.fcap = 0
 
     def set_ctl(self, word: int):
         self.stop, self.choke = word & 15, (word >> 4) & 15
@@ -207,19 +222,26 @@ class EnvFx:
         if self.stop < N_STOPS and (fire >> self.stop) & 1:
             self.level = usat((self.peak * accents[self.stop]) >> 15, ENV_BITS)
             self.strike = self.level
+            self.fcap = self.level
             self.t = 0
             self.n_fire += 1
         else:
             self.t = min(self.t + 1, T_MAX)
             t = self.t
+            last = self.bursts * self.period
             if t < self.hold:
                 pass
             elif self.period and any(t == k * self.period for k in (1, 2, 3) if k <= self.bursts):
-                self.strike = (self.strike * BURST_C) >> 16
+                if self.frate and t == last:
+                    self.strike = self.fcap                  # the final strike: the fire level
+                    self.n_final += 1
+                else:
+                    self.strike = (self.strike * BURST_C) >> 16
                 self.level = self.strike
                 self.n_restrike += 1
             else:
-                dec = (self.level * self.rate) >> RATE_Q
+                rate = self.frate if (self.frate and t > last) else self.rate
+                dec = (self.level * rate) >> RATE_Q
                 if dec == 0:
                     self.n_floor += self.level > 0
                     if self.floor:
@@ -227,6 +249,7 @@ class EnvFx:
                 self.level = max(0, self.level - dec)
         if self.choke < N_STOPS and (fire >> self.choke) & 1:
             self.level = 0
+            self.fcap = 0
             self.n_choke += 1
 
     @property
@@ -267,7 +290,7 @@ class DrumsFx:
         if not hasattr(self, "envs"):
             self.envs = [EnvFx(self.floor) for _ in range(self.E)]
         for env in self.envs:                    # state and control to 0; the coverage counters stay
-            env.reset(); env.set_ctl(0); env.peak = env.rate = 0
+            env.reset(); env.set_ctl(0); env.peak = env.rate = env.frate = 0
         self.paths = [0] * self.P
         self.a1 = [0] * self.M
         self.a2 = [0] * self.M
@@ -294,6 +317,8 @@ class DrumsFx:
                 self.envs[e].peak = value & FULL24
             elif f == 2:
                 self.envs[e].rate = value & 0xFFFF
+            else:
+                self.envs[e].frate = value & 0xFFFF   # revision 13: the final strike (15.3)
         elif A_PATH <= addr < A_PATH + self.P:
             self.paths[addr - A_PATH] = value & ((1 << 25) - 1)
         elif A_MODE <= addr < A_MODE + self.M * MODE_STRIDE:
@@ -462,10 +487,18 @@ def mode_writes(m: int, f0_hz: float, q: float, amp: float, num: int = RAW) -> l
 
 
 def env_writes(e: int, stop: int, tau_s: float, peak: float, *, choke: int = 15,
-               hold: int = 0, bursts: int = 0, period: int = 0) -> list:
+               hold: int = 0, bursts: int = 0, period: int = 0,
+               final_tau: float | None = None) -> list:
+    """`final_tau` (revision 13) writes FRATE: None writes nothing (the register
+    keeps what it had -- 0 from reset), 0 writes 0 (the feature OFF, which a
+    preset that shares an envelope with a final-strike sound MUST do), and a
+    time constant writes its rate."""
     base = A_ENV + e * ENV_STRIDE
-    return [(base, env_ctl(stop, choke, hold, bursts, period)),
-            (base + 1, peak_reg(peak)), (base + 2, rate_reg(tau_s))]
+    w = [(base, env_ctl(stop, choke, hold, bursts, period)),
+         (base + 1, peak_reg(peak)), (base + 2, rate_reg(tau_s))]
+    if final_tau is not None:
+        w.append((base + 3, rate_reg(final_tau) if final_tau > 0 else 0))
+    return w
 
 
 # ---- the reference kit (contract Appendix G, informative) -----------------------------
@@ -517,6 +550,14 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
 PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
+# ---- the clap, contract revision 13 (plan081 C / plan084: "L2") ---------------
+# FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
+# section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
+# 21.3, 31.9 ms), the first three at the kept 4 ms decay and 13/16 re-strike,
+# the LAST at the accent-scaled fire level (L = 1.00) decaying at 20 ms, and the
+# tail's tau at its one-record measured 80 ms (was the R348 x C138 estimate 47).
+CP_BURST_TAU, CP_BURSTS, CP_PERIOD = 4e-3, 3, 511
+CP_FINAL_TAU, CP_TAIL_TAU = 20e-3, 80e-3
 # The RS/CL exciter, by position. The RIMSHOT's is low on purpose: both taps
 # go through the swing VCA, and a tap that drives the tanh into its rail comes
 # out as a flat-topped burst whose decay is the GATE's 22 ms rather than the
@@ -931,8 +972,9 @@ def kit_808() -> list:
     w += env_writes(E_HTX, HT, 0.1e-3, 0.25)
     w += env_writes(E_CH, CH, 20e-3, 1.0)                    # reference 11
     w += env_writes(E_OH, OH, 150e-3, 1.0, choke=CH)         # DECAY knob mid; CH chokes it, reference 11
-    w += env_writes(E_CPBURST, CP, 4e-3, 0.69, bursts=2, period=480)  # three bursts 10 ms apart, reference 7
-    w += env_writes(E_CPTAIL, CP, 47e-3, 0.22)               # the tail at -10 dB, reference 7 (chosen ratio)
+    w += env_writes(E_CPBURST, CP, CP_BURST_TAU, 0.69, bursts=CP_BURSTS, period=CP_PERIOD,
+                    final_tau=CP_FINAL_TAU)                  # L2: four strikes, the last at the fire level
+    w += env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22)         # the tail, tau MEASURED (plan084)
     w += env_writes(E_CBA, CB, 5e-3, 0.5)                    # two-slope envelope, reference 9
     w += env_writes(E_CBB, CB, 100e-3, 0.5)                  # MEASURED: the reference tail is tau 98 ms
     w += env_writes(E_RSX, CL, 0.1e-3, PEAK_RSX)             # the RS/CL exciter pulse
@@ -1041,8 +1083,9 @@ def preset_writes(sound: str) -> list:
                 + [(A_PATH + P_CPN, path_word(SRC_NOISE, ENV_FULL, dest=M_CPBP)),
                    (A_PATH + P_CPOUT, path_word(SRC_TAP + M_CPBP, E_CPBURST, E_CPTAIL,
                                                 nl=NL_TANH, dest=DEST_MIX))]
-                + env_writes(E_CPBURST, CP, 4e-3, 0.69, bursts=2, period=480)
-                + env_writes(E_CPTAIL, CP, 47e-3, 0.22))
+                + env_writes(E_CPBURST, CP, CP_BURST_TAU, 0.69, bursts=CP_BURSTS, period=CP_PERIOD,
+                             final_tau=CP_FINAL_TAU)
+                + env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22))
     if n == "MA":
         # Same noise source, same buffer (IC19), SW12 selects: the band-pass
         # becomes Q68's Sallen-Key HIGH-pass and the three-burst envelope
@@ -1053,7 +1096,7 @@ def preset_writes(sound: str) -> list:
                 + [(A_PATH + P_CPN, path_word(SRC_NOISE, ENV_FULL, dest=M_CPBP)),
                    (A_PATH + P_CPOUT, path_word(SRC_TAP + M_CPBP, E_CPBURST,
                                                 nl=NL_SWING, att=MA_ATT, dest=DEST_MIX))]
-                + env_writes(E_CPBURST, CP, MA_TAU, PEAK_MA)
+                + env_writes(E_CPBURST, CP, MA_TAU, PEAK_MA, final_tau=0)   # FRATE OFF: no CP leak
                 + env_writes(E_CPTAIL, CP, 1e-3, 0.0))
     if n in ("BD", "SD", "CB", "CY", "OH", "CH"):
         return []                       # not a shared circuit: the kit is the sound

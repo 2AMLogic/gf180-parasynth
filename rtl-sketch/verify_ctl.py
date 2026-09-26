@@ -107,7 +107,7 @@ def stimulus() -> list:
     m_top = dx.A_MODE + (dx.N_MODES - 1) * dx.MODE_STRIDE
     p_top = dx.A_PATH + dx.N_PATH - 1
     assert m_top + 3 != dx.A_RESET, "the top MODE register aliases the drum RESET: revision 8's defect"
-    assert e_top + 2 < dx.A_PATH and p_top < dx.A_MODE, "two drum register blocks overlap"
+    assert e_top + 3 < dx.A_PATH and p_top < dx.A_MODE, "two drum register blocks overlap"
     corners = [
         (dx.A_STOPS,               (1 << bits["stops"]) - 1),         # all ELEVEN stop bits
         (dx.A_ACCENT,              (1 << bits["accent"]) - 1),
@@ -118,8 +118,10 @@ def stimulus() -> list:
         (dx.A_ENV,                 (1 << bits["env_ctl"]) - 1),       # 27 bits
         (dx.A_ENV + 1,             (1 << bits["peak"]) - 1),
         (dx.A_ENV + 2,             (1 << bits["rate"]) - 1),
+        (dx.A_ENV + 3,             (1 << bits["frate"]) - 1),         # revision 13: FRATE
         (e_top,                    (1 << bits["env_ctl"]) - 1),       # envelope 17, 0x84
-        (e_top + 2,                (1 << bits["rate"]) - 1),          # 0x86: the block's top
+        (e_top + 2,                (1 << bits["rate"]) - 1),
+        (e_top + 3,                (1 << bits["frate"]) - 1),         # 0x87: the block's top now
         (dx.A_PATH,                (1 << bits["path"]) - 1),          # 25 bits now, at 0x90
         (p_top,                    (1 << bits["path"]) - 1),          # path 22, 0xA6
         (dx.A_MODE,                (1 << bits["a1"]) - 1),            # 26 bits, at 0xB0

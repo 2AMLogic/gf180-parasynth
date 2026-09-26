@@ -313,7 +313,7 @@ def test_kit_writes_fit_their_registers():
         elif dx.A_ACCENT <= a < dx.A_ACCENT + dx.N_STOPS: assert v < (1 << B["accent"])
         elif dx.A_OSC <= a < dx.A_OSC + dx.N_OSC: assert v < (1 << B["osc_inc"])
         elif dx.A_ENV <= a < dx.A_ENV + dx.N_ENV * dx.ENV_STRIDE:
-            assert v < (1 << (B["env_ctl"], B["peak"], B["rate"])[(a - dx.A_ENV) % 4])
+            assert v < (1 << (B["env_ctl"], B["peak"], B["rate"], B["frate"])[(a - dx.A_ENV) % 4])
         elif dx.A_PATH <= a < dx.A_PATH + dx.N_PATH: assert v < (1 << B["path"])
         elif dx.A_MODE <= a < dx.A_MODE + dx.N_MODES * dx.MODE_STRIDE:
             assert v < (1 << (B["a1"], B["a2"], B["amp"], B["num"])[(a - dx.A_MODE) % 4])
@@ -373,17 +373,24 @@ def test_hats_are_squares_not_noise():
     assert spec[f > 5000].sum() > 5 * spec[f < 5000].sum()
 
 
-def test_clap_has_three_bursts_and_a_tail():
-    """Envelope 8's trace: strikes at 0, 10 and 20 ms at 1, 13/16 and
-    (13/16)^2 of the first; envelope 9 the tail at -10 dB that outlasts them."""
+def test_clap_has_four_strikes_the_last_at_the_fire_level_and_a_tail():
+    """Envelope 8's trace (contract revision 13, 15.3; plan084 L2): strikes at
+    0, 10.6 and 21.3 ms at 1, 13/16 and (13/16)^2 of the first, then the FINAL
+    strike at 31.9 ms back at the fire level, decaying at FRATE; envelope 9 the
+    tail, which outlasts them. Was three strikes at 10 ms and no final strike
+    (revision 10) -- the D12A deficit #253 diagnosed."""
     d, dm, bd = _solo(dx.CP, 0.2)
     burst = d.trace["env"][dx.E_CPBURST]
     tail = d.trace["env"][dx.E_CPTAIL]
-    P = dx.peak_reg(0.69)
-    assert burst[10] == P >> 9 and burst[490] == ((P * 53248) >> 16) >> 9
-    assert burst[970] == ((((P * 53248) >> 16) * 53248) >> 16) >> 9
-    assert burst[489] < burst[490] // 8 and burst[10 + 3000] == 0
-    assert tail[10] == dx.peak_reg(0.22) >> 9 and tail[10 + 4000] > 0
+    P, T = dx.peak_reg(0.69), dx.CP_PERIOD
+    s1 = (P * 53248) >> 16
+    s2 = (s1 * 53248) >> 16
+    assert burst[10] == P >> 9 and burst[10 + T] == s1 >> 9 and burst[10 + 2 * T] == s2 >> 9
+    assert burst[10 + 3 * T] == P >> 9                      # the final strike: the fire level
+    assert burst[9 + T] < burst[10 + T] // 8                # the early strikes are short
+    assert burst[10 + 3 * T + 480] > (P >> 9) // 3          # the final one is not (tau 20 ms)
+    assert burst[-1] < burst[10 + 3 * T] // 64
+    assert tail[10] == dx.peak_reg(0.22) >> 9 and tail[-1] > 0
 
 
 def test_closed_hat_chokes_the_open_hat():

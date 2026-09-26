@@ -260,6 +260,11 @@ controls:
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject SPI_DRAIN_LATE --expect-fail --outdir build/top-drainlate" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject MODAL_NUM_HOLD --expect-fail --outdir build/top-numhold" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_ENV_FLOOR --expect-fail --outdir build/top-envfloor" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_WEAK --expect-fail --outdir build/drum-finalweak" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHORT --expect-fail --outdir build/drum-finalshort" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHIFT --expect-fail --outdir build/drum-finalshift" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FCAP_STALE --expect-fail --outdir build/drum-fcapstale" \
+	  "$(PY) rtl-sketch/verify_synth_top.py --clap-phrase --inject DRUM_FINAL_WEAK --expect-fail --outdir build/top-clap-finalweak" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-lfsrtap" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_RESET_ALIAS --expect-fail --outdir build/top-resetalias" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_STOPS8 --expect-fail --outdir build/top-stops8" \

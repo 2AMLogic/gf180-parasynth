@@ -43,12 +43,15 @@ ROOT = Path(__file__).resolve().parents[1]
 #   reports/arty/uart-clean  the pre-drift UART wrapper -- still the proof the
 #                            PUBLISHED integrated baseline bitstream cites by
 #                            hash, so it is never rewritten in place
-#   reports/arty/drift-clean this tree: per-oscillator drift in voice_dp.v
+#   reports/arty/drift-clean the pre-L2 tree: per-oscillator drift in voice_dp.v
 #                            (contract 6.11, DR 0019) moved the frame's sample
 #                            strobe from cycle 175 to 176 and left the audio
 #                            byte-identical. See that directory's README.
+#   reports/arty/l2-clean    this tree: the clap's final strike (contract rev
+#                            13, ENV_FRATE) in drum_dp/drum_regs/drum_kit and
+#                            synth_top. See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/drift-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/l2-clean/verification.json",
 }
 
 

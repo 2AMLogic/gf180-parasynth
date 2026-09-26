@@ -115,24 +115,28 @@ IN_WINDOW = verify_ctl.GO_CYCLE - 6           # cycle 2: what the rev-2 link mea
 AT_GO = verify_ctl.GO_CYCLE + 2               # cycle 10: what SPI_DRAIN_LATE measures
 
 
+# The counts below are facts of `verify_ctl.stimulus()` and move with it. Contract
+# revision 13 (the clap's final strike) added three writes -- the kit's CP FRATE
+# and the FRATE corners at 0x43 and 0x87 -- so 206 -> 209 writes, 105 -> 106
+# addresses above 0x7F (0x87), and the 24-bit data count is unchanged at 42.
 def test_a_defect_confined_to_one_field_leaves_the_other_five_blind(tmp_path, capsys):
     """The SPI_ADDR7 shape, reproduced from the stimulus rather than asserted
-    from memory: truncating every address to A[6:0] makes 105 of the 206
+    from memory: truncating every address to A[6:0] makes 106 of the 209
     writes wrong and touches nothing else."""
     writes = verify_ctl.stimulus()
     got = [(f, s, a & 0x7F, d) for f, s, a, d in _delivered(writes)]
     status, last = _last_from_compare(writes, got, [IN_WINDOW] * len(got), tmp_path, capsys)
     assert status == 1
-    assert last["bad_addr"] == 105 and last["compared"] == 206
+    assert last["bad_addr"] == 106 and last["compared"] == 209
     out = _matrix(last, "SPI_ADDR7", capsys)
     assert _rows(out) == {"flag": "BLIND", "section": "BLIND", "address": "MOVED",
                           "data": "BLIND", "count": "BLIND", "drain": "BLIND"}
-    assert "105 of 206" in out
+    assert "106 of 209" in out
     assert "NO PROPERTY MOVED" not in out
 
 
 def test_the_data_truncation_moves_the_data_field_and_only_that(tmp_path, capsys):
-    """SPI_DATA24: 42 of 206 writes carry a datum wider than 24 bits."""
+    """SPI_DATA24: 42 of 209 writes carry a datum wider than 24 bits."""
     writes = verify_ctl.stimulus()
     got = [(f, s, a, d & 0xFFFFFF) for f, s, a, d in _delivered(writes)]
     status, last = _last_from_compare(writes, got, [IN_WINDOW] * len(got), tmp_path, capsys)
@@ -140,13 +144,13 @@ def test_the_data_truncation_moves_the_data_field_and_only_that(tmp_path, capsys
     out = _matrix(last, "SPI_DATA24", capsys)
     assert _rows(out) == {"flag": "BLIND", "section": "BLIND", "address": "BLIND",
                           "data": "MOVED", "count": "BLIND", "drain": "BLIND"}
-    assert "42 of 206" in out
+    assert "42 of 209" in out
 
 
 def test_a_write_count_mismatch_moves_the_count_property(tmp_path, capsys):
     """The SPI_ANYLEN shape, as measured under iverilog on this tree: accepting
-    a mis-sized transaction instead of discarding it puts 208 writes on the
-    register port for 206 sent, with all four bit-fields intact and every
+    a mis-sized transaction instead of discarding it puts 211 writes on the
+    register port for 209 sent, with all four bit-fields intact and every
     write inside the drain window.
 
     This is the row whose absence printed "NO FIELD MOVED" for a control that
@@ -156,53 +160,53 @@ def test_a_write_count_mismatch_moves_the_count_property(tmp_path, capsys):
     got = _delivered(writes) + _delivered(writes[:2])
     status, last = _last_from_compare(writes, got, [IN_WINDOW] * len(got), tmp_path, capsys)
     assert status == 1
-    assert (last["count_seen"], last["count_sent"], last["count_off"]) == (208, 206, 2)
+    assert (last["count_seen"], last["count_sent"], last["count_off"]) == (211, 209, 2)
     assert last["bad"] == 0 and last["late"] == 0
     out = _matrix(last, "SPI_ANYLEN", capsys)
     assert _rows(out) == {"flag": "BLIND", "section": "BLIND", "address": "BLIND",
                           "data": "BLIND", "count": "MOVED", "drain": "BLIND"}
-    assert "2 of 206 writes unaccounted for" in out
+    assert "2 of 209 writes unaccounted for" in out
     assert "NO PROPERTY MOVED" not in out
 
 
 def test_a_drain_that_runs_at_go_moves_the_drain_property(tmp_path, capsys):
-    """The SPI_DRAIN_LATE shape, as measured: all 206 writes arrive bit-exact
-    and the count matches -- and all 206 are applied at cycle 10, at or after
+    """The SPI_DRAIN_LATE shape, as measured: all 209 writes arrive bit-exact
+    and the count matches -- and all 209 are applied at cycle 10, at or after
     `go`, so the datapath had already read its registers. Bit-exactness at the
     port is not delivery on time, and only the drain row can say so."""
     writes = verify_ctl.stimulus()
     got = _delivered(writes)
     status, last = _last_from_compare(writes, got, [AT_GO] * len(got), tmp_path, capsys)
     assert status == 1
-    assert last["late"] == 206 and last["cyc_seen"] == 206
+    assert last["late"] == 209 and last["cyc_seen"] == 209
     assert last["bad"] == 0 and last["count_off"] == 0
     out = _matrix(last, "SPI_DRAIN_LATE", capsys)
     assert _rows(out) == {"flag": "BLIND", "section": "BLIND", "address": "BLIND",
                           "data": "BLIND", "count": "BLIND", "drain": "MOVED"}
-    assert "206 of 206 writes at or after `go`" in out
+    assert "209 of 209 writes at or after `go`" in out
     assert "NO PROPERTY MOVED" not in out
 
 
 def test_each_row_is_printed_against_the_population_it_was_counted_over(tmp_path, capsys):
     """The denominator defect. The per-field numerators accumulate over
     `zip(writes, got)` -- the writes that ARRIVED -- while "writes sent" is the
-    host's count. A link that drops writes therefore printed "10 of 206" for a
+    host's count. A link that drops writes therefore printed "10 of 209" for a
     figure counted over 155 comparisons: CLAUDE.md's "37 of 155 writes"
     control-path shape with the two populations swapped. Every row must name
     its own population, and `_fracs` reads that back out of the printed text
     so the coupling is checked where a reader sees it."""
     writes = verify_ctl.stimulus()
-    got = _delivered(writes)[:155]                        # 51 writes never arrived
+    got = _delivered(writes)[:155]                        # 54 writes never arrived
     for i in range(10):                                   # 10 of the 155 are corrupt
         f, s, a, d = got[i]
         got[i] = (f, s, a, d ^ 1)
     status, last = _last_from_compare(writes, got, [IN_WINDOW] * len(got), tmp_path, capsys)
     assert status == 1
-    assert (last["compared"], last["count_sent"], last["bad_data"]) == (155, 206, 10)
+    assert (last["compared"], last["count_sent"], last["bad_data"]) == (155, 209, 10)
     out = _matrix(last, "SPI_DROPS", capsys)
     assert _fracs(out)["data"] == (10, 155), "the data row must be measured over the 155 compared"
-    assert _fracs(out)["count"] == (51, 206), "the count row is over the 206 the host sent"
-    assert "10 of 206" not in out
+    assert _fracs(out)["count"] == (54, 209), "the count row is over the 209 the host sent"
+    assert "10 of 209" not in out
     assert _rows(out)["data"] == "MOVED" and _rows(out)["count"] == "MOVED"
 
 
@@ -276,7 +280,7 @@ def test_a_second_dead_run_does_not_print_the_first_runs_matrix(tmp_path, capsys
     out = capsys.readouterr().out
     assert "no per-field blindness matrix" in out
     assert "MOVED" not in out and "BLIND" not in out
-    assert "105 of 206" not in out, "the stale matrix from the first run must not reappear"
+    assert "106 of 209" not in out, "the stale matrix from the first run must not reappear"
 
 
 def test_simulator_never_ran_message_differs_from_comparison_recorded_nothing_message(capsys):

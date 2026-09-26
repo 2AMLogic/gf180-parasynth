@@ -65,6 +65,29 @@ def stimulus(short: bool = False):
         # rings -- it is not the kit's f0, which is the circuit's 49.4 Hz (DR 0009)
         writes += [(fr, a, v) for a, v in dx.mode_writes(dx.M_BD, dx.BD_HZ_CHART, q, 0.0)[:2]]
     f += int(60.0 / bpm * 4 * SR) + int(0.05 * SR)
+    # 4b. revision 13, the clap's final strike (15.3; plan084). Retrigger one frame BEFORE, AT and
+    #     one AFTER the final-strike boundary, each at a different accent so a stale captured level
+    #     shows; mid-note PEAK / ACCENT / RATE / FRATE writes; a choke between the third strike and
+    #     the final one (no ghost); and CP -> MA -> CP switched while each is still sounding.
+    LAST, P = dx.CP_BURSTS * dx.CP_PERIOD, dx.CP_PERIOD
+    eb = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE
+    h = [f, f + LAST - 1]
+    h += [h[-1] + LAST, h[-1] + LAST + LAST + 1]
+    hits += [(h[0], dx.CP, 1.0), (h[1], dx.CP, 0.5), (h[2], dx.CP, 2.0), (h[3], dx.CP, 1.0)]
+    writes += [(h[3] + 100, eb + 1, dx.peak_reg(0.2)), (h[3] + 101, dx.A_ACCENT + dx.CP, dx.accent_reg(1.5)),
+               (h[3] + 300, eb + 2, dx.rate_reg(8e-3)), (h[3] + LAST + 50, eb + 3, dx.rate_reg(5e-3))]
+    f = h[3] + LAST + 1200
+    writes += [(f, a, v) for a, v in dx.preset_writes("CP")]
+    writes.append((f, eb, dx.env_ctl(dx.CP, dx.CB, 0, dx.CP_BURSTS, P)))           # choke CP by CB
+    hits += [(f + 2, dx.CP, 1.0), (f + 2 + 2 * P + 20, dx.CB, 1.0)]
+    f += LAST + 600
+    writes += [(f, a, v) for a, v in dx.preset_writes("CP")]                        # choke off again
+    hits.append((f + 2, dx.CP, 1.0))
+    writes += [(f + 2 + P + 7, a, v) for a, v in dx.preset_writes("MA")]            # CP -> MA, CP ringing
+    hits.append((f + 2 + P + 40, dx.CP, 1.0))                                       # strike MA
+    writes += [(f + 2 + P + 400, a, v) for a, v in dx.preset_writes("CP")]          # MA -> CP, MA ringing
+    hits.append((f + 2 + P + 430, dx.CP, 1.0))
+    f += P + 430 + LAST + 1500
     # 5. register extremes on the last three paths and the spare mode, every stop again at accent 2.0:
     #    a tap of the ringing BD into an unstable mode (the state rails, the body word saturates),
     #    two full envelopes on one path (envsum 65534), att 7, nl = TANH on a raw source, the last
@@ -104,7 +127,11 @@ def stimulus(short: bool = False):
                                                     hold=255 if e % 4 == 1 else 0, bursts=3 if e % 4 == 2 else 0,
                                                     period=511 if e % 4 == 2 else 0)),
                    (f, dx.A_ENV + e * 4 + 1, 0 if e % 5 == 0 else dx.FULL24),
-                   (f, dx.A_ENV + e * 4 + 2, 0 if e % 4 == 3 else (65535 if e % 4 == 1 else 3))]
+                   (f, dx.A_ENV + e * 4 + 2, 0 if e % 4 == 3 else (65535 if e % 4 == 1 else 3)),
+                   # revision 13: FRATE on the bursting envelopes (the final strike, at an ordinary
+                   # and at the extreme rate) and on burst-less ones (FRATE from the first decay)
+                   (f, dx.A_ENV + e * 4 + 3, (dx.rate_reg(20e-3) if e % 8 == 2 else 65535) if e % 4 == 2
+                    else (1 if e % 4 == 3 else 0))]
     hits += [(f + 3, s, 2.0) for s in range(dx.N_STOPS)]
     f += int(0.08 * S * SR)
     # 7. RESET mid-run, the kit again, one hit of each of BD and OH, then silence: decay to nothing

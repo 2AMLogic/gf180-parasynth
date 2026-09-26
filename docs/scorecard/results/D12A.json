@@ -2,70 +2,73 @@
   "engine": "fixed-model",
   "case_id": "D12A",
   "subject": "Clap / anchor",
-  "source_commit": "7dd6337",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:28:13Z",
+  "source_commit": "d42ac140",
+  "analysis_run": "run_case@1ce265479a2c + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T11:50:06Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "7dd6337",
-      "described": "node/D-drums-bitexact-83-g7dd6337",
-      "branch": "fix-decay-and-corner",
+      "commit": "d42ac140",
+      "described": "d42ac140",
+      "branch": "feature/clap-final-strike-l2",
       "dirty": true,
-      "uncommitted_sha256": "f7c8641bd3f74c94",
-      "untracked_files": 1
+      "uncommitted_sha256": "3ee125b2e64499e6",
+      "untracked_files": 64
     },
     "base_check": {
       "checked": true,
-      "origin_main": "398bc543d7b9",
+      "origin_main": "55bf490a76ff",
       "behind_commits": 0,
-      "ahead_commits": 5,
+      "ahead_commits": 11,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
+        "model/drums_fx.py": {
+          "origin_main": "4a0177412ff4",
+          "here": "5c61662c8158"
         }
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
     },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
+    "command": "tools/run_case.py D12A E1A E1B E2A",
     "config": {
       "voice": "CP",
-      "refs": "/tmp/tr808-ref",
+      "refs": "/home/ubuntu/dev/refs/sounds-tr808-fischer",
       "inject": null,
       "render_seconds": 2.2,
       "accent": 1.0,
       "bus_gain": 0.45,
       "level_matched": true
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-19T01:28:19Z",
+    "python": "3.12.14",
+    "run_at": "2026-09-26T11:50:14Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:5c61662c81583c38",
+      "model/voice_fx.py": "sha256:85f80f46481be1a8",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:4222305718828edf",
+      "tools/run_case.py": "sha256:1ce265479a2c9d27",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
       "reference:cp8/CP.WAV": "sha256:376429bb81cb48d1"
     },
     "artefacts": {
-      "ours": "not written (--no-audio)",
-      "reference": "/tmp/tr808-ref/cp8/CP.WAV"
+      "ours": "build/scorecard/D12A-ours.wav",
+      "reference": "/home/ubuntu/dev/refs/sounds-tr808-fischer/cp8/CP.WAV"
     },
-    "outcome_code": 1,
+    "outcome_code": 2,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "reference_profile": "fischer-tr808-103852:cp8/CP.WAV (no knob)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('CP') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 6 of 11",
-  "audio": "reference cp8/CP.WAV; ours not written",
+  "render_run": "drums_fx@5c61662c8158 kit_with_sounds('CP') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 6 of 11",
+  "audio": "reference cp8/CP.WAV; ours build/scorecard/D12A-ours.wav",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -111,40 +114,122 @@
   },
   "metrics": {
     "Burst timing": {
-      "value": 18.8542,
       "units": "ms",
-      "reference": 35.805,
-      "error": -16.9508,
+      "valid": false,
+      "why": "UNQUALIFIED for noise-excited clap envelopes (measurement version 2026-09-26): the accepted-peak span of a 4 ms RMS envelope misreads noise inside a sustained strike as extra strikes -- it failed every condition of an independent known-schedule check at both rates, and is exact on a noise-free carrier (docs/scorecard/clap-d12a/burst-timing-qual.json, plan081 B). Programmed strike times are model/RTL state and are not a comparison with the recording",
       "tolerance": 17.9025,
-      "valid": true,
-      "tolerance_basis": "time"
+      "qualification": "UNQUALIFIED",
+      "unqualified_value": 47.0,
+      "unqualified_reference": 35.805,
+      "unqualified_error": 11.195
     },
     "burst/tail ratio": {
-      "value": 11.2831,
+      "value": -2.1366,
       "units": "dB",
       "reference": -2.9726,
-      "error": 14.2557,
+      "error": 0.836,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "decay": {
-      "value": 101.094,
+      "value": 111.766,
       "units": "ms",
       "reference": 198.9924,
-      "error": -97.8983,
+      "error": -87.2263,
       "tolerance": 99.4962,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     }
   },
   "diagnostics": {
-    "ours_peak_fs": 0.242737,
-    "ours_rms_fs": 0.007367,
+    "ours_peak_fs": 0.274048,
+    "ours_rms_fs": 0.01189,
     "reference_peak_fs": 0.711884,
     "reference_rate_hz": 44100,
     "ours_rate_hz": 48000,
     "level_matched": true,
     "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. Original-gain peak and RMS are recorded above."
-  }
+  },
+  "rubric_history": [
+    {
+      "kind": "rubric change (measurement-version change), not a sound change",
+      "changed": {
+        "Burst timing": {
+          "before": "qualified (estimator in use)",
+          "after": "UNQUALIFIED"
+        }
+      },
+      "superseded_at": "2026-09-26T11:50:14Z",
+      "state": "fail",
+      "worst": 4.7519,
+      "why": "worst: burst/tail ratio",
+      "properties": {
+        "Burst timing": 0.9468398268398269,
+        "burst/tail ratio": 4.7519,
+        "decay": 0.9839400901742982
+      },
+      "measurement_policy": {
+        "required": [
+          "Burst timing",
+          "burst/tail ratio",
+          "decay"
+        ],
+        "metrics": {
+          "Burst timing": {
+            "units": "ms",
+            "tolerance": 17.9025,
+            "tolerance_basis": "time",
+            "purpose": "match"
+          },
+          "burst/tail ratio": {
+            "units": "dB",
+            "tolerance": 3.0,
+            "tolerance_basis": "energy ratio",
+            "purpose": "match"
+          },
+          "decay": {
+            "units": "ms",
+            "tolerance": 99.4962,
+            "tolerance_basis": "time",
+            "purpose": "match"
+          }
+        }
+      },
+      "source_commit": "7dd6337",
+      "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:28:13Z",
+      "metrics": {
+        "Burst timing": {
+          "value": 18.8542,
+          "units": "ms",
+          "reference": 35.805,
+          "error": -16.9508,
+          "tolerance": 17.9025,
+          "valid": true,
+          "tolerance_basis": "time"
+        },
+        "burst/tail ratio": {
+          "value": 11.2831,
+          "units": "dB",
+          "reference": -2.9726,
+          "error": 14.2557,
+          "tolerance": 3.0,
+          "valid": true,
+          "tolerance_basis": "energy ratio"
+        },
+        "decay": {
+          "value": 101.094,
+          "units": "ms",
+          "reference": 198.9924,
+          "error": -97.8983,
+          "tolerance": 99.4962,
+          "valid": true,
+          "tolerance_basis": "time"
+        }
+      },
+      "note": "the superseded record may also predate a SOUND change; compare its source_commit and provenance.inputs with the new record's"
+    }
+  ]
 }

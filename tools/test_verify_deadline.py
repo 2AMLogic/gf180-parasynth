@@ -9,6 +9,8 @@ import os
 import re
 import sys
 
+import pytest
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "rtl-sketch"))
@@ -171,17 +173,46 @@ def test_a_frame_where_the_shadow_work_ends_the_wait_is_an_exception_not_explain
 import gzip, shutil  # noqa: E402
 
 TRACE = os.path.join(ROOT, "docs", "deadline", "traces")
+# The judge compares a capture against the stimulus the scenario builds NOW.
+# A capture is only a clean capture of THIS tree if it was driven by that
+# stimulus, so _capture asserts it -- the same precondition
+# verify_deadline.analyse_capture enforces with REFUSED. The retained
+# `prod-stress-saw` / `ctl-prod-stress-late15` captures (2221d2c) predate
+# contract revision 13, whose kit has one more write (461 vs 460), and stay in
+# the tree as history; these tests use the `-l2` re-captures
+# (docs/deadline/runs/*-l2.json, build box, tools/run_all.py 2/2).
+CLEAN, LATE15 = "prod-stress-saw-l2", "ctl-prod-stress-late15-l2"
 
 
-def _capture(tmp_path, record):
+def _stimulus_matches(d, scenario="stress-saw"):
+    import tempfile
+    import verify_synth_top as vst
+    cmds, _, _ = vd.SPI_SCENARIOS[scenario](False)
+    with tempfile.TemporaryDirectory() as t:
+        probe = os.path.join(t, "cmds.txt")
+        vst.write_cmds(probe, cmds)
+        return open(probe, "rb").read() == open(os.path.join(d, "top_bx_cmds.txt"), "rb").read()
+
+
+def _capture(tmp_path, record, scenario="stress-saw"):
     d = tmp_path / record
     d.mkdir()
     for gz in os.listdir(os.path.join(TRACE, record)):
         with gzip.open(os.path.join(TRACE, record, gz), "rb") as src, open(d / gz[:-3], "wb") as dst:
             shutil.copyfileobj(src, dst)
+    assert _stimulus_matches(d, scenario), (
+        f"{record} was not driven by this tree's {scenario} stimulus: re-capture it, "
+        "do not judge historical evidence against current source")
     wrs = [f for f in os.listdir(d) if f.startswith("top_wrs_") and f.endswith(".txt")][0]
     i2s = [f for f in os.listdir(d) if f.startswith("top_i2s_")][0]
     return dict(i2s=str(d / i2s), wrs=str(d / wrs), sched=str(d / (wrs + ".sched")))
+
+
+def test_the_pre_revision_13_captures_are_history_not_this_trees_stimulus(tmp_path):
+    """The control for _capture's precondition: the retained pre-L2 capture is
+    refused as this tree's evidence (it stays in the tree, unmodified)."""
+    with pytest.raises(AssertionError, match="not driven by this tree"):
+        _capture(tmp_path, "prod-stress-saw")
 
 
 def _judge(files, scenario="stress-saw", overflow=0):
@@ -217,9 +248,10 @@ def test_i2s_completeness_names_every_defect():
 
 
 def test_the_retained_clean_capture_passes_and_each_corruption_refuses(tmp_path):
-    files = _capture(tmp_path, "prod-stress-saw")
+    files = _capture(tmp_path, CLEAN)
     res, st, reasons, dl = _judge(files)
-    assert st == 0 and res["periods"] == res["periods_required"] == 2156
+    # 2158 on the revision-13 re-capture; the pre-L2 capture required 2156
+    assert st == 0 and res["periods"] == res["periods_required"] == 2158
     corruptions = {
         "i2s-empty": ("i2s", lambda L: []),
         "i2s-truncated": ("i2s", lambda L: L[:1000]),
@@ -231,14 +263,15 @@ def test_the_retained_clean_capture_passes_and_each_corruption_refuses(tmp_path)
     }
     for name, (key, fn) in corruptions.items():
         (tmp_path / name).mkdir()
-        bad = _capture(tmp_path / name, "prod-stress-saw")
+        bad = _capture(tmp_path / name, CLEAN)
         _edit(bad[key], fn)
         r, st, reasons, dl = _judge(bad)
         assert st == 2 and not dl and "incomplete" in reasons[0], (name, st, reasons)
 
 
 def test_a_late_but_complete_capture_is_still_a_deadline_fail(tmp_path):
-    """late:15 on stress-saw: complete evidence, 41 frames strobed at 255."""
-    files = _capture(tmp_path, "ctl-prod-stress-late15")
+    """late:15 on stress-saw: complete evidence, frames missed (32 on the
+    revision-13 re-capture, the first at 539)."""
+    files = _capture(tmp_path, LATE15)
     res, st, reasons, dl = _judge(files)
     assert res["evidence"] == [] and st == 1 and dl and "missed" in reasons[0]

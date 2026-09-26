@@ -80,11 +80,53 @@ def test_superseded_records_are_data_and_never_a_failure(capsys):
     way; the gate must not count them, or the one real red is lost in them."""
     records = dict(gate.historical())
     assert "fpga/reports/arty/uart-clean/verification.json" in records
-    assert records["fpga/reports/arty/uart-clean/verification.json"] == [
-        "rtl-sketch/voice_dp.v"]
+    # EXACT lists, and they grow only when a compiled source changes: the
+    # pre-drift proof (the one the published R0 image cites) differs by drift
+    # (voice_dp.v) and by the clap's final strike (contract rev 13: the drum
+    # RTL and the top that carries ENV_FRATE); the pre-L2 drift proof by
+    # exactly the latter.
+    L2 = ["rtl-sketch/drum_dp.v", "rtl-sketch/drum_kit.v",
+          "rtl-sketch/drum_regs.v", "rtl-sketch/synth_top.v"]
+    assert records["fpga/reports/arty/uart-clean/verification.json"] == sorted(
+        L2 + ["rtl-sketch/voice_dp.v"])
+    assert records["fpga/reports/arty/drift-clean/verification.json"] == L2
     bound = {str(p.relative_to(ROOT)) for _, p in gate.bound_bindings()}
     assert not (bound & set(records)), "the bound record is not history"
     assert gate.main(["--list-historical"]) == 0
     out = capsys.readouterr().out
     assert "expected, not a failure" in out
     assert "uart-clean" in out
+
+
+R0 = ROOT / "fpga/reports/arty/integrated-baseline-2025.1"
+
+
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def test_r0_published_image_is_bound_to_its_historical_source_set():
+    """plan087 section 4: R0 (bitstream a66c9349..., checkpoint 6c3c22c5...)
+    is bound to the source set it was built from, NOT to the working tree.
+    Its proof is reports/arty/uart-clean, by record AND transcript hash; the
+    image and that proof name the same bytes for every source both cover; and
+    the tree has since moved on exactly the files the historical record says,
+    so neither the old image nor its proof can be read as a build of the
+    current source. If a later change rewrote uart-clean in place, or rebound
+    the published image to a live-tree record, this goes red."""
+    import json
+    pub = json.loads((R0 / "publication.json").read_text())
+    rec = json.loads(STALE.read_text())
+    assert pub["bitstream_sha256"].startswith("a66c9349")
+    assert pub["verification"]["record_sha256"] == _sha(STALE)
+    assert pub["verification"]["transcript_sha256"] == _sha(STALE.with_name("verification.txt"))
+    common = set(pub["source_sha256"]) & set(rec["source_sha256"])
+    assert len(common) >= 8
+    assert {k: pub["source_sha256"][k] for k in common} == {k: rec["source_sha256"][k] for k in common}
+    moved = sorted(k for k in pub["source_sha256"]
+                   if (ROOT / k).is_file() and _sha(ROOT / k) != pub["source_sha256"][k])
+    assert moved == dict(gate.historical())[str(STALE.relative_to(ROOT))]
+    assert moved, "R0 is historical: the live tree is not its source set"
+    bound = {str(q.relative_to(ROOT)) for _, q in gate.bound_bindings()}
+    assert str(STALE.relative_to(ROOT)) not in bound, "the live binding must not be R0's proof"

@@ -1,0 +1,12 @@
+reference corpus: /home/ubuntu/dev/refs/sounds-tr808-fischer
+results into:     /home/ubuntu/work/clap-d/docs/scorecard/results
+
+case   state         worst  note
+------------------------------------------------------------------------------------------------
+D12A   no verdict       --  invalid: Burst timing
+E1A    pass           0.20  
+E1B    pass           0.20  
+E2A    pass           0.20  
+------------------------------------------------------------------------------------------------
+no verdict: 1  pass: 3
+exit 2: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
