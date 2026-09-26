@@ -10,7 +10,7 @@ due frame.
 |---|---|
 | `fpga/midi_session.py` | the session: parser, note logic, maps, refusals, scheduling, send loop, live CLI |
 | `fpga/live_midi_contract.py` | the frozen parameters and the latency target (committed before any measurement) |
-| `fpga/verify_live_midi.py` | the independently built expected schedule, eleven properties, three controls, RTL replay |
+| `fpga/verify_live_midi.py` | the independently built expected schedule, twelve properties, three controls, RTL replay |
 | `fpga/sweep_live_midi.py` | the lookahead / reserve / redundant-write sweep that chose the lookahead |
 | `fpga/test_midi_session.py` | unit tests |
 | `fpga/reports/live-midi/` | evidence: `verification.json`, `start-red.log`, `sweep.json`, RTL captures and receipts |
@@ -182,6 +182,8 @@ Outside the declared load:
 ## Verification
 
 ```
+make trial T=T-LIVE-MIDI ARGS="--mode sim"                 # the trial: receipt under build/trials/
+make trial T=T-LIVE-MIDI ARGS="--mode rtl"                 # + UART RTL and I2S (build box, ~1 h)
 .venv/bin/python fpga/verify_live_midi.py                  # seconds: sim + controls
 .venv/bin/python fpga/verify_live_midi.py --rtl coverage pressure sustained \
       --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT             # the UART RTL + I2S (box)
@@ -196,7 +198,9 @@ batch. It shares with the session only the frozen parameters and the register
 encoders already proved bit-exact at the pins (`spi_host.MusicHost`,
 `voice_fx.KeyHost`). The one number the session chooses, its time map, is
 checked against the device's own timeline first. A map more than one frame
-off is NO VERDICT, never a result.
+off is NO VERDICT, never a result. A twelfth property, `release_domain`, runs
+the release's own validator (`fpga/release/qualified_domain.check_stream`,
+#255) over every write the device executed.
 
 Scenarios:
 
