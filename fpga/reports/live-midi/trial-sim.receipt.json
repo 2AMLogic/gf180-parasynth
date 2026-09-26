@@ -25,29 +25,29 @@
   },
   "identities": {
     "source": {
-      "head": "03decc3c2036dcf16092d9e5eb3e0e6e72e1c4fc",
-      "commit": "03decc3",
-      "described": "node/D-drums-bitexact-591-g03decc3",
-      "branch": "feature/clap-final-strike-l2",
+      "head": "cfcf1f377b3662590ee6a71a0d06badba56d587e",
+      "commit": "cfcf1f3",
+      "described": "cfcf1f3",
+      "branch": "b1/l2-integrate",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
       "untracked_files": 0
     },
     "integration": {
-      "origin_main": "5e085b54d57d5c4b4d963232fe9f173c10220232",
-      "merge_base": "5e085b54d57d5c4b4d963232fe9f173c10220232",
+      "origin_main": "4d87e2af91e06fbbf2ac23290c878f1e7a656110",
+      "merge_base": "4d87e2af91e06fbbf2ac23290c878f1e7a656110",
       "head_contains_origin_main": true
     },
     "registry": {
-      "path": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/docs/trials.json",
+      "path": "/home/ubuntu/work/b1-l2/docs/trials.json",
       "sha256": "38c9bbc6344e68b7525be347b4cf5477c2cfeb7dce1245773e19da8bd5725987"
     },
     "environment": {
-      "spec_path": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/spec/trial-environment.json",
+      "spec_path": "/home/ubuntu/work/b1-l2/spec/trial-environment.json",
       "spec_sha256": "7813252b1b48000a84ec7e05368328924df19db8f16fddbff4a76c127fd6031c",
       "spec": "trial-env/1",
       "python": "3.12.14",
-      "python_exe": "/home/ubuntu/work/venv/bin/python3",
+      "python_exe": "/home/ubuntu/work/venv/bin/python",
       "packages": {
         "numpy": "2.5.3",
         "scipy": "1.18.1",
@@ -64,19 +64,19 @@
       ],
       "covers_sha256": {
         "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
-        "rtl-sketch/drum_regs.v": "783e31010926f96d0cf3d3a5eed949f749155c9f89bb54a8ca6d5821c9192b28",
+        "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
         "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
         "model/synth_top_model.py": "144ac659b899e243a1cfcf0c5ee091b096052acc18c2e5ca7246cd7678e049f4"
       }
     },
     "checkers_sha256": {
-      "fpga/verify_live_midi.py": "0126565d53cdeaa3979bc0c1c56174469567b89d9b1308c8d600508937dbb17f"
+      "fpga/verify_live_midi.py": "7fd932cccd4d82b81cf448c09ce8d29be3bdf0f3842fd7c2134c7e2c68f4c034"
     }
   },
   "execution": {
     "status": "complete",
-    "started": "2026-09-26T18:00:48Z",
-    "finished": "2026-09-26T18:00:52Z",
+    "started": "2026-09-26T18:18:57Z",
+    "finished": "2026-09-26T18:19:00Z",
     "timeout_s": 900,
     "preflight": []
   },
@@ -91,12 +91,12 @@
       "interpreter": {
         "interpret": "live_midi_record"
       },
-      "command": "/home/ubuntu/work/venv/bin/python3 /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/fpga/verify_live_midi.py --outdir /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/build/trials/T-LIVE-MIDI/20260926T180048Z-03decc3-sim-251434-c4b2b0/session-sim",
-      "cwd": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273",
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/b1-l2/fpga/verify_live_midi.py --outdir /home/ubuntu/work/b1-l2/build/trials/T-LIVE-MIDI/20260926T181857Z-cfcf1f3-sim-267487-f47bc6/session-sim",
+      "cwd": "/home/ubuntu/work/b1-l2",
       "execution": {
         "state": "PASS",
         "rc": 0,
-        "secs": 4.3
+        "secs": 3.2
       },
       "verdict": "PASS",
       "reasons": [],
@@ -153,12 +153,12 @@
       "interpreter": {
         "interpret": "live_midi_record"
       },
-      "command": "/home/ubuntu/work/venv/bin/python3 /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/fpga/verify_live_midi.py --control DROP_NOTE_OFF --expect-fail --outdir /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/build/trials/T-LIVE-MIDI/20260926T180048Z-03decc3-sim-251434-c4b2b0/drop-note-off",
-      "cwd": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273",
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/b1-l2/fpga/verify_live_midi.py --control DROP_NOTE_OFF --expect-fail --outdir /home/ubuntu/work/b1-l2/build/trials/T-LIVE-MIDI/20260926T181857Z-cfcf1f3-sim-267487-f47bc6/drop-note-off",
+      "cwd": "/home/ubuntu/work/b1-l2",
       "execution": {
         "state": "PASS",
         "rc": 0,
-        "secs": 1.0
+        "secs": 0.8
       },
       "verdict": "FAIL",
       "reasons": [
@@ -208,12 +208,12 @@
       "interpreter": {
         "interpret": "live_midi_record"
       },
-      "command": "/home/ubuntu/work/venv/bin/python3 /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/fpga/verify_live_midi.py --control WRONG_DRUM_MAP --expect-fail --outdir /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/build/trials/T-LIVE-MIDI/20260926T180048Z-03decc3-sim-251434-c4b2b0/wrong-drum-map",
-      "cwd": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273",
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/b1-l2/fpga/verify_live_midi.py --control WRONG_DRUM_MAP --expect-fail --outdir /home/ubuntu/work/b1-l2/build/trials/T-LIVE-MIDI/20260926T181857Z-cfcf1f3-sim-267487-f47bc6/wrong-drum-map",
+      "cwd": "/home/ubuntu/work/b1-l2",
       "execution": {
         "state": "PASS",
         "rc": 0,
-        "secs": 1.0
+        "secs": 0.8
       },
       "verdict": "FAIL",
       "reasons": [
@@ -263,12 +263,12 @@
       "interpreter": {
         "interpret": "live_midi_record"
       },
-      "command": "/home/ubuntu/work/venv/bin/python3 /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/fpga/verify_live_midi.py --control DELAYED_EVENT --expect-fail --outdir /home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273/build/trials/T-LIVE-MIDI/20260926T180048Z-03decc3-sim-251434-c4b2b0/delayed-event",
-      "cwd": "/home/ubuntu/loom-workspaces/gf180-parasynth/.loom/worktrees/pr-273",
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/b1-l2/fpga/verify_live_midi.py --control DELAYED_EVENT --expect-fail --outdir /home/ubuntu/work/b1-l2/build/trials/T-LIVE-MIDI/20260926T181857Z-cfcf1f3-sim-267487-f47bc6/delayed-event",
+      "cwd": "/home/ubuntu/work/b1-l2",
       "execution": {
         "state": "PASS",
         "rc": 0,
-        "secs": 1.0
+        "secs": 0.7
       },
       "verdict": "FAIL",
       "reasons": [
@@ -318,5 +318,5 @@
     "controls": 3,
     "controls_caught": 3
   },
-  "receipt_sha256": "5e518e70eb93ce7230c267619911c520b74ee6ad83b302d95c146d15ab40ee36"
+  "receipt_sha256": "2a6b9bd81964e076445b7f3d5e439d96a99ef1332683b92b917351bccc6f9167"
 }
