@@ -1584,7 +1584,31 @@ def _legacy_reads(ref_f, cut, res, amp, open_f, open_hz):
             "wide_open_plateau_db": round(float(pl), 4)}
 
 
-def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
+def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
+                    engine_path=None, engine: str | None = None,
+                    artifact_tag: str = "") -> dict:
+    """One F1 case, scored against its frozen Surge clip.
+
+    `engine_path` replaces the model filter path with any object offering
+    `SelectedFilterPath`'s interface (`curve`, `record`, `probe_profile`,
+    `calibration`, `match`, `path_version`). That is how a case is anchored on
+    another engine -- `tools/score_f1_rtl.py` passes the RTL filter chain -- and
+    it exists so the RTL reading and the `fixed-model` reading it is compared
+    with come out of the SAME estimators, references and tolerance policy. A
+    second copy of this function would have been free to drift from its twin.
+    `engine` names what produced the numbers and lands on the record; a caller
+    that swaps the path and forgets the label is refused below.
+    """
+    # Asserted before anything is loaded or rendered, so a caller that swaps the
+    # engine and forgets to say so cannot spend twenty minutes of simulation
+    # producing a record labelled with the wrong engine.
+    if engine_path is not None and (engine or ENGINE) == ENGINE:
+        raise Refused(f"a substituted filter path must name its engine; this one would "
+                      f"have been recorded as {ENGINE!r}")
+    if engine_path is not None and inject:
+        raise Refused("a substituted filter path and a reference-side injection cannot be "
+                      "combined: the control would not say which side moved")
+    record_engine = engine or ENGINE
     cid = case["case_id"]
     spec = FILTER_CASES[cid]
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
@@ -1601,12 +1625,16 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
         raise Refused("the cutoff clip and the wide-open clip do not share one probe grid")
     import f1_filter_path as fp
     try:
-        path = fp.SelectedFilterPath(
+        path = engine_path if engine_path is not None else fp.SelectedFilterPath(
             substitute_profile="legacy" if inject == "F1_LEGACY_SUBSTITUTE" else None)
         ours_g, ours_info = path.curve(dut_f, cut, spec["res_ours"], amp)
         ours_open_g, ours_open_info = path.curve(open_f, spec["open_hz"], spec["res_ours"], amp)
     except fp.Refused as e:
         raise Refused(f"F1 selected filter path: {e}")
+    except Exception as e:                      # a substituted path's own refusal
+        if engine_path is not None and type(e).__name__ == "Refused":
+            raise Refused(f"F1 {record_engine} filter path: {e}")
+        raise
     legacy = _legacy_reads(dut_f, cut, spec["res_ours"], amp, open_f, spec["open_hz"])
 
     ref_open_plateau = am.plateau_db(open_f, open_g, _ref_band(open_f, cut))
@@ -1629,10 +1657,11 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     audio = f"reference {spec['ref_clip']} (frozen, sha256 {meta['sha256'][:12]})"
     audio_path = "not written (--no-audio)"
     if keep_audio:
-        pth = AUDIO_OUT / f"{cid}-ours-response.json"
+        pth = AUDIO_OUT / f"{cid}-ours-response{artifact_tag}.json"
         pth.parent.mkdir(parents=True, exist_ok=True)
         pth.write_text(json.dumps({"freqs_hz": [float(f) for f in dut_f],
                                    "reference_freqs_hz": [float(f) for f in ref_f],
+                                   "engine": record_engine,
                                    "engine_profile": path.probe_profile["name"],
                                    "filter_calibration": path.calibration,
                                    "ours_gain_db": [float(v) for v in ours_g],
@@ -1647,7 +1676,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     prof = rp.load_profile()
     rig = prof["rigs"][meta["rig"]]
     base = {
-        "engine": ENGINE, "case_id": cid, "subject": case["subject"],
+        "engine": record_engine, "case_id": cid, "subject": case["subject"],
         "source_commit": source_commit(), "analysis_run": analysis_run(),
         "provenance": provenance(
             model_input_hashes({
@@ -1682,8 +1711,8 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
         "model_path": path.record() | {"cut_registers": ours_info,
                                        "open_registers": ours_open_info},
         "render_run": (f"selected Mono filter path {path.probe_profile['name']} "
-                       f"(causal 2x RateConvertedLadder, tools/f1_filter_path.py "
-                       f"{fp.PATH_VERSION}) under filter calibration {path.calibration} "
+                       f"({getattr(path, 'render_label', f'causal 2x RateConvertedLadder, tools/f1_filter_path.py {fp.PATH_VERSION}')})"
+                       f" under filter calibration {path.calibration} "
                        f"(gain {ours_info['regs']['gain']}, ogain {ours_info['regs']['ogain']} "
                        f"from VoiceFx.patch_regs; exact match to a selected-voice note "
                        f"{path.match['frames']} frames, 0 mismatches); "
@@ -1713,6 +1742,11 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
                      "absolute levels are still on the record."),
         },
     }
+    # `provenance()` stamps this module's own engine. A substituted path makes
+    # that label wrong, and a result whose provenance disagrees with its headline
+    # about what produced the audio is exactly the kind of record #94 was filed
+    # about (`tools/score_m5a_i2s.py` overrides the same field for the same reason).
+    base["provenance"]["engine"] = record_engine
     if inject:
         base["INJECTED_CONTROL"] = inject
     return base

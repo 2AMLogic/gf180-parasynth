@@ -32,6 +32,14 @@ help:
 ## exceeded the old 3600s cap under this target's parallel fan-out, reporting
 ## NO-VERDICT twice. verify-full already used 7200.
 ##
+## check_f1_rtl_record.py is the same shape of check for the F1 `integrated-rtl`
+## anchor (#94, #291): it refuses a board record that claims the instrument but
+## carries model provenance, and it binds the record to the bytes of
+## tb_f1_chain.v / ladder_dp_n.v / rate_conv_2x.v / tanh16.hex. Change any of
+## those and this goes red until the anchor is re-measured
+## (`tools/score_f1_rtl.py --case F1A`, about twenty minutes) -- which is the
+## point: a changed ladder means the anchor is no longer about this tree.
+##
 ## check_arty_evidence_binding.py is here for legibility, not coverage: the
 ## broad pytest job already catches a stale wrapper proof, but it catches it
 ## 39 minutes in as 23 failures across three files, and the one sentence that
@@ -56,6 +64,7 @@ verify:
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
+	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -294,7 +303,9 @@ controls:
 	  "$(PY) pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x --outdir build/pnr-area-tanh-oor" \
 	  "$(PY) pnr/orfs/area_provenance.py --expect ok --outdir build/pnr-die-clean" \
 	  "$(PY) pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular --outdir build/pnr-die-utilreq" \
-	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk"
+	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk" \
+	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_SKIP_INTERP --expect-mismatch" \
+	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
