@@ -452,8 +452,8 @@ def stage_resonance():
     print(f"    {'ramp':>13} {'seconds':>8} {'res/s':>7} {'ripple dB':>10} "
           f"{'verdict':>14} {'at Hz':>7}")
     rows = []
-    for tag, (lo, hi) in (("0.6 -> 1.4", RES_SPAN), ("1.4 -> 0.6", RES_SPAN[::-1]),
-                          ("0.2 -> 0.6", RES_BELOW)):
+    for lo, hi in (RES_SPAN, RES_SPAN[::-1], RES_BELOW):
+        tag = f"{lo} -> {hi}"
         for s in RES_RATES_S:
             row, _ = _res_row(lo, hi, s, 1)
             row["crosses_onset"] = min(lo, hi) < r_on < max(lo, hi)
