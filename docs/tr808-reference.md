@@ -15,6 +15,10 @@ terms. Breadth was traded for accuracy: every number is tagged.
 - **[inferred]** — computed by me from verified component values with the
   formulas given in §1, or read by me off the schematic scan where the wiring
   is unambiguous. Reproducible; not independently measured.
+- **[measured]** — read off recordings of a real TR-808, with the instrument
+  that read them committed and validated. This tag **outranks [inferred]**
+  where the two disagree, and §4's pitch drop is the reason it exists: a
+  magnitude tagged *[inferred]* here was shipped as ×1.7 and measures ×1.06.
 - **[could not establish]** — no primary source found; do not build on it.
 
 Where a number below disagrees with folklore, the folklore is wrong or refers
@@ -468,15 +472,55 @@ are unity-gain inverters, 33 kΩ/33 kΩ):
 The agreement with Roland's chart is within 5 % across all six once the diodes
 are treated as open **[inferred]**. (W16 Table 2.2 lists R1 = 333–500 Ω, which
 is the diode-*conducting* limit; with those values every frequency comes out
-1.7× too high against the chart — that is the large-signal pitch, see next.)
+1.7× too high against the chart — that is the large-signal **bound**, not the
+pitch the machine reaches, see next.)
 
-**Pitch drop [verified: SN text; magnitude inferred].** With the diodes fully
-conducting the foot resistance becomes (1−x)·500 + 1 kΩ ‖ x·500 → 333–500 Ω,
-i.e. f0 up to ≈1.7× the small-signal value (LT ≈ 145 Hz at the very start of
-a hard hit, settling to 86 Hz). The transition is amplitude-dependent and
-gradual (germanium diode, soft knee), not a stepped envelope. The congas share
-the mechanism. This, not any envelope, is the toms' characteristic "doom"
-sweep; it also means **accent changes the pitch envelope**.
+**Pitch drop [verified: SN text; magnitude MEASURED — and it is not ×1.7].**
+With the diodes fully conducting the foot resistance becomes (1−x)·500 + 1 kΩ
+‖ x·500 → 333–500 Ω, i.e. f0 would reach ≈1.7× the small-signal value
+(LT ≈ 145 Hz, settling to 86 Hz) — but that is the resistance **limit**, what
+the branch would do with the diodes held hard on, and a real hit does not get
+there. The transition is amplitude-dependent and gradual (germanium diode,
+soft knee), not a stepped envelope. The congas share the mechanism. This, not
+any envelope, is the toms' characteristic "doom" sweep; it also means
+**accent changes the pitch envelope**.
+
+> **AMENDED 2026-09-26 from hardware** (measured in #110, shipped in #154;
+> `docs/tom-pitch-drop-measurement.md`, `docs/tom-pitch-drop-correction.md`,
+> contract 15.7.1). The *mechanism* above survives. The ≈1.7× did not: it was
+> tagged *magnitude inferred* here, was carried into the contract as the
+> shipped sweep, and is the largest single error the drum section has had.
+> Onset f0 ÷ settled f0, 99 clean-digital tom files of a real TR-808, median
+> over 11 TUNING positions × 3 voices:
+>
+> | accent | n | onset ÷ settled | range over the pot | τ |
+> |---|--:|--:|---|--:|
+> | no accent | 23 | **×1.063** | ×1.040 – ×1.094 | 13.0 ms |
+> | accent | 33 | **×1.140** | ×1.085 – ×1.272 | 24.5 ms |
+> | more accent | 33 | **×1.236** | ×1.169 – ×1.344 | 33.1 ms |
+>
+> **×1.7 occurs in none of the 99 files**; the largest drop anywhere is
+> ×1.344. Two further readings of this paragraph were wrong independently of
+> the magnitude, and both are now measured:
+>
+> - **an unaccented hit barely sweeps at all.** Germanium diodes do not
+>   conduct below a drive, so the accent law has a **threshold** — accent
+>   0.670 in the tom position, 1.064 in the conga position — where the
+>   shipped law had a `min(max(accent,0),1)` **clamp** that handed a soft hit
+>   the *full* sweep. Measured excesses at the three recorded accent levels
+>   are 0.054 / 0.143 / 0.239: a straight line that does not pass through the
+>   origin.
+> - **the TUNING pot changes the drop**, which the shipped sequence ignored
+>   entirely. LT at *More Accent* runs ×1.169 at 82 Hz and ×1.325 at 101 Hz;
+>   d ln(excess)/d(f0/f0_nominal) is **3.58 ± 0.14** in the tom position and
+>   **7.46 ± 0.09** in the conga position. HT and LC are both nominally
+>   185 Hz on this same bridged-T with a capacitor switched (SW8) and their
+>   unaccented excesses differ **11×**, so the dependence is on the **switch
+>   position**, not on frequency.
+>
+> Unamended: the **shape** (the exponential beat a linear ramp in 88 of 89
+> measured rows) and the ≈20 ms relaxation carried by the 60 ms window.
+<!-- claim: test=model/test_tom_drop_law.py::test_the_reference_documents_carry_the_measured_magnitude -->
 
 **Noise (toms only) [verified: SN text; values inferred from p.9].** The
 P.N. bus is gated by Q52/Q55/Q58 with an envelope from a diode-charged RC
@@ -489,10 +533,30 @@ It is a quiet, dark rumble under the tone.
 **What to implement (toms/congas).** One modal-bank mode per voice at the
 chart frequency (LT 90, MT 135, HT 185 / LC 185, MC 280, HC 400 Hz; the TUNING
 pot spans ±10 %), Q ≈ 25 (toms) / ≈ 40–55 (congas), excited by the 1 ms pulse
-× accent. Add the **amplitude-dependent pitch offset**: f = f0·(1 + 0.7·
-sat(|y|/y_knee)) or, cheaper, a decaying pitch offset of +40 % → 0 over
-≈ 2τ scaled by accent — the bank must accept per-sample coefficient updates or
-a short coefficient ramp (a 4–8 step ramp of a1 is enough; a2 changes little).
+× accent. Add the **amplitude-dependent pitch offset**: ~~f = f0·(1 + 0.7·
+sat(|y|/y_knee)) or, cheaper, a decaying pitch offset of +40 % → 0 over ≈ 2τ
+scaled by accent~~ — both of those are the ≈1.7× bound above, and the
+measurement says otherwise. Use the **measured** law (contract 15.7.1,
+`drums_fx.tom_drop_excess`):
+
+```
+f(t) = f0 · (1 + excess · exp(−3t/60 ms))
+excess = 0.060 · max(0, accent − A0)/(1 − A0_tom) · exp(G · (f0/f0_nominal − 1))
+```
+
+| constant | tom position | conga position |
+|---|--:|--:|
+| accent threshold `A0` | **0.670** | **1.064** |
+| tuning slope `G` | **3.58** | **7.46** |
+<!-- claim: test=model/test_tom_drop_law.py::test_the_reference_documents_carry_the_measured_magnitude -->
+
+so that a tom at accent 1.0 with the pot centred sweeps **×1.06**, not ×1.7,
+and an *unaccented conga* does not sweep at all. `f0_nominal` is the
+**position's own centre** — this section's chart frequency — not a global one;
+`u` is clamped to the pot's ±10 %, because that is the span the recordings
+cover and the law must not extrapolate past its own evidence. The bank must
+accept per-sample coefficient updates or a short coefficient ramp (a 4–8 step
+ramp of a1 is enough; a2 changes little).
 Toms only: pink noise (LFSR + 1-pole low-pass at ≈400 Hz) × envelope
 (τ ≈ 85 ms) at low level. Congas: no noise.
 
@@ -784,7 +848,8 @@ two (CP, MA) are noise; and the SD and toms add noise to a ring-down.
    W14a's transfer functions; mod that reaches self-oscillation verified: RW]**.
    Component values and the resulting f0/Q: §2–6. Two caveats that *look* like
    sweeps but are not oscillator sweeps: the BD's 4 ms attack at ≈2.6× f0 and
-   its slow sigh; the toms' diode-driven pitch fall (up to ≈1.7× → 1×).
+   its slow sigh; the toms' diode-driven pitch fall (~~up to ≈1.7× → 1×~~
+   **measured ×1.06 – ×1.34 → 1×**, by accent and TUNING — §4's amendment).
 2. **Six square-wave oscillators, summed, band-passed, high-passed —
    confirmed; not noise [verified: W14b §3; SN p.6, p.13]**. Nominal
    frequencies **205.3, 369.6, 304.4, 522.7, 800 (trimmed), 540 (trimmed) Hz**
