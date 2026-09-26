@@ -939,16 +939,32 @@ few hundred mV against 2V_T ≈ 50 mV) and the dedicated Minimoog emulation.
 
 ### 8.4 Result: the cutoff control does not mean the same thing across its range
 
-> #### The `ours` rows below are revision 8 — the filter BEFORE DR 0011
+> ### Re-run 2026-09-26 — the table below now measures the shipped filter, not revision 8
 >
-> They are correct as history and the conclusion they reached was taken: the fix
-> named here shipped as **DR 0011** on 2026-09-18. But the headline number
-> — "7.92 pp against Surge Type 2's 0.62" — is not the shipped filter's, and it
-> has been quoted as though it were. Re-measured on the shipped filter at the
-> same operating point the drift is **1.26 pp**, and what is left is a
-> *resonance-dependent offset* of 105 cents that this metric cannot see by
-> construction. `docs/ladder-rung1-audit.md` has the shipped numbers, the
-> resonance table, and what remains available.
+> Every revision of this table through 2026-09-18 measured `ours` against the
+> pre-DR-0011 cutoff ROM and reported "7.92 pp against Surge Type 2's 0.62" as
+> though it were the shipped filter's number. It was not — DR 0011 shipped the
+> fix this section itself derives, below, on 2026-09-18, and the table was
+> never re-run against it (issue #239). It is re-run here: every
+> `ours`-prefixed row (`ours` plus its controls and probes) is rebuilt against
+> the current `model/reference_rigs.OurLadder` by
+> `tools/regen_discrimination_ours.py`, whose output is committed at
+> `docs/reference-compare-results-shipped.json`. **The spread drops from
+> 7.92 pp to 1.26 pp** — matching, independently, the number
+> `docs/ladder-rung1-audit.md` already reported from a different instrument (a
+> linearised loop, not this stepped-tone harness). What is left is the
+> *resonance-dependent offset* this metric cannot see by construction — 105
+> cents of travel across the resonance knob, unchanged by this re-run and
+> tracked separately in `docs/ladder-rung1-audit.md`.
+>
+> `docs/reference-compare-results.json` itself is untouched by this re-run.
+> Its `ours`-prefixed keys are `model/ladder_headroom.py`'s own deliberate
+> revision-8 anchor — `frozen_reference_tracking("ours")`, bound there to the
+> name `ours_rev8` and used to compute `drift_before_dr_0011_pp` — and
+> `model/test_ladder_headroom.py::test_the_frozen_surge_row_is_not_a_like_for_like_limit_cycle`
+> locks its 7.92 pp spread as a historical value. Overwriting that file's
+> `ours` keys in place would have silently broken that anchor to fix this
+> table, which is why the fresh data lives in a new file instead.
 >
 > **One caveat this section did not state, which decides how its comparison may
 > be read**: §8.3 records that Surge Type 2 cannot self-oscillate, so its
@@ -961,21 +977,27 @@ six octaves:
 
 | filter | 100 Hz | 800 Hz | 6400 Hz | **spread** |
 |---|---|---|---|---|
-| **ours** | −8.30 % | −6.77 % | −0.38 % | **7.92 pp** |
+| **ours** | −6.13 % | −5.12 % | −5.25 % | **1.26 pp** |
 | Surge Type 2 (Huov) | −0.37 % | −0.23 % | +0.25 % | **0.62 pp** |
 | Surge Type 1 (RK) | −2.18 % | −2.32 % | −3.46 % | **1.28 pp** |
 | Diva *(knob calibrated on f_osc — circular, not evidence)* | +0.10 % | +0.04 % | +0.04 % | 0.09 pp |
 | Mini V3 *(same, circular)* | +0.03 % | −0.15 % | −0.24 % | 1.02 pp |
 
 A frequency-*independent* offset is one scale factor and is removable in an
-afternoon; the **spread** is the defect, and ours is 6 to 13 times the
-spread of either Surge model. Contract 17.12 already records the symptom
-(+7.2 % at 10 kHz, ±2 % from 400 Hz to 1.6 kHz) as an open item. What the
-reference adds is **the cause and the fix**, both read out of Surge's source:
-Huovilainen's `fcr` tuning polynomial, which Surge applies and we do not.
+afternoon; the **spread** is the defect. **Post-DR-0011, ours (1.26 pp) sits
+between the two Surge models** (0.62 pp Type 2, 1.28 pp Type 1) rather than 6
+to 13 times either, which is what the fix derived below (Huovilainen's `fcr`
+tuning polynomial) predicts. Contract 17.12's open item (+7.2 % at 10 kHz,
+±2 % from 400 Hz to 1.6 kHz) is the symptom this closed. What remains is not
+this drift but the 105-cent resonance-dependent offset the admonition above
+names — invisible to this metric by construction.
 
-Applying `fcr` to our own cutoff lookup — one multiply in the ROM build, no
-change to the datapath — and then one constant scale:
+**The rest of this subsection is the historical derivation that produced
+DR 0011**, kept for the record rather than re-run: its `ours` column below is
+deliberately the pre-fix baseline, not the shipped filter, and the live
+number is the table above. Applying `fcr` to our own cutoff lookup — one
+multiply in the ROM build, no change to the datapath — and then one constant
+scale:
 
 | cutoff | ours | + `fcr` | + `fcr` × 1.030 |
 |---|---|---|---|
@@ -1063,48 +1085,68 @@ not to.
 
 ### 8.6 Result: slope, corner and resonance
 
+> ### Re-run 2026-09-26 — `ours` rows below are the shipped filter, not revision 8
+>
+> Like §8.4, this subsection's `ours`-prefixed rows were last measured before
+> DR 0011 (2026-09-18) and are re-run here against the current
+> `model/reference_rigs.OurLadder` by `tools/regen_discrimination_ours.py`
+> (issue #239); the reference rows (Surge, Diva, Mini V3) are unchanged,
+> reused from the frozen `docs/reference-compare-results.json`. The stopband
+> slope and the dropped-pole control barely move — DR 0011 changes the cutoff
+> ROM's tuning, not the ladder structure or the pole count, so a
+> structure-dependent number is not expected to move and does not. The
+> resonant-peak table and the corner ratio **do** move, because both are
+> downstream of the cutoff ROM the resonance compensation (DR 0006) is derived
+> from.
+
 **Stopband slope.** Ours −21.4 to −21.9 dB/oct over 2.2–7× the measured
-corner, fit residual 0.21–0.34 dB. The references over the same band: Surge
+corner, fit residual 0.22–0.35 dB. The references over the same band: Surge
 Type 2 −19.4 to −21.5, Surge Type 1 −19.2 to −21.4, Diva −18.2 to −21.2,
 Mini V3 −17.6 to −21.6. **An ideal analogue 4-pole gives −17.6 dB/oct over
 that band** (closed form, in the report's `ideal4p` column) — 24 dB/octave is
 the asymptote, not what any 4-pole does two octaves above its corner. So the
 24 dB/oct claim holds: ours is the *steepest* of the five, and the injected
-dropped-pole control reads −11.6 to −11.8.
+dropped-pole control reads −11.7 to −11.8 — still far outside the real
+filters' cluster, so the control still starts red.
 
-**−3 dB corner against commanded cutoff.** Nobody's ratio is constant:
-ours 0.752→0.818 (drifting up), Surge Type 2 0.627→0.566 and Mini V3
-0.697→0.730 (drifting the other way), Diva 0.584–0.697 with no clean trend.
-The corner is the weaker discriminator of the two frequency measurements —
-it moves with resonance and with the passband reference band — and §8.4's
-self-oscillation pitch is the one to read.
+**−3 dB corner against commanded cutoff.** Nobody's ratio is constant: ours
+0.771–0.800 — rising from 100 Hz to a peak near 800 Hz and easing back, not
+the pre-DR-0011 monotonic drift, and less than half the span (0.029 against
+0.066) — Surge Type 2 0.627→0.566 and Mini V3 0.697→0.730 (drifting the other
+way), Diva 0.584–0.697 with no clean trend. The corner is the weaker
+discriminator of the two frequency measurements — it moves with resonance and
+with the passband reference band — and §8.4's self-oscillation pitch is the
+one to read.
 
 **Resonant peak, at 0.9 of each filter's own self-oscillation threshold**,
 against input level:
 
 | filter | −60 dBFS | −48 | −36 | −24 | −12 dBFS |
 |---|---|---|---|---|---|
-| **ours** | 23.3 dB / Q 14.3 | 23.2 / 14.1 | 21.8 / 12.8 | 14.5 / 6.3 | **8.0 / 2.6** |
-| ours, 256-entry table | 20.2 / 11.2 | 20.1 / 11.0 | 20.8 / 11.7 | 14.7 / 6.5 | 8.1 / 2.7 |
+| **ours** | 20.7 dB / Q 11.8 | 20.6 / 11.5 | 20.5 / 11.4 | 15.0 / 6.7 | **8.3 / 2.8** |
+| ours, 256-entry table | 17.9 / 8.8 | 17.7 / 8.6 | 18.3 / 9.2 | 15.1 / 6.9 | 8.3 / 2.8 |
 | Surge Type 2 | 21.9 / 12.7 | 21.9 | 21.9 | 21.9 | **21.9 / 12.7** |
 | Surge Type 1 | 22.0 / 12.7 | 22.0 | 22.0 | 22.0 | 22.5 / 13.2 |
 | Diva | 17.7 / 9.7 | 18.4 | 19.7 | 20.9 | 20.0 / 10.6 |
 | Mini V3 | 14.1 / 3.4 | 14.1 | 13.7 | 14.4 | 16.6 / 7.5 |
-| *2-pole — injected defect* | 2.1 / — | 2.1 | 2.0 | 2.0 | 1.6 / — |
+| *2-pole — injected defect* | 2.0 / — | 2.1 | 2.1 | 2.0 | 1.6 / — |
 
-**At small signal the five agree**: 23.3, 22.0, 21.9, 17.7, 14.1 dB. Ours is
-at the top of the spread, not outside it.
+**At small signal the five agree**: 22.0, 21.9, 20.7, 17.7, 14.1 dB. Ours now
+sits in the middle of the spread, not at its top — DR 0011's cutoff-ROM
+retuning moves the resonance-compensation coefficient (DR 0006) derived from
+it, and this table is downstream of that.
 
-**With drive we are the only one whose resonance collapses**: −15.2 dB from
+**With drive we are the only one whose resonance collapses**: −12.3 dB from
 −48 to −12 dBFS, against +0.0, +0.5, +1.6 and +2.5 for the four references.
 This is the "thickens vs flat-tops" question and the answer is not flattering,
 but **it is confounded** and the confound must be stated: at 0.9 of its own
-threshold ours reaches Q 14.3 while Mini V3 reaches only Q 3.4, so our
-internal signal is four times larger before the nonlinearity ever sees it. Our
-*input-referred* saturation threshold (−6.6 dBFS) agrees with Mini V3's
-(−5.7 dBFS) to within a dB. What differs is how much Q each knob buys, which
-is a resonance-law difference, not a gain-staging one. **Reported as a
-measured difference with its confound named, not as a defect.**
+threshold ours reaches Q 11.8 while Mini V3 reaches only Q 3.4, so our
+internal signal is roughly three and a half times larger before the
+nonlinearity ever sees it. Our *input-referred* saturation threshold
+(−6.2 dBFS) agrees with Mini V3's (−5.7 dBFS) to within a dB. What differs is
+how much Q each knob buys, which is a resonance-law difference, not a
+gain-staging one. **Reported as a measured difference with its confound
+named, not as a defect.**
 
 ---
 
@@ -1114,9 +1156,9 @@ Three deliberately-wrong ladders through the identical measurements:
 
 | injected defect | what it must move | measured | ours |
 |---|---|---|---|
-| **dropped pole** (2 stages) | the slope, the peak | −11.6 to −11.8 dB/oct; peak 2.1 dB, no Q at any drive | −21.4 to −21.9; 23.3 dB, Q 14.3 |
-| **cutoff ROM read 30 % high** | the corner | corner/commanded 0.97–1.08 | 0.752–0.818 |
-| **one-tanh** (four linear poles, one saturating element in the feedback — the structure DR 0001 rejected) | the fingerprint | h5 − h3 at matched h3 **−38.7 dB** | **−20.4 dB** |
+| **dropped pole** (2 stages) | the slope, the peak | −11.7 to −11.8 dB/oct; peak 2.0–2.1 dB, no Q at any drive | −21.4 to −21.9; 20.7 dB, Q 11.8 |
+| **cutoff ROM read 30 % high** | the corner | corner/commanded 0.99–1.04 | 0.771–0.800 |
+| **one-tanh** (four linear poles, one saturating element in the feedback — the structure DR 0001 rejected) | the fingerprint | h5 − h3 at matched h3 **−38.8 dB** | **−20.4 dB** |
 
 Each is separated from ours by far more than the spread between the three
 references, so the measurements can see a broken filter. The one-tanh control
