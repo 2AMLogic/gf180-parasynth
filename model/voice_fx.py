@@ -465,7 +465,7 @@ def blep_fx(ph: np.ndarray, inc, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BIT
     return c
 
 
-# ---- PolyBLAMP (DR 0016) ----------------------------------------------------
+# ---- PolyBLAMP (DR 0017) ----------------------------------------------------
 # The shark-tooth has TWO kinds of discontinuity and PolyBLEP corrects one of
 # them. Esqueda, Bilbao and Valimaki analyse this exact waveform (ISMRA 2016
 # section 3): the saw share STEPS at the wrap -- an amplitude discontinuity,
@@ -640,7 +640,7 @@ class OscFx:
             # The switch mixes the two BUFFERED waveform outputs through R030
             # and R031, so whatever correction each one already carries is what
             # the junction sees. Both of them need one, and they are different
-            # corrections (DR 0016): the saw STEPS at the wrap, so its share of
+            # corrections (DR 0017): the saw STEPS at the wrap, so its share of
             # the step is 10/57 of the saw's and PolyBLEP is what removes it;
             # the triangle CORNERS twice per cycle, at the valley (phase 0) and
             # the peak (half a cycle), and a corner is a slope discontinuity

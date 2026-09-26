@@ -2035,7 +2035,7 @@ def _shark(note, third, n=int(0.5 * SR)):
 
 
 def test_the_blamp_residual_is_the_cubic_the_derivation_says_it_is():
-    """[source-verified: DR 0016; Esqueda, Bilbao and Valimaki, ISMRA 2016 section 3] **DR 0016.** The shark-tooth has two kinds of discontinuity and BLEP
+    """[source-verified: DR 0017; Esqueda, Bilbao and Valimaki, ISMRA 2016 section 3] **DR 0017.** The shark-tooth has two kinds of discontinuity and BLEP
     corrects one of them. The triangle share's corners are SLOPE
     discontinuities, and the residual that band-limits a slope discontinuity is
     the integral of the one that band-limits a step:
@@ -2076,7 +2076,7 @@ def test_the_blamp_residual_is_the_cubic_the_derivation_says_it_is():
 
 
 def test_the_shark_tooths_corner_is_corrected_and_its_step_still_is():
-    """[source-verified: DR 0016 -- the correction each share of the divider needs] **DR 0016.** `OscFx.render`'s shark-tooth is the junction of two
+    """[source-verified: DR 0017 -- the correction each share of the divider needs] **DR 0017.** `OscFx.render`'s shark-tooth is the junction of two
     BUFFERED outputs (W3), and BOTH of them arrive needing a correction --
     different ones. The saw share STEPS at the wrap: PolyBLEP, already there.
     The triangle share CORNERS at the valley (phase 0) and the peak (half a
@@ -2125,7 +2125,7 @@ def test_the_shark_tooths_corner_is_corrected_and_its_step_still_is():
 
 @pytest.mark.parametrize("note", [69, 81, 93, 105])
 def test_the_blamp_takes_inharmonic_energy_off_the_shark_tooth(note):
-    """[measured-here: DR 0001's estimator, before and after, four octaves] **DR 0016's reason for existing, measured.** The uncorrected corner is a
+    """[measured-here: DR 0001's estimator, before and after, four octaves] **DR 0017's reason for existing, measured.** The uncorrected corner is a
     second alias source, so removing it must show up in DR 0001's own
     inharmonic-energy measure -- and must show up MORE at higher pitch, because
     a corner's alias energy grows with the number of its images that fold.
@@ -2170,7 +2170,7 @@ def test_the_blamp_takes_inharmonic_energy_off_the_shark_tooth(note):
 
 def test_the_blamp_does_not_move_the_shark_tooths_harmonics():
     """[source-verified: docs/minimoog-reference.md W3 -- the 10/57 divider is a separate fact] **The divider and the corrections are independent facts, and this is
-    what keeps them independent.** DR 0016 adds a correction; it must not
+    what keeps them independent.** DR 0017 adds a correction; it must not
     change the SHAPE. h2..h7 at 110 Hz are compared against the closed form of
     10/57 saw + 47/57 triangle -- saw harmonics are sine terms and the
     triangle's are cosine, so they add in quadrature -- before and after.
@@ -2422,7 +2422,7 @@ def test_the_modulation_tap_is_the_same_signal_band_limited_or_not_at_lo_rates()
         inc = dsp.phase_inc(hz)
         cycles = math.ceil(n * inc / (1 << 24))
         for shape in ("saw", "revsaw", "square", "tri", "shark"):
-            # the shark-tooth has TWO corrected discontinuities since DR 0016:
+            # the shark-tooth has TWO corrected discontinuities since DR 0017:
             # the wrap (BLEP on its saw share, BLAMP on its triangle's valley)
             # and the triangle's peak half a cycle later (BLAMP alone).
             edges = 2 if (shape in vf.TWO_EDGE or shape == "shark") \
@@ -2533,7 +2533,7 @@ def test_control_the_shark_tooths_blamp_with_its_two_corners_swapped(monkeypatch
 
 
 def test_control_the_shark_tooths_triangle_left_uncorrected(monkeypatch):
-    """[meta] Defect: DR 0016 never happened -- the shark-tooth's triangle share goes
+    """[meta] Defect: DR 0017 never happened -- the shark-tooth's triangle share goes
     to the divider with its corners intact, which is exactly what `main` did
     before #48. The aliasing test must go red on the pitch dependence, because
     that is the property the corner controls.

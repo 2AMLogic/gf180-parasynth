@@ -2,6 +2,10 @@
 
 **Revision 12 — 2026-09-26 — status: PROPOSED. Not ratified.**
 
+Revision 12 is one normative change: the shark-tooth's triangle share now
+carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
+its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
+
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
 saturating mixer, Huovilainen's nonlinear ladder with a resonance-compensation
@@ -548,7 +552,7 @@ Let `p` be the 24-bit phase before advance. `naive` is signed 16-bit
 | 2 | pulse25 | `+32767` if `p < 0x400000`, else `−32768` — 25 %; **not a Model D width** |
 | 3 | tri | `q = p >> 7` (0..131071); `q − 32768` if `q < 65536`, else `98303 − q` |
 | 4 | sine | `SINE(p)`, section 6.5; **not a Model D waveform** |
-| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth |
+| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth. **Naive only**: the band-limited form is 6.6.5, and it corrects BOTH shares |
 | 6 | revsaw | `sat16(−saw)` — oscillator 3's reverse sawtooth |
 | 7 | pulse29 | `+32767` if `p < 4 865 393`, else `−32768` — **29 % duty**, the wide rectangle |
 | 8 | pulse15 | `+32767` if `p < 2 516 582`, else `−32768` — **15 % duty**, the narrow rectangle |
@@ -562,10 +566,18 @@ drawing's pulse-width divider read against SM 2.3's 50 % and 15 %.
 
 The square and pulse step **up** at the wrap (p = 0) and **down** at the
 duty point; the saw steps **down** at the wrap. That difference fixes the sign
-of the correction in 6.6.4. The shark-tooth mixes the **corrected** saw (6.6)
-with the naive triangle, as the switch mixes two buffered outputs, so its step
-at the wrap is 10/57 of the sawtooth's and needs no second correction; the
-reverse sawtooth negates the corrected saw, for the same reason.
+of the correction in 6.6.4. The reverse sawtooth negates the **corrected** saw,
+because the switch mixes two buffered outputs and oscillator 3's Q20 inverts
+what the saw buffer already carries.
+
+The shark-tooth mixes the **corrected** saw with the **corrected** triangle, and
+the two corrections are different ones (revision 12, DR 0017). Its step at the
+wrap is 10/57 of the sawtooth's and PolyBLEP is what removes it. Its triangle
+share also **corners** twice per cycle — at `p = 0` and at `p = 2^23` — and a
+corner is a discontinuity in the SLOPE, not in the value, so no step correction
+can see it. That takes the ramp residual of 6.6.5. Before revision 12 the
+triangle share went to the divider naive, which cost up to 6.3 dB of inharmonic
+energy at the top of the register (DR 0017).
 
 ### 6.5 Sine
 
@@ -590,9 +602,12 @@ even-symmetric about 255.5.
 
 ### 6.6 PolyBLEP
 
-Applied to saw, square and pulse25 only. Triangle and sine are the naive
-waveform (the model constructs `OscFx` with `blep = blep and shape in (saw,
-square, pulse25)`). The integer model's aliasing suppression equals the float
+Applied to the discontinuous shapes of 6.4 — saw, revsaw, shark, square,
+pulse25, pulse29 and pulse15 (`voice_fx.BLEP_SHAPES`, which also carries the
+model-only `pulse479`). Triangle and sine are the naive waveform, and sine has
+no discontinuity of either kind. 6.6.1–6.6.3 are the machinery, 6.6.4 the
+application to the shapes of revision 4, and 6.6.5 the shark-tooth's, which is
+the one shape needing a correction 6.6.3 does not provide. The integer model's aliasing suppression equals the float
 PolyBLEP's at every note measured (DESIGN.md section 6); the widths below were
 set by tracking the float waveform inside Q1.15, not by aliasing.
 
@@ -688,6 +703,51 @@ than the naive square (`test_square_correction_has_the_right_sign`).
 Consequences: at `p = 0` the band-limited saw is `sat16(−32768 − (−32768)) =
 0`, the midpoint of its step, and the square is `sat16(32767 − 32768 − 0) =
 −1`. Both differ from the naive values by design.
+
+#### 6.6.5 polyBLAMP, and the shark-tooth (revision 12, DR 0017)
+
+A **slope** discontinuity is not corrected by 6.6.3 at all: the signal is
+continuous across it, so `c` has nothing to subtract. The correction it takes is
+the integral of 6.6.3's, evaluated in the same window from the same `s`
+(`voice_fx.blamp_slope`, `voice_fx.blamp_fx`):
+
+```
+m3 = (inc · 21845) >> 15                  once per oscillator per frame; 24 bits
+b  = 0
+if p < inc:                               just after the corner
+    s  = 65536 − frac(p)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+q = 2^24 − p
+if q < inc:                               just before the corner
+    s  = 65536 − frac(q)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+```
+
+`b` ranges **0..43690** — 17 bits UNSIGNED, and it is never negative: the sign
+belongs to the caller, because the same residual raises a valley and lowers a
+peak. If both conditions hold (only when `inc > 2^23`) the second assignment
+wins, as in 6.6.3. With `inc = 0`, `b = 0` for every `p`.
+
+`21845` is `round(2^16 / 3)` and MUST be used as written. It is a constant
+multiply, not a division: an implementation that divides by 3 exactly is **not**
+bit-exact with this specification.
+
+The shark-tooth (code 5) is then, with `c(·)` from 6.6.3, `b(·)` from above and
+`tri`, `saw` from 6.4, all evaluated with this oscillator's `inc, e, r`:
+
+```
+shark:    p2   = (p + 0x800000) mod 2^24                  the triangle's peak
+          tric = sat16( tri + b(p) − b(p2) )              valley up, peak down
+          sawc = sat16( saw − c(p) )
+          osc  = sat16(( 5749 · sawc + 27019 · tric ) >> 15)
+```
+
+*Informative:* the residual is `R(x) = (1 − |x|)^3 / 3` for a sample `x` samples
+from the corner, scaled by half the slope change. The triangle of 6.4 reads
+`p >> 7`, so its slope is `inc/128` Q1.15 LSB per sample and half its change at
+a corner is the same `inc/128`; `m3` is that over three. Getting the two corners
+the wrong way round sharpens them and measures *worse* than no correction at all
+(DR 0017's control table).
 
 ### 6.7 Glide (DR 0004)
 

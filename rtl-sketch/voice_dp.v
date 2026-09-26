@@ -163,7 +163,7 @@ module voice_dp #(
     localparam signed [24:0] PA0 = -25'sd28689,  PA1 =  25'sd12348;                        // Q14
     localparam signed [24:0] RED_G = 25'sd904, RED_GAIN = 25'sd29841;
     localparam signed [24:0] SHK_SAW = 25'sd5749, SHK_TRI = 25'sd27019;
-    // polyBLAMP (DR 0016): Q0.16 approximation of 1/3, the ramp residual's
+    // polyBLAMP (DR 0017): Q0.16 approximation of 1/3, the ramp residual's
     // leading coefficient. The MODEL performs this same constant multiply, so
     // "exactly 1/3" never enters the bit-exactness question.
     localparam signed [20:0] BLAMP_THIRD = 21'sd21845;
@@ -253,7 +253,7 @@ module voice_dp #(
     reg [1:0]  kk;                     // oscillator index
     reg [1:0]  win;                    // PolyBLEP window 0..3
     reg signed [16:0] c_pp, c_ps;      // corrections at the two edges
-    // polyBLAMP (DR 0016): the shark-tooth's triangle share CORNERS twice per
+    // polyBLAMP (DR 0017): the shark-tooth's triangle share CORNERS twice per
     // cycle and a corner is a slope discontinuity, which c_pp/c_ps cannot see.
     // b_pp is the ramp residual at the valley (phase 0), b_ps at the peak (half
     // a cycle); both are non-negative -- the sign is applied where they are used.
@@ -293,7 +293,7 @@ module voice_dp #(
     wire        blep     = is_saw | is_rev | is_shark | two_edge;
     // For the rectangles this is the duty point -- the second EDGE. For the
     // shark-tooth it is the triangle's PEAK, half a cycle from its valley, so
-    // windows 2 and 3 land on the second corner (DR 0016).
+    // windows 2 and 3 land on the second corner (DR 0017).
     wire [23:0] dutyv = (is_sq | is_shark) ? 24'h800000 : is_p25 ? 24'h400000
                       : is_p29 ? DUTY_WIDE : DUTY_NARROW;
     // naive waveforms (6.4, 6.5)
@@ -345,7 +345,7 @@ module voice_dp #(
                             : (sawc_raw < -18'sd32768) ? -16'sd32768 : sawc_raw[15:0];
     wire signed [17:0] revc = -$signed({{2{sawc[15]}}, sawc});
     // the band-limited TRIANGLE the shark-tooth's 47/57 share is taken from
-    // (DR 0016): the valley raised and the peak lowered by the ramp residual.
+    // (DR 0017): the valley raised and the peak lowered by the ramp residual.
     // Getting those two the wrong way round SHARPENS both corners, which is the
     // negative control below.
 `ifdef INJECT_BUG_VOICE_SHARK_BLAMP_SIGN
