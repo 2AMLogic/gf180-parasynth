@@ -42,6 +42,45 @@ the integrated RTL:
 **That is the failure this column exists to prevent** — optimising eighty cases
 against a model the built instrument does not reproduce.
 
+## Two scores for one change: bass compensation
+
+A ladder loses bass as its resonance rises — `H(0) = 1/(1 + k)` in the
+small-signal model, which `model/test_moog_acceptance.py` now asserts against
+our filter directly.
+<!-- claim: test=model/test_moog_acceptance.py::test_the_ladders_low_frequency_gain_is_one_over_one_plus_k -->
+DR 0005's `ogain` gives part of it back (`(1 + 2 res)`), and DR 0006's `k_comp`
+ROM moves the onset. **Both are level policy, and a change to either has two
+effects that must never be added up:**
+
+| property | asks | measured against |
+|---|---|---|
+| **`Bass loss`** | *does it match the reference?* | the frozen Surge Type 2 profile — the low-frequency gain versus resonance of another implementation of the same filter |
+| **`Playing weight`** | *does it sound bigger?* | our own declared level at that node, unnormalised — no reference, and no claim that a reference would agree |
+
+The two are **separate named properties on the same case** (`F2A`–`F2D` in
+[`cases.csv`](cases.csv)), never combined into one number, because the
+interesting change is the one that moves them in opposite directions:
+compensation that makes the instrument feel better to play while moving it
+*away* from the reference. That is a legitimate product choice — and it has to
+be **visible as a choice**, which means seeing both numbers, not an average
+that hides which half paid for which.
+<!-- claim: test=tools/test_acceptance_policy.py::test_a_bass_compensation_trade_is_two_properties_not_an_average -->
+
+Two consequences of listing both as required measurements, both deliberate:
+
+- **You cannot report the weight and call the compensation validated.**
+  A case missing either half is `no verdict`, by the rule three sections up.
+  `Bass loss` is currently a stated not-run (`run_case.NOT_RUN["F2A"]`: the
+  comparison is not well posed until a matched-drive definition is written
+  down), and `Playing weight` is measurable on our own output today — exactly
+  the asymmetry that would otherwise let the easy half stand in for the hard
+  one.
+  <!-- claim: test=tools/test_acceptance_policy.py::test_every_case_scoring_bass_loss_also_scores_playing_weight -->
+- **A regression in either is a regression.** `scorecard.compare` rejects a
+  candidate where any property regresses past its allowance, whatever the
+  others did; widening one property's allowance is available and is a recorded
+  decision, which is the difference between a trade and an accident.
+
 ## What is frozen before results are collected, and why
 
 Reference identity and patch · parameter mappings · allowed alignment and level
