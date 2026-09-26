@@ -1,7 +1,7 @@
 """The kit the player CLI sends is the kit the IMAGE on the board plays.
 
 #273 (clap L2, contract revision 14) changed `drums_fx.kit_808()`. The published
-R1 image is revision-11 RTL with no ENV_FRATE, and its release manifest binds
+R0 image is revision-11 RTL with no ENV_FRATE, and its release manifest binds
 the CLI's bytes (fpga/release/baseline-2025.1.json). These tests hold the
 mechanism that keeps both true: `uart_host --image release` (the default) sends
 the frozen revision-11 kit, `--image tree` sends the tree's.
@@ -112,7 +112,7 @@ def test_cli_default_sends_the_bytes_the_release_binds(tmp_path, capsys):
 
 def test_control_tree_image_is_not_the_release(tmp_path, capsys):
     """The binding discriminates: the tree's kit is different bytes, and the
-    difference includes the revision-14 register the R1 image does not have."""
+    difference includes the revision-14 register the R0 image does not have."""
     bound = json.loads(MANIFEST.read_text())["commands"]["demo"]["cmds_sha256"]
     tree = _capture(tmp_path, "--image", "tree")
     assert _sha(tree) != bound

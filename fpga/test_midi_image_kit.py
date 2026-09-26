@@ -3,7 +3,7 @@
 `fpga/midi_session.py` is a second host, separate from `uart_host.py run`, and it
 built `spi_host.MusicHost` with no kit, so it fell back to `drums_fx.kit_808()`:
 after #273 that is revision 14's clap (ENV_CTL[8] burst 3, the new ENV_FRATE[8],
-ENV_RATE[9] 80 ms). The published R1 Arty image is revision 11 and does not
+ENV_RATE[9] 80 ms). The published R0 Arty image is revision 11 and does not
 decode ENV_FRATE, so a live session on a real board played an unverified clap
 and nothing refused or reported it.
 

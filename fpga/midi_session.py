@@ -9,7 +9,7 @@
 
 THE IMAGE (#273). The drum kit in the known-state image is a property of the
 Arty image on the board, not of the tree this runs from (uart_host.image_kit).
-On a serial port the default is `--image release`: the published R1 image,
+On a serial port the default is `--image release`: the published R0 image,
 contract revision 11, which has no ENV_FRATE and plays revision 11's clap.
 `--image tree` is a board built from this tree (revision 14). `--port sim` is
 this tree's device contract, so it implies `tree`, and `--port sim --image
@@ -873,7 +873,7 @@ def main(argv=None) -> int:
     ap.add_argument("--duration", type=float, default=None, help="stop after this many seconds")
     ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit sent: "
-                         "release (the published R1 image, contract revision 11 -- the "
+                         "release (the published R0 image, contract revision 11 -- the "
                          "DEFAULT on a serial port) or tree (built from this tree, "
                          "revision 14 -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)

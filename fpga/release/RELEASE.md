@@ -1,5 +1,11 @@
 # Release: Arty A7-100T baseline 2025.1, r1
 
+> **Naming (plan087/plan088).** This release, whose immutable identifier is
+> `arty-a7-100t baseline 2025.1, r1`, is **R0** in all new prose: the published
+> revision-11 image and the rollback. **R1** is the revision-14 player preview,
+> frozen in [`R1.md`](R1.md) / [`r1-candidate.json`](r1-candidate.json), which has
+> no bitstream yet (#280). Neither identity's evidence stands in for the other's.
+
 **Status: CANDIDATE — digital evidence only. No physical programming, control
 or audio capture has been performed on this image.**
 

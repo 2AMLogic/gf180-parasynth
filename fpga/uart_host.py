@@ -122,7 +122,7 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 
 # ---- the image this CLI drives, and so the drum kit it sends ------------------
 # The kit is a property of the IMAGE on the board, not of the tree the CLI runs
-# from. The published R1 image (fpga/release, integrated-baseline-2025.1) is
+# from. The published R0 image (fpga/release, integrated-baseline-2025.1) is
 # contract revision 11 RTL: no ENV_FRATE, no final strike. Revision 14's
 # `kit_808()` programs a clap that image cannot play, so the default -- the
 # image a player actually has -- sends revision 11's frozen kit, and a board
@@ -1690,7 +1690,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "preflight REFUSES it: over queue and wire budget)")
     ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit a "
-                         "fixture sends: release (the published R1 image, contract "
+                         "fixture sends: release (the published R0 image, contract "
                          "revision 11, no final strike -- the DEFAULT) or tree (an "
                          "image built from this tree, revision 14)")
     ap.add_argument("--dry-run", action="store_true",
