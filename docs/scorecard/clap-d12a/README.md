@@ -1,9 +1,10 @@
 # D12A clap burst/tail balance: reproduction and diagnosis
 
 This folder is diagnostic only. No change was made to the drum model, the
-scorer or `docs/scorecard/results/D12A.json`. The candidate renders are register
-images built inside `tools/clap_d12a_probe.py` and then discarded. They were not
-promoted.
+scorer or `docs/scorecard/results/D12A.json`. The experiment renders (C1–C3)
+are register images built inside `tools/clap_d12a_probe.py` and then discarded.
+**They are development experiments on development data, not candidates for
+promotion** (see §8).
 
 | file | what |
 |---|---|
@@ -65,7 +66,7 @@ float64 `03684093c3d559b9…` and 16-bit PCM `5a68e7f84a0d4f6b…`.
   decreasing 4 ms bursts ending by about 25 ms, and nothing but the tail after
   30 ms.
 
-## 4. Absolute energies: the late side is weak, not the burst loud
+## 4. Window energies: late energy is deficient under the stated normalisation
 
 The Fischer set pinned LEVEL at maximum, so cross-recording gain means nothing.
 Original-gain energies (dB re FS²·s) are recorded in `probe.json` but cannot be
@@ -83,7 +84,11 @@ Two anchors were used, and the conclusion is drawn only where they agree.
 - Peak anchor: the late window is 11.1 dB short and the early window is 3.2 dB
   hot. Anchored on the first 30 ms, the late window is 14.3 dB short and the
   early window is 0 dB off. **Under both anchors the late side accounts for most
-  of the error (≥ 11 dB). At most 3.2 dB is attributable to the bursts.**
+  of the error (≥ 11 dB).** Both anchors are internal to each recording: each
+  side is normalised to its own peak or its own first 30 ms. This is **not** an
+  absolute calibration. It does not show that our early (burst) amplitude is
+  correct, only that, relative to each side's own peak, the late energy is
+  deficient and the early energy differs by at most about 3 dB.
 - **Counterfactual window swaps** (`decomposition`). Giving ours the reference's
   30–50 ms energy reduces the error from 14.26 to **3.98 dB**. Giving it the
   reference's 50–200 ms energy reduces it only to 9.28 dB. So the missing final
@@ -94,7 +99,9 @@ Two anchors were used, and the conclusion is drawn only where they agree.
   The model's 47 ms is the R348·C138 component estimate. The machine measures
   about 80 ms.
 
-**Diagnosis.** The error comes from the late envelope. About 10 dB of the
+**Diagnosis (scoped).** Under the stated normalisation (each side to its own
+peak; Fischer pinned LEVEL at maximum, so there is no absolute level), the ratio
+error is carried by deficient late energy. About 10 dB of the
 14.26 dB is the missing slow final burst of the burst VCA, which starts at about
 31 ms and so sits in the reference's late window. Most of the rest is the tail's
 time constant (45 ms against 80 ms). The bursts before 30 ms are within about
@@ -148,7 +155,7 @@ Start-red: the closed-form tests fail 8 of 8 against mutated scorer estimators
 The LFSR runs freely, so moving the strike by whole frames changes only the
 noise under the envelope. This was done over 8 offsets.
 
-| config | ratio dB | ratio pass | burst span ms | span pass | T20 ms | T20 pass |
+| config (C1–C3: development experiments) | ratio dB | ratio pass | burst span ms | span pass | T20 ms | T20 pass |
 |---|---|---|---|---|---|---|
 | baseline | 10.19 … 11.28 | 0/8 | 18.67 … 20.00 | 8/8 | 88.9 … 101.1 | **3/8** |
 | C1 final τ 30 ms | −0.53 … 0.61 | 3/8 | 32.0 … 56.1 | 5/8 | 122.7 … 135.2 | 8/8 |
@@ -160,15 +167,15 @@ noise under the envelope. This was done over 8 offsets.
   one noise phase, not of the model.
 - **The Burst timing estimator is not qualified for a clap with a slow final
   burst.** The estimator is `envelope_bursts` with a 2 dB dip on a 4 ms RMS
-  envelope over 0–120 ms. Once any candidate supplies the final burst, it counts
+  envelope over 0–120 ms. Once any experiment supplies the final burst, it counts
   noise fluctuations inside that burst as extra bursts, and the span wanders
   from 32 to 79 ms with the noise phase. The reference is a single realisation
   of a signal of the same shape, so its 35.8 ms is subject to the same
   fluctuation, and it cannot be repeated from this corpus.
 
-## 8. Proposed next change (one; not implemented)
+## 8. Proposed next step (one; not implemented)
 
-**Mechanism: the burst VCA's final strike decays slowly.** On the machine,
+**Mechanism under test: the burst VCA's final strike carries the late energy.** On the machine,
 Fig. 13's sawtooth oscillator stops mid-ramp and the last ramp completes
 (tr808-reference §7). The change adds a fourth strike (`bursts=3, period=511`,
 which places strikes at 0, 10.6, 21.3 and 31.9 ms) and a **host-sequenced write
@@ -178,26 +185,45 @@ change to the block. The tail τ is set to its **measured 80 ms**. That is a
 coupled precondition, not a candidate dimension: §5 shows that without it the
 final burst breaks T20.
 
-Frozen candidates, differing only in final-strike τ:
+**Development experiments (development data, not promotion candidates)**,
+differing only in final-strike τ:
 
 - **C1** 30 ms
 - **C2** 38.5 ms (C144·R365)
 - **C3** 45 ms
 
-**Stated tradeoff.** The model's fourth strike is (13/16)³ = 0.54 of the first,
-because `BURST_C` is fixed. On the reference it is the loudest. The candidates
-therefore make up the energy with a τ 1.3–2.5 times the reference's measured
-18–24 ms. That is an energy match with the wrong shape, and it has to be
-accepted as a product decision or replaced by a structural final-strike level.
-The structural option is a block change and is outside this bound.
+These compensate for a weak final strike by extending its decay. They are
+evidence that the late window is where the ratio lives, not a sound to ship.
 
-**Preservation requirements.** Each is judged as a pass-rate over the same 8
+**Implementation constraint (found in review, confirmed in source).**
+- The envelope reduces each internal re-strike to 13/16 of the previous strike:
+  `strike <- (strike * BURST_C) >> 16` in `EnvFx.frame` (`model/drums_fx.py`), and
+  `mul_a <= strike`, `mul_b <= BURST_C` in `rtl-sketch/drum_dp.v`. The fourth
+  strike is therefore (13/16)³ ≈ 54 % of the first. On the reference it is the
+  loudest.
+- PEAK is read only when the envelope FIRES (`e_fired ? e_peak` in
+  `drum_dp.v`; `level <- peak * accent` on fire in the model). **Writing PEAK
+  mid-note does not change the stored strike level.** No register sequence can
+  raise the final strike.
+- RATE, by contrast, is read on every decay step in both the model and
+  `drum_dp.v` (`mul_b <= ... e_rate`), so the host rate rewrite used by C1–C3
+  does take effect mid-note in both. It was checked by reading the source only:
+  **exact RTL agreement for a mid-note RATE write has not been simulated.**
+- Consequence: a rate rewrite can only lengthen a strike that is about 5.4 dB
+  too quiet, which is why C1–C3 need a τ 1.3–2.5 times the reference's measured
+  18–24 ms. A final strike at the reference's relative level **needs an explicit
+  implementation**, such as a separate final-strike level or multiplier. That is
+  a block change and must be scoped as its own bounded experiment. The
+  host-sequenced rate rewrite alone is not a faithful implementation of this
+  mechanism.
+
+**Preservation requirements for any later final-strike experiment.** Each is judged as a pass-rate over the same 8
 noise offsets, never on one strike, and must be at least the baseline's rate:
 
 - burst timing at 8/8
-- decay T20 at 3/8, which C1–C3 all exceed at 8/8
+- decay T20 at 3/8 (the development experiments C1–C3 reached 8/8)
 - accent 0.5 / 1 / 2: the ratio moves monotonically as it does now, and there
-  are 0 rail samples at accent 2 (candidates peak at 0.390 FS against the
+  are 0 rail samples at accent 2 (C1–C3 peak at 0.390 FS against the
   baseline's 0.389)
 - MA, which shares circuit 6, is unchanged: the rate write is emitted only when
   CP is the selected sound
@@ -211,7 +237,7 @@ Promotion further needs exact RTL agreement with a mid-sound envelope RATE
 write, and release binding.
 
 **Before/after test.** Run `tools/run_case.py D12A` plus
-`tools/clap_d12a_probe.py` (nuisance block) on baseline and candidate.
+`tools/clap_d12a_probe.py` (nuisance block) on the baseline and the experiment.
 
 - The target is a burst/tail pass-rate of 8/8, against 0/8 now.
 - The preservation criteria are the pass-rates listed above.
@@ -221,9 +247,8 @@ write, and release binding.
 ### Blocker, and where this stops
 
 **Measurement qualification fails for a required preservation property.**
-Burst timing cannot certify any candidate that implements this mechanism. The
-estimator is qualified at best 2/8 on C2 and C3, the two candidates that fix the
-ratio, and the reference's own 35.8 ms is a single realisation of the same
+Burst timing cannot certify any render that has a slow final burst. It passes
+at best 2/8 on C2 and C3, the two experiments that fix the ratio, and the reference's own 35.8 ms is a single realisation of the same
 fragile reading. Following plan075 Milestone 3 and T7, this task stops here and
 records the blocker. It does not start an estimator project.
 

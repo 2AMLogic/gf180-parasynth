@@ -70,7 +70,10 @@ SPLIT_S, END_S = 0.030, 0.200          # the metric's own windows (run_case DRUM
 TAIL_FIT = (0.080, 0.200)              # after every burst on BOTH sides (see segmentation)
 KNOWN_ANSWER_TOL_DB = 0.01
 
-#: The proposed next change's frozen candidate set: ONE mechanism (the burst
+#: DEVELOPMENT EXPERIMENTS on development data -- not candidates for promotion.
+#: They compensate for a weak final strike (13/16 per re-strike, so the fourth is
+#: ~54 % of the first; PEAK is read only on fire, so it cannot be raised mid-note)
+#: by extending its decay. ONE mechanism (the burst
 #: VCA's final strike decays slowly -- a host write of the burst envelope's
 #: RATE at the fourth strike), with the tail's time constant set to its
 #: MEASURED 80 ms rather than the 47 ms component estimate, which is not a
@@ -543,7 +546,7 @@ def diagnose(refdir, jobs: int) -> dict:
                 "first_burst_amp_tau_ms_4_12": slope_tau(yr, rsr, 4, 12),
                 "second_burst_amp_tau_ms_15_24": slope_tau(yr, rsr, 15, 24)}
 
-    # --- the frozen candidates and the nuisance variation ------------------------
+    # --- the development experiments and the nuisance variation ----------------
     # FROZEN before this block was run on 2026-09-25 (see
     # docs/scorecard/clap-d12a/README.md for how they were chosen, from renders
     # of development data -- this is not independent confirmation).
@@ -574,7 +577,16 @@ def diagnose(refdir, jobs: int) -> dict:
         acc[i]["accent0.5_ratio_db"] = round(ratio_db(rc.prepare(x5, sr), sr), 3)
     return {"reference_file": rel, "segmentation": seg, "energies": en, "components": comps,
             "decomposition": decomp, "reference_fine_structure": ref_fine,
-            "sensitivity": sens, "candidates": [dict(label=l, override=p) for l, p in CANDIDATES],
+            "sensitivity": sens,
+            "development_experiments": {
+                "status": "development data; not candidates for promotion",
+                "note": ("compensate for a weak final strike (4th strike = (13/16)^3 of the "
+                         "first; PEAK is read only on fire) by extending its decay"),
+                "configs": [dict(label=l, override=p) for l, p in CANDIDATES]},
+            "normalisation_scope": ("window energies are each side normalised to its own peak "
+                                    "(Fischer pinned LEVEL at maximum): they show deficient late "
+                                    "energy under that normalisation, not an absolute calibration "
+                                    "of the early amplitude"),
             "nuisance_offsets_frames": offsets, "nuisance": nuis, "accent_headroom": acc}
 
 
