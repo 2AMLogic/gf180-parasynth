@@ -1186,9 +1186,16 @@ ENSEMBLE_CASES = {
 # plugin updates and moves silently, because the number coming out looks the
 # same.
 #
-# Our side is `reference_rigs.OurLadder`, the integer ladder at the host's own
-# operating point -- the same device `model/reference_compare.py` measures, at
-# the same drive, through the same stimulus. No plugin is involved on either
+# Our side (plan074 C) is the SELECTED Mono filter path -- the causal 2x
+# `RateConvertedLadder` the M5A/M5B engine ships -- under the named, frozen
+# calibration `surge-type2-clean-v1`, whose gain/ogain words come from the
+# production host conversion (`voice_fx.ladder_regs`). `tools/f1_filter_path.py`
+# builds it, checks its identity and proves it bit-exact against a real
+# selected-voice note before any number is read. Until plan074 it was
+# `reference_rigs.OurLadder`, the legacy base-rate standalone component with
+# the global words; that reading is kept on every record as
+# `diagnostics.legacy_standalone`, and the superseded records are under
+# docs/scorecard/f1-calibrated/legacy-records/. No plugin is involved on either
 # side of this comparison at run time.
 # ===========================================================================
 #: Below this, relative to the same curve's passband plateau, the stepped-tone
@@ -1436,11 +1443,22 @@ def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     g = np.asarray(g, dtype=np.float64)
     if inject == "REF_CORNER_2X":
         # The measured curve for a reference whose filter corner is an octave
-        # lower. This is equivalent to time-stretching the original audio by
+        # lower. ONLY the reference's axis moves: the device under test keeps
+        # the frozen probe grid (`dut_probe_grid`, plan075 4). Before that
+        # repair our side was rendered on this halved axis too, which left
+        # F1C's rolloff band with 3 points and the control NO-VERDICT. This is equivalent to time-stretching the original audio by
         # 2 before projection, but keeping the already-projected response makes
         # the mutation independently testable without a plugin/cache.
         freqs = freqs / 2.0
     return freqs, g, meta
+
+
+def dut_probe_grid(meta: dict) -> np.ndarray:
+    """The stepped-tone frequencies the DEVICE UNDER TEST is driven with: the
+    frozen profile's own grid, read from the clip's metadata, never from the
+    (possibly mutated) reference axis. A reference-side control must not be
+    able to change the DUT's stimulus -- asserted in `run_filter_case`."""
+    return np.asarray([float(f) for f in meta["freqs_hz"]], dtype=np.float64)
 
 
 def our_filter_curve(freqs, cut_hz: float, res: float, amp: float):
@@ -1488,15 +1506,22 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
 
     ref_f, ref_g, meta = load_filter_reference(spec["ref_clip"], inject)
     open_f, open_g, open_meta = load_filter_reference(spec["ref_open_clip"])
+    # The DUT's grid is the frozen probe grid whatever a reference-side control
+    # does to the reference axis. Without an injection the two are identical.
+    dut_f = dut_probe_grid(meta)
+    if not inject and not np.array_equal(dut_f, ref_f):
+        raise Refused("the reference axis differs from the frozen probe grid with no injection")
+    if not np.array_equal(dut_f, dut_probe_grid(open_meta)):
+        raise Refused("the cutoff clip and the wide-open clip do not share one probe grid")
     import f1_filter_path as fp
     try:
         path = fp.SelectedFilterPath(
             substitute_profile="legacy" if inject == "F1_LEGACY_SUBSTITUTE" else None)
-        ours_g, ours_info = path.curve(ref_f, cut, spec["res_ours"], amp)
+        ours_g, ours_info = path.curve(dut_f, cut, spec["res_ours"], amp)
         ours_open_g, ours_open_info = path.curve(open_f, spec["open_hz"], spec["res_ours"], amp)
     except fp.Refused as e:
         raise Refused(f"F1 selected filter path: {e}")
-    legacy = _legacy_reads(ref_f, cut, spec["res_ours"], amp, open_f, spec["open_hz"])
+    legacy = _legacy_reads(dut_f, cut, spec["res_ours"], amp, open_f, spec["open_hz"])
 
     ref_open_plateau = am.plateau_db(open_f, open_g, _ref_band(open_f, cut))
     ours_open_plateau = am.plateau_db(open_f, ours_open_g, _ref_band(open_f, cut))
@@ -1510,7 +1535,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     metrics = {}
     for name, units, key, tol_rule in FILTER_PLAN[cid]:
         e_ours, e_ref = ests[key]
-        metrics[name] = measure_pair(name, units, e_ours, (ref_f, ours_g),
+        metrics[name] = measure_pair(name, units, e_ours, (dut_f, ours_g),
                                      (ref_f, ref_g), tol_rule, {}, est_ref=e_ref)
     for m in required:
         metrics.setdefault(m, invalid_metric("", "this runner has no estimator for it"))
@@ -1520,7 +1545,8 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     if keep_audio:
         pth = AUDIO_OUT / f"{cid}-ours-response.json"
         pth.parent.mkdir(parents=True, exist_ok=True)
-        pth.write_text(json.dumps({"freqs_hz": [float(f) for f in ref_f],
+        pth.write_text(json.dumps({"freqs_hz": [float(f) for f in dut_f],
+                                   "reference_freqs_hz": [float(f) for f in ref_f],
                                    "engine_profile": path.probe_profile["name"],
                                    "filter_calibration": path.calibration,
                                    "ours_gain_db": [float(v) for v in ours_g],
@@ -1575,7 +1601,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
                        f"(gain {ours_info['regs']['gain']}, ogain {ours_info['regs']['ogain']} "
                        f"from VoiceFx.patch_regs; exact match to a selected-voice note "
                        f"{path.match['frames']} frames, 0 mismatches); "
-                       f"stepped tone, {len(ref_f)} frequencies {ref_f[0]:.0f}-{ref_f[-1]:.0f} Hz, "
+                       f"stepped tone, {len(dut_f)} frequencies {dut_f[0]:.0f}-{dut_f[-1]:.0f} Hz, "
                        f"amp {amp} ({rp.PROBE_LEVEL_DBFS:+.2f} dBFS), cutoff {cut:.0f} Hz, "
                        f"resonance {spec['res_ours']} (k = 4*res, so this is our zero), "
                        f"{rp.SR} Hz, no resampling anywhere"),
@@ -1584,7 +1610,10 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
         "estimator_floors": rp.ESTIMATOR_FLOORS,
         "metrics": metrics,
         "diagnostics": {
-            "ours_corner_hz": _est_value(filt_corner(cut)(ref_f, ours_g)),
+            "ours_corner_hz": _est_value(filt_corner(cut)(dut_f, ours_g)),
+            "dut_probe_grid_sha256": hashlib.sha256(dut_f.tobytes()).hexdigest()[:16],
+            "reference_axis_sha256": hashlib.sha256(
+                np.asarray(ref_f, dtype=np.float64).tobytes()).hexdigest()[:16],
             "reference_corner_hz": _est_value(filt_corner(cut)(ref_f, ref_g)),
             "ours_wide_open_plateau_db": round(float(ours_open_plateau), 4),
             "reference_wide_open_plateau_db": round(float(ref_open_plateau), 4),
@@ -2514,7 +2543,7 @@ def cmd_list(cases: list[dict]) -> int:
             why = f"{p}, {'dense' if d else 'sparse'} 808 groove, stems vs final output"
         elif kind == "filter":
             f = FILTER_CASES[c["case_id"]]
-            why = (f"ours vs frozen {f['ref_clip']} "
+            why = (f"selected 2x path + surge-type2-clean-v1 vs frozen {f['ref_clip']} "
                    f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
         elif kind == "mono":
             why = ("fixed integer-model phrase vs frozen Mini V3; " +

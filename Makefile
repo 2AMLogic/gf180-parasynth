@@ -112,6 +112,13 @@ verify-full:
 ## without a valid clean comparison. Restore the frozen profile first
 ## (`python3 tools/refprofile_restore.py`, which needs no plugin).
 ##
+## plan074/075: F1A-F1C now PASS cleanly on the selected filter under
+## surge-type2-clean-v1, so REF_CORNER_2X is a discriminating `--expect fail`
+## (the runner refuses a fail control whose clean baseline does not pass). It
+## shifts ONLY the reference axis; the DUT keeps the frozen probe grid
+## (run_case.dut_probe_grid). F1_LEGACY_SUBSTITUTE must refuse by identity.
+## The paragraph below is the pre-plan074 history.
+##
 ## THE TWO PROFILE CONTROLS NOW COVER F1B AND F1C. REF_CORNER_2X compares the
 ## injected run with a clean run, because all three F1 cases now fail cleanly;
 ## state-only `--expect fail` would be the D01A false green. `--expect changed`
@@ -190,7 +197,9 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_MISSING D09A --results build/case-noref --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_run_case.py -q -k ref_corner_2x_control_moves_a_known_reference_corner" \
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-noclip --expect 'no verdict'" \
-	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'"
+	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'" \
+	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
+	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ -q
