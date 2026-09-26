@@ -70,6 +70,19 @@ SPLIT_S, END_S = 0.030, 0.200          # the metric's own windows (run_case DRUM
 TAIL_FIT = (0.080, 0.200)              # after every burst on BOTH sides (see segmentation)
 KNOWN_ANSWER_TOL_DB = 0.01
 
+#: The proposed next change's frozen candidate set: ONE mechanism (the burst
+#: VCA's final strike decays slowly -- a host write of the burst envelope's
+#: RATE at the fourth strike), with the tail's time constant set to its
+#: MEASURED 80 ms rather than the 47 ms component estimate, which is not a
+#: candidate dimension but a precondition: without it the final burst alone
+#: drops the decay T20 out of tolerance (sensitivity rows). 38.5 ms is RC of
+#: C144 x R365, the discharge the final ramp completes (tr808-reference 7).
+CANDIDATES = [
+    ("C1 final tau 30 ms", dict(bursts=3, period=511, final_tau=30e-3, t_tau=80e-3)),
+    ("C2 final tau 38.5 ms (C144 x R365)", dict(bursts=3, period=511, final_tau=38.5e-3, t_tau=80e-3)),
+    ("C3 final tau 45 ms", dict(bursts=3, period=511, final_tau=45e-3, t_tau=80e-3)),
+]
+
 
 class Refused(Exception):
     """A precondition failed: the probe says so instead of producing numbers."""
@@ -120,10 +133,23 @@ def basis(refdir, manifest) -> dict:
 # ---------------------------------------------------------------------------
 # rendering with a register override (diagnostic only)
 # ---------------------------------------------------------------------------
-DEFAULT = dict(b_tau=4e-3, b_peak=0.69, bursts=2, period=480, t_tau=47e-3, t_peak=0.22)
+DEFAULT = dict(b_tau=4e-3, b_peak=0.69, bursts=2, period=480, t_tau=47e-3, t_peak=0.22, final_tau=None)
 
 
-def render_cp(p: dict | None = None, accent: float = 1.0) -> tuple:
+def final_rate_writes(p: dict, hit_frame: int) -> list:
+    """The host-sequenced part of the FINAL-BURST mechanism (diagnostic): at the
+    frame of the last re-strike, rewrite the burst envelope's RATE register so
+    the last strike decays with `final_tau` instead of the burst tau. Same kind
+    of host write as `drums_fx.bd_attack_writes` / `tom_pitch_drop_writes`
+    (contract 15.6: registers may change on any frame), no block change."""
+    import drums_fx as dx
+    if not p.get("final_tau"):
+        return []
+    f = hit_frame + p["bursts"] * p["period"]
+    return [(f, dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE + 2, dx.rate_reg(p["final_tau"]))]
+
+
+def render_cp(p: dict | None = None, accent: float = 1.0, offset: int = 0) -> tuple:
     """`run_case.render_drum_solo("CP")` with the two clap envelopes rewritten.
     With `p` = DEFAULT it must be bit-identical to render_drum_solo; `main`
     asserts that before any other render is believed."""
@@ -136,15 +162,21 @@ def render_cp(p: dict | None = None, accent: float = 1.0) -> tuple:
         img[a] = v
     n = int(rc.SOLO_SECONDS.get("CP", 2.2) * dx.SR)
     d = dx.DrumsFx()
-    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), dx.CP, accent)], sorted(img.items())), n)
+    # `offset` moves the strike later by whole frames. The LFSR free-runs from
+    # frame 0, so this changes ONLY the noise realisation under the envelope --
+    # the nuisance variation a real machine's free-running noise has on every hit.
+    # The render is then shifted back so the record still starts 10 ms before it.
+    hit = int(0.01 * dx.SR) + offset
+    n += offset
+    w = dx.hit_writes([(hit, dx.CP, accent)], sorted(img.items())) + final_rate_writes(p, hit)
+    dm, bd = d.play(sorted(w, key=lambda t: t[0]), n)
     g = dx.accent_reg(0.45)
-    out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
+    out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)[offset:]
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
 
 
 def _render_job(args):
-    p, accent = args
-    return render_cp(p, accent)
+    return render_cp(*args)
 
 
 def audio_sha(x) -> str:
@@ -398,11 +430,12 @@ def diagnose(refdir, jobs: int) -> dict:
     wins = [(0, 30), (30, 200), (0, 50), (50, 200), (80, 200), (30, 50)]
     en = {}
     for k, (x, sr, y) in sides.items():
-        xr = np.asarray(x, dtype=np.float64)
-        i = rc._onset_index(xr)
-        trim = int(round(rc.TRIM_MS * 1e-3 * sr))
-        raw = lambda a, b: 10 * math.log10(float(np.sum(xr[i - trim + int(a * sr / 1e3):
-                                                          i - trim + int(b * sr / 1e3)] ** 2)) / sr)
+        # Original gain = the metric's peak-normalised window scaled back by the
+        # side's own peak. Indexing the raw record directly was the first
+        # version, and it read BEFORE sample 0 on the reference (onset at sample
+        # 8, trim 44): prepare() manufactures that lead, the raw file has none.
+        g = 20 * math.log10(float(np.max(np.abs(np.asarray(x, dtype=np.float64)))))
+        raw = lambda a, b: win_db(y, sr, a / 1e3, b / 1e3) + g
         en[k] = {"original_gain_db_fs2s": {f"{a}-{b}ms": round(raw(a, b), 2) for a, b in wins},
                  "peak_normalised_db": {f"{a}-{b}ms": round(win_db(y, sr, a / 1e3, b / 1e3), 2)
                                         for a, b in wins},
@@ -447,10 +480,14 @@ def diagnose(refdir, jobs: int) -> dict:
              ("bursts 3 strikes->4, period 480", dict(bursts=3)),
              ("bursts 4 strikes, period 511", dict(bursts=3, period=511)),
              ("burst tau 4->8 ms", dict(b_tau=8e-3)),
+             ("tail peak 0.44 + tau 90 ms", dict(t_peak=0.44, t_tau=90e-3)),
+             ("4 strikes p511 + tail tau 90 ms, peak 0.33", dict(bursts=3, period=511, t_tau=90e-3, t_peak=0.33)),
+             ("final burst tau 20 ms alone", dict(bursts=3, period=511, final_tau=20e-3)),
+             ("final burst tau 38.5 ms alone", dict(bursts=3, period=511, final_tau=38.5e-3)),
              ]
     with ProcessPoolExecutor(max_workers=jobs) as ex:
-        renders = list(ex.map(_render_job, [(p, 1.0) for _, p in sweep]
-                              + [(p, 2.0) for _, p in sweep]))
+        renders = list(ex.map(_render_job, [(p, 1.0, 0) for _, p in sweep]
+                              + [(p, 2.0, 0) for _, p in sweep]))
     n = len(sweep)
     sens = []
     for i, (label, p) in enumerate(sweep):
@@ -466,8 +503,79 @@ def diagnose(refdir, jobs: int) -> dict:
         if set(p) <= {"t_peak"}:
             row["predicted_ratio_db"] = round(predict(p.get("t_peak", 0.22) / 0.22), 3)
         sens.append(row)
+    # --- which part of the late window: counterfactual window swaps -------------
+    # The ratio is scale-free, so "burst too loud" versus "tail too weak" needs an
+    # ANCHOR; the Fischer set has no absolute level (LEVEL pinned at maximum). Two
+    # anchors are reported and the conclusion is only drawn where they agree.
+    pn = {k: en[k]["peak_normalised_db"] for k in ("ours", "reference")}
+    lin = lambda d: 10 ** (d / 10)
+    db = lambda v: 10 * math.log10(v)
+    def ratio_with(late_parts):
+        return pn["ours"]["0-30ms"] - db(sum(lin(v) for v in late_parts))
+    base_err = ratio_db(*ours) - ratio_db(*ref)
+    decomp = {
+        "error_db": round(base_err, 3),
+        "late_deficit_db_anchor_peak": round(pn["reference"]["30-200ms"] - pn["ours"]["30-200ms"], 2),
+        "early_excess_db_anchor_peak": round(pn["ours"]["0-30ms"] - pn["reference"]["0-30ms"], 2),
+        "late_deficit_db_anchor_first_30ms": round(base_err, 2),
+        "early_excess_db_anchor_first_30ms": 0.0,
+        "error_if_ours_had_ref_30_50ms": round(ratio_with([pn["reference"]["30-50ms"], pn["ours"]["50-200ms"]])
+                                               - ratio_db(*ref), 2),
+        "error_if_ours_had_ref_50_200ms": round(ratio_with([pn["ours"]["30-50ms"], pn["reference"]["50-200ms"]])
+                                                - ratio_db(*ref), 2),
+        "error_if_ours_had_ref_30_200ms": round(ratio_with([pn["reference"]["30-50ms"],
+                                                            pn["reference"]["50-200ms"]]) - ratio_db(*ref), 2),
+    }
+
+    # --- the reference's burst train at 1 ms resolution --------------------------
+    yr = ref[0]
+    ms1 = lambda y, sr, t: 10 * math.log10(float(np.mean(rc.window(y, sr, t, t + 1e-3) ** 2)) + 1e-30)
+    fine = {k: [round(ms1(y, sr, t / 1e3), 1) for t in range(0, 80)]
+            for k, (y, sr) in (("ours", ours), ("reference", ref))}
+    def slope_tau(y, sr, a, b):
+        ts = np.arange(a, b) / 1e3
+        sl = np.polyfit(ts, [ms1(y, sr, t) for t in ts], 1)[0]
+        return round(float(-20 / (sl * math.log(10)) * 1e3), 1)
+    ref_fine = {"one_ms_mean_square_db_0_80ms": fine,
+                "final_burst_amp_tau_ms": {"40-55": slope_tau(yr, rsr, 40, 55),
+                                           "42-60": slope_tau(yr, rsr, 42, 60),
+                                           "45-65": slope_tau(yr, rsr, 45, 65)},
+                "first_burst_amp_tau_ms_4_12": slope_tau(yr, rsr, 4, 12),
+                "second_burst_amp_tau_ms_15_24": slope_tau(yr, rsr, 15, 24)}
+
+    # --- the frozen candidates and the nuisance variation ------------------------
+    # FROZEN before this block was run on 2026-09-25 (see
+    # docs/scorecard/clap-d12a/README.md for how they were chosen, from renders
+    # of development data -- this is not independent confirmation).
+    offsets = [0, 7, 131, 977, 2203, 4099, 7919, 12007]
+    configs = [("baseline", {})] + CANDIDATES
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        rr = list(ex.map(_render_job, [(p, 1.0, o) for _, p in configs for o in offsets]
+                         + [(p, 2.0, 0) for _, p in configs]
+                         + [(p, 0.5, 0) for _, p in configs]))
+    nuis = []
+    k = 0
+    for label, p in configs:
+        runs = []
+        for o in offsets:
+            x, sr = rr[k]; k += 1
+            m = metrics(x, sr, ref)
+            runs.append({"offset": o, **{n: (m[n]["value"], m[n].get("pass")) for n in m}})
+        nuis.append({"label": label, "override": p, "runs": runs})
+    acc = []
+    for label, p in configs:
+        x2, sr = rr[k]; k += 1
+        acc.append({"label": label, "accent2_peak_fs": round(float(np.max(np.abs(x2))), 4),
+                    "accent2_rail_samples": int(np.sum(np.abs(x2) >= 32767 / 32768)),
+                    "accent2_ratio_db": round(ratio_db(rc.prepare(x2, sr), sr), 3)})
+    for i, (label, p) in enumerate(configs):
+        x5, sr = rr[k]; k += 1
+        acc[i]["accent0.5_peak_fs"] = round(float(np.max(np.abs(x5))), 4)
+        acc[i]["accent0.5_ratio_db"] = round(ratio_db(rc.prepare(x5, sr), sr), 3)
     return {"reference_file": rel, "segmentation": seg, "energies": en, "components": comps,
-            "sensitivity": sens}
+            "decomposition": decomp, "reference_fine_structure": ref_fine,
+            "sensitivity": sens, "candidates": [dict(label=l, override=p) for l, p in CANDIDATES],
+            "nuisance_offsets_frames": offsets, "nuisance": nuis, "accent_headroom": acc}
 
 
 def main(argv=None) -> int:
@@ -507,6 +615,14 @@ def main(argv=None) -> int:
               f"span {m['Burst timing']['value']:6.2f} ({'ok' if m['Burst timing'].get('pass') else 'FAIL'}) "
               f"T20 {m['decay']['value']} ({'ok' if m['decay'].get('pass') else 'FAIL'}) "
               f"pk2 {r['peak_fs_accent2']} rail {r['rail_samples_accent2']}")
+    print("decomposition:", out["decomposition"])
+    for c in out["nuisance"]:
+        v = {n: [r[n] for r in c["runs"]] for n in ("Burst timing", "burst/tail ratio", "decay")}
+        print(f"{c['label']:38s} " + "  ".join(
+            f"{n[:10]} {min(x for x, _ in v[n]):.2f}..{max(x for x, _ in v[n]):.2f} "
+            f"pass {sum(bool(ok) for _, ok in v[n])}/{len(v[n])}" for n in v))
+    for a_ in out["accent_headroom"]:
+        print(a_)
     print(f"wrote {p.relative_to(ROOT) if p.is_relative_to(ROOT) else p}")
     return 0
 
