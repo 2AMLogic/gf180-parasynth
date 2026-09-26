@@ -1,0 +1,27 @@
+{
+  "state": "reproduced",
+  "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724",
+  "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
+  "report_sha256": "a26768ca77798ee3e786a8f33cf15147166338e03ecaa086986d456a5cde363e",
+  "model_audio_files": 12,
+  "reference_audio_files": 36,
+  "exact_timing_rows": 12,
+  "history_contrasts": 6,
+  "local_partial_files_matching_linux_byte_for_byte": 5,
+  "held_rms_max_absolute_delta": 5.551115123125783e-17,
+  "held_rms_relative_reproduction_tolerance": 1e-14,
+  "timing_reproduction_tolerance_ms": 0,
+  "evidence_level": "model audio; external frozen Mini V3 reference; no RTL or physical playback",
+  "controls": [
+    "one-sample attack timing mutation refused",
+    "changed history contrast refused",
+    "missing row refused",
+    "changed audio digest refused",
+    "invalid timing flag refused"
+  ],
+  "wrong_then_right": {
+    "sound_measurement_claims_corrected": 0,
+    "publication_preconditions_corrected": 1,
+    "detail": "Exact dictionary equality rejected a 5.55e-17 held-RMS difference across ARM/x86. All time crossings, tail values, and audio hashes remain exact."
+  }
+}

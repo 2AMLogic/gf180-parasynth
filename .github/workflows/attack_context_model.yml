@@ -1,0 +1,30 @@
+name: attack-context-model
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [measure/mono-attack-model-context]
+    paths:
+      - '.github/workflows/attack_context_model.yml'
+      - 'tools/compare_mono_attack_context.py'
+      - 'model/**'
+
+permissions:
+  contents: read
+
+jobs:
+  matched-contexts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install numpy scipy
+      - name: unchanged model in all frozen note-history contexts
+        run: python tools/compare_mono_attack_context.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: attack-context-model
+          path: docs/scorecard/mono-attack-context/model/
