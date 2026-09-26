@@ -537,3 +537,105 @@ def test_a_changed_event_interval_is_seen(tmp_path):
     ref, host = _live_plan(tmp_path, "phrase-m5a")
     _rows(host, "event")[3]["due"] += 1                 # one frame late
     assert rc.command_identity(ref, host) != []
+
+
+# ---- Judge #299 re-review (cb29c90): C1 transcript structure, C2 host-log schema --
+_SHA = "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95"
+_HEAD = ("release_manifest: BOUND -- ok\nexit 0\n"
+         f"{_SHA}  fpga/reports/arty/integrated-baseline-2025.1/arty.bit\n"
+         "openFPGALoader v1.1.1\n")
+_PROG_OK = "Load SRAM: [====] 100.00%\nDone\nexit 0\n"
+_PROG_FAIL = "Error: JTAG init failed, no device found\nexit 1\n"
+STRUCTURE_BAD = {
+    "no programmer block at all": ("release_manifest: BOUND\nexit 0\n"
+                                   f"{_SHA}  fpga/reports/arty/integrated-baseline-2025.1/"
+                                   "arty.bit\nexit 0\n"),
+    "programmer exit 1, then a stray exit 0": _HEAD + _PROG_FAIL + "exit 0\n",
+    "programmer exit 1, then the manifest re-run": _HEAD + _PROG_FAIL
+    + "release_manifest: BOUND\nexit 0\n",
+    "manifest check after the programmer": (f"{_SHA}  fpga/reports/arty/integrated-baseline"
+                                            "-2025.1/arty.bit\nopenFPGALoader v1.1.1\n"
+                                            + _PROG_OK + "release_manifest: BOUND\nexit 0\n"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(STRUCTURE_BAD))
+def test_the_programmer_block_must_itself_exit_0(name):
+    """Judge C1: a failed programming step followed by ANY `exit 0` was
+    accepted, because only the transcript's tail was read."""
+    assert rc.transcript_problems(STRUCTURE_BAD[name], _SHA) != [], name
+
+
+@pytest.mark.parametrize("text", [_HEAD + _PROG_OK,
+                                  _HEAD + _PROG_FAIL + "openFPGALoader v1.1.1\n" + _PROG_OK],
+                         ids=["procedure", "programmer retried after a failure"])
+def test_the_procedures_transcript_and_a_programmer_retry_are_accepted(text):
+    """The structural gate must stay satisfiable, including a legitimate retry."""
+    assert rc.transcript_problems(text, _SHA) == []
+
+
+def _live_session(clean, tmp_path, transcript=GOOD_TRANSCRIPT):
+    d = _as_real(clean, tmp_path, transcript)
+    s = json.loads((d / "session.json").read_text())
+    for i, t in enumerate(s["takes"]):
+        if t["command_id"] != "silence":
+            _live_host_log(t["command_id"], d / t["host_capture"], epoch=5000 * i)
+    return d
+
+
+def _cli_analyse(d):
+    import subprocess
+    r = subprocess.run([sys.executable, str(rc.ROOT / "tools/r0_capture.py"), "analyse",
+                        "--bundle", str(d)], capture_output=True, text=True, cwd=rc.ROOT)
+    return r.returncode, r.stdout + r.stderr
+
+
+def test_a_failed_programmer_with_a_stray_exit_0_is_no_verdict_end_to_end(clean, tmp_path):
+    """Judge C1 end to end: the as-real live-log session whose programmer
+    block failed (`Error: JTAG init failed / exit 1`) and then shows a stray
+    `exit 0` gave `analyse` PASS, exit 0. It must be NO VERDICT, exit 2."""
+    bad = GOOD_TRANSCRIPT.rsplit("exit 0", 1)[0] + "Error: JTAG init failed\nexit 1\nexit 0\n"
+    code, out = _cli_analyse(_live_session(clean, tmp_path, bad))
+    assert code == 2, out[-600:]
+    assert "program" in out
+
+
+@pytest.mark.parametrize("kind,field", [("write", "apply_frame"), ("event", "due"),
+                                        ("write", "expect")])
+def test_a_host_log_missing_a_timing_field_is_no_verdict_not_a_crash(clean, tmp_path,
+                                                                     kind, field):
+    """Judge C2: a live host log whose writes lack apply_frame crashed the CLI
+    with KeyError, exit 1 -- this tool's FAIL code, so missing evidence was
+    scored as a measured failure. The schema is a precondition: exit 2."""
+    d = _live_session(clean, tmp_path)
+    p = d / "host" / "held-1.plan.json"
+    plan = json.loads(p.read_text())
+    for r in plan["rows"]:
+        if r["kind"] == kind:
+            r.pop(field, None)
+    p.write_text(json.dumps(plan))
+    code, out = _cli_analyse(d)
+    assert code == 2, out[-600:]
+    assert "held-1" in out and field in out
+
+
+def test_no_exception_inside_analyse_is_scored_as_fail(clean, tmp_path, monkeypatch):
+    """The general rule: an unhandled error is NO VERDICT, never FAIL."""
+    d = _as_real(clean, tmp_path)
+
+    def boom(*a, **k):
+        raise ZeroDivisionError("an estimator blew up")
+    monkeypatch.setattr(rc, "calibrate", boom)
+    rec = rc.analyse(d)
+    assert rec["verdict"] == rc.REFUSED
+    assert "ZeroDivisionError" in rec["reasons"][0]
+
+
+def test_session_properties_say_where_they_were_not_evaluated(clean, tmp_path):
+    """Judge N1: `properties` read `residual: PASS` although no held take
+    was scored for it. A PASS must name the takes it does not cover."""
+    rec = rc.analyse(_live_session(clean, tmp_path))
+    assert rec["verdict"] == rc.PASS, rec["reasons"]
+    for p in ("residual", "timing", "gain", "clock", "dropout"):
+        v = rec["properties"][p]
+        assert v.startswith("PASS") and "not evaluated on" in v and "held-1" in v, (p, v)
