@@ -255,16 +255,6 @@ module voice_dp #(
     reg signed [35:0] macc;            // v*vol                   , |.| < 2^34
     reg signed [39:0] tacc;            // the whole sum           , |.| < 2^38
     reg signed [18:0] d19;             // the drum bus after the drum filter
-`ifdef INJECT_BUG_VOICE_LATE_DONE
-    // NEGATIVE CONTROL for the frame DEADLINE (plan075 T1, docs/deadline/): the
-    // master mix is held VOICE_LATE_STALL extra cycles before the sample, so the
-    // strobe and busy both complete late with every value unchanged. A deadline
-    // check that cannot see this is not checking the deadline.
-`ifndef VOICE_LATE_STALL
-`define VOICE_LATE_STALL 160
-`endif
-    reg [8:0] late_cnt;
-`endif
     assign busy = (state != S_IDLE);
 
     // ---- per-oscillator combinational view (index kk) --------------------------------
@@ -575,9 +565,6 @@ module voice_dp #(
             case (state)
                 // ---- 0. the noise board (6.10), then the modulation path (6.9) ----
                 S_IDLE: if (go) begin
-`ifdef INJECT_BUG_VOICE_LATE_DONE
-                    late_cnt <= 9'd0;
-`endif
                     nx0_r <= nx0; lfsr <= {lfsr[14:0], nbits};
                     ma <= PB0; mb <= {{5{nx0[15]}}, nx0};
                     kk <= 2'd0; mixacc <= 0; state <= S_NZ0;
@@ -827,9 +814,6 @@ module voice_dp #(
                 S_VCA2: begin macc <= $signed(mr[35:0]); state <= S_DWAIT; end
                 // ---- 7. the master mix: one exact sum, one shift, one rail ----
                 S_DWAIT: begin
-`ifdef INJECT_BUG_VOICE_LATE_DONE
-                    if (late_cnt != `VOICE_LATE_STALL) late_cnt <= late_cnt + 9'd1; else
-`endif
                     if (dfilt) begin
                         if (d_seen) begin
                             tacc <= macc + $signed({{6{d19[18]}}, d19, 15'b0});
