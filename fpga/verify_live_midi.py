@@ -80,6 +80,11 @@ SR = C.SR
 BT = uh.BITS_PER_BYTE / uh.DEFAULT_BAUD            # one byte on the wire, seconds
 EVENT_PKT_S = 10 * BT
 REPORT_DIR = ROOT / "fpga/reports/live-midi"
+# The image this harness drives: the device contract (sim) and the RTL replay
+# (arty_a7_top from this tree) are contract revision 13, so the session and the
+# oracle both send the tree's kit -- named, never MusicHost's silent fallback.
+# The live CLI's default on a serial port is the release image (#273).
+HARNESS_IMAGE = "tree"
 RTL_TAIL_S = 0.3
 
 # ---- the oracle's OWN maps (docs/live-midi.md; written here, not imported) ---
@@ -284,7 +289,7 @@ class Oracle:
     def __init__(self, frame_of, patch: dict | None = None):
         self.frame_of = frame_of
         self.regs = dict(patch or vf.VoiceFx.patch_regs())
-        self.mh = sh.MusicHost(patch=dict(self.regs))
+        self.mh = sh.MusicHost(patch=dict(self.regs), kit=uh.image_kit(HARNESS_IMAGE))
         self.mh.load(0)
         self.static = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
         for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
@@ -581,7 +586,8 @@ def run_session(scenario: str, *, inject: str | None = None, epoch: int = 0,
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(epoch_frame=epoch, clock=clock)
     ser = dev.SimSerial(sim)
-    s = ms.MidiSession(ser, clock=clock, inject={inject} if inject else set())
+    s = ms.MidiSession(ser, clock=clock, image=HARNESS_IMAGE,
+                       inject={inject} if inject else set())
     s.start()
     t0 = clock.t + 0.020
     times = [t0 + e.t for e in events]

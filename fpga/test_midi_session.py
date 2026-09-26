@@ -84,7 +84,7 @@ def session(patch=None, *, epoch=0):
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(epoch_frame=epoch, clock=clock)
     ser = dev.SimSerial(sim)
-    s = ms.MidiSession(ser, clock=clock, patch=patch)
+    s = ms.MidiSession(ser, clock=clock, patch=patch, image="tree")   # the sim is the tree
     s.start()
     return s, sim, ser, clock
 
