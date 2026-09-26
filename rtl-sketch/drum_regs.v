@@ -14,7 +14,7 @@
 //   0x40 + 4e ENV_CTL[e]      27       e = 0..ENVS-1   <- 27 bits: the register that
 //   0x41 + 4e ENV_PEAK[e]     24 u                        does not fit a 24-bit datum
 //   0x42 + 4e ENV_RATE[e]     16 u        (18 envelopes: 0x40..0x87)
-//   0x43 + 4e ENV_FRATE[e]    16 u     revision 11: the final strike's rate (15.3); 0 = off
+//   0x43 + 4e ENV_FRATE[e]    16 u     revision 13: the final strike's rate (15.3); 0 = off
 //   0x90 + p  PATH[p]         25       p = 0..PATHS-1  (23 paths: 0x90..0xA6)
 //   0xB0 + 4m MODE_A1[m]      26 s     m = 0..MODES-1  <- 26 bits, likewise
 //   0xB1 + 4m MODE_A2[m]      26 s        (16 modes: 0xB0..0xEF)
@@ -143,7 +143,7 @@ module drum_regs #(
                 if      (fld == 2'd0) ectl[e_idx] <= wr_data[26:0];      // 27 bits
                 else if (fld == 2'd1) peak[e_idx] <= wr_data[23:0];
                 else if (fld == 2'd2) rate[e_idx] <= wr_data[15:0];
-                else                  frate[e_idx] <= wr_data[15:0];     // revision 11
+                else                  frate[e_idx] <= wr_data[15:0];     // revision 13
             end
             else if (wr_addr >= 8'h90 && wr_addr < 8'h90 + PATHS)        path[p_idx[4:0]] <= wr_data[24:0];
             else if (wr_addr >= 8'hB0 && wr_addr < 8'hB0 + MODES * 4) begin

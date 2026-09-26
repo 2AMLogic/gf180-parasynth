@@ -1,4 +1,4 @@
-"""The clap's final strike (contract revision 11, 15.3; plan084 "L2").
+"""The clap's final strike (contract revision 13, 15.3; plan084 "L2").
 
 Expectations here are EVENT facts stated from the contract text -- which frames
 strike, at what level, at which rate the level falls afterwards -- not a second

@@ -182,7 +182,7 @@ class EnvFx:
         choked (its choke stop went 0->1 this frame): level <- 0
         ENV = level >> 9                      (Q0.15, what the paths multiply by)
 
-    THE FINAL STRIKE (contract revision 11, 15.3; plan084, the clap's L2).
+    THE FINAL STRIKE (contract revision 13, 15.3; plan084, the clap's L2).
     With FRATE = 0 -- the reset value, and every envelope but the clap's burst
     -- nothing below changes and the envelope is bit-identical to revision 10.
     With FRATE != 0:
@@ -318,7 +318,7 @@ class DrumsFx:
             elif f == 2:
                 self.envs[e].rate = value & 0xFFFF
             else:
-                self.envs[e].frate = value & 0xFFFF   # revision 11: the final strike (15.3)
+                self.envs[e].frate = value & 0xFFFF   # revision 13: the final strike (15.3)
         elif A_PATH <= addr < A_PATH + self.P:
             self.paths[addr - A_PATH] = value & ((1 << 25) - 1)
         elif A_MODE <= addr < A_MODE + self.M * MODE_STRIDE:
@@ -489,7 +489,7 @@ def mode_writes(m: int, f0_hz: float, q: float, amp: float, num: int = RAW) -> l
 def env_writes(e: int, stop: int, tau_s: float, peak: float, *, choke: int = 15,
                hold: int = 0, bursts: int = 0, period: int = 0,
                final_tau: float | None = None) -> list:
-    """`final_tau` (revision 11) writes FRATE: None writes nothing (the register
+    """`final_tau` (revision 13) writes FRATE: None writes nothing (the register
     keeps what it had -- 0 from reset), 0 writes 0 (the feature OFF, which a
     preset that shares an envelope with a final-strike sound MUST do), and a
     time constant writes its rate."""
@@ -550,7 +550,7 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
 PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
-# ---- the clap, contract revision 11 (plan081 C / plan084: "L2") ---------------
+# ---- the clap, contract revision 13 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
 # 21.3, 31.9 ms), the first three at the kept 4 ms decay and 13/16 re-strike,

@@ -118,7 +118,7 @@ def stimulus() -> list:
         (dx.A_ENV,                 (1 << bits["env_ctl"]) - 1),       # 27 bits
         (dx.A_ENV + 1,             (1 << bits["peak"]) - 1),
         (dx.A_ENV + 2,             (1 << bits["rate"]) - 1),
-        (dx.A_ENV + 3,             (1 << bits["frate"]) - 1),         # revision 11: FRATE
+        (dx.A_ENV + 3,             (1 << bits["frate"]) - 1),         # revision 13: FRATE
         (e_top,                    (1 << bits["env_ctl"]) - 1),       # envelope 17, 0x84
         (e_top + 2,                (1 << bits["rate"]) - 1),
         (e_top + 3,                (1 << bits["frate"]) - 1),         # 0x87: the block's top now

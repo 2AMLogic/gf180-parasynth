@@ -60,7 +60,7 @@ module drum_dp #(
     input  wire [ENVS*27-1:0]    env_ctl_bus,
     input  wire [ENVS*24-1:0]    env_peak_bus,
     input  wire [ENVS*16-1:0]    env_rate_bus,
-    input  wire [ENVS*16-1:0]    env_frate_bus,       // revision 11: the final strike (15.3)
+    input  wire [ENVS*16-1:0]    env_frate_bus,       // revision 13: the final strike (15.3)
     input  wire [PATHS*25-1:0]   path_bus,
     output wire [MW-1:0]         tap_sel,
     input  wire signed [SB-1:0]  tap_y1,
@@ -90,7 +90,7 @@ module drum_dp #(
     reg [23:0] phase [0:5];
     reg [23:0] level  [0:ENVS-1];
     reg [23:0] strike [0:ENVS-1];
-    reg [23:0] fcap   [0:ENVS-1];   // revision 11: the fire level, captured once per hit (15.3)
+    reg [23:0] fcap   [0:ENVS-1];   // revision 13: the fire level, captured once per hit (15.3)
     reg [10:0] tcnt   [0:ENVS-1];
     reg signed [21:0] dmix;
     reg [1:0]  st;                                  // 0 idle, 1 envelopes, 2 paths, 3 drain
@@ -161,7 +161,7 @@ module drum_dp #(
                            (e_bur >= 2'd2 && t_nx == per2) ||
                            (e_bur == 2'd3 && t_nx == per3));
     wire [1:0]  e_op    = e_fired ? 2'd0 : e_holdp ? 2'd1 : e_rs ? 2'd2 : 2'd3;   // FIRE HOLD RESTRIKE DECAY
-    // Revision 11 (15.3): with FRATE != 0 the LAST re-strike (t = bursts*period)
+    // Revision 13 (15.3): with FRATE != 0 the LAST re-strike (t = bursts*period)
     // restores the captured fire level instead of 13/16 of the last strike, and
     // every decay after it runs at FRATE. FRATE = 0 is revision 10 exactly.
     // Neither needs a multiply of its own: the final strike is a register copy

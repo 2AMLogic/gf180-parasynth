@@ -273,7 +273,7 @@ def script(short: bool = False):
 
 
 def clap_script():
-    """plan084's production-path clap phrase (contract revision 11, the L2 final
+    """plan084's production-path clap phrase (contract revision 13, the L2 final
     strike), through the SPI pins with the voice sounding at its reference
     gains: CP at three accents, re-struck around its final-strike boundary; CP
     -> MA and MA -> CP switched while the other is still sounding; a drum RESET

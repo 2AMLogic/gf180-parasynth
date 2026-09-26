@@ -2,7 +2,7 @@
 
 This folder is the evidence for the one production-clap change: the confirmed
 L2 final strike (`docs/scorecard/clap-d12a/README.md` §10), implemented in
-`model/drums_fx.py` and the drum RTL as **contract revision 11**. Every heavy
+`model/drums_fx.py` and the drum RTL as **contract revision 13**. Every heavy
 run was on the build box, and every verdict below comes from a checked exit
 status recorded by `tools/run_all.py`.
 

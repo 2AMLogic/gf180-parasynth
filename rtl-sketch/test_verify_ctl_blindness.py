@@ -116,7 +116,7 @@ AT_GO = verify_ctl.GO_CYCLE + 2               # cycle 10: what SPI_DRAIN_LATE me
 
 
 # The counts below are facts of `verify_ctl.stimulus()` and move with it. Contract
-# revision 11 (the clap's final strike) added three writes -- the kit's CP FRATE
+# revision 13 (the clap's final strike) added three writes -- the kit's CP FRATE
 # and the FRATE corners at 0x43 and 0x87 -- so 206 -> 209 writes, 105 -> 106
 # addresses above 0x7F (0x87), and the 24-bit data count is unchanged at 42.
 def test_a_defect_confined_to_one_field_leaves_the_other_five_blind(tmp_path, capsys):

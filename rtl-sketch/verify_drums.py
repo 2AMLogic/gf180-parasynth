@@ -65,7 +65,7 @@ def stimulus(short: bool = False):
         # rings -- it is not the kit's f0, which is the circuit's 49.4 Hz (DR 0009)
         writes += [(fr, a, v) for a, v in dx.mode_writes(dx.M_BD, dx.BD_HZ_CHART, q, 0.0)[:2]]
     f += int(60.0 / bpm * 4 * SR) + int(0.05 * SR)
-    # 4b. revision 11, the clap's final strike (15.3; plan084). Retrigger one frame BEFORE, AT and
+    # 4b. revision 13, the clap's final strike (15.3; plan084). Retrigger one frame BEFORE, AT and
     #     one AFTER the final-strike boundary, each at a different accent so a stale captured level
     #     shows; mid-note PEAK / ACCENT / RATE / FRATE writes; a choke between the third strike and
     #     the final one (no ghost); and CP -> MA -> CP switched while each is still sounding.
@@ -128,7 +128,7 @@ def stimulus(short: bool = False):
                                                     period=511 if e % 4 == 2 else 0)),
                    (f, dx.A_ENV + e * 4 + 1, 0 if e % 5 == 0 else dx.FULL24),
                    (f, dx.A_ENV + e * 4 + 2, 0 if e % 4 == 3 else (65535 if e % 4 == 1 else 3)),
-                   # revision 11: FRATE on the bursting envelopes (the final strike, at an ordinary
+                   # revision 13: FRATE on the bursting envelopes (the final strike, at an ordinary
                    # and at the extreme rate) and on burst-less ones (FRATE from the first decay)
                    (f, dx.A_ENV + e * 4 + 3, (dx.rate_reg(20e-3) if e % 8 == 2 else 65535) if e % 4 == 2
                     else (1 if e % 4 == 3 else 0))]

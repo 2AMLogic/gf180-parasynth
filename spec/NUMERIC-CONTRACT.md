@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 12 — 2026-09-26 — status: PROPOSED. Not ratified.**
+**Revision 13 — 2026-09-26 — status: PROPOSED. Not ratified.**
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -10,7 +10,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 12,
+through the two-key process this fleet uses; until then it is revision 13,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -1392,7 +1392,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
-| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 11**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is revision 10 exactly |
+| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 13**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is the envelope of revisions 10 to 12 exactly |
 | `0x90 + p` | `PATH[p]` | 25 | `[4:0] src`, `[9:5] e1`, `[14:10] e2`, `[16:15] nl`, `[19:17] att`, `[24:20] dest` (15.5) |
 | `0xB0 + 4m` | `MODE_A1[m]` | 26 s | Q2.24 coefficient a1 = 2r·cos ω |
 | `0xB1 + 4m` | `MODE_A2[m]` | 26 s | Q2.24 coefficient a2 = −r² |
@@ -1420,7 +1420,7 @@ bus.
 
 State registers, not host-writable except by
 RESET: `stops_prev` (11), per envelope `level` (24), `strike` (24), `t`
-(11), `fcap` (24, revision 11: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
+(11), `fcap` (24, revision 13: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
 `y2[m]`, `exc[m]` (21), `h1[m]`, `h2[m]` (21, modes 0..`N_NUMS`−1). The gains
 `dvol`, `bvol` of the output stage (12) are the instrument's, 16 bits
 unsigned each.
@@ -1473,7 +1473,7 @@ if choke < 8 and fire[choke]:  level ← 0                    choked, after ever
 ENV(e) = level >> 9                                         Q0.15, what the paths multiply by
 ```
 
-**Revision 11: the final strike** (plan084; the clap's confirmed "L2",
+**Revision 13: the final strike** (plan084; the clap's confirmed "L2",
 `docs/scorecard/clap-d12a/README.md` section 10). With `FRATE = 0` nothing
 below applies and the envelope is revision 10 exactly. With `FRATE ≠ 0`, and
 `last = bursts · period`:
@@ -1681,7 +1681,7 @@ says so:
 | 1 SD | PULSE × 0.1 ms → modes 7 (173 Hz, Q 16.3) and 8 (336 Hz, Q 9.9); NOISE × 15 ms → mode 3 (**BP** 2.75 kHz, Q 0.7) | 7, 8 (RAW), 3 (**BP**) | 2, 3 | both f0/Q, the snappy filter's pole, τ 15 ms | both bodies from the pulse, not the cascade (17.15); the snappy filter's **numerator**: reference 3 calls it a high-pass and the machine measures a band-pass on the same pole (17.22); SNAPPY level set to the knob's own curve at 5.0 |
 | 2 LT, 3 HT | PULSE × 0.1 ms → mode 9 (90 Hz, Q 25) / 10 (185 Hz, Q 25); the host's diode pitch drop sweeps f0 from ×1.06 down over 60 ms, scaled by accent above a threshold and by the TUNING pot (15.7.1) | 9, 10 (RAW) | 4, 5 | f0, Q, **the pitch drop** (reference 4) | no pink-noise rumble (17.14) |
 | 4 CH, 5 OH | SQSUM → mode 0 (BP 7117 Hz, Q 6, amp 0); TAP 0, SWING × envelope → mode 2 (HP 11.7 kHz, Q 2.5) / mode 1 (HP 7.8 kHz, Q 2.5); CH chokes OH | 0 (BP), 1, 2 (HP) | 6 (20 ms), 7 (150 ms, choke 4) | oscillators, BP, HPs, CH τ, the choke | OH τ 150 ms (DECAY mid) |
-| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 11 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
+| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 13 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
 | 7 CB | **SQ 4 and SQ 5 on two separate paths**, each SWING × (τ 5 ms at 0.5 + **τ 100 ms** at 0.5) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010) | nothing: the BP centre was 17.16 and is now fitted to a recording (1100 Hz Q 2.8), and the tail is the measured 98 ms |
 
 Fourteen of the sixteen paths are used; mode 11 is spare (zero). Levels are
@@ -1763,7 +1763,7 @@ which is why `verify_drums.py`'s stimulus carries them.
 ### 15.8 Reset
 
 RESET (`0xFF`, or hardware reset) sets every register of 15.1 (including
-revision 11's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
+revision 13's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).
@@ -2157,6 +2157,28 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 13 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
+  "L2" level frozen and confirmed in `docs/scorecard/clap-d12a/README.md`
+  section 10, implemented in `docs/scorecard/clap-l2/`). One new register per
+  envelope, `ENV_FRATE[e]` at `0x43 + 4e` (the stride's spare slot, so no
+  address moves), 16 bits, Q0.16, reset 0; one new state register per
+  envelope, `fcap` (24). With `FRATE = 0` the envelope is revisions 10 to 12
+  exactly. The reference kit's clap (Appendix G) changes: 4 strikes at period
+  511, the last at the fire level with `FRATE` τ 20 ms, tail τ 80 ms.
+  **KIT808 moves from `a43fe2a7…` to `321a9354…`, 147 writes → 148.**
+  Exactly three writes differ, all on the clap's envelopes 8 and 9:
+  `ENV_CTL[8]` at 0x60, 125960438 → 134152438 (bursts 2 → 3, period 480 →
+  511); `ENV_FRATE[8]` at 0x63, new, 68 (τ 20 ms); `ENV_RATE[9]` at 0x66,
+  29 → 17 (τ 47 → 80 ms). Every other table is unchanged.
+  `test_revision_13_changes_only_the_clap_final_strike_registers` rebuilds
+  revision 11's image from the live one by undoing exactly those three and
+  requires revision 11's hash; `test_revision_11_…` now starts from that
+  rebuilt image. This change was first written as "revision 11", colliding
+  with the tom rebalance below, and was renumbered before merge. The
+  `*_rev10` keys in `docs/scorecard/clap-l2/clap-phrase.json` name the
+  pre-L2 clap image, whose clap settings date from revision 10 and did not
+  change through revision 12.
 
 - **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0019), closing
   17.18's mechanism half. One new register, `DRIFT` at 0x2D, 16 bits, Q0.16,
@@ -2616,58 +2638,58 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 | 0xBE | 0x34B6 | MODE_AMP[3] | | 0x5C | 0x45 | ENV_CTL[7] |
 | 0xBF | 0x1 | MODE_NUM[3] | | 0x5D | 0xFFFFFF | ENV_PEAK[7] |
 | 0xC0 | 0x1E53ED0 | MODE_A1[4] | | 0x5E | 0x9 | ENV_RATE[7] |
-| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x60 | 0x78200F6 | ENV_CTL[8] |
+| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x60 | 0x7FF00F6 | ENV_CTL[8] |
 | 0xC2 | 0x0 | MODE_AMP[4] | | 0x61 | 0xB0A3D6 | ENV_PEAK[8] |
 | 0xC3 | 0x1 | MODE_NUM[4] | | 0x62 | 0x154 | ENV_RATE[8] |
-| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x64 | 0xF6 | ENV_CTL[9] |
-| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
-| 0xC6 | 0x592 | MODE_AMP[5] | | 0x66 | 0x1D | ENV_RATE[9] |
-| 0xC7 | 0x1 | MODE_NUM[5] | | 0x68 | 0xF7 | ENV_CTL[10] |
-| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x69 | 0x800000 | ENV_PEAK[10] |
-| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x6A | 0x110 | ENV_RATE[10] |
-| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
-| 0xD3 | 0x0 | MODE_NUM[8] | | 0x6D | 0x800000 | ENV_PEAK[11] |
-| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x6E | 0xE | ENV_RATE[11] |
-| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x74 | 0xF9 | ? |
-| 0xD6 | 0xAF | MODE_AMP[9] | | 0x75 | 0xF5C29 | ? |
-| 0xD7 | 0x0 | MODE_NUM[9] | | 0x76 | 0x3025 | ? |
-| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x78 | 0xF9 | ? |
-| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x79 | 0x57CED9 | ? |
-| 0xDA | 0x245 | MODE_AMP[10] | | 0x7A | 0x3E | ? |
-| 0xDB | 0x0 | MODE_NUM[10] | | 0x7C | 0xFA | ? |
-| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7D | 0x52F1AA | ? |
-| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7E | 0x72 | ? |
-| 0xDE | 0x13B | MODE_AMP[11] | | 0x80 | 0xFA | ? |
-| 0xDF | 0x0 | MODE_NUM[11] | | 0x81 | 0x6E978D | ? |
-| 0xE0 | 0x1FFBB4C | ? | | 0x82 | 0xA | ? |
-| 0xE1 | 0x300303D | ? | | 0x84 | 0xFA | ? |
-| 0xE2 | 0x196 | ? | | 0x85 | 0x161E4F | ? |
-| 0xE3 | 0x0 | ? | | 0x86 | 0x3 | ? |
-| 0xE4 | 0x1FF9A1F | ? | | 0x90 | 0x807803 | PATH[0] |
-| 0xE5 | 0x3003F74 | ? | | 0x91 | 0x1F07823 | PATH[1] |
-| 0xE6 | 0x28B | ? | | 0x92 | 0x907843 | PATH[2] |
-| 0xE7 | 0x0 | ? | | 0x93 | 0xA07843 | PATH[3] |
-| 0xE8 | 0x1FCD356 | ? | | 0x94 | 0x307861 | PATH[4] |
-| 0xE9 | 0x30243FF | ? | | 0x95 | 0xB07883 | PATH[5] |
-| 0xEA | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
-| 0xEB | 0x0 | ? | | 0x97 | 0xD078A3 | PATH[7] |
-| 0xEC | 0x1EDC70C | ? | | 0x98 | 0x7BE2 | PATH[8] |
-| 0xED | 0x3046527 | ? | | 0x99 | 0x20F8D0 | PATH[9] |
-| 0xEE | 0x0 | ? | | 0x9A | 0x10F8F0 | PATH[10] |
-| 0xEF | 0x0 | ? | | 0x9B | 0x407BE1 | PATH[11] |
-| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x9C | 0x1F12514 | PATH[12] |
-| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9D | 0x50AD49 | PATH[13] |
-| 0xCA | 0x0 | MODE_AMP[6] | | 0x9E | 0x50AD4A | PATH[14] |
-| 0xCB | 0x1 | MODE_NUM[6] | | 0x9F | 0xE079A3 | PATH[15] |
-| 0xCC | 0x4BE113 | MODE_A1[7] | | 0xA0 | 0xF079A3 | ? |
-| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA1 | 0x1F0F9DE | ? |
-| 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA2 | 0x1F0F9DF | ? |
-| 0xCF | 0x1 | MODE_NUM[7] | | 0xA3 | 0x607BE2 | ? |
-| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA4 | 0x20F9F0 | ? |
-| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA5 | 0x70FA10 | ? |
-| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA6 | 0x1F0FA36 | ? |
-| 0x44 | 0x30F0 | ENV_CTL[1] | | | | |
+| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x63 | 0x44 | ENV_-[8] |
+| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x64 | 0xF6 | ENV_CTL[9] |
+| 0xC6 | 0x592 | MODE_AMP[5] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
+| 0xC7 | 0x1 | MODE_NUM[5] | | 0x66 | 0x11 | ENV_RATE[9] |
+| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x68 | 0xF7 | ENV_CTL[10] |
+| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x69 | 0x800000 | ENV_PEAK[10] |
+| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6A | 0x110 | ENV_RATE[10] |
+| 0xD3 | 0x0 | MODE_NUM[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
+| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x6D | 0x800000 | ENV_PEAK[11] |
+| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x6E | 0xE | ENV_RATE[11] |
+| 0xD6 | 0xAF | MODE_AMP[9] | | 0x74 | 0xF9 | ? |
+| 0xD7 | 0x0 | MODE_NUM[9] | | 0x75 | 0xF5C29 | ? |
+| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x76 | 0x3025 | ? |
+| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x78 | 0xF9 | ? |
+| 0xDA | 0x245 | MODE_AMP[10] | | 0x79 | 0x57CED9 | ? |
+| 0xDB | 0x0 | MODE_NUM[10] | | 0x7A | 0x3E | ? |
+| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7C | 0xFA | ? |
+| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7D | 0x52F1AA | ? |
+| 0xDE | 0x13B | MODE_AMP[11] | | 0x7E | 0x72 | ? |
+| 0xDF | 0x0 | MODE_NUM[11] | | 0x80 | 0xFA | ? |
+| 0xE0 | 0x1FFBB4C | ? | | 0x81 | 0x6E978D | ? |
+| 0xE1 | 0x300303D | ? | | 0x82 | 0xA | ? |
+| 0xE2 | 0x196 | ? | | 0x84 | 0xFA | ? |
+| 0xE3 | 0x0 | ? | | 0x85 | 0x161E4F | ? |
+| 0xE4 | 0x1FF9A1F | ? | | 0x86 | 0x3 | ? |
+| 0xE5 | 0x3003F74 | ? | | 0x90 | 0x807803 | PATH[0] |
+| 0xE6 | 0x28B | ? | | 0x91 | 0x1F07823 | PATH[1] |
+| 0xE7 | 0x0 | ? | | 0x92 | 0x907843 | PATH[2] |
+| 0xE8 | 0x1FCD356 | ? | | 0x93 | 0xA07843 | PATH[3] |
+| 0xE9 | 0x30243FF | ? | | 0x94 | 0x307861 | PATH[4] |
+| 0xEA | 0x0 | ? | | 0x95 | 0xB07883 | PATH[5] |
+| 0xEB | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
+| 0xEC | 0x1EDC70C | ? | | 0x97 | 0xD078A3 | PATH[7] |
+| 0xED | 0x3046527 | ? | | 0x98 | 0x7BE2 | PATH[8] |
+| 0xEE | 0x0 | ? | | 0x99 | 0x20F8D0 | PATH[9] |
+| 0xEF | 0x0 | ? | | 0x9A | 0x10F8F0 | PATH[10] |
+| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x9B | 0x407BE1 | PATH[11] |
+| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9C | 0x1F12514 | PATH[12] |
+| 0xCA | 0x0 | MODE_AMP[6] | | 0x9D | 0x50AD49 | PATH[13] |
+| 0xCB | 0x1 | MODE_NUM[6] | | 0x9E | 0x50AD4A | PATH[14] |
+| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9F | 0xE079A3 | PATH[15] |
+| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA0 | 0xF079A3 | ? |
+| 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA1 | 0x1F0F9DE | ? |
+| 0xCF | 0x1 | MODE_NUM[7] | | 0xA2 | 0x1F0F9DF | ? |
+| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA3 | 0x607BE2 | ? |
+| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA4 | 0x20F9F0 | ? |
+| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA5 | 0x70FA10 | ? |
+| 0x44 | 0x30F0 | ENV_CTL[1] | | 0xA6 | 0x1F0FA36 | ? |
 
-SHA-256 of the 147 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19`
+SHA-256 of the 148 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683`
 
 <!-- END GENERATED APPENDICES -->

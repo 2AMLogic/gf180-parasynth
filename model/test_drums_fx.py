@@ -374,7 +374,7 @@ def test_hats_are_squares_not_noise():
 
 
 def test_clap_has_four_strikes_the_last_at_the_fire_level_and_a_tail():
-    """Envelope 8's trace (contract revision 11, 15.3; plan084 L2): strikes at
+    """Envelope 8's trace (contract revision 13, 15.3; plan084 L2): strikes at
     0, 10.6 and 21.3 ms at 1, 13/16 and (13/16)^2 of the first, then the FINAL
     strike at 31.9 ms back at the fire level, decaying at FRATE; envelope 9 the
     tail, which outlasts them. Was three strikes at 10 ms and no final strike
