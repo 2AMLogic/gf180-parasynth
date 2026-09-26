@@ -107,6 +107,7 @@ CLUSTER_S = 0.25      # coarse candidates closer than this are one placement
 # 5 Hz AC-coupling high-pass, FAILED timing by 1.0 sample and residual by
 # 0.5 dB without it: a first-order high-pass moves a 50 Hz kick's local lag.
 BAND_HZ = (100.0, 16000.0)
+TIMING_MIN_WINDOWS = 3  # a slip must show in at least this many local-lag windows
 END_GUARD_S = 0.1     # not scored: the last 0.1 s of each reference (see analyse_take)
 PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
 ENV_LP_HZ = 100.0     # the alignment envelope: x^2, zero-phase low-pass, sqrt
@@ -692,19 +693,33 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
         M["local_lag_dev"] = [round(float(dev.min()), 3), round(float(dev.max()), 3)]
         span = (ms[-1] - ms[0]) / sr
         if span >= LIMITS["clock_min_span_s"] and len(pts) >= 5:
-            slope = np.polyfit(ms, dev, 1)[0]            # samples per reference sample
+            # robust line: a lone narrowband window can sit samples off (below)
+            fit = np.polyfit(ms, dev, 1)
+            keep = np.abs(dev - np.polyval(fit, ms)) <= max(1.0, 3 * float(np.median(
+                np.abs(dev - np.polyval(fit, ms)))))
+            if keep.sum() >= 5:
+                fit = np.polyfit(ms[keep], dev[keep], 1)
+            slope = fit[0]                                  # samples per reference sample
             M["clock_drift_ppm"] = round(float(slope * 1e6), 2)
             if abs(M["clock_drift_ppm"]) > LIMITS["clock_ppm_drift_max"]:
                 F["clock"] = (f"this take's clock differs from the frozen calibration by "
                               f"{M['clock_drift_ppm']} ppm")
-            lin = dev - np.polyval(np.polyfit(ms, dev, 1), ms)
-            scatter = float(np.max(np.abs(lin)))
+            lin = dev - np.polyval(fit, ms)
         else:
-            scatter = float(np.max(np.abs(dev - np.median(dev))))
+            lin = dev - np.median(dev)
+        # A slip is SUSTAINED: at least TIMING_MIN_WINDOWS windows (or 10 %)
+        # beyond the limit. One narrowband window is not a slip: its lag is a
+        # phase delay, and AC coupling at fc moves it by fc*SR/(2 pi f^2)
+        # samples -- 3.8 samples for a 5 Hz high-pass on a ~110 Hz bass window,
+        # which failed the clean synthetic session on the full bar808 reference.
+        off = np.abs(lin) > LIMITS["timing_slip_max_samples"]
+        scatter = float(np.max(np.abs(lin)))
         M["timing_scatter"] = round(scatter, 3)
-        if scatter > LIMITS["timing_slip_max_samples"]:
-            F["timing"] = (f"local lag moves {scatter:.2f} samples against the frozen "
-                           f"delay (limit {LIMITS['timing_slip_max_samples']})")
+        M["timing_windows_off"] = [int(off.sum()), int(off.size)]
+        if off.sum() >= max(TIMING_MIN_WINDOWS, int(math.ceil(0.1 * off.size))):
+            F["timing"] = (f"local lag moves up to {scatter:.2f} samples against the frozen "
+                           f"delay in {int(off.sum())} of {off.size} windows "
+                           f"(limit {LIMITS['timing_slip_max_samples']})")
         elif abs(float(np.median(dev))) > LIMITS["timing_slip_max_samples"]:
             F["timing"] = f"median local lag {float(np.median(dev)):.2f} samples off the frozen delay"
         gains = []
