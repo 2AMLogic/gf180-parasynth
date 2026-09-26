@@ -1504,7 +1504,7 @@ def test_clap_is_three_bursts_about_ten_ms_apart_inside_thirty_ms():
 
 
 def test_clap_tail_time_constant():
-    """[hardware-measured, contract revision 11: cp8/CP.WAV's tail on 80-200 ms
+    """[hardware-measured: cp8/CP.WAV, contract revision 11 -- its tail on 80-200 ms
     fits an amplitude tau of 80.2 ms (docs/scorecard/clap-d12a/README.md section
     4, fit validated on synthetic exponentials)] SUPERSEDES the source-inferred
     47 ms (reference 7, Q69 charging C138 0.047 uF through R348 1 M; Roland's
@@ -1941,7 +1941,10 @@ def test_maracas_and_clap_cannot_sound_at_once():
     for name, want in (("CP", 3), ("MA", 1)):
         x = sound(name, 1.0, 0.30).after_hit(0, 0.20, "dmix")
         env = am.rms_envelope(x, 1.0, SR)
-        n = len(am.envelope_bursts(env, SR, window_s=0.030, min_sep_s=0.005, level_frac=0.45))
+        # The first 30 ms after the strike only (after the pre-roll), with its OWN peak as the reference (level_frac is
+        # relative to the window's maximum): revision 11's final strike is the
+        # loudest event and would otherwise set a threshold the early bursts miss.
+        n = len(am.envelope_bursts(env[:int((PRE_ROLL_S + 0.030) * SR)], SR, min_sep_s=0.005, level_frac=0.45))
         assert n == want, f"{name} shows {n} bursts, expected {want}"
 
 

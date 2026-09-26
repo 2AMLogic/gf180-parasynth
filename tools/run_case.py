@@ -2202,7 +2202,29 @@ def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
     history = list((old or {}).get("rubric_history") or [])
     if old is not None:
         before, after = scorecard.evaluate(case, old), scorecard.evaluate(case, res)
-        if (before.get("measurement_policy") and after.get("measurement_policy")
+        # A property newly marked UNQUALIFIED is a measurement-version change too.
+        # The new record is then a no-verdict and carries no measurement_policy,
+        # so the comparison below cannot see it; this does (plan084 section 5:
+        # "preserve history").
+        newly_unq = sorted(n for n, m in (res.get("metrics") or {}).items()
+                           if m.get("qualification") == "UNQUALIFIED"
+                           and (old.get("metrics") or {}).get(n, {}).get("qualification") != "UNQUALIFIED")
+        if newly_unq and before.get("measurement_policy"):
+            history.append({
+                "kind": RUBRIC_CHANGE,
+                "changed": {n: {"before": "qualified (estimator in use)", "after": "UNQUALIFIED"}
+                            for n in newly_unq},
+                "superseded_at": _now(),
+                "state": before["state"], "worst": before["worst"], "why": before["why"],
+                "properties": before.get("properties"),
+                "measurement_policy": before["measurement_policy"],
+                "source_commit": old.get("source_commit"),
+                "analysis_run": old.get("analysis_run"),
+                "metrics": old.get("metrics"),
+                "note": ("the superseded record may also predate a SOUND change; compare its "
+                         "source_commit and provenance.inputs with the new record's"),
+            })
+        elif (before.get("measurement_policy") and after.get("measurement_policy")
                 and before["measurement_policy"] != after["measurement_policy"]):
             bp, ap = before["measurement_policy"], after["measurement_policy"]
             changed = {n: {"before": bp["metrics"].get(n), "after": ap["metrics"].get(n)}
