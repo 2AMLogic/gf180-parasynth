@@ -87,12 +87,14 @@ F1CAL_WORDS = {0.0: (42598, 100825), 1.0: (42598, 302474), 1.1: (42598, 322639)}
 MUTANTS = {
     # late completion: the master mix held N extra cycles before the sample, so
     # the strobe and busy both finish N cycles late with every value unchanged
+    # (the stall sits in S_OUT2, after every wait: a stall placed in S_DWAIT
+    # overlapped the drum filter's own wait there and was absorbed -- a 15-cycle
+    # "late" mutant moved no DFILT frame at all, which the boundary control caught)
     "late": [("    reg signed [18:0] d19;",
               "    reg [8:0] late_cnt;                // MUTANT late: the stall counter\n"),
              ("                S_IDLE: if (go) begin\n",
               "                    late_cnt <= 9'd0;                                  // MUTANT late\n"),
-             ("                S_DWAIT: begin\n",
-              "                    if (late_cnt != 9'd{N}) late_cnt <= late_cnt + 9'd1; else   // MUTANT late\n")],
+             ("                S_OUT2: begin\n", None)],
     # the CANDIDATE correction (docs/deadline/README.md): an oscillator whose
     # output comes from the 2x bank skips the scalar PolyBLEP window loop,
     # whose c_pp/c_ps only feed the scalar path it does not use
@@ -110,7 +112,10 @@ def make_mutant(spec: str, outdir: str) -> str:
         if src.count(anchor) != 1:
             raise SystemExit(f"verify_deadline: REFUSED -- mutant {kind} anchor occurs "
                              f"{src.count(anchor)} times in voice_dp.v: {anchor.strip()!r}")
-        if kind == "skip2xwin":
+        if kind == "late" and anchor.strip() == "S_OUT2: begin":
+            src = src.replace(anchor, f"                S_OUT2: if (late_cnt != 9'd{int(arg)}) "
+                                      f"late_cnt <= late_cnt + 9'd1; else begin   // MUTANT late\n")
+        elif kind == "skip2xwin":
             src = src.replace(anchor, "                    if (!blep || (use_osc2x && shape_osc2x)) "
                                       "state <= S_MIX;   // MUTANT skip2xwin")
         elif anchor.endswith("\n"):

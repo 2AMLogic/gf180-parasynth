@@ -135,3 +135,5 @@ def test_every_mutant_anchor_occurs_exactly_once_in_the_current_voice(tmp_path):
     d = vd.make_mutant("late:37", str(tmp_path))
     mutated = open(os.path.join(d, "voice_dp.v")).read()
     assert mutated.count("MUTANT late") == 3 and "9'd37" in mutated
+    # the stall is in S_OUT2, after every wait, so it cannot overlap one and be absorbed
+    assert "S_OUT2: if (late_cnt != 9'd37)" in mutated
