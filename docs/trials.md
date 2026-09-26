@@ -70,37 +70,69 @@ runs the same way on the build box and in CI. It is the executable form of a
 milestone. It generalises what `docs/capability-dag.md` already does for
 implementation nodes, and adds the product nodes that DAG does not have.
 
-Rules:
+Rules (amended after review, plan085 §3):
 
-1. **Every Loom work issue names the trial it flips** (or the new trial it
-   adds) and its expected state change, e.g. `T-PLAY-DIGITAL: FAIL → PASS`.
-   An issue without a trial is triage, not work.
-2. **The trial is written and committed red first**, before the
-   implementation, in its own small PR if needed. Acceptance changes are
-   trial changes, reviewed as such — never re-negotiated in prose.
-3. **A PR shows the trial transition with a receipt** from the build box or
-   CI. Judge reviews the trial and the receipt, not the narrative.
-4. **An unqualified measurement is NO VERDICT, never PASS** (#115, #134).
-   Qualifying it is its own trial.
-5. **A negative result closes the issue** with its evidence; it does not open
-   a follow-up investigation automatically.
-6. **One entry point**: `make trial T=<id>` runs a trial on the current tree
-   after refusing if the branch is behind `origin/main` on any input it
-   hashes; `tools/box_bootstrap.py` makes the build box match CI.
+1. **Every executable work issue names its trial(s) and expected outcome.**
+   Legitimate outcomes: valid FAIL → PASS; NO VERDICT → valid FAIL (coverage);
+   preserved PASS (refactor, setup, docs); a qualified negative experiment.
+   A sound change names ONE target property and an explicit preservation set.
+   An issue with no executable acceptance contract stays in triage.
+2. **A meaningful baseline before implementation.** Prefer a committed
+   reproducer before the fix; a separate preliminary PR is optional. "Red"
+   counts only if the checker ran and detected the intended condition — an
+   import error or missing asset is not a caught defect. For a new capability
+   an honest initial NO VERDICT is fine; for a working capability wrapped as a
+   trial, keep its PASS and show the wrapper rejects a relevant counterexample.
+3. **Judge reviews contract, implementation and evidence** — does the trial
+   ask the right question, is the apparatus independently exercised, is the
+   evidence complete and bound to the candidate, and does the implementation
+   meet the contract. A receipt alone can certify a faithfully reproduced
+   wrong formula. Criterion/tolerance changes are versioned and never
+   reported as sound improvements.
+4. **Three product verdicts, separate from execution status.** PASS: complete
+   qualified evidence meets the criterion. FAIL: complete qualified evidence
+   violates it. NO VERDICT: evidence absent, corrupt, incomplete, unqualified,
+   or no measurement established. A process exit code is not the verdict. A
+   control counts only when its child reaches the intended meaningful failure
+   (not an import error, timeout or empty comparison). Not-run / queued /
+   operator-blocked are workflow states, not results. A composite PASSes only
+   when every required child is valid and passing; a conclusive required-child
+   FAIL is FAIL; otherwise NO VERDICT, with coverage shown.
+5. **Close the investigation, not the goal.** A negative experiment closes
+   "evaluate approach X", never the product requirement it served. A
+   root-cause issue closes as covered only when a MERGED check exercises its
+   failure mode — a planned trial is not closure evidence.
+6. **Freeze experiment inputs; qualify integration separately.** At dispatch
+   record base commit, candidate, configuration, references, tools, analyser
+   and criteria; the result stays valid for those inputs after main moves.
+   At merge, validate the integration head and re-run only trials whose
+   dependency fingerprints changed. The current stale-input guard stays on;
+   narrowing it is a separate, tested change (unrelated upstream change,
+   changed reference/analyser/ROM, intentional DUT change, changed merge
+   result, corrupted or foreign evidence).
+7. **Thin dispatcher, no second source of truth.** `make trial T=<id>` wraps
+   existing checkers via `tools/run_all.py`, `tools/manifest.py`,
+   `tools/provenance.py` and `docs/dag.json`; `docs/trials.json` owns only the
+   product question, scope, required children, criterion version, preservation
+   set and resource class, and references DAG nodes rather than copying their
+   commands. Results are generated from validated receipts; artifacts are
+   retained, not just hashed. No service, database or new scheduler.
 
 ### Proposed trial set (product first)
 
 | ID | Question | State today | Verifier (existing where possible) |
 |---|---|---|---|
-| T-RELEASE-BOUND | Do image, sources, host bytes, supported domain and evidence agree? | ~PASS (#255 draft) | `fpga/release/release_manifest.py` + release tests |
+| T-RELEASE-BOUND | Do image, sources, host bytes, supported domain and evidence agree? | not yet run as a trial (#255 draft) | `fpga/release/release_manifest.py` + release tests |
 | T-PLAY-DIGITAL | Do the documented playback commands produce correct, non-silent audio through UART→RTL→I²S? | partial (held note was silent until #255) | release held-note + `verify_rolling_playback.py --rtl` |
 | T-DEADLINE | Does every supported configuration meet the frame deadline, with complete evidence? | PASS baseline; pulse2x excluded | `rtl-sketch/verify_deadline.py` |
 | T-PULSE2X-IMAGE | Is a PULSE2X=1 image qualified (fit, timing, deadline, I²S)? | FAIL | #205 |
 | T-CLAP-L2 | Is D12A's late energy repaired in the shipping model and RTL? | in progress (#261 → D) | run_case D12A + model→RTL→I²S |
 | T-LIVE-MIDI | Does a MIDI controller drive the image with bounded latency and no stuck notes? | not started | new; sim first |
 | T-PHYSICAL | Does the board's line output match the digital prediction (gain, latency, noise, repeatability)? | operator-only (rig) | new capture analysis; #208 |
-| T-MEASURE-QUAL | Does each scored estimator declare and enforce its validated domain? | FAIL (#115) | known-answer suites per estimator |
-| T-BOARD | Scorecard coverage/pass counts, from qualified measurements only | 20 valid / 9 pass | `tools/scorecard.py --check` |
+| T-MEASURE-QUAL-* | A FAMILY of bounded tasks, one estimator each, starting with one qualified measurement and the known-unqualified clap timing; not a prerequisite for shipping L2 | NO VERDICT (#115) | known-answer suite per estimator |
+| T-BOARD-INTEGRITY | Is the scorecard internally consistent and bound to its records? | PASS | `tools/scorecard.py --check` |
+| T-BOARD-COVERAGE | How many cases have a valid measurement? (a count, not a pass) | 20 / 100 | scorecard |
+| T-SOUND-* | Per case/property: does qualified evidence meet tolerance? (nine case passes is not a passing instrument) | 9 case passes | run_case per property |
 
 Sound work (M1A harmonic, cowbell partial balance, BD attack, aliasing #61,
 DC blocking #152/#165) becomes **one trial per property to flip**, each issue
@@ -119,13 +151,22 @@ naming the case/property and its preservation set.
 - **Coordinator budget:** at most two implementation owners at once, one
   heavy workload on the box at a time (CLAUDE.md).
 
-## 4. What this changes immediately
+## 4. Pilot, not migration
 
-1. Add `make trial`, `tools/box_bootstrap.py` and the trial registry
-   (`docs/trials.json`, extending `docs/dag.json`), with the release, deadline
-   and playback trials wired first — they already have verifiers.
-2. Curate the backlog: close stale/superseded issues with evidence; convert
-   each "Root cause" essay into a gate (or close it as absorbed by a named
-   trial); label every live issue with its trial and a Loom state.
-3. Stop writing `plan0NN.md` as the source of truth; the trial registry and
-   Loom issues are the plan.
+1. **Backlog first:** a read-only curation proposal (every open issue:
+   disposition, exact existing Loom labels, trial/parent goal, evidence for any
+   closure, prerequisites, expected transition, stop rule) reviewed by the
+   operator before any bulk label or close.
+2. **Three pilot trials only**, wrapping existing checkers: T-RELEASE-BOUND,
+   T-DEADLINE (baseline), T-PLAY-DIGITAL. One shared bootstrap specification
+   for the build box and CI, with cheap dependency/tool/reference checks
+   before long jobs.
+3. **Prove the dispatcher's failure behaviour:** missing assets, empty or
+   truncated comparisons, a genuine DUT defect, timeout and altered evidence
+   each get the correct verdict.
+4. **Run one issue through the real Loom loop** (Curator → Builder → Judge →
+   Champion) with no human message relay.
+5. **Measure whether it helped** over the next few items: review rounds from
+   missed declared checks, human relay interventions, reruns caused only by
+   provenance, setup failures found after expensive work began, time from
+   implementation to qualified result. Not PR count or trial count.
