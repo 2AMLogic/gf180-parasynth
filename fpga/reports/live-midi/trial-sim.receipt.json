@@ -1,0 +1,322 @@
+{
+  "schema": "trial-receipt/2",
+  "trial": {
+    "id": "T-LIVE-MIDI",
+    "question": "Does a live MIDI stream, through the real host session and its bytes, drive the instrument with the documented note, drum and controller behaviour, explicit refusals, bounded queues, no stuck note, and receipt-to-update latency p95 <= 20 ms / p99 <= 30 ms under the declared load?",
+    "criterion_version": "live-midi/1 (fpga/live_midi_contract.py: target, endpoints and declared load frozen before measurement; timing contract 2)",
+    "mode": "sim",
+    "candidate": "baseline",
+    "scope": {
+      "configuration": {
+        "OSC2X": 1,
+        "FILTER2X": 1,
+        "PULSE2X": 0
+      },
+      "path": "deterministic MIDI -> fpga/midi_session.py -> UART bytes -> device contract (sim) and arty_a7_top UART pins (rtl) -> decoded I2S",
+      "excluded": [
+        "hardware MIDI-to-audio latency (a later capture measurement)",
+        "USB/FTDI host latency"
+      ]
+    },
+    "preservation": [
+      "T-PLAY-DIGITAL"
+    ],
+    "resource_class": "light"
+  },
+  "identities": {
+    "source": {
+      "head": "1dcb2e3ff67eb3605766566e273f6f019878c23e",
+      "commit": "1dcb2e3",
+      "described": "1dcb2e3",
+      "branch": "feature/issue-281-live-midi",
+      "dirty": true,
+      "uncommitted_sha256": "6dbfbbcc6980fd96",
+      "untracked_files": 16
+    },
+    "integration": {
+      "origin_main": "da4b276d03fbe34e5186ff7382be37bb2f73ca99",
+      "merge_base": "da4b276d03fbe34e5186ff7382be37bb2f73ca99",
+      "head_contains_origin_main": true
+    },
+    "registry": {
+      "path": "/home/ubuntu/work/live-midi/docs/trials.json",
+      "sha256": "793882d7895723f26744bb370eee233464713895b44750611962be98c894db31"
+    },
+    "environment": {
+      "spec_path": "/home/ubuntu/work/live-midi/spec/trial-environment.json",
+      "spec_sha256": "7813252b1b48000a84ec7e05368328924df19db8f16fddbff4a76c127fd6031c",
+      "spec": "trial-env/1",
+      "python": "3.12.14",
+      "python_exe": "/home/ubuntu/work/venv/bin/python",
+      "packages": {
+        "numpy": "2.5.3",
+        "scipy": "1.18.1",
+        "pytest": "9.1.1",
+        "pyyaml": "6.0.3",
+        "pyserial": "3.5"
+      },
+      "tools": {}
+    },
+    "dag_fingerprint": {
+      "nodes": [
+        "I1",
+        "I2"
+      ],
+      "covers_sha256": {
+        "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+        "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+        "rtl-sketch/synth_top.v": "e4f8d97b9785f283439782c6bfc6a2f3981788a92723ac1329f09e94719fedd0",
+        "model/synth_top_model.py": "144ac659b899e243a1cfcf0c5ee091b096052acc18c2e5ca7246cd7678e049f4"
+      }
+    },
+    "checkers_sha256": {
+      "fpga/verify_live_midi.py": "4839ab7470b72ae55ca79843462855b1d95f23852286aad7dddef27cabd32c6c"
+    }
+  },
+  "execution": {
+    "status": "complete",
+    "started": "2026-09-26T14:58:37Z",
+    "finished": "2026-09-26T14:58:40Z",
+    "timeout_s": 900,
+    "preflight": []
+  },
+  "children": [
+    {
+      "id": "session-sim",
+      "role": "required",
+      "checker": "fpga/verify_live_midi.py",
+      "property": "every scenario equals the independently built schedule on eleven properties and the declared load meets the latency target",
+      "intended_reason": null,
+      "dir": "session-sim",
+      "interpreter": {
+        "interpret": "live_midi_record"
+      },
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/live-midi/fpga/verify_live_midi.py --outdir /home/ubuntu/work/live-midi/build/trials/T-LIVE-MIDI/20260926T145837Z-1dcb2e3-sim-105867-4fcc95/session-sim",
+      "cwd": "/home/ubuntu/work/live-midi",
+      "execution": {
+        "state": "PASS",
+        "rc": 0,
+        "secs": 2.8
+      },
+      "verdict": "PASS",
+      "reasons": [],
+      "coverage": {
+        "expected": {
+          "scenarios": [
+            "coverage",
+            "pressure",
+            "sustained"
+          ],
+          "rtl": []
+        },
+        "observed": {
+          "scenarios": [
+            "coverage",
+            "coverage@65000",
+            "pressure",
+            "sustained"
+          ],
+          "i2s_periods": {}
+        }
+      },
+      "metrics": {
+        "latency_sustained": {
+          "n": 905,
+          "p50_ms": 16.020833333333332,
+          "p95_ms": 16.729166666666668,
+          "p99_ms": 16.979166666666668,
+          "max_ms": 17.041666666666668
+        }
+      },
+      "artifacts": [
+        {
+          "path": "session-sim/log.txt",
+          "sha256": "a4de3d9b53fb0072308237a7e244c8e21419a1833a27cda5f5c39be3c50e5173",
+          "bytes": 1541
+        },
+        {
+          "path": "session-sim/verification.json",
+          "sha256": "381c4ca4f682ee0609d79db93b8ef06e78bdd7071fb9835c6c95797954ee433c",
+          "bytes": 17761
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "id": "drop-note-off",
+      "role": "control",
+      "checker": "fpga/verify_live_midi.py",
+      "property": null,
+      "intended_reason": "a lost note-off is caught by voice_gate and stuck_notes",
+      "dir": "drop-note-off",
+      "interpreter": {
+        "interpret": "live_midi_record"
+      },
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/live-midi/fpga/verify_live_midi.py --control DROP_NOTE_OFF --expect-fail --outdir /home/ubuntu/work/live-midi/build/trials/T-LIVE-MIDI/20260926T145837Z-1dcb2e3-sim-105867-4fcc95/drop-note-off",
+      "cwd": "/home/ubuntu/work/live-midi",
+      "execution": {
+        "state": "PASS",
+        "rc": 0,
+        "secs": 0.5
+      },
+      "verdict": "FAIL",
+      "reasons": [
+        "DROP_NOTE_OFF: must move ['voice_gate', 'stuck_notes']; caught (exit 0)"
+      ],
+      "coverage": {
+        "expected": null,
+        "observed": null
+      },
+      "metrics": {
+        "matrix": {
+          "static_image": "BLIND",
+          "voice_gate": "MOVED",
+          "voice_pitch": "MOVED",
+          "drum_strikes": "BLIND",
+          "drum_coeffs": "BLIND",
+          "knobs": "BLIND",
+          "timing": "BLIND",
+          "stuck_notes": "MOVED",
+          "refusals": "BLIND",
+          "release_domain": "BLIND",
+          "queues": "BLIND",
+          "latency": "BLIND"
+        }
+      },
+      "caught": true,
+      "artifacts": [
+        {
+          "path": "drop-note-off/log.txt",
+          "sha256": "9f2cf9610879e06e9500d955de277aa44851904db10c1ab4273de4f90e89c32f",
+          "bytes": 234
+        },
+        {
+          "path": "drop-note-off/verification.json",
+          "sha256": "02788b18812dc85a98a533d4201af3d8b10e64bd8fd781166dd2804a1dedc41a",
+          "bytes": 1062
+        }
+      ]
+    },
+    {
+      "id": "wrong-drum-map",
+      "role": "control",
+      "checker": "fpga/verify_live_midi.py",
+      "property": null,
+      "intended_reason": "GM 38 struck as the clap is caught by drum_strikes",
+      "dir": "wrong-drum-map",
+      "interpreter": {
+        "interpret": "live_midi_record"
+      },
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/live-midi/fpga/verify_live_midi.py --control WRONG_DRUM_MAP --expect-fail --outdir /home/ubuntu/work/live-midi/build/trials/T-LIVE-MIDI/20260926T145837Z-1dcb2e3-sim-105867-4fcc95/wrong-drum-map",
+      "cwd": "/home/ubuntu/work/live-midi",
+      "execution": {
+        "state": "PASS",
+        "rc": 0,
+        "secs": 0.5
+      },
+      "verdict": "FAIL",
+      "reasons": [
+        "WRONG_DRUM_MAP: must move ['drum_strikes']; caught (exit 0)"
+      ],
+      "coverage": {
+        "expected": null,
+        "observed": null
+      },
+      "metrics": {
+        "matrix": {
+          "static_image": "BLIND",
+          "voice_gate": "BLIND",
+          "voice_pitch": "BLIND",
+          "drum_strikes": "MOVED",
+          "drum_coeffs": "MOVED",
+          "knobs": "BLIND",
+          "timing": "BLIND",
+          "stuck_notes": "BLIND",
+          "refusals": "BLIND",
+          "release_domain": "BLIND",
+          "queues": "BLIND",
+          "latency": "BLIND"
+        }
+      },
+      "caught": true,
+      "artifacts": [
+        {
+          "path": "wrong-drum-map/log.txt",
+          "sha256": "b742e97eb0679598d77ffab0c8baf55ff781bf1fb53e591aba7813f8996ac13f",
+          "bytes": 222
+        },
+        {
+          "path": "wrong-drum-map/verification.json",
+          "sha256": "47da49b957812f0ec2020d5aba3bc32d12fcd8961ae2b7d95cbdbc382ae7044d",
+          "bytes": 929
+        }
+      ]
+    },
+    {
+      "id": "delayed-event",
+      "role": "control",
+      "checker": "fpga/verify_live_midi.py",
+      "property": null,
+      "intended_reason": "one event 5 ms late is caught by timing",
+      "dir": "delayed-event",
+      "interpreter": {
+        "interpret": "live_midi_record"
+      },
+      "command": "/home/ubuntu/work/venv/bin/python /home/ubuntu/work/live-midi/fpga/verify_live_midi.py --control DELAYED_EVENT --expect-fail --outdir /home/ubuntu/work/live-midi/build/trials/T-LIVE-MIDI/20260926T145837Z-1dcb2e3-sim-105867-4fcc95/delayed-event",
+      "cwd": "/home/ubuntu/work/live-midi",
+      "execution": {
+        "state": "PASS",
+        "rc": 0,
+        "secs": 0.5
+      },
+      "verdict": "FAIL",
+      "reasons": [
+        "DELAYED_EVENT: must move ['timing']; caught (exit 0)"
+      ],
+      "coverage": {
+        "expected": null,
+        "observed": null
+      },
+      "metrics": {
+        "matrix": {
+          "static_image": "BLIND",
+          "voice_gate": "BLIND",
+          "voice_pitch": "MOVED",
+          "drum_strikes": "BLIND",
+          "drum_coeffs": "BLIND",
+          "knobs": "BLIND",
+          "timing": "MOVED",
+          "stuck_notes": "BLIND",
+          "refusals": "BLIND",
+          "release_domain": "BLIND",
+          "queues": "BLIND",
+          "latency": "BLIND"
+        }
+      },
+      "caught": true,
+      "artifacts": [
+        {
+          "path": "delayed-event/log.txt",
+          "sha256": "c4a50b81a07b420100a2ea44bbfa889d65ee93f2ad8fd3819fa64568ddba5a61",
+          "bytes": 215
+        },
+        {
+          "path": "delayed-event/verification.json",
+          "sha256": "112858c7d2338cf354e6653aeddcaee746457f5c65fd10f14a3c74768271ce8e",
+          "bytes": 1020
+        }
+      ]
+    }
+  ],
+  "verdict": "PASS",
+  "verdict_reasons": [],
+  "coverage": {
+    "required_children": 1,
+    "with_valid_verdict": 1,
+    "passing": 1,
+    "controls": 3,
+    "controls_caught": 3
+  },
+  "receipt_sha256": "baac22980199c20139aa25c60d146cba689bf186a81a46e6a474e718c9a60b08"
+}

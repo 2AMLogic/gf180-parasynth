@@ -26,6 +26,12 @@ reads:
 .venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage
 ```
 
+The run exits 0 (`fpga/reports/live-midi/start-command.log`): 190 init writes
+acknowledged, 203 scheduled writes executed, 14 refusals printed by name,
+device errors 0, drops 0, queue peak 17. Its first run REFUSED at start: 48 of
+190 ACKs were counted. The fault was in `uart_host.Bridge._take`, which dropped
+every ACK after the first in a chunk; it is fixed, with a regression test.
+
 The hardware form is the same command with a serial port and a Linux raw MIDI
 device, for example `--port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0`. **It has
 not been exercised on a board.** Hardware MIDI-to-audio latency is a later
@@ -238,6 +244,20 @@ Each control prints the full MOVED/BLIND matrix (rule 4).
   be paired write-for-write with the schedule; it is caught at the device
   contract.
 
+**RTL results** (`fpga/reports/live-midi/verification.json`; captures and run
+receipts under `rtl-replay/`):
+
+| replay | writes | frame errors | I2S mismatch |
+|---|---|---|---|
+| coverage | 394/394 | 0 | 0 of 108 912 periods |
+| pressure | 585/585 | 0 | 0 of 46 512 periods |
+| sustained (first 3 s) | 499/499 | 0 | 0 of 166 372 periods |
+| control WRONG_DRUM_MAP | wrong address at write 346 | -- | **47 824** of 108 912 (caught) |
+| control DELAYED_EVENT | writes 205.. land 240 frames late | 240 | **84 447** of 108 912 (caught) |
+
+`make trial T=T-LIVE-MIDI ARGS="--mode sim"` gives PASS with 3 of 3 controls
+caught (`trial-sim.log`, `trial-sim.receipt.json`).
+
 **Start red.** Against `fpga/stubs/midi_session_stub.py` every scenario FAILS
 by named property (static image 0/190, gates 0/19, strikes 0/14, refusals
 0/14, ...; `fpga/reports/live-midi/start-red.log`). A first stub with a naive
@@ -246,9 +266,9 @@ any property was read.
 
 ## Wrong-then-right record
 
-Six results were wrong before they were right. Five were caught by a control,
-a precondition or a test. The sixth was caught by re-measuring a number
-before publishing it:
+Seven results were wrong before they were right. Five were caught by a
+control, a precondition or a test. One was caught by re-measuring a number
+before publishing it. One was caught by actually running the start command:
 
 1. **Naive time map.** The first stub's time map ignored the STATUS
    request's two byte-times and the reply's eight, and was 34 frames off. The
@@ -267,6 +287,10 @@ before publishing it:
    failing red. The unit test on the stub caught it.
 6. **Device queue peak.** This document first stated a device queue peak of
    17 (copied from the host peak). Measured, it is 18.
+7. **Start command REFUSED at start.** The documented start command's first
+   run on the box REFUSED: 48 of 190 ACKs. `SimSerial` delivers one ACK per
+   read, and every deterministic test passed. A real-time pty delivers four,
+   and `Bridge._take` counted only the first of each chunk.
 
 ## Known limits
 
