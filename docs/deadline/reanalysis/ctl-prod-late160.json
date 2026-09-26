@@ -1,0 +1,327 @@
+{
+ "scenario": "threesaw-f1cal",
+ "configuration": {
+  "OSC2X": 1,
+  "FILTER2X": 1,
+  "PULSE2X": 0
+ },
+ "bench": "tb_top_bx (SPI pins)",
+ "go_cycle": 8,
+ "inject": null,
+ "mutant": "late:160",
+ "status": "FAIL",
+ "reasons": [
+  "3691 missed frame(s), first [2, 3, 4, 5, 6]",
+  "datapath busy at 1846 tick(s)",
+  "sticky overrun flag set",
+  "1846 frame(s) with no sample",
+  "29 write(s) during computation, 0 frame(s) with a write at/after go",
+  "wire_mismatch 3624"
+ ],
+ "deadline_failed": true,
+ "schedule": {
+  "frames": 3691,
+  "missed": 3691,
+  "missed_frames": [
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21
+  ],
+  "bad_go": 0,
+  "writes_in_compute": 29,
+  "frames_with_write_after_go": 0,
+  "worst_sample_slack": 175,
+  "worst_busy_slack": 0,
+  "worst_drum_slack": 130,
+  "strobe_range": [
+   -1,
+   79
+  ],
+  "voice_start": [
+   -1,
+   9
+  ],
+  "drum_start": [
+   9
+  ],
+  "max_rwait": 19,
+  "max_oscwait": 60,
+  "max_dwait": 1,
+  "max_active_windows": 2,
+  "cost_model": {
+   "analysis_version": 2,
+   "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+   "checked_frames": 1845,
+   "frames_without_strobe": 1846,
+   "constant": 58,
+   "residuals": {
+    "58": 1826,
+    "60": 8,
+    "62": 8,
+    "79": 3
+   },
+   "ywait_range": [
+    0,
+    0
+   ],
+   "exceptions": 1845,
+   "first_exceptions": [
+    {
+     "frame": 3,
+     "residual": 58,
+     "ywait": 0
+    },
+    {
+     "frame": 5,
+     "residual": 58,
+     "ywait": 0
+    },
+    {
+     "frame": 7,
+     "residual": 58,
+     "ywait": 0
+    },
+    {
+     "frame": 9,
+     "residual": 58,
+     "ywait": 0
+    },
+    {
+     "frame": 11,
+     "residual": 58,
+     "ywait": 0
+    }
+   ],
+   "explained": false
+  },
+  "write_cycles": [
+   2,
+   2
+  ],
+  "max_writes_per_frame": 1,
+  "slack_histogram_8": {
+   "168": 3,
+   "192": 1842
+  },
+  "worst_frames": [
+   {
+    "frame": 61,
+    "go": 8,
+    "v_start": -1,
+    "v_last": 78,
+    "strobe": 79,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 0,
+    "wr_first": -1,
+    "wr_last": -1,
+    "wr_in_compute": 0,
+    "busy_at_tick": 1,
+    "rwait": 0,
+    "oscwait": 0,
+    "dwait": 0,
+    "win": 0,
+    "w1": 0,
+    "im1": 0,
+    "sk": 0,
+    "ywait": 0,
+    "sample_slack": 175,
+    "busy_slack": 177,
+    "drum_slack": 130
+   },
+   {
+    "frame": 63,
+    "go": 8,
+    "v_start": -1,
+    "v_last": 78,
+    "strobe": 79,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 1,
+    "wr_first": 2,
+    "wr_last": 2,
+    "wr_in_compute": 1,
+    "busy_at_tick": 1,
+    "rwait": 0,
+    "oscwait": 0,
+    "dwait": 0,
+    "win": 0,
+    "w1": 0,
+    "im1": 0,
+    "sk": 0,
+    "ywait": 0,
+    "sample_slack": 175,
+    "busy_slack": 177,
+    "drum_slack": 130
+   },
+   {
+    "frame": 65,
+    "go": 8,
+    "v_start": -1,
+    "v_last": 78,
+    "strobe": 79,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 1,
+    "wr_first": 2,
+    "wr_last": 2,
+    "wr_in_compute": 1,
+    "busy_at_tick": 1,
+    "rwait": 0,
+    "oscwait": 0,
+    "dwait": 0,
+    "win": 0,
+    "w1": 0,
+    "im1": 0,
+    "sk": 0,
+    "ywait": 0,
+    "sample_slack": 175,
+    "busy_slack": 177,
+    "drum_slack": 130
+   },
+   {
+    "frame": 935,
+    "go": 8,
+    "v_start": -1,
+    "v_last": 61,
+    "strobe": 62,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 0,
+    "wr_first": -1,
+    "wr_last": -1,
+    "wr_in_compute": 0,
+    "busy_at_tick": 1,
+    "rwait": 0,
+    "oscwait": 0,
+    "dwait": 0,
+    "win": 0,
+    "w1": 0,
+    "im1": 0,
+    "sk": 0,
+    "ywait": 0,
+    "sample_slack": 192,
+    "busy_slack": 194,
+    "drum_slack": 130
+   },
+   {
+    "frame": 937,
+    "go": 8,
+    "v_start": -1,
+    "v_last": 61,
+    "strobe": 62,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 0,
+    "wr_first": -1,
+    "wr_last": -1,
+    "wr_in_compute": 0,
+    "busy_at_tick": 1,
+    "rwait": 0,
+    "oscwait": 0,
+    "dwait": 0,
+    "win": 0,
+    "w1": 0,
+    "im1": 0,
+    "sk": 0,
+    "ywait": 0,
+    "sample_slack": 192,
+    "busy_slack": 194,
+    "drum_slack": 130
+   }
+  ]
+ },
+ "analysis_version": 2,
+ "evidence_problems": [],
+ "facts": {
+  "busy_at_tick": 1846,
+  "overrun": 1,
+  "overflow": 0,
+  "frames_no_sample": 1846,
+  "worst_strobe_cycle": 79,
+  "periods": 3692,
+  "periods_required": 3692,
+  "periods_decoded": 3692,
+  "wire_mismatch": 3624,
+  "swap": 0,
+  "width": 0,
+  "writes_sent": 60,
+  "writes_seen": 60,
+  "writes_bad": 0,
+  "frame_pred_bad": 0,
+  "collisions": null,
+  "model_peak": 32767
+ },
+ "coverage": {
+  "three_saws_gate_on": 3629,
+  "three_2x_gate_on": 3629
+ },
+ "provenance": {
+  "commit": "2221d2c-dirty",
+  "files": {
+   "synth_top.v": "e4f8d97b9785",
+   "voice_dp.v": "a15752570543",
+   "spi_ctl.v": "8892b72cde65",
+   "drum_regs.v": "c20808c86b23",
+   "drum_kit.v": "41bdf7a73aaa",
+   "drum_dp.v": "debc3ed0d64e",
+   "modal_dp.v": "dd4906617919",
+   "i2s_tx.v": "2cdb2112a11e",
+   "ladder_dp_n.v": "22e2be19863b",
+   "recip_div.v": "bf081a1b780d",
+   "osc_2x_saw_bank.v": "05869337f593",
+   "osc_2x_saw_path.v": "9e61079d40fa",
+   "polyblep_saw_pair.v": "1576461daa91",
+   "osc_substep_pair.v": "6dc5cfb922cb",
+   "decimate_2x_tm_sym.v": "0575e80ef33c",
+   "rate_conv_2x.v": "0e28468820bd",
+   "tb_top_bx.v": "dc2c177a0ec0",
+   "tb_uart_bx.v": "3d0e792b0de1",
+   "uart_bridge.v": "25ef72bc47f9",
+   "deadline_mon.vh": "b57cc36a8fc5",
+   "deadline_mon_top.v": "45fc4b0c22f3",
+   "deadline_mon_arty.v": "00507623ea2a",
+   "fpga/rtl/arty_a7_top.v": "664a4359af90"
+  },
+  "generated": {
+   "tanh16.hex": "a5c4862a7e90",
+   "tanh256.hex": "c6e81324b225"
+  },
+  "defines": [
+   "VOICE_OSC_2X",
+   "VOICE_FILTER_2X"
+  ]
+ },
+ "reanalysis": {
+  "analysis_version": 2,
+  "capture_dir": "rtl-sketch/build/deadline/threesaw-f1cal-late160",
+  "capture_sha256": {
+   "top_bx_cmds.txt": "d9bb1ea96f8c33f7d489b899f12b7002cc5d2f05d8a7fdee902190fb8e786b0d",
+   "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "991d7e2ab2c8648f31d5c9b1e80ab163fba1380ea4ceb40601d5784644508981",
+   "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e5e790e642e592d153d43ec8c521c31b252198fca74edc502d81f979d651c3aa",
+   "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "b4a96636de4cf475a600b35bc6b58ee0eb24b560bee579ddb4ebf426f9650319"
+  },
+  "original_record": "docs/deadline/runs/ctl-prod-late160.json",
+  "original_status": "FAIL",
+  "original_analysis_version": 1,
+  "facts_source": "schedule trace; overflow from the run record",
+  "note": "re-judged from retained files; no simulation. provenance is the ORIGINAL run's identity"
+ }
+}
