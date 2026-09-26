@@ -7,6 +7,14 @@
     # on hardware (Linux raw MIDI device; NOT YET EXERCISED on a board):
     .venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0
 
+THE IMAGE (#273). The drum kit in the known-state image is a property of the
+Arty image on the board, not of the tree this runs from (uart_host.image_kit).
+On a serial port the default is `--image release`: the published R1 image,
+contract revision 11, which has no ENV_FRATE and plays revision 11's clap.
+`--image tree` is a board built from this tree (revision 14). `--port sim` is
+this tree's device contract, so it implies `tree`, and `--port sim --image
+release` is REFUSED rather than letting a revision-11 kit pass against it.
+
 A keyboard's MIDI stream in, register writes out, over the existing USB-UART
 control link (fpga/uart_host.py's packets, rtl-sketch/uart_bridge.v's device
 contract). No GUI, no on-chip USB, no sequencer, no new protocol: every write
@@ -269,7 +277,7 @@ class MidiSession:
 
     def __init__(self, ser, *, clock=time, baud: int = uh.DEFAULT_BAUD,
                  preset: str | None = None, patch: dict | None = None,
-                 inject=frozenset(), out=None):
+                 image: str = uh.DEFAULT_IMAGE, inject=frozenset(), out=None):
         import spi_host as sh
         import voice_fx as vf
         import selected_preset
@@ -286,7 +294,11 @@ class MidiSession:
         # the release's player-facing domain (#255): a patch outside it is
         # refused before anything is sent
         self.patch_summary = qd.check_patch(regs, name=preset or "default")
-        self.mh = sh.MusicHost(patch=dict(regs))
+        # the kit the IMAGE on the board plays (uart_host.image_kit): the frozen
+        # revision-11 kit for the published release REFUSES (KitRefused) if it
+        # has drifted; never MusicHost's fallback to the tree's kit_808()
+        self.image = image
+        self.mh = sh.MusicHost(patch=dict(regs), kit=uh.image_kit(image))
         self.keys = MonoKeys(regs)
         self.mod_routed = bool(int(regs["mroute"]) & (vf.MR_OSC | vf.MR_FILT))
         self.parser = MidiParser()
@@ -353,7 +365,9 @@ class MidiSession:
         now = self.clock.monotonic()
         self.next_poll = now + C.STATUS_POLL_S
         self.stats["init_writes"] = len(writes)
-        self._say(f"midi_session: known state sent ({len(writes)} writes, acknowledged); "
+        self._say(f"midi_session: known state sent ({len(writes)} writes, acknowledged; "
+                  f"kit for image {self.image}, contract revision "
+                  f"{uh.IMAGE_REVISION[self.image]}); "
                   f"device frame {self.anchor[0]} at host {self.anchor[1]:.6f} s")
 
     def _anchor(self) -> None:
@@ -825,6 +839,21 @@ def run_live(session: MidiSession, source: RawMidiInput, *, duration_s: float | 
     return why
 
 
+def resolve_image(port: str, image: str | None) -> str:
+    """The image a session drives. A serial port defaults to the published
+    release (revision 11); `sim` is this tree's device contract (revision 14), so
+    it implies `tree` and REFUSES `release`."""
+    if port == "sim":
+        if image == "release":
+            raise uh.Refused("--port sim is this tree's device contract (contract "
+                             f"revision {uh.IMAGE_REVISION['tree']}); a revision-"
+                             f"{uh.IMAGE_REVISION['release']} release kit against it "
+                             "verifies nothing -- use --image tree, or a board "
+                             "running the release image")
+        return "tree"
+    return image or uh.DEFAULT_IMAGE
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -835,7 +864,17 @@ def main(argv=None) -> int:
                     "`-` for stdin, or scripted:<scenario> (coverage, pressure, sustained)")
     ap.add_argument("--preset", default=None, help="selected_preset name (default patch if omitted)")
     ap.add_argument("--duration", type=float, default=None, help="stop after this many seconds")
+    ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
+                    help="the Arty image on the board, which decides the drum kit sent: "
+                         "release (the published R1 image, contract revision 11 -- the "
+                         "DEFAULT on a serial port) or tree (built from this tree, "
+                         "revision 14 -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
+    try:
+        image = resolve_image(a.port, a.image)
+    except uh.Refused as exc:
+        print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
+        return 2
     sim = None
     if a.port == "sim":
         import uart_device_sim as dev
@@ -863,7 +902,7 @@ def main(argv=None) -> int:
             print(f"midi_session: REFUSED -- cannot open MIDI input {a.midi_in}: {exc}",
                   file=sys.stderr)
             return 2
-    session = MidiSession(ser, preset=a.preset, out=sys.stdout)
+    session = MidiSession(ser, preset=a.preset, image=image, out=sys.stdout)
     try:
         session.start()
     except uh.Refused as exc:

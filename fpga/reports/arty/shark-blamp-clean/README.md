@@ -1,7 +1,7 @@
 # Arty wrapper UART-bridge clean run, polyBLAMP-on-shark-tooth tree
 
 The wrapper's digital proof for the tree that carries the shark-tooth's
-polyBLAMP correction (contract revision 12, DR 0017 — `voice_dp.v` appends
+polyBLAMP correction (contract revision 13 -- written as 12 when it merged, renumbered in #273 because 12 is drift -- DR 0017 — `voice_dp.v` appends
 states `S_SKM`/`S_W3`/`S_W4` after `S_DR1`, so this PR's states start at 80
 rather than colliding with the drift work's `S_DA0`..`S_DR1` at 75..79). This
 is what `fpga/publish_arty.py`'s `VERIFICATION_BY_WRAPPER["arty_a7_top"]`

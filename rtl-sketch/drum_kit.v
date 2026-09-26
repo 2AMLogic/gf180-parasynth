@@ -31,6 +31,7 @@ module drum_kit #(
     input  wire [ENVS*27-1:0]      env_ctl_bus,
     input  wire [ENVS*24-1:0]      env_peak_bus,
     input  wire [ENVS*16-1:0]      env_rate_bus,
+    input  wire [ENVS*16-1:0]      env_frate_bus,
     input  wire [PATHS*25-1:0]     path_bus,
     input  wire [MODES*(CF+2)-1:0] a1_bus,
     input  wire [MODES*(CF+2)-1:0] a2_bus,
@@ -50,7 +51,7 @@ module drum_kit #(
     drum_dp #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .STOPS(STOPS), .SB(SB), .EW(EW), .MW(MW), .ROM_FILE(ROM_FILE)) src (
         .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick), .stops(stops), .accent_bus(accent_bus),
         .osc_inc_bus(osc_inc_bus), .env_ctl_bus(env_ctl_bus), .env_peak_bus(env_peak_bus),
-        .env_rate_bus(env_rate_bus), .path_bus(path_bus), .tap_sel(tap_sel), .tap_y1(tap_y1),
+        .env_rate_bus(env_rate_bus), .env_frate_bus(env_frate_bus), .path_bus(path_bus), .tap_sel(tap_sel), .tap_y1(tap_y1),
         .exc_we(exc_we), .exc_mode(exc_mode), .exc_val(exc_val), .bank_start(bank_start),
         .mix_out(mix_out), .mix_valid(mix_valid));
 

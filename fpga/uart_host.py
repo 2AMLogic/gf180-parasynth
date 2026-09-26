@@ -119,6 +119,26 @@ FRAME_S = Fraction(CYC_PER_FRAME, CLK_HZ)
 
 DEFAULT_BAUD = 115_200
 UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
+
+# ---- the image this CLI drives, and so the drum kit it sends ------------------
+# The kit is a property of the IMAGE on the board, not of the tree the CLI runs
+# from. The published R1 image (fpga/release, integrated-baseline-2025.1) is
+# contract revision 11 RTL: no ENV_FRATE, no final strike. Revision 14's
+# `kit_808()` programs a clap that image cannot play, so the default -- the
+# image a player actually has -- sends revision 11's frozen kit, and a board
+# built from this tree is named explicitly (`--image tree`).
+IMAGE_REVISION = {"release": 11, "tree": 14}
+DEFAULT_IMAGE = "release"
+
+
+def image_kit(image: str = DEFAULT_IMAGE) -> list:
+    """The drum kit `image` plays (drums_fx.KITS_BY_REVISION). The frozen
+    revision-11 kit REFUSES (drums_fx.KitRefused) if it no longer hashes to the
+    image it was verified with."""
+    import drums_fx as dx
+    if image not in IMAGE_REVISION:
+        raise ValueError(f"image {image!r} is not one of {sorted(IMAGE_REVISION)}")
+    return dx.KITS_BY_REVISION[IMAGE_REVISION[image]]()
 BITS_PER_BYTE = 10
 
 OP_WRITE = 0x57
@@ -541,16 +561,17 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     return writes
 
 
-def fixture_split(fixture: str) -> tuple:
+def fixture_split(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """(static, timed, n_frames, host): a scripted fixture's writes, spread
     by the link's own rules, split into the configuration image its
     `MusicHost.load()` emitted and everything after it. The split is by
     POSITION (`load_span`), never by tag: a hit writes an "accent" and a
     key writes a "glide" too, and treating those as setup would play every
-    accent of the pattern at t=0 and none on its step."""
+    accent of the pattern at t=0 and none on its step. The kit in the load
+    image is the one `image` plays (`image_kit`)."""
     import fixtures
     import spi_host as sh
-    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    host, n_frames, _cover = fixtures.FIXTURES[fixture](kit=image_kit(image))
     if host.load_span is None:
         raise ValueError(f"fixture {fixture!r} has no load(): nothing to "
                          "deliver as static configuration")
@@ -575,7 +596,7 @@ def fixture_split(fixture: str) -> tuple:
     return static, timed, n_frames, host
 
 
-def phrase_static_and_events(fixture: str) -> tuple:
+def phrase_static_and_events(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """A scripted phrase SPLIT the way the link delivers it: the fixture's
     configuration image (`MusicHost.load()`: patch, kit, initial accents)
     as live writes carrying no due, and everything after it (keys, hits,
@@ -587,14 +608,14 @@ def phrase_static_and_events(fixture: str) -> tuple:
     frames at 115200 -- a due'd load image would die under the wire no
     matter how the phrase rolled. As live writes it applies ahead of the
     music, which starts ROLLING_START_FRAMES after the image completes."""
-    static, timed, n_frames, _host = fixture_split(fixture)
+    static, timed, n_frames, _host = fixture_split(fixture, image)
     st = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static]
     ev = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed]
     end = (max(d for d, *_ in ev) + 64) if ev else n_frames
     return st, ev, end
 
 
-def phrase_events(fixture: str) -> tuple:
+def phrase_events(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """A scripted phrase as scheduled events: (due, flag, sec, addr, data),
     reusing the existing fixtures and the link's own spreading rules. Dues are
     >= 1 frame apart, which the device's two write slots deliver exactly.
@@ -612,7 +633,7 @@ def phrase_events(fixture: str) -> tuple:
         return _phrase_events_m5a()
     import fixtures
     import spi_host as sh
-    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    host, n_frames, _cover = fixtures.FIXTURES[fixture](kit=image_kit(image))
     link = sh.LinkTiming.contract_max()
     step = link.min_land_gap()
     ws = sh.feasible(sorted(host.w, key=lambda w: w.frame), link)
@@ -1640,6 +1661,11 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "mode -- the DEFAULT), m5a (the short phrase the "
                          "UART bench proves), bar808 (full musical fixture; "
                          "preflight REFUSES it: over queue and wire budget)")
+    ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
+                    help="the Arty image on the board, which decides the drum kit a "
+                         "fixture sends: release (the published R1 image, contract "
+                         "revision 11, no final strike -- the DEFAULT) or tree (an "
+                         "image built from this tree, revision 14)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
     ap.add_argument("--engineering", action="store_true",
@@ -1661,6 +1687,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
     common.add_argument("--note", type=int, default=argparse.SUPPRESS)
     common.add_argument("--hold-frames", type=int, default=argparse.SUPPRESS)
     common.add_argument("--fixture", default=argparse.SUPPRESS)
+    common.add_argument("--image", default=argparse.SUPPRESS, choices=sorted(IMAGE_REVISION))
     common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("--engineering", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("--capture", default=argparse.SUPPRESS, metavar="PREFIX",
@@ -1691,11 +1718,11 @@ def main(argv=None, *, bridge_factory=None) -> int:
         # The first phrase is `--fixture m5a` (bench-proven), never a default.
         fixture = a.fixture or "none"
         if fixture == "m5a":
-            fx_events, _end = phrase_events(fixture)
+            fx_events, _end = phrase_events(fixture, a.image)
         elif fixture != "none":
             # the fixture's own structure: its load() image as live setup,
             # everything after it as scheduled events
-            fx_static, fx_events, _end = phrase_static_and_events(fixture)
+            fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
     fixture_image = a.cmd in ("play", "run") and (a.fixture or "none") != "none"
     if fixture_image and a.preset and not a.engineering:
         # the fixture programs its own patch over the preset: the player

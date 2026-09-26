@@ -22,7 +22,7 @@ SR = 48_000
 
 class MidiSession:
     def __init__(self, ser, *, clock, baud: int = uh.DEFAULT_BAUD, preset=None,
-                 inject=frozenset()):
+                 image=uh.DEFAULT_IMAGE, inject=frozenset()):
         self.bridge = uh.Bridge.on_serial(ser, baud, clock=clock)
         self.clock = clock
         self.anchor = None

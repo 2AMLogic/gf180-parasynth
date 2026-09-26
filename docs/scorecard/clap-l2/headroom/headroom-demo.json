@@ -1,0 +1,305 @@
+{
+  "tool": "tools/headroom_demo_mix.py",
+  "fixture": "demo",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "link": "tb_top_bx 1.536 MHz",
+  "writes": 489,
+  "coverage": {
+    "writes": 489,
+    "bd_attack": 40,
+    "bd_hot": 20,
+    "bd_restore": 20,
+    "tom_bend": 56,
+    "strikes": 18,
+    "gates": 32,
+    "knobs": 36
+  },
+  "dvol": [
+    14746
+  ],
+  "bvol": [
+    14746
+  ],
+  "provenance": {
+    "commit": "3886191",
+    "described": "3886191",
+    "branch": "b1/l2-integrate",
+    "dirty": false,
+    "uncommitted_sha256": "e3b0c44298fc1c14",
+    "untracked_files": 0,
+    "at": "2026-09-26T13:59:12Z",
+    "tool_sha": "sha256:79455349becc6d8c"
+  },
+  "l2": {
+    "frames": 198103,
+    "pre_clamp_over": 0,
+    "pre_clamp_over_first": [],
+    "rail_samples": 0,
+    "peak_pre_clamp": 26072,
+    "peak_sample": 26072,
+    "headroom_db": 1.985,
+    "rms_dbfs": -16.08,
+    "env_saturated_fires": 16,
+    "env_saturated_where": [
+      {
+        "env": 6,
+        "frame": 400
+      },
+      {
+        "env": 6,
+        "frame": 12603
+      },
+      {
+        "env": 6,
+        "frame": 24807
+      },
+      {
+        "env": 6,
+        "frame": 37010
+      },
+      {
+        "env": 6,
+        "frame": 49214
+      },
+      {
+        "env": 6,
+        "frame": 61417
+      },
+      {
+        "env": 6,
+        "frame": 73620
+      },
+      {
+        "env": 6,
+        "frame": 85824
+      },
+      {
+        "env": 6,
+        "frame": 98027
+      },
+      {
+        "env": 6,
+        "frame": 110231
+      },
+      {
+        "env": 6,
+        "frame": 122434
+      },
+      {
+        "env": 6,
+        "frame": 134637
+      },
+      {
+        "env": 6,
+        "frame": 146841
+      },
+      {
+        "env": 6,
+        "frame": 159044
+      },
+      {
+        "env": 6,
+        "frame": 171247
+      },
+      {
+        "env": 6,
+        "frame": 183451
+      }
+    ],
+    "cp_fires": 2,
+    "sample_sha256": "200a4580ae8a8512531588f986ca953c42192aac438bb9c84dafae0dd9d48b8c"
+  },
+  "pre_l2": {
+    "frames": 198103,
+    "pre_clamp_over": 0,
+    "pre_clamp_over_first": [],
+    "rail_samples": 0,
+    "peak_pre_clamp": 26159,
+    "peak_sample": 26159,
+    "headroom_db": 1.956,
+    "rms_dbfs": -16.1,
+    "env_saturated_fires": 16,
+    "env_saturated_where": [
+      {
+        "env": 6,
+        "frame": 400
+      },
+      {
+        "env": 6,
+        "frame": 12603
+      },
+      {
+        "env": 6,
+        "frame": 24807
+      },
+      {
+        "env": 6,
+        "frame": 37010
+      },
+      {
+        "env": 6,
+        "frame": 49214
+      },
+      {
+        "env": 6,
+        "frame": 61417
+      },
+      {
+        "env": 6,
+        "frame": 73620
+      },
+      {
+        "env": 6,
+        "frame": 85824
+      },
+      {
+        "env": 6,
+        "frame": 98027
+      },
+      {
+        "env": 6,
+        "frame": 110231
+      },
+      {
+        "env": 6,
+        "frame": 122434
+      },
+      {
+        "env": 6,
+        "frame": 134637
+      },
+      {
+        "env": 6,
+        "frame": 146841
+      },
+      {
+        "env": 6,
+        "frame": 159044
+      },
+      {
+        "env": 6,
+        "frame": 171247
+      },
+      {
+        "env": 6,
+        "frame": 183451
+      }
+    ],
+    "cp_fires": 2,
+    "sample_sha256": "3e913fc721a209293712e710c6e6eb6171e5913503853535d2591582e89f9674"
+  },
+  "control_hot": {
+    "frames": 198103,
+    "pre_clamp_over": 30595,
+    "pre_clamp_over_first": [
+      427,
+      444,
+      453,
+      454,
+      460,
+      474,
+      478,
+      479,
+      482,
+      486
+    ],
+    "rail_samples": 30601,
+    "peak_pre_clamp": 147419,
+    "peak_sample": 32768,
+    "headroom_db": -13.062,
+    "rms_dbfs": -5.31,
+    "env_saturated_fires": 22,
+    "env_saturated_where": [
+      {
+        "env": 6,
+        "frame": 400
+      },
+      {
+        "env": 6,
+        "frame": 12603
+      },
+      {
+        "env": 6,
+        "frame": 24807
+      },
+      {
+        "env": 6,
+        "frame": 37010
+      },
+      {
+        "env": 6,
+        "frame": 49214
+      },
+      {
+        "env": 6,
+        "frame": 61417
+      },
+      {
+        "env": 6,
+        "frame": 73620
+      },
+      {
+        "env": 6,
+        "frame": 85824
+      },
+      {
+        "env": 6,
+        "frame": 98027
+      },
+      {
+        "env": 6,
+        "frame": 110231
+      },
+      {
+        "env": 6,
+        "frame": 122434
+      },
+      {
+        "env": 6,
+        "frame": 134637
+      },
+      {
+        "env": 6,
+        "frame": 146841
+      },
+      {
+        "env": 6,
+        "frame": 159044
+      },
+      {
+        "env": 6,
+        "frame": 171247
+      },
+      {
+        "env": 6,
+        "frame": 183451
+      },
+      {
+        "env": 8,
+        "frame": 73620
+      },
+      {
+        "env": 8,
+        "frame": 171247
+      },
+      {
+        "env": 10,
+        "frame": 49214
+      },
+      {
+        "env": 10,
+        "frame": 146841
+      }
+    ],
+    "cp_fires": 2,
+    "sample_sha256": "8ee8a41b9bc0cd1785e2c54397a973b1144f5c7249fd3d30bad61dc7f950551b"
+  },
+  "state": "QUALIFIED",
+  "exit_code": 0,
+  "refused": [],
+  "seconds": 107.9
+}

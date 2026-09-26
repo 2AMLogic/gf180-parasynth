@@ -1,0 +1,23 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --scenario phrase --outdir build/uart-rev14",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[phrase]: PASS -- writes 87/87, timing bad 0, corrupt 0, I2S mismatch 0 over 6734 periods, errs 0 {}\n{\"state\": \"PASS\", \"runs\": {\"phrase\": \"PASS\"}}\n",
+    "secs": 53.4119029045105
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --start-red --outdir build/uart-startred",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge: START RED against /home/ubuntu/work/b1-l2/fpga/stubs/arty_a7_uart_stub.v\n    0 writes drained, 26 expected\nverify_uart_bridge: start-red run state FAIL (writes_seen 0 of 26, wire_mismatch 0, periods 3418)\nverify_uart_bridge: start red confirmed -- the bench fails against a behaviour-free stub, as it must\n",
+    "secs": 23.13041639328003
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage > build/b2/start-command.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 2.8396928310394287
+  }
+]

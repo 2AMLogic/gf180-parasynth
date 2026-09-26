@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --scenario phrase --outdir build/uart-l2",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[phrase]: PASS -- writes 87/87, timing bad 0, corrupt 0, I2S mismatch 0 over 6734 periods, errs 0 {}\n{\"state\": \"PASS\", \"runs\": {\"phrase\": \"PASS\"}}\n",
+    "secs": 54.792640924453735
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --start-red --outdir build/uart-startred",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge: START RED against /home/ubuntu/work/b1-l2/fpga/stubs/arty_a7_uart_stub.v\n    0 writes drained, 26 expected\nverify_uart_bridge: start-red run state FAIL (writes_seen 0 of 26, wire_mismatch 0, periods 3418)\nverify_uart_bridge: start red confirmed -- the bench fails against a behaviour-free stub, as it must\n",
+    "secs": 23.23944354057312
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/headroom_demo_mix.py --fixture demo --out build/b1/headroom-demo.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "demo         l2           pre-clamp over      0  rail      0  peak(pre)  26072  headroom   +1.99 dB  env-sat fires  16  CP fires 2\ndemo         pre_l2       pre-clamp over      0  rail      0  peak(pre)  26159  headroom   +1.96 dB  env-sat fires  16  CP fires 2\ndemo         control_hot  pre-clamp over  30595  rail  30601  peak(pre) 147419  headroom  -13.06 dB  env-sat fires  22  CP fires 2\nheadroom_demo_mix: QUALIFIED\n",
+    "secs": 108.36537837982178
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/headroom_demo_mix.py --fixture bar808-full --out build/b1/headroom-bar808-full.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "bar808-full  l2           pre-clamp over      0  rail      0  peak(pre)  19971  headroom   +4.30 dB  env-sat fires  16  CP fires 2\nbar808-full  pre_l2       pre-clamp over      0  rail      0  peak(pre)  19971  headroom   +4.30 dB  env-sat fires  16  CP fires 2\nbar808-full  control_hot  pre-clamp over  27132  rail  27135  peak(pre) 143326  headroom  -12.82 dB  env-sat fires  22  CP fires 2\nheadroom_demo_mix: QUALIFIED\n",
+    "secs": 114.82098412513733
+  }
+]

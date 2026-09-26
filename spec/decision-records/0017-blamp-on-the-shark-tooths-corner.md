@@ -170,7 +170,8 @@ will otherwise re-derive in six months is 1.25.
 
 ## Consequences
 
-- `spec/NUMERIC-CONTRACT.md` is at **revision 12**, whose one normative change
+- `spec/NUMERIC-CONTRACT.md` is at **revision 13** (merged as "12", which drift
+  already was; renumbered in #273, see the contract's section 18), whose one normative change
   is this: 6.6 gains **6.6.5**, 6.4's shark-tooth row is marked naive-only, and
   the sentence saying the shark-tooth "needs no second correction" is replaced.
   Any other implementation of shape 5 must carry the BLAMP too, and must use the
