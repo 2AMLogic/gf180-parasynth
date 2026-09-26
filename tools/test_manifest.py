@@ -106,6 +106,58 @@ def test_the_injected_defect_control_refuses_rather_than_reporting_green(monkeyp
     assert inj.main([]) == 2
 
 
+def test_the_injection_harness_refuses_when_the_interpreter_loaded_stale_bytecode(tmp_path):
+    """The permanent control for the defect the harness itself shipped (PR #260,
+    round 2): it checked that the injected text was on DISK and never that the
+    interpreter had COMPILED it.
+
+    Four injections add exactly the ten characters `"False and "`, so their
+    `tools/manifest.py` is byte-for-byte the same SIZE; CPython's pyc
+    invalidation key is `(mtime-to-the-second, size)`; the runs are sequential
+    in one staged tree. Two same-size injections in the same wall-clock second
+    therefore ran the PREVIOUS injection's bytecode with the guard under test
+    still live, and the harness printed `GREEN (MISSED)` -- 7/8 in CI (~0.2 s
+    per pytest, no second boundary crossed), 8/8 on a laptop (~1.2 s, boundary
+    crossed). A control whose verdict depends on machine speed.
+
+    This reproduces the collision adversarially rather than waiting for a fast
+    machine to find it again: one real injection, then a *benign twin* padded
+    to exactly the same source length, both with the pinned mtime and with
+    `no_bytecode_cache` / `purge_pycache` switched off -- i.e. the as-shipped
+    harness. The twin's test would pass (its guard is intact), so the
+    as-shipped harness would have reported `GREEN (MISSED)`. What must happen
+    instead is `ControlRefused`: nothing was measured.
+
+    The third run is the falsifiability half -- with the mitigation ON, the same
+    twin reports GREEN and does *not* refuse, so the detector is discriminating
+    rather than refusing unconditionally.
+    """
+    import inject_manifest_defects as inj
+
+    real = next(i for i in inj.INJECTIONS if i[0].startswith("render() hard-clips"))
+    label, rel, old, new, tests = real
+    pad = "  #" + "p" * (len(new) - len(old) - 3)      # a comment: no behaviour change
+    assert len(old + pad) == len(new), "the twin must be the same source length"
+    twin = (label + " (benign twin, same source length)", rel, old, old + pad, tests)
+
+    tree = tmp_path / "tree"
+    inj._stage(tree)
+
+    red, _ = inj.run_one(tree, real, no_bytecode_cache=False, purge_pycache=False)
+    assert red, "the real injection must still turn its test red"
+    with pytest.raises(inj.ControlRefused, match="interpreter LOADED"):
+        inj.run_one(tree, twin, no_bytecode_cache=False, purge_pycache=False)
+
+    twin_red, _ = inj.run_one(tree, twin)      # defaults: the shipped mitigation
+    assert not twin_red, (
+        "the benign twin changes no behaviour, so with the mitigation on its "
+        "test must pass -- if this is red the twin is not benign and the "
+        "refusal above proved nothing")
+    assert not list(tree.rglob("__pycache__")), (
+        "the shipped run must leave no bytecode cache in the staged tree at all "
+        "-- that is what makes the next injection's compile unconditional")
+
+
 def test_the_bound_ledger_defaults_to_a_tracked_path():
     """The mechanism `accept()` replaces (`model/sound_report.py`'s
     `LOCK`/`LOCKS`) lives in committed source. A ledger defaulting into the
@@ -270,10 +322,63 @@ def test_render_refuses_a_clipped_render_and_records_the_peak_when_allowed(tmp_p
     assert on_disk["clipped_samples"] == rec["clipped_samples"]
 
 
+def test_a_render_normalised_to_exactly_full_scale_is_not_reported_as_clipped(tmp_path):
+    """"Normalise to full scale" is a common convention, and the scale here is
+    32768 (the exact inverse of `_read_wav16`), so `+1.0` lands one code above
+    int16's positive limit. Thresholding the guard on the int16 range therefore
+    reported `clipped_samples: 1` for a 1-LSB truncation at the single positive
+    endpoint and REFUSED the render. The guard is on `|x| > 1.0` instead:
+    everything actually beyond full scale is still caught.
+    """
+    runs = tmp_path / "runs"
+    x, sr = _tone()
+    full = x / np.max(np.abs(x))
+    rec = mf.render("T1", {"norm": "peak"}, lambda: (full, sr), runs_dir=runs)
+    assert rec["requested_peak"] == pytest.approx(1.0, abs=1e-12)
+    assert rec["clipped_samples"] == 0, "full scale is not a wrong instrument state"
+
+    with pytest.raises(mf.Refused, match="hard-clipped"):
+        mf.render("T1", {"norm": "over"},
+                  lambda: (full * (1.0 + 4.0 / 32768.0), sr), runs_dir=runs)
+
+    # Both endpoints directly: -1.0 is exactly representable, +1.0 costs 1 LSB.
+    stats = mf._write_wav16(tmp_path / "fs.wav", np.array([1.0, -1.0, 0.5]), sr)
+    assert stats["clipped_samples"] == 0
+    back, _ = mf._read_wav16(tmp_path / "fs.wav")
+    assert [int(round(v * 32768.0)) for v in back] == [32767, -32768, 16384]
+
+
 def test_an_unclipped_render_records_its_peak_and_zero_clipped_samples(tmp_path):
     rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=tmp_path / "runs")
     assert rec["requested_peak"] == pytest.approx(0.5, abs=1e-3)
     assert rec["clipped_samples"] == 0
+
+
+def test_render_refuses_a_case_id_that_is_not_one_path_component(tmp_path):
+    """`render_id` is `f"{case_id}-..."` and is used directly as a directory
+    name, so `render("SD/01", ...)` silently created
+    `runs/SD/01-<commit>-.../raw.wav` -- a record under a name nobody asked
+    for, the same class as the analyser-name nit one call away, and with `..`
+    it escapes `runs_dir` entirely.
+
+    Checked before `render_fn()` is called: a render that cannot be honestly
+    named should not cost a render first.
+    """
+    runs = tmp_path / "runs"
+    called = []
+
+    def render_fn():
+        called.append(1)
+        return _tone()
+
+    with pytest.raises(mf.Refused, match="single path component"):
+        mf.render("SD/01", {}, render_fn, runs_dir=runs)
+    assert not called, "case_id must be checked before render_fn() runs"
+    assert not runs.exists(), "nothing may be written under a refused case_id"
+    for bad in ("..", ".", "a\\b", "x\ny", ""):
+        with pytest.raises(mf.Refused):
+            mf.render(bad, {}, render_fn, runs_dir=runs)
+    assert not called
 
 
 def test_wav_quantisation_rounds_rather_than_truncating(tmp_path):

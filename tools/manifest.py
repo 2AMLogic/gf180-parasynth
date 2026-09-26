@@ -149,6 +149,33 @@ def _dumps(obj) -> str:
     return json.dumps(obj, indent=2, sort_keys=True, default=_canonical)
 
 
+def _single_path_component(label: str, value) -> str:
+    """REFUSE a value that is about to become one directory name under `runs/`
+    or `jobs/` but is not a single path component.
+
+    Both `render_id` (`f"{case_id}-..."`) and `analysis_id`
+    (`f"...-{analyser}-{analyser_version}-..."`) are used directly as directory
+    names, so `render("SD/01", ...)` would silently create
+    `runs/SD/01-<commit>-.../raw.wav` -- a record that exists, under a name
+    nobody asked for, that `load_render("SD/01-...")` will then find. With
+    `..` it escapes the runs/jobs directory entirely.
+
+    Refused rather than quietly rewritten: an id that is not the name it was
+    asked for is a worse outcome than an error, because everything downstream
+    keys on that id.
+    """
+    s = str(value)
+    if not s.strip():
+        raise Refused(f"{label} is empty -- a record with no named {label} cannot "
+                       f"be told apart from any other")
+    if any(c in s for c in ("/", "\\", "\n", "\r", "\0")) or s in (".", ".."):
+        raise Refused(
+            f"{label}={value!r} would not be a single path component under "
+            f"runs/ or jobs/ -- refusing to silently nest or escape the "
+            f"directory the record is keyed by")
+    return s
+
+
 def _write_wav16(path: pathlib.Path, x, sr: int) -> dict:
     """Write `x` as the 16-bit retained artefact and REPORT what quantising it
     cost -- the peak it was handed and how many samples did not fit.
@@ -166,10 +193,21 @@ def _write_wav16(path: pathlib.Path, x, sr: int) -> dict:
     Rounds rather than truncates: `astype("<i2")` alone truncates toward zero,
     a half-LSB *biased* quantisation applied to the one artefact everything
     else is derived from. `np.rint` is free.
+
+    "Clipped" is defined on the FLOAT input, `|x| > 1.0`, not on the int16
+    range. The scale is 32768 (the exact inverse of `_read_wav16`'s `/32768.0`),
+    and two's complement is asymmetric, so `x = +1.0` maps to 32768.0 and is
+    clamped to code 32767: a 1-LSB truncation at the single positive endpoint,
+    inherent to the convention and inaudible. Thresholding on the int16 range
+    instead (`scaled > 32767.0`) counted that endpoint as clipping, so a render
+    normalised to exactly full scale -- a common convention -- was REFUSED
+    unless the caller passed `allow_clipping=True`. Every sample the guard
+    exists for, anything actually beyond full scale, is still caught; a render
+    at exactly full scale is not a wrong instrument state.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     scaled = np.asarray(x, dtype=np.float64) * 32768.0
-    clipped = int(np.count_nonzero((scaled < -32768.0) | (scaled > 32767.0)))
+    clipped = int(np.count_nonzero((scaled < -32768.0) | (scaled > 32768.0)))
     y = np.rint(np.clip(scaled, -32768, 32767)).astype("<i2")
     with wave.open(str(path), "wb") as w:
         w.setnchannels(1)
@@ -243,7 +281,13 @@ def render(case_id: str, config: dict, render_fn: Callable[[], tuple], *,
         half that can actually prevent the loss -- an `analysis.json` already
         referencing that WAV by `render_wav_sha256` would otherwise be left
         pointing at different audio with nothing noticing.
+
+    `case_id` becomes the leading component of `render_id`, which is used
+    directly as a directory name -- so it is checked here, before `render_fn()`
+    is even called, rather than after an expensive render has already produced
+    samples for a record that cannot be honestly named.
     """
+    _single_path_component("case_id", case_id)
     result = render_fn()
     x, sr = result[0], result[1]
     x = np.asarray(x, dtype=np.float64)
@@ -411,14 +455,8 @@ def analysis_id(render_manifest: dict, analyser: str, analyser_version: str,
     carrying a path separator would silently nest directories (or, with `..`,
     escape `jobs_dir` entirely). REFUSED rather than quietly rewritten: an id
     that is not the name it was asked for is a worse outcome than an error."""
-    for label, value in (("analyser", analyser), ("analyser_version", analyser_version)):
-        if not str(value).strip():
-            raise Refused(f"{label} is empty -- an analysis record with no named "
-                           f"analyser cannot be told apart from any other")
-        if any(c in str(value) for c in ("/", "\\", "\n")) or str(value) in (".", ".."):
-            raise Refused(
-                f"{label}={value!r} would not be a single path component under "
-                f"jobs/ -- refusing to silently nest or escape the jobs directory")
+    _single_path_component("analyser", analyser)
+    _single_path_component("analyser_version", analyser_version)
     cfg_sha = _hash_json(config)
     return f"{render_manifest['render_id']}-{analyser}-{analyser_version}-{cfg_sha}"
 
@@ -552,6 +590,15 @@ def accept(analysis: dict, criteria: dict, *, jobs_dir: pathlib.Path = JOBS_DIR,
     empty, so no bound change is ever detected and the gate silently passes
     everything. A bound moving shows up as a diff in review, which is the
     point. Pass `history_path=` explicitly for a scratch ledger (tests do).
+
+    NOT CONCURRENCY SAFE, stated rather than assumed. The ledger update is a
+    read-modify-write with no locking, so two `accept()` calls sharing a
+    `history_path` can lose one update -- and `make verify` / `make controls`
+    run their jobs in parallel. No caller uses the default ledger today; the
+    first two that do must either serialise (one `accept()` job) or pass
+    distinct `history_path=` values. This is a real limit, not a caveat: the
+    update that is lost is silently lost, which is the failure shape this
+    module exists to refuse.
     """
     history_path = history_path or BOUNDS_HISTORY
     history = json.loads(history_path.read_text()) if history_path.exists() else {}
