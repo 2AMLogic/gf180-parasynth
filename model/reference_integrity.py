@@ -51,8 +51,16 @@ SR = rr.SR
 # ===========================================================================
 # the detector
 # ===========================================================================
-def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0, block_ms: float = 5.0,
-                     k: float = 12.0, skip_s: float = 0.5) -> dict:
+TRANSIENT_BLOCK_MS = 5.0     # the un-pitched default block
+TRANSIENT_PERIODS = 2        # blocks per note period when f0 is known
+TRANSIENT_FLOOR_DB = 1.0     # minimum threshold above the median, pitched path only
+
+
+def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0,
+                     block_ms: float | None = None, k: float = 12.0, skip_s: float = 0.5,
+                     f0_hz: float | None = None,
+                     periods: int = TRANSIENT_PERIODS,
+                     floor_db: float = TRANSIENT_FLOOR_DB) -> dict:
     """Isolated broadband transients against a stationary background.
 
     A held note through a synthesiser is stationary: its short-time energy
@@ -64,7 +72,61 @@ def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0, block_ms: float 
 
     Reported against a Gaussian expectation: for a stationary Gaussian process
     the block levels are tightly clustered and the count above 12 MADs is
-    essentially zero, so any nonzero count is an event and not a tail."""
+    essentially zero, so any nonzero count is an event and not a tail.
+
+    **A pitched source needs `f0_hz`.** A saw (or any source with an edge per
+    cycle) puts one broadband burst in the high band every period. With a
+    fixed block that is not a whole number of periods, blocks hold a varying
+    count of edges, and the blocks that happen to hold one more are outliers
+    against the median: a clean MIDI 36 saw at 5 ms blocks reported 359
+    "events" in 6 s -- one per period -- and MIDI 60 (3.8 ms period, 1.3
+    periods per block) failed the same way while MIDI 45 and 72 did not
+    (issue #225). With `f0_hz` the block is `periods` whole periods,
+    truncated, so every block holds the same number of edges bar a sliver of
+    grid drift that can only LOWER a block. This is the block
+    `tools/capture_m1a_phase_cycle.click_report` already uses.
+
+    An explicit `block_ms` shorter than `periods` periods of `f0_hz` is
+    REFUSED rather than measured: it is the configuration that produced the
+    false events above.
+
+    The pitched path also floors the threshold at `floor_db` above the median.
+    Whole-period blocks of a clean saw are so alike that the MAD collapses,
+    and the sub-sample grid drift (a block of int(2P) samples cuts a
+    fraction of an edge) then crossed `k*MAD`: 1 to 34 false events per 8 s
+    from MIDI 45 to 84 with the period block alone (second wrong-then-right
+    of #225). Measured over MIDI 33-84 on a full-band synthetic saw: clean
+    blocks peak <= 0.6 dB over the median, injected clicks (0.25 x peak,
+    12 samples) >= 3.7 dB. The floor sits between; it is the same 1 dB as
+    `capture_m1a_phase_cycle.CLICK_FLOOR_DB`. A click under 1 dB of the
+    block's own high-band energy is below this detector's resolution: on a
+    full-band saw (every harmonic to Nyquist) about 85 % of 0.25 x peak
+    12-sample clicks are caught -- a click split across a block boundary, or
+    a small random draw, sits under the floor -- and all of 0.5 x peak; on
+    the 24-partial saw of `tools/test_capture_m1a_phase_cycle` every 0.25 x
+    peak click is caught. (A one-period block halves the dilution but its
+    clean jitter reached 1.04 dB at MIDI 60, over the floor.)
+
+    Without `f0_hz` the behaviour is unchanged (5 ms blocks, no floor)."""
+    if f0_hz is not None:
+        if not (f0_hz > 0 and math.isfinite(f0_hz)):
+            raise ValueError(f"transient_report: f0_hz must be positive, got {f0_hz!r}")
+        if int(periods) != periods or periods < 1:
+            raise ValueError(f"transient_report: periods must be a positive integer, got {periods!r}")
+        period_samples = sr / f0_hz
+        if block_ms is None:
+            nb = max(8, int(periods * period_samples))
+        else:
+            nb = max(8, int(block_ms * sr / 1000.0))
+            if nb < int(periods * period_samples):
+                raise am.InsufficientEvidence(
+                    f"transient_report: block_ms={block_ms} is {nb / period_samples:.2f} "
+                    f"periods of f0={f0_hz:.2f} Hz; need >= {periods} or every cycle "
+                    f"edge reads as a click (issue #225)")
+    else:
+        nb = max(8, int((TRANSIENT_BLOCK_MS if block_ms is None else block_ms) * sr / 1000.0))
+    block_ms = nb * 1000.0 / sr if f0_hz is not None else (
+        TRANSIENT_BLOCK_MS if block_ms is None else block_ms)
     x = _mono(x)[int(skip_s * sr):]
     n = len(x)
     if n < sr:
@@ -72,12 +134,13 @@ def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0, block_ms: float 
     # a difference high-pass: no FFT wrap artefact, no filter design, and its
     # response above hp_hz is flat enough for a detector
     d = np.diff(x, n=2)
-    nb = max(8, int(block_ms * sr / 1000.0))
     nblocks = len(d) // nb
     lev = np.sqrt((d[:nblocks * nb].reshape(nblocks, nb) ** 2).mean(axis=1))
     med = float(np.median(lev))
     mad = float(np.median(np.abs(lev - med))) or 1e-30
     thr = med + k * mad
+    if f0_hz is not None:
+        thr = max(thr, med * 10 ** (floor_db / 20.0))
     hot = np.nonzero(lev > thr)[0]
     # group adjacent blocks into events
     events, run = [], []
@@ -89,7 +152,8 @@ def transient_report(x, sr: int = SR, *, hp_hz: float = 6000.0, block_ms: float 
     if run:
         events.append(run)
     peak_ratio = float(lev.max() / med) if med > 0 else float("inf")
-    return dict(seconds=n / sr, n_blocks=nblocks, block_ms=block_ms,
+    return dict(seconds=n / sr, n_blocks=nblocks, block_ms=block_ms, block_samples=nb,
+                f0_hz=f0_hz,
                 median_level=med, mad=mad, threshold=thr,
                 n_hot_blocks=int(len(hot)), n_events=len(events),
                 events_per_minute=len(events) / (n / sr) * 60.0,
