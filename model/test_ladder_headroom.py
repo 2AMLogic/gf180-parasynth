@@ -17,8 +17,10 @@ this repository keeps re-finding:
     published derivation, and the audit REFUSES if they disagree
   * `cutoff_from_g` is checked by round-tripping the closed-form coefficient
     law, so the cents conversion cannot be a fit to itself
-  * the ROM read error is checked to be ZERO at a cutoff that lands exactly on
-    a ROM entry -- a known answer that does not depend on the estimator
+  * at a cutoff that lands exactly on a ROM entry the read error is checked
+    against a closed form computed in the test -- the truncating shift is
+    EXACTLY zero there and the remainder is that one entry's own rounding, a
+    known answer that does not depend on the estimator
   * the predicted tracking is checked against `test_moog_acceptance.TRACKING`,
     which is MEASURED on the fixed-point filter and locked by DR 0011
   * the external row is read out of `docs/reference-compare-results.json`, the
@@ -40,7 +42,7 @@ import fixed                                                        # noqa: E402
 import ladder_headroom as lh                                        # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
 import voice_fx as vf                                              # noqa: E402
-from dsp import SR                                                  # noqa: E402
+from dsp import SR                                                  # noqa: F401,E402
 
 
 # =============================================================================
@@ -73,17 +75,26 @@ def test_cutoff_from_g_inverts_the_shipped_coefficient_law():
     assert abs(back[1] / 100.0 - 1.0) > 0.005
 
 
-def test_the_rom_read_error_is_zero_where_the_cutoff_lands_on_a_rom_entry():
-    """The ROM is EDGE-sampled at `i * (32768 >> GROM_BITS)` Hz, so at those
-    cutoffs the interpolation contributes nothing and the only error left is the
-    rounding of one Q0.16 word. A known answer independent of the estimator: if
-    this is not ~0 the cents conversion or the entry grid is wrong, and every
-    other number in the axis is void."""
+def test_at_a_rom_entrys_own_cutoff_the_error_is_exactly_that_entrys_rounding():
+    """**A known answer, derived independently of the estimator.** The ROM is
+    EDGE-sampled at `i * (32768 >> GROM_BITS)` Hz, so at those cutoffs there is
+    no fractional index: the truncating shift contributes EXACTLY zero, and the
+    whole remaining error is the rounding of one Q0.16 word. Both are asserted
+    against a value computed here from `round()` rather than read back from the
+    module -- if the cents conversion or the entry grid were wrong this is where
+    it would show, and every other number on the axis would be void.
+
+    Half an LSB is worth up to 0.16 cents at the bottom of the range, which is
+    also the floor the size sweep converges to, two decades below the shipped
+    table's 29 cents."""
     step = (1 << 15) >> vf.GROM_BITS
     on_grid = np.array([i * step for i in range(2, 1 + (vf.CUT_MAX // step))])
     err = lh.rom_read_error_cents(on_grid)
+    assert np.abs(err["trunc"]).max() == 0.0, float(np.abs(err["trunc"]).max())
+    exact = lh.g_exact_q16(on_grid)
+    want = 1200.0 * np.log2(lh.cutoff_from_g(np.round(exact)) / lh.cutoff_from_g(exact))
+    assert np.allclose(err["interp"], want, atol=1e-9)
     assert np.abs(err["total"]).max() < 0.30, float(np.abs(err["total"]).max())
-    assert np.abs(err["interp"]).max() < 1e-9, float(np.abs(err["interp"]).max())
 
 
 def test_the_rom_error_split_adds_up_to_the_total():
@@ -166,7 +177,7 @@ def test_a_refitted_tuning_polynomial_recovers_most_of_the_remaining_drift():
     assert worst3 < 0.5 * float(np.abs(shipped).max())
 
 
-def test_the_coefficient_rom_has_no_cheap_precision_headroom():
+def test_more_coefficient_rom_entries_is_a_poor_buy_and_the_sweep_floors():
     """**Sweep the parameter before arguing about it** (`CLAUDE.md`). The
     interpolated ROM read is worst at the BOTTOM of the range, where `g` is a
     few hundred LSB: -29 cents at 30 Hz, -17 at 100 Hz, under a cent above
@@ -182,6 +193,30 @@ def test_the_coefficient_rom_has_no_cheap_precision_headroom():
     # the floor: three doublings past the shipped table and it stops improving
     assert abs(sweep[10]["worst_cents"]) == pytest.approx(abs(sweep[9]["worst_cents"]), abs=0.2)
     assert abs(sweep[10]["worst_cents"]) > 8.0
+
+
+def test_refitting_the_existing_129_entries_beats_a_1025_entry_table():
+    """**The free win on this axis, and the reason it exists.** The ROM is
+    EDGE-sampled, and linear interpolation between edge samples of a CONCAVE law
+    always lands below it, so the read error is one-sided -- every entry is
+    biased the same direction. Choosing the 129 stored words to minimise the
+    interpolated error instead of to sample the law removes that bias for
+    nothing: same 2064 ROM bits, same read, no datapath change.
+
+    Worst error 29.0 -> 8.0 cents, which is better than the 9.2-cent floor a
+    1025-entry table converges to. Measured, not shipped: moving the table moves
+    DR 0006's k ROM, the contract revision and every bit-exact expectation, so
+    it is a decision record and not an audit."""
+    cuts = np.arange(vf.CUT_MIN, vf.CUT_MAX + 1)
+    shipped = np.abs(lh.rom_read_error_cents(cuts)["total"]).max()
+    refit = np.abs(lh.rom_read_error_cents(cuts, rom=lh.refit_rom_entries())["total"]).max()
+    assert shipped == pytest.approx(29.0, abs=1.5)
+    assert refit < 10.0, refit
+    assert refit < abs(lh.rom_size_sweep((10,))[10]["worst_cents"])
+    # the entries really are the same shape and width -- not a wider ROM in disguise
+    entries = lh.refit_rom_entries()
+    assert entries.shape == vf.make_g_rom().shape
+    assert entries.min() >= 0 and entries.max() <= 65535
 
 
 def test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin():
@@ -292,6 +327,11 @@ def test_the_audit_reports_every_axis_with_a_verdict_and_a_number():
         assert isinstance(ax["deciding_number"], (int, float)), name
         assert ax["units"]
     worth = [n for n, a in rep["axes"].items() if a["verdict"] == "worth pursuing"]
+    small = [n for n, a in rep["axes"].items() if a["verdict"] == "available but small"]
+    closed = [n for n, a in rep["axes"].items()
+              if a["verdict"] == "no further win available"]
     assert worth == ["cutoff-offset"], rep["axes"]
+    assert sorted(small) == ["coefficient-rom", "tuning-law"], rep["axes"]
+    assert sorted(closed) == ["drive", "numerical-precision"], rep["axes"]
     assert rep["conclusion"].startswith("Rung 1")
     assert json.dumps(rep)          # the report has to be serialisable to be evidence

@@ -176,14 +176,35 @@ class OurLadder:
         self.stages, self.nonlin = stages, nonlin
         self.compensated, self.cut_skew, self.drive = compensated, cut_skew, drive
         self.cfg = dict(vf.LADDER_CFG, **(cfg or {}))
+        # PRECONDITION, asserted at the point of use rather than assumed.
+        # `huov_fcr` exists to answer "what would applying Huovilainen's tuning
+        # polynomial buy us", and it answers that only while G_ROM does NOT
+        # already carry it. Since DR 0011 it does, so the flag would silently
+        # apply the correction twice and the `ours-huovtune` device would be a
+        # doubly-tuned filter reported as a candidate. A correct instrument in a
+        # wrong state is worse than an absent one, so this refuses.
+        if huov_fcr and not np.array_equal(G_ROM, vf.make_g_rom(tune=False)):
+            raise AssertionError(
+                "huov_fcr=True would apply Huovilainen's tuning polynomial on top of "
+                "a cutoff ROM that already carries it (DR 0011). To measure the "
+                "pre-DR-0011 candidate, build this rig against make_g_rom(tune=False); "
+                "to measure the shipped filter, use huov_fcr=False.")
         self.huov_fcr = huov_fcr
 
     @staticmethod
     def fcr(cut_hz: float, sr: float = SR) -> float:
-        """Huovilainen's published tuning polynomial (DAFx-04), which Surge
-        applies and we do not. `fc` is the cutoff normalised to the BASE rate,
-        not the oversampled one, which is how both Surge and Csound's original
-        evaluate it.
+        """Huovilainen's published tuning polynomial (DAFx-04). `fc` is the
+        cutoff normalised to the BASE rate, not the oversampled one, which is
+        how both Surge and Csound's original evaluate it.
+
+        **WE APPLY IT TOO, AND HAVE SINCE DR 0011.** The sentence that used to
+        stand here -- "which Surge applies and we do not" -- was true when this
+        rig was written and stopped being true on 2026-09-18, when DR 0011 baked
+        `CUT_TRIM * fcr()` into `voice_fx.make_g_rom()`. `G_ROM` above IS that
+        tuned ROM, so `huov_fcr=True` now applies the polynomial a SECOND time;
+        `__init__` refuses that combination rather than measuring it. See the
+        identical correction in `model/voice_fx.py`'s own comment, and issue
+        #46's rung-1 audit (`model/ladder_headroom.py`) for what is left.
 
         **The quadratic coefficient is 0.4955, and `sst-filters` ships
         0.4995.** Surge's own comment in `VintageLadders.h` reads
