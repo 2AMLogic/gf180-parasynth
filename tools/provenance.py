@@ -33,18 +33,24 @@ def git(*args: str, root: pathlib.Path = ROOT) -> str:
         return ""
 
 
-def sha_of(*paths, root: pathlib.Path = ROOT) -> str:
-    """A short content hash over one or more files, read in the given order."""
+def sha_of(*paths) -> str:
+    """A short content hash over one or more files, read in the given order.
+
+    No `root`: the paths are used as given. An unused `root=` parameter that
+    call sites nonetheless passed was worse than none -- it read as though the
+    hash were relative to a worktree when it never was."""
     h = hashlib.sha256()
     for p in paths:
         h.update(pathlib.Path(p).read_bytes())
     return h.hexdigest()[:12]
 
 
-def file_sha(path, root: pathlib.Path = ROOT) -> str:
+def file_sha(path) -> str:
     """A content hash for one file, tagged with its algorithm and safe to
     write directly into a provenance record. `"missing"` (not an exception)
-    when the file is not there -- a hash a reader can act on either way."""
+    when the file is not there -- a hash a reader can act on either way.
+
+    No `root`: as with `sha_of`, the path is used as given."""
     try:
         return "sha256:" + hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()[:16]
     except OSError:
@@ -56,8 +62,8 @@ def source_commit(root: pathlib.Path = ROOT) -> str:
 
 
 def worktree_state(root: pathlib.Path = ROOT) -> dict:
-    """The commit is not enough. Several worktrees are commonly live against
-    this repository at once, and a clean SHA that silently means "plus
+    """The commit is not enough. Fourteen worktrees are live on this repository
+    at once, and a clean SHA that silently means "plus
     whatever was in the working tree" is worse than no SHA: a stale result is
     indistinguishable from a current one. So the uncommitted diff is hashed
     too -- tracked modifications from `git diff HEAD`, and every untracked

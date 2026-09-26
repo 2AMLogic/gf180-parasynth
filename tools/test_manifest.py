@@ -22,11 +22,119 @@ from __future__ import annotations
 
 import json
 import math
+import pathlib
+import re
+import subprocess
 
 import numpy as np
 import pytest
+import yaml
 
 import manifest as mf
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+# =============================================================================
+# The gate on this suite's own wiring
+# =============================================================================
+def _makefile_recipe(target: str) -> str:
+    """The recipe lines of one Makefile target, joined. Used to assert that a
+    check is enumerated where CI will actually reach it."""
+    lines = (ROOT / "Makefile").read_text().split("\n")
+    out, inside = [], False
+    for line in lines:
+        if re.match(rf"^{re.escape(target)}\s*:", line):
+            inside = True
+            continue
+        if inside:
+            if line and not line[0].isspace():
+                break
+            out.append(line)
+    assert out, f"no recipe found for Makefile target {target!r}"
+    return "\n".join(out)
+
+
+def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
+    """"Check that the thing you are testing is the thing that ships"
+    (CLAUDE.md), applied to this suite itself.
+
+    As first written, `tools/test_manifest.py` was reachable only through the
+    broad `pytest ... tools/ ...` in `make verify` / `make verify-full`, and no
+    workflow invokes either target -- so these tests and the injected-bug T20
+    control below shipped without ever executing in CI. `rungs.yml`'s own
+    comment states the rule: a gate nothing invokes fails exactly the same way
+    as one that passes. This test fails if that wiring is ever removed.
+    """
+    recipe = _makefile_recipe("verify-fast")
+    assert "tools/test_manifest.py" in recipe, (
+        "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
+        "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
+        "in `make verify` is invoked by no workflow")
+    workflow = yaml.safe_load((ROOT / ".github/workflows/rungs.yml").read_text())
+    runs = [str(step.get("run", "")) for step in workflow["jobs"]["m5a-fast"]["steps"]]
+    assert any("verify-fast" in r for r in runs), (
+        "rungs.yml's m5a-fast job no longer runs `make verify-fast` -- this "
+        "suite's only CI path is gone")
+
+
+def test_the_bound_ledger_defaults_to_a_tracked_path():
+    """The mechanism `accept()` replaces (`model/sound_report.py`'s
+    `LOCK`/`LOCKS`) lives in committed source. A ledger defaulting into the
+    gitignored `jobs/` tree -- as this module first did -- detects a bound
+    change only inside one long-lived worktree: on a fresh checkout or any CI
+    run the history is empty, so nothing is ever detected and the gate silently
+    passes everything."""
+    assert mf.JOBS_DIR not in mf.BOUNDS_HISTORY.parents
+    assert mf.RUNS_DIR not in mf.BOUNDS_HISTORY.parents
+    r = subprocess.run(["git", "-C", str(ROOT), "check-ignore", str(mf.BOUNDS_HISTORY)],
+                       capture_output=True, text=True)
+    if r.returncode not in (0, 1):
+        pytest.skip(f"git check-ignore unavailable here (rc={r.returncode})")
+    assert r.returncode == 1, (
+        f"{mf.BOUNDS_HISTORY} is gitignored, so the previous bound does not "
+        f"survive a fresh checkout and no bound change can ever be detected")
+
+
+# =============================================================================
+# _hash_json: the identity every render_id and job_id rests on
+# =============================================================================
+def test_hash_does_not_collide_on_arrays_that_differ_only_in_the_middle():
+    """The collision the first implementation shipped: `json.dumps(...,
+    default=str)` hashed `str(array)`, which ELIDES the middle of a large
+    array, so two genuinely different configs shared one `render_id` -- and so
+    one `runs/<render_id>/` directory."""
+    a = np.arange(10000)
+    b = a.copy()
+    b[5000] = -1
+    assert str(a) == str(b), ("the premise of this control: str() elides the "
+                              "middle, so the two are indistinguishable by repr")
+    assert mf._hash_json({"grid": a}) != mf._hash_json({"grid": b})
+
+
+def test_hash_is_reproducible_across_calls_for_the_same_config():
+    a = np.linspace(0.0, 1.0, 257)
+    assert mf._hash_json({"grid": a, "n": 3}) == mf._hash_json({"grid": a.copy(), "n": 3})
+
+
+def test_hash_refuses_a_config_value_with_no_reproducible_identity():
+    """The other direction of the same defect: for an object whose repr carries
+    its memory address, `default=str` produced a NEW hash on every call, so the
+    same source and config never re-derived the same `render_id` and retroactive
+    reanalysis was impossible. Refusing is the honest outcome."""
+    class Cfg:
+        pass
+
+    with pytest.raises(mf.Refused, match="no reproducible JSON identity"):
+        mf._hash_json({"o": Cfg()})
+
+
+def test_render_refuses_a_config_it_cannot_identify(tmp_path):
+    class Cfg:
+        pass
+
+    with pytest.raises(mf.Refused, match="no reproducible JSON identity"):
+        mf.render("T1", {"o": Cfg()}, lambda: _tone(), runs_dir=tmp_path / "runs")
 
 
 # =============================================================================
@@ -74,6 +182,84 @@ def test_load_render_refuses_a_render_id_with_no_manifest(tmp_path):
         mf.load_render("does-not-exist", runs_dir=tmp_path / "runs")
 
 
+def test_render_refuses_to_overwrite_a_retained_wav_with_different_audio(tmp_path):
+    """The write-side half of "a retained WAV is what `render()` produced".
+
+    `load_render()` enforces it on READ, which catches the loss after it has
+    happened; this catches it before. Two renders reaching the same
+    `render_id` with different audio means something the audio depends on is
+    not restated in `config` -- and any `analysis.json` already referencing
+    that WAV by `render_wav_sha256` would otherwise come to point at audio
+    nobody analysed."""
+    runs = tmp_path / "runs"
+    first = mf.render("T1", {"hz": 440.0}, lambda: _tone(hz=440.0), runs_dir=runs)
+    wav_path = runs / first["render_id"] / first["wav_path"]
+    with pytest.raises(mf.Refused, match="already records a DIFFERENT"):
+        # Same case id, same config, DIFFERENT audio: exactly the render_fn
+        # whose behaviour depends on something `config` does not state.
+        mf.render("T1", {"hz": 440.0}, lambda: _tone(hz=550.0), runs_dir=runs)
+    assert mf.provenance.file_sha(wav_path) == first["wav_sha256"], (
+        "the refusal must leave the already-retained WAV untouched")
+    # Re-rendering the SAME audio under the same id is fine -- idempotent, not
+    # an error: this is the ordinary "re-run the case" path.
+    again = mf.render("T1", {"hz": 440.0}, lambda: _tone(hz=440.0), runs_dir=runs)
+    assert again["wav_sha256"] == first["wav_sha256"]
+
+
+# =============================================================================
+# render preconditions: an instrument in a wrong state is not a result
+# =============================================================================
+def test_render_refuses_non_finite_samples(tmp_path):
+    with pytest.raises(mf.Refused, match="non-finite"):
+        mf.render("T1", {}, lambda: (np.full(480, np.nan), 48000),
+                  runs_dir=tmp_path / "runs")
+
+
+def test_render_refuses_exact_silence_unless_the_call_says_it_is_intended(tmp_path):
+    """CLAUDE.md's own example of preconditions assumed rather than asserted is
+    "a Model D rendering exact silence". Silence is a legitimate thing to test
+    for, and an illegitimate thing to accept by default."""
+    runs = tmp_path / "runs"
+    with pytest.raises(mf.Refused, match="exact silence"):
+        mf.render("T1", {}, lambda: (np.zeros(4800), 48000), runs_dir=runs)
+    rec = mf.render("T1", {"silent": True}, lambda: (np.zeros(4800), 48000),
+                     runs_dir=runs, allow_silence=True)
+    assert rec["requested_peak"] == 0.0 and rec["allow_silence"] is True
+
+
+def test_render_refuses_a_clipped_render_and_records_the_peak_when_allowed(tmp_path):
+    """A peak-3.0 render used to be hard-clipped to 1.0 with nothing recorded:
+    invisible afterwards, because every over-scale sample reads back as exactly
+    full scale. Refused by default; recorded either way."""
+    runs = tmp_path / "runs"
+    loud = lambda: (3.0 * _tone()[0], 48000)                      # peak 1.5
+    with pytest.raises(mf.Refused, match="hard-clipped"):
+        mf.render("T1", {"gain": 3.0}, loud, runs_dir=runs)
+    rec = mf.render("T1", {"gain": 3.0}, loud, runs_dir=runs, allow_clipping=True)
+    assert rec["requested_peak"] == pytest.approx(1.5, abs=1e-3)
+    assert rec["clipped_samples"] > 0
+    on_disk = json.loads((runs / rec["render_id"] / "manifest.json").read_text())
+    assert on_disk["clipped_samples"] == rec["clipped_samples"]
+
+
+def test_an_unclipped_render_records_its_peak_and_zero_clipped_samples(tmp_path):
+    rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=tmp_path / "runs")
+    assert rec["requested_peak"] == pytest.approx(0.5, abs=1e-3)
+    assert rec["clipped_samples"] == 0
+
+
+def test_wav_quantisation_rounds_rather_than_truncating(tmp_path):
+    """`astype("<i2")` alone truncates toward zero -- a half-LSB BIASED
+    quantisation applied to the one artefact every measurement re-derives
+    from."""
+    path = tmp_path / "q.wav"
+    stats = mf._write_wav16(path, np.array([1.7, -1.7]) / 32768.0, 48000)
+    back, _ = mf._read_wav16(path)
+    codes = [int(round(v * 32768.0)) for v in back]
+    assert codes == [2, -2], "truncation would have given [1, -1]"
+    assert stats["clipped_samples"] == 0
+
+
 # =============================================================================
 # measurement / validate_measurement
 # =============================================================================
@@ -115,6 +301,25 @@ def test_analyse_round_trips_through_json(tmp_path):
     assert on_disk["render_id"] == render_rec["render_id"]
 
 
+def test_analyse_carries_the_case_id_it_analysed(tmp_path):
+    """The field a human reads first -- and the one `accept()`'s ledger needs
+    to key by (case_id, metric) instead of by metric alone."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("SD-01", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    rec = mf.analyse(render_rec, [_good_measurement()], analyser="demo",
+                      analyser_version="v1", config={}, jobs_dir=jobs)
+    assert rec["case_id"] == "SD-01"
+    assert json.loads((jobs / rec["job_id"] / "analysis.json").read_text())["case_id"] == "SD-01"
+
+
+def test_analysis_id_refuses_an_analyser_name_that_is_not_one_path_component(tmp_path):
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    with pytest.raises(mf.Refused, match="single path component"):
+        mf.analyse(render_rec, [_good_measurement()], analyser="t20/v2",
+                   analyser_version="v1", config={}, jobs_dir=jobs)
+
+
 # =============================================================================
 # accept
 # =============================================================================
@@ -136,7 +341,7 @@ def test_accept_pass_and_fail(tmp_path):
     render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
     analysis = _analysis_with(12.3, jobs, render_rec)
     ok = mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
-                    jobs_dir=jobs)
+                    jobs_dir=jobs, history_path=jobs / "_h1.json")
     assert ok["verdicts"]["decay"]["state"] == "pass"
     bad = mf.accept(analysis, {"decay": {"lo": 20.0, "hi": 30.0, "rationale": "spec"}},
                      jobs_dir=jobs, history_path=jobs / "_h2.json")
@@ -161,13 +366,77 @@ def test_accept_records_why_a_bound_changed(tmp_path):
                         jobs_dir=jobs, history_path=hist)
     assert len(second["bound_changes"]) == 1
     change = second["bound_changes"][0]
-    assert change["previous"] == {"lo": 0.0, "hi": 20.0, "rationale": "initial spec"}
+    assert {"lo": change["previous"]["lo"], "hi": change["previous"]["hi"],
+            "rationale": change["previous"]["rationale"]} == {
+        "lo": 0.0, "hi": 20.0, "rationale": "initial spec"}
     assert change["new"]["rationale"] == "re-measured reference, +5ms"
     # An unchanged bound on a THIRD call logs no change.
     third = mf.accept(analysis, {"decay": {"lo": 5.0, "hi": 25.0,
                                             "rationale": "re-measured reference, +5ms"}},
                        jobs_dir=jobs, history_path=hist)
     assert third["bound_changes"] == []
+    # Which run set the bound that moved is the first thing a reader wants.
+    assert change["previous"]["job_id"] == analysis["job_id"]
+
+
+def test_the_bound_ledger_is_keyed_by_case_and_metric_not_by_metric_alone(tmp_path):
+    """Keyed by metric name alone, accepting `T20` for one case and then for
+    another fabricated a `bound_changes` entry claiming the bound had moved
+    between two unrelated cases' values. On a scorecard with sixteen drum
+    voices each carrying a `T20`, every accept reported a change that had not
+    happened -- and a ledger that cries wolf trains everyone to ignore gates,
+    including the ones that work (CLAUDE.md)."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    hist = jobs / "_bounds_history.json"
+    render_a = mf.render("CASE-A", {"hz": 440.0}, lambda: _tone(hz=440.0), runs_dir=runs)
+    render_b = mf.render("CASE-B", {"hz": 220.0}, lambda: _tone(hz=220.0), runs_dir=runs)
+    analysis_a = mf.analyse(render_a, [_good_measurement(name="T20", value=10.0)],
+                             analyser="demo", analyser_version="v1", config={},
+                             jobs_dir=jobs)
+    analysis_b = mf.analyse(render_b, [_good_measurement(name="T20", value=90.0)],
+                             analyser="demo", analyser_version="v1", config={},
+                             jobs_dir=jobs)
+    first = mf.accept(analysis_a, {"T20": {"lo": 5.0, "hi": 15.0,
+                                            "rationale": "case A spec"}},
+                       jobs_dir=jobs, history_path=hist)
+    second = mf.accept(analysis_b, {"T20": {"lo": 85.0, "hi": 95.0,
+                                             "rationale": "case B spec"}},
+                        jobs_dir=jobs, history_path=hist)
+    assert first["bound_changes"] == []
+    assert second["bound_changes"] == [], (
+        "nothing moved: these are two different cases' bounds for a metric that "
+        "happens to share a name")
+    assert first["verdicts"]["T20"]["state"] == "pass"
+    assert second["verdicts"]["T20"]["state"] == "pass"
+
+    # A REAL change, to the same case's own bound, is still caught.
+    moved = mf.accept(analysis_a, {"T20": {"lo": 6.0, "hi": 16.0,
+                                           "rationale": "re-measured reference"}},
+                       jobs_dir=jobs, history_path=hist)
+    assert len(moved["bound_changes"]) == 1
+    assert moved["bound_changes"][0]["case_id"] == "CASE-A"
+    assert moved["bound_changes"][0]["previous"]["rationale"] == "case A spec"
+
+
+def test_accept_refuses_an_analysis_that_does_not_say_which_case_it_is_of(tmp_path):
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(12.3, jobs, render_rec)
+    del analysis["case_id"]
+    with pytest.raises(mf.Refused, match="no case_id"):
+        mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                  jobs_dir=jobs, history_path=jobs / "_h.json")
+
+
+def test_accept_does_not_score_a_boolean_as_a_measured_value(tmp_path):
+    """`bool` subclasses `int`, so `True` would otherwise be compared against
+    the bounds as 1.0 and reported as a value that was measured."""
+    runs, jobs = tmp_path / "runs", tmp_path / "jobs"
+    render_rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    analysis = _analysis_with(True, jobs, render_rec)
+    out = mf.accept(analysis, {"decay": {"lo": 0.0, "hi": 20.0, "rationale": "spec"}},
+                     jobs_dir=jobs, history_path=jobs / "_h.json")
+    assert out["verdicts"]["decay"]["state"] == "no verdict"
 
 
 # =============================================================================
@@ -212,15 +481,26 @@ TRUE_TAU_MS = 40.0          # the spec's decay time constant
 TARGET_T20_MS = TRUE_TAU_MS * math.log(10)   # ~92.1 ms: T20 for that tau
 
 
-def _synthetic_decay(tau_ms, sr=48000, dur_s=0.25, seed=0):
+def _synthetic_decay(tau_ms, sr=48000, dur_s=0.25, seed=0, peak=0.5):
     """A stand-in drum hit: white noise under an exponential envelope with a
     known, exact time constant -- so the "true" T20 is knowable independently
-    of any estimator, the way an external reference recording would be."""
+    of any estimator, the way an external reference recording would be.
+
+    Scaled to `peak` because the retained artefact is a 16-bit WAV and
+    `render()` refuses a render that would hard-clip into it. As first written
+    this returned raw `standard_normal` samples, whose tails reach ~4 sigma, so
+    the loudest part of every one of these "hits" -- the attack, where the
+    decay fit starts -- was silently clipped to full scale in the WAV the
+    measurement then read back. A constant gain cannot change a decay *time*
+    (both laws below work in dB relative to the signal's own peak), so the
+    scaling costs this control nothing; the clipping was flattening the first
+    milliseconds of the envelope it was fitting.
+    """
     n = int(sr * dur_s)
     t = np.arange(n) / sr
     rng = np.random.default_rng(seed)
     x = (rng.standard_normal(n) * np.exp(-t / (tau_ms / 1000.0))).astype(np.float64)
-    return x, sr
+    return x * (peak / np.max(np.abs(x))), sr
 
 
 def _rms_envelope(x, sr, win_ms=2.0):
