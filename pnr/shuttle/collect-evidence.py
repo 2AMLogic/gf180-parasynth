@@ -36,6 +36,51 @@ def load(p):
     with open(p) as f:
         return json.load(f)
 
+
+def step_metrics(run, step):
+    """{step: metrics} for one step, or {} if it recorded none.
+
+    LibreLane 3 keeps the cumulative metrics inside each step's state_out.json
+    under a "metrics" key; LibreLane 2 wrote a per-step metrics.json. Both are
+    read, newest convention first, so this collector is not silently blind to
+    whichever one the container ships.
+    """
+    sp = os.path.join(run, step, "state_out.json")
+    if os.path.exists(sp):
+        payload = load(sp)
+        if payload.get("metrics"):
+            return {step: payload["metrics"]}
+    mp = os.path.join(run, step, "metrics.json")
+    if os.path.exists(mp):
+        return {step: load(mp)}
+    return {}
+
+
+def rtl_fingerprint(repo):
+    """md5 of every RTL file and ROM table the flow reads.
+
+    `md5 -r` is macOS-only and this repository's flows now run on Linux hosts too;
+    the recovered version used it unconditionally and produced an EMPTY
+    fingerprint block on Linux, with `2>/dev/null` swallowing the reason. hashlib
+    has no such problem and needs no subprocess at all.
+    """
+    import hashlib
+    rels = [f"rtl-sketch/{m}.v" for m in
+            ("synth_top", "spi_ctl", "drum_regs", "drum_kit", "drum_dp", "modal_dp",
+             "voice_dp", "recip_div", "ladder_dp_n", "i2s_tx")]
+    rels += sorted(os.path.relpath(p, repo)
+                   for p in glob.glob(os.path.join(repo, "spec/reference/tables/*.hex")))
+    rels.append("rtl-sketch/tanh16.hex")
+    lines = []
+    for rel in rels:
+        p = os.path.join(repo, rel)
+        if not os.path.exists(p):
+            lines.append(f"MISSING                           {rel}")
+            continue
+        with open(p, "rb") as f:
+            lines.append(f"{hashlib.md5(f.read()).hexdigest()}  {rel}")
+    return "\n".join(lines) + "\n"
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run_dir")
@@ -54,10 +99,19 @@ def main():
     # per-step metrics, and the final resolved config
     per_step = {}
     for s in steps:
-        mp = os.path.join(run, s, "metrics.json")
-        if os.path.exists(mp):
-            per_step[s] = load(mp)
-    for f in ("resolved.json", "config.json", "warnings.log", "error.log"):
+        per_step.update(step_metrics(run, s))
+    if not per_step:
+        # REFUSE rather than write a SUMMARY.md whose tables are empty. An empty
+        # table is not "no violations"; it is "this tool could not read the run",
+        # and the two look identical on the page. This is not hypothetical: as
+        # recovered, this script looked for a top-level metrics.json, which
+        # LibreLane 3 does not write -- it carries the cumulative metrics inside
+        # each step's state_out.json -- so it produced a summary with every number
+        # missing and said nothing about it.
+        sys.exit(f"REFUSED: no step under {run} yielded metrics "
+                 f"(looked for state_out.json['metrics'] and metrics.json). "
+                 f"There is nothing to summarise.")
+    for f in ("resolved.json", "config.json", "warning.log", "warnings.log", "error.log"):
         p = os.path.join(run, f)
         if os.path.exists(p):
             shutil.copy2(p, out)
@@ -83,18 +137,15 @@ def main():
     for rel in ("librelane/config.yaml", "librelane/density.yaml", "librelane/chip_top.sdc",
                 "librelane/slots/slot_1x0p5.yaml", "librelane/macros/macros_5v.yaml",
                 "librelane/pdn/pdn_cfg.tcl", "src/chip_core.sv", "src/generated_defines.svh",
-                "TEMPLATE_PROVENANCE.txt", "run-librelane.sh"):
+                "TEMPLATE_PROVENANCE.txt", "run_librelane.py"):
         p = os.path.join(HERE, rel)
         if os.path.exists(p):
             shutil.copy2(p, os.path.join(src, os.path.basename(rel)))
 
-    last = per_step[max(per_step)] if per_step else {}
+    last = per_step[max(per_step)]
     rtl_sha = a.rtl_sha or subprocess.run(
         ["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-    md5s = subprocess.run(
-        ["bash", "-c", "cd %s && md5 -r rtl-sketch/{synth_top,spi_ctl,drum_regs,drum_kit,drum_dp,modal_dp,voice_dp,recip_div,ladder_dp_n,i2s_tx}.v "
-                       "spec/reference/tables/*.hex rtl-sketch/tanh16.hex 2>/dev/null" % REPO],
-        capture_output=True, text=True).stdout
+    md5s = rtl_fingerprint(REPO)
 
     def fmt(v):
         if isinstance(v, float):
