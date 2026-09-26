@@ -121,11 +121,37 @@ _K_ROM_CACHE = {}
 G_ROM_UNTUNED = vf.make_g_rom(tune=False)          # the ROM of contract revisions 1-6
 
 
+def _neutral_ogain() -> int:
+    """`ogain` with the passband compensation taken out -- the res = 0 value,
+    which is the state-units-to-Q1.15 conversion and nothing else
+    (`fixed.LadderFx.regs`: `ogain = 2Vt/vpu * (1 + 2 res)`).
+
+    Rendering with this is how the LOOP's own low-frequency gain is read: at
+    the shipped `ogain` the `(1 + 2 res)` factor is multiplied back in, and
+    the two must not be confused -- one is a property of the ladder, the other
+    is our level policy on top of it."""
+    return int(_REAL_LADDER(**vf.LADDER_CFG).regs(0.0, 1.0)[2])
+
+
+def _k_float(res, cut, compensated=True) -> float:
+    """The feedback coefficient the loop actually runs at, as a number: the
+    Q3.14 `k` register (after DR 0006's per-cutoff compensation, when it is
+    on) divided by 2^14. This is Stinchcombe's `k`, not the host's `res`."""
+    return _ladder_regs(res, drive=1.0, cut=cut, compensated=compensated)[1] / float(1 << 14)
+
+
 def ladder_render(x_q15, cut, res, drive, compensated=True, ladder=None,
-                  skew=1.0, g_rom=None, **cfg):
+                  skew=1.0, g_rom=None, ogain=None, **cfg):
     """`x_q15` through one ladder at a fixed operating point. `vf.LadderFx` is
-    looked up at call time so an injected defect is seen."""
-    g, k, gain, ogain = _ladder_regs(res, drive, cut, compensated, skew, g_rom)
+    looked up at call time so an injected defect is seen.
+
+    `ogain` overrides the output register the host would write, which is the
+    only way to measure the LOOP on its own: the shipped `ogain` carries DR
+    0005's `(1 + 2 res)` passband compensation, and a measurement that leaves
+    it in is measuring the instrument's level policy rather than the filter's
+    transfer function (`_neutral_ogain`, below)."""
+    g, k, gain, og = _ladder_regs(res, drive, cut, compensated, skew, g_rom)
+    ogain = og if ogain is None else int(ogain)
     lad = ladder if ladder is not None else vf.LadderFx(**{**vf.LADDER_CFG, **cfg})
     n = len(x_q15)
     return lad.process(np.asarray(x_q15, dtype=np.int16), None, res, drive,
@@ -637,6 +663,83 @@ def test_the_passband_compensation_is_partial_and_is_the_one_in_the_contract():
         assert got > uncomp + 2.0, f"res {res}: no compensation is visible"
 
 
+@pytest.mark.parametrize("compensated", [False, True])
+def test_the_ladders_low_frequency_gain_is_one_over_one_plus_k(compensated):
+    """[source-verified: Stinchcombe 2008 SS 2.3-2.4, equations 21 and 22]
+    **The small-signal ladder with a feedback loop, from a source outside this
+    repository.** Stinchcombe derives it from the block diagram and nothing
+    else (SS 2.3): with the core's transfer function `G(s)` and a feedback
+    gain `k`,
+
+        Vout = G(s)(Vin - k Vout)   =>   H(s) = G(s) / (1 + k G(s))
+
+    and with the normalised four-pole core `G(s) = 1 / (s + 1)^4` (eq. 21)
+    that is `Hstd(s) = 1 / ((s + 1)^4 + k)` (eq. 22). At `s = 0`, `G(0) = 1`
+    and therefore
+
+        H(0) = 1 / (1 + k)
+
+    -- the classic ladder bass loss, and the thing DR 0006's k_comp ROM is
+    compensating against. SS 2.4 is the author's own check that this model
+    tracks a SPICE simulation of the transistor circuit, which is why it is a
+    referent for us rather than one more restatement of our decision records.
+
+    Source: T. E. Stinchcombe, "Analysis of the Moog Transistor Ladder and
+    Derivative Filters", 25 Oct 2008,
+    <http://www.timstinchcombe.co.uk/synth/Moog_ladder_tf.pdf> (fetched and
+    read for this test; see docs/minimoog-reference.md SS 0, key STIN).
+
+    WHAT IS MEASURED, and why it is not the test above. The shipped `ogain`
+    multiplies `(1 + 2 res)` back in (DR 0005), so a probe that leaves it in
+    reads OUR LEVEL POLICY, not the ladder. This renders at `_neutral_ogain()`
+    -- `ogain` at its res = 0 value, the state-units conversion alone -- so
+    what comes back is the loop. And the abscissa is `k` itself, the Q3.14
+    register the loop runs on (`_k_float`), not the host's `res`: with DR
+    0006's compensation on, `k` is 4.25 at res = 1 and 2000 Hz, and the law
+    has to hold at THAT k or the ROM is not doing what it claims.
+
+    Measured, cutoff 2000 Hz probed at 100 Hz (a 20:1 ratio), relative to the
+    same probe at k = 0:
+
+        res   k (comp off)   measured    1/(1+k)    G/(1+kG) at 100 Hz
+        0.25    1.000        -5.954 dB   -6.021     -5.956
+        0.50    2.000        -9.473      -9.542     -9.475
+        0.75    3.000       -11.975     -12.041    -11.976
+        1.00    4.000       -13.916     -13.979    -13.917
+
+    The residual against `1/(1+k)` is +0.066 dB and it is NOT an error: it is
+    the finite-frequency term, `|1 + k G(j0.05)|` rather than `|1 + k|`, and
+    the last column -- the same `H(s)` evaluated at the probe frequency
+    instead of at DC -- reproduces the measurement to 0.003 dB. Probing a
+    decade down instead of a decade and a half (500 Hz cutoff, 50 Hz) moves
+    both the measurement and that column to +0.26 dB, together.
+
+    Tolerances: 0.05 dB against `H(j omega)/H_0(j omega)` from eq. 21, and
+    0.12 dB against the `H(0) = 1/(1 + k)` limit itself at the 20:1 probe.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
+    cut, f, drive = 2000.0, 100.0, 0.1
+    og = _neutral_ogain()
+    ref = probe_gain_db(f, cut, 0.0, drive, compensated=compensated, ogain=og)
+    for res in (0.25, 0.5, 0.75, 1.0):
+        k = _k_float(res, cut, compensated)
+        got = probe_gain_db(f, cut, res, drive, compensated=compensated, ogain=og) - ref
+        G = 1.0 / (1.0 + 1j * f / cut) ** 4                     # eq. 21, normalised core
+        exact = 20 * math.log10(abs((G / (1 + k * G)) / G))     # eq. 22 at the probe
+        dc = -20 * math.log10(1.0 + k)                          # H(0) = 1/(1+k)
+        assert abs(got - exact) < 0.05, \
+            f"res {res} (k {k:.3f}): {got:.3f} dB, H(jw)/H0 {exact:.3f} dB"
+        assert abs(got - dc) < 0.12, \
+            f"res {res} (k {k:.3f}): {got:.3f} dB, 1/(1+k) {dc:.3f} dB"
+        # and the shipped output register is exactly (1 + 2 res) on top of it:
+        # the two tests are measuring two different things, on purpose
+        shipped = (probe_gain_db(f, cut, res, drive, compensated=compensated)
+                   - probe_gain_db(f, cut, 0.0, drive, compensated=compensated))
+        assert abs((shipped - got) - 20 * math.log10(1 + 2 * res)) < 0.1, \
+            f"res {res}: ogain contributes {shipped - got:.3f} dB, not (1 + 2 res)"
+
+
 def test_opening_the_cutoff_makes_a_note_brighter():
     """[measured-here: cutoff-to-brightness ordering on the finished voice] **Acceptance, not diagnosis.** The cutoff control has to do the one
     thing a player expects: open it and the note gets brighter. Measured on
@@ -916,6 +1019,115 @@ def test_nothing_clips_at_the_reference_gain_structure():
             assert np.mean(np.abs((t["vca"] * 29491) >> 15) > 32767) > 0.03, name
     assert 1.5 < worst_ladder < 2.5, worst_ladder
     assert 0.8 < worst_out < 0.95, worst_out
+
+
+def test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it():
+    """[source-verified: contract 6 and 5.1] **The first node of the gain structure: one oscillator, before the
+    mixer.** Contract 6 makes every waveform a signed Q1.15 word, so the
+    reference level at this node is the word itself -- `-32768 .. +32767`,
+    nothing above it and nothing meaningfully below. The test above asserts
+    the MIXER SUM; this asserts what the mixer is handed, which is a different
+    number and the one the mixer's weight budget is sized against.
+
+    Both directions matter, and the second is the one that rots quietly:
+
+      * **Nothing leaves the word.** The risk is not the waveform -- a ramp
+        cannot overflow its own generator -- it is the PolyBLEP correction
+        added at each discontinuity (contract 6.5), which is a SUBTRACTION
+        near the edge and could push a full-scale step past the rail. It does
+        not: swept over MIDI 0..124, the worst sample of any shape is +32767
+        / -32768, i.e. exactly the word and never outside it.
+      * **The word is actually used.** A quiet oscillator satisfies any upper
+        bound. The smallest peak anywhere in that sweep is 19949 LSB (0.61 x
+        full scale), the saw at the top of the range where PolyBLEP has
+        rounded most of the ramp away; every other shape stays above 0.82.
+
+    Measured, worst over MIDI 0..124 (`max`, `min`, and the smallest peak):
+
+        saw      +32753  -32757   19949      shark    +27018  -32748   27019
+        square   +32767  -32768   32768      revsaw   +32757  -32753   19949
+        pulse25  +32767  -32768   32768      pulse29  +32767  -32768   32768
+        tri      +32767  -32768   32768      pulse15  +32767  -32768   32768
+        sine     +32767  -32767   32763
+
+    `shark` is 47/57 of the word by construction (`SHARK_W_TRI`), not a
+    defect; it is asserted at its own level.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    shapes = list(vf.WAVE_CODE)                      # every shape the register map can select
+    floor = {"shark": 0.80 * 27019}                  # 47/57 of the word, by construction
+    for shape in shapes:
+        worst_peak = None
+        for note in (0, 24, 45, 69, 93, 120):
+            inc = dsp.phase_inc(dsp.note_hz(note))
+            n = min(20000, max(2400, int(3 * SR / max(dsp.note_hz(note), 1.0))))
+            x = vf.OscFx(shape).render(n, inc)
+            assert x.max() <= 32767, f"{shape} at note {note}: {x.max()} is above the Q1.15 word"
+            assert x.min() >= -32768, f"{shape} at note {note}: {x.min()} is below the Q1.15 word"
+            pk = am.peak(x)
+            worst_peak = pk if worst_peak is None else min(worst_peak, pk)
+        assert worst_peak >= floor.get(shape, 0.60 * 32768), \
+            f"{shape} only reaches {worst_peak} LSB: the node is not at its reference level"
+
+
+def test_the_vca_node_has_headroom_and_never_adds_gain():
+    """[source-verified: DR 0005 item 2 and contract 12] **The node between the filter and the output rail, asserted on its
+    own.** `voice_fx._render` step 7 is `v = (y * ae) >> 15`: the amplitude
+    envelope applied to the ladder's 19-bit Q4.15 word, AFTER the filter (DR
+    0005 item 2). In the chip that `v` is what meets the drum buses, still
+    unsaturated (`synth_top_model.py` point 3), so its bound is a question
+    the output clamp cannot answer -- the clamp is downstream of `vol`, and at
+    the reference `vol = 0.45` an output that never rails is consistent with a
+    `v` more than twice full scale. It is, in fact: growl-bass runs this node
+    at 1.918 x full scale with a perfectly clean output.
+
+    Two properties, neither of them implied by the existing clipping test:
+
+      * **The word holds the loudest patch the REGISTER MAP can express**, not
+        just the loudest audition patch. At the register clamps -- `drive` 6
+        (the 20-bit `gain` clamp) and `res` 2.0 (the 17-bit `k` clamp), three
+        oscillators at full mix -- `y` reaches 3.456 x full scale and `v`
+        3.377, which is 0.43 of the Q4.15 word. 2.3 x of headroom left, and
+        the output rail is firing on 3.4 % of samples while it happens: the
+        two bounds are measuring different things, which is the point.
+      * **The VCA attenuates and never adds gain.** `ae` is Q0.15 in
+        `0 .. 32767`, so `|v| <= |y|` sample by sample -- asserted pointwise
+        rather than on peaks, because a gain jump at one frame is exactly
+        what a peak comparison would miss.
+
+    Measured on the audition patches, `v` relative to full scale: 1.172,
+    1.174, 0.845, 0.884, 0.972, 0.866, **1.918** (growl-bass), 0.412.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    import patches
+    name, seq, total = next(p for p in patches.MONO if p[0].endswith("growl-bass"))
+    v = vf.VoiceFx()
+    out = vf.render_mono_fx(seq, total, v)
+    y = np.asarray(v.trace["ladder"], dtype=np.int64)
+    vca = np.asarray(v.trace["vca"], dtype=np.int64)
+    ae = np.asarray(v.trace["amp_env"], dtype=np.int64)
+    assert ae.max() <= 32767 and ae.min() >= 0, (ae.min(), ae.max())
+    assert np.all(np.abs(vca) <= np.abs(y)), \
+        f"{name}: the VCA added gain at {int(np.sum(np.abs(vca) > np.abs(y)))} frames"
+    assert np.abs(vca).max() < (1 << 18), f"{name}: the VCA word saturates"
+    assert 1.5 < am.peak(vca) / FS < 2.5, am.peak(vca) / FS
+    assert am.peak(out) < 32767, f"{name}: the output rail fires; this is the clean case"
+
+    # the loudest thing the register map can ask for: both clamps, full mix
+    hot = vf.VoiceFx()
+    out_hot = hot.note(28, 0.6, waves=("saw", "saw", "square"), mix=(1.0, 1.0, 1.0),
+                       q=2.0, drive=6.0, cutoff=(400, 12000))
+    y_hot = np.asarray(hot.trace["ladder"], dtype=np.int64)
+    vca_hot = np.asarray(hot.trace["vca"], dtype=np.int64)
+    assert np.all(np.abs(vca_hot) <= np.abs(y_hot)), "the VCA added gain at the register clamps"
+    assert np.abs(vca_hot).max() < (1 << 18), \
+        f"the VCA word saturates at the register clamps: {np.abs(vca_hot).max()} LSB"
+    assert 3.0 < am.peak(vca_hot) / FS < 5.0, am.peak(vca_hot) / FS
+    # and it is NOT the output clamp keeping it there: that clamp is firing
+    assert np.mean(np.abs(out_hot) >= 32767) > 0.01, \
+        "the hot patch does not reach the output rail, so it is not the hot case"
 
 
 def test_the_drive_control_engages_the_ladders_saturation():
@@ -1276,6 +1488,89 @@ def test_control_a_silent_stub_is_not_mistaken_for_a_note_that_ended(monkeypatch
     monkeypatch.setattr(vf, "LadderFx", _SilentLadder)
     msg = _expect_red(test_a_high_resonance_note_reaches_exactly_zero_after_its_release)
     assert "not singing" in msg
+
+
+# ---- controls for the gain structure (issue #47) -----------------------------
+class _SkewedFeedbackLadder(_REAL_LADDER):
+    """Defect: the loop runs at 1.2 x the `k` the register holds. Every other
+    property of the filter survives -- it still self-oscillates, still falls at
+    24 dB/octave -- so only a test that reads the LEVEL against `k` can see
+    it."""
+
+    def process(self, x_q15, cutoff_hz, res, drive=1.0, *, k=None, k_q14=None, **kw):
+        if k_q14 is not None:
+            k_q14 = (np.asarray(k_q14, dtype=np.int64) * 6) // 5
+        if k is not None:
+            k = (int(k) * 6) // 5
+        return super().process(x_q15, cutoff_hz, res, drive, k=k, k_q14=k_q14, **kw)
+
+
+@pytest.mark.parametrize("compensated", [False, True])
+def test_control_a_feedback_gain_that_is_not_the_one_the_register_holds(monkeypatch,
+                                                                        compensated):
+    """[meta] Defect: 20 % more feedback inside the loop than the `k` register
+    says. Stinchcombe's `H(0) = 1/(1 + k)` is then read against the wrong `k`
+    -- 1.28 dB out at k = 4 -- and
+    test_the_ladders_low_frequency_gain_is_one_over_one_plus_k must go red.
+
+    This is the control that makes that test an EXTERNAL check rather than a
+    tautology: the law is asserted against the register the host wrote, so a
+    model that quietly runs a different feedback gain fails it.
+
+    Ground truth: test_audio_measure.test_tone_amplitude_recovers_a_known_amplitude_under_noise
+    """
+    monkeypatch.setattr(vf, "LadderFx", _SkewedFeedbackLadder)
+    _expect_red(test_the_ladders_low_frequency_gain_is_one_over_one_plus_k, compensated)
+
+
+def _scaled_osc(factor):
+    real = vf.OscFx.render
+
+    def render(self, n, inc):
+        return (np.asarray(real(self, n, inc), dtype=np.int64) * factor).astype(np.int64)
+    return render
+
+
+def test_control_an_oscillator_at_the_wrong_reference_level(monkeypatch):
+    """[meta] Two defects at the first node of the gain structure, one on each
+    side of the bound, because a level check with only an upper bound is half
+    a check:
+
+      * **10 % hot.** The oscillator leaves the Q1.15 word and the mixer is
+        handed something it was not sized for.
+      * **6 dB quiet.** Nothing overflows anywhere, every downstream headroom
+        test goes greener, and the instrument is wrong -- this is the
+        direction a headroom suite rewards if nobody asserts the floor.
+
+    Both must turn test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it red.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    monkeypatch.setattr(vf.OscFx, "render", _scaled_osc(1.1))
+    msg = _expect_red(test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it)
+    assert "above the Q1.15 word" in msg or "below the Q1.15 word" in msg
+
+    monkeypatch.setattr(vf.OscFx, "render", _scaled_osc(0.5))
+    msg = _expect_red(test_one_oscillator_in_isolation_fills_its_word_and_stays_inside_it)
+    assert "not at its reference level" in msg
+
+
+def test_control_an_amplitude_envelope_that_adds_gain(monkeypatch):
+    """[meta] Defect: the amplitude envelope rendered at twice its Q0.15 word,
+    so the VCA multiplies UP. The output still sounds like the instrument at a
+    lower `vol`, and the existing clipping test can still pass at the
+    reference volume -- what has changed is that the node between the filter
+    and the rail now carries twice the level the contract gives it, which is
+    the case `test_the_vca_node_has_headroom_and_never_adds_gain` exists for.
+
+    Ground truth: test_audio_measure.test_peak_is_the_largest_magnitude_either_sign
+    """
+    real = vf.AdsrFx.render
+
+    def render(self, n, gate, trig=None, q: int = 15):
+        return np.asarray(real(self, n, gate, trig, q), dtype=np.int64) * 2
+    monkeypatch.setattr(vf.AdsrFx, "render", render)
+    _expect_red(test_the_vca_node_has_headroom_and_never_adds_gain)
 
 
 # =============================================================================
