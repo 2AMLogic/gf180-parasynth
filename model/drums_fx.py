@@ -240,6 +240,84 @@ class EnvFx:
         return (1 << RATE_Q) // self.rate + 1 if self.rate else FULL24
 
 
+# ---- output coupling: the DC blocker (#165, EXPERIMENTAL -- default OFF) -----
+# The block has no DC blocking anywhere (#152). `SRC_PULSE` is +32767 gated by
+# an envelope and never changes sign (mean/|mean| = 1.000 exactly), `NL_SWING`
+# rectifies a bipolar source into a positive-mean one, and the all-pole (RAW)
+# modes those drive have DC gains of 18 to 23,899. The machine does not: every
+# voice leaves its circuit through a coupling capacitor.
+#
+# THE CORNER IS THE MACHINE'S, NOT A TASTE. The BD's output buffer Q44 couples
+# through C49 0.47 uF into the bias divider R176 100 kOhm || R177 82 kOhm =
+# 45.05 kOhm (reference 2, "Topology", verified: W14a/SN p.9). That is
+#     f = 1 / (2*pi*C*R) = 1 / (2*pi * 0.47e-6 * 45050) = 7.52 Hz,
+# and a one-pole blocker with a = 1 - 2^-10 sits at SR/(2*pi*2^10) = 7.457 Hz
+# -- 0.8 % low, which is 25x inside the +-20 % capacitor tolerance reference 2
+# quotes for the voice circuits. K is therefore READ OFF THE CIRCUIT: no knob
+# was turned to choose it. (If the divider is not the AC load the corner is
+# 1.86-3.39 Hz instead, i.e. K = 11 or 12; `couple_k` sweeps it and the
+# measured cost of each is in tools/probes/dc_blocker.py.)
+COUPLE_OFF, COUPLE_EXC, COUPLE_BUS, COUPLE_POST = "none", "exc", "bus", "post"
+COUPLE_PLACEMENTS = (COUPLE_OFF, COUPLE_EXC, COUPLE_BUS, COUPLE_POST)
+COUPLE_K = 10                    # pole 1 - 2^-K; 7.457 Hz at SR = 48 kHz
+
+
+class DcBlockFx:
+    """One-pole DC blocker, integer, one register and two adders:
+
+        d   <- acc >> K                 (the registered estimate)
+        y   <- x - d
+        acc <- acc + y
+
+    so acc[n] = (1 - 2^-K) acc[n-1] + x[n] and
+
+        H(z) = (1 - z^-1) / (1 - (1 - 2^-K) z^-1),
+
+    a ZERO AT z = 1 -- the DC null is exact, not approximate -- a pole at
+    1 - 2^-K, and a gain of 2/(2 - 2^-K) = 1.0005 at Nyquist. `y` is formed
+    from a REGISTERED value, so the shift and one adder are all that stand
+    between a bus and the next stage.
+
+    TRUNCATION AND THE DEAD ZONE. `acc >> K` is an arithmetic shift (floor),
+    which is what the RTL does. For a constant x the accumulator reaches a
+    fixed point anywhere in [x*2^K, x*2^K + 2^K - 1] and y is then exactly 0:
+    a standing offset is removed COMPLETELY, unlike the envelope's decay
+    (15.3) there is no residue to close with a max(1, .). What truncation does
+    cost is up to one LSB of asymmetry on the way there, counted in `n_trunc`.
+
+    STATE IS NOT RESET BY A HIT. A capacitor does not know a stop fired, and
+    the five exclusive pairs share one circuit: a retune mid-ring must carry
+    the charge across. Only A_RESET (15.8) clears it."""
+    __slots__ = ("k", "acc", "n_trunc", "acc_bits")
+
+    def __init__(self, k: int = COUPLE_K):
+        self.k = int(k)
+        self.n_trunc = 0            # coverage, NOT state: `reset` leaves these
+        self.acc_bits = 0           # alone, as EnvFx leaves its own counters
+        self.reset()
+
+    def reset(self):
+        self.acc = 0
+
+    def step(self, x: int) -> int:
+        d = self.acc >> self.k                       # arithmetic: floor
+        self.n_trunc += (self.acc != (d << self.k))
+        y = x - d
+        self.acc += y
+        n = self.acc.bit_length() + 1                # +1 for the sign
+        if n > self.acc_bits:
+            self.acc_bits = n
+        return y
+
+
+def dc_block(x, k: int = COUPLE_K):
+    """`DcBlockFx` over an array, bit for bit -- the SAME filter, so a
+    placement after the output stage's clamp is compared against the others
+    on identical arithmetic and any difference is the placement."""
+    f = DcBlockFx(k)
+    return np.array([f.step(int(v)) for v in np.asarray(x).ravel()], dtype=np.int64)
+
+
 # ---- the drum section --------------------------------------------------------------
 class DrumsFx:
     """8 stops, N_ENV envelopes, N_PATH paths, six squares, one LFSR and the
@@ -248,11 +326,18 @@ class DrumsFx:
     the two buses. All control registers reset to 0 (15.8) and the block is
     silent until programmed."""
 
-    def __init__(self, envs=N_ENV, paths=N_PATH, modes=N_MODES, nums=N_NUMS, floor=True):
+    def __init__(self, envs=N_ENV, paths=N_PATH, modes=N_MODES, nums=N_NUMS, floor=True,
+                 couple: str = COUPLE_OFF, couple_k: int = COUPLE_K):
         self.E, self.P, self.M = envs, paths, modes
         self.bank = ModalFx(modes=modes, nums=nums, headroom=BODY_HR, out_bits=BODY_BITS)
         self.tanh = LadderFx(**LADDER_CFG)
         self.floor = floor
+        # EXPERIMENTAL (#165). `couple` is OFF by default, so a DrumsFx built
+        # the old way is bit for bit the old block -- test_drums_fx pins that.
+        assert couple in COUPLE_PLACEMENTS, couple
+        self.couple, self.couple_k = couple, int(couple_k)
+        self.dc_exc = [DcBlockFx(couple_k) for _ in range(modes)]
+        self.dc_dmix, self.dc_body = DcBlockFx(couple_k), DcBlockFx(couple_k)
         self.n_tapsat = 0            # coverage: taps that hit the +-8.0 rail (15.5)
         self.n_late_writes = 0       # writes scheduled past the end of a play()
         self.trace = {}
@@ -274,6 +359,11 @@ class DrumsFx:
         self.amp = [0] * self.M
         self.num = [0] * self.M
         self.bank.reset()
+        if hasattr(self, "dc_dmix"):          # A_RESET is the only thing that
+            for f in self.dc_exc:             # discharges the coupling (15.8);
+                f.reset()                     # a hit, a choke or a retune does
+            self.dc_dmix.reset()              # not, because a capacitor cannot
+            self.dc_body.reset()              # know one happened
 
     # ---- control (contract 15.1) ---------------------------------------------
     def write(self, addr: int, value: int):
@@ -367,8 +457,23 @@ class DrumsFx:
                 dmix += v
             elif dest < self.M:
                 exc[dest] += v
+        if self.couple == COUPLE_EXC:
+            # The diagnosis's literal reading: AC-couple each mode's
+            # excitation, BEFORE the all-pole gain multiplies its mean. It is
+            # also what reference 5's Q62 tells us not to do -- the excitation
+            # is asymmetric by design -- so it is measured, not assumed.
+            exc = [self.dc_exc[m].step(exc[m]) for m in range(self.M)]
         coefs = list(zip(self.a1, self.a2, self.amp))
         body = self.bank.step(exc, coefs, self.num)             # 15.6
+        if self.couple == COUPLE_BUS:
+            # The machine's placement: after the nonlinearities, the envelopes
+            # and the resonators, before the output stage's single clamp (12).
+            # A linear filter commutes with a sum, so ONE blocker on a bus is
+            # the superposition of a per-path or per-mode blocker at the same
+            # corner -- two registers for sixteen voices. `test_..._commutes`
+            # is that claim, measured.
+            dmix = self.dc_dmix.step(dmix)
+            body = self.dc_body.step(body)
         return dmix, body, fire, noise, sqsum, exc, vals
 
     def play(self, writes, n: int):

@@ -1,0 +1,33 @@
+commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+
+CONTINUOUS PLAYING, placement 'bus', K = 10
+
+  repeated hits: peak of each hit's window, dBFS, uncoupled -> coupled
+  sound   hit       off        on   delta   drift
+  CY        0   -13.364   -13.302  +0.062
+  CY        7   -13.536   -13.280  +0.256
+  CY     last-minus-first of the coupled/uncoupled delta: +0.1941 dB  -- state that wandered would show here
+
+  RS        0   -14.306   -14.522  -0.216
+  RS        7   -14.304   -14.526  -0.222
+  RS     last-minus-first of the coupled/uncoupled delta: -0.0056 dB  -- state that wandered would show here
+
+  retune mid-ring on a shared circuit (the five exclusive pairs)
+  pair          largest 1-sample step at the switch frame
+  LT->LC        off                                     0.021606
+  LT->LC        bus                                     0.021606
+  MT->MC        off                                     0.062195
+  MT->MC        bus                                     0.062164
+  HT->HC        off                                     0.054993
+  HT->HC        bus                                     0.054932
+  RS->CL        off                                     0.000031
+  RS->CL        bus                                     0.000031
+  CP->MA        off                                     0.005707
+  CP->MA        bus                                     0.005707
+
+  A blocker holds charge across a retune, so the switch must not add a
+  step of its own: the coupled column must not exceed the uncoupled one.
+
+  choke (CH chokes OH) and overlap (a hit into a ring)
+  choke  OH then CH    sub20  -10.36 dB   HF  +0.00 dB   peak  +0.00 dB   clip +0
+  overlap CY + CY      sub20  -15.68 dB   HF  +0.00 dB   peak  +0.06 dB   clip +0

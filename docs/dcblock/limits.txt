@@ -1,0 +1,21 @@
+commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+
+DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
+
+  REQUIRED improvement, CY and RS:
+    sub-20 Hz ABSOLUTE energy falls by >= 6.0 dB
+
+  PRESERVATION allowance, every voice (controls: BD, HT, CH)
+
+    property           unit            BD  others
+    peak_dbfs          dB            0.50    0.30
+    body_20_700_db     dB(abs)       0.50    0.30
+    mid_700_5k_db      dB(abs)       0.20    0.20
+    hf_5k_20k_db       dB(abs)       0.20    0.20
+    t20_ms_pct         %             3.00    3.00
+    attack_samp        samples       2.00    2.00
+    centroid_pct       %             1.00    1.00
+    n_clip             count       must not increase
+
+  A normalised band SHARE is never a verdict; `share_rise_is_lf_removal`
+  refuses one whose absolute band energy did not move.
