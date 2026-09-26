@@ -79,6 +79,7 @@ A_K, A_GAIN, A_OGAIN, A_MROUTE = 0x1C, 0x1D, 0x1E, 0x1F
 A_MMIX, A_MWHEEL, A_MPD, A_MFD = 0x24, 0x25, 0x26, 0x27
 A_GATE_ON, A_GATE_OFF, A_TRIG, A_RESET = 0x20, 0x21, 0x22, 0x23
 A_DCUT, A_DK, A_DGAIN, A_DOGAIN, A_BVOL = 0x28, 0x29, 0x2A, 0x2B, 0x2C
+A_DRIFT = 0x2D                       # per-oscillator drift (6.11, DR 0018)
 A_NOP = 0x3F
 
 # the widths the register keeps (DR 0007 section 3); the datum is 32 bits and
@@ -118,7 +119,7 @@ class SynthTopModel:
                         amp=[0, 0, 0, 0], fenv=[0, 0, 0, 0],
                         cut_lo=0, cut_hi=0, k=0, gain=0, ogain=0,
                         vol=0, dvol=0, bvol=0, glide=0, route=0,
-                        dcut=0, dk=0, dgain=0, dogain=0)
+                        dcut=0, dk=0, dgain=0, dogain=0, drift=0)
 
     def _regs(self) -> dict:
         r = dict(self.base)
@@ -128,7 +129,8 @@ class SynthTopModel:
                  cut_lo=i["cut_lo"], cut_hi=i["cut_hi"], k=i["k"], gain=i["gain"],
                  ogain=i["ogain"], vol=i["vol"], glide=i["glide"],
                  nsel=i["nsel"], mmix=i["mmix"], mwheel=i["mwheel"],
-                 mpd=i["mpd"], mfd=i["mfd"], mroute=i["mroute"])
+                 mpd=i["mpd"], mfd=i["mfd"], mroute=i["mroute"],
+                 drift=i["drift"])
         return r
 
     # ---- one SEC = 0 write: exactly voice_dp.v's decode ----------------------
@@ -172,6 +174,7 @@ class SynthTopModel:
         if addr == A_MWHEEL: i["mwheel"] = data & W16; return ("MWHEEL", data & W16)
         if addr == A_MPD:    i["mpd"]    = data & W16; return "image"
         if addr == A_MFD:    i["mfd"]    = data & W16; return "image"
+        if addr == A_DRIFT:  i["drift"]  = data & W16; return "image"
         if addr == A_RESET:    return "reset"
         if addr == A_DCUT:   i["dcut"]   = data & W16; return "image"
         if addr == A_DK:     i["dk"]     = data & W17; return "image"
@@ -276,4 +279,4 @@ class SynthTopModel:
                         amp=[0, 0, 0, 0], fenv=[0, 0, 0, 0],
                         cut_lo=0, cut_hi=0, k=0, gain=0, ogain=0,
                         vol=0, dvol=0, bvol=0, glide=0, route=0,
-                        dcut=0, dk=0, dgain=0, dogain=0)
+                        dcut=0, dk=0, dgain=0, dogain=0, drift=0)

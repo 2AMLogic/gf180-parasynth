@@ -163,9 +163,23 @@ A hand-selected part per unit, whose stated purpose is the 50 %. Our square is
 a true 50 % and therefore has no even harmonics at all, which is what the
 circuit is trimmed to produce. **Whether to model per-unit drift** — a slightly
 asymmetric square is audibly fatter, and three oscillators drifting against
-each other is part of what a Minimoog sounds like — **is a separate and real
-question**, and it is a musical decision rather than a fidelity one. It is
-contract open item 17; it is one constant if taken.
+each other is part of what a Minimoog sounds like — **was a separate and real
+question**, and it was a musical decision rather than a fidelity one. It was
+contract open item **18** (not 17: that is the uniform-noise item, and this
+line named the wrong number from rev 11 until this edit).
+
+**Taken, in the half that is three oscillators beating and not in the half that
+is the duty cycle** — contract 6.11 and DR 0018. One register, `DRIFT`, drives
+three independent bounded random walks on the three phase increments; the
+default is 0 and 0 is bit-identical to no drift path at all. It was worth
+measuring the references before choosing the amount, because they do not supply
+one: every isolated-oscillator window in the frozen Mini V3 set wanders by
+0.001–0.024 cents rms, 30–100× below audibility, so they bound drift instead
+(`docs/scorecard/mono-osc-drift/reference-drift-v1.json`). The target is
+0.8–4.0 cents rms per oscillator as a musical decision, a range because SM 2.3's
+oscillator boards differ by serial range. The **duty cycle** is not drifted: a
+wandering pulse width is a second mechanism and nothing measured argues for it,
+so the 50 %-versus-52 % half of item 18 stays open.
 
 The same comparison recorded the two rectangles as **14.3 % and 16.7 %**.
 Those are 1/7 and 1/6, which is what reading a duty cycle off the position of a
@@ -579,8 +593,12 @@ Stated, because a list of what we added is not a claim of completeness.
 - **The second VCA** with its external loudness control input (§5.24.1).
 - **The decay switch**, which on the Model D makes the release equal to the
   decay rather than instant.
-- **Per-unit oscillator drift and the temperature-compensated exponential
-  converter** (§2.16). Ours are exact; a Model D's are not, and the beating of
-  three slightly-drifting oscillators is part of the sound.
+- **The temperature-compensated exponential converter** (§2.16). Ours is exact;
+  a Model D's is not. Its *audible* consequence — three oscillators drifting
+  independently against each other — **is** modelled, as of contract 6.11 and
+  DR 0018: three seeded bounded walks on the three phase increments, off by
+  default, targeting 0.8–4.0 cents rms each. What is still not modelled is the
+  converter itself: no temperature term, no per-unit trim, and no drift of the
+  *duty cycle* (W3a) or of the filter's own tuning.
 - **Any measurement of a real Model D.** Everything above is a schematic, a
   service procedure, or arithmetic on one.

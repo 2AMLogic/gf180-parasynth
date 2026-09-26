@@ -151,12 +151,13 @@ carries 24 bits and the register keeps its own width.
 | 0x29 | `DK` | 17 | the drum filter's resonance, `4·res` in Q3.14, compensated by the same kc ROM at `DCUT` | 0 |
 | 0x2A | `DGAIN` | 20 | the drum filter's input gain, Q4.16 | 0 |
 | 0x2B | `DOGAIN` | 20 | the drum filter's output gain, Q4.16 | 0 |
+| 0x2D | `DRIFT` | 16 | **per-oscillator drift** depth, Q0.16 (contract 6.11, DR 0018): the rms deviation of three independent bounded walks on the three phase increments, scaled so 65535 is 5.604 cents rms. 0 is off and bit-identical to no drift mechanism at all, which is why it can be added to this page without re-baselining a single register image that predates it | 0 (off) |
 | 0x20 | `GATE_ON` | — | `gate ← 1`, both envelopes `seg ← ATTACK`, level unchanged; D ignored | |
 | 0x21 | `GATE_OFF` | — | `gate ← 0`; D ignored | |
 | 0x22 | `TRIG` | — | both envelopes `seg ← ATTACK`, level and gate unchanged; D ignored | |
 | 0x23 | `RESET` | — | every datapath register of contract 14 ← its reset value; D ignored. **The link and the write queue are not touched**: writes queued behind a RESET in the same frame still apply, in order, after it (the sibling's rule, 10.5; it is what makes 4.3's "every write complete during frame f MUST be applied" true through a RESET). | |
 | 0x3F | `NOP` | — | no effect; exists so the host can read the status word without changing anything | |
-| 0x03, 0x07, 0x2D–0x3E, 0x40–0xFF | reserved on page 0 | | ignored, no effect | |
+| 0x03, 0x07, 0x2E–0x3E, 0x40–0xFF | reserved on page 0 | | ignored, no effect | |
 
 **Page 1 (`SEC` = 1) is the drum section**, and its map is contract 15.1's,
 address for address and bit for bit: `0x00` STOPS, `0x10 + s` ACCENT,

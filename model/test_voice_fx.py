@@ -633,6 +633,17 @@ def test_every_host_conversion_fits_its_register():
     for vol in np.linspace(0.0, 2.0, 21):
         r = vf.VoiceFx.patch_regs(vol=float(vol))
         assert _fits(r["vol"], B["vol"]) and r["vol"] == min(65535, int(round(vol * 32768)))
+    # drift (6.11): rms cents per oscillator, 0 .. 12 -- twice what the register
+    # can express, so the clamp is inside the domain walked here and not only
+    # asserted about. It is the ONLY conversion of 5.5 that clamps inside a
+    # musically plausible request: 5.604 cents rms is the top of the register.
+    for cents in [0.0, -1.0] + list(np.linspace(0.0, 12.0, 241)):
+        d = vf.drift_reg(float(cents))
+        assert _fits(d, B["drift"]), (cents, d)
+        assert (d == 0) == (cents <= 0.0), (cents, d)
+        assert (d == 65535) == (cents >= vf.drift_cents(65535)), (cents, d)
+        r = vf.VoiceFx.patch_regs(drift_cents=float(cents))
+        assert r["drift"] == d and _fits(r["drift"], B["drift"])
     for shape in SHAPES:
         vf.OscFx(shape)
     # envelopes: attack, decay x sustain, release, each over 0 .. 30 s
@@ -742,6 +753,7 @@ def test_every_legal_register_value_runs():
     regs["cut_lo"] = regs["cut_hi"] = 65535
     regs["k"], regs["gain"], regs["ogain"] = (1 << 17) - 1, (1 << 20) - 1, (1 << 20) - 1
     regs["vol"], regs["glide"] = 65535, (1 << 24) - 1
+    regs["drift"] = 65535                                   # 6.11 at full depth, on an inc already clamped
     w = [(0, "INC", k, (1 << 24) - 1, True) for k in range(3)] + [(0, "TRACK", 65535), (0, "GATE", 1),
                                                                   (n // 2, "INC", 0, 1, False), (n // 2, "TRIG")]
     out = v.play(regs, w, n)

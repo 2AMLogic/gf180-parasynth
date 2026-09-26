@@ -333,7 +333,8 @@ REG_BITS = dict(inc=INC_BITS, w=WEIGHT_BITS, wn=WEIGHT_BITS,
                 cut_lo=CUT_BITS, cut_hi=CUT_BITS, track_hz=CUT_BITS,
                 k=LadderFx.K_BITS, gain=LadderFx.GAIN_BITS, ogain=LadderFx.GAIN_BITS,
                 glide=GLIDE_BITS, vol=VOL_BITS, nsel=NSEL_BITS, mmix=MOD_BITS,
-                mwheel=MOD_BITS, mpd=MOD_BITS, mfd=MOD_BITS, mroute=MROUTE_BITS)
+                mwheel=MOD_BITS, mpd=MOD_BITS, mfd=MOD_BITS, mroute=MROUTE_BITS,
+                drift=DRIFT_BITS)
 
 _SINE = dsp._QUARTER.astype(np.int64)   # 256-entry quarter wave, midpoint-sampled
 
