@@ -190,3 +190,28 @@ starts, when the environment, a checker, or a required asset is absent.
 same bootstrap and gates on T-DEADLINE. Receipts live under `build/trials/` and
 are uploaded by CI as `trial-receipts`; `tools/trial.py compare A B` checks two
 environments reached the same numbers from the same inputs.
+
+### Pilot receipts, 2026-09-26 (a snapshot, not maintained state)
+
+`docs/trials/pilot-2026-09-26.tgz` holds every receipt bundle the pilot
+produced on the build box (`tar xzf` it, then `python3 tools/trial.py
+check-all pilot`: 12/12 valid). `main-c50abf9/` is this branch's own tree;
+`cand255-5a8f87d/` is this branch merged locally with open PR #255's head
+`b2ccc12` (never pushed), to show what the two #255-dependent trials return
+once its manifest and held-note checker land. CI's receipts for the same
+commit are the `trial-receipts` artifact of `.github/workflows/trials.yml`;
+`tools/trial.py compare` reports AGREE between CI and the box for both
+T-DEADLINE modes.
+
+| trial | tree | verdict | what it shows |
+|---|---|---|---|
+| T-RELEASE-BOUND | main | NO VERDICT (preflight) | manifest and `release_manifest.py` absent until #255 |
+| T-RELEASE-BOUND | +#255 | PASS | manifest BOUND; Arty evidence binding BOUND |
+| T-DEADLINE reanalyse | main | PASS | retained traces: slack 14, 3300/3300 I2S periods; late160 control caught |
+| T-DEADLINE sim | main | PASS | this tree's RTL: slack 13 (one cycle less than the published image's 14), 3300/3300 periods; control caught |
+| T-DEADLINE sim, candidate late160 | main | FAIL | 3496 missed frames, overrun: the deadline reason |
+| T-DEADLINE sim, 45 s budget | main | NO VERDICT (timeout) | no PASS left behind |
+| T-DEADLINE sim, SIGTERM at 60 s | main | NO VERDICT (cancelled) | children killed, none surviving |
+| T-DEADLINE reanalyse, truncated trace | main | NO VERDICT | staging refused the altered trace before the checker ran |
+| T-PLAY-DIGITAL | main | NO VERDICT (preflight) | `held_note_audible.py` absent until #255 |
+| T-PLAY-DIGITAL | +#255 | PASS | three held notes audible (peaks 12760/7345/10376 LSB) and bit-exact; demo phrase 257,185 I2S periods, 508/508 writes, 0 mismatches; silent-image control caught |
