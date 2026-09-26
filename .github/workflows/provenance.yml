@@ -1,0 +1,92 @@
+# Measurement provenance: render / analyse / accept, and the retained artefacts.
+#
+# docs/measurement-provenance.md. This job exists to keep four things true:
+#
+#   1. the schema's own controls stay red when they should -- an incomplete
+#      measurement record, a bound with no rationale, and a bound that moved
+#      must all be REFUSED, never quietly accepted;
+#   2. every lock in model/sound_report.py has a recorded change and a reason,
+#      so a test cannot go green because a bound moved;
+#   3. the end-to-end demonstration still holds: the withdrawn estimator re-run
+#      on a RETAINED WAV is attributed to the measurement, a render with a real
+#      sound defect is attributed to the sound, and the two together are REFUSED
+#      rather than guessed;
+#   4. the raw WAVs and numerical traces are actually uploaded, with a reference
+#      fixture outliving a smoke render.
+#
+# NO PATH FILTER. A promise conditioned on which directory you edited is not a
+# promise, and this one depends on model/drums_fx.py, model/drum_verify.py,
+# model/audio_measure.py and model/sound_report.py at least as much as on
+# tools/. It is a couple of minutes of rendering; that is not worth a filter.
+#
+# The retention NUMBERS below are not authored here. They are in
+# tools/provenance_retention.py's RETENTION_DAYS, which marks each record at the
+# point it is written, and tools/test_provenance_retention.py reads THIS FILE and
+# asserts the two agree -- because retention is a property of the record and a
+# number two files from the thing it describes is how the two clocks drift apart.
+name: provenance
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  stages-and-controls:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install numpy scipy pytest pyyaml
+
+      - name: the schema, the lock changelog, and the retention table
+        run: |
+          python -m pytest tools/test_manifest.py \
+                           tools/test_provenance_retention.py \
+                           model/test_sound_report.py -q
+
+      - name: every lock has a recorded change and a reason
+        run: python model/sound_report.py --check-locks
+
+      - name: the three stages, end to end, on a real case
+        run: python tools/stage_case.py demo --root build/provenance
+
+      - name: every injected control must be REFUSED by the stage that owns it
+        run: python tools/stage_case.py controls --root build/provenance-controls
+
+      # includes the check that the committed evidence under
+      # docs/provenance/bd-decay-demo/ still matches what this tree produces
+      - name: the staged runner's own suite
+        run: python -m pytest tools/test_stage_case.py -q
+
+      - name: group the retained records by retention class
+        if: always()
+        run: |
+          python tools/provenance_retention.py \
+            --root build/provenance --out build/provenance-upload
+
+      # Two uploads, two clocks. The reference fixture is the audio a BOUND was
+      # derived from: if it expires the bound can only be re-trusted, never
+      # re-derived. The smoke group is a per-push render nobody will re-read.
+      #
+      # if-no-files-found differs on purpose. `error` on the fixture group,
+      # because "the evidence was never produced" must not read as a green job
+      # with a note in the log; `warn` on the smoke group, because a run that
+      # refused at the render stage legitimately has no smoke records and the
+      # refusal is already the failure.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provenance-reference-fixtures
+          path: build/provenance-upload/reference-fixture/
+          retention-days: 90
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provenance-smoke
+          path: |
+            build/provenance-upload/smoke/
+            build/provenance-upload/summary.json
+          retention-days: 7
+          if-no-files-found: warn

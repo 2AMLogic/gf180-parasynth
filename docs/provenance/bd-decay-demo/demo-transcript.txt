@@ -1,0 +1,86 @@
+==============================================================================================
+render / analyse / accept on a REAL case -- BD decay (issues #68, #259)
+==============================================================================================
+
+[render 1] the kit as it ships
+           BD-solo-7156d23-ac67474d-1ea24350ebf5
+           raw.wav sha256:8d4c71e4f24ad181, 105600 samples, peak 0.225677, clipped 0
+           retained 90 days as reference-fixture
+
+[analyse 1] the WITHDRAWN estimator
+  analysis BD-solo-7156d23-ac67474d-1ea24350ebf5-drum-decay-moving-average-v1-withdrawn-7b2a7480aefe
+  analyser drum-decay-moving-average@v1-withdrawn  render BD-solo-7156d23-ac67474d-1ea24350ebf5
+    fundamental     49.4084 Hz  bound      49.4 +/-2.0    target q parabolic interpolation of the thr
+    decay tau       149.315 ms  bound     144.0 +/-36.0   target q 0.823227
+    T20            207.0417 ms  bound   307.979 +/-36.0   lock   q none: a crossing is located, not f
+    attack           9.9375 ms  bound   14.5625 +/-3.0    lock   q none: two locations, no fit
+  accept -> fail (code 1)
+    fundamental  pass       49.4084 in [47.4, 51.4]
+    decay tau    pass       149.315 in [108, 180]
+    T20          fail       207.0417 in [272, 344]
+    attack       fail       9.9375 in [11.56, 17.56]
+
+[analyse 2] the CORRECTED estimator, re-reading the SAME retained WAV
+            manifest.load_render re-verified sha256:8d4c71e4f24ad181 before any estimator ran; no render happened
+  analysis BD-solo-7156d23-ac67474d-1ea24350ebf5-drum-decay-rms-v2-50de99714990
+  analyser drum-decay-rms@v2  render BD-solo-7156d23-ac67474d-1ea24350ebf5
+    fundamental     49.4084 Hz  bound      49.4 +/-2.0    target q parabolic interpolation of the thr
+    decay tau      144.0924 ms  bound     144.0 +/-36.0   target q 0.995537
+    T20            307.9792 ms  bound   307.979 +/-36.0   lock   q none: a crossing is located, not f
+    attack          14.5625 ms  bound   14.5625 +/-3.0    lock   q none: two locations, no fit
+  accept -> pass (code 0)
+    fundamental  pass       49.4084 in [47.4, 51.4]
+    decay tau    pass       144.0924 in [108, 180]
+    T20          pass       307.9792 in [272, 344]
+    attack       pass       14.5625 in [11.56, 17.56]
+
+[render 2] the SOUND defect 'bd-decay-short': the kick's body Q 40 % low, so it decays 40 % faster
+           BD-solo-7156d23-ac67474d-156c39bccf05
+[analyse 3] the CORRECTED estimator on the broken render
+  analysis BD-solo-7156d23-ac67474d-156c39bccf05-drum-decay-rms-v2-d85980fff66a
+  analyser drum-decay-rms@v2  render BD-solo-7156d23-ac67474d-156c39bccf05
+    fundamental     49.4091 Hz  bound      49.4 +/-2.0    target q parabolic interpolation of the thr
+    decay tau       86.4672 ms  bound     144.0 +/-36.0   target q 0.99518
+    T20            186.1042 ms  bound   307.979 +/-36.0   lock   q none: a crossing is located, not f
+    attack          14.2917 ms  bound   14.5625 +/-3.0    lock   q none: two locations, no fit
+  accept -> fail (code 1)
+    fundamental  pass       49.4091 in [47.4, 51.4]
+    decay tau    fail       86.4672 in [108, 180]
+    T20          fail       186.1042 in [272, 344]
+    attack       pass       14.2917 in [11.56, 17.56]
+
+==============================================================================================
+ATTRIBUTION -- did the sound change, or only the measurement?
+==============================================================================================
+
+  v1 -> v2 on the SAME retained audio
+    => measurement changed
+       fundamental     49.4084 -> 49.4084    delta     0.0000  tol    2.0  BLIND
+       decay tau       149.315 -> 144.0924   delta    -5.2226  tol   36.0  BLIND
+       T20            207.0417 -> 307.9792   delta   100.9375  tol   36.0  MOVED
+       attack           9.9375 -> 14.5625    delta     4.6250  tol    3.0  MOVED
+
+  v2 on clean -> v2 on the broken render
+    => sound changed
+       fundamental     49.4084 -> 49.4091    delta     0.0007  tol    2.0  BLIND
+       decay tau      144.0924 -> 86.4672    delta   -57.6252  tol   36.0  MOVED
+       T20            307.9792 -> 186.1042   delta  -121.8750  tol   36.0  MOVED
+       attack          14.5625 -> 14.2917    delta    -0.2708  tol    3.0  BLIND
+
+  v1 on clean -> v2 on the broken render
+    => REFUSED: 'fundamental': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-
+       fundamental     49.4084 -> 49.4091    delta     0.0007  tol    2.0  BLIND  (delta only; not attributed)
+       decay tau       149.315 -> 86.4672    delta   -62.8478  tol   36.0  MOVED  (delta only; not attributed)
+       T20            207.0417 -> 186.1042   delta   -20.9375  tol   36.0  BLIND  (delta only; not attributed)
+       attack           9.9375 -> 14.2917    delta     4.3542  tol    3.0  MOVED  (delta only; not attributed)
+
+----------------------------------------------------------------------------------------------
+  the corrected estimator on the clean render   pass
+  the withdrawn estimator on the SAME audio     fail    <- the measurement was wrong, not the sound
+  the corrected estimator on the broken render  fail    <- the sound was wrong, not the measurement
+  the two together                             REFUSED <- unattributable, and said so
+  T20 under both defects at once: delta -20.94 ms, BLIND -- they partly cancel
+----------------------------------------------------------------------------------------------
+  manifests and raw-clean.wav written to docs/provenance/bd-decay-demo
+
+PASS: the demonstration held

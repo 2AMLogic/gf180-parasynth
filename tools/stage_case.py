@@ -808,7 +808,16 @@ def demo(root, out) -> int:
                                      "unattributable"), deltas):
             (out / f"delta-{slug}.json").write_text(
                 json.dumps(dict(d, comparison=title), indent=1, default=str) + "\n")
-        print(f"  manifests written to {out}")
+        # The raw WAV goes with the manifests, not just its hash. "Retroactive
+        # analysis is the whole point -- when the next estimator turns out to be
+        # wrong, we re-run it on the old audio instead of losing the history"
+        # (issue #68), and an evidence directory of nothing but JSON is summary
+        # statistics wearing a manifest. 211 kB for the clean render; the broken
+        # one is reproducible from its manifest's `variant` and is not kept.
+        shutil.copyfile(
+            pathlib.Path(root) / "runs" / clean["render_id"] / clean["wav_path"],
+            out / "raw-clean.wav")
+        print(f"  manifests and raw-clean.wav written to {out}")
     print(f"\n{'PASS' if ok else 'FAIL'}: the demonstration "
           f"{'held' if ok else 'DID NOT hold'}")
     return 0 if ok else 1
