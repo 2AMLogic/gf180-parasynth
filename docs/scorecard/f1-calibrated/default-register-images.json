@@ -1,0 +1,144 @@
+{
+ "what": "default register images, baseline tree vs candidate tree (plan074 B7)",
+ "inject": null,
+ "baseline": {
+  "root": "/tmp/wt-f1-calib-base",
+  "head": "4c26c410e854d5dc3cae08af634519aec9f63d5a",
+  "dirty": false
+ },
+ "candidate": {
+  "root": "/private/tmp/wt-f1-calib",
+  "head": "b115b6adaa127a672742c6d73302f0b75040a7bb",
+  "dirty": true
+ },
+ "items": {
+  "M1A": {
+   "patch_regs": {
+    "baseline_sha256": "4b366a58a63e2c656796754930bb5d30795ea2b4111123287bcb8bc80bfede2e",
+    "candidate_sha256": "4b366a58a63e2c656796754930bb5d30795ea2b4111123287bcb8bc80bfede2e",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "6265befccd8a19b830cb18bfd88891b17d14e32e42eaeb1cb6c885a4b1003934",
+    "candidate_sha256": "6265befccd8a19b830cb18bfd88891b17d14e32e42eaeb1cb6c885a4b1003934",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "candidate_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "identical": true
+   },
+   "gain_ogain": [
+    127795,
+    27727
+   ]
+  },
+  "M5A-pulse": {
+   "patch_regs": {
+    "baseline_sha256": "c7a5141b093f013ff88eb54cbdac4717b8fdc754000c8eba1af97f48292884d1",
+    "candidate_sha256": "c7a5141b093f013ff88eb54cbdac4717b8fdc754000c8eba1af97f48292884d1",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "b353c00df9646ecdd3e0075c56d04b92001d1b3a5966f0f32e882621ba235a1c",
+    "candidate_sha256": "b353c00df9646ecdd3e0075c56d04b92001d1b3a5966f0f32e882621ba235a1c",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "candidate_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "identical": true
+   },
+   "gain_ogain": [
+    127795,
+    25206
+   ]
+  },
+  "M5A-saw": {
+   "patch_regs": {
+    "baseline_sha256": "67f3fc8516c976320c12d4e0e0f806f8b3454ff35061444403f4f6c8c8eb41f4",
+    "candidate_sha256": "67f3fc8516c976320c12d4e0e0f806f8b3454ff35061444403f4f6c8c8eb41f4",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "4738efb5bd48faa2ab478b9feaeaf1cc5f5dd7f95c59b5ae31f82bd35c5fb27e",
+    "candidate_sha256": "4738efb5bd48faa2ab478b9feaeaf1cc5f5dd7f95c59b5ae31f82bd35c5fb27e",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "candidate_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "identical": true
+   },
+   "gain_ogain": [
+    127795,
+    25206
+   ]
+  },
+  "M5B-pulse": {
+   "patch_regs": {
+    "baseline_sha256": "dcf957bb253b9ca0e9b18b53417dd0b5df2940ad5e283559fb64111978833b8f",
+    "candidate_sha256": "dcf957bb253b9ca0e9b18b53417dd0b5df2940ad5e283559fb64111978833b8f",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "c0d4701511200108492d895dc229553b00f763b28378268bea74da8dafbaa2c6",
+    "candidate_sha256": "c0d4701511200108492d895dc229553b00f763b28378268bea74da8dafbaa2c6",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "candidate_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "identical": true
+   },
+   "gain_ogain": [
+    127795,
+    25206
+   ]
+  },
+  "M5B-saw": {
+   "patch_regs": {
+    "baseline_sha256": "d0e9ae3978dd185ae001ac46576fadedd03e11168a2acca430b34bc4adc2b08f",
+    "candidate_sha256": "d0e9ae3978dd185ae001ac46576fadedd03e11168a2acca430b34bc4adc2b08f",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "e6fa72fc18fd8a572e4d412f546071ab3870d15fe6f9db17eaaa219865b6e32e",
+    "candidate_sha256": "e6fa72fc18fd8a572e4d412f546071ab3870d15fe6f9db17eaaa219865b6e32e",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "candidate_sha256": "8dc2c7804d78898ab003e2693a6980d6ef30d5cc21a49f1c8abed5fbdbfaf2ea",
+    "identical": true
+   },
+   "gain_ogain": [
+    127795,
+    25206
+   ]
+  },
+  "default": {
+   "patch_regs": {
+    "baseline_sha256": "03b09492a543714424535b4e890073d5bb5152b6d56137cb17f7d0435ff37981",
+    "candidate_sha256": "03b09492a543714424535b4e890073d5bb5152b6d56137cb17f7d0435ff37981",
+    "identical": true
+   },
+   "spi_load_voice_writes": {
+    "baseline_sha256": "f9bdd8f19ef7ee4fef4894d6ce7e20754556684a5fc5e03e9fbadcb53810fe0a",
+    "candidate_sha256": "f9bdd8f19ef7ee4fef4894d6ce7e20754556684a5fc5e03e9fbadcb53810fe0a",
+    "identical": true
+   },
+   "spi_resonance_knob_writes": {
+    "baseline_sha256": "216c73bee3ff6b6848294a5eb68f3e69e3a5a911f93972defe2aa94a29a3b99a",
+    "candidate_sha256": "216c73bee3ff6b6848294a5eb68f3e69e3a5a911f93972defe2aa94a29a3b99a",
+    "identical": true
+   },
+   "gain_ogain": [
+    272630,
+    56462
+   ]
+  }
+ },
+ "differences": [],
+ "identical": true
+}

@@ -939,6 +939,23 @@ few hundred mV against 2V_T ≈ 50 mV) and the dedicated Minimoog emulation.
 
 ### 8.4 Result: the cutoff control does not mean the same thing across its range
 
+> #### The `ours` rows below are revision 8 — the filter BEFORE DR 0011
+>
+> They are correct as history and the conclusion they reached was taken: the fix
+> named here shipped as **DR 0011** on 2026-09-18. But the headline number
+> — "7.92 pp against Surge Type 2's 0.62" — is not the shipped filter's, and it
+> has been quoted as though it were. Re-measured on the shipped filter at the
+> same operating point the drift is **1.26 pp**, and what is left is a
+> *resonance-dependent offset* of 105 cents that this metric cannot see by
+> construction. `docs/ladder-rung1-audit.md` has the shipped numbers, the
+> resonance table, and what remains available.
+>
+> **One caveat this section did not state, which decides how its comparison may
+> be read**: §8.3 records that Surge Type 2 cannot self-oscillate, so its
+> `tracking` row is a *decaying* resonant ring — 36 dB below ours in level in the
+> frozen profile — where ours is a limit cycle. Comparing how much each *drifts*
+> is fair; comparing the absolute offsets is not.
+
 Self-oscillation pitch against **commanded** cutoff, at maximum resonance, over
 six octaves:
 

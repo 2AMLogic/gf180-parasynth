@@ -122,3 +122,16 @@ def test_the_cost_model_is_explained_only_when_one_constant_remains():
     assert vd.cost_model(rows[2:])["explained"]
     rows[10]["strobe"] += 1                             # a cycle the counts do not explain
     assert not vd.cost_model(rows[2:])["explained"]
+
+
+def test_every_mutant_anchor_occurs_exactly_once_in_the_current_voice(tmp_path):
+    """The late-completion control and the candidate correction are generated
+    from voice_dp.v at run time; an anchor that moved would REFUSE the control
+    at run time -- pinned here so the drift is seen without a simulator."""
+    src = open(os.path.join(ROOT, "rtl-sketch", "voice_dp.v")).read()
+    for kind, edits in vd.MUTANTS.items():
+        for anchor, _ in edits:
+            assert src.count(anchor) == 1, (kind, anchor)
+    d = vd.make_mutant("late:37", str(tmp_path))
+    mutated = open(os.path.join(d, "voice_dp.v")).read()
+    assert mutated.count("MUTANT late") == 3 and "9'd37" in mutated

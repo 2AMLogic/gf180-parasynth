@@ -7,7 +7,7 @@
     .venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x
     .venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart
     .venv/bin/python rtl-sketch/verify_deadline.py --scenario threesaw-f1cal \\
-        --inject VOICE_LATE_DONE --expect-fail                  # the overrun control
+        --mutant late:160 --expect-fail                          # the overrun control
 
 WHY THIS EXISTS. The component bench (tb_voice.v) used to launch the voice at
 cycle 48 of the 256-cycle frame; synth_top launches at cycle 8. PR #235 found
@@ -72,9 +72,57 @@ MON_ARTY = os.path.join(HERE, "deadline_mon_arty.v")
 SAMPLE_DEADLINE, BUSY_DEADLINE = 254, 255
 TWO_X_SHAPES = {"saw"}                               # always through the 2x bank with OSC2X
 RECT_SHAPES = {"square", "pulse25", "pulse29", "pulse15"}  # through it only with PULSE2X
-#: PR #235's surge-type2-clean-v1 words (model/voice_fx.ladder_regs on that
-#: branch, recomputed there on 2026-09-25): res -> (gain, ogain); k is unchanged
+#: surge-type2-clean-v1's words as PR #235 recorded them: res -> (gain, ogain).
+#: The scenario takes them from model/voice_fx.py's calibration and asserts
+#: they are these, so a changed calibration cannot silently change the case.
+F1CAL = "surge-type2-clean-v1"
 F1CAL_WORDS = {0.0: (42598, 100825), 1.0: (42598, 302474), 1.1: (42598, 322639)}
+
+
+# ---- build-time mutants of voice_dp.v (never committed RTL) ------------------------
+# voice_dp.v is bound by hash to the published Arty image (fpga/publish_arty.py);
+# a control compiled into it by `ifdef would unbind that image. So each mutant
+# is generated from the CURRENT voice_dp.v at run time, from anchors that must
+# each occur exactly once, and REFUSES if one does not.
+MUTANTS = {
+    # late completion: the master mix held N extra cycles before the sample, so
+    # the strobe and busy both finish N cycles late with every value unchanged
+    "late": [("    reg signed [18:0] d19;",
+              "    reg [8:0] late_cnt;                // MUTANT late: the stall counter\n"),
+             ("                S_IDLE: if (go) begin\n",
+              "                    late_cnt <= 9'd0;                                  // MUTANT late\n"),
+             ("                S_DWAIT: begin\n",
+              "                    if (late_cnt != 9'd{N}) late_cnt <= late_cnt + 9'd1; else   // MUTANT late\n")],
+    # the CANDIDATE correction (docs/deadline/README.md): an oscillator whose
+    # output comes from the 2x bank skips the scalar PolyBLEP window loop,
+    # whose c_pp/c_ps only feed the scalar path it does not use
+    "skip2xwin": [("                    if (!blep) state <= S_MIX;",
+                   None)],
+}
+
+
+def make_mutant(spec: str, outdir: str) -> str:
+    kind, _, arg = spec.partition(":")
+    if kind not in MUTANTS:
+        raise SystemExit(f"verify_deadline: REFUSED -- unknown mutant {kind!r}")
+    src = open(os.path.join(HERE, "voice_dp.v")).read()
+    for anchor, insert in MUTANTS[kind]:
+        if src.count(anchor) != 1:
+            raise SystemExit(f"verify_deadline: REFUSED -- mutant {kind} anchor occurs "
+                             f"{src.count(anchor)} times in voice_dp.v: {anchor.strip()!r}")
+        if kind == "skip2xwin":
+            src = src.replace(anchor, "                    if (!blep || (use_osc2x && shape_osc2x)) "
+                                      "state <= S_MIX;   // MUTANT skip2xwin")
+        elif anchor.endswith("\n"):
+            src = src.replace(anchor, anchor + insert.replace("{N}", str(int(arg))))
+        else:
+            i = src.index(anchor)
+            src = src[:i] + insert + src[i:]
+    d = os.path.join(outdir, f"mutant-{kind}{arg}")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "voice_dp.v"), "w") as fh:
+        fh.write(src)
+    return d
 
 
 def chip_go_cycle() -> int:
@@ -146,8 +194,9 @@ def sc_threesaw_f1cal(short=False):
     for i, (cut, res) in enumerate(pts):
         r = vf.VoiceFx.patch_regs(waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
                                   mix=(1.0, 0.0, 0.0), cutoff=(cut, cut), q=res, drive=1.0,
-                                  track=0.0, amp=(0.001, 0.25, 1.0, 0.05))
-        r["gain"], r["ogain"] = F1CAL_WORDS[res]
+                                  track=0.0, amp=(0.001, 0.25, 1.0, 0.05),
+                                  filter_calibration=F1CAL)
+        assert (r["gain"], r["ogain"]) == F1CAL_WORDS[res], (res, r["gain"], r["ogain"])
         if i == 0:
             regs = r
             s.put(0, image_writes(r))                     # the legal preload, gate still off
@@ -408,13 +457,14 @@ def analyse_sched(rows, go_cycle, skip=2):
 
 # ---- the SPI path: tb_top_bx + monitor -------------------------------------------
 @contextlib.contextmanager
-def monitor_attached(mod, path):
-    """Append the monitor root to the source list a bench driver resolves.
-    Restored on exit; the driver itself is not edited."""
+def monitor_attached(mod, path, rtl_dir=None):
+    """Append the monitor root to the source list a bench driver resolves (and,
+    for a mutant, take voice_dp.v from `rtl_dir`). Restored on exit; the driver
+    itself is not edited."""
     orig = mod.resolve_sources
 
-    def with_monitor(rtl_dir=None):
-        return list(orig(rtl_dir)) + [(os.path.basename(path), path)]
+    def with_monitor(_rtl_dir=None):
+        return list(orig(rtl_dir or _rtl_dir)) + [(os.path.basename(path), path)]
     mod.resolve_sources = with_monitor
     try:
         yield
@@ -422,7 +472,7 @@ def monitor_attached(mod, path):
         mod.resolve_sources = orig
 
 
-def run_spi(scenario, *, osc2x, filter2x, pulse2x, inject, outdir, short, late_stall=None):
+def run_spi(scenario, *, osc2x, filter2x, pulse2x, inject, outdir, short, rtl_dir=None):
     cmds, tail, meta = SPI_SCENARIOS[scenario](short)
     os.makedirs(outdir, exist_ok=True)
     vst.write_cmds(os.path.join(outdir, "top_bx_cmds.txt"), cmds)
@@ -430,13 +480,11 @@ def run_spi(scenario, *, osc2x, filter2x, pulse2x, inject, outdir, short, late_s
         + (["VOICE_PULSE_2X"] if pulse2x else [])
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
-    if late_stall is not None:
-        defines.append(f"VOICE_LATE_STALL={late_stall}")
     print(f"verify_deadline: {scenario}: {len(cmds)} writes over the SPI pins "
           f"({sum(1 for c in cmds if c[2] == SEC_V)} voice, {sum(1 for c in cmds if c[2] == SEC_D)} drum), "
           f"{tail} frames after the last; defines {', '.join(defines) or '(none)'}")
-    with monitor_attached(vst, MON_TOP):
-        out = vst.simulate(defines, outdir, tail)
+    with monitor_attached(vst, MON_TOP, rtl_dir):
+        out = vst.simulate(defines, outdir, tail, rtl_dir=rtl_dir)
     if out is None:
         return None
     rep = "\n".join(out["report"])
@@ -511,10 +559,8 @@ def arty_items():
     return items, regs
 
 
-def run_arty(*, inject, outdir, late_stall=None):
+def run_arty(*, inject, outdir, rtl_dir=None):
     import verify_uart_bridge as vub
-    if late_stall is not None:
-        raise SystemExit("verify_deadline: --late-stall is SPI-path only")
     items, regs = arty_items()
     vub.SCENARIOS["deadline-arty"] = lambda: (items, {"tail": 200})
     print(f"verify_deadline: arty-uart: {sum(1 for i in items if i[0] == 'write')} live writes, "
@@ -523,7 +569,7 @@ def run_arty(*, inject, outdir, late_stall=None):
     cwd = os.getcwd()
     os.chdir(HERE)                    # the monitor's `include resolves from rtl-sketch
     try:
-        with monitor_attached(vub.top, MON_ARTY):
+        with monitor_attached(vub.top, MON_ARTY, rtl_dir):
             run = vub.simulate("deadline-arty", inject, outdir)
     finally:
         os.chdir(cwd)
@@ -598,31 +644,41 @@ def provenance(defines):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--scenario", required=True, choices=sorted(SPI_SCENARIOS) + ["arty-uart"])
+    ap.add_argument("--scenario", choices=sorted(SPI_SCENARIOS) + ["arty-uart"])
     ap.add_argument("--no-osc2x", action="store_true", help="legacy single-rate oscillators")
     ap.add_argument("--no-filter2x", action="store_true")
     ap.add_argument("--pulse2x", action="store_true")
     ap.add_argument("--inject", default=None, help="compile with -DINJECT_BUG_<NAME>")
-    ap.add_argument("--late-stall", type=int, default=None,
-                    help="with --inject VOICE_LATE_DONE: stall cycles (default 160)")
+    ap.add_argument("--mutant", default=None,
+                    help="late:N (the late-completion control: N stall cycles) or skip2xwin "
+                         "(the candidate correction); generated from voice_dp.v at run time")
+    ap.add_argument("--write-mutant", default=None, metavar="SPEC",
+                    help="only write the mutant voice_dp.v under --outdir and print its path")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--short", action="store_true")
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--json", default=None)
     a = ap.parse_args(argv)
     osc2x, filter2x = not a.no_osc2x, not a.no_filter2x
+    if not a.scenario and not a.write_mutant:
+        ap.error("--scenario is required")
     go = chip_go_cycle()
+    if a.write_mutant:
+        d = make_mutant(a.write_mutant, os.path.abspath(a.outdir or os.path.join(HERE, "build", "deadline")))
+        print(os.path.join(d, "voice_dp.v"))
+        return 0
     tag = a.scenario + ("-p2x" if a.pulse2x else "") + (f"-{a.inject}" if a.inject else "") \
-        + (f"-{a.late_stall}" if a.late_stall is not None else "")
+        + (f"-{a.mutant.replace(':', '')}" if a.mutant else "")
     outdir = os.path.abspath(a.outdir or os.path.join(HERE, "build", "deadline", tag))
+    rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
     if a.scenario == "arty-uart":
         if a.pulse2x or a.no_osc2x or a.no_filter2x:
             print("verify_deadline: REFUSED -- arty-uart runs the published Arty configuration "
                   "(OSC2X=1 FILTER2X=1 PULSE2X=0) only"); return 2
-        res = run_arty(inject=a.inject, outdir=outdir, late_stall=a.late_stall)
+        res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir)
     else:
         res = run_spi(a.scenario, osc2x=osc2x, filter2x=filter2x, pulse2x=a.pulse2x,
-                      inject=a.inject, outdir=outdir, short=a.short, late_stall=a.late_stall)
+                      inject=a.inject, outdir=outdir, short=a.short, rtl_dir=rtl_dir)
     if res is None:
         print("verify_deadline: REFUSED -- the simulation did not run"); return _exit(2, a)
     for ln in res["report"]:
@@ -666,7 +722,7 @@ def main(argv=None) -> int:
                                         f"{sched['worst_sample_slack']} cycles, I2S identical to the model"))
     if a.json:
         rec = dict(scenario=a.scenario, configuration=cfg, bench=res["bench"], go_cycle=go,
-                   inject=a.inject, late_stall=a.late_stall, status=word, reasons=reasons,
+                   inject=a.inject, mutant=a.mutant, status=word, reasons=reasons,
                    deadline_failed=deadline_failed,
                    schedule={k: v for k, v in sched.items()},
                    facts={k: res.get(k) for k in ("busy_at_tick", "overrun", "overflow",
@@ -680,7 +736,7 @@ def main(argv=None) -> int:
             json.dump(rec, fh, indent=1, default=str)
     if a.expect_fail:
         if status == 1 and deadline_failed:
-            print(f"verify_deadline: negative control {a.inject} CAUGHT by the deadline check")
+            print(f"verify_deadline: negative control {a.inject or a.mutant} CAUGHT by the deadline check")
             return 0
         print(f"verify_deadline: NEGATIVE CONTROL NOT CAUGHT FOR ITS REASON (status {word}, "
               f"deadline failed {deadline_failed})")

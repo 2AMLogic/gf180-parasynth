@@ -132,6 +132,19 @@ which injects the defect the estimators exist to catch and requires the
 absolute property to go red while the drift property stays green — the
 estimator was tested by breaking it, not by trusting it.
 
+**And the same blindness, at a second operating point, found later.** The
+injected skew above tests the drift metric at `res = 1.05` — the resonance
+`CUT_TRIM` was fitted at. Swept across the resonance knob
+(`model/ladder_headroom.py`, issue #46's rung-1 audit), the mean offset walks
+from **+0.07 % at res 1.05 to −5.32 % at res 2.00** while the drift stays at
+1.0–1.3 pp throughout. So the residual this record removes with one constant is
+resonance-dependent, which the "What was NOT taken" section above anticipates in
+principle ("its value depends on the operating point") without measuring: it is
+**105 cents of travel**, and it is the largest remaining rung-1 error by an order
+of magnitude. Not a defect in this record — it is the consequence this record
+says it is accepting — but it is now a number rather than a caveat.
+`docs/ladder-rung1-audit.md` §1 has the table.
+
 The −3 dB corner is not 1.0 in either revision and was never going to be: a
 four-pole cascade's corner is structurally below its per-pole corner. What that
 row locks is that the corner is a *fixed fraction* of the commanded cutoff, and

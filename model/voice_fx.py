@@ -103,6 +103,71 @@ GLIDE_BITS = 24                  # glide register: ratio per frame - 1, Q0.24; 0
 INC_FRAC = 8                     # the slewed increment carries 8 fraction bits, Q24.8
 GLIDE_REF_S = 0.09               # reference host: 90 ms per octave (engines.mono_note's 90 ms glide)
 LADDER_CFG = dict(state_bits=24, state_q=20, tanh_entries=16, interp=True, out_bits=LADDER_OUT_BITS)
+
+# ---- versioned filter operating points (plan074 B) -------------------------
+# A calibration is a NAMED, FROZEN operating point of the host's gain/ogain
+# conversion (contract 5.5) -- not a filter algorithm and not a default. The one
+# entry is #231's selected result: the ladder's input scaled by s = 1/4 with the
+# exact reciprocal output compensation, recomputed from the physical mapping
+# (volts_per_unit = 0.13 * s) and quantised, never derived by scaling the
+# rounded baseline words. ROMs, CUT_TRIM, the tanh table, state widths and the
+# rate chain are untouched: two writable register values change and nothing
+# else. `None` is the legacy conversion, byte-identical to every existing patch.
+# Scope (docs/scorecard/f1-level/): Surge Type 2 small-signal cutoff response,
+# res 0, drive 1.0, -12..-24 dBFS. It is SELECTABLE, not qualified as a global
+# default (plan074 G) -- resonance/overdrive behaviour differs by construction.
+FILTER_CALIBRATIONS = {
+    "surge-type2-clean-v1": dict(
+        input_scale=0.25,
+        base_volts_per_unit=0.13,
+        source="docs/scorecard/f1-level/selection-rule.md (#231), s = 1/4 frozen "
+               "across F1A-F1C and all three development levels",
+        expected_words_res0_drive1=dict(gain=42598, ogain=100825),
+    ),
+}
+
+
+class CalibrationError(ValueError):
+    """An unknown calibration, or one whose words cannot be carried by the
+    register: REFUSED, never clamped or silently replaced by the default."""
+
+
+def filter_calibration(name: str) -> dict:
+    try:
+        return FILTER_CALIBRATIONS[name]
+    except KeyError:
+        raise CalibrationError(f"unknown filter calibration {name!r}; known: "
+                               f"{sorted(FILTER_CALIBRATIONS)}") from None
+
+
+def ladder_regs(res: float, drive: float, calibration: str | None = None) -> tuple:
+    """THE host conversion for the ladder's k / gain / ogain registers. Every
+    production caller (`VoiceFx.patch_regs`, the SPI host's resonance knob)
+    goes through here, so a calibration cannot be applied on one path and
+    forgotten on another.
+
+    calibration None: the legacy conversion, `LadderFx(**LADDER_CFG).regs`,
+    clamped to the register widths exactly as before.
+    calibration name: `LadderFx.regs_unclamped` at volts_per_unit =
+    base * input_scale; a word outside its register REFUSES."""
+    if calibration is None:
+        return LadderFx(**LADDER_CFG).regs(res, drive)
+    cal = filter_calibration(calibration)
+    base = LadderFx(**LADDER_CFG)
+    if base.vpu != cal["base_volts_per_unit"]:
+        raise CalibrationError(f"{calibration}: frozen against volts_per_unit "
+                               f"{cal['base_volts_per_unit']}, the global conversion now "
+                               f"uses {base.vpu}")
+    lad = LadderFx(**{**LADDER_CFG, "volts_per_unit": cal["base_volts_per_unit"]
+                      * cal["input_scale"]})
+    words = lad.regs_unclamped(res, drive)
+    for name, v, bits in zip(("k", "gain", "ogain"), words,
+                             (LadderFx.K_BITS, LadderFx.GAIN_BITS, LadderFx.GAIN_BITS)):
+        if not 0 <= v < (1 << bits):
+            raise CalibrationError(f"{calibration}: {name} = {v} at res {res}, drive {drive} "
+                                   f"does not fit its {bits}-bit register; refused, not clamped")
+    return words
+
 INC_BITS = PHASE_BITS            # the increment register is as wide as the phase
 INC_MAX = (1 << INC_BITS) - 1
 WEIGHT_BITS = 16                 # Q0.15 mixer weight; 1.0 = 32768 needs the 16th bit
@@ -995,16 +1060,28 @@ class VoiceFx:
                    amp=(0.005, 0.25, 0.75, 0.12), fenv=(0.004, 0.30, 0.25, 0.10),
                    track=0.35, vol=None, glide_s=GLIDE_REF_S,
                    mod_mix=0.0, mod_wheel=0.0, mod_pitch=MPD_REF_OCT, mod_filter=MFD_REF_OCT,
-                   osc_mod=False, filt_mod=False, osc3_ctl=True, **_ignored) -> dict:
+                   osc_mod=False, filt_mod=False, osc3_ctl=True, filter_calibration=None,
+                   **_ignored) -> dict:
         """The patch's physical units as the control image, less the per-note
         registers (inc, track_hz, gate). Same names and defaults as
         engines.mono_note. `vol` in 0..1 (reference 0.45); `glide_s` is the
-        time per octave at the constant-rate glide of DR 0004."""
+        time per octave at the constant-rate glide of DR 0004.
+
+        `filter_calibration`: None (the legacy conversion; the image is exactly
+        what it always was, with no calibration key) or a FILTER_CALIBRATIONS
+        name, recorded in the image as `filter_calibration`. An unknown name
+        refuses; a misspelt keyword is refused rather than swallowed by
+        `_ignored`, because an ignored calibration would look selected."""
+        stray = [key for key in _ignored if "calib" in key.lower()]
+        if stray:
+            raise CalibrationError(f"patch keyword(s) {stray} are not `filter_calibration`; "
+                                   f"refusing rather than ignoring a calibration request")
         waves = tuple(waves) + ("saw",) * (3 - len(waves))     # a patch with fewer than
         detune = tuple(detune) + (0.0,) * (3 - len(detune))      # three oscillators leaves
         mix = tuple(mix) + (0.0,) * (3 - len(mix))               # the rest silent: w = 0
         weights = mix_weights(list(mix) + [noise])               # FOUR mixer sources (6.10)
-        k, gain, ogain = LadderFx(**LADDER_CFG).regs(q, drive)     # clamped to 17 / 20 / 20 bits
+        k, gain, ogain = ladder_regs(q, drive, filter_calibration)   # 17 / 20 / 20 bits
+        extra = {} if filter_calibration is None else {"filter_calibration": filter_calibration}
         return dict(waves=waves, detune=detune, weights=weights,
                     cut_lo=usat(int(round(cutoff[0])), CUT_BITS),
                     cut_hi=usat(int(round(cutoff[1])), CUT_BITS),
@@ -1018,7 +1095,8 @@ class VoiceFx:
                     mpd=usat(int(round(mod_pitch * (1 << OCT_Q))), MOD_BITS),
                     mfd=usat(int(round(mod_filter * (1 << OCT_Q))), MOD_BITS),
                     mroute=((MR_OSC if osc_mod else 0) | (MR_FILT if filt_mod else 0)
-                            | (MR_OSC3 if osc3_ctl else 0)))
+                            | (MR_OSC3 if osc3_ctl else 0)),
+                    **extra)
 
     @staticmethod
     def note_incs(note, detune) -> list:
@@ -1090,6 +1168,16 @@ class VoiceFx:
         self.cut_lo, self.cut_hi = int(r["cut_lo"]), int(r["cut_hi"])
         self.res, self.drive = r["res"], r["drive"]
         self.k_reg, self.gain, self.ogain = int(r["k"]), int(r["gain"]), int(r["ogain"])
+        cal = r.get("filter_calibration")
+        if cal is not None:
+            # An image that NAMES a calibration must carry its words: a request
+            # for the operating point with the legacy words delivered is the
+            # constructor-only trap of #231, refused here rather than rendered.
+            want = ladder_regs(r["res"], r["drive"], cal)
+            if (self.k_reg, self.gain, self.ogain) != tuple(want):
+                raise CalibrationError(
+                    f"image names {cal!r} but carries k/gain/ogain "
+                    f"{(self.k_reg, self.gain, self.ogain)}, not its words {tuple(want)}")
         self.vol = int(r["vol"])
         self.glide = int(r["glide"])
         self.nsel = int(r.get("nsel", 0))

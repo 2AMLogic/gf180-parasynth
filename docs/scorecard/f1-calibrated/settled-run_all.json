@@ -1,0 +1,44 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     /private/tmp/wt-f1-calib/docs/scorecard/results\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nF1A    pass           0.76  \nF1B    pass           0.42  \nF1C    pass           0.36  \n------------------------------------------------------------------------------------------------\npass: 3\nexit 0: 0 match, 1 mismatch (a result), 2 did not run (no evidence)\n",
+    "secs": 133.26240301132202
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-f1-noclip --expect 'no verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/case-f1-noclip\nINJECTED CONTROL: REF_PROFILE_MISSING -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)\n",
+    "secs": 141.50842905044556
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-f1-badhash --expect 'no verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/case-f1-badhash\nINJECTED CONTROL: REF_PROFILE_TAMPERED -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)\n",
+    "secs": 141.74179410934448
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/case-f1-corner2x\nINJECTED CONTROL: REF_CORNER_2X -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    fail           8.76  worst: Corner frequency\nF1B    fail           9.39  worst: Corner frequency\nF1C    fail           9.33  worst: Corner frequency\n------------------------------------------------------------------------------------------------\nfail: 3\ncontrol fired: REF_CORNER_2X caused the expected result on 3 measured case(s)\n",
+    "secs": 211.32997298240662
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /tmp/tr808-ref\nresults into:     build/case-f1-legacy\nINJECTED CONTROL: F1_LEGACY_SUBSTITUTE -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: F1_LEGACY_SUBSTITUTE caused the expected result on 3 measured case(s)\n",
+    "secs": 139.0492238998413
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest model/test_filter_calibration.py tools/test_run_case.py tools/test_f1_selected_path.py tools/test_f1_level_scaling.py tools/test_refprofile.py tools/test_refprofile_post_render.py -q",
+    "state": "PASS",
+    "rc": 0,
+    "out": "...................................................ssss................. [ 40%]\n........................................................................ [ 81%]\n................................                                         [100%]\n172 passed, 4 skipped in 45.67s\n",
+    "secs": 49.59736084938049
+  }
+]
