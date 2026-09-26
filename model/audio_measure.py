@@ -240,8 +240,16 @@ def rms_envelope(x, ms: float = 5.0, sr: int = SR_DEFAULT) -> np.ndarray:
 
 def moving_average_envelope(x, ms: float, sr: int = SR_DEFAULT) -> np.ndarray:
     """DEPRECATED, kept only as the counter-example in
-    `test_moving_average_envelope_is_biased_and_analytic_is_not`. Do not use it
-    to measure anything."""
+    `test_moving_average_envelope_ripples_where_the_analytic_one_does_not`
+    (name corrected here -- the docstring had drifted from the test it cited).
+    Do not use it to measure anything.
+
+    This is also the shipped defect `model/sound_report.py --inject
+    bd-ma-envelope` reinstates: patched into `drum_verify.envelope` at its
+    original 5 ms window, it biases the kick's T20 by -33 % and its attack by
+    -32 % while leaving `decay tau` and `fundamental` BLIND -- a demonstration,
+    not just an assertion, that a defect can be invisible to some properties of
+    the same voice and visible to others."""
     x = _as_float(x)
     k = max(1, int(round(ms * 1e-3 * sr)))
     return np.convolve(np.abs(x), np.ones(k) / k, mode="same")
@@ -686,7 +694,16 @@ def spectral_centroid(x, band=(20.0, 20000.0), sr: int = SR_DEFAULT, *, weight: 
     """A descriptor of where the energy sits. NOT a filter corner and NOT a
     band-pass centre -- see rule 3 at the top of this file. `weight` is
     "power" or "amplitude"; they answer different questions and neither is the
-    corner frequency of anything."""
+    corner frequency of anything.
+
+    "amplitude" is the textbook ("magnitude") centroid `drum_verify.centroid_hz`
+    also reports for comparison, and docs/drum-verification.md 3 documents why
+    it lies for a body-plus-noise voice: a wide, quiet noise floor pulls it
+    high even when almost all the energy sits low. Reading it where "power"
+    (`drum_verify.power_centroid_hz`) belongs is the shipped defect
+    `model/sound_report.py --inject sd-centroid-amp-weighted` reinstates, and
+    `test_amplitude_weighted_centroid_reads_a_quiet_wideband_floor_as_bright` in
+    `test_audio_measure.py` is its closed-form ground truth."""
     f, X = spectrum(x, sr)
     sel = (f >= band[0]) & (f <= band[1])
     w = X[sel] ** 2 if weight == "power" else X[sel]
