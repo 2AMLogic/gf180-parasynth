@@ -29,7 +29,7 @@ is not available in a sandbox. It needs, in order:
 
 1. `python fpga/build_arty.py` on the x86-64 Linux build box with Vivado
    2025.1 on `PATH` — a real synthesis, place, route and bitstream from the
-   current tree, bound to `reports/arty/l2-clean/verification.json`;
+   current tree, bound to `reports/arty/rev14-clean/verification.json`;
 2. `python tools/dsp_dpreg_extract.py` against the **new** `routed.dcp`, to
    re-derive the DPREG-4 DSP-feedback disposition for that image (the
    committed evidence is bound by digest to routed checkpoint
@@ -46,7 +46,7 @@ refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 - the digital verification record is **derived from the wrapper the build
   compiled** (`build.tcl` `-top` → `VERIFICATION_BY_WRAPPER`:
   `arty_a7_top` — which, since the bridge merged, IS the UART wrapper —
-  → `reports/arty/l2-clean/verification.json`; an
+  → `reports/arty/rev14-clean/verification.json`; an
   unlisted wrapper has no evidence and is refused), and the proof is
   hash-validated against the wrapper's compiled source set, so **the map
   moves whenever a compiled source changes** and superseded runs stay where
@@ -434,11 +434,13 @@ demonstrated to turn the bench red. The controls are bench-logic controls
 [reports/arty/uart-controls](reports/arty/uart-controls).
 
 The clean run for the **current** tree is
-[reports/arty/l2-clean](reports/arty/l2-clean) (the clap's final strike,
-contract revision 14: four drum/top source hashes move against `drift-clean`
-and no measured field or transcript byte does, because the `phrase` scenario
-does not fire the clap — the clap's pin-level evidence is
-`docs/scorecard/clap-l2/`). Before it,
+[reports/arty/rev14-clean](reports/arty/rev14-clean): contract revision 14,
+polyBLAMP (13) and the clap's final strike (14). Against its two parents,
+[shark-blamp-clean](reports/arty/shark-blamp-clean) and
+[l2-clean](reports/arty/l2-clean), only source hashes move. No measured field
+or transcript byte moves, because the `phrase` scenario is a sawtooth phrase
+that plays neither feature. Their pin-level evidence is their own benches, and
+the clap's is in `docs/scorecard/clap-l2/`. Before those,
 [reports/arty/drift-clean](reports/arty/drift-clean) — 87/87 writes
 delivered, 6,734 I2S periods bit-exact, carried with its own start-red run
 against `stubs/arty_a7_uart_stub.v` (`FAIL`, 0 of 26 writes). Drift moved one
@@ -495,7 +497,7 @@ To reuse the committed digital evidence on that host, without rerunning the
 same unchanged RTL smoke:
 
 ```text
-python fpga/build_arty.py --verification fpga/reports/arty/l2-clean/verification.json
+python fpga/build_arty.py --verification fpga/reports/arty/rev14-clean/verification.json
 ```
 
 (the preparer hash-checks the record against the live source set, so only a

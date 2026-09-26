@@ -89,7 +89,13 @@ def test_superseded_records_are_data_and_never_a_failure(capsys):
           "rtl-sketch/drum_regs.v", "rtl-sketch/synth_top.v"]
     assert records["fpga/reports/arty/uart-clean/verification.json"] == sorted(
         L2 + ["rtl-sketch/voice_dp.v"])
-    assert records["fpga/reports/arty/drift-clean/verification.json"] == L2
+    V = ["rtl-sketch/voice_dp.v"]            # polyBLAMP (revision 13) since then
+    assert records["fpga/reports/arty/drift-clean/verification.json"] == sorted(L2 + V)
+    # the two parents of the revision-14 tree: polyBLAMP without L2, and L2
+    # without polyBLAMP (whose drum comments were renumbered 13 -> 14 after it)
+    assert records["fpga/reports/arty/shark-blamp-clean/verification.json"] == L2
+    assert records["fpga/reports/arty/l2-clean/verification.json"] == [
+        "rtl-sketch/drum_dp.v", "rtl-sketch/drum_regs.v", "rtl-sketch/voice_dp.v"]
     bound = {str(p.relative_to(ROOT)) for _, p in gate.bound_bindings()}
     assert not (bound & set(records)), "the bound record is not history"
     assert gate.main(["--list-historical"]) == 0

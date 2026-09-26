@@ -29,7 +29,7 @@ reads:
 The run exits 0 (`fpga/reports/live-midi/start-command.log`, regenerated on
 the revision-14 tree for #273): 191 init writes acknowledged (kit for image
 tree, contract revision 14), 203 scheduled writes executed, 14 refusals printed
-by name, device errors 0, drops 0, queue peak 17. Its first run (before #273,
+by name, device errors 0, drops 0, queue peak 18 (17 on the previous run: the simulated board runs in real time behind a pty, so the peak moves by one). Its first run (before #273,
 revision 11's 190-write known state) REFUSED at start: 48 of 190 ACKs were
 counted. The fault was in `uart_host.Bridge._take`, which dropped
 every ACK after the first in a chunk; it is fixed, with a regression test.
