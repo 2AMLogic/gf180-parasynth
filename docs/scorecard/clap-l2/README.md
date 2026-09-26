@@ -109,6 +109,16 @@ reference kit, the fixture's accents; each fires CP twice). Build box, commit
 | control: `demo`, every accent 2.0, DVOL/BVOL full | L2 | 30,595 | 30,601 | 147,419 | −13.06 dB | 22 |
 | control: `bar808-full`, same | L2 | 27,132 | 27,135 | 143,326 | −12.82 dB | 22 |
 
+> **Superseded for the player, 2026-09-26 (#279/#300): model only, on the
+> fixture's own schedule.** Decoded from the R1 production path (the CLI's
+> `--image tree` bytes through the Arty wrapper RTL), `demo` peaks at
+> **29,962 LSB with 0 rail samples: +0.78 dB**, not +1.99 dB; `bar808-full`
+> peaks at 19,517 (+4.50 dB). Both still reach no rail, so "no gain change"
+> holds, with 0.78 dB of margin rather than 1.99. The two figures are
+> **unreconciled**: the stimuli differ in delivery timing, the R1 known-state
+> preamble, the voice image and the held state, and which of these moves the
+> peak has not been measured. See `fpga/release/R1.md`.
+
 - **No gain change.** Neither nominal mix reaches the final clamp with either
   clap. L2 does not reduce the demo's headroom (+1.99 dB vs +1.96 dB), so the
   gains stay where they are and there is nothing to bind.

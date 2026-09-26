@@ -3,7 +3,7 @@
 `fpga/midi_session.py` is a second host, separate from `uart_host.py run`, and it
 built `spi_host.MusicHost` with no kit, so it fell back to `drums_fx.kit_808()`:
 after #273 that is revision 14's clap (ENV_CTL[8] burst 3, the new ENV_FRATE[8],
-ENV_RATE[9] 80 ms). The published R1 Arty image is revision 11 and does not
+ENV_RATE[9] 80 ms). The published R0 Arty image is revision 11 and does not
 decode ENV_FRATE, so a live session on a real board played an unverified clap
 and nothing refused or reported it.
 
@@ -74,7 +74,9 @@ def test_control_tree_session_sends_revision_14():
     assert FRATE in drums
     tree = dict(dx.kit_808())
     assert drums[BURST] == tree[BURST] and drums[TAIL_RATE] == tree[TAIL_RATE]
-    assert len(s.init_writes()) == len(_session().init_writes()) + 1
+    # one more kit write (ENV_FRATE[8]) and R1's known-state preamble (#279)
+    assert len(s.init_writes()) == len(_session().init_writes()) + 1 + len(uh.known_state_preamble())
+    assert s.init_writes()[:2] == list(uh.known_state_preamble())
 
 
 def test_control_release_session_refuses_a_drifted_kit(monkeypatch):

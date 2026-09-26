@@ -74,6 +74,7 @@ import spi_host as sh                             # noqa: E402
 import synth_top_model as stm                     # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import voice_fx as vf                             # noqa: E402
+import r1_candidate as r1c                        # noqa: E402
 from dsp import note_hz, phase_inc                # noqa: E402
 
 SR = C.SR
@@ -289,9 +290,14 @@ class Oracle:
     def __init__(self, frame_of, patch: dict | None = None):
         self.frame_of = frame_of
         self.regs = dict(patch or vf.VoiceFx.patch_regs())
-        self.mh = sh.MusicHost(patch=dict(self.regs), kit=uh.image_kit(HARNESS_IMAGE))
+        # the R1 target is FROZEN (fpga/release/r1_candidate.py), never read
+        # from the image selector the session under test was given (plan088):
+        # the revision-14 kit by digest, after the known-state preamble
+        assert HARNESS_IMAGE == r1c.HOST_IMAGE, (HARNESS_IMAGE, r1c.HOST_IMAGE)
+        self.mh = sh.MusicHost(patch=dict(self.regs), kit=r1c.frozen_kit())
         self.mh.load(0)
-        self.static = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
+        self.static = [tuple(w) for w in r1c.PREAMBLE]
+        self.static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
         for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
                           (stm.A_MWHEEL, "mwheel"), (stm.A_MPD, "mpd"), (stm.A_MFD, "mfd")):
             self.static.append((0, 0, addr, int(self.regs[key])))
@@ -967,10 +973,13 @@ def rtl_replay(res: dict, outdir: Path, *, reuse: bool = False, timeout_s: int =
     if rr is None:
         return {"state": "NO VERDICT", "reason": "the RTL replay did not run", "capture": cap}
     ok, comp, detail = vub.analyze(rr)
+    trunc = vub.truncation_control(rr)          # completeness can fail (#300 review)
     receipt = Path(rr["outdir"]) / "run_identity.json"
     published = outdir / f"{name}.run_identity.json"
     published.write_bytes(receipt.read_bytes())
-    return {"state": "PASS" if ok else "FAIL", "capture": cap, "comparison": comp,
+    state = ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
+             else "PASS" if ok else "FAIL")
+    return {"state": state, "capture": cap, "comparison": comp, "truncation_control": trunc,
             "detail": detail[:10], "reused_rtl_run": bool(rr.get("reused")),
             "run_receipt": {"path": published.name,
                             "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
@@ -1012,6 +1021,9 @@ def main(argv=None) -> int:
                          "so its bytes cannot be paired with the schedule write for write; "
                          "it is caught at the device contract.)")
     ap.add_argument("--reuse-rtl", action="store_true")
+    ap.add_argument("--reuse-rtl-if-identical", action="store_true",
+                    help="re-analyse the RTL run on disk when its full identity is this "
+                         "run's; else simulate")
     ap.add_argument("--sustained-s", type=float, default=C.SUSTAINED_S)
     ap.add_argument("--rtl-sustained-s", type=float, default=3.0,
                     help="length of the sustained session replayed through the RTL")
@@ -1063,7 +1075,8 @@ def main(argv=None) -> int:
         for sc in ([] if a.rtl is None else (a.rtl or ["coverage"])):
             kw = {"seconds": a.rtl_sustained_s} if sc == "sustained" else {}
             r = check(run_session(sc, **kw))
-            rr = rtl_replay(r, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
+            rr = rtl_replay(r, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl)
             record["rtl"][sc] = rr
             verdicts.append(rr["state"])
             comp = rr.get("comparison", {})
@@ -1073,7 +1086,8 @@ def main(argv=None) -> int:
                   + (f" -- {rr.get('detail') or rr.get('reason')}" if rr["state"] != "PASS" else ""))
         for ctl in a.rtl_inject:
             r = check(run_session(CONTROLS[ctl][0], inject=ctl))
-            rr = rtl_replay(r, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
+            rr = rtl_replay(r, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl)
             comp = rr.get("comparison", {})
             caught = rr["state"] == "FAIL" and (comp.get("wire_mismatch", 0) > 0)
             rr["caught_by_i2s"] = caught

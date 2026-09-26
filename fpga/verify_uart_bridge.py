@@ -414,7 +414,12 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     musical-length replay is ~50 minutes) -- only when the stimulus file
     the bench consumed is byte-identical to this capture's and the run
     reached the frames this analysis needs; otherwise it REFUSES (None).
-    Expectations may change between the two; the stimulus may not."""
+    Expectations may change between the two; the stimulus may not.
+
+    `reuse="auto"` re-analyses under exactly the same identity check and
+    SIMULATES instead of refusing when the run on disk is not this run --
+    so a fresh machine runs, and an identical run is never repeated."""
+    auto = reuse == "auto"
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     items, planned_segments, _origin, _baud = rows_from_capture(prefix)
@@ -422,9 +427,12 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     previous = cmd_path.read_bytes() if (reuse and cmd_path.exists()) else None
     build_cmd_file(planned_segments, [], cmd_path)
     if reuse and previous != cmd_path.read_bytes():
-        print("verify_uart_bridge: REFUSED -- reuse asked, but the stimulus "
-              "differs from the run on disk (or there is none)")
-        return None
+        if not auto:
+            print("verify_uart_bridge: REFUSED -- reuse asked, but the stimulus "
+                  "differs from the run on disk (or there is none)")
+            return None
+        print("verify_uart_bridge: no identical run on disk (stimulus); simulating")
+        reuse = False
     last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
                    + [0])
     last_send = max([r.send_frame for rows in planned_segments for r in rows]
@@ -458,9 +466,13 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
             if bad or not (outdir / "transcript.txt").exists() or \
                     _sha(outdir / "transcript.txt") != rec["outputs"].get("transcript"):
                 why = f"outputs changed since that run wrote them: {bad or ['transcript']}"
-        if why:
+        if why and auto:
+            print(f"verify_uart_bridge: no identical run on disk ({why}); simulating")
+            reuse = False
+        elif why:
             print(f"verify_uart_bridge: REFUSED -- reuse asked, but {why}")
             return None
+    if reuse:
         report = (outdir / "transcript.txt").read_text().splitlines()
         return {"outdir": outdir, "items": items, "bodies": [items],
                 "planned": planned_segments, "reset_frames": [],
@@ -576,6 +588,13 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
 # ---- analysis --------------------------------------------------------------
 def _rows(path):
     return [ln.split() for ln in Path(path).read_text().splitlines() if ln.strip()]
+
+
+def _int_or_none(v):
+    try:
+        return int(v)
+    except ValueError:
+        return None
 
 
 def analyze(run):
@@ -753,6 +772,12 @@ def analyze(run):
     comp["wire_mismatch"] = comp["swap"] = comp["width"] = 0
     comp["core_bad"] = 0
     total_periods = 0
+    # COMPLETENESS (#300 review): the periods this comparison REQUIRES are the
+    # model window derived from the stimulus -- last write + tail, cut at the
+    # next segment's origin -- and every one of them must be decoded exactly
+    # once, in order. A capture cut short compared what it had and passed.
+    required_periods = 0
+    coverage_gaps = []
     for s in range(len(origins)):
         seg_rows = planned[s]
         exp = [e for e in expected if e[0] >= origins[s]
@@ -769,7 +794,12 @@ def analyze(run):
                               ).run(model_writes, n)
         exp_i2s, exp_s = m["i2s"], m["sample"]
         p0 = segs[s][2]                                   # periods at segment origin
-        periods = [r for r in i2s if p0 <= int(r[0]) < p0 + n]
+        periods = [r for r in i2s if _int_or_none(r[0]) is not None and p0 <= int(r[0]) < p0 + n]
+        required_periods += n
+        idx = [int(r[0]) for r in periods]
+        if idx != list(range(p0, p0 + n)):
+            coverage_gaps.append(f"seg {s}: {len(idx)} of {n} required I2S periods decoded"
+                                 + ("" if len(idx) == len(set(idx)) else " (duplicates)"))
         for r in periods:
             try:
                 p, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]),
@@ -807,6 +837,11 @@ def analyze(run):
                 if sval != int(exp_s[fr - origin]):
                     comp["core_bad"] += 1
     comp["periods"] = total_periods
+    comp["periods_required"] = required_periods
+    comp["i2s_incomplete"] = bool(coverage_gaps)
+    if coverage_gaps:
+        detail[:0] = ["I2S coverage INCOMPLETE (no verdict on missing periods): "
+                      + "; ".join(coverage_gaps[:3])]
 
     # -- the frame budget ----------------------------------------------------
     mw, ms = RE_WRT.search(report), RE_STRB.search(report)
@@ -847,11 +882,33 @@ def analyze(run):
              and comp["frames_no_sample"] == 0
              and 0 < comp["worst_strobe_cycle"] < 256
              and comp["ack_missing"] == 0 and comp["status_bad"] == 0
-             and ok_specific)
+             and ok_specific and not comp["i2s_incomplete"])
     if not clean:
         for d in detail:
             print("    " + d)
     return clean, comp, detail
+
+
+def truncation_control(run, keep_fraction: float = 0.5) -> dict:
+    """The completeness check must be able to fail (#300 review): re-analyse
+    the SAME run with its decoded I2S cut to `keep_fraction` of its rows. It is
+    caught only if the analysis reports the coverage INCOMPLETE (not merely
+    not-ok for another reason) and does not pass."""
+    import io as _io
+    import contextlib as _cl
+    src = Path(run["files"]["i2s"])
+    rows = src.read_text().splitlines()
+    keep = max(1, int(len(rows) * keep_fraction))
+    cut = src.with_name(src.stem + f".trunc{keep}.txt")
+    cut.write_text("\n".join(rows[:keep]) + "\n")
+    r2 = dict(run)
+    r2["files"] = dict(run["files"], i2s=str(cut))
+    with _cl.redirect_stdout(_io.StringIO()):
+        ok, comp, _ = analyze(r2)
+    cut.unlink()
+    return {"caught": (not ok) and bool(comp.get("i2s_incomplete")),
+            "kept_rows": keep, "of_rows": len(rows), "periods": comp.get("periods"),
+            "periods_required": comp.get("periods_required")}
 
 
 def record_for(run, comp, ok):
@@ -935,6 +992,11 @@ def main(argv=None) -> int:
         ok, comp, detail = analyze(run)
         rec = record_for(run, comp, ok)
         rec["capture"] = str(a.replay)
+        rec["comparison"]["periods_required"] = comp.get("periods_required")
+        rec["comparison"]["i2s_incomplete"] = comp.get("i2s_incomplete")
+        rec["truncation_control"] = truncation_control(run)
+        if comp.get("i2s_incomplete") or not rec["truncation_control"]["caught"]:
+            rec["state"] = "NO VERDICT"
         (outdir / name / "verification.json").write_text(
             json.dumps(rec, indent=2) + "\n")
         print(f"verify_uart_bridge[{name}]: {rec['state']} -- "
@@ -944,6 +1006,11 @@ def main(argv=None) -> int:
               f"errs {comp.get('errs_seen')} {comp.get('err_codes')}")
         for d in detail[:6]:
             print(f"verify_uart_bridge[{name}]:   {d}")
+        print(f"verify_uart_bridge[{name}]: I2S coverage {comp.get('periods')}/"
+              f"{comp.get('periods_required')} required periods; truncation control "
+              f"{'CAUGHT' if rec['truncation_control']['caught'] else 'MISSED'}")
+        if rec["state"] == "NO VERDICT":
+            return 2
         return 0 if rec["state"] == "PASS" else 1
 
     work = []
