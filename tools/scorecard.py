@@ -46,6 +46,33 @@ ENGINES = ["float-model", "fixed-model", "integrated-rtl", "board-digital", "boa
 
 NOT_RUN, PASS, FAIL, NO_VERDICT = "not run", "pass", "fail", "no verdict"
 
+# WHAT A METRIC'S ERROR MEANS -- its declared purpose (plan075 section 6, #141).
+#
+#   match           two-sided: a deficit and an excess are both a distance.
+#   defect ceiling  one-sided: only EXCESS over the reference is a distance;
+#                   having less of an unwanted component than the machine is
+#                   not a defect and scores 0.
+#
+# A record with no `purpose` predates this field and was scored two-sided, so
+# it still is: that keeps every historical number reproducible. A purpose the
+# board does not know is REFUSED, never guessed -- guessing two-sided silently
+# re-introduces #141 and guessing one-sided hides deficits.
+MATCH, DEFECT_CEILING = "match", "defect ceiling"
+PURPOSES = (MATCH, DEFECT_CEILING)
+
+
+def metric_distance(m: dict) -> float:
+    """|error| / tolerance for a match; max(0, error) / tolerance for a
+    defect ceiling. Dimensionless; <= 1 is inside tolerance. Raises
+    ValueError for a purpose it does not know."""
+    purpose = m.get("purpose", MATCH)
+    err, tol = float(m["error"]), abs(float(m["tolerance"]))
+    if purpose == MATCH:
+        return abs(err) / tol
+    if purpose == DEFECT_CEILING:
+        return max(0.0, err) / tol
+    raise ValueError(f"unknown metric purpose {purpose!r} (known: {', '.join(PURPOSES)})")
+
 
 def load_cases() -> list[dict]:
     if not CASES.exists():
@@ -110,7 +137,11 @@ def evaluate(case: dict, res: dict | None) -> dict:
         if tol in (None, 0) or err is None:
             invalid.append(name)
             continue
-        d = abs(err) / abs(tol)            # dimensionless; units never mixed
+        try:
+            d = metric_distance(m)         # dimensionless; units never mixed
+        except ValueError:
+            invalid.append(f"{name} (unknown purpose {m.get('purpose')!r})")
+            continue
         props[name] = d                    # KEEP IT -- see `compare` below
         if worst is None or d > worst:
             worst, worst_name = d, name
@@ -127,8 +158,13 @@ def evaluate(case: dict, res: dict | None) -> dict:
             "analysis_version": res.get("analysis_version"),
             "measurement_policy": {
                 "required": sorted(required),
-                "metrics": {name: {key: metric.get(key)
-                                   for key in ("units", "tolerance", "tolerance_basis")}
+                # `purpose` is part of the policy: a change of direction is a
+                # rubric change, and compare() must call it INCOMPARABLE rather
+                # than read it as the device improving (#141). A legacy record
+                # without the field was scored as a match, so it reads as one.
+                "metrics": {name: {**{key: metric.get(key)
+                                      for key in ("units", "tolerance", "tolerance_basis")},
+                                   "purpose": metric.get("purpose", MATCH)}
                             for name, metric in metrics.items()},
             },
             "why": "" if worst <= 1.0 else f"worst: {worst_name}", "engine": engine}
