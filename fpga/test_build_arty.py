@@ -141,10 +141,13 @@ endmodule
 
 def test_prepared_build_resolves_the_actual_hdl_rom_filenames(tmp_path):
     import re
-    # this branch's wrapper adds the UART bridge, so the wrapper evidence this
-    # test consumes is the UART bench's (fpga/verify_uart_bridge.py); the
-    # published baseline's own evidence stays untouched in reports/arty/clean
-    proof = build.ROOT / "fpga/reports/arty/uart-clean/verification.json"
+    import publish_arty as publish
+    # this test prepares a build of the LIVE tree, so it consumes whichever
+    # UART-bench run (fpga/verify_uart_bridge.py) covers that tree -- the one
+    # publish_arty binds. Superseded runs stay where they are: reports/arty/
+    # clean is the pre-uart SPI evidence, reports/arty/uart-clean the pre-drift
+    # UART evidence the published baseline bitstream cites by hash.
+    proof = publish.VERIFICATION_BY_WRAPPER["arty_a7_top"]
     assert build.main(["--prepare-only", "--out", str(tmp_path),
                        "--verification", str(proof)]) == 0
     voice = (build.ROOT / "rtl-sketch/voice_dp.v").read_text()

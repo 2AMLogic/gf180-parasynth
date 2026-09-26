@@ -29,6 +29,12 @@ help:
 ## 2026-09-22 M2 (2026-09-23), the broad pytest job alone runs 2631s solo and
 ## exceeded the old 3600s cap under this target's parallel fan-out, reporting
 ## NO-VERDICT twice. verify-full already used 7200.
+##
+## check_arty_evidence_binding.py is here for legibility, not coverage: the
+## broad pytest job already catches a stale wrapper proof, but it catches it
+## 39 minutes in as 23 failures across three files, and the one sentence that
+## explains all 23 is buried in a traceback. The same question answered in
+## 0.2s, naming the source file that moved, is worth a job slot.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
@@ -46,6 +52,7 @@ verify:
 	  "$(PY) fpga/verify_uart_bridge.py --scenario all --outdir build/uart-controls" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
+	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py"
 
 ## Fast sound-development checks, separate from the broad repository suite.
