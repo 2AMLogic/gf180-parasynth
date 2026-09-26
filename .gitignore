@@ -16,6 +16,11 @@ pnr/orfs/joined.sh
 
 # top-level verifier output directories (make controls writes build/<variant>/)
 /build/
+
+# render/analyse/accept manifest artifacts (tools/manifest.py, issue #68):
+# plain-file CI artifacts with their own retention rules, not committed here.
+/runs/
+/jobs/
 # no trailing slash: `.venv/` matches a directory but NOT a symlink to one,
 # which is how a venv symlink got staged by `git add -A` on another branch
 .venv
