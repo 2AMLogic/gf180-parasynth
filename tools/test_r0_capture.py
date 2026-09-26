@@ -234,16 +234,6 @@ def test_clean_synthetic_session_passes_with_its_known_answers(clean):
     assert "UNOBSERVABLE" in rec["properties"]["channel-identity"]
 
 
-def test_every_defect_is_caught_for_its_own_reason_and_the_swap_is_blind(tmp_path):
-    res = rc.run_controls(tmp_path)
-    rc.print_matrix(res)
-    assert res["clean"]["ok"], res["clean"]
-    for name, d in res["defects"].items():
-        assert d["caught"], (name, d)
-    assert res["defects"]["swap"]["verdict"] == rc.PASS          # honest: unobservable
-    assert res["all_caught"]
-
-
 def test_start_red_the_stub_analyser_catches_nothing(tmp_path):
     res = rc.run_controls(tmp_path, analyser=rc.stub_analyse,
                           defects=["dropout", "clipping", "noise"])
@@ -290,6 +280,15 @@ def test_t_physical_trial_without_a_capture_is_no_verdict_with_its_control_caugh
     assert child["verdict"] == trial.NO_VERDICT
     assert "operator-blocked" in child["reasons"][0]
     assert rec["controls"][0]["caught"] is True, rec["controls"][0]["reasons"]
+    # the control's own record, defect by defect (the suite runs once, here)
+    ctl = json.loads((run_dir / "synthetic-defects" / "controls.json").read_text())
+    rc.print_matrix(ctl)
+    assert ctl["clean"]["ok"], ctl["clean"]
+    for name, d in ctl["defects"].items():
+        assert d["caught"], (name, d)
+        if d["intended"] is not None:
+            assert d["intended"] in d["failed"], (name, d)
+    assert ctl["defects"]["swap"]["verdict"] == rc.PASS           # honest: unobservable
     ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
     assert ok, problems
 

@@ -111,16 +111,7 @@ jobs:
         run: python tools/trial_env.py bootstrap --no-toolchain
       - name: the committed R0 reference set is the release's
         run: python tools/r0_reference.py check fpga/release/evidence/r0-reference
-      - name: capture analysis tests, and T-PHYSICAL without a capture
+      - name: capture analysis tests, and T-PHYSICAL end to end without a capture
+        # the last test runs the registered trial through tools/trial.py and
+        # asserts NO VERDICT (operator-blocked) with every synthetic defect caught
         run: python -m pytest tools/test_r0_capture.py -q
-      - name: T-PHYSICAL as registered (NO VERDICT until the rig is recorded; exit 2 expected)
-        run: |
-          python tools/trial.py run T-PHYSICAL && exit 1 || test $? -eq 2
-      - name: every receipt is intact and matches its artifacts
-        if: always()
-        run: python tools/trial.py check-all build/trials
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: trial-receipts-physical
-          path: build/trials/

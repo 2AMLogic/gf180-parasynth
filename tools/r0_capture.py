@@ -107,6 +107,7 @@ CLUSTER_S = 0.25      # coarse candidates closer than this are one placement
 # 5 Hz AC-coupling high-pass, FAILED timing by 1.0 sample and residual by
 # 0.5 dB without it: a first-order high-pass moves a 50 Hz kick's local lag.
 BAND_HZ = (100.0, 16000.0)
+DROPOUT_RUN = 96        # 2 ms of raw near-silence where the prediction sounds
 TIMING_MIN_WINDOWS = 3  # a slip must show in at least this many local-lag windows
 END_GUARD_S = 0.1     # not scored: the last 0.1 s of each reference (see analyse_take)
 PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
@@ -741,6 +742,18 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     lim = 10 ** (LIMITS["dropout_ref_dbfs_min"] / 20)
     drop = np.flatnonzero((pb >= lim) & (cb_ < pb * 10 ** (-LIMITS["dropout_drop_db"] / 20)))
     M["dropout_blocks"] = int(drop.size)
+    # and on the RAW capture: a run of near-silence where the prediction
+    # sounds. The banded check alone missed a 20 ms gap placed on the loudest
+    # block of bar808-full: the band filter rings a loud onset into the gap.
+    raw_p = block_rms(g * warp_reference(x_raw, A_raw.size, d, rho)[ev])
+    quiet_lin = 10 ** ((max(noise_floor_dbfs, -110.0) + 6.0) / 20)
+    qr = np.abs(A_raw[ev]) <= quiet_lin
+    dq = np.diff(np.concatenate([[0], qr.astype(np.int8), [0]]))
+    runs = [(a0, b0) for a0, b0 in zip(np.flatnonzero(dq == 1), np.flatnonzero(dq == -1))
+            if b0 - a0 >= DROPOUT_RUN and raw_p[min(a0 // BLOCK, raw_p.size - 1)] >= lim]
+    M["dropout_raw_runs"] = len(runs)
+    if runs and not drop.size:
+        drop = np.array([runs[0][0] // BLOCK])
     if drop.size:
         F["dropout"] = (f"{drop.size} x 5 ms blocks {LIMITS['dropout_drop_db']:.0f} dB below "
                         f"prediction, first at {(e0 + drop[0] * BLOCK) / sr:.3f} s")
