@@ -292,7 +292,7 @@
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__phrase-bar808-full__rtl-replay__bar808-full.run_identity.json": "c2c62875ded95bf1595bf2169f20d02efea322bd63ec497db9fd4acb832af158",
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__phrase-demo__rtl-replay__demo.run_identity.json": "ed04f501bc0a2ee580ce5664d73625e69dd998f548802e1189be2c4c812c8043",
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__run-m5a__default-m5a__run_identity.json": "679d04bb5caacd06df2478427e1934d2bcfc13cb9cb20703962f16b98a7fc331",
-      "fpga/reports/r1-candidate/summary.json": "afb6036e5c3831b6ebc1215933cde7b2bb323723a6da247b398a98ab2e7724a7"
+      "fpga/reports/r1-candidate/summary.json": "8e0861be99a17ee3ffd8b04568327a257eb6203bdf21980520e3d4a3ae2611dd"
     },
     "rtl_runs_bound": 12
   }

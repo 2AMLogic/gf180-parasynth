@@ -281,3 +281,22 @@ the sweep's token has admin on this repository. It is blocked by two things.
 First, `main` has no branch protection or ruleset at all, so requiring anything
 is a new repository policy. Second, a required job must exist on `main` before
 it is required, or older PRs cannot merge. Tracked as #287.
+
+### R1 candidate receipts, 2026-09-26 (#279; a snapshot, not maintained state)
+
+`fpga/reports/r1-candidate/receipts.tgz` holds the `trial-receipt/2` receipts of
+the R1 qualification run (build box, commit `ccf7ed4`, RTL frozen at `6864435`);
+`summary.json` beside it is harvested from them by `tools/r1_harvest.py`, which
+re-checks every receipt. Naming: the historical release `baseline 2025.1, r1`
+is **R0**; the "R1 release receipts" section above is about R0.
+
+| trial | verdict | what it shows |
+|---|---|---|
+| T-PLAY-DIGITAL `r1` | **PASS** | `--image tree` bytes, target frozen apart from the sender: held notes 12760/7345/10376 LSB, `run --fixture m5a` 12760; demo 511/511 writes, 0 mismatches over 257,427 periods; bar808-full 397/397, 0 over 266,937; silent control and wrong-kit control (release sender vs R1 target, caught at the init bytes) caught |
+| T-DEADLINE `stress` | **PASS** | full rev-14 kit under three gliding, modulated oscillators: 0 missed, slack 13; `late:15` caught (32 missed) |
+| T-DEADLINE `sim` | **PASS** | arty-uart: slack 13, 3300/3300 periods; `late160` caught |
+| T-LIVE-MIDI `sim` / `rtl` | **PASS** / **PASS** | 193-write known state; RTL 397/588/502 writes, 0 mismatches; 3/3 controls |
+| T-RELEASE-BOUND | **PASS** | R0 preserved on this branch; both stale controls caught |
+
+`sim` mode of T-PLAY-DIGITAL (R0 bytes through the current RTL) was not re-run:
+it is a compatibility test and says nothing about either image's playback.

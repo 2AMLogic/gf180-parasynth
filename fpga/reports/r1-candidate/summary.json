@@ -1,6 +1,6 @@
 {
  "schema": "r1-qualification-summary/1",
- "head": "981f936e06b0f8861620225f9fa3092065f0608d",
+ "head": "03a196c4abec56b52cf42c10d7799788f42838de",
  "origin_main": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
  "evidence_heads": [
   "ccf7ed49515bdff017479c95323be375b9d6fce3"
@@ -125,7 +125,7 @@
    "receipt": "trials/T-LIVE-MIDI/20260926T190820Z-ccf7ed4-sim-289775-4de7a5/receipt.json",
    "receipt_valid": true,
    "execution": "complete",
-   "coverage": "session-sim: latency n 905 p95 16.729166666666668 p99 16.979166666666668 ms",
+   "coverage": "session-sim: latency n 905 p95 16.73 p99 16.98 ms",
    "children": {
     "session-sim": {
      "verdict": "PASS",
@@ -187,7 +187,7 @@
    "receipt": "trials/T-LIVE-MIDI/20260926T190822Z-ccf7ed4-rtl-289941-afbc07/receipt.json",
    "receipt_valid": true,
    "execution": "complete",
-   "coverage": "session-rtl: latency n 905 p95 16.729166666666668 p99 16.979166666666668 ms",
+   "coverage": "session-rtl: latency n 905 p95 16.73 p99 16.98 ms; RTL I2S periods compared coverage 109053, pressure 46653, sustained 166513",
    "children": {
     "session-rtl": {
      "verdict": "PASS",
@@ -464,9 +464,9 @@
    "gate": "implementation",
    "workload": "refusals with a reason (INC_RANGE, GLIDE_247, ROUTE_DRUMFILTER, MOD_EXCURSION, WAVES, PULSE2X, NOT_IN_IMAGE R1 wording, preset with fixture); known-state preamble; queued-event refusal; wrong-kit controls",
    "level": "host code (no RTL)",
-   "identity": "`981f936e`; R1 host (--image tree)",
+   "identity": "`03a196c4`; R1 host (--image tree)",
    "verdict": "PASS",
-   "coverage": "pytest exit 0: 69 passed in 3.36s",
+   "coverage": "pytest exit 0: 73 passed in 4.70s",
    "receipt_valid": true,
    "controls": {}
   }

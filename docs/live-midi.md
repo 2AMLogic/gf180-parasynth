@@ -266,11 +266,25 @@ Each control prints the full MOVED/BLIND matrix (rule 4).
   be paired write-for-write with the schedule; it is caught at the device
   contract.
 
-**RTL results** (`fpga/reports/live-midi/verification.json`; captures and run
-receipts under `rtl-replay/`). These were measured before #273, on contract
-revision 11 (190-write known state, no `ENV_FRATE[8]`), and have not been
-re-run on revision 14: the RTL replay is a build-box run of about an hour. The
-sim-mode trial below and the start-red run were regenerated on revision 14.
+**RTL results on the R1 candidate (revision 14, #279).** `make trial
+T=T-LIVE-MIDI ARGS="--mode rtl"` on the build box at `ccf7ed4` (RTL frozen at
+`6864435`): **PASS**, 3 of 3 controls caught; receipt in
+`fpga/reports/r1-candidate/receipts.tgz` (`T-LIVE-MIDI/*-rtl-*`). The session
+sends `--image tree` (193-write known state with the preamble, kit
+`321a9354…`); the oracle is the frozen R1 target, not the session's selector.
+
+| replay | writes | frame errors | I2S mismatch | worst strobe |
+|---|---|---|---|---|
+| coverage | 397/397 | 0 | 0 of 109 053 periods | 198 of 256 |
+| pressure | 588/588 | 0 | 0 of 46 653 periods | 198 |
+| sustained (first 3 s) | 502/502 | 0 | 0 of 166 513 periods | 198 |
+| control WRONG_DRUM_MAP | wrong address at write 349 | -- | **47 842** of 109 053 (caught) | |
+| control DELAYED_EVENT | writes 208.. land 240 frames late | 4 | **84 474** of 109 053 (caught) | |
+
+Latency under the declared load, same run: p95 16.73 ms, p99 16.98 ms (n 905).
+
+**Historical: revision 11 (before #273; 190-write known state, no
+`ENV_FRATE[8]`), kept as measured, not evidence about R1.**
 
 | replay | writes | frame errors | I2S mismatch |
 |---|---|---|---|
@@ -279,6 +293,8 @@ sim-mode trial below and the start-red run were regenerated on revision 14.
 | sustained (first 3 s) | 499/499 | 0 | 0 of 166 372 periods |
 | control WRONG_DRUM_MAP | wrong address at write 346 | -- | **47 824** of 108 912 (caught) |
 | control DELAYED_EVENT | writes 205.. land 240 frames late | 240 | **84 447** of 108 912 (caught) |
+
+Its records stay at `fpga/reports/live-midi/verification.json` and `rtl-replay/`.
 
 `make trial T=T-LIVE-MIDI ARGS="--mode sim"` gives PASS with 3 of 3 controls
 caught (`trial-sim.log`, `trial-sim.receipt.json`).
