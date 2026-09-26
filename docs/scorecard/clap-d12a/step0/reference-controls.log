@@ -1,0 +1,13 @@
+==============================================================================
+PASS            59.8s  /home/ubuntu/work/venv/bin/python tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/ref-missing --expect 'no verdict'
+              F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              ------------------------------------------------------------------------------------------------
+              no verdict: 3
+              control fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)
+PASS            60.1s  /home/ubuntu/work/venv/bin/python tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/ref-tampered --expect 'no verdict'
+              F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              ------------------------------------------------------------------------------------------------
+              no verdict: 3
+              control fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)
+==============================================================================
+2/2 passed
