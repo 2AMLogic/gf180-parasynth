@@ -439,12 +439,86 @@ def interpret_live_midi_record(spec, run, out, role):
     return _result(PASS, [], metrics=metrics, **cov)
 
 
+def interpret_physical_capture_record(spec, run, out, role):
+    """tools/r0_capture.py analyse writes <out>/analysis.json: verdict PASS /
+    FAIL / REFUSED, exit 0 / 1 / 2. REFUSED is NO VERDICT -- including the
+    operator-blocked state when no capture session exists, which is a
+    workflow state and never a result (docs/trials.md rule 4). A PASS also
+    needs the declared diagnostic set on disk: each required command has a
+    take, and some command was taken twice."""
+    rec, err = _load_json(out / "analysis.json")
+    nv_caught = False if role == "control" else None
+    if rec is None:
+        return _result(NO_VERDICT, [err], caught=nv_caught)
+    verdict = rec.get("verdict")
+    takes = rec.get("takes") or []
+    have = {}
+    for t in takes:
+        have[t.get("command_id")] = have.get(t.get("command_id"), 0) + 1
+    need = list(spec.get("fixtures", []))
+    cov = dict(expected={"commands": need, "repeat_take": True},
+               observed={"commands": sorted(k for k in have if k), "takes": len(takes)})
+    metrics = {"properties": rec.get("properties"), "calibration": rec.get("calibration"),
+               "noise_floor_dbfs": rec.get("noise_floor_dbfs"),
+               "identity": rec.get("identity"), "operator_blocked": bool(rec.get("operator_blocked"))}
+    want_rc = {"PASS": 0, "FAIL": 1, "REFUSED": 2}.get(verdict)
+    if want_rc is None:
+        return _result(NO_VERDICT, [f"record verdict {verdict!r} is not PASS/FAIL/REFUSED"],
+                       metrics=metrics, caught=nv_caught, **cov)
+    if run["rc"] != want_rc:
+        return _result(NO_VERDICT, [f"exit status {run['rc']} disagrees with the record's "
+                                    f"{verdict} (expected {want_rc})"], metrics=metrics,
+                       caught=nv_caught, **cov)
+    if verdict == "REFUSED":
+        return _result(NO_VERDICT, list(rec.get("reasons") or ["REFUSED"]), metrics=metrics,
+                       caught=nv_caught, **cov)
+    gaps = [f"no take of {c}" for c in need if not have.get(c)]
+    if not any(v >= 2 for k, v in have.items() if k != "silence"):
+        gaps.append("no repeat take")
+    if verdict == "PASS" and gaps:
+        return _result(NO_VERDICT, ["coverage incomplete -- " + g for g in gaps],
+                       metrics=metrics, caught=nv_caught, **cov)
+    return _result(PASS if verdict == "PASS" else FAIL, list(rec.get("reasons") or []),
+                   metrics=metrics, caught=nv_caught, **cov)
+
+
+def interpret_capture_controls_record(spec, run, out, role):
+    """tools/r0_capture.py controls writes <out>/controls.json: the clean
+    synthetic session must PASS with its known answers, every defect FAIL for
+    its own property, the dual-mono swap be reported unobservable. Caught only
+    with the REAL analyser, all_caught, and exit 0; a refusal, a stub or a
+    crash is never a catch."""
+    rec, err = _load_json(out / "controls.json")
+    if rec is None:
+        return _result(NO_VERDICT, [err], caught=False if role == "control" else None)
+    defects = rec.get("defects") or {}
+    metrics = {"clean": rec.get("clean"),
+               "defects": {k: {"intended": v.get("intended"), "outcome": v.get("outcome")}
+                           for k, v in defects.items()},
+               "analyser": rec.get("analyser")}
+    cov = dict(expected={"defects": ">0", "clean": "PASS"},
+               observed={"defects": len(defects),
+                         "clean": (rec.get("clean") or {}).get("verdict")})
+    caught = (bool(rec.get("all_caught")) and rec.get("analyser") == "real" and run["rc"] == 0
+              and bool(defects) and bool((rec.get("clean") or {}).get("ok")))
+    missed = [f"{k}: {v.get('outcome')}" for k, v in defects.items() if not v.get("caught")]
+    reasons = (["every synthetic defect caught for its own property; swap BLIND as declared"]
+               if caught else [f"NOT caught (exit {run['rc']}, analyser {rec.get('analyser')}, "
+                               f"refused {rec.get('refused')!r})"] + missed)
+    if role != "control":
+        return _result(NO_VERDICT, ["a controls record is not a product verdict"] + reasons,
+                       metrics=metrics, **cov)
+    return _result(FAIL if caught else NO_VERDICT, reasons, metrics=metrics, caught=caught, **cov)
+
+
 INTERPRETERS = {
     "live_midi_record": interpret_live_midi_record,
     "deadline_record": interpret_deadline_record,
     "bound_text": interpret_bound_text,
     "rolling_record": interpret_rolling_record,
     "held_note_record": interpret_held_note_record,
+    "physical_capture_record": interpret_physical_capture_record,
+    "capture_controls_record": interpret_capture_controls_record,
 }
 
 
