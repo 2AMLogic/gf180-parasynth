@@ -537,7 +537,8 @@ def stepped_tone_db(render, freqs, amp: float, *, n: int = TONE_N,
 
 
 def reference_response_db(cut_hz: float, res: float, freqs, amp: float = 1e-4,
-                          oversample: int = REF_OVERSAMPLE) -> np.ndarray:
+                          oversample: int = REF_OVERSAMPLE, *, n: int = TONE_N,
+                          settle: int = TONE_SETTLE) -> np.ndarray:
     """The rung-4 reference's SMALL-SIGNAL gain, in dB, at each frequency.
 
     `amp` is small enough that `tanh(x) = x` to a part in 10^8, so the answer
@@ -545,7 +546,131 @@ def reference_response_db(cut_hz: float, res: float, freqs, amp: float = 1e-4,
     that owes nothing to this repository (`analytic_response_db`)."""
     return stepped_tone_db(
         lambda x: reference_ode(x, cut_hz, res, oversample=oversample),
-        freqs, amp, label=f"reference {cut_hz:.0f} Hz")
+        freqs, amp, n=n, settle=settle, label=f"reference {cut_hz:.0f} Hz")
+
+
+PEAK_SPAN = (0.84, 1.19)         # the window, RELATIVE TO THE ANALYTIC PEAK
+PEAK_POINTS = 13
+PROBE_AMP = 0.003                # MEASURED: see `probe_amplitude_sweep`
+
+
+def peak_of(freqs, gains_db) -> tuple:
+    """Peak frequency and height from a sampled magnitude response, by a
+    parabola through the three points around the maximum in LOG frequency --
+    which is exact for a parabola and unbiased for anything peak-like sampled
+    finely enough. Returns `(f_peak_hz, gain_db)`.
+
+    Separating the peak's FREQUENCY from its HEIGHT is the whole point. A
+    resonant peak sampled at a fixed grid reads a frequency error as a level
+    deficit: the shipped filter's untuned ROM looked 3.4 dB short at the peak
+    until the peak was located rather than assumed, and the deficit was its
+    tuning error wearing a different hat."""
+    f = np.log(np.asarray(freqs, dtype=np.float64))
+    y = np.asarray(gains_db, dtype=np.float64)
+    i = int(np.argmax(y))
+    if i == 0 or i == len(y) - 1:
+        raise Refused(f"the peak is at the edge of the search window "
+                      f"({math.exp(f[i]):.0f} Hz); it is not bracketed")
+    d = y[i - 1] - 2.0 * y[i] + y[i + 1]
+    if d >= 0.0:
+        raise Refused("the sampled response has no interior maximum")
+    t = 0.5 * (y[i - 1] - y[i + 1]) / d
+    step = f[i + 1] - f[i]
+    return float(math.exp(f[i] + t * step)), float(y[i] - 0.25 * (y[i - 1] - y[i + 1]) * t)
+
+
+def stage_max_lag_deg(law: str, cut_hz: float) -> float:
+    """The greatest phase lag ONE stage of a given integrator can produce, in
+    degrees, at a given cutoff. Closed form, no filter run:
+
+        explicit (`expo`)      H = g / (1 - a z^-1),  a = 1 - g
+                               the lag is maximised at `cos w = a` and equals
+                               **arcsin(a)** -- which is below 45 degrees once
+                               `g > 0.293`
+        trapezoidal            H = 1 / (1 + j tan(w/2) / G)
+                               the lag rises to 90 degrees as w -> pi, for any G
+
+    This is why the delay-free explicit ladder stops self-oscillating: four
+    stages of a lag below 45 degrees never reach the -180 the loop needs, and
+    no amount of feedback changes a phase. It is arithmetic, not an artefact of
+    our implementation, and `delay_free_oscillation_limit_hz` turns it into a
+    frequency anyone can check by hand."""
+    w = 2.0 * math.pi * float(cut_hz) / FS_OS
+    if law == "expo":
+        return math.degrees(math.asin(min(max(1.0 - (1.0 - math.exp(-w)), 0.0), 1.0)))
+    if law == "tanh-half":
+        return 90.0
+    raise Refused(f"no such coefficient law {law!r}")
+
+
+def delay_free_oscillation_limit_hz(law: str = "expo", stages: int = 4) -> float:
+    """The cutoff above which a DELAY-FREE ladder on this integrator cannot
+    self-oscillate at any feedback, in closed form.
+
+    `stages * arcsin(1 - g) >= 180` needs `1 - g >= sin(180/stages)`, and
+    `g = 1 - exp(-w)` gives
+
+        f <= -fs_os / (2 pi) * ln( sin(180 / stages) )
+
+    which is **5295.6 Hz** for four stages at 96 kHz. Above it the loop's phase
+    never reaches -180 degrees, so the filter cannot sing however hard it is
+    driven. `inf` for the trapezoidal law, whose stage lag reaches 90 degrees.
+    """
+    if law == "tanh-half":
+        return float("inf")
+    s = math.sin(math.pi / stages)
+    return -FS_OS / (2.0 * math.pi) * math.log(s)
+
+
+def analytic_peak(cut_hz: float, res: float) -> tuple:
+    """Where the closed form's own resonant peak is, and how tall. The search
+    window is centred HERE rather than on the cutoff, because at moderate
+    resonance the ladder's peak sits well below its cutoff -- at res = 0.5 it
+    is at 0.80 x, which fell outside a window centred on the cutoff and made
+    every res = 0.5 point refuse."""
+    dense = np.geomspace(0.35, 1.35, 20001) * float(cut_hz)
+    a = analytic_response_db(cut_hz, res, dense)
+    j = int(np.argmax(a))
+    if j in (0, len(a) - 1):
+        raise Refused(f"the closed form has no interior peak at {cut_hz:.0f} Hz, "
+                      f"res {res}")
+    return float(dense[j]), float(a[j])
+
+
+def peak_probe(render, cut_hz: float, res: float, amp: float = PROBE_AMP,
+               label: str = "probe", *, n: int = TONE_N,
+               settle: int = TONE_SETTLE) -> dict:
+    """Where the resonant peak actually is, and how tall, measured by a stepped
+    tone on a log grid around the cutoff -- plus the passband gain a decade
+    below it, which is the bass question at the same operating point.
+
+    Returned against the closed form, so both numbers are errors against an
+    answer that owes nothing to this repository:
+        `cents`      peak frequency against the analytic peak frequency
+        `peak_db`    peak height against the analytic peak height
+        `pass_db`    gain at 0.1 x cutoff against the analytic gain there
+    """
+    f_a, g_a = analytic_peak(cut_hz, res)
+    grid = np.unique(snap_freqs(f_a * np.geomspace(PEAK_SPAN[0], PEAK_SPAN[1],
+                                                   PEAK_POINTS), n))
+    lo = snap_freqs([max(0.1 * cut_hz, 2.0 * SR / n)], n)
+    meas = stepped_tone_db(render, np.concatenate([lo, grid]), amp, n=n,
+                           settle=settle, label=label)
+    f_m, g_m = peak_of(grid, meas[1:])
+    return dict(f_peak_hz=f_m, f_analytic_hz=f_a,
+                cents=1200.0 * math.log2(f_m / f_a),
+                peak_db=g_m - g_a,
+                pass_db=float(meas[0] - analytic_response_db(cut_hz, res, lo)[0]),
+                pass_hz=float(lo[0]))
+
+
+def probe_amplitude_sweep(render, cut_hz: float, res: float,
+                          amps=(0.05, 0.02, 0.005, 0.002, 0.001, 0.0005)) -> dict:
+    """The small-signal probe level, SWEPT rather than chosen. Too loud and the
+    `tanh` compresses the resonant peak; too quiet and the Q15 quantisation
+    floor eats it. Both ends were measured before `PROBE_AMP` was set, because
+    an amplitude assumed is a precondition assumed."""
+    return {a: peak_probe(render, cut_hz, res, amp=a) for a in amps}
 
 
 def analytic_response_db(cut_hz: float, res: float, freqs, *, zoh: bool = True) -> np.ndarray:
@@ -583,15 +708,17 @@ REF_PROBE_FREQS = (0.25, 0.5, 0.8, 1.0, 1.25, 2.0)      # multiples of cutoff
 
 
 def reference_floor_db(cuts=(200.0, 1000.0, 6400.0), res: float = 0.9,
-                       oversample: int = REF_OVERSAMPLE) -> dict:
+                       oversample: int = REF_OVERSAMPLE, *, n: int = TONE_N,
+                       settle: int = TONE_SETTLE) -> dict:
     """What the rung-4 reference's OWN discretisation costs, in dB of response
     error against `analytic_response_db`, at each cutoff. This is the floor
     below which no candidate's response error can be believed, and it is
     measured rather than assumed."""
     out = {}
     for c in cuts:
-        fr = snap_freqs(np.array(REF_PROBE_FREQS) * c)
-        err = reference_response_db(c, res, fr, oversample=oversample) \
+        fr = snap_freqs(np.array(REF_PROBE_FREQS) * c, n)
+        err = reference_response_db(c, res, fr, oversample=oversample, n=n,
+                                    settle=settle) \
             - analytic_response_db(c, res, fr)
         out[c] = float(np.abs(err).max())
     return out
@@ -623,13 +750,36 @@ def _cents_of_ring(y, cut: float) -> float:
     return 1200.0 * math.log2(f / float(cut))
 
 
+class NullCore(_Core):
+    """A core with the right ports and no behaviour: it returns silence.
+
+    `docs/verification-rules.md` rule 1 -- START RED. Every stage of the
+    comparison is run against this before any candidate is believed, and every
+    stage must either REFUSE or score it worse than every real candidate. A
+    stage that produces a plausible number for silence is not a measurement,
+    and four harnesses in this repository have shipped in exactly that state."""
+
+    MULS, ADDS, RUNG = 0, 0, 0
+    SHIPPABLE = False
+    DESC = "silence: the start-red stub"
+
+    def process(self, x_q15, cutoff_hz, res, drive=1.0, *, g_q16=None,
+                k=None, gain=None, ogain=None, k_q14=None):
+        n, _g, _k, _ps, _gain, _og, out = self._prologue(
+            x_q15, cutoff_hz, res, drive, g_q16, k, gain, ogain, k_q14)
+        out[:] = 0
+        self.n_sub += n * self.os
+        return out
+
+
 CORES = {
+    "null": (NullCore, {}),
     "shipped": (ShippedCore, {}),
     "zdf-newton-2": (NewtonCore, dict(iters=2)),
     "zdf-newton-3": (NewtonCore, dict(iters=3)),
     "zdf-explicit": (ExplicitDFCore, {}),
 }
-SHIPPABLE = tuple(CORES)
+SHIPPABLE = tuple(n for n, (c, _) in CORES.items() if c.SHIPPABLE)
 
 
 # ===========================================================================
@@ -767,10 +917,14 @@ class Candidate:
         ci = np.clip(np.round(cut_f / quantum) * quantum, vf.CUT_MIN,
                      vf.CUT_MAX).astype(np.int64)
         if smooth:
-            law = (fixed.tuned_cutoff(np.clip(cut_f, vf.CUT_MIN, vf.CUT_MAX))
-                   if self.tuned else np.clip(cut_f, vf.CUT_MIN, vf.CUT_MAX))
-            g = np.clip(np.round((1.0 - np.exp(-2.0 * math.pi * law / FS_OS))
-                                 * 65536.0), 1, 65535).astype(np.int64)
+            # the candidate's OWN coefficient law, in float and at the exact
+            # commanded cutoff -- the differential reference, not the shipped
+            # law applied to a candidate that does not use it
+            f_law = (fixed.tuned_cutoff(np.clip(cut_f, vf.CUT_MIN, vf.CUT_MAX))
+                     if self.tuned else np.clip(cut_f, vf.CUT_MIN, vf.CUT_MAX))
+            w = 2.0 * math.pi * f_law / FS_OS
+            v = np.tanh(0.5 * w) if self.law == "tanh-half" else 1.0 - np.exp(-w)
+            g = np.clip(np.round(v * 65536.0), 1, 65535).astype(np.int64)
         else:
             g = vf.g_from_cut(ci, self.g_rom)
         if self.compensated:
