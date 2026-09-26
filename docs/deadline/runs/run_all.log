@@ -1,0 +1,575 @@
+==============================================================================
+PASS           325.9s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario threesaw-f1cal --json docs/deadline/runs/prod-threesaw-f1cal.json
+                sim: tb_top_bx: sample strobed in 3693 frames, MISSING in 0, worst strobe cycle 175 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 60 writes sent, 3693 frames, 3692 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 60, writes drained 60, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 3693 frames, MISSING in 0, worst strobe cycle 175 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 3691 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 79 cycles (strobe cycles [154, 175], deadline 254); voice busy 81 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 19, 2x bank 60, drum handshake 1 cycles; max active PolyBLEP windows 2; cost model {'base_values': {76: 3691}, 'explained': True}
+                worst frame 60: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+                worst frame 62: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+                worst frame 63: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 3629, 'three_2x_gate_on': 3629}
+              verify_deadline: I2S: 3692 periods, 0 differ from the model; L!=R 0; bad width 0; writes 60/60, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 79 cycles, I2S identical to the model
+PASS           326.0s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario threesaw-f1cal --pulse2x --json docs/deadline/runs/prod-threesaw-f1cal-p2x.json
+                sim: tb_top_bx: sample strobed in 3693 frames, MISSING in 0, worst strobe cycle 175 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 60 writes sent, 3693 frames, 3692 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 60, writes drained 60, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 3693 frames, MISSING in 0, worst strobe cycle 175 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 3691 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 79 cycles (strobe cycles [154, 175], deadline 254); voice busy 81 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 19, 2x bank 60, drum handshake 1 cycles; max active PolyBLEP windows 2; cost model {'base_values': {76: 3691}, 'explained': True}
+                worst frame 60: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+                worst frame 62: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+                worst frame 63: strobe 175 (slack 79), voice 9..174, drum 9..125, waits r/osc/d/y 19/60/1/11, windows 1/6, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 3629, 'three_2x_gate_on': 3629}
+              verify_deadline: I2S: 3692 periods, 0 differ from the model; L!=R 0; bad width 0; writes 60/60, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 79 cycles, I2S identical to the model
+PASS           268.4s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --json docs/deadline/runs/prod-stress-saw.json
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 240 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 240 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 14 cycles (strobe cycles [154, 240], deadline 254); voice busy 16 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 2; cost model {'base_values': {82: 1450, 76: 696, 78: 5, 80: 4}, 'explained': False}
+                worst frame 538: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 585: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 586: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2156 periods, 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 14 cycles, I2S identical to the model
+PASS           270.9s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --pulse2x --json docs/deadline/runs/prod-stress-saw-p2x.json
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 242 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 242 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 12 cycles (strobe cycles [154, 242], deadline 254); voice busy 14 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 2; cost model {'base_values': {82: 1450, 76: 696, 78: 5, 80: 4}, 'explained': False}
+                worst frame 632: strobe 242 (slack 12), voice 9..241, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/8, im1 3, sk 0
+                worst frame 633: strobe 242 (slack 12), voice 9..241, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/8, im1 3, sk 0
+                worst frame 679: strobe 242 (slack 12), voice 9..241, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/8, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333}
+              verify_deadline: I2S: 2156 periods, 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 12 cycles, I2S identical to the model
+PASS           298.8s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --json docs/deadline/runs/prod-stress-pulse-p2x.json
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 250 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 250 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 4 cycles (strobe cycles [156, 250], deadline 254); voice busy 6 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 4; cost model {'base_values': {82: 1450, 76: 696, 78: 5, 80: 4}, 'explained': False}
+                worst frame 1315: strobe 250 (slack 4), voice 9..249, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 4/12, im1 3, sk 0
+                worst frame 831: strobe 248 (slack 6), voice 9..247, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 3/12, im1 3, sk 0
+                worst frame 862: strobe 248 (slack 6), voice 9..247, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 3/12, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2156 periods, 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 4 cycles, I2S identical to the model
+FAIL(1)        277.2s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-saw --json docs/deadline/runs/prod-extreme-saw.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 245 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 245 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 9 cycles (strobe cycles [154, 245], deadline 254); voice busy 11 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 6; cost model {'base_values': {82: 1597, 76: 564, 78: 3, 80: 3}, 'explained': False}
+                worst frame 355: strobe 245 (slack 9), voice 9..244, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 6/6, im1 0, sk 0
+                worst frame 359: strobe 245 (slack 9), voice 9..244, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 6/6, im1 0, sk 0
+                worst frame 360: strobe 245 (slack 9), voice 9..244, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 6/6, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1861, 'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1809 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 1809
+FAIL(1)        279.5s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-saw-mod --json docs/deadline/runs/prod-extreme-saw-mod.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 248 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 248 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 6 cycles (strobe cycles [154, 248], deadline 254); voice busy 8 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 6; cost model {'base_values': {82: 1597, 76: 564, 78: 3, 80: 3}, 'explained': False}
+                worst frame 310: strobe 248 (slack 6), voice 9..247, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 6/6, im1 3, sk 0
+                worst frame 322: strobe 248 (slack 6), voice 9..247, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 6/6, im1 3, sk 0
+                worst frame 327: strobe 248 (slack 6), voice 9..247, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 6/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1861, 'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1809 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 1809
+FAIL(1)        308.5s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-pulse --pulse2x --json docs/deadline/runs/prod-extreme-pulse-p2x.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 304, worst strobe cycle 255 of 256
+                sim: tb_top_bx: datapath busy at a tick: 1293 (must be 0); overrun 1; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 304, worst strobe cycle 255 of 256
+                sim: tb_top_bx: datapath busy at a tick: 1293 (must be 0); overrun 1; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 1597; sticky overrun 1; busy at tick 1293; link overflow 0
+              verify_deadline: WORST SLACK sample -1 cycles (strobe cycles [-1, 255], deadline 254); voice busy 0 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 82 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 27 cycles; max active PolyBLEP windows 12; cost model None
+                worst frame 356: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 8/12, im1 0, sk 0
+                worst frame 361: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 8/12, im1 0, sk 0
+                worst frame 366: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 8/12, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_rect_2x_gate_on': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1812 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 1597 missed frame(s), first [355, 356, 357, 358, 359]; datapath busy at 1293 tick(s); sticky overrun flag set; 304 frame(s) with no sample; 82 write(s) during computation, 0 frame(s) with a write at/after go; wire_mismatch 1812
+FAIL(1)        308.1s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-pulse-mod --pulse2x --json docs/deadline/runs/prod-extreme-pulse-mod-p2x.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 64, worst strobe cycle 239 of 256
+                sim: tb_top_bx: datapath busy at a tick: 1675 (must be 0); overrun 1; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 64, worst strobe cycle 239 of 256
+                sim: tb_top_bx: datapath busy at a tick: 1675 (must be 0); overrun 1; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 1739; sticky overrun 1; busy at tick 1675; link overflow 0
+              verify_deadline: WORST SLACK sample 15 cycles (strobe cycles [-1, 239], deadline 254); voice busy 0 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 113 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 30 cycles; max active PolyBLEP windows 11; cost model None
+                worst frame 354: strobe 239 (slack 15), voice 9..238, drum 9..125, waits r/osc/d/y 38/60/23/5, windows 8/12, im1 3, sk 0
+                worst frame 1953: strobe 239 (slack 15), voice 9..238, drum 9..125, waits r/osc/d/y 38/60/28/9, windows 8/12, im1 3, sk 0
+                worst frame 352: strobe 224 (slack 30), voice 9..223, drum 9..125, waits r/osc/d/y 19/60/28/9, windows 10/12, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_rect_2x_gate_on': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1836 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 1739 missed frame(s), first [310, 311, 312, 313, 314]; datapath busy at 1675 tick(s); sticky overrun flag set; 64 frame(s) with no sample; 113 write(s) during computation, 0 frame(s) with a write at/after go; wire_mismatch 1836
+PASS           363.0s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --json docs/deadline/runs/prod-arty-uart.json
+              verify_deadline: arty-uart: 37 live writes, 34 device-scheduled events over the UART pin; wrapper fpga/rtl/arty_a7_top.v, published configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}
+                sim: tb_uart_bx: SEG 0 origin_tcc 20 periods 0 strobes 0
+                sim: tb_uart_bx: ran 3499 frames in 1 segments; 3498 I2S periods decoded
+                sim: tb_uart_bx: writes drained 71, spi+uart slot collisions 0 (must be 0)
+                sim: tb_uart_bx: sample strobed in 3499 frames, MISSING in 0, worst strobe cycle 240 of 256
+                sim: tb_uart_bx: datapath busy at a tick: 0; core overrun 0; link overflow 0
+                sim: tb_uart_bx: TX bytes captured 143
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_uart_bx (Arty wrapper, UART pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 3496 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 14 cycles (strobe cycles [154, 240], deadline 254); voice busy 16 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [6, 6] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 3; cost model {'base_values': {76: 3298, 82: 194, 78: 2, 80: 2}, 'explained': False}
+                worst frame 2439: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 2440: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 2482: strobe 240 (slack 14), voice 9..239, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: I2S: 3300 periods, 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 14 cycles, I2S identical to the model
+PASS           183.6s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario threesaw-f1cal --mutant late:160 --expect-fail --json docs/deadline/runs/ctl-prod-late160.json
+                sim: tb_top_bx: datapath busy at a tick: 1846 (must be 0); overrun 1; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 60 writes sent, 3693 frames, 3692 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 60, writes drained 60, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 1846 frames, MISSING in 1847, worst strobe cycle 79 of 256
+                sim: tb_top_bx: datapath busy at a tick: 1846 (must be 0); overrun 1; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 3691 frames scheduled; missed 3691; sticky overrun 1; busy at tick 1846; link overflow 0
+              verify_deadline: WORST SLACK sample 175 cycles (strobe cycles [-1, 79], deadline 254); voice busy 0 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [-1, 9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 29 during computation
+              verify_deadline: max per-frame waits: reciprocal 19, 2x bank 60, drum handshake 1 cycles; max active PolyBLEP windows 2; cost model None
+                worst frame 61: strobe 79 (slack 175), voice -1..78, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+                worst frame 63: strobe 79 (slack 175), voice -1..78, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+                worst frame 65: strobe 79 (slack 175), voice -1..78, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 3629, 'three_2x_gate_on': 3629}
+              verify_deadline: I2S: 3692 periods, 3624 differ from the model; L!=R 0; bad width 0; writes 60/60, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 3691 missed frame(s), first [2, 3, 4, 5, 6]; datapath busy at 1846 tick(s); sticky overrun flag set; 1847 frame(s) with no sample; 29 write(s) during computation, 0 frame(s) with a write at/after go; wire_mismatch 3624
+              verify_deadline: negative control late:160 CAUGHT by the deadline check
+PASS           240.2s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --mutant late:160 --expect-fail --json docs/deadline/runs/ctl-arty-late160.json
+              verify_deadline: arty-uart: 37 live writes, 34 device-scheduled events over the UART pin; wrapper fpga/rtl/arty_a7_top.v, published configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}
+                sim: tb_uart_bx: SEG 0 origin_tcc 20 periods 0 strobes 0
+                sim: tb_uart_bx: ran 3499 frames in 1 segments; 3498 I2S periods decoded
+                sim: tb_uart_bx: writes drained 71, spi+uart slot collisions 0 (must be 0)
+                sim: tb_uart_bx: sample strobed in 1749 frames, MISSING in 1749, worst strobe cycle 146 of 256
+                sim: tb_uart_bx: datapath busy at a tick: 1749; core overrun 1; link overflow 0
+                sim: tb_uart_bx: TX bytes captured 143
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_uart_bx (Arty wrapper, UART pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 3496 frames scheduled; missed 3496; sticky overrun 1; busy at tick 1749; link overflow 0
+              verify_deadline: WORST SLACK sample 108 cycles (strobe cycles [-1, 146], deadline 254); voice busy 0 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [-1, 9], drum at [9]; writes in cycles [6, 6] (max 1 per frame), 16 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 3; cost model None
+                worst frame 2497: strobe 146 (slack 108), voice -1..145, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+                worst frame 2499: strobe 146 (slack 108), voice -1..145, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+                worst frame 2631: strobe 146 (slack 108), voice -1..145, drum 9..125, waits r/osc/d/y 0/0/0/0, windows 0/0, im1 0, sk 0
+              verify_deadline: I2S: 3300 periods, 989 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 3496 missed frame(s), first [2, 3, 4, 5, 6]; datapath busy at 1749 tick(s); sticky overrun flag set; 1749 frame(s) with no sample; 16 write(s) during computation, 0 frame(s) with a write at/after go; wire_mismatch 989; core_bad 990
+              verify_deadline: negative control late:160 CAUGHT by the deadline check
+PASS           167.3s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --mutant late:14 --json docs/deadline/runs/ctl-prod-stress-late14.json
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 254 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 254 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 0 cycles (strobe cycles [168, 254], deadline 254); voice busy 2 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 2; cost model {'base_values': {96: 1450, 90: 696, 92: 5, 94: 4}, 'explained': False}
+                worst frame 538: strobe 254 (slack 0), voice 9..253, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 585: strobe 254 (slack 0), voice 9..253, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 586: strobe 254 (slack 0), voice 9..253, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2156 periods, 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 0 cycles, I2S identical to the model
+PASS           166.4s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --mutant late:15 --expect-fail --json docs/deadline/runs/ctl-prod-stress-late15.json
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 41, worst strobe cycle 255 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 41; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample -1 cycles (strobe cycles [169, 255], deadline 254); voice busy 1 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 2; cost model {'base_values': {97: 1450, 91: 696, 93: 5, 95: 4}, 'explained': False}
+                worst frame 538: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 585: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 586: strobe 255 (slack -1), voice 9..254, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2156 periods, 38 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 41 missed frame(s), first [538, 585, 586, 840, 841]; 41 frame(s) with no sample; wire_mismatch 38
+              verify_deadline: negative control late:15 CAUGHT by the deadline check
+FAIL(1)        205.3s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-pulse --pulse2x --mutant skip2xwin --json docs/deadline/runs/cand-extreme-pulse-p2x-skip2xwin.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 230 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 230 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 24 cycles (strobe cycles [151, 230], deadline 254); voice busy 26 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'base_values': {82: 1597, 76: 564, 78: 3, 80: 3}, 'explained': False}
+                worst frame 355: strobe 230 (slack 24), voice 9..229, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 0, sk 0
+                worst frame 356: strobe 230 (slack 24), voice 9..229, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 0, sk 0
+                worst frame 357: strobe 230 (slack 24), voice 9..229, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 0, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_rect_2x_gate_on': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1809 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 1809
+FAIL(1)        211.6s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-pulse-mod --pulse2x --mutant skip2xwin --json docs/deadline/runs/cand-extreme-pulse-mod-p2x-skip2xwin.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 21 cycles (strobe cycles [151, 233], deadline 254); voice busy 23 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'base_values': {82: 1597, 76: 564, 78: 3, 80: 3}, 'explained': False}
+                worst frame 310: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+                worst frame 312: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+                worst frame 314: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_rect_2x_gate_on': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1809 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 1809
+PASS           203.0s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --mutant skip2xwin --json docs/deadline/runs/cand-stress-pulse-p2x-skip2xwin.json
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 460 writes sent, 2157 frames, 2156 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 460, writes drained 460, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2157 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 1}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2155 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 21 cycles (strobe cycles [151, 233], deadline 254); voice busy 23 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'base_values': {82: 1450, 76: 696, 78: 5, 80: 4}, 'explained': False}
+                worst frame 514: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 515: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 516: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2156 periods, 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 21 cycles, I2S identical to the model
+FAIL(1)        173.9s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_deadline.py --scenario extreme-saw-mod --mutant skip2xwin --json docs/deadline/runs/cand-extreme-saw-mod-skip2xwin.json
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+                sim: tb_top_bx: status word on MISO = 4d210001
+                sim: tb_top_bx: 357 writes sent, 2169 frames, 2168 I2S periods decoded
+                sim: tb_top_bx: transactions accepted at the pin 357, writes drained 357, landing frame differs from the pin prediction 0 times (must be 0)
+                sim: tb_top_bx: sample strobed in 2169 frames, MISSING in 0, worst strobe cycle 233 of 256
+                sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+              verify_deadline: configuration {'OSC2X': 1, 'FILTER2X': 1, 'PULSE2X': 0}; bench tb_top_bx (SPI pins); go at cycle 8 (synth_top GO_CYCLE)
+              verify_deadline: 2167 frames scheduled; missed 0; sticky overrun 0; busy at tick 0; link overflow 0
+              verify_deadline: WORST SLACK sample 21 cycles (strobe cycles [151, 233], deadline 254); voice busy 23 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [2, 2] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'base_values': {82: 1597, 76: 564, 78: 3, 80: 3}, 'explained': False}
+                worst frame 310: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+                worst frame 311: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+                worst frame 312: strobe 233 (slack 21), voice 9..232, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1861, 'three_2x_gate_on': 1861, 'three_2x_audible_gate_on': 1861, 'three_2x_audible_dfilt': 1861, 'three_2x_audible_with_strike': 32}
+              verify_deadline: I2S: 2168 periods, 1809 differ from the model; L!=R 0; bad width 0; writes 357/357, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 1809
+PASS           358.5s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --outdir build/dl/tbv-threesaw
+                [threesaw] three 2x saws at 4000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.0, calibrated words (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.1, calibrated words (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 7200 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 145, mean 145, worst 208 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 217 (sample slack 37 to cycle 254); worst last-busy cycle 216 (busy slack 39 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 36869231000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 145, mean 145.0, worst 208 (of 256 - 8 in the chip)
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 7200 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 217 (slack 37), worst last-busy cycle 216 (slack 39)
+PASS           329.4s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --pulse2x --outdir build/dl/tbv-threesaw-p2x
+                [threesaw] three 2x saws at 4000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.0, calibrated words (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.1, calibrated words (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 7200 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 145, mean 145, worst 208 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 217 (sample slack 37 to cycle 254); worst last-busy cycle 216 (busy slack 39 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 36869231000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 145, mean 145.0, worst 208 (of 256 - 8 in the chip)
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 7200 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 217 (slack 37), worst last-busy cycle 216 (slack 39)
+PASS             8.7s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --go 48 --expect-deadline-fail --outdir build/dl/tbv-threesaw-go48
+              verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['threesaw']
+                [threesaw] three 2x saws at 250 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 0..1439 (1440), 5 writes; blep windows 21; gate on 1440/1440, trig 1
+                [threesaw] three 2x saws at 1000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 1440..2879 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 4000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.0, calibrated words (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.1, calibrated words (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+              verify_voice: DIAGNOSTIC launch at cycle 48, NOT the chip's cycle 8: a deadline result from this run says nothing about the chip
+                sim: tb_voice: OVERRUN at frame 0: the datapath is still busy at the end of the frame (go at cycle 48 of 256, the production launch)
+                sim: tb_voice: FAIL
+                sim: tb_voice.v:208: $finish called at 10351000 (1ps)
+              verify_voice: FAIL -- DEADLINE: overrun at frame 0 (datapath busy at the tick, go at cycle 48)
+              verify_voice: late-completion control CAUGHT by the deadline check
+PASS             8.1s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --rtl build/dl/mut/mutant-late160/voice_dp.v --expect-deadline-fail --outdir build/dl/tbv-late160
+              verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['threesaw']
+                [threesaw] three 2x saws at 250 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 0..1439 (1440), 5 writes; blep windows 21; gate on 1440/1440, trig 1
+                [threesaw] three 2x saws at 1000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 1440..2879 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 4000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.0, calibrated words (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.1, calibrated words (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating ../build/dl/mut/mutant-late160/voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: OVERRUN at frame 0: the datapath is still busy at the end of the frame (go at cycle 8 of 256, the production launch)
+                sim: tb_voice: FAIL
+                sim: tb_voice.v:208: $finish called at 10351000 (1ps)
+              verify_voice: FAIL -- DEADLINE: overrun at frame 0 (datapath busy at the tick, go at cycle 8)
+              verify_voice: late-completion control CAUGHT by the deadline check
+PASS           262.6s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --rtl build/dl/mut/mutant-late37/voice_dp.v --outdir build/dl/tbv-late37
+                [threesaw] three 2x saws at 4000 Hz, res 0.0, calibrated words (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.0, calibrated words (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [threesaw] three 2x saws at 1000 Hz, res 1.1, calibrated words (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating ../build/dl/mut/mutant-late37/voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 7200 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 182, mean 182, worst 245 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 254 (sample slack 0 to cycle 254); worst last-busy cycle 253 (busy slack 2 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 36869231000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 182, mean 182.0, worst 245 (of 256 - 8 in the chip)
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 7200 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 254 (slack 0), worst last-busy cycle 253 (slack 2)
+PASS           261.6s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only threesaw --filter2x --rtl build/dl/mut/mutant-late38/voice_dp.v --expect-deadline-fail --outdir build/dl/tbv-late38
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating ../build/dl/mut/mutant-late38/voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 7200 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 183, mean 183, worst 246 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 255 (sample slack -1 to cycle 254); worst last-busy cycle 254 (busy slack 1 to cycle 255); late samples 1
+                sim: tb_voice: LATE SAMPLE: 1 frame(s) strobed after cycle 254, first frame 0 at cycle 255
+                sim: tb_voice: FAIL
+                sim: tb_voice.v:251: $finish called at 36869231000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 183, mean 183.0, worst 246 (of 256 - 8 in the chip)
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [threesaw] 1440 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 7200 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: FAIL -- DEADLINE: 1 late sample(s), first at frame 0 cycle 255 (> 254)
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 255 (slack -1), worst last-busy cycle 254 (slack 1)
+              verify_voice: late-completion control CAUGHT by the deadline check
+PASS           252.9s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only f1cal --filter2x --outdir build/dl/tbv-f1cal
+                [f1cal] surge-type2-clean-v1 at 4000 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.0, drive 1.0 (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; rail 1; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.1, drive 1.0 (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 7200 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 85, mean 85, worst 148 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 157 (sample slack 97 to cycle 254); worst last-busy cycle 156 (busy slack 99 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 36869231000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 85, mean 85.0, worst 148 (of 256 - 8 in the chip)
+                [f1cal] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [f1cal] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [f1cal] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [f1cal] 1440 frames: 0 sample mismatches, 0 tap mismatches
+                [f1cal] 1440 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 7200 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 157 (slack 97), worst last-busy cycle 156 (slack 99)
+PASS           473.2s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --outdir build/dl/tbv-quick
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [notes] 1536 frames: 0 sample mismatches, 0 tap mismatches
+                [notes] 1500 frames: 0 sample mismatches, 0 tap mismatches
+                [glide] 6600 frames: 0 sample mismatches, 0 tap mismatches
+                [gate] 2540 frames: 0 sample mismatches, 0 tap mismatches
+                [silence] 8200 frames: 0 sample mismatches, 0 tap mismatches
+                [silence] 7500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 400 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 200 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 1500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 400 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 300 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 200 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 64416 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 170 (slack 84), worst last-busy cycle 169 (slack 86)
+PASS           642.3s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --osc2x --outdir build/dl/tbv-quick-osc2x
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [modulation] 3840 frames: 0 sample mismatches, 0 tap mismatches
+                [notes] 1536 frames: 0 sample mismatches, 0 tap mismatches
+                [notes] 1500 frames: 0 sample mismatches, 0 tap mismatches
+                [glide] 6600 frames: 0 sample mismatches, 0 tap mismatches
+                [gate] 2540 frames: 0 sample mismatches, 0 tap mismatches
+                [silence] 8200 frames: 0 sample mismatches, 0 tap mismatches
+                [silence] 7500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 400 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 200 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 1500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 400 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 500 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 300 frames: 0 sample mismatches, 0 tap mismatches
+                [extremes] 200 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 64416 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 207 (slack 47), worst last-busy cycle 206 (slack 49)
+PASS           175.5s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --outdir build/dl/tbv-w3-f2x
+                [waves3] shark / revsaw / wide / narrow ('revsaw', 'pulse29', 'pulse15') at note 69: frames 1152..1727 (576), 4 writes; blep windows 30; gate on 576/576, trig 0
+                [waves3] shark / revsaw / wide / narrow ('pulse29', 'pulse15', 'shark') at note 21: frames 1728..2303 (576), 4 writes; blep windows 0; gate on 576/576, trig 0
+                [waves3] shark / revsaw / wide / narrow ('shark', 'shark', 'shark') at note 108: frames 2304..2879 (576), 4 writes; blep windows 250; gate on 576/576, trig 0
+                2880 frames, 166 register writes; final amp level 15853215, filt level 14427903
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 2880 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 2880 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 89, mean 91, worst 153 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 162 (sample slack 92 to cycle 254); worst last-busy cycle 161 (busy slack 94 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 14750831000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 89, mean 91.4, worst 153 (of 256 - 8 in the chip)
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 2880 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 162 (slack 92), worst last-busy cycle 161 (slack 94)
+PASS           177.7s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --outdir build/dl/tbv-w3-p2x
+                [waves3] shark / revsaw / wide / narrow ('revsaw', 'pulse29', 'pulse15') at note 69: frames 1152..1727 (576), 4 writes; blep windows 30; gate on 576/576, trig 0
+                [waves3] shark / revsaw / wide / narrow ('pulse29', 'pulse15', 'shark') at note 21: frames 1728..2303 (576), 4 writes; blep windows 0; gate on 576/576, trig 0
+                [waves3] shark / revsaw / wide / narrow ('shark', 'shark', 'shark') at note 108: frames 2304..2879 (576), 4 writes; blep windows 250; gate on 576/576, trig 0
+                2880 frames, 166 register writes; final amp level 15853215, filt level 14427903
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X, VOICE_PULSE_2X), 2880 frames, 166 writes at the register port
+                sim: tb_voice: 166 writes, 2880 frames, 0 sample mismatches, worst |error| 0 LSB
+                sim: tb_voice: cycles from go to sample_valid: best 94, mean 115, worst 189 (chip: go at cycle 8 of 256)
+                sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 198 (sample slack 56 to cycle 254); worst last-busy cycle 197 (busy slack 58 to cycle 255); late samples 0
+                sim: tb_voice: PASS
+                sim: tb_voice.v:251: $finish called at 14750831000 (1ps)
+              verify_voice: cycles from go to sample_valid: best 94, mean 115.4, worst 189 (of 256 - 8 in the chip)
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 2880 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 198 (slack 56), worst last-busy cycle 197 (slack 58)
+PASS            86.4s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/dl/tbv-osc2x-off
+              verify_voice: cycles from go to sample_valid: best 82, mean 82.1, worst 145 (of 256 - 8 in the chip)
+                [default] 1200 frames: 1199 sample mismatches, 14397 tap mismatches
+              verify_voice: FAIL -- 1199 of 1200 samples differ; tap mismatches: osc0 1200, osc1 1200, inc0 1200, inc1 1200, sh0 1200, sh1 1200, r0 1200, r1 1200, mixed 1200, y19 1199, v 1199, out_v 1199; 9600 undefined/X
+                first sample mismatch at frame 1 [default]: model 0, RTL -1
+                first osc0 mismatch at frame 0 [default]: model -34, RTL x
+                first osc1 mismatch at frame 0 [default]: model -34, RTL x
+                first inc0 mismatch at frame 0 [default]: model 38448, RTL x
+                first inc1 mismatch at frame 0 [default]: model 38604, RTL x
+                first sh0 mismatch at frame 0 [default]: model 15, RTL x
+                first sh1 mismatch at frame 0 [default]: model 15, RTL x
+                first r0 mismatch at frame 0 [default]: model 55854, RTL x
+                first r1 mismatch at frame 0 [default]: model 55628, RTL x
+                first mixed mismatch at frame 0 [default]: model -27, RTL -1
+                first y19 mismatch at frame 1 [default]: model 0, RTL -1
+                first v mismatch at frame 1 [default]: model 0, RTL -1
+                first out_v mismatch at frame 1 [default]: model 0, RTL -1
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 154 (slack 100), worst last-busy cycle 153 (slack 102)
+              verify_voice: negative control OSC2X_OFF CAUGHT (comparison failed as required)
+NO-VERDICT       2.8s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only default --rtl stubs/voice_dp_stub.v --expect-fail --outdir build/dl/tbv-stub
+              verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['default']
+                [default] default patch (saw, saw, square), note 45 from reset: frames 0..1199 (1200), 6 writes; blep windows 15; gate on 960/1200, trig 1
+                1200 frames, 35 register writes; final amp level 13988416, filt level 13186566
+              verify_voice: simulating ../stubs/voice_dp_stub.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines (none)), 1200 frames, 35 writes at the register port
+              verify_voice: iverilog compile failed:
+              ../stubs/voice_dp_stub.v: No such file or directory
+              Preprocessor failed with 1 errors.
+              verify_voice: NEGATIVE CONTROL NOT CAUGHT (status 2)
+PASS            66.9s  /Users/joseph/dev/2amlogic/gf180-monosynth/.venv/bin/python -m pytest tools/test_verify_deadline.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_build_selected.py fpga/test_publish_selected.py -q
+              .....................................................................    [100%]
+              69 passed in 62.23s (0:01:02)
+==============================================================================
+24/32 passed  --  FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; FAIL /Users/joseph/dev/2amlogic/gf180-monosynth/.; NO-VERDICT /Users/joseph/dev/2amlogic/gf180-monosynth/.
