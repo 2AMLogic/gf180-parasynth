@@ -842,7 +842,11 @@ def _gate_the_sum(kit: list) -> list:
     return sorted(img.items())
 
 
-def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None) -> tuple:
+DRUM_SOLO_HIT_FRAME = 480               # int(0.01 * dx.SR); the lead the windower needs
+
+
+def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None,
+                     hit_frame: int | None = None, frames: int | None = None) -> tuple:
     """One hit of one SOUND from the kit that ships, rendered here and now
     through the register interface -- never a committed WAV, so what is
     measured is the design as it stands.
@@ -850,14 +854,26 @@ def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None)
     Sixteen sounds sit on eleven circuits and five of them are pairs sharing
     one, so the circuit is switched to the named sound with `kit_with_sounds`
     before the hit: rendering LC by striking the LT stop would measure the
-    low tom and call it a conga."""
+    low tom and call it a conga.
+
+    `hit_frame` and `frames` move the strike and the render length; both
+    default to the scorecard's own render and no case uses anything else. They
+    exist for the integrated-RTL anchor (tools/score_drum_i2s.py), where the
+    chip's strike lands wherever the SPI link puts it and the CONTROLLED
+    comparison -- is the decoded wire the fixed model? -- has to be made at the
+    frame the strike actually landed in. The noise LFSR free-runs, so a render
+    whose strike is in a different frame is a different waveform even when the
+    engine is bit-identical, which is precisely what this parameter isolates."""
     import drums_fx as dx
     if sound not in dx.SOUND_NAMES:
         raise Refused(f"{sound} is not one of the sixteen sounds the kit implements "
                       f"({', '.join(dx.SOUND_NAMES)})")
     stop = dx.SOUND_STOP[sound]
     seconds = SOLO_SECONDS.get(sound, 2.2)
-    n = int(seconds * dx.SR)
+    n = int(seconds * dx.SR) if frames is None else int(frames)
+    hit = DRUM_SOLO_HIT_FRAME if hit_frame is None else int(hit_frame)
+    if hit < 0 or hit >= n:
+        raise Refused(f"the strike must fall inside the render ({hit} of {n} frames)")
     d = dx.DrumsFx()
     kit = dx.kit_with_sounds(sound)
     if inject == "CB_GATE_THE_SUM":
@@ -865,7 +881,7 @@ def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None)
             raise Refused(f"CB_GATE_THE_SUM is a cowbell control; {sound} does not "
                           f"strike the cowbell, so it would inject nothing")
         kit = _gate_the_sum(kit)
-    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), stop, accent)], kit), n)
+    dm, bd = d.play(dx.hit_writes([(hit, stop, accent)], kit), n)
     g = dx.accent_reg(0.45)
     out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
