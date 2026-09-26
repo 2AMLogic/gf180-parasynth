@@ -272,6 +272,20 @@ def m_noise_share(voice, bands):
     return f
 
 
+def m_sd_brightness(ctx):
+    """The snare's brightness, power-weighted by default -- `ctx["centroid_weight"]`
+    lets `--inject sd-centroid-amp-weighted` read the other field instead
+    (`drum_verify.measure` already computes both). docs/drum-verification.md 3:
+    the amplitude/magnitude weighting 'weights a wide, quiet noise floor
+    heavily,' which is exactly the snare's shape -- a ~173 Hz body under a
+    16 kHz-wide noise band."""
+    m = _meas(ctx, "SD")
+    if m.get("silent"):
+        return None
+    field = "centroid_hz" if ctx.get("centroid_weight") == "amplitude" else "power_centroid_hz"
+    return m.get(field)
+
+
 # ===========================================================================
 # injections: the known-broken variants the report must be able to see
 # ===========================================================================
@@ -316,6 +330,44 @@ def _env_injection(env_attr, **scale):
     return make
 
 
+def _envelope_injection(kind):
+    """Replace `drum_verify`'s tuned per-voice envelope (moving RMS, window
+    matched to each voice's own fundamental) with ONE method for every voice --
+    which is what this repository shipped before ENV_WIN_MS existed. `kind`
+    selects the historical replacement:
+
+      "moving_average"  the deprecated `audio_measure.moving_average_envelope`
+                         at its original 5 ms window -- audio_measure.py's own
+                         rule 1: 'a 5 ms moving average spans 0.28 of a cycle
+                         at 56 Hz.' Kept alive ONLY as
+                         `test_moving_average_envelope_ripples_where_the_analytic_one_does_not`
+                         until this injection, which reinstates it on the
+                         acceptance path rather than a helper-function test.
+
+    Patches the module attribute, so every voice's `decay_fit`-derived
+    property is exposed to it -- not only the one this injection's declared
+    `voices` list names, which is why the un-declared voices' movement (or
+    lack of it) is worth reading in the printed report too."""
+    def make(ctx):
+        orig = dv.envelope
+
+        def patched(x, sr, win_ms=4.0):
+            if kind == "moving_average":
+                return np.abs(am.moving_average_envelope(x, 5.0, sr))
+            return orig(x, sr, win_ms)
+        ctx["_patches"].append((dv, "envelope", orig))
+        dv.envelope = patched
+    return make
+
+
+def _centroid_weight_injection(weight):
+    """Read `m_sd_brightness` (and any other centroid-based property added
+    later) through the given weighting instead of the correct default."""
+    def make(ctx):
+        ctx["centroid_weight"] = weight
+    return make
+
+
 INJECTIONS = {
     "ladder-2pole": ("a pole dropped from the ladder (2 stages, not 4)",
                      ["LADDER"], _ladder_injection(stages=2)),
@@ -336,6 +388,23 @@ INJECTIONS = {
                 ["LT"], _mode_injection("M_LT", f0=1.15)),
     "oh-decay-half": ("the open hat's envelope tau halved",
                       ["OH"], _env_injection("E_OH", tau=0.5)),
+    # -- permanent injections of historical bugs (issue #52): these two
+    # reinstate defects that actually shipped and were fixed at the estimator
+    # layer, rather than inventing a new defect, per docs/verification-rules.md
+    # ("SPI_ADDR7"/"SPI_DATA24" are the RTL-side precedent for this pattern).
+    "bd-ma-envelope": ("the decay estimator reads every voice through the "
+                       "deprecated 5 ms moving-average envelope instead of "
+                       "the per-voice-tuned RMS window -- the historical "
+                       "defect audio_measure.py rule 1 and "
+                       "test_moving_average_envelope_ripples_where_the_analytic_one_does_not "
+                       "describe, reinstated here on the acceptance path",
+                       ["BD"], _envelope_injection("moving_average")),
+    "sd-centroid-amp-weighted": ("the snare's brightness is read from the "
+                                 "amplitude/magnitude-weighted centroid "
+                                 "instead of the power-weighted one -- "
+                                 "docs/drum-verification.md 3's withdrawn "
+                                 "measurement method, reinstated here",
+                                 ["SD"], _centroid_weight_injection("amplitude")),
 }
 
 
@@ -403,6 +472,13 @@ def build_properties():
                   f"locked at {LOCK}; drum_fit.noise_share, the validated measure "
                   "(drum-verification.md 8.0 withdrew the windowed split)",
                   m_noise_share("SD", [(150.0, 200.0), (300.0, 380.0)])))
+    P.append(Prop("SD", "brightness (power centroid)", "Hz", "lock", None, 300.0,
+                  f"locked at {LOCK}; drum_verify.power_centroid_hz, over the "
+                  "amplitude/magnitude-weighted centroid_hz drum-verification.md "
+                  "3 withdrew ('a voice with 98 % of its energy below 700 Hz can "
+                  "still show a 6.5 kHz magnitude centroid') -- ground truth in "
+                  "test_audio_measure.test_amplitude_weighted_centroid_reads_a_quiet_wideband_floor_as_bright",
+                  m_sd_brightness))
     return P
 
 
@@ -432,6 +508,7 @@ LOCKS = {
     ("CB", "T20"): 176.125,
     ("CB", "attack"): 4.39583,
     ("SD", "noise share"): 27.5488,
+    ("SD", "brightness (power centroid)"): 1918.08,
 }
 
 

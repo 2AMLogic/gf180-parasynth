@@ -1,0 +1,12 @@
+==============================================================================
+PASS             2.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only default --rtl rtl-sketch/stubs/voice_dp_stub.v --expect-fail --outdir build/dl/tbv-stub
+                first v mismatch at frame 0 [default]: model 0, RTL x
+                first out_v mismatch at frame 0 [default]: model 0, RTL x
+                first phase2x0 mismatch at frame 0 [default]: model 0, RTL x
+                first phase2x1 mismatch at frame 0 [default]: model 0, RTL x
+                first phase2x2 mismatch at frame 0 [default]: model 0, RTL x
+                final state differs: phase0 model 12583168 RTL x, phase1 model 12770368 RTL x, phase2 model 6291584 RTL x, inc_acc0 model 9842688 RTL x, inc_acc1 model 9882624 RTL x, inc_acc2 model 4921344 RTL x, level_a model 13988416 RTL x, level_f model 13186566 RTL x, seg_a model 1 RTL x, seg_f model 1 RTL x, phase2x0 model 0 RTL x, phase2x1 model 0 RTL x, phase2x2 model 0 RTL x
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 12 (slack 242), worst last-busy cycle -1 (slack 256)
+              verify_voice: negative control  CAUGHT (comparison failed as required)
+==============================================================================
+1/1 passed

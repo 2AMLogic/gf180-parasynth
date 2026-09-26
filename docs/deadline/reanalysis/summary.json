@@ -1,0 +1,759 @@
+{
+ "simulator_runs_at": "2221d2c",
+ "analysed_at": "396d492",
+ "analysis_version": 2,
+ "run_all_exit": 1,
+ "cost_model_totals": {
+  "traces": 12,
+  "checked_frames": 30333,
+  "exceptions": 0,
+  "constants": {
+   "87": 30333
+  },
+  "ywait_min": 5,
+  "ywait_max": 11
+ },
+ "captures": [
+  {
+   "record": "cand-extreme-pulse-mod-p2x-skip2xwin",
+   "capture": "rtl-sketch/build/deadline/extreme-pulse-mod-p2x-skip2xwin",
+   "reanalysis": "docs/deadline/reanalysis/cand-extreme-pulse-mod-p2x-skip2xwin.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2167,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2167
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "a959abb9132553a03ec2c53389fd1ecccdbff12f9dc55b117d583e0ad21265eb",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "86be02ead69316d2b50e8ab6abe1546cd253ff051e3b27aae75014b328c9da91",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "1db6ae40a228eabe110e68ac7c1328f6635f5aaec9b1690d89e1559d92f608ca",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "001f0d5a3214938e034ed666b624b142ca8a88a9c4bbcf4b8b1d360ebc582da7"
+   }
+  },
+  {
+   "record": "cand-extreme-pulse-p2x-skip2xwin",
+   "capture": "rtl-sketch/build/deadline/extreme-pulse-p2x-skip2xwin",
+   "reanalysis": "docs/deadline/reanalysis/cand-extreme-pulse-p2x-skip2xwin.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2167,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2167
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "d5e1bfa0e21ac1c7f82044e3155ea48b0dd105ad0503ab88f57c090e64da6dd5",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "4465537226556cbb0dedea37cdbf44adee5401fdb09d67dfcfe3cc11f61a65cb",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "7bc5120c2be21bfc0d6b6668dc822c70d5130e9cfd1a38e290cd954fb43f6447",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "1b7762f29dca3d30666d2ed70b60035f294468bcd104c09c4cbee9440d619452"
+   }
+  },
+  {
+   "record": "cand-extreme-saw-mod-skip2xwin",
+   "capture": "rtl-sketch/build/deadline/extreme-saw-mod-skip2xwin",
+   "reanalysis": "docs/deadline/reanalysis/cand-extreme-saw-mod-skip2xwin.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2167,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2167
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "e3a836a104210890996df85088c8b96be9bf05f51acf6732fa5cd0e12f740f4e",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "82e613ad8f43fcbdb03c3556d9de857dac9a164f3428cefaccf48144044082f2",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "fb6cf537255bbfe2033eb9694fab797132026347c23d3268ad2919da6a63cff6",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "ba42c89d9682c2e56a6484f603e96a913e4fbcce9acd1e050923add9f319244f"
+   }
+  },
+  {
+   "record": "cand-stress-pulse-p2x-skip2xwin",
+   "capture": "rtl-sketch/build/deadline/stress-pulse-p2x-skip2xwin",
+   "reanalysis": "docs/deadline/reanalysis/cand-stress-pulse-p2x-skip2xwin.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "cb80669ca446a3bf103453fd0406bd16d2fcfd35226373efc9973e1dba7ff950",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "327bdbdb9386a6ed3e307a634323f32af6e59e1f4745af205df60dc11df51c63",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "f142ad1250689eb76c05cfa3eb271b773b5b86fb8e0010401a7d2bf14b43deb5",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "52d9d367f32dd121de65ed9232f075778d68c64d787512d136175d1f3caef58d"
+   }
+  },
+  {
+   "record": "ctl-arty-late160",
+   "capture": "rtl-sketch/build/deadline/arty-uart-late160",
+   "reanalysis": "docs/deadline/reanalysis/ctl-arty-late160.json",
+   "expect_fail": true,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 1748,
+    "frames_without_strobe": 1748,
+    "constant": 61,
+    "residuals": {
+     "61": 737,
+     "58": 414,
+     "140": 360,
+     "142": 109,
+     "118": 43,
+     "144": 33,
+     "122": 30,
+     "124": 10
+    },
+    "ywait_range": [
+     0,
+     0
+    ],
+    "exceptions": 1748,
+    "first_exceptions": [
+     {
+      "frame": 3,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 5,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 7,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 9,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 11,
+      "residual": 58,
+      "ywait": 0
+     }
+    ],
+    "explained": false
+   },
+   "capture_sha256": {
+    "uart_cmds.txt": "9c4c31aaf661ee8c02aeadae5b7f4f59cf8e9da23aaf0c76e9dd3c9de9c92819",
+    "transcript.txt": "78e33d6c31fb5642276cf0030f28d9b79b3a4e2d57d272d56b35051220c217fc",
+    "uart_i2s.txt": "0ee0b155c653e4caedb25ffc16db5f0810ed83ef2087e5651d6747db5cfdaf35",
+    "uart_wrs.txt": "17fdbfdc97f11338d1cfc8f77832299f24b556113f04f39aec0a04bc4a961149",
+    "uart_wrs.txt.sched": "cd00a5a5d6518df51d9b7d013684025328a86ade0ea7b6b0a3ab54e9ffde76ce",
+    "uart_txd.txt": "451ba8527395740356b76fc8d9b447d4693f4d650670ccc0b9221cb82f0bf0d6",
+    "uart_samp.txt": "934fd38ec8b92a5afa7a29ddcd0568c4794ec5acbcc5568c09134c72ba7d0559"
+   }
+  },
+  {
+   "record": "ctl-prod-late160",
+   "capture": "rtl-sketch/build/deadline/threesaw-f1cal-late160",
+   "reanalysis": "docs/deadline/reanalysis/ctl-prod-late160.json",
+   "expect_fail": true,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 1845,
+    "frames_without_strobe": 1846,
+    "constant": 58,
+    "residuals": {
+     "58": 1826,
+     "60": 8,
+     "62": 8,
+     "79": 3
+    },
+    "ywait_range": [
+     0,
+     0
+    ],
+    "exceptions": 1845,
+    "first_exceptions": [
+     {
+      "frame": 3,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 5,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 7,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 9,
+      "residual": 58,
+      "ywait": 0
+     },
+     {
+      "frame": 11,
+      "residual": 58,
+      "ywait": 0
+     }
+    ],
+    "explained": false
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "d9bb1ea96f8c33f7d489b899f12b7002cc5d2f05d8a7fdee902190fb8e786b0d",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "991d7e2ab2c8648f31d5c9b1e80ab163fba1380ea4ceb40601d5784644508981",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e5e790e642e592d153d43ec8c521c31b252198fca74edc502d81f979d651c3aa",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "b4a96636de4cf475a600b35bc6b58ee0eb24b560bee579ddb4ebf426f9650319"
+   }
+  },
+  {
+   "record": "ctl-prod-stress-late14",
+   "capture": "rtl-sketch/build/deadline/stress-saw-late14",
+   "reanalysis": "docs/deadline/reanalysis/ctl-prod-stress-late14.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 101,
+    "residuals": {
+     "101": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "031616ae2c67bb6940c46b19e92d9ed97c0238f9e74deeb211af6a336af8e66b",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "0dfe447ec4c9f17c1d3ae2522023243048d24b1ffa977db099f3294a9e3d1db4",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e1141a078ff82616d339ad6bc26d7712ab24dd9964cbabce0413cfc75e07742e",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "3d3dd1c925a5b87d356ce089b1aad62f8db1c445f9728187df0954c399f91499"
+   }
+  },
+  {
+   "record": "ctl-prod-stress-late15",
+   "capture": "rtl-sketch/build/deadline/stress-saw-late15",
+   "reanalysis": "docs/deadline/reanalysis/ctl-prod-stress-late15.json",
+   "expect_fail": true,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 102,
+    "residuals": {
+     "102": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "031616ae2c67bb6940c46b19e92d9ed97c0238f9e74deeb211af6a336af8e66b",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "f436b2d0970ca6f66ed655cff12dae089c156395e69efacd22d94031f73fdf71",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e1141a078ff82616d339ad6bc26d7712ab24dd9964cbabce0413cfc75e07742e",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "9274fe49a4104407201181af786c6be88bf59e0fc991bd6f8c6a2318445fe930"
+   }
+  },
+  {
+   "record": "prod-arty-uart",
+   "capture": "rtl-sketch/build/deadline/arty-uart",
+   "reanalysis": "docs/deadline/reanalysis/prod-arty-uart.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 3496,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 3496
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "uart_cmds.txt": "9c4c31aaf661ee8c02aeadae5b7f4f59cf8e9da23aaf0c76e9dd3c9de9c92819",
+    "transcript.txt": "936ef8b1e5894b43dddd73a153c1a2ec29410b02fa5d1bb5f0c1371dd75f5f13",
+    "uart_i2s.txt": "1597af4e4f2f6bb4548ed2b53ad71800c0749a27cbbe3d1d36315f39e997f9da",
+    "uart_wrs.txt": "17fdbfdc97f11338d1cfc8f77832299f24b556113f04f39aec0a04bc4a961149",
+    "uart_wrs.txt.sched": "bcd868505f1e58d326339aa6137f3622eb4e600ad6f9b3fffee49478dfec6430",
+    "uart_txd.txt": "451ba8527395740356b76fc8d9b447d4693f4d650670ccc0b9221cb82f0bf0d6",
+    "uart_samp.txt": "f19a43ea09fdb2ee2abf6cce2285e8db821098c36031bedf54e6583e16390a61"
+   }
+  },
+  {
+   "record": "prod-extreme-pulse-mod-p2x",
+   "capture": "rtl-sketch/build/deadline/extreme-pulse-mod-p2x",
+   "reanalysis": "docs/deadline/reanalysis/prod-extreme-pulse-mod-p2x.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2103,
+    "frames_without_strobe": 64,
+    "constant": -169,
+    "residuals": {
+     "-169": 1584,
+     "87": 400,
+     "82": 31,
+     "-168": 28,
+     "-170": 28,
+     "86": 13,
+     "84": 11,
+     "80": 8
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 519,
+    "first_exceptions": [
+     {
+      "frame": 2,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 3,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 4,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 5,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 6,
+      "residual": 87,
+      "ywait": 11
+     }
+    ],
+    "explained": false
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "a959abb9132553a03ec2c53389fd1ecccdbff12f9dc55b117d583e0ad21265eb",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "c69af280d44b916e51d7b167a0e65e9487ea921b464e3fd52a197ba9500814e8",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "1db6ae40a228eabe110e68ac7c1328f6635f5aaec9b1690d89e1559d92f608ca",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "d1bc37df935ca31260dc91349fa2a35cf17b7bae17c4e88c2261125bf7837b31"
+   }
+  },
+  {
+   "record": "prod-extreme-pulse-p2x",
+   "capture": "rtl-sketch/build/deadline/extreme-pulse-p2x",
+   "reanalysis": "docs/deadline/reanalysis/prod-extreme-pulse-p2x.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 1905,
+    "frames_without_strobe": 262,
+    "constant": -169,
+    "residuals": {
+     "-169": 1031,
+     "87": 789,
+     "85": 85
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 874,
+    "first_exceptions": [
+     {
+      "frame": 2,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 3,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 4,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 5,
+      "residual": 87,
+      "ywait": 11
+     },
+     {
+      "frame": 6,
+      "residual": 87,
+      "ywait": 11
+     }
+    ],
+    "explained": false
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "d5e1bfa0e21ac1c7f82044e3155ea48b0dd105ad0503ab88f57c090e64da6dd5",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "e439774370574395ea277d773786c8cb64050e902ee880948aa2d1c6b18afd59",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "7bc5120c2be21bfc0d6b6668dc822c70d5130e9cfd1a38e290cd954fb43f6447",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "ac94db0233e87689407c00784308059135d48d6eddfc0fe8ebdfa585f87ec32c"
+   }
+  },
+  {
+   "record": "prod-extreme-saw-mod",
+   "capture": "rtl-sketch/build/deadline/extreme-saw-mod",
+   "reanalysis": "docs/deadline/reanalysis/prod-extreme-saw-mod.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2167,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2167
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "e3a836a104210890996df85088c8b96be9bf05f51acf6732fa5cd0e12f740f4e",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "82e613ad8f43fcbdb03c3556d9de857dac9a164f3428cefaccf48144044082f2",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "fb6cf537255bbfe2033eb9694fab797132026347c23d3268ad2919da6a63cff6",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "d2a3a05e3ccdf09cf309aed1102ff94779c36f4d405cf61fbca9186cd44315aa"
+   }
+  },
+  {
+   "record": "prod-extreme-saw",
+   "capture": "rtl-sketch/build/deadline/extreme-saw",
+   "reanalysis": "docs/deadline/reanalysis/prod-extreme-saw.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "FAIL",
+   "original_status": "FAIL",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2167,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2167
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "b0a133cd17b03a00ec2c0516f7015726a5e7c409e81db80a73040a41b9eee413",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "7bf28863330d7ce5ec2651b765aad75dc8c3fb34f4d8a0103a2996037cb8815f",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "3bfa0a7c0fc12ba6e3403b387071d8bf262adb5f5b5b6178f71c15e70efa7742",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "f735f9d4ed456342dc85dd3ceab620bc5f20daff55d7a6150d738c0c459a2a9e"
+   }
+  },
+  {
+   "record": "prod-stress-pulse-p2x",
+   "capture": "rtl-sketch/build/deadline/stress-pulse-p2x",
+   "reanalysis": "docs/deadline/reanalysis/prod-stress-pulse-p2x.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "cb80669ca446a3bf103453fd0406bd16d2fcfd35226373efc9973e1dba7ff950",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "327bdbdb9386a6ed3e307a634323f32af6e59e1f4745af205df60dc11df51c63",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "f142ad1250689eb76c05cfa3eb271b773b5b86fb8e0010401a7d2bf14b43deb5",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "2aaa004feb173f3ec3ec1e09451278718f1f262198b2102f317a97fe72002c3a"
+   }
+  },
+  {
+   "record": "prod-stress-saw-p2x",
+   "capture": "rtl-sketch/build/deadline/stress-saw-p2x",
+   "reanalysis": "docs/deadline/reanalysis/prod-stress-saw-p2x.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "031616ae2c67bb6940c46b19e92d9ed97c0238f9e74deeb211af6a336af8e66b",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "2de847f8eabebbd73b91660b99a8a77637db47dc60fa07f75683bf47e73c2de6",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "e1141a078ff82616d339ad6bc26d7712ab24dd9964cbabce0413cfc75e07742e",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "ba0567e1f415f8bfc92f5a37da69f44a39aeae80c7e163e04f161030d91eb166"
+   }
+  },
+  {
+   "record": "prod-stress-saw",
+   "capture": "rtl-sketch/build/deadline/stress-saw",
+   "reanalysis": "docs/deadline/reanalysis/prod-stress-saw.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 2155,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 2155
+    },
+    "ywait_range": [
+     5,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "031616ae2c67bb6940c46b19e92d9ed97c0238f9e74deeb211af6a336af8e66b",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "0dfe447ec4c9f17c1d3ae2522023243048d24b1ffa977db099f3294a9e3d1db4",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e1141a078ff82616d339ad6bc26d7712ab24dd9964cbabce0413cfc75e07742e",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "58075d2fbd4459184a8c09aaea51c834a8f604ceb7fc600cde30aa3c087c12f4"
+   }
+  },
+  {
+   "record": "prod-threesaw-f1cal-p2x",
+   "capture": "rtl-sketch/build/deadline/threesaw-f1cal-p2x",
+   "reanalysis": "docs/deadline/reanalysis/prod-threesaw-f1cal-p2x.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 3691,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 3691
+    },
+    "ywait_range": [
+     11,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "d9bb1ea96f8c33f7d489b899f12b7002cc5d2f05d8a7fdee902190fb8e786b0d",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "77b3e692888b8ec3f040ac523d5e3918b6ff32f411df59e08edc422e0ddc9130",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "e5e790e642e592d153d43ec8c521c31b252198fca74edc502d81f979d651c3aa",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "5e0d88ee2985f9f4c3f3bfb6f3fcca4c11927e566e74cac0d1246cd58d77fa37"
+   }
+  },
+  {
+   "record": "prod-threesaw-f1cal",
+   "capture": "rtl-sketch/build/deadline/threesaw-f1cal",
+   "reanalysis": "docs/deadline/reanalysis/prod-threesaw-f1cal.json",
+   "expect_fail": false,
+   "identified": true,
+   "identity_diff": {},
+   "status": "PASS",
+   "original_status": "PASS",
+   "evidence_problems": [],
+   "cost_model": {
+    "analysis_version": 2,
+    "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+    "checked_frames": 3691,
+    "frames_without_strobe": 0,
+    "constant": 87,
+    "residuals": {
+     "87": 3691
+    },
+    "ywait_range": [
+     11,
+     11
+    ],
+    "exceptions": 0,
+    "first_exceptions": [],
+    "explained": true
+   },
+   "capture_sha256": {
+    "top_bx_cmds.txt": "d9bb1ea96f8c33f7d489b899f12b7002cc5d2f05d8a7fdee902190fb8e786b0d",
+    "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "77b3e692888b8ec3f040ac523d5e3918b6ff32f411df59e08edc422e0ddc9130",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt": "e5e790e642e592d153d43ec8c521c31b252198fca74edc502d81f979d651c3aa",
+    "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X.txt.sched": "5e0d88ee2985f9f4c3f3bfb6f3fcca4c11927e566e74cac0d1246cd58d77fa37"
+   }
+  }
+ ]
+}
