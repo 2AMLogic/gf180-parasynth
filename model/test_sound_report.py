@@ -238,3 +238,69 @@ def test_the_brightness_property_is_locked_and_the_lock_is_the_power_weighted_on
     assert sr.LOCKS[key] < 3000.0, (
         f"the locked brightness is {sr.LOCKS[key]:.0f} Hz -- high enough to be the amplitude-weighted "
         "value, which would mean the lock was taken with the defect in place")
+
+
+# ===========================================================================
+# the lock changelog (issue #68)
+# ===========================================================================
+# `LOCKS` used to be an overwrite: a commit that moved a locked value left the
+# new number and nothing else, so "did this go green because the model improved
+# or because the bound moved?" was answerable only by reading git log and
+# guessing which of a commit's changes was the point. These are the gate on the
+# record that closes it.
+def test_the_lock_changelog_agrees_with_the_live_table():
+    """Run the gate against the current state. An unsatisfiable gate is worse
+    than no gate -- it trains everyone to ignore gates, including the working
+    ones."""
+    problems = sr.check_lock_changelog()
+    assert problems == [], problems
+
+
+def test_every_lock_has_a_history_entry_with_a_reason():
+    for key in sr.LOCKS:
+        hist = sr.lock_history(*key)
+        assert hist, f"{key} has no recorded change"
+        assert hist[-1]["reason"].strip(), f"{key}'s last change records no reason"
+        assert hist[-1]["recorded_by"], f"{key}'s last change names no commit"
+
+
+def test_a_lock_moved_without_an_entry_is_flagged(monkeypatch):
+    """The injected control. Without this the changelog is a comment: it would
+    agree with the table on the day it was written and quietly stop agreeing on
+    the first re-lock."""
+    key = ("BD", "T20")
+    monkeypatch.setitem(sr.LOCKS, key, 207.0)
+    problems = sr.check_lock_changelog()
+    assert any("BD" in p and "T20" in p and "no reason recorded" in p
+               for p in problems), problems
+
+
+def test_a_lock_added_without_an_entry_is_flagged(monkeypatch):
+    monkeypatch.setitem(sr.LOCKS, ("BD", "a new property"), 1.0)
+    assert any("a new property" in p for p in sr.check_lock_changelog())
+
+
+def test_a_changelog_entry_for_a_property_that_is_not_a_lock_is_flagged(monkeypatch):
+    """A stale entry is the other direction of the same failure: a record that
+    describes a bound nobody applies reads as coverage."""
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", sr.LOCK_CHANGELOG + [
+        {"at": "x", "recorded_by": "y", "issue": 0, "reason": "r",
+         "locks": {("BD", "gone"): (None, 1.0)}}])
+    assert any("gone" in p for p in sr.check_lock_changelog())
+
+
+def test_the_changelog_records_the_two_commits_that_actually_moved_the_locks():
+    """Recovered with `git log -L` on the LOCKS block, not from memory: 28dfd55
+    introduced the table (#51) and bf13fdd added the power-centroid lock (#251)
+    so that --inject sd-centroid-amp-weighted had something to turn red."""
+    by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
+    assert set(by) == {"28dfd55", "bf13fdd"}
+    assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
+    assert all(was is None for was, _ in by["28dfd55"]["locks"].values()), (
+        "nothing was pinned before 28dfd55, so every entry there is a first lock")
+
+
+def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
+    assert sr.main(["--check-locks"]) == 0
+    monkeypatch.setitem(sr.LOCKS, ("SD", "T20"), 1.0)
+    assert sr.main(["--check-locks"]) == 1

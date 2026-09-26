@@ -513,6 +513,116 @@ LOCKS = {
 
 
 # ===========================================================================
+# when each lock moved, and why
+# ===========================================================================
+# THE GAP THIS CLOSES (issue #68). `LOCKS` above is an overwrite: a commit that
+# moves a locked value leaves the new number and nothing else, so "did this test
+# go green because the model improved, or because the bound moved?" is answerable
+# only by reading git log and guessing which of a commit's changes was the point.
+# The distinction between a `target` (a document says so) and a `lock` (this
+# model, pinned) was already here; the record of the CHANGE was not.
+#
+# Every entry is a real commit, recovered with `git log -L` on the LOCKS block --
+# nothing below is reconstructed from memory. `check_lock_changelog` asserts that
+# the last recorded value for each lock is the value in `LOCKS`, so an overwrite
+# without an entry is a detectable state rather than an invisible one, and
+# `--relock` prints a skeleton entry beside the new table.
+#
+# `from: None` means the lock did not exist before that commit.
+LOCK_CHANGELOG = [
+    {
+        "at": "ce400a6",
+        "recorded_by": "28dfd55",
+        "issue": 51,
+        "reason": "the lock table introduced with this report. Nothing was pinned "
+                  "before, so every entry here is a first lock rather than a move.",
+        "locks": {
+            ("LADDER", "corner at 800 Hz / commanded"): (None, 0.786039),
+            ("LADDER", "corner ratio drift"): (None, 9.40462),
+            ("LADDER", "h3 at self-oscillation (res 1.3)"): (None, -45.3762),
+            ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): (None, -13.7836),
+            ("BD", "T20"): (None, 307.979),
+            ("BD", "attack"): (None, 14.5625),
+            ("SD", "T20"): (None, 56.3958),
+            ("SD", "attack"): (None, 4.27083),
+            ("LT", "T20"): (None, 198.229),
+            ("LT", "attack"): (None, 16.625),
+            ("HT", "T20"): (None, 89.3125),
+            ("HT", "attack"): (None, 4.20833),
+            ("CH", "T20"): (None, 42.5417),
+            ("CH", "attack"): (None, 2.54167),
+            ("OH", "T20"): (None, 312.083),
+            ("OH", "attack"): (None, 4.39583),
+            ("CP", "T20"): (None, 40.6042),
+            ("CP", "attack"): (None, 3.0),
+            ("CB", "T20"): (None, 176.125),
+            ("CB", "attack"): (None, 4.39583),
+            ("SD", "noise share"): (None, 27.5488),
+        },
+    },
+    {
+        "at": "ce400a6",
+        "recorded_by": "bf13fdd",
+        "issue": 251,
+        "reason": "the power-weighted centroid became a locked property so that "
+                  "--inject sd-centroid-amp-weighted has something to turn red: the "
+                  "amplitude/magnitude weighting docs/drum-verification.md 3 "
+                  "withdrew reads this snare at 5868 Hz. A new lock, not a moved "
+                  "one -- measured at the same commit as the rest.",
+        "locks": {
+            ("SD", "brightness (power centroid)"): (None, 1918.08),
+        },
+    },
+]
+
+
+def lock_history(voice: str, name: str) -> list:
+    """Every recorded change to one lock, oldest first, in the shape
+    `tools/measurement_manifest.validate_bound` requires: `at`, `from`, `to`,
+    `reason`. An empty list means the lock has no record, which that validator
+    treats as a problem rather than as a default."""
+    out = []
+    for ev in LOCK_CHANGELOG:
+        if (voice, name) in ev["locks"]:
+            was, now = ev["locks"][(voice, name)]
+            out.append({"at": ev["at"], "recorded_by": ev["recorded_by"],
+                        "issue": ev["issue"], "from": was, "to": now,
+                        "reason": ev["reason"]})
+    return out
+
+
+def check_lock_changelog() -> list:
+    """Problems with the changelog, as sentences. Empty list means every lock
+    has a recorded value and a reason, and the record agrees with the table.
+
+    Three ways it can be wrong, and the first is the one that matters: a value
+    in `LOCKS` that the changelog does not end on means somebody re-locked
+    without saying why, and every verdict that bound has issued since is
+    unexplained."""
+    problems = []
+    for key, value in sorted(LOCKS.items()):
+        hist = lock_history(*key)
+        if not hist:
+            problems.append(f"{key[0]} {key[1]!r}: locked at {value!r} with no "
+                            f"changelog entry. A bound with no recorded reason is a "
+                            f"number somebody chose")
+            continue
+        last = hist[-1]["to"]
+        if last is None or abs(float(last) - float(value)) > 1e-9:
+            problems.append(f"{key[0]} {key[1]!r}: LOCKS says {value!r}, the "
+                            f"changelog's last entry ({hist[-1]['recorded_by']}) says "
+                            f"{last!r}. The lock moved with no reason recorded")
+    for ev in LOCK_CHANGELOG:
+        for key in ev["locks"]:
+            if key not in LOCKS:
+                problems.append(f"{ev['recorded_by']} records a change to "
+                                f"{key[0]} {key[1]!r}, which is not a lock. Either "
+                                f"the property was removed and the entry is stale, "
+                                f"or the name in one of the two is wrong")
+    return problems
+
+
+# ===========================================================================
 # running
 # ===========================================================================
 def run(inject=None):
@@ -636,11 +746,25 @@ def main(argv=None) -> int:
     ap.add_argument("--list-injections", action="store_true")
     ap.add_argument("--changed", metavar="REF")
     ap.add_argument("--relock", action="store_true")
+    ap.add_argument("--check-locks", action="store_true",
+                    help="every lock must have a recorded change and a reason, and "
+                         "the record must end on the value LOCKS holds. Measures "
+                         "nothing and runs in milliseconds.")
     a = ap.parse_args(argv)
     if a.list_injections:
         for k, (d, v, _) in sorted(INJECTIONS.items()):
             print(f"  {k:18s} {','.join(v):8s} {d}")
         return 0
+    if a.check_locks:
+        problems = check_lock_changelog()
+        for p in problems:
+            print(f"  {p}")
+        print(f"\n{len(LOCKS)} lock(s), {len(LOCK_CHANGELOG)} changelog event(s), "
+              f"{len(problems)} problem(s)")
+        if problems:
+            print("A bound that moved without a reason is how a test goes green "
+                  "without the model improving.")
+        return 1 if problems else 0
     if a.changed:
         return cmd_changed(a.changed)
     if a.inject:
@@ -652,6 +776,28 @@ def main(argv=None) -> int:
             if r.prop.kind == "lock" and r.measured is not None:
                 print(f'    ("{r.prop.voice}", "{r.prop.name}"): {r.measured:.6g},')
         print("}")
+        # A new table with no record of what moved is the gap issue #68 names, so
+        # the skeleton comes out with it. `from` is the value being replaced; fill
+        # in the reason before committing, because --check-locks will not accept
+        # an entry that does not end on the new value and the report will not
+        # explain a bound that moved for no stated reason.
+        print("\n# paste into LOCK_CHANGELOG, and replace the reason:")
+        print("    {")
+        print('        "at": "<the commit these were measured at, and LOCK above>",')
+        print('        "recorded_by": "<the commit that re-locks>",')
+        print('        "issue": 0,')
+        print('        "reason": "WHY these values moved. A bound that moved with no '
+              'reason is how a test goes green without the model improving.",')
+        print('        "locks": {')
+        for r in res:
+            if r.prop.kind == "lock" and r.measured is not None:
+                was = LOCKS.get((r.prop.voice, r.prop.name))
+                if was is not None and abs(float(was) - float(r.measured)) <= 1e-9:
+                    continue
+                print(f'            ("{r.prop.voice}", "{r.prop.name}"): '
+                      f'({was!r}, {r.measured:.6g}),')
+        print("        },")
+        print("    },")
         return 0
     return 1 if print_report(res, "SOUND REPORT -- per voice, per property") else 0
 
