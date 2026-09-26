@@ -170,16 +170,42 @@ def ncc_lag(template: np.ndarray, signal: np.ndarray, lo: int, hi: int):
     num = correlate(seg, template, mode="valid", method="fft")
     e = np.concatenate([[0.0], np.cumsum(seg * seg)])
     win_e = e[n:] - e[:-n]
-    den = np.sqrt(np.maximum(win_e, 1e-30) * max(float(np.dot(template, template)), 1e-30))
+    te = float(np.dot(template, template))
+    den = np.sqrt(np.maximum(win_e, 1e-30) * max(te, 1e-30))
     c = num / den
+    # a (near-)silent placement has no correlation: FFT round-off over a
+    # denominator of ~0 is not a match (the first run found "matches" there)
+    c[win_e < 1e-9 * max(te, 1e-30)] = 0.0
     i = int(np.argmax(c))
-    lag = float(i)
-    if 0 < i < c.size - 1:
-        a, b, g = c[i - 1], c[i], c[i + 1]
-        den2 = a - 2 * b + g
-        if den2 < 0:
-            lag += 0.5 * (a - g) / den2
-    return lo + lag, float(c[i]), c
+    t = _refine_peak(c, i)
+    peak = float(interp(c, np.array([t]), half=16)[0]) if t != i else float(c[i])
+    return lo + t, max(peak, float(c[i])), c
+
+
+def _refine_peak(c: np.ndarray, i: int) -> float:
+    """Sub-sample peak of a correlation sequence: golden-section on its
+    band-limited interpolant. A parabola through three points is biased by
+    up to ~0.07 sample on band-limited noise (measured by the known-answer
+    test); the interpolant is not."""
+    if not 0 < i < c.size - 1:
+        return float(i)
+    a, b = i - 1.0, i + 1.0
+    gr = (math.sqrt(5) - 1) / 2
+
+    def f(t):
+        return -float(interp(c, np.array([t]), half=16)[0])
+    x1, x2 = b - gr * (b - a), a + gr * (b - a)
+    f1, f2 = f(x1), f(x2)
+    for _ in range(40):
+        if f1 < f2:
+            b, x2, f2 = x2, x1, f1
+            x1 = b - gr * (b - a)
+            f1 = f(x1)
+        else:
+            a, x1, f1 = x1, x2, f2
+            x2 = a + gr * (b - a)
+            f2 = f(x2)
+    return (a + b) / 2
 
 
 def first_strong_lag(template, signal, lo, hi, frac=0.9):
@@ -192,7 +218,7 @@ def first_strong_lag(template, signal, lo, hi, frac=0.9):
     i = int(cand[0])
     lo_c = max(lo, 0)
     # refine around that earliest candidate
-    l2, n2, _ = ncc_lag(template, signal, lo_c + i - 2, lo_c + i + 2)
+    l2, n2, _ = ncc_lag(template, signal, lo_c + i - 40, lo_c + i + 40)
     return l2, n2
 
 
@@ -501,7 +527,7 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR) -> di
         lvA = dbfs(rms(A))
         F["silence"] = f"declared DAC input carries {lvA:.1f} dBFS and no reference"
         return out
-    wl, wn, _ = ncc_lag(x[cal[0]:cal[1]], A, int(round(lag)) - 4, int(round(lag)) + 4)
+    wl, wn, _ = ncc_lag(x[cal[0]:cal[1]], A, int(round(lag)) - 40, int(round(lag)) + 40)
     d = wl - cal[0] / rho
     M["delay_samples"] = round(d, 3)
     M["cal_window_ncc"] = round(wn, 4)
