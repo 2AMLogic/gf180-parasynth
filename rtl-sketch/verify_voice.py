@@ -107,7 +107,7 @@ F1CAL = "surge-type2-clean-v1"
 #: requested image, so the bench must mismatch. Set by --f1cal-fault.
 F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
-        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY",
+        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "SHARK_BLAMP_SIGN", "MOD_NODELAY",
         "DRIFT_SHARED", "DRIFT_LEAKFLOOR", "DRIFT_MEANSTEP"]
 #: The production launch. tb_voice.v's GO must equal synth_top.v's GO_CYCLE:
 #: a bench that launches later than the chip refuses configurations the chip

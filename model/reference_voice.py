@@ -367,7 +367,10 @@ def _floor_fmt(v, floor, is_ideal=False):
     print("  appears here, as a target description, and not in the aliasing comparison.")
     print("  A saw has h_n = 1/n (-6.0, -9.5, -12.0 dB) and a triangle 1/n^2 on odd harmonics")
     print("  only (-19.1 at h3). A hybrid sits between them and has BOTH an amplitude and a")
-    print("  slope discontinuity, so a generator needs BLEP and BLAMP; we have PolyBLEP only.")
+    print("  slope discontinuity, so a generator needs BLEP and BLAMP. WE NOW HAVE BOTH:")
+    print("  PolyBLEP on the saw share's step and polyBLAMP on the triangle share's two")
+    print("  corners (DR 0017, issue #48), worth up to 6.3 dB of inharmonic energy at the")
+    print("  top of the register -- measured by tools/measure_shark_blamp.py, not here.")
 
 
 def report_margins(good, notes, floors):

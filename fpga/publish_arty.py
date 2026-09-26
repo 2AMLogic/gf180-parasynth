@@ -39,16 +39,21 @@ ROOT = Path(__file__).resolve().parents[1]
 # The proof must cover the tree it is bound to, so this entry MOVES whenever
 # a compiled source changes; validate_verification hash-checks it against the
 # live source set and refuses otherwise. Superseded runs stay where they are:
-#   reports/arty/clean       the pre-uart SPI wrapper (fpga/verify_arty.py)
-#   reports/arty/uart-clean  the pre-drift UART wrapper -- still the proof the
-#                            PUBLISHED integrated baseline bitstream cites by
-#                            hash, so it is never rewritten in place
-#   reports/arty/drift-clean this tree: per-oscillator drift in voice_dp.v
-#                            (contract 6.11, DR 0019) moved the frame's sample
-#                            strobe from cycle 175 to 176 and left the audio
-#                            byte-identical. See that directory's README.
+#   reports/arty/clean            the pre-uart SPI wrapper (fpga/verify_arty.py)
+#   reports/arty/uart-clean       the pre-drift UART wrapper -- still the proof
+#                                 the PUBLISHED integrated baseline bitstream
+#                                 cites by hash, so it is never rewritten in place
+#   reports/arty/drift-clean      per-oscillator drift in voice_dp.v (contract
+#                                 6.11, DR 0019) moved the frame's sample strobe
+#                                 from cycle 175 to 176 and left the audio
+#                                 byte-identical. See that directory's README.
+#   reports/arty/shark-blamp-clean  this tree: the shark-tooth's polyBLAMP
+#                                 correction (DR 0017) appended states after
+#                                 drift's S_DR1 and left this bench's audio,
+#                                 timing and transcript byte-identical. See
+#                                 that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/drift-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/shark-blamp-clean/verification.json",
 }
 
 
