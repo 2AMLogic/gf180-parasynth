@@ -443,3 +443,34 @@ deadline checks, and I2S proof. That waits for the coordinator.
    identical.
 9. The first C run used `--jobs 7`, before the coordinator's cap of 4 arrived.
    The committed re-run used 4. Both were on the build box.
+
+## Integration with main (step 0, merge `05b0406`)
+
+- **Why #261 went red.** Its `reference-controls` and `m5a-fast` checks
+  refused because `model/audio_measure.py` and `docs/scorecard/cases.csv`
+  differed from origin/main. That was the stale-input guard working. The branch
+  now merges origin/main (`d396964`) and #253's refreshed head (`a84d5b7`), and
+  the guard was not bypassed (no `--allow-stale`).
+- **What changed in those inputs, and whether it touches the clap.**
+  - `model/audio_measure.py`: **docstring-only** edits to
+    `moving_average_envelope` and `spectral_centroid`, from #251. No executable
+    line changed.
+  - `docs/scorecard/cases.csv`: only rows F2A–F2D, which gain "Playing weight",
+    from #238. The D12A row is unchanged.
+  - Neither touches the CP estimators or the qualification apparatus.
+- **Re-checked on the build box at `05b0406`** (logs in `step0/`, every exit
+  status checked):
+
+  | check | result | exit |
+  |---|---|---|
+  | refprofile restore + tests | pass | 0 |
+  | `reference-controls` | 2/2 PASS | 0 |
+  | `make verify-fast` | 7/7 PASS: 272 + 163 + 10 + 3 pytest passed, plus 3 tools | 0 |
+  | `tools/run_case.py D12A` through the normal runner | metrics identical to the official record in every value, reference, error, tolerance and valid field | 1 (a mismatch result, as expected) |
+  | probe tests | pass | 0 |
+
+- **The experiment was not re-run or re-selected.** `final-strike.json` and
+  `burst-timing-qual.json` keep their original identities (`50214bb` and
+  `4059834`), and their fresh-offset confirmation stands as recorded. The
+  unchanged D12A rescore shows the merged measurement inputs do not move the
+  clap's values.

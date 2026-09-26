@@ -1,0 +1,150 @@
+{
+  "engine": "fixed-model",
+  "case_id": "D12A",
+  "subject": "Clap / anchor",
+  "source_commit": "05b0406",
+  "analysis_run": "run_case@78ce1ec934d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T09:21:38Z",
+  "provenance": {
+    "engine": "fixed-model",
+    "worktree": {
+      "commit": "05b0406",
+      "described": "05b0406",
+      "branch": "measure/d12a-final-strike",
+      "dirty": true,
+      "uncommitted_sha256": "737d507a5d3d2d44",
+      "untracked_files": 8
+    },
+    "base_check": {
+      "checked": true,
+      "origin_main": "d396964be980",
+      "behind_commits": 0,
+      "ahead_commits": 11,
+      "n_stops_here": 11,
+      "n_stops_origin_main": 11,
+      "stale_dependencies": {},
+      "ahead_dependencies": {},
+      "allow_stale": false,
+      "problems": []
+    },
+    "command": "tools/run_case.py D12A --no-audio --results docs/scorecard/clap-d12a/step0/d12a-rescore",
+    "config": {
+      "voice": "CP",
+      "refs": "/home/ubuntu/dev/refs/sounds-tr808-fischer",
+      "inject": null,
+      "render_seconds": 2.2,
+      "accent": 1.0,
+      "bus_gain": 0.45,
+      "level_matched": true
+    },
+    "python": "3.12.14",
+    "run_at": "2026-09-26T09:21:46Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:4a0177412ff464a3",
+      "model/voice_fx.py": "sha256:85f80f46481be1a8",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:4222305718828edf",
+      "tools/run_case.py": "sha256:78ce1ec934d05bd6",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
+      "reference:cp8/CP.WAV": "sha256:376429bb81cb48d1"
+    },
+    "artefacts": {
+      "ours": "not written (--no-audio)",
+      "reference": "/home/ubuntu/dev/refs/sounds-tr808-fischer/cp8/CP.WAV"
+    },
+    "outcome_code": 1,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "reference_profile": "fischer-tr808-103852:cp8/CP.WAV (no knob)",
+  "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
+  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('CP') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 6 of 11",
+  "audio": "reference cp8/CP.WAV; ours not written",
+  "tolerance_policy": {
+    "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
+    "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
+    "energy ratio": "3 dB, the half-power convention. A stated convention, not a number derived from any error of ours",
+    "event timing": "10 ms -- the positional accuracy audio_measure.onsets states for itself; a failure is larger than the estimator's own resolution",
+    "bus sum": "0.5 dB -- the final output must be the sum of the per-bus stems",
+    "rail": "0.01 % of samples at the rail, a stated budget for a render with no limiter in the path",
+    "rolloff": "1.5 dB per octave -- audio_measure.slope_db_oct's own max_residual_db. That estimator REFUSES a straight-line fit whose RMS residual exceeds it, so a difference smaller than it is inside the fit's own scatter and is not a difference. A number the estimator states about itself, not one derived from any error of ours"
+  },
+  "windowing": {
+    "ours": {
+      "onset_index": 480,
+      "onset_ms_into_the_record": 10.0,
+      "lead_samples": 540,
+      "lead_ms": 11.25,
+      "trim_ms": 1.0,
+      "lead_from_the_record_samples": 480,
+      "lead_manufactured_samples": 108,
+      "junction_level_frac_of_peak": 0.0,
+      "dc_removed": true,
+      "dc_frac_of_peak": 0.0,
+      "padtype": "odd (scipy default)",
+      "bandpass_padlen_samples": 27,
+      "lead_in_padlens": 20.0,
+      "convention": "both sides are trimmed so that exactly lead_samples + trim_ms of TRUE silence precede the strike; t = 0 for every window is trim_ms before the onset, and the lead sits before it"
+    },
+    "reference": {
+      "onset_index": 8,
+      "onset_ms_into_the_record": 0.1814,
+      "lead_samples": 540,
+      "lead_ms": 12.2449,
+      "trim_ms": 1.0,
+      "lead_from_the_record_samples": 8,
+      "lead_manufactured_samples": 576,
+      "junction_level_frac_of_peak": 0.002272,
+      "dc_removed": false,
+      "dc_frac_of_peak": 0.00176834,
+      "padtype": "odd (scipy default)",
+      "bandpass_padlen_samples": 27,
+      "lead_in_padlens": 20.0,
+      "convention": "both sides are trimmed so that exactly lead_samples + trim_ms of TRUE silence precede the strike; t = 0 for every window is trim_ms before the onset, and the lead sits before it"
+    }
+  },
+  "metrics": {
+    "Burst timing": {
+      "value": 18.8542,
+      "units": "ms",
+      "reference": 35.805,
+      "error": -16.9508,
+      "tolerance": 17.9025,
+      "valid": true,
+      "tolerance_basis": "time",
+      "purpose": "match"
+    },
+    "burst/tail ratio": {
+      "value": 11.2831,
+      "units": "dB",
+      "reference": -2.9726,
+      "error": 14.2557,
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
+    },
+    "decay": {
+      "value": 101.094,
+      "units": "ms",
+      "reference": 198.9924,
+      "error": -97.8983,
+      "tolerance": 99.4962,
+      "valid": true,
+      "tolerance_basis": "time",
+      "purpose": "match"
+    }
+  },
+  "diagnostics": {
+    "ours_peak_fs": 0.242737,
+    "ours_rms_fs": 0.007367,
+    "reference_peak_fs": 0.711884,
+    "reference_rate_hz": 44100,
+    "ours_rate_hz": 48000,
+    "level_matched": true,
+    "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. Original-gain peak and RMS are recorded above."
+  }
+}

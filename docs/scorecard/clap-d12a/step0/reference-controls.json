@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/ref-missing --expect 'no verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /home/ubuntu/dev/refs/sounds-tr808-fischer\nresults into:     build/ref-missing\nINJECTED CONTROL: REF_PROFILE_MISSING -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)\n",
+    "secs": 59.82034111022949
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/ref-tampered --expect 'no verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: /home/ubuntu/dev/refs/sounds-tr808-fischer\nresults into:     build/ref-tampered\nINJECTED CONTROL: REF_PROFILE_TAMPERED -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\ncontrol fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)\n",
+    "secs": 60.097439765930176
+  }
+]
