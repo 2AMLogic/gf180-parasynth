@@ -254,6 +254,73 @@ def test_a_run_that_delivered_nothing_refuses_the_matrix_rather_than_printing_ze
     assert "MOVED" not in out and "BLIND" not in out
 
 
+def test_a_second_dead_run_does_not_print_the_first_runs_matrix(tmp_path, capsys):
+    """Regression for issue #254(A): `compare_writes` records via
+    `LAST.update(...)`, and both of its `return 2` paths returned BEFORE that
+    line -- so a second call in the same process whose link delivered nothing
+    (no RTL output this time) used to leave the FIRST call's counters sitting
+    in `LAST`, and `print_blindness` printed a full, confident six-row matrix
+    for a run that was never measured. Reproduced at 7b203d1 as exactly this
+    shape: a real PASS followed by a dead second call still printing "105 of
+    206" from the run before it."""
+    writes = verify_ctl.stimulus()
+    first_status, first_last = _last_from_compare(writes, _delivered(writes),
+                                                   [IN_WINDOW] * len(writes), tmp_path, capsys)
+    assert first_status == 0 and first_last, "the first run must be a real, populated PASS"
+    second_status = verify_ctl.compare_writes(writes, os.path.join(str(tmp_path), "does_not_exist.txt"))
+    capsys.readouterr()                                    # drop compare_writes' own text
+    assert second_status == 2
+    assert verify_ctl.LAST == {}, ("a dead second run must not leave the first run's counters "
+                                   "behind for print_blindness to report as this run's own")
+    verify_ctl.print_blindness("SECOND_RUN_DELIVERED_NOTHING")
+    out = capsys.readouterr().out
+    assert "no per-field blindness matrix" in out
+    assert "MOVED" not in out and "BLIND" not in out
+    assert "105 of 206" not in out, "the stale matrix from the first run must not reappear"
+
+
+def test_simulator_never_ran_message_differs_from_comparison_recorded_nothing_message(capsys):
+    """Regression for issue #254(B). `main()` reaches the empty-`LAST` branch
+    of `print_blindness` two ways that are NOT the same claim: `compare_writes`
+    ran and the link delivered nothing (a claim about the DUT), or `simulate()`
+    returned `None` and `compare_writes` was never even called (a claim about
+    the apparatus -- iverilog/vvp missing, a compile failure, a vvp failure, or
+    a timeout). Wording both as "the link delivered no writes at all" attributes
+    an apparatus failure to the DUT; `simulated=False` must print a distinct
+    message that says nothing about the link at all."""
+    verify_ctl.LAST.clear()
+    verify_ctl.print_blindness("SPI_NO_SIM", simulated=False)
+    sim_never_ran = capsys.readouterr().out
+
+    verify_ctl.LAST.clear()
+    verify_ctl.print_blindness("SPI_DEAD", simulated=True)
+    comparison_recorded_nothing = capsys.readouterr().out
+
+    assert sim_never_ran != comparison_recorded_nothing
+    assert "simulator did not run" in sim_never_ran
+    assert "simulator did not run" not in comparison_recorded_nothing
+    assert "the link delivered no writes at all" in comparison_recorded_nothing
+    assert "the link delivered no writes at all" not in sim_never_ran
+    for out in (sim_never_ran, comparison_recorded_nothing):
+        assert "MOVED" not in out and "BLIND" not in out
+
+
+def test_simulator_never_ran_wins_over_a_stale_LAST_from_an_earlier_run(tmp_path, capsys):
+    """`simulated=False` must be believed even when `LAST` still holds a real,
+    fully-populated matrix from an earlier call in the same process: the flag
+    describes THIS call, not whether `LAST` happens to look usable."""
+    writes = verify_ctl.stimulus()
+    status, last = _last_from_compare(writes, _delivered(writes),
+                                      [IN_WINDOW] * len(writes), tmp_path, capsys)
+    assert status == 0 and last                            # LAST now holds a real matrix
+    verify_ctl.print_blindness("SPI_NO_SIM", simulated=False)
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "simulator did not run" in out
+    assert "MOVED" not in out and "BLIND" not in out
+    assert "the link delivered no writes at all" not in out, (
+        "a run the simulator never produced must not be reported as a claim about the link")
+
+
 def test_a_LAST_missing_the_count_and_drain_counters_refuses_the_whole_matrix(capsys):
     """A `LAST` shaped like the pre-fix one -- four field counters and a total,
     no `count_off`, `late`, `compared` or `cyc_seen` -- cannot be decomposed

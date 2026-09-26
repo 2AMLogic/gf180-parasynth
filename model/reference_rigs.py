@@ -601,29 +601,6 @@ class SurgeRig(_Plugin):
     #
     #   Shape  reads       Width 50 %                  Width 25 %
     #   0.00   -100.00 %   pulse, duty 50.0 %          pulse, duty 25.0 %
-    #   0.25    -50.00 %   pulse + a partial 2nd saw   (not a named waveform)
-    #   0.50      0.00 %   SAW  (Width has no effect)  SAW, bit-identical
-    #   0.75    +50.00 %   (not a named waveform)      (not a named waveform)
-    #   1.00   +100.00 %   4 midpoint crossings: a     4 midpoint crossings
-    #                      saw at 2*f0, fundamental
-    #                      cancelled
-    #
-    # The mapping that shipped had saw at 0.0 and square at 1.0, i.e. it asked
-    # for a 50 % PULSE and called it a saw, and for the DUAL SAW and called it
-    # a square. Every Surge oscillator row of docs/reference-voice-report.txt
-    # before this change is of a different waveform from the one it is
-    # labelled with. There is no triangle on this oscillator, so Surge has no
-    # counterpart for ours -- a finding about the comparison, not an error.
-    # ---- oscillator 1, for the waveform study -----------------------------
-    # Surge's Classic oscillator sums TWO saws whose separation is set by
-    # Width, and Shape mixes between one saw and the pair. Shape is BIPOLAR.
-    # `--stage shape` sweeps it and identifies each result by
-    # `audio_measure.waveform_id` -- time domain first, duty measured, nulls
-    # checked against that measured duty -- and the whole sweep is in
-    # docs/surge-shape-sweep.txt. What it measured, at A2 = 110 Hz:
-    #
-    #   Shape  reads       Width 50 %                  Width 25 %
-    #   0.00   -100.00 %   pulse, duty 50.0 %          pulse, duty 25.0 %
     #   0.125   -75.00 %   pulse, duty 50.0 %          pulse, duty 25.0 %
     #   0.25    -50.00 %   rectangle + a partial saw   pulse, duty 25.1 %
     #   0.50      0.00 %   SAW  (Width has no effect)  SAW, the same waveform

@@ -96,7 +96,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime
 import hashlib
 import json
 import math
@@ -120,6 +119,7 @@ import audio_measure as am                                           # noqa: E40
 import drum_verify as dv                                             # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
+import provenance                                                    # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -1925,19 +1925,19 @@ def plan_for(case_id: str) -> str:
 # ===========================================================================
 # 7. Running one case
 # ===========================================================================
-def _sha(*paths) -> str:
-    h = hashlib.sha256()
-    for p in paths:
-        h.update(pathlib.Path(p).read_bytes())
-    return h.hexdigest()[:12]
-
-
-def _git(*args) -> str:
-    try:
-        return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True,
-                                       stderr=subprocess.DEVNULL)
-    except Exception:
-        return ""
+# The commit/uncommitted-tree/content-hash primitives below used to be
+# defined here. They now live in `tools/provenance.py` so the
+# render/analyse/accept manifest scheme (`tools/manifest.py`, issue #68) can
+# produce provenance blocks in the same shape without a second, competing
+# format -- this is a pure extraction, re-exported under the same names so
+# every call site below (and every existing test that reaches for
+# `run_case.worktree_state` etc.) is unchanged.
+_sha = provenance.sha_of
+_git = provenance.git
+source_commit = provenance.source_commit
+worktree_state = provenance.worktree_state
+_file_sha = provenance.file_sha
+_now = provenance.now
 
 
 def mono_reference_pulse_mapping(manifest: dict) -> str:
@@ -1948,43 +1948,6 @@ def mono_reference_pulse_mapping(manifest: dict) -> str:
               for measurement in segment["measurements"]
               if measurement.get("waveform") is not None}
     return ", ".join(sorted(values)) or "waveform not classified in frozen reference"
-
-
-def source_commit() -> str:
-    return (_git("rev-parse", "--short", "HEAD").strip() or "?")
-
-
-def worktree_state() -> dict:
-    """The commit is not enough. Fourteen worktrees are live on this repository
-    at once and a clean SHA that silently means "plus whatever was in the tree"
-    is worse than no SHA: a stale result is indistinguishable from a current
-    one. So the uncommitted diff is hashed too -- tracked modifications from
-    `git diff HEAD`, and every untracked file git would not ignore, by content.
-    `dirty` says which of the two kinds of record this is."""
-    h = hashlib.sha256()
-    diff = _git("diff", "HEAD")
-    h.update(diff.encode())
-    untracked = [f for f in _git("ls-files", "--others", "--exclude-standard").split("\n") if f]
-    for rel in sorted(untracked):
-        f = ROOT / rel
-        try:
-            h.update(rel.encode())
-            h.update(hashlib.sha256(f.read_bytes()).digest())
-        except OSError:
-            h.update(b"?")
-    return {"commit": source_commit(),
-            "described": _git("describe", "--always", "--dirty").strip() or "?",
-            "branch": _git("rev-parse", "--abbrev-ref", "HEAD").strip() or "?",
-            "dirty": bool(diff.strip() or untracked),
-            "uncommitted_sha256": h.hexdigest()[:16],
-            "untracked_files": len(untracked)}
-
-
-def _file_sha(path) -> str:
-    try:
-        return "sha256:" + hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()[:16]
-    except OSError:
-        return "missing"
 
 
 # 0 match, 1 mismatch (a result), 2 did not run (no evidence). The repository's
@@ -2166,10 +2129,6 @@ def model_input_hashes(extra: dict | None = None) -> dict:
     d = {rel: _file_sha(ROOT / rel) for rel in MODEL_INPUTS}
     d.update(extra or {})
     return d
-
-
-def _now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def analysis_run() -> str:
