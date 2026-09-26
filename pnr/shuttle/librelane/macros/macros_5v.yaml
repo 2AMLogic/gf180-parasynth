@@ -1,0 +1,87 @@
+# Adapted from the wafer.space gf180mcu project template (see ../../TEMPLATE_PROVENANCE.txt).
+# CHANGE FROM UPSTREAM: the template's two example gf180mcu_fd_ip_sram__sram512x8m8wm1
+# macros and their PDN_MACRO_CONNECTIONS are removed. synth_top instantiates no SRAM --
+# its tables are $readmemh'd reg arrays synthesised into logic, exactly as in
+# pnr/orfs/synth_top/config.mk. The five wafer.space IP cells below are NOT optional
+# (chip_top.sv marks four of them "necessary for tapeout"); all five sit in the die
+# margin outside CORE_AREA, so they consume no core area.
+
+MACROS:
+  # required: will be replaced with actual content
+  gf180mcu_ws_ip__qrcode_id:
+    gds:
+      - dir::../ip/gf180mcu_ws_ip__qrcode_id/gds/gf180mcu_ws_ip__qrcode_id.gds
+    lef:
+      - dir::../ip/gf180mcu_ws_ip__qrcode_id/lef/gf180mcu_ws_ip__qrcode_id.lef
+    vh:
+      - dir::../ip/gf180mcu_ws_ip__qrcode_id/vh/gf180mcu_ws_ip__qrcode_id.v
+    lib:
+      "*":
+        - dir::../ip/gf180mcu_ws_ip__qrcode_id/lib/gf180mcu_ws_ip__qrcode_id.lib
+    instances:
+      qrcode_id:
+        location: [26, 26]
+        orientation: N
+
+  # required: will be replaced with actual content
+  gf180mcu_ws_ip__shuttle_id:
+    gds:
+      - dir::../ip/gf180mcu_ws_ip__shuttle_id/gds/gf180mcu_ws_ip__shuttle_id.gds
+    lef:
+      - dir::../ip/gf180mcu_ws_ip__shuttle_id/lef/gf180mcu_ws_ip__shuttle_id.lef
+    vh:
+      - dir::../ip/gf180mcu_ws_ip__shuttle_id/vh/gf180mcu_ws_ip__shuttle_id.v
+    lib:
+      "*":
+        - dir::../ip/gf180mcu_ws_ip__shuttle_id/lib/gf180mcu_ws_ip__shuttle_id.lib
+    instances:
+      shuttle_id:
+        location: [26, 175.6]
+        orientation: E
+
+  # required: will be replaced with actual content
+  gf180mcu_ws_ip__project_id:
+    gds:
+      - dir::../ip/gf180mcu_ws_ip__project_id/gds/gf180mcu_ws_ip__project_id.gds
+    lef:
+      - dir::../ip/gf180mcu_ws_ip__project_id/lef/gf180mcu_ws_ip__project_id.lef
+    vh:
+      - dir::../ip/gf180mcu_ws_ip__project_id/vh/gf180mcu_ws_ip__project_id.v
+    lib:
+      "*":
+        - dir::../ip/gf180mcu_ws_ip__project_id/lib/gf180mcu_ws_ip__project_id.lib
+    instances:
+      project_id:
+        location: [175.6, 26]
+        orientation: N
+
+  # required: top right corner marker
+  gf180mcu_ws_ip__marker:
+    gds:
+      - dir::../ip/gf180mcu_ws_ip__marker/gds/gf180mcu_ws_ip__marker.gds
+    lef:
+      - dir::../ip/gf180mcu_ws_ip__marker/lef/gf180mcu_ws_ip__marker.lef
+    vh:
+      - dir::../ip/gf180mcu_ws_ip__marker/vh/gf180mcu_ws_ip__marker.v
+    lib:
+      "*":
+        - dir::../ip/gf180mcu_ws_ip__marker/lib/gf180mcu_ws_ip__marker.lib
+    instances:
+      marker:
+        location: ["expr::($DIE_AREA[2] - (245 + 36))", "expr::($DIE_AREA[3] - (245 + 36))"]
+        orientation: N
+
+  gf180mcu_ws_ip__logo:
+    gds:
+      - dir::../ip/gf180mcu_ws_ip__logo/gds/gf180mcu_ws_ip__logo.gds
+    lef:
+      - dir::../ip/gf180mcu_ws_ip__logo/lef/gf180mcu_ws_ip__logo.lef
+    vh:
+      - dir::../ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v
+    lib:
+      "*":
+        - dir::../ip/gf180mcu_ws_ip__logo/lib/gf180mcu_ws_ip__logo.lib
+    instances:
+      wafer_space_logo:
+        location: [26, "expr::$DIE_AREA[3] - 169.25"]
+        orientation: N

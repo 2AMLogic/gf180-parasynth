@@ -1,0 +1,5 @@
+gf180mcu-project-template 0de7e394337a1f7f5303ac7a3681bf2481b58176 2026-07-21T16:38:40+02:00
+0de7e394337a1f7f5303ac7a3681bf2481b58176 2026-07-21T16:38:40+02:00 ci: pull git submodules (#75)
+47ef266a15e1955fb9853c2924d13d2a librelane/slots/slot_1x0p5.yaml
+f3fa0389ab127ec14315839e08ced7b4 src/chip_top.sv
+29b9240c216211c54d616dce63623dae src/slot_defines.svh

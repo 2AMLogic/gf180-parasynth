@@ -1,0 +1,188 @@
+# synth_top in the wafer.space gf180mcu project template, HALF-HEIGHT (1x0.5) slot.
+#
+# Adapted from the template's librelane/config.yaml -- see ../TEMPLATE_PROVENANCE.txt
+# for the upstream commit. Everything not marked CHANGE below is the template's.
+#
+# READ THIS BEFORE QUOTING A DIE AREA.
+#   The die and the core are FIXED INPUTS. They come from the template's own
+#   librelane/slots/slot_1x0p5.yaml, which is copied here byte for byte and not
+#   edited: DIE_AREA [0,0,3932,2531], CORE_AREA [442,442,3490,2089], FP_SIZING
+#   absolute. No utilisation target is set, so it cannot be an input. UTILISATION
+#   IS THE MEASURED QUANTITY. (pnr/orfs/synth_top/config.mk makes the same point;
+#   an earlier run in this repository reported "cell area x 2.00 = die area" as a
+#   finding when it had in fact set utilization_pct: 50 and recovered its own input.)
+#
+#   PL_TARGET_DENSITY_PCT below IS an input and is not a utilisation measurement.
+#   It is the global placer's spreading target and is set from the floorplan's
+#   measured utilisation, in ../density.yaml written by ../run-librelane.sh.
+
+meta:
+  version: 3
+  flow: Chip
+  substituting_steps:
+    # Render the layout after sealring insertion
+    KLayout.Render: null
+    +KLayout.SealRing: KLayout.Render
+
+DESIGN_NAME: chip_top
+
+# CHANGE: the template's chip_top.sv unedited, this project's chip_core.sv (a pin
+# map, nothing else), and synth_top's RTL read FROM rtl-sketch/ IN PLACE. In place
+# matters: voice_dp.v/ladder_dp_n.v/drum_dp.v $readmemh their tables with paths
+# relative to their own source file ("tanh16.hex", "../spec/reference/tables/...").
+# Copying the RTL anywhere else silently loads nothing -- and a design whose ROMs
+# read as zero still synthesises, still has an area, and is worthless
+# (docs/verification-rules.md rule 3). The file list is the same one
+# pnr/orfs/synth_top/config.mk uses, so the two flows implement the same chip.
+VERILOG_FILES:
+- dir::../src/chip_top.sv
+- dir::../src/chip_core.sv
+- dir::../../../rtl-sketch/synth_top.v
+- dir::../../../rtl-sketch/spi_ctl.v
+- dir::../../../rtl-sketch/drum_regs.v
+- dir::../../../rtl-sketch/drum_kit.v
+- dir::../../../rtl-sketch/drum_dp.v
+- dir::../../../rtl-sketch/modal_dp.v
+- dir::../../../rtl-sketch/voice_dp.v
+- dir::../../../rtl-sketch/recip_div.v
+- dir::../../../rtl-sketch/ladder_dp_n.v
+- dir::../../../rtl-sketch/i2s_tx.v
+
+# Slightly smaller file sizes
+PRIMARY_GDSII_STREAMOUT_TOOL: klayout
+
+# SDC files
+PNR_SDC_FILE: dir::chip_top.sdc
+SIGNOFF_SDC_FILE: dir::chip_top.sdc
+FALLBACK_SDC: dir::chip_top.sdc
+
+# Power / ground nets
+VDD_NETS:
+- VDD
+GND_NETS:
+- VSS
+
+# We need to add gf180mcu_fd_io__bi_24t
+# due to the unused Y output for output only pads
+IGNORE_DISCONNECTED_MODULES:
+- gf180mcu_fd_io__bi_24t
+- gf180mcu_ws_ip__qrcode_id
+- gf180mcu_ws_ip__shuttle_id
+- gf180mcu_ws_ip__project_id
+- gf180mcu_ws_ip__logo
+- gf180mcu_ws_ip__marker
+
+# Clock
+# CHANGE: 81.38 ns = 12.288 MHz, the architecture's core clock (256 cycles per
+# 48 kHz frame). The template ships 40 ns / 25 MHz. Same period as
+# pnr/orfs/synth_top/constraint.sdc, so the two flows are timed alike.
+CLOCK_PORT: clk_PAD
+CLOCK_NET: clk_pad/Y
+CLOCK_PERIOD: 81.38
+
+# Overfix hold violations
+PL_RESIZER_HOLD_SLACK_MARGIN: 0.35
+GRT_RESIZER_HOLD_SLACK_MARGIN: 0.3
+
+# CHANGE: global-placement spreading target. INPUT, not a measurement -- set from
+# the floorplan's measured utilisation by ../run-librelane.sh (../density.yaml).
+GRT_ALLOW_CONGESTION: true
+
+# Allow a larger Y displacement
+PL_MAX_DISPLACEMENT_Y: 200
+
+# Fix antenna violations after DRT
+DRT_ANTENNA_REPAIR_ITERS: 10
+DRT_ANTENNA_REPAIR_MARGIN: 10 # %
+
+# PDN
+PDN_CFG: dir::pdn/pdn_cfg.tcl
+PDN_ENABLE_PINS: False
+
+# PDN - Straps
+PDN_VWIDTH: 5
+PDN_HWIDTH: 5
+PDN_VSPACING: 1
+PDN_HSPACING: 1
+PDN_VPITCH: 75
+PDN_HPITCH: 75
+
+# PDN - Core ring
+PDN_CORE_RING: True
+# Maximum metal width without slotting: 30um
+PDN_CORE_RING_VWIDTH: 25
+PDN_CORE_RING_HWIDTH: 25
+PDN_CORE_RING_CONNECT_TO_PADS: True
+PDN_CORE_VERTICAL_LAYER: Metal4
+PDN_CORE_HORIZONTAL_LAYER: Metal3
+PDN_CORE_RING_CONNECT_TO_PAD_LAYERS: [Metal2]
+
+# Do not error on magic DRC violations
+# Note: Passing magic DRC is not required for the submission.
+# However, it is recommended to fix or carefully review all violations.
+ERROR_ON_MAGIC_DRC: False
+
+# Prevent false positive DRC errors in I/O cells
+MAGIC_GDS_FLATGLOB:
+# For contacts
+- "*_CDNS_*"
+# Foundry provided SRAMs
+- "*$$*"
+- "M1_N*"
+- "M1_P*"
+- "M2_M1*"
+- "M3_M2*"
+- "nmos_5p0*"
+- "nmos_1p2*"
+- "pmos_5p0*"
+- "pmos_1p2*"
+- "via1_*"
+- "ypass_gate*"
+- "G_ring_*"
+# These additional cells must be flattened to get rid of 3.3V devices
+# (DUALGATE drawn into high-level cells)
+- "dcap_103*"
+- "din_*"
+- "mux821_*"
+- "rdummy_*"
+- "pmoscap_*"
+- "xdec_*"
+- "ypredec*"
+- "xpredec*"
+- "prexdec_*"
+- "xdec8_*"
+- "xdec16_*"
+- "xdec32_*"
+- "sa_*"
+
+# Since we cannot meet the minimum density limit on Metal2,
+# ignore active metal on previous and subsequent layers
+# (DM.5_DM.7 and DM.4_DM.6). Dummy metal is moved to active
+# metal during the precheck.
+KLAYOUT_FILLER_OPTIONS:
+  Metal2_ignore_active: true
+
+# Because we have multiple power pads for one power domain
+MAGIC_EXT_UNIQUE: notopports
+
+# Image render settings
+KLAYOUT_RENDER_RESOLUTION: 2048
+KLAYOUT_RENDER_OVERSAMPLING: 3
+KLAYOUT_PROPERTIES: dir::gf180mcu_render.lyp
+
+KLAYOUT_DRC_THREADS: 1
+
+KLAYOUT_DRC_OPTIONS:
+  decks: "all,-antenna,-density,-cup" # disable CUP for now
+  variant: ref::$PDK
+  workers: max
+
+KLAYOUT_DENSITY_OPTIONS:
+  decks: "density"
+  variant: ref::$PDK
+  workers: max
+
+KLAYOUT_ANTENNA_OPTIONS:
+  decks: "antenna"
+  variant: ref::$PDK
+  workers: max
