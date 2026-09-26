@@ -2,10 +2,14 @@
 """The TR-808 toms' diode pitch drop, measured from a recording.
 
 `spec/NUMERIC-CONTRACT.md` 15.7.1 ships the drop as a coefficient sequence:
-f0 starts at **x1.7** the small-signal value and relaxes over **60 ms**, the
-excess scaled by accent. `docs/tr808-reference.md` 4 marks that magnitude
-**[inferred]** -- the service notes verify that the drop exists, not how big it
-is. This module measures it.
+f0 starts above the small-signal value and relaxes over **60 ms**, the excess
+scaled by accent. When this module was written 15.7.1 shipped that excess at
+**x1.7** and `docs/tr808-reference.md` 4 marked the magnitude **[inferred]** --
+the service notes verify that the drop exists, not how big it is. This module
+measured it (x1.06 / x1.14 / x1.24 by accent, #110); #154 shipped the
+correction, and 4 now carries the measured figure with the same tags. The
+x1.7 references below are the DEFECT this instrument was pointed at, kept
+because recovering it to 0.41 % is one of the probe's own validation cases.
 
 WHAT IT MEASURES, and why this way
 ----------------------------------
