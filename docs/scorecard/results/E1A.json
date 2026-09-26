@@ -2,9 +2,9 @@
   "engine": "integrated-rtl",
   "case_id": "E1A",
   "subject": "Bass and kit / sparse",
-  "source_commit": "76d246f",
-  "source_dirty": true,
-  "analysis_run": "run_case@679a787be5fd + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T23:03:59Z",
+  "source_commit": "af8f8ef",
+  "source_dirty": false,
+  "analysis_run": "run_case@679a787be5fd + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T23:10:02Z",
   "reference_profile": "our own per-bus stems and the register schedule the CS_N pin predicted; no external reference is involved in this case",
   "render_run": "synth_top.v over the SPI pins: 01-bass-classic bass line and the sparse 808 groove, 124 BPM, 2 bars, buses 0.45/0.45, no limiter; 12 parts decoded from the I2S pins",
   "audio": "docs/scorecard/ensemble-e1a/rtl/E1A-mix-i2s.wav",
@@ -225,12 +225,12 @@
   "provenance": {
     "engine": "integrated-rtl",
     "worktree": {
-      "commit": "76d246f",
-      "described": "node/D-drums-bitexact-618-g76d246f-dirty",
+      "commit": "af8f8ef",
+      "described": "node/D-drums-bitexact-631-gaf8f8ef",
       "branch": "feature/issue-292",
-      "dirty": true,
-      "uncommitted_sha256": "7f5dcdee1774eb34",
-      "untracked_files": 29
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "untracked_files": 0
     },
     "base_check": {},
     "command": "tools/score_ensemble_i2s.py --case E1A --simulator verilator --jobs 2 --reuse",
@@ -283,12 +283,12 @@
       "scored_audio_artifact_sha256": "4aec40e813ad01f5be953c3e798475d4e2a81e52d9205321c6ab8b768ef684f1"
     },
     "python": "3.12.3",
-    "run_at": "2026-09-26T23:03:59Z",
+    "run_at": "2026-09-26T23:10:02Z",
     "inputs": {
       "model/drums_fx.py": "sha256:9c4eebbd42eeb591",
       "model/voice_fx.py": "sha256:876b31f280fd3ef4",
       "model/audio_measure.py": "sha256:ff1ae641f70752d1",
-      "model/reference_rigs.py": "sha256:78de333e7ecb2d6f",
+      "model/reference_rigs.py": "sha256:c31aadac74845fc7",
       "tools/run_case.py": "sha256:679a787be5fd58fd",
       "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
       "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",

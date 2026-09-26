@@ -13,7 +13,7 @@
     "engine": "integrated-rtl",
     "state": "pass",
     "worst": 0.1958,
-    "source_commit": "76d246f",
+    "source_commit": "af8f8ef",
     "decoded_i2s_sha256": {
       "body": "4610b4ed0f661e6b0155ce2e093144e4a140a2b0dcac12ca8f927bf7b9519bb0",
       "drum-mix": "cd7de05ddd849daf5edeea1896a54c50664707531cb84652b15a4a4562278923",
@@ -74,11 +74,11 @@
     "accepts_candidate": true
   },
   "provenance": {
-    "source_commit": "76d246fadf1c59eb24ee710a5ffc1821ecea1edd",
+    "source_commit": "af8f8ef272003d0dd01142828ba2b1356a5578c7",
     "source_dirty": true,
     "input_sha256": {
       "baseline_record": "414188ebcc7adc287001b55e127b80ef45af310e84a0ad7e9e9e0f239993ecb1",
-      "candidate_record": "47491f25b498ec143b2e2dbe04eed185ae27611cab0d84cbf5534ba1960c344c"
+      "candidate_record": "99f2df44c0f43c528ea811aa83ffbd91a22502a4c3a3346363090760901cd85a"
     },
     "source_sha256": {
       "tools/compare_ensemble_candidate.py": "e1ea147d5fec4d1d99aa83c42d2e8853189680785d8f729e93956a2045800224",
@@ -86,6 +86,6 @@
       "tools/run_case.py": "679a787be5fd58fdb6655c2b6f156e187dd29cdff005f33a515103a11d002f81",
       "tools/scorecard.py": "aa365a0cdcafb6c711f86be755cf5019558bdacefa4d066e256af2734fa3db45"
     },
-    "run_at_utc": "2026-09-26T23:09:24.117252+00:00"
+    "run_at_utc": "2026-09-26T23:14:04.777928+00:00"
   }
 }
