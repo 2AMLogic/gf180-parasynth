@@ -165,6 +165,16 @@ between running a thing and reading its result:
 job and stopping costs nothing while it runs. Firing a job and polling costs a
 full turn per check.
 
+**Except in a headless session, where ending your turn kills the job.** Loom
+sweeps run as `claude -p` (`LOOM_HEADLESS_SESSION=1`). There, ending the turn
+ends the process, and the wrapper reaps every background job and subagent it
+left behind. On 2026-09-26 the first `/loom:sweep 225` did exactly that: its
+Builder backgrounded a verification run and ended the turn "to avoid polling",
+and the sweep exited 0 with the run killed and #225 stranded at
+`loom:building`. In a headless session, run the job in the foreground, chain
+its result check into the same command, and end the turn only when the step is
+done or blocked.
+
 **Use `Monitor` for progress you actually need to see** — it streams stdout
 lines as events without a turn each. Filter to the lines you would act on,
 including failures, not just the success marker.

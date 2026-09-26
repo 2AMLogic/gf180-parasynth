@@ -1,0 +1,47 @@
+{
+ "identity": {
+  "sources": {
+   "rtl-sketch/tb_uart_bx.v": "3d0e792b0de173c56f517786e2454c902a6e12af7bf4c80ff6be148b4e46d27e",
+   "rtl-sketch/synth_top.v": "e4f8d97b9785f283439782c6bfc6a2f3981788a92723ac1329f09e94719fedd0",
+   "rtl-sketch/voice_dp.v": "a1575257054328dbc460f81cb4e3c1d901a81b565a332c00da0df9c8aa29c097",
+   "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+   "rtl-sketch/drum_regs.v": "c20808c86b234c523ea24ff414738dd263a88b9d002f34cee2a1320f5a1eaaa1",
+   "rtl-sketch/drum_kit.v": "41bdf7a73aaae5ec325afb77ae8ff2e14e55793889a2990ecd5a05117c167224",
+   "rtl-sketch/drum_dp.v": "debc3ed0d64eb5d8da472307f39f2d57934290d961751a91c776233d698692d4",
+   "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+   "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+   "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+   "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+   "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+   "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+   "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+   "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+   "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+   "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+   "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+   "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1"
+  },
+  "roms": {
+   "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+   "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+   "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+   "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+   "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+   "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
+  },
+  "defines": [
+   "VOICE_OSC_2X",
+   "VOICE_FILTER_2X",
+   "UART_HIER"
+  ],
+  "stimulus": "9eba73acacd8a4e54f7e60a3a646dd990a1ad82afd6c6826d35fe192e19090b1",
+  "tail_frames": 2754
+ },
+ "outputs": {
+  "i2s": "0fa49c576576d00f16babac7405e01e485a68e9a7d7f037f7f48084bcb9017c0",
+  "wrs": "f901e5f1d1e431bbd95c1ccfaf408f96186304e2a8f659bb24a73a031d46db57",
+  "txd": "41a7a3f013b6ff7b048f6f0917730dce3a7924ce8ae35757329d560027be9df8",
+  "samp": "951bf9ab594b15edf91c9d17b931a816ba915ea5f620185b84f42f62fefc3e23",
+  "transcript": "2ce24ebd99d9ab46d16485cc4ec28b28c7fffccb6f9534ba80c239c65e438d7a"
+ }
+}

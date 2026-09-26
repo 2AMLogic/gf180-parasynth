@@ -57,21 +57,28 @@ VERIFIER_NO_EVIDENCE = 2
 
 
 def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
-            verifier: bool = True) -> dict:
+            verifier: bool = True, cwd: str | None = None, on_spawn=None) -> dict:
     """Run one command. Never infers status from output.
 
     `verifier=True` applies this repo's exit-code convention, under which 2
     means "did not run" and is reported NO-VERDICT rather than FAIL. Pass
     False for a command that uses 2 to mean an ordinary error.
+
+    `on_spawn(popen)` is called once the child exists. The child leads its own
+    process group, so a supervisor that is itself cancelled (tools/trial.py)
+    needs the handle to kill that group -- a signal to the supervisor alone
+    would leave the simulation running with nobody to record its outcome.
     """
     t0 = time.time()
     try:
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True,
-                             start_new_session=True, env=env)
+                             start_new_session=True, env=env, cwd=cwd)
     except Exception as exc:                       # could not launch at all
         return {"cmd": cmd, "state": LAUNCH_ERROR, "rc": None,
                 "out": f"{type(exc).__name__}: {exc}", "secs": 0.0}
+    if on_spawn is not None:
+        on_spawn(p)
     try:
         out, _ = p.communicate(timeout=timeout)
         rc = p.returncode
@@ -98,8 +105,12 @@ def run_one(cmd: str, timeout: float | None = None, env: dict | None = None,
 
 
 def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = None,
-            jobs: int | None = None, on_result=None) -> list[dict]:
-    """Run commands and call `on_result(index, result)` as each one finishes."""
+            jobs: int | None = None, on_result=None, env: dict | None = None,
+            cwd: str | None = None, on_spawn=None) -> list[dict]:
+    """Run commands and call `on_result(index, result)` as each one finishes.
+    `env`, `cwd` and `on_spawn` are passed to every `run_one`."""
+    # only what the caller set, so a run_one with the older signature still works
+    kw = {k: v for k, v in dict(env=env, cwd=cwd, on_spawn=on_spawn).items() if v is not None}
     results: list[dict | None] = [None] * len(cmds)
 
     def finished(index: int, result: dict) -> None:
@@ -109,11 +120,11 @@ def run_all(cmds: list[str], *, serial: bool = False, timeout: float | None = No
 
     if serial or len(cmds) == 1:
         for index, cmd in enumerate(cmds):
-            finished(index, run_one(cmd, timeout))
+            finished(index, run_one(cmd, timeout, **kw))
     else:
         workers = jobs or min(len(cmds), (os.cpu_count() or 4))
         with cf.ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(run_one, cmd, timeout): index
+            futs = {ex.submit(run_one, cmd, timeout, **kw): index
                     for index, cmd in enumerate(cmds)}
             for future in cf.as_completed(futs):
                 finished(futs[future], future.result())

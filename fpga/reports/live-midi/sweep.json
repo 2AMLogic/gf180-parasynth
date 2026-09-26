@@ -1,0 +1,448 @@
+{
+ "tool": "fpga/sweep_live_midi.py",
+ "workload": "sustained",
+ "seed": 281,
+ "seconds": 20.0,
+ "rows": [
+  {
+   "lookahead_ms": 12,
+   "reserve": 2,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 13,
+   "p95_ms": 12.75,
+   "p99_ms": 13.0,
+   "max_ms": 13.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 13,
+   "redundant_writes": 546,
+   "by_class": {
+    "voice": 543,
+    "drum": 3
+   },
+   "event_writes": 2600,
+   "stops_on_writes": 131
+  },
+  {
+   "lookahead_ms": 12,
+   "reserve": 3,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 26,
+   "p95_ms": 12.75,
+   "p99_ms": 13.0,
+   "max_ms": 13.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 13,
+   "redundant_writes": 538,
+   "by_class": {
+    "voice": 535,
+    "drum": 3
+   },
+   "event_writes": 2509,
+   "stops_on_writes": 126
+  },
+  {
+   "lookahead_ms": 12,
+   "reserve": 4,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 37,
+   "p95_ms": 12.75,
+   "p99_ms": 13.0,
+   "max_ms": 13.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 196,
+   "pressure_device_queue_peak": 13,
+   "redundant_writes": 542,
+   "by_class": {
+    "voice": 539,
+    "drum": 3
+   },
+   "event_writes": 2448,
+   "stops_on_writes": 125
+  },
+  {
+   "lookahead_ms": 13,
+   "reserve": 2,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 5,
+   "p95_ms": 13.75,
+   "p99_ms": 14.0,
+   "max_ms": 14.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 14,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2648,
+   "stops_on_writes": 135
+  },
+  {
+   "lookahead_ms": 13,
+   "reserve": 3,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 10,
+   "p95_ms": 13.75,
+   "p99_ms": 14.0,
+   "max_ms": 14.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 14,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2619,
+   "stops_on_writes": 132
+  },
+  {
+   "lookahead_ms": 13,
+   "reserve": 4,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 24,
+   "p95_ms": 13.75,
+   "p99_ms": 14.0,
+   "max_ms": 14.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 14,
+   "redundant_writes": 542,
+   "by_class": {
+    "voice": 539,
+    "drum": 3
+   },
+   "event_writes": 2518,
+   "stops_on_writes": 127
+  },
+  {
+   "lookahead_ms": 14,
+   "reserve": 2,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 2,
+   "p95_ms": 14.729166666666666,
+   "p99_ms": 14.979166666666666,
+   "max_ms": 15.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 16,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2663,
+   "stops_on_writes": 136
+  },
+  {
+   "lookahead_ms": 14,
+   "reserve": 3,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 5,
+   "p95_ms": 14.75,
+   "p99_ms": 15.0,
+   "max_ms": 15.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 197,
+   "pressure_device_queue_peak": 16,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2648,
+   "stops_on_writes": 135
+  },
+  {
+   "lookahead_ms": 14,
+   "reserve": 4,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 9,
+   "p95_ms": 14.75,
+   "p99_ms": 15.0,
+   "max_ms": 15.041666666666666,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 193,
+   "pressure_device_queue_peak": 16,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2622,
+   "stops_on_writes": 133
+  },
+  {
+   "lookahead_ms": 15,
+   "reserve": 2,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 15.729166666666666,
+   "p99_ms": 15.979166666666666,
+   "max_ms": 16.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 17,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 15,
+   "reserve": 3,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 15.729166666666666,
+   "p99_ms": 15.979166666666666,
+   "max_ms": 16.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 192,
+   "pressure_device_queue_peak": 17,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 15,
+   "reserve": 4,
+   "verdict": "FAIL",
+   "moved": [
+    "load_admitted"
+   ],
+   "refused_declared": 5,
+   "p95_ms": 15.75,
+   "p99_ms": 16.0,
+   "max_ms": 16.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 17,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2648,
+   "stops_on_writes": 135
+  },
+  {
+   "lookahead_ms": 16,
+   "reserve": 2,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 16.729166666666668,
+   "p99_ms": 16.979166666666668,
+   "max_ms": 17.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 193,
+   "pressure_device_queue_peak": 18,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 16,
+   "reserve": 3,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 16.729166666666668,
+   "p99_ms": 16.979166666666668,
+   "max_ms": 17.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 18,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 16,
+   "reserve": 4,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 16.729166666666668,
+   "p99_ms": 16.979166666666668,
+   "max_ms": 17.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 193,
+   "pressure_device_queue_peak": 18,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 17,
+   "reserve": 2,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 17.729166666666668,
+   "p99_ms": 17.979166666666668,
+   "max_ms": 18.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 19,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 17,
+   "reserve": 3,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 17.729166666666668,
+   "p99_ms": 17.979166666666668,
+   "max_ms": 18.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 194,
+   "pressure_device_queue_peak": 19,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 17,
+   "reserve": 4,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 17.729166666666668,
+   "p99_ms": 17.979166666666668,
+   "max_ms": 18.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 192,
+   "pressure_device_queue_peak": 19,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 18,
+   "reserve": 2,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 18.729166666666668,
+   "p99_ms": 18.979166666666668,
+   "max_ms": 19.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 193,
+   "pressure_device_queue_peak": 20,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 18,
+   "reserve": 3,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 18.729166666666668,
+   "p99_ms": 18.979166666666668,
+   "max_ms": 19.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 195,
+   "pressure_device_queue_peak": 20,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  },
+  {
+   "lookahead_ms": 18,
+   "reserve": 4,
+   "verdict": "PASS",
+   "moved": [],
+   "refused_declared": 0,
+   "p95_ms": 18.729166666666668,
+   "p99_ms": 18.979166666666668,
+   "max_ms": 19.041666666666668,
+   "pressure_verdict": "PASS",
+   "pressure_refused": 193,
+   "pressure_device_queue_peak": 20,
+   "redundant_writes": 549,
+   "by_class": {
+    "voice": 547,
+    "drum": 2
+   },
+   "event_writes": 2669,
+   "stops_on_writes": 138
+  }
+ ]
+}

@@ -303,3 +303,34 @@ def test_write_capture_writes_the_bench_files(tmp_path):
     assert first[0] == "S"
     assert int(first[1]) == 0                                          # rebased
     assert bytes.fromhex("".join(first[2:])) == rows[0].packet
+
+
+def test_take_counts_every_packet_in_a_chunk_not_just_the_first_match():
+    """#281: a real-time pty hands the host four ACKs per read(8). _take used
+    to return at the first ACK and drop the other three from acks_seen, so a
+    190-write burst was 'acknowledged' 48 times and the session refused."""
+    class Burst:
+        timeout = 0.0
+
+        def __init__(self, data):
+            self.data = data
+
+        def read(self, n):
+            out, self.data = self.data[:n], self.data[n:]
+            return out
+
+    class Clock:
+        t = 0.0
+
+        def monotonic(self):
+            self.t += 0.1                    # every look at the clock moves it
+            return self.t
+
+        def sleep(self, s):
+            self.t += s
+    acks = b"".join(bytes([uh.RSP_ACK, k]) for k in range(1, 9))
+    b = uh.Bridge.on_serial(Burst(acks + bytes([uh.RSP_ERR, 1, 9, 0x21])), clock=Clock())
+    while b._take({"ack", "err"}, 1.0) is not None:
+        pass
+    assert b.acks_seen == 8
+    assert b.device_errors == [(1, 0x21)]

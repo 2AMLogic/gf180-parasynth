@@ -1,0 +1,10 @@
+trial T-LIVE-MIDI [sim, baseline] criterion live-midi/1 (fpga/live_midi_contract.py: target, endpoints and declared load frozen before measurement; timing contract 2)
+  required session-sim            exec PASS(rc 0, 2.8s) -> PASS
+  control  drop-note-off          exec PASS(rc 0, 0.5s) -> FAIL caught=True
+             DROP_NOTE_OFF: must move ['voice_gate', 'stuck_notes']; caught (exit 0)
+  control  wrong-drum-map         exec PASS(rc 0, 0.5s) -> FAIL caught=True
+             WRONG_DRUM_MAP: must move ['drum_strikes']; caught (exit 0)
+  control  delayed-event          exec PASS(rc 0, 0.5s) -> FAIL caught=True
+             DELAYED_EVENT: must move ['timing']; caught (exit 0)
+trial T-LIVE-MIDI: PASS (execution complete)
+receipt: /home/ubuntu/work/live-midi/build/trials/T-LIVE-MIDI/20260926T145837Z-1dcb2e3-sim-105867-4fcc95/receipt.json
