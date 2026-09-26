@@ -232,12 +232,23 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
         raise Refused(f"{key}: L != R on {lr} periods; R0 is dual-mono, so this is not R0")
     wav = out / f"{key}.wav"
     write_wav(wav, i2s[:, 0])
+    attach_plan(out, key)
     rec["wav"] = wav.name
     rec["wav_sha256"] = sha256_file(wav)
     rec["calibration"] = calibration_window(i2s[:, 0])
     rec["verdict"] = "PASS"
     (out / f"{key}.json").write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
     return rec
+
+
+def attach_plan(out: pathlib.Path, key: str) -> str:
+    """The CLI's own plan for the pinned bytes, beside the reference: the
+    capture analysis compares the operator's host log (uart_host --capture)
+    with it, so a take of some other command cannot be scored as this one."""
+    src = out / "work" / key / "capture.plan.json"
+    dst = out / f"{key}.plan.json"
+    dst.write_bytes(src.read_bytes())
+    return sha256_file(dst)
 
 
 def silence_record(held: np.ndarray | None) -> dict:
@@ -275,6 +286,9 @@ def main(argv=None) -> int:
         unknown = [k for k in keys if k not in manifest["commands"]]
         if unknown:
             raise Refused(f"not release commands: {unknown}; known {list(manifest['commands'])}")
+        # absolute: the replay runs vvp with cwd=rtl-sketch, so a relative
+        # output path names a file that is not there (the first box run did)
+        a.out = a.out.resolve()
         a.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for key in keys:
