@@ -407,6 +407,92 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
+#: plan074 D. The F1 calibrated operating point through the SPI pins.
+F1CAL_CUTOFFS = (250, 1000, 4000)          # the F1A/F1B/F1C commanded cutoffs
+F1CAL_SEGMENT_S = 0.025
+F1CAL_FAULTS = ("LEGACY_WORDS",)
+_F1CAL_WORD_ADDRS = ("A_GAIN", "A_OGAIN", "A_DGAIN", "A_DOGAIN")
+
+
+def f1cal_script(calibration: str, fault: str | None = None):
+    """A saw (note 45) held through the ladder under `calibration` at res 0,
+    drive 1.0 (the F1 settings), the cutoff knob stepped through 250 / 1000 /
+    4000 Hz, then the resonance knob to 0.5 at 1 kHz -- the second host path
+    through the gain/ogain conversion. Returns (sent, requested, tail, info).
+
+    `requested` is what the host image asks for. `sent` is what goes on the
+    pins: identical, unless `fault` is LEGACY_WORDS, in which case every
+    gain/ogain word is the LEGACY conversion's while the image still names the
+    calibration -- the #231 constructor-only trap moved onto the wire."""
+    if fault not in (None, *F1CAL_FAULTS):
+        raise ValueError(f"unknown f1cal fault {fault!r}")
+    patch = dict(waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0), mix=(1.0, 0.0, 0.0),
+                 noise=0.0, cutoff=(F1CAL_CUTOFFS[0],) * 2, q=0.0, drive=1.0,
+                 amp=(0.001, 0.25, 1.0, 0.05), fenv=(0.004, 0.30, 1.0, 0.10), track=0.0,
+                 vol=0.45, mod_mix=0.0, mod_wheel=0.0, osc_mod=False, filt_mod=False,
+                 filter_calibration=calibration)
+    regs = vf.VoiceFx.patch_regs(**patch)
+    if regs.get("filter_calibration") != calibration:
+        raise ValueError(f"host image does not record calibration {calibration!r}")
+    legacy = vf.ladder_regs(regs["res"], regs["drive"])
+    req, sent = [], []
+
+    def put(wait, flag, addr_name, data, legacy_data=None):
+        addr = getattr(A, addr_name)
+        req.append((int(wait), int(flag), SEC_V, int(addr), int(data)))
+        bad = (fault == "LEGACY_WORDS" and legacy_data is not None)
+        sent.append((int(wait), int(flag), SEC_V, int(addr),
+                     int(legacy_data if bad else data)))
+
+    def put_raw(wait, flag, addr, data):
+        req.append((int(wait), int(flag), SEC_V, int(addr), int(data)))
+        sent.append(req[-1])
+
+    for k, wave in enumerate(regs["waves"]):
+        put_raw(0, 0, A.A_WAVE + k, WAVE_CODE[wave])
+    for k, weight in enumerate(regs["weights"]):
+        put_raw(0, 0, A.A_W + k, weight)
+    for base, key in ((A.A_AMP, "amp"), (A.A_FILT, "fenv")):
+        for k, value in enumerate(regs[key]):
+            put_raw(0, 0, base + k, value)
+    for name, key in (("A_CUT_LO", "cut_lo"), ("A_CUT_HI", "cut_hi"), ("A_K", "k"),
+                      ("A_GLIDE", "glide"), ("A_VOL", "vol"), ("A_ROUTE", "route"),
+                      ("A_NSEL", "nsel"), ("A_MROUTE", "mroute"), ("A_MMIX", "mmix"),
+                      ("A_MWHEEL", "mwheel"), ("A_MPD", "mpd"), ("A_MFD", "mfd")):
+        put(0, 0, name, regs.get(key, 0))
+    put(0, 0, "A_GAIN", regs["gain"], legacy[1])
+    put(0, 0, "A_OGAIN", regs["ogain"], legacy[2])
+    put(0, 0, "A_DVOL", 0); put(0, 0, "A_BVOL", 0)
+    put(0, 0, "A_DCUT", F1CAL_CUTOFFS[0]); put(0, 0, "A_DK", regs["k"])
+    put(0, 0, "A_DGAIN", regs["gain"], legacy[1]); put(0, 0, "A_DOGAIN", regs["ogain"], legacy[2])
+    incs = vf.VoiceFx.note_incs(45, regs["detune"])
+    put_raw(4, 1, A.A_INC, incs[0])
+    put_raw(0, 1, A.A_INC + 1, incs[1])
+    put_raw(0, 1, A.A_INC + 2, incs[2])
+    put(0, 0, "A_TRACK", vf.VoiceFx.note_track(45, regs["track"]))
+    put(0, 0, "A_GATE_ON", 0)
+    seg = round(F1CAL_SEGMENT_S * 48000)
+    points = [{"cutoff_hz": F1CAL_CUTOFFS[0], "res": 0.0, "gain": regs["gain"],
+               "ogain": regs["ogain"]}]
+    for cut in F1CAL_CUTOFFS[1:]:
+        put(seg, 0, "A_CUT_LO", cut); put(0, 0, "A_CUT_HI", cut)
+        points.append({"cutoff_hz": cut, "res": 0.0, "gain": regs["gain"],
+                       "ogain": regs["ogain"]})
+    # the resonance knob, through the SAME common conversion the SPI host uses
+    k5, g5, og5 = vf.ladder_regs(0.5, regs["drive"], calibration)
+    _, lg5, log5 = vf.ladder_regs(0.5, regs["drive"])
+    put(seg, 0, "A_CUT_LO", 1000); put(0, 0, "A_CUT_HI", 1000)
+    put(0, 0, "A_K", k5); put(0, 0, "A_GAIN", g5, lg5); put(0, 0, "A_OGAIN", og5, log5)
+    points.append({"cutoff_hz": 1000, "res": 0.5, "gain": g5, "ogain": og5})
+    put(seg, 0, "A_GATE_OFF", 0)
+    tail = round(0.020 * 48000)
+    return sent, req, tail, {"calibration": calibration, "fault": fault, "points": points,
+                             "legacy_words_res0": list(legacy[1:]),
+                             "legacy_words_res05": [lg5, log5],
+                             "image": {k: regs[k] for k in ("k", "gain", "ogain", "res",
+                                                            "drive", "filter_calibration")}}
+
+
 def write_cmds(path: str, w) -> None:
     with open(path, "w") as fh:
         for wait, flag, sec, addr, data in w:
@@ -552,9 +638,22 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl", default=None,
                     help="take sources this directory holds from there (the start-red path)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "build"))
+    ap.add_argument("--f1cal-smoke", default=None, metavar="CALIBRATION",
+                    help="plan074 D: the F1 calibrated operating point through the SPI pins; "
+                         "asserts the calibration's gain/ogain words arrive and the I2S "
+                         "wire equals the model driven by the REQUESTED image")
+    ap.add_argument("--f1cal-fault", default=None, choices=F1CAL_FAULTS,
+                    help="negative control: the image names the calibration, the pins "
+                         "carry the legacy gain/ogain words; must fail (exit 1)")
     ap.add_argument("--envtrace", action="store_true",
                     help="write diagnostic voice gate/envelope registers per frame")
     a = ap.parse_args(argv)
+    if a.f1cal_fault and not a.f1cal_smoke:
+        ap.error("--f1cal-fault requires --f1cal-smoke")
+    if a.f1cal_smoke:
+        if a.m5a or a.m5a_smoke:
+            ap.error("--f1cal-smoke and --m5a are separate stimuli")
+        a.filter2x = True                     # the selected filter path only
     if a.filter2x or a.pulse2x:
         a.osc2x = True
     a.outdir = os.path.abspath(a.outdir); os.makedirs(a.outdir, exist_ok=True)
@@ -582,12 +681,25 @@ def main(argv=None) -> int:
         if case_id not in ("M5A", "M5B"):
             print("verify_synth_top: REFUSED -- unsupported Mono manifest case"); return 2
         cover = {}
+    elif a.f1cal_smoke:
+        try:
+            cmds, f1cal_req, tail, f1cal = f1cal_script(a.f1cal_smoke, a.f1cal_fault)
+        except (ValueError, vf.CalibrationError) as exc:
+            print(f"verify_synth_top: REFUSED -- F1 calibration stimulus: {exc}")
+            return 2
+        cover = {}
+        print(f"verify_synth_top: F1 calibration {f1cal['calibration']}: requested image "
+              f"{f1cal['image']}; points {f1cal['points']}"
+              + (f"; FAULT {a.f1cal_fault}: the pins carry legacy words "
+                 f"{f1cal['legacy_words_res0']} / {f1cal['legacy_words_res05']}"
+                 if a.f1cal_fault else ""))
     else:
         cmds, tail, cover = script(a.short)
     # The stimulus must reach the cases this bench claims, or it is not the
     # bench it says it is. Checked BEFORE the simulation, so a stimulus edit
     # that quietly drops a circuit refuses instead of passing.
-    if not a.m5a:
+    focused = a.m5a or bool(a.f1cal_smoke)
+    if not focused:
         missing = [dx.STOP_NAMES[i] for i in range(dx.N_STOPS) if i not in cover["stops"]]
         pairs = {b for _, b in dx.PAIRS}
         if missing:
@@ -620,6 +732,10 @@ def main(argv=None) -> int:
               f"pulse {m5a['pulse_shape']}; saw cutoff {m5a['saw_cutoff_hz']} Hz; "
               f"saw volume correction {m5a['saw_volume_correction_db']:+.5f} dB; "
               f"reference sha256 {m5a['manifest']['audio']['sha256']}")
+    elif a.f1cal_smoke:
+        print(f"verify_synth_top: F1 calibration stimulus: saw note 45, drive 1.0, cutoff "
+              f"{' / '.join(str(c) for c in F1CAL_CUTOFFS)} Hz at res 0 then res 0.5 at 1 kHz, "
+              f"{F1CAL_SEGMENT_S * 1000:.0f} ms each; no drum section")
     else:
         print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
               f"{cover['sounds']} of {len(dx.SOUND_NAMES)} sounds "
@@ -640,7 +756,7 @@ def main(argv=None) -> int:
     # serializer periods still in flight.  Give the M5A transport check three
     # drain frames so its *modelled* phrase length remains unchanged while the
     # wire has time to emit its complete final periods.
-    sim_frames = tail + (3 if a.m5a else 0)
+    sim_frames = tail + (3 if focused else 0)
     envtrace_path = os.path.join(a.outdir, "top_envtrace.txt") if a.envtrace else None
     out = simulate(defines, a.outdir, sim_frames, rtl_dir=a.rtl, simulator=a.simulator,
                    envtrace_path=envtrace_path)
@@ -713,6 +829,30 @@ def main(argv=None) -> int:
         return 1
     # drive the model from the PREDICTION, not from what the chip reported
     model_writes = [(int(g[5]), int(g[1]), int(g[2]), int(g[3]), int(g[4])) for g in wr]
+    f1cal_bad_words = 0
+    if a.f1cal_smoke:
+        # (1) the words that ARRIVED at the register port against the words the
+        # calibrated image requested -- the transport claim itself;
+        # (2) the model is driven by the REQUESTED data at the pin-predicted
+        # frames, so a link that delivers other words than the image names
+        # cannot move the model with it.
+        word_addrs = {getattr(A, nm) for nm in _F1CAL_WORD_ADDRS}
+        arrived = []
+        for want, got in zip(f1cal_req, wr):
+            if int(got[3]) in word_addrs:
+                arrived.append({"addr": int(got[3]), "requested": int(want[4]),
+                                "arrived": int(got[4]), "frame": int(got[5])})
+                if int(got[4]) != int(want[4]):
+                    f1cal_bad_words += 1
+        model_writes = [(f, fl, sec, ad, int(want[4])) for (f, fl, sec, ad, _), want
+                        in zip(model_writes, f1cal_req)]
+        LAST.update(f1cal=f1cal, f1cal_words=arrived, f1cal_bad_words=f1cal_bad_words)
+        print(f"verify_synth_top: F1 calibration words at the register port: "
+              + "; ".join(f"addr {r['addr']:#04x} frame {r['frame']} requested {r['requested']} "
+                          f"arrived {r['arrived']}" for r in arrived))
+        if f1cal_bad_words:
+            print(f"verify_synth_top: FAIL -- {f1cal_bad_words} of {len(arrived)} gain/ogain "
+                  f"writes arrived with words other than calibration {a.f1cal_smoke}'s")
     last = max(f for f, *_ in model_writes)
     n = a.frames or (last + tail + 1)
     print(f"verify_synth_top: writes landed in frames {model_writes[0][0]}..{last}; modelling {n} frames")
@@ -726,10 +866,10 @@ def main(argv=None) -> int:
     if not i2s:
         print("verify_synth_top: FAIL -- no I2S periods decoded from the wire"); return 2
     nper = min(len(i2s), n)
-    if a.m5a and nper != n:
+    if focused and nper != n:
         print(f"verify_synth_top: REFUSED -- M5A I2S path yielded {nper} periods for {n} frames")
         return 2
-    if a.m5a and [int(r[0]) for r in i2s[:n]] != list(range(n)):
+    if focused and [int(r[0]) for r in i2s[:n]] != list(range(n)):
         print("verify_synth_top: REFUSED -- M5A I2S periods are not a complete, ordered 0..N-1 timeline")
         return 2
     mism = swap = width = xs = 0
@@ -772,16 +912,32 @@ def main(argv=None) -> int:
     # section is for. The model is the same whatever is injected, so this
     # refuses for a stimulus that stopped covering the case, never for a defect.
     LAST.update(model_peak=peak, model_clipped=clipped)
-    if clipped == 0 and not a.m5a:
+    if clipped == 0 and not focused:
         print(f"verify_synth_top: REFUSED -- the simultaneous-hit section never reached the rail "
               f"(model peak {peak} of 32768): the master clamp is not exercised by this stimulus")
         return 2
     LAST.update(wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad, periods=nper)
+    if a.f1cal_smoke:
+        wire = np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int64)
+        LAST.update(f1cal_wire_sha256=hashlib.sha256(wire.tobytes()).hexdigest(),
+                    f1cal_model_sha256=hashlib.sha256(
+                        np.asarray(exp_i2s[:nper], dtype=np.int64).tobytes()).hexdigest(),
+                    f1cal_wire_peak=int(np.abs(wire).max()))
+        print(f"verify_synth_top: F1 calibration wire sha256 {LAST['f1cal_wire_sha256'][:16]}, "
+              f"model sha256 {LAST['f1cal_model_sha256'][:16]}, wire peak {LAST['f1cal_wire_peak']}, "
+              f"{nper} periods")
+    if f1cal_bad_words:
+        print(f"verify_synth_top: FAIL -- calibration words did not arrive; of {nper} I2S periods "
+              f"{mism} differ from the model of the requested image")
+        return 1
     if mism == 0 and swap == 0 and width == 0 and core_bad == 0:
         print(f"verify_synth_top: PASS -- {nper} I2S periods decoded from the wire, every one identical "
               f"to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too")
         if a.m5a:
             print(f"verify_synth_top: {case_id} path verified from SPI pins through the production voice and I2S pins")
+        if a.f1cal_smoke:
+            print(f"verify_synth_top: F1 calibration {a.f1cal_smoke} words verified at the register "
+                  f"port and its output verified from SPI pins to I2S pins")
         return 0
     print(f"verify_synth_top: FAIL -- of {nper} decoded I2S periods: {mism} differ from the model, "
           f"{swap} have L != R, {width} have a slot that is not 32 BCLK")

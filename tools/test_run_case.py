@@ -108,6 +108,29 @@ def test_ref_corner_2x_control_moves_a_known_reference_corner(monkeypatch):
                               ("fail", shifted_corner.value, "synthetic octave fault"))
 
 
+def test_ref_corner_2x_moves_only_the_reference_axis_not_the_dut_grid(monkeypatch):
+    """plan075 4: the DUT's stimulus grid is invariant under the reference-side
+    octave mutation. Before the repair our side was rendered on the halved
+    axis, which left F1C's rolloff band with 3 points (NO-VERDICT)."""
+    import reference_rigs as rr
+    freqs = np.geomspace(40.0, 12000.0, 32)
+    clip_id = "synthetic/known-4pole"
+    meta = {"freqs_hz": freqs.tolist(),
+            "parts": [[i * 16, 16, float(f)] for i, f in enumerate(freqs)],
+            "amp": 0.1, "sha256": "known-ground-truth"}
+    profile = {"clips": {clip_id: {"sha256": "known-ground-truth"}}}
+    monkeypatch.setattr(rc.rp, "load_profile", lambda: profile)
+    monkeypatch.setattr(rc.rp, "load_clip", lambda _cid, _profile: (np.zeros(32), SR, meta))
+    monkeypatch.setattr(rr.SurgeRig, "tone_project",
+                        staticmethod(lambda _y, parts, _amp, _cid:
+                                     ideal_4pole_db([p[2] for p in parts])))
+    clean_f, _, clean_meta = rc.load_filter_reference(clip_id)
+    shifted_f, _, shifted_meta = rc.load_filter_reference(clip_id, "REF_CORNER_2X")
+    assert not np.array_equal(shifted_f, clean_f)                 # the reference moved
+    assert np.array_equal(rc.dut_probe_grid(shifted_meta), freqs)  # the DUT did not
+    assert np.array_equal(rc.dut_probe_grid(clean_meta), clean_f)
+
+
 def test_control_refuses_a_case_that_is_not_implemented():
     outcome = rc.control_outcome(
         "changed", "REF_CORNER_2X", ["M5A"], {"M5A": "not-run"}, {}, {})

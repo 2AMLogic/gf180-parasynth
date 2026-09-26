@@ -2,35 +2,29 @@
   "engine": "fixed-model",
   "case_id": "F1C",
   "subject": "Cutoff response / high",
-  "source_commit": "e356498",
-  "analysis_run": "run_case@06eba1bead1c + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-26T01:55:39Z",
+  "source_commit": "5b45564",
+  "analysis_run": "run_case@77739a9434f2 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-25T18:57:27Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "e356498",
-      "described": "node/D-drums-bitexact-474-ge356498-dirty",
-      "branch": "feature/f1-clean-calibration",
+      "commit": "5b45564",
+      "described": "node/D-drums-bitexact-441-g5b45564-dirty",
+      "branch": "measure/f1-records-current-estimator",
       "dirty": true,
-      "uncommitted_sha256": "59b7d77b89e4ff68",
+      "uncommitted_sha256": "569cf6b684a86e26",
       "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "c3a8797ab0bf",
+      "origin_main": "37e1601f0b80",
       "behind_commits": 0,
-      "ahead_commits": 6,
+      "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
-      "ahead_dependencies": {
-        "model/voice_fx.py": {
-          "origin_main": "eb26dc7d7a9e",
-          "here": "970ad08f32ea"
-        }
-      },
+      "ahead_dependencies": {},
       "allow_stale": false,
-      "problems": [],
-      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/voice_fx.py."
+      "problems": []
     },
     "command": "tools/run_case.py F1A F1B F1C",
     "config": {
@@ -40,147 +34,35 @@
       "probe_amp": 0.25,
       "probe_level_dbfs": -12.04,
       "n_probe_tones": 32,
-      "inject": null,
-      "engine_profile": "selected-m5a-reconstructed-filter2x",
-      "filter_calibration": "surge-type2-clean-v1",
-      "gain": 42598,
-      "ogain": 100825,
-      "sr_hz": 48000
+      "inject": null
     },
     "python": "3.14.7",
-    "run_at": "2026-09-26T01:55:39Z",
+    "run_at": "2026-09-25T18:57:27Z",
     "inputs": {
       "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:970ad08f32eaed5c",
+      "model/voice_fx.py": "sha256:eb26dc7d7a9e9cea",
       "model/audio_measure.py": "sha256:cd27a0a67dfde218",
       "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:06eba1bead1c25a2",
-      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/run_case.py": "sha256:77739a9434f2605e",
+      "tools/refprofile.py": "sha256:a5c5196a1ecc952b",
       "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
       "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
       "tools/scorecard.py": "sha256:2094d43f15e9abad",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
       "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
       "frozen:surge-type2/lp-cut4000-res0.00": "sha256:e18a16e6f2203fdf",
-      "frozen:surge-type2/lp-open20k-res0.00": "sha256:ad30cebd73b77be3",
-      "tools/f1_filter_path.py": "sha256:027233caa2f57ae4",
-      "tools/probes/f1_selected_path.py": "sha256:ee680e654b55625e",
-      "model/filter_rate_chain.py": "sha256:134b958dec5308fd",
-      "model/fixed.py": "sha256:eec1c66158a611dc"
+      "frozen:surge-type2/lp-open20k-res0.00": "sha256:ad30cebd73b77be3"
     },
     "artefacts": {
       "ours": "build/scorecard/F1C-ours-response.json",
       "reference": "cache/surge-type2/lp-cut4000-res0.00.wav"
     },
-    "outcome_code": 0,
+    "outcome_code": 1,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "reference_profile": "surge-type2:surge-type2/lp-cut4000-res0.00 (commanded 4000 Hz, readback 4000.0 Hz, resonance 0.0), frozen at daf9e64",
   "reference_identity": "1.2.3 org.surge-synth-team.surge-xt, binary sha256 2bc28ffe729965aa; LP Vintage Ladder subtype Type 2 = sst-filters VintageLadder::Huov, Huovilainen DAFx-04, the same paper DR 0001 implements. Rendered once through the qualified rig of #87 and frozen: this result did not run a plugin.",
-  "model_path": {
-    "path_version": "f1-filter-path-v1",
-    "engine_profile": "selected-m5a-reconstructed-filter2x",
-    "filter_calibration": "surge-type2-clean-v1",
-    "calibration_definition": {
-      "input_scale": 0.25,
-      "base_volts_per_unit": 0.13,
-      "source": "docs/scorecard/f1-level/selection-rule.md (#231), s = 1/4 frozen across F1A-F1C and all three development levels",
-      "expected_words_res0_drive1": {
-        "gain": 42598,
-        "ogain": 100825
-      }
-    },
-    "gain_ogain_res0_drive1": [
-      42598,
-      100825
-    ],
-    "legacy_gain_ogain_res0_drive1": [
-      170394,
-      25206
-    ],
-    "identity": {
-      "ladder_class": "RateConvertedLadder",
-      "factor": 2,
-      "causal": true,
-      "preserve_headroom": true,
-      "latency_frames": 20,
-      "out_bits": 19,
-      "g_rom_bits": 7,
-      "k_rom_bits": 5
-    },
-    "rom": {
-      "CUT_TRIM": 1.03,
-      "coefficient_oversample": 2,
-      "g_rom_sha256": "48c6c974faf01776",
-      "k_rom_sha256": "f27ec0e198d0b1f8"
-    },
-    "exact_match": {
-      "frames": 12000,
-      "calibration_in_image": "surge-type2-clean-v1",
-      "voice_words_entering": [
-        [
-          42598,
-          100825
-        ]
-      ],
-      "probe_words_entering": [
-        [
-          42598,
-          100825
-        ]
-      ],
-      "g_mismatches": 0,
-      "k_mismatches": 0,
-      "ladder_mismatches": 0,
-      "ladder_sha256": "fdf85a20b6f0c4e7",
-      "ok": true
-    },
-    "cut_registers": {
-      "regs": {
-        "cut_lo": 4000,
-        "k": 0,
-        "gain": 42598,
-        "ogain": 100825,
-        "res": 0.0,
-        "drive": 1.0,
-        "filter_calibration": "surge-type2-clean-v1"
-      },
-      "words_entering": [
-        [
-          42598,
-          100825
-        ]
-      ],
-      "g_q16": 14797,
-      "k_eff_q14": 0,
-      "reconstruction_would_clip": 0,
-      "output_max_abs": 8191,
-      "output_sha256": "8f3c440c6da94ff7"
-    },
-    "open_registers": {
-      "regs": {
-        "cut_lo": 20000,
-        "k": 0,
-        "gain": 42598,
-        "ogain": 100825,
-        "res": 0.0,
-        "drive": 1.0,
-        "filter_calibration": "surge-type2-clean-v1"
-      },
-      "words_entering": [
-        [
-          42598,
-          100825
-        ]
-      ],
-      "g_q16": 47327,
-      "k_eff_q14": 0,
-      "reconstruction_would_clip": 0,
-      "output_max_abs": 8418,
-      "output_sha256": "3a3fdc64a67efe1d"
-    }
-  },
-  "render_run": "selected Mono filter path selected-m5a-reconstructed-filter2x (causal 2x RateConvertedLadder, tools/f1_filter_path.py f1-filter-path-v1) under filter calibration surge-type2-clean-v1 (gain 42598, ogain 100825 from VoiceFx.patch_regs; exact match to a selected-voice note 12000 frames, 0 mismatches); stepped tone, 32 frequencies 40-12000 Hz, amp 0.25 (-12.04 dBFS), cutoff 4000 Hz, resonance 0.0 (k = 4*res, so this is our zero), 48000 Hz, no resampling anywhere",
+  "render_run": "reference_rigs.OurLadder@99b1c862857a stepped tone, 32 frequencies 40-12000 Hz, amp 0.25 (-12.04 dBFS), cutoff 4000 Hz, resonance 0.0 (k = 4*res, so this is our zero), 48000 Hz, no resampling anywhere",
   "audio": "reference surge-type2/lp-cut4000-res0.00 (frozen, sha256 e18a16e6f220); ours build/scorecard/F1C-ours-response.json",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
@@ -213,47 +95,38 @@
   },
   "metrics": {
     "Corner frequency": {
-      "value": 1656.1734,
+      "value": 1433.4968,
       "units": "Hz",
       "reference": 1718.5771,
-      "error": -62.4037,
+      "error": -285.0803,
       "tolerance": 171.8577,
       "valid": true,
       "tolerance_basis": "frequency"
     },
     "low-band gain": {
-      "value": -0.0424,
+      "value": -0.0624,
       "units": "dB",
       "reference": -0.1364,
-      "error": 0.094,
+      "error": 0.074,
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "energy ratio"
     },
     "rolloff": {
-      "value": -16.2688,
+      "value": -15.3246,
       "units": "dB/oct",
       "reference": -16.4113,
-      "error": 0.1425,
+      "error": 1.0867,
       "tolerance": 1.5,
       "valid": true,
       "tolerance_basis": "rolloff"
     }
   },
   "diagnostics": {
-    "ours_corner_hz": 1656.1734,
-    "dut_probe_grid_sha256": "449ca4205ccd35f3",
-    "reference_axis_sha256": "449ca4205ccd35f3",
+    "ours_corner_hz": 1433.4968,
     "reference_corner_hz": 1718.5771,
-    "ours_wide_open_plateau_db": -0.0027,
+    "ours_wide_open_plateau_db": -0.0047,
     "reference_wide_open_plateau_db": -9.0676,
-    "legacy_standalone": {
-      "engine": "reference_rigs.OurLadder (legacy base-rate standalone component, global gain/ogain words)",
-      "corner_hz": 1433.4968,
-      "lowband_db": -0.0624,
-      "rolloff_db_oct": -15.3246,
-      "wide_open_plateau_db": -0.0047
-    },
     "reference_commanded_cutoff_hz": 4000.0,
     "reference_cutoff_readback_hz": 4000.0,
     "probe_level_dbfs": -12.04,
