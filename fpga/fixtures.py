@@ -44,7 +44,7 @@ def _coverage(host: MusicHost) -> dict:
                 knobs=sum(1 for t in tags if t.startswith("knob-")))
 
 
-def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
+def bar_808(*, short: bool = True, bpm: float = 118.0, kit: list = None) -> tuple:
     """THE MUSICAL FIXTURE: a bass line under a drum part, both through the
     link, with every host behaviour #81 names.
 
@@ -52,9 +52,10 @@ def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
     material with the rests taken out -- the hits keep their order and their
     accents, and both timed sequences keep their full real duration, so the
     tom's 60 ms bend and the BD's 4 ms window are exercised exactly as they
-    would be on a board. Returns (host, frames, coverage)."""
+    would be on a board. `kit` is the kit image the target plays (None: the
+    tree's `kit_808()`). Returns (host, frames, coverage)."""
     patch = vf.VoiceFx.patch_regs(cutoff=(320, 4200), q=0.62)
-    host = MusicHost(patch=patch)
+    host = MusicHost(patch=patch, kit=kit)
     host.load(0, dvol=0.45, bvol=0.45)
 
     if not short:
@@ -96,12 +97,12 @@ def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
     return host, n, _coverage(host)
 
 
-def demo(*, bars: int = 2, bpm: float = 118.0) -> tuple:
+def demo(*, bars: int = 2, bpm: float = 118.0, kit: list = None) -> tuple:
     """DEMO MODE: no keyboard attached. The pattern plays, the bass line walks
     and the three knobs sweep on their own, so a board with nothing plugged in
-    still makes the instrument's own noise."""
+    still makes the instrument's own noise. `kit` as for `bar_808`."""
     patch = vf.VoiceFx.patch_regs(cutoff=(300, 4600), q=0.7)
-    host = MusicHost(patch=patch)
+    host = MusicHost(patch=patch, kit=kit)
     host.load(0)
     step = int(round(60.0 / bpm / 4.0 * SR))
     start = 400
@@ -123,6 +124,8 @@ def demo(*, bars: int = 2, bpm: float = 118.0) -> tuple:
     return host, n, _coverage(host)
 
 
-FIXTURES = {"bar808": lambda: bar_808(short=True),
-            "bar808-full": lambda: bar_808(short=False),
+# Each takes an optional `kit=`: the image a host drives decides the kit
+# (drums_fx.KITS_BY_REVISION); the default is the tree's.
+FIXTURES = {"bar808": lambda kit=None: bar_808(short=True, kit=kit),
+            "bar808-full": lambda kit=None: bar_808(short=False, kit=kit),
             "demo": demo}

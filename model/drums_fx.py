@@ -1027,6 +1027,63 @@ def kit_808() -> list:
     return w
 
 
+# ---- the kit an image that predates revision 13 plays --------------------------
+# The published R1 Arty image (fpga/reports/arty/integrated-baseline-2025.1,
+# built at fpga/release/release_manifest.IMAGE_SOURCE_COMMIT) is contract
+# revision 12 RTL: it has no ENV_FRATE register and no final strike. Sending it
+# revision 13's `kit_808()` would program four strikes at period 511 and an
+# 80 ms tail on a clap that cannot play the fourth at the fire level -- a clap
+# nobody verified. So the kit a host sends is a property of the IMAGE it drives,
+# not of the tree it runs from.
+#
+# KIT808 as revisions 11 and 12 stated it (revision 12 moved no table): the
+# hash in spec/reference/test_tables.py's REV11 pin, computed the same way
+# (sha256 of the decimal words `addr << 32 | value`, comma-joined).
+KIT808_REV12_SHA256 = "a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19"
+
+
+class KitRefused(RuntimeError):
+    """A frozen kit no longer reproduces the image it is frozen against."""
+
+
+def _kit_sha256(kit: list) -> str:
+    import hashlib
+    return hashlib.sha256(",".join(str((int(a) << 32) | int(v)) for a, v in kit)
+                          .encode()).hexdigest()
+
+
+def kit_808_rev12() -> list:
+    """The reference kit a revision-12 image plays: `kit_808()` with revision
+    13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
+    480, no ENV_FRATE[8] write at all (the register does not exist there), and
+    ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
+    its order.
+
+    FROZEN BY HASH, CHECKED AT THE POINT OF USE: the result must hash to
+    KIT808_REV12_SHA256, or this REFUSES (KitRefused). A later change to any
+    other kit value moves `kit_808()` for the tree, but it did not move the
+    published image; deriving this kit would then silently send the old image
+    bytes it was never verified with. Refusing makes that a decision someone
+    has to take (freeze the literal, or cut a new release), not a drift."""
+    burst = A_ENV + E_CPBURST * ENV_STRIDE
+    tail = A_ENV + E_CPTAIL * ENV_STRIDE
+    undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
+            tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
+    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
+    got = _kit_sha256(kit)
+    if got != KIT808_REV12_SHA256:
+        raise KitRefused(f"kit_808_rev12() hashes to {got[:12]}, not revision 12's "
+                         f"KIT808 {KIT808_REV12_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-12 image was verified with; freeze the literal "
+                         "image or cut a new release")
+    return kit
+
+
+# The kit each supported image revision plays. A host names the image it
+# drives; it does not assume the tree's.
+KITS_BY_REVISION = {12: kit_808_rev12, 13: kit_808}
+
+
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:
     """The inverse of `pole_regs`: (f0, Q) of the resonator a coefficient pair
     actually encodes. Float; host side only. Used to read a circuit's CURRENT
