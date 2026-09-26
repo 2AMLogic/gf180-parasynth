@@ -71,11 +71,39 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
         "tools/test_manifest.py must be enumerated in `make verify-fast`, which "
         "is the target rungs.yml's m5a-fast job runs; the broad `pytest tools/` "
         "in `make verify` is invoked by no workflow")
+    assert "tools/inject_manifest_defects.py" in recipe, (
+        "the injected-defect controls have the same problem as the suite did if "
+        "they live only in `make controls`, which no workflow invokes either")
     workflow = yaml.safe_load((ROOT / ".github/workflows/rungs.yml").read_text())
     runs = [str(step.get("run", "")) for step in workflow["jobs"]["m5a-fast"]["steps"]]
     assert any("verify-fast" in r for r in runs), (
         "rungs.yml's m5a-fast job no longer runs `make verify-fast` -- this "
         "suite's only CI path is gone")
+
+
+def test_every_permanent_injected_defect_still_has_something_to_inject_into():
+    """`tools/inject_manifest_defects.py` reintroduces each defect this module
+    shipped and checks the test that catches it goes red. Those injections are
+    exact source strings, so a refactor can silently make them un-appliable --
+    at which point the control REFUSES (exit 2) rather than reporting green, but
+    only when `make controls` is next run. This asserts it in the fast suite
+    instead, where the refactor happens."""
+    import inject_manifest_defects as inj
+
+    for label, rel, old, _new, _tests in inj.INJECTIONS:
+        assert old in (ROOT / rel).read_text(), (
+            f"injected-defect control {label!r} can no longer be applied to "
+            f"{rel} -- update tools/inject_manifest_defects.py")
+
+
+def test_the_injected_defect_control_refuses_rather_than_reporting_green(monkeypatch):
+    """The control's own only failure mode that matters: an injection that did
+    not apply must be REFUSED (exit 2), never counted as a fired control."""
+    import inject_manifest_defects as inj
+
+    monkeypatch.setattr(inj, "INJECTIONS",
+                        [("bogus", "tools/manifest.py", "NOT IN THE SOURCE", "x", [])])
+    assert inj.main([]) == 2
 
 
 def test_the_bound_ledger_defaults_to_a_tracked_path():

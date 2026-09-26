@@ -86,7 +86,8 @@ verify-fast:
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
 	  "$(PY) tools/verify_mono_case.py" \
-	  "$(PY) tools/check_workflows.py"
+	  "$(PY) tools/check_workflows.py" \
+	  "$(PY) tools/inject_manifest_defects.py"
 
 ## Adds the runs that take an hour. Still one turn.
 verify-full:
@@ -244,7 +245,8 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) model/sound_report.py --inject bd-ma-envelope" \
-	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted"
+	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted" \
+	  "$(PY) tools/inject_manifest_defects.py"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q
