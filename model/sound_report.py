@@ -577,10 +577,11 @@ LOCK_CHANGELOG = [
 
 
 def lock_history(voice: str, name: str) -> list:
-    """Every recorded change to one lock, oldest first, in the shape
-    `tools/measurement_manifest.validate_bound` requires: `at`, `from`, `to`,
-    `reason`. An empty list means the lock has no record, which that validator
-    treats as a problem rather than as a default."""
+    """Every recorded change to one lock, oldest first: `at`, `recorded_by`,
+    `issue`, `from`, `to`, `reason`. `tools/stage_case.py`'s `bound_for` folds
+    the last entry into the rationale it hands `tools/manifest.py`'s `accept()`,
+    and REFUSES a bound whose history is empty -- an empty list means the lock
+    has no record, which is a problem rather than a default."""
     out = []
     for ev in LOCK_CHANGELOG:
         if (voice, name) in ev["locks"]:
