@@ -16,8 +16,8 @@ bitstream to its source inputs, digital verification and implementation
 reports. Physical playback remains under review; this is not yet a
 qualified hardware audio result.
 
-**The published baseline predates per-oscillator drift, and only a real
-Vivado run can change that.** Contract 6.11 / DR 0019 added drift to
+**The published baseline predates per-oscillator drift and the clap's final
+strike (contract revision 13), and only a real Vivado run can change that.** Contract 6.11 / DR 0019 added drift to
 `rtl-sketch/voice_dp.v` (five datapath states, three 16-bit walk
 accumulators, three deviations, a 10-bit decimation counter and register
 `0x2D`). Every figure in the table below — LUTs, registers, DSPs, both slack
@@ -29,7 +29,7 @@ is not available in a sandbox. It needs, in order:
 
 1. `python fpga/build_arty.py` on the x86-64 Linux build box with Vivado
    2025.1 on `PATH` — a real synthesis, place, route and bitstream from the
-   drift tree, bound to `reports/arty/drift-clean/verification.json`;
+   current tree, bound to `reports/arty/l2-clean/verification.json`;
 2. `python tools/dsp_dpreg_extract.py` against the **new** `routed.dcp`, to
    re-derive the DPREG-4 DSP-feedback disposition for that image (the
    committed evidence is bound by digest to routed checkpoint
@@ -46,7 +46,7 @@ refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 - the digital verification record is **derived from the wrapper the build
   compiled** (`build.tcl` `-top` → `VERIFICATION_BY_WRAPPER`:
   `arty_a7_top` — which, since the bridge merged, IS the UART wrapper —
-  → `reports/arty/drift-clean/verification.json`; an
+  → `reports/arty/l2-clean/verification.json`; an
   unlisted wrapper has no evidence and is refused), and the proof is
   hash-validated against the wrapper's compiled source set, so **the map
   moves whenever a compiled source changes** and superseded runs stay where
@@ -426,6 +426,11 @@ demonstrated to turn the bench red. The controls are bench-logic controls
 [reports/arty/uart-controls](reports/arty/uart-controls).
 
 The clean run for the **current** tree is
+[reports/arty/l2-clean](reports/arty/l2-clean) (the clap's final strike,
+contract revision 13: four drum/top source hashes move against `drift-clean`
+and no measured field or transcript byte does, because the `phrase` scenario
+does not fire the clap — the clap's pin-level evidence is
+`docs/scorecard/clap-l2/`). Before it,
 [reports/arty/drift-clean](reports/arty/drift-clean) — 87/87 writes
 delivered, 6,734 I2S periods bit-exact, carried with its own start-red run
 against `stubs/arty_a7_uart_stub.v` (`FAIL`, 0 of 26 writes). Drift moved one
@@ -482,13 +487,13 @@ To reuse the committed digital evidence on that host, without rerunning the
 same unchanged RTL smoke:
 
 ```text
-python fpga/build_arty.py --verification fpga/reports/arty/drift-clean/verification.json
+python fpga/build_arty.py --verification fpga/reports/arty/l2-clean/verification.json
 ```
 
 (the preparer hash-checks the record against the live source set, so only a
 run of the current tree binds: the pre-uart `clean/verification.json` misses
-`rtl-sketch/uart_bridge.v`, and the pre-drift `uart-clean/verification.json`
-refuses with `verification source differs: rtl-sketch/voice_dp.v`. Ask before
+`rtl-sketch/uart_bridge.v`, and the pre-drift `uart-clean` and pre-L2
+`drift-clean` records refuse with `verification source differs: <file>`. Ask before
 the 39-minute suite does: `python3 tools/check_arty_evidence_binding.py`.)
 
 This produces a batch Tcl script, tool log, input hashes, utilization, clock,
