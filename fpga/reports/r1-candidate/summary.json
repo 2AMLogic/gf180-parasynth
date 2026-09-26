@@ -1,0 +1,474 @@
+{
+ "schema": "r1-qualification-summary/1",
+ "head": "981f936e06b0f8861620225f9fa3092065f0608d",
+ "origin_main": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
+ "evidence_heads": [
+  "ccf7ed49515bdff017479c95323be375b9d6fce3"
+ ],
+ "runs": [
+  {
+   "name": "T-DEADLINE sim",
+   "gate": "implementation",
+   "workload": "arty-uart: three audible 2x saws, glide, wheel, waveform and control writes over the UART pins; drum page at reset (strikes silent)",
+   "level": "RTL simulation, Arty wrapper at its UART pins (digital production path; no image) + deadline monitor",
+   "identity": "`ccf7ed49`; engineering stream (no kit)",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-DEADLINE/20260926T190823Z-ccf7ed4-sim-289993-3a6246/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "arty-uart: I2S 3300/3300 periods; frames 3496, missed 0, worst sample slack 13",
+   "children": {
+    "arty-uart": {
+     "verdict": "PASS",
+     "metrics": {
+      "frames": 3496,
+      "missed": 0,
+      "worst_sample_slack": 13,
+      "worst_busy_slack": 15,
+      "worst_drum_slack": 130,
+      "periods": 3300,
+      "periods_required": 3300,
+      "periods_decoded": 3498,
+      "wire_mismatch": 0,
+      "overrun": 0,
+      "busy_at_tick": 0,
+      "writes_sent": 71,
+      "writes_seen": 71,
+      "writes_bad": 0,
+      "deadline_failed": false
+     },
+     "coverage": {
+      "expected": {
+       "i2s_periods": 3300,
+       "frames": ">0"
+      },
+      "observed": {
+       "i2s_periods": 3300,
+       "frames": 3496
+      }
+     }
+    }
+   },
+   "controls": {
+    "late160": true
+   },
+   "control_reasons": {
+    "late160": [
+     "3496 missed frame(s), first [2, 3, 4, 5, 6]",
+     "datapath busy at 1749 tick(s)"
+    ]
+   }
+  },
+  {
+   "name": "T-DEADLINE stress",
+   "gate": "implementation",
+   "workload": "stress-saw: three audible 2x oscillators, glide + oscillator/filter modulation, noise, full revision-14 kit loaded and all eleven stops struck, cutoff/resonance/volume/wheel/waveform writes, drum filter toggled (a superset of the player domain)",
+   "level": "RTL simulation, synth_top at its SPI pins + deadline monitor",
+   "identity": "`ccf7ed49`; engineering stream, kit rev 14 321a93546cfa",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-DEADLINE/20260926T190940Z-ccf7ed4-stress-290384-7b85e4/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "stress-saw: I2S 2158/2158 periods; frames 2157, missed 0, worst sample slack 13",
+   "children": {
+    "stress-saw": {
+     "verdict": "PASS",
+     "metrics": {
+      "frames": 2157,
+      "missed": 0,
+      "worst_sample_slack": 13,
+      "worst_busy_slack": 15,
+      "worst_drum_slack": 130,
+      "periods": 2158,
+      "periods_required": 2158,
+      "periods_decoded": 2158,
+      "wire_mismatch": 0,
+      "overrun": 0,
+      "busy_at_tick": 0,
+      "writes_sent": 461,
+      "writes_seen": 461,
+      "writes_bad": 0,
+      "deadline_failed": false
+     },
+     "coverage": {
+      "expected": {
+       "i2s_periods": 2158,
+       "frames": ">0"
+      },
+      "observed": {
+       "i2s_periods": 2158,
+       "frames": 2157
+      }
+     }
+    }
+   },
+   "controls": {
+    "late15": true
+   },
+   "control_reasons": {
+    "late15": [
+     "32 missed frame(s), first [539, 586, 843, 861, 880]",
+     "32 frame(s) with no sample"
+    ]
+   }
+  },
+  {
+   "name": "T-LIVE-MIDI sim",
+   "gate": "playability",
+   "workload": "coverage (incl. counter wrap), pressure, sustained 20 s declared load",
+   "level": "host against the device contract on simulated time (no RTL)",
+   "identity": "`ccf7ed49`; session --image tree / frozen oracle, kit rev 14 321a93546cfa",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-LIVE-MIDI/20260926T190820Z-ccf7ed4-sim-289775-4de7a5/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "session-sim: latency n 905 p95 16.729166666666668 p99 16.979166666666668 ms",
+   "children": {
+    "session-sim": {
+     "verdict": "PASS",
+     "metrics": {
+      "latency_sustained": {
+       "n": 905,
+       "p50_ms": 16.0,
+       "p95_ms": 16.729166666666668,
+       "p99_ms": 16.979166666666668,
+       "max_ms": 17.041666666666668
+      }
+     },
+     "coverage": {
+      "expected": {
+       "scenarios": [
+        "coverage",
+        "pressure",
+        "sustained"
+       ],
+       "rtl": []
+      },
+      "observed": {
+       "scenarios": [
+        "coverage",
+        "coverage@65000",
+        "pressure",
+        "sustained"
+       ],
+       "i2s_periods": {}
+      }
+     }
+    }
+   },
+   "controls": {
+    "drop-note-off": true,
+    "wrong-drum-map": true,
+    "delayed-event": true
+   },
+   "control_reasons": {
+    "drop-note-off": [
+     "DROP_NOTE_OFF: must move ['voice_gate', 'stuck_notes']; caught (exit 0)"
+    ],
+    "wrong-drum-map": [
+     "WRONG_DRUM_MAP: must move ['drum_strikes']; caught (exit 0)"
+    ],
+    "delayed-event": [
+     "DELAYED_EVENT: must move ['timing']; caught (exit 0)"
+    ]
+   }
+  },
+  {
+   "name": "T-LIVE-MIDI rtl",
+   "gate": "playability",
+   "workload": "the session's own bytes for coverage, pressure and 3 s of the declared load, replayed through the wrapper; two I2S controls",
+   "level": "RTL simulation, Arty wrapper at its UART pins (digital production path; no image)",
+   "identity": "`ccf7ed49`; session --image tree / frozen oracle, kit rev 14 321a93546cfa",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-LIVE-MIDI/20260926T190822Z-ccf7ed4-rtl-289941-afbc07/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "session-rtl: latency n 905 p95 16.729166666666668 p99 16.979166666666668 ms",
+   "children": {
+    "session-rtl": {
+     "verdict": "PASS",
+     "metrics": {
+      "latency_sustained": {
+       "n": 905,
+       "p50_ms": 16.0,
+       "p95_ms": 16.729166666666668,
+       "p99_ms": 16.979166666666668,
+       "max_ms": 17.041666666666668
+      }
+     },
+     "coverage": {
+      "expected": {
+       "scenarios": [
+        "coverage",
+        "pressure",
+        "sustained"
+       ],
+       "rtl": [
+        "coverage",
+        "pressure",
+        "sustained"
+       ]
+      },
+      "observed": {
+       "scenarios": [
+        "coverage",
+        "coverage@65000",
+        "pressure",
+        "sustained"
+       ],
+       "i2s_periods": {
+        "coverage": 109053,
+        "pressure": 46653,
+        "sustained": 166513
+       }
+      }
+     }
+    }
+   },
+   "controls": {
+    "drop-note-off": true,
+    "wrong-drum-map": true,
+    "delayed-event": true
+   },
+   "control_reasons": {
+    "drop-note-off": [
+     "DROP_NOTE_OFF: must move ['voice_gate', 'stuck_notes']; caught (exit 0)"
+    ],
+    "wrong-drum-map": [
+     "WRONG_DRUM_MAP: must move ['drum_strikes']; caught (exit 0)"
+    ],
+    "delayed-event": [
+     "DELAYED_EVENT: must move ['timing']; caught (exit 0)"
+    ]
+   }
+  },
+  {
+   "name": "T-PLAY-DIGITAL r1",
+   "gate": "implementation",
+   "workload": "held notes (default, m5a-saw, m5a-pulse), `run --note 45 --fixture m5a`, `demo` and `bar808-full` as the CLI emits them (known-state preamble, full kit, three oscillators on the default patch, knob moves, glides on legato)",
+   "level": "RTL simulation, Arty wrapper at its UART pins (digital production path; no image)",
+   "identity": "`ccf7ed49`; tree / tree (frozen), kit rev 14 321a93546cfa",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-PLAY-DIGITAL/20260926T190822Z-ccf7ed4-r1-289853-d5609b/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "held-default: 4052 decoded samples, peak 12760 LSB (floor 1024) / held-m5a-saw: 4052 decoded samples, peak 7345 LSB (floor 1024) / held-m5a-pulse: 4052 decoded samples, peak 10376 LSB (floor 1024) / run-m5a: 8349 decoded samples, peak 12760 LSB (floor 1024) / phrase-demo: demo: writes 511/511, I2S 257427 periods, mismatch 0, off-frame 0, worst strobe 198 / phrase-bar808-full: bar808-full: writes 397/397, I2S 266937 periods, mismatch 0, off-frame 0, worst strobe 196",
+   "children": {
+    "held-default": {
+     "verdict": "PASS",
+     "metrics": {
+      "i2s_peak_lsb": 12760,
+      "min_peak_lsb": 1024,
+      "replay_status": 0,
+      "decoded_samples": 4052
+     },
+     "coverage": {
+      "expected": {
+       "decoded_i2s_samples": ">0"
+      },
+      "observed": {
+       "decoded_i2s_samples": 4052
+      }
+     }
+    },
+    "held-m5a-saw": {
+     "verdict": "PASS",
+     "metrics": {
+      "i2s_peak_lsb": 7345,
+      "min_peak_lsb": 1024,
+      "replay_status": 0,
+      "decoded_samples": 4052
+     },
+     "coverage": {
+      "expected": {
+       "decoded_i2s_samples": ">0"
+      },
+      "observed": {
+       "decoded_i2s_samples": 4052
+      }
+     }
+    },
+    "held-m5a-pulse": {
+     "verdict": "PASS",
+     "metrics": {
+      "i2s_peak_lsb": 10376,
+      "min_peak_lsb": 1024,
+      "replay_status": 0,
+      "decoded_samples": 4052
+     },
+     "coverage": {
+      "expected": {
+       "decoded_i2s_samples": ">0"
+      },
+      "observed": {
+       "decoded_i2s_samples": 4052
+      }
+     }
+    },
+    "run-m5a": {
+     "verdict": "PASS",
+     "metrics": {
+      "i2s_peak_lsb": 12760,
+      "min_peak_lsb": 1024,
+      "replay_status": 0,
+      "decoded_samples": 8349
+     },
+     "coverage": {
+      "expected": {
+       "decoded_i2s_samples": ">0"
+      },
+      "observed": {
+       "decoded_i2s_samples": 8349
+      }
+     }
+    },
+    "phrase-demo": {
+     "verdict": "PASS",
+     "metrics": {
+      "demo": {
+       "periods": 257427,
+       "writes_sent": 511,
+       "writes_seen": 511,
+       "frame_pred_bad": 0,
+       "wire_mismatch": 0,
+       "overrun": 0,
+       "worst_strobe_cycle": 198
+      }
+     },
+     "coverage": {
+      "expected": {
+       "rtl_fixtures": [
+        "demo"
+       ],
+       "i2s_periods": ">0"
+      },
+      "observed": {
+       "i2s_periods": {
+        "demo": 257427
+       },
+       "clean_host_cases": 12
+      }
+     }
+    },
+    "phrase-bar808-full": {
+     "verdict": "PASS",
+     "metrics": {
+      "bar808-full": {
+       "periods": 266937,
+       "writes_sent": 397,
+       "writes_seen": 397,
+       "frame_pred_bad": 0,
+       "wire_mismatch": 0,
+       "overrun": 0,
+       "worst_strobe_cycle": 196
+      }
+     },
+     "coverage": {
+      "expected": {
+       "rtl_fixtures": [
+        "bar808-full"
+       ],
+       "i2s_periods": ">0"
+      },
+      "observed": {
+       "i2s_periods": {
+        "bar808-full": 266937
+       },
+       "clean_host_cases": 12
+      }
+     }
+    }
+   },
+   "controls": {
+    "held-legacy-silent": true,
+    "wrong-kit-demo": true
+   },
+   "control_reasons": {
+    "held-legacy-silent": [
+     "silent: decoded I2S peak 0 LSB below the 1024 LSB floor",
+     "caught: bit-exact but silent"
+    ],
+    "wrong-kit-demo": [
+     "sender release vs target tree: caught at the init bytes"
+    ]
+   }
+  },
+  {
+   "name": "T-RELEASE-BOUND check",
+   "gate": "trust",
+   "workload": "R0's manifest and evidence binding, preserved on this branch",
+   "level": "binding check",
+   "identity": "`ccf7ed49`; R0 (release, rev 11) -- not R1 evidence",
+   "verdict": "PASS",
+   "verdict_reasons": [],
+   "receipt": "trials/T-RELEASE-BOUND/20260926T190753Z-ccf7ed4-check-289460-544875/receipt.json",
+   "receipt_valid": true,
+   "execution": "complete",
+   "coverage": "release-manifest: expected {'verdict_lines': '>=1'}, observed {'verdict_lines': 1} / arty-evidence-binding: expected {'verdict_lines': '>=1'}, observed {'verdict_lines': 1}",
+   "children": {
+    "release-manifest": {
+     "verdict": "PASS",
+     "metrics": {
+      "tokens": [
+       "BOUND"
+      ]
+     },
+     "coverage": {
+      "expected": {
+       "verdict_lines": ">=1"
+      },
+      "observed": {
+       "verdict_lines": 1
+      }
+     }
+    },
+    "arty-evidence-binding": {
+     "verdict": "PASS",
+     "metrics": {
+      "tokens": [
+       "BOUND"
+      ]
+     },
+     "coverage": {
+      "expected": {
+       "verdict_lines": ">=1"
+      },
+      "observed": {
+       "verdict_lines": 1
+      }
+     }
+    }
+   },
+   "controls": {
+    "stale-manifest": true,
+    "stale-binding": true
+   },
+   "control_reasons": {
+    "stale-manifest": [
+     "stale_control: STALE -- a manifest bound to the pre-fix CLI bytes of `run --note 45 --fixture none` (commands.held-default cmds_sha256 9e28725511d458ef0801533f2d80eb4fcb241379d64cfc9b11d729d28bdab2c1 -> c68c001bf9f44c056497e1d66758ca1fc72ff695856ef2a3951ea81e8197b54c, packets 36 -> 26) is STALE at exactly ['commands.held-default.cmds_sha256', 'commands.held-default.packets']",
+     "caught: STALE"
+    ],
+    "stale-binding": [
+     "stale_control: STALE -- a tree holding the published image's rtl-sketch/voice_dp.v (a15752570543, pre-#252) instead of the bound one (67d59af7e249) is STALE against ['fpga/reports/arty/rev14-clean/verification.json'], naming exactly rtl-sketch/voice_dp.v",
+     "caught: STALE"
+    ]
+   }
+  },
+  {
+   "name": "supported domain + session start (unit)",
+   "gate": "implementation",
+   "workload": "refusals with a reason (INC_RANGE, GLIDE_247, ROUTE_DRUMFILTER, MOD_EXCURSION, WAVES, PULSE2X, NOT_IN_IMAGE R1 wording, preset with fixture); known-state preamble; queued-event refusal; wrong-kit controls",
+   "level": "host code (no RTL)",
+   "identity": "`981f936e`; R1 host (--image tree)",
+   "verdict": "PASS",
+   "coverage": "pytest exit 0: 69 passed in 3.36s",
+   "receipt_valid": true,
+   "controls": {}
+  }
+ ]
+}

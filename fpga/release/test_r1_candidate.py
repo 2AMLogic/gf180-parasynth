@@ -172,3 +172,34 @@ def test_drift_is_refused_with_the_r1_reason():
 def test_live_midi_known_state_is_the_frozen_target():
     ws = r1c.live_midi_init()
     assert tuple(ws[:2]) == r1c.PREAMBLE and r1c.check_init(ws, kit_expected=True) == []
+
+
+# ---- the committed record binds, and its controls ----------------------------
+def test_committed_r1_record_is_bound():
+    verdict, detail = r1c.check()
+    assert verdict == "BOUND", detail
+
+
+def test_control_mutated_record_is_stale(tmp_path):
+    rec = json.loads(r1c.RECORD.read_text())
+    rec["kit"]["clap_final_strike"]["value"] = 0
+    p = tmp_path / "r1.json"
+    p.write_text(json.dumps(rec))
+    verdict, detail = r1c.check(p)
+    assert verdict == "STALE" and "kit.clap_final_strike.value" in detail
+
+
+def test_control_r0_run_identity_is_not_r1_evidence(tmp_path, monkeypatch):
+    """The published R0 demo replay ran rev-11 voice_dp.v: as R1 evidence it REFUSES."""
+    import shutil
+    shutil.copyfile(ROOT / "fpga/reports/arty/rolling-playback/demo/rtl-replay/demo.run_identity.json",
+                    tmp_path / "demo.run_identity.json")
+    monkeypatch.setattr(r1c, "EVIDENCE_DIR", tmp_path)
+    with pytest.raises(r1c.Refused, match="not R1 evidence"):
+        r1c.evidence()
+
+
+def test_r1_scorecard_view_is_current():
+    import r1_scorecard
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert r1_scorecard.main(["--check"]) == 0

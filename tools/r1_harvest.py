@@ -89,7 +89,12 @@ def coverage_text(child: dict) -> str:
                         f"{v.get('worst_strobe_cycle')}")
     if "latency_sustained" in m:
         lat = m["latency_sustained"]
-        bits.append(f"latency n {lat.get('n')} p95 {lat.get('p95_ms')} p99 {lat.get('p99_ms')} ms")
+        r2 = lambda v: round(v, 2) if isinstance(v, (int, float)) else v  # noqa: E731
+        bits.append(f"latency n {lat.get('n')} p95 {r2(lat.get('p95_ms'))} p99 "
+                    f"{r2(lat.get('p99_ms'))} ms")
+    per = obs.get("i2s_periods")
+    if isinstance(per, dict) and per and not any("writes_sent" in str(v) for v in m.values()):
+        bits.append("RTL I2S periods compared " + ", ".join(f"{k} {v}" for k, v in per.items()))
     if not bits:
         bits.append(f"expected {exp}, observed {obs}")
     return "; ".join(bits)

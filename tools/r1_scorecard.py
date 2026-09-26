@@ -102,8 +102,8 @@ def render(cand: dict, summary: dict) -> str:
              f"({cand['kit']['writes']} writes, clap ENV_FRATE[8] = "
              f"{cand['kit']['clap_final_strike']['value']}), host `{cand['host_image_selector']}`. "
              f"R0 is `{cand['r0_is']}`; nothing below is evidence about R0.\n")
-    L.append(f"Evidence produced at `{summary['head'][:12]}` (origin/main "
-             f"`{summary['origin_main'][:12]}`) on the build box.\n")
+    L.append(f"Evidence produced at `{', '.join(h[:12] for h in summary['evidence_heads'])}` (origin/main "
+             f"`{summary['origin_main'][:12]}`) on the build box; harvested at `{summary['head'][:12]}`.\n")
     L.append("| gate | question | verdict | evidence level |")
     L.append("|---|---|---|---|")
     L.append(f"| trust | are the results trustworthy? | **{verdicts['trust']}** | receipts re-checked; "
