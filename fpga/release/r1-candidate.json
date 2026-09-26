@@ -143,7 +143,7 @@
   "host": {
     "version": "no numeric protocol version exists; the host is pinned by the sha256 of its files (host.files) and the exact bytes of every supported command (commands.*.cmds_sha256)",
     "files": {
-      "fpga/uart_host.py": "d4d00ddcf802ceff0b4380be09463f89cf4e6e942f4142145ee2cc7b208e9345",
+      "fpga/uart_host.py": "e36ece62cd01eb8d1384d7428eb698bcc8b08a0247388e285687d47f65d85917",
       "fpga/midi_session.py": "e8111ec8e6a517499c6b002d40469a233b1832c7a1479fc81375869be5cfce24",
       "fpga/live_midi_contract.py": "314c45fd0de8ebb3b3169840a56f473b511867bdf1059e02cf8c38a9d8b50ccb",
       "fpga/release/qualified_domain.py": "b554ba57f0b988b98db8cd9b1dddd5607abaf7eaa2f76aebf3c17e9e2008d7fe",
@@ -279,7 +279,7 @@
   "evidence": {
     "dir": "fpga/reports/r1-candidate",
     "files": {
-      "fpga/reports/r1-candidate/receipts.tgz": "fbf481a2e74579429f7eea4815a12c29324abe7f8b32c06d18462179cbdcf0fd",
+      "fpga/reports/r1-candidate/receipts.tgz": "aa27a7d8b6bfb4dc082c531aa897d91e0595f303e5bcaa6ca7ec9b71881c24ab",
       "fpga/reports/r1-candidate/rtl-run-identities/T-LIVE-MIDI__session-rtl__rtl-replay__coverage-DELAYED_EVENT.run_identity.json": "5fe7bc50251eb008f648ce1baa7e1789307819c2c6127c86f3f53e69bf67e801",
       "fpga/reports/r1-candidate/rtl-run-identities/T-LIVE-MIDI__session-rtl__rtl-replay__coverage-WRONG_DRUM_MAP.run_identity.json": "99661fe335ee277468c613a7ca1536e0ae5704d1ae8a6cd4db5d44e69fb77a2c",
       "fpga/reports/r1-candidate/rtl-run-identities/T-LIVE-MIDI__session-rtl__rtl-replay__coverage.run_identity.json": "a806f19b1f4fed07bb450cecc0ac8041bebb8989d4e7f622df1f0fd3eba92289",
@@ -292,7 +292,7 @@
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__phrase-bar808-full__rtl-replay__bar808-full.run_identity.json": "c2c62875ded95bf1595bf2169f20d02efea322bd63ec497db9fd4acb832af158",
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__phrase-demo__rtl-replay__demo.run_identity.json": "ed04f501bc0a2ee580ce5664d73625e69dd998f548802e1189be2c4c812c8043",
       "fpga/reports/r1-candidate/rtl-run-identities/T-PLAY-DIGITAL__run-m5a__default-m5a__run_identity.json": "679d04bb5caacd06df2478427e1934d2bcfc13cb9cb20703962f16b98a7fc331",
-      "fpga/reports/r1-candidate/summary.json": "8e0861be99a17ee3ffd8b04568327a257eb6203bdf21980520e3d4a3ae2611dd"
+      "fpga/reports/r1-candidate/summary.json": "98c10998c0a1d0297dbbe054de933f60cd01c69fcf151b498a708b6a0d0bfdf7"
     },
     "rtl_runs_bound": 12
   }

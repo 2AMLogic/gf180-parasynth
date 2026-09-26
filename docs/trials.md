@@ -287,7 +287,14 @@ it is required, or older PRs cannot merge. Tracked as #287.
 `fpga/reports/r1-candidate/receipts.tgz` holds the `trial-receipt/2` receipts of
 the R1 qualification run (build box, commit `ccf7ed4`, RTL frozen at `6864435`);
 `summary.json` beside it is harvested from them by `tools/r1_harvest.py`, which
-re-checks every receipt. Naming: the historical release `baseline 2025.1, r1`
+re-checks every receipt. After #300's review the T-PLAY-DIGITAL `r1` and
+T-LIVE-MIDI `rtl` receipts were regenerated at `14e12bc` under the new
+completeness gate (required I2S periods derived from the stimulus, a
+truncation control on every replay) by **re-analysing** the same RTL runs
+(`--reuse-rtl-if-identical`: full identity match); the held notes, which are
+short, re-simulated. Every replay compared exactly its required count: demo
+257,427, bar808-full 266,937, held 3,820, run-m5a 8,109, live MIDI 109,053 /
+46,653 / 166,513; every truncation control caught. Naming: the historical release `baseline 2025.1, r1`
 is **R0**; the "R1 release receipts" section above is about R0.
 
 | trial | verdict | what it shows |

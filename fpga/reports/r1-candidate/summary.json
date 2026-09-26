@@ -1,8 +1,9 @@
 {
  "schema": "r1-qualification-summary/1",
- "head": "03a196c4abec56b52cf42c10d7799788f42838de",
- "origin_main": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
+ "head": "8f6db97bb6766d169a1c81dd51e30d37a34b2af2",
+ "origin_main": "86838760ccce3e308f48e9c61de1afa4ff8080ff",
  "evidence_heads": [
+  "14e12bc028080bfc0a75a6ef65469a456983f273",
   "ccf7ed49515bdff017479c95323be375b9d6fce3"
  ],
  "runs": [
@@ -181,13 +182,13 @@
    "gate": "playability",
    "workload": "the session's own bytes for coverage, pressure and 3 s of the declared load, replayed through the wrapper; two I2S controls",
    "level": "RTL simulation, Arty wrapper at its UART pins (digital production path; no image)",
-   "identity": "`ccf7ed49`; session --image tree / frozen oracle, kit rev 14 321a93546cfa",
+   "identity": "`14e12bc0`; session --image tree / frozen oracle, kit rev 14 321a93546cfa",
    "verdict": "PASS",
    "verdict_reasons": [],
-   "receipt": "trials/T-LIVE-MIDI/20260926T190822Z-ccf7ed4-rtl-289941-afbc07/receipt.json",
+   "receipt": "trials/T-LIVE-MIDI/20260926T224221Z-14e12bc-rtl-323087-d2efc6/receipt.json",
    "receipt_valid": true,
    "execution": "complete",
-   "coverage": "session-rtl: latency n 905 p95 16.73 p99 16.98 ms; RTL I2S periods compared coverage 109053, pressure 46653, sustained 166513",
+   "coverage": "session-rtl: latency n 905 p95 16.73 p99 16.98 ms; RTL I2S periods compared/required coverage 109053/109053, pressure 46653/46653, sustained 166513/166513",
    "children": {
     "session-rtl": {
      "verdict": "PASS",
@@ -211,7 +212,12 @@
         "coverage",
         "pressure",
         "sustained"
-       ]
+       ],
+       "i2s_periods": {
+        "coverage": 109053,
+        "pressure": 46653,
+        "sustained": 166513
+       }
       },
       "observed": {
        "scenarios": [
@@ -251,13 +257,13 @@
    "gate": "implementation",
    "workload": "held notes (default, m5a-saw, m5a-pulse), `run --note 45 --fixture m5a`, `demo` and `bar808-full` as the CLI emits them (known-state preamble, full kit, three oscillators on the default patch, knob moves, glides on legato)",
    "level": "RTL simulation, Arty wrapper at its UART pins (digital production path; no image)",
-   "identity": "`ccf7ed49`; tree / tree (frozen), kit rev 14 321a93546cfa",
+   "identity": "`14e12bc0`; tree / tree (frozen), kit rev 14 321a93546cfa",
    "verdict": "PASS",
    "verdict_reasons": [],
-   "receipt": "trials/T-PLAY-DIGITAL/20260926T190822Z-ccf7ed4-r1-289853-d5609b/receipt.json",
+   "receipt": "trials/T-PLAY-DIGITAL/20260926T224221Z-14e12bc-r1-323086-5b895b/receipt.json",
    "receipt_valid": true,
    "execution": "complete",
-   "coverage": "held-default: 4052 decoded samples, peak 12760 LSB (floor 1024) / held-m5a-saw: 4052 decoded samples, peak 7345 LSB (floor 1024) / held-m5a-pulse: 4052 decoded samples, peak 10376 LSB (floor 1024) / run-m5a: 8349 decoded samples, peak 12760 LSB (floor 1024) / phrase-demo: demo: writes 511/511, I2S 257427 periods, mismatch 0, off-frame 0, worst strobe 198 / phrase-bar808-full: bar808-full: writes 397/397, I2S 266937 periods, mismatch 0, off-frame 0, worst strobe 196",
+   "coverage": "held-default: I2S 3820/3820 periods; I2S 3820/3820 periods, peak 12760 LSB (floor 1024) / held-m5a-saw: I2S 3820/3820 periods; I2S 3820/3820 periods, peak 7345 LSB (floor 1024) / held-m5a-pulse: I2S 3820/3820 periods; I2S 3820/3820 periods, peak 10376 LSB (floor 1024) / run-m5a: I2S 8109/8109 periods; I2S 8109/8109 periods, peak 12760 LSB (floor 1024) / phrase-demo: demo: writes 511/511, I2S 257427/257427 periods, mismatch 0, off-frame 0, worst strobe 198 / phrase-bar808-full: bar808-full: writes 397/397, I2S 266937/266937 periods, mismatch 0, off-frame 0, worst strobe 196",
    "children": {
     "held-default": {
      "verdict": "PASS",
@@ -265,13 +271,16 @@
       "i2s_peak_lsb": 12760,
       "min_peak_lsb": 1024,
       "replay_status": 0,
-      "decoded_samples": 4052
+      "decoded_samples": 4052,
+      "periods": 3820,
+      "periods_required": 3820
      },
      "coverage": {
       "expected": {
-       "decoded_i2s_samples": ">0"
+       "i2s_periods": 3820
       },
       "observed": {
+       "i2s_periods": 3820,
        "decoded_i2s_samples": 4052
       }
      }
@@ -282,13 +291,16 @@
       "i2s_peak_lsb": 7345,
       "min_peak_lsb": 1024,
       "replay_status": 0,
-      "decoded_samples": 4052
+      "decoded_samples": 4052,
+      "periods": 3820,
+      "periods_required": 3820
      },
      "coverage": {
       "expected": {
-       "decoded_i2s_samples": ">0"
+       "i2s_periods": 3820
       },
       "observed": {
+       "i2s_periods": 3820,
        "decoded_i2s_samples": 4052
       }
      }
@@ -299,13 +311,16 @@
       "i2s_peak_lsb": 10376,
       "min_peak_lsb": 1024,
       "replay_status": 0,
-      "decoded_samples": 4052
+      "decoded_samples": 4052,
+      "periods": 3820,
+      "periods_required": 3820
      },
      "coverage": {
       "expected": {
-       "decoded_i2s_samples": ">0"
+       "i2s_periods": 3820
       },
       "observed": {
+       "i2s_periods": 3820,
        "decoded_i2s_samples": 4052
       }
      }
@@ -316,13 +331,16 @@
       "i2s_peak_lsb": 12760,
       "min_peak_lsb": 1024,
       "replay_status": 0,
-      "decoded_samples": 8349
+      "decoded_samples": 8349,
+      "periods": 8109,
+      "periods_required": 8109
      },
      "coverage": {
       "expected": {
-       "decoded_i2s_samples": ">0"
+       "i2s_periods": 8109
       },
       "observed": {
+       "i2s_periods": 8109,
        "decoded_i2s_samples": 8349
       }
      }
@@ -332,6 +350,7 @@
      "metrics": {
       "demo": {
        "periods": 257427,
+       "periods_required": 257427,
        "writes_sent": 511,
        "writes_seen": 511,
        "frame_pred_bad": 0,
@@ -345,7 +364,9 @@
        "rtl_fixtures": [
         "demo"
        ],
-       "i2s_periods": ">0"
+       "i2s_periods": {
+        "demo": 257427
+       }
       },
       "observed": {
        "i2s_periods": {
@@ -360,6 +381,7 @@
      "metrics": {
       "bar808-full": {
        "periods": 266937,
+       "periods_required": 266937,
        "writes_sent": 397,
        "writes_seen": 397,
        "frame_pred_bad": 0,
@@ -373,7 +395,9 @@
        "rtl_fixtures": [
         "bar808-full"
        ],
-       "i2s_periods": ">0"
+       "i2s_periods": {
+        "bar808-full": 266937
+       }
       },
       "observed": {
        "i2s_periods": {
@@ -464,10 +488,10 @@
    "gate": "implementation",
    "workload": "refusals with a reason (INC_RANGE, GLIDE_247, ROUTE_DRUMFILTER, MOD_EXCURSION, WAVES, PULSE2X, NOT_IN_IMAGE R1 wording, preset with fixture); known-state preamble; queued-event refusal; wrong-kit controls",
    "level": "host code (no RTL)",
-   "identity": "`03a196c4`; R1 host (--image tree)",
+   "identity": "`8f6db97b`; R1 host (--image tree)",
    "verdict": "PASS",
-   "coverage": "pytest exit 0: 73 passed in 4.70s",
-   "receipt_valid": true,
+   "coverage": "pytest exit 0: 71 passed, 2 deselected in 5.73s",
+   "receipt_valid": null,
    "controls": {}
   }
  ]
