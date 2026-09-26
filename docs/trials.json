@@ -69,7 +69,8 @@
        "token_prefix": ""
       }
      ],
-     "controls": []
+     "controls": [],
+     "_controls_pending": "No control yet, so this mode is NO VERDICT even when both children print BOUND (tools/trial.py composite; docs/trials.md rule 2). The control it needs is a STALE counterexample -- a manifest or binding fixture that release_manifest.py prints STALE for with exit 1 (interpret bound_text catches exactly that). release_manifest.py arrives with #255 and check_arty_evidence_binding.py takes no input path, so no such control can be written on this tree."
     }
    }
   },

@@ -30,15 +30,27 @@ verdict needs its EVIDENCE and its exit status to agree:
                 coverage, a checker REFUSED, a control that was not caught
 
 A composite (the trial) is FAIL if any required child is a conclusive FAIL,
-PASS only if every required child PASSes AND every control was caught for its
-intended reason, and otherwise NO VERDICT with coverage shown.
+PASS only if every required child PASSes AND at least one control was declared
+AND every control was caught for its intended reason, and otherwise NO VERDICT
+with coverage shown. A mode with no control cannot PASS: nothing showed the
+apparatus able to fail (docs/verification-rules.md section 2, docs/trials.md
+rule 2).
 
 RECEIPTS. `build/trials/<id>/<run>/receipt.json` is written as NO VERDICT
 (execution `in-progress`) before any child starts, and atomically replaced at
 the end. So a run that is killed, cancelled or times out can never leave a
-PASS behind. `check-receipt` recomputes the receipt's own hash, every
-artifact's sha256, and the composite verdict from the children, and refuses a
-PASS whose execution did not complete.
+PASS behind. `check-receipt` recomputes the receipt's own hash and every
+artifact's sha256, refuses files in the run directory that the receipt does not
+list, RE-DERIVES each child's verdict (and each control's `caught`) by running
+the child's recorded interpreter on its hash-verified evidence and recorded
+exit status, recomputes the composite from those, and refuses a PASS whose
+execution did not complete.
+
+What that does NOT prove: `receipt_sha256` is an unkeyed self-hash, so it
+detects accidental edits, not a forger. A forger who also edits a child's
+recorded exit status or interpreter spec, or deletes a child's entry together
+with its directory, is caught only by re-running the trial or comparing its
+children to docs/trials.json at the recorded registry hash.
 
 Exit: 0 PASS, 1 FAIL, 2 NO VERDICT (the repository's verifier convention; the
 receipt, not this number, is the record).
@@ -66,7 +78,12 @@ ROOT = provenance.ROOT
 REGISTRY = ROOT / "docs" / "trials.json"
 DAG = ROOT / "docs" / "dag.json"
 OUT_BASE = ROOT / "build" / "trials"
-RECEIPT_SCHEMA = "trial-receipt/1"
+# /2: each child records its interpreter spec and directory, so a verdict can be
+# re-derived from evidence rather than read back from the receipt. /1 receipts
+# cannot be re-derived and are refused.
+RECEIPT_SCHEMA = "trial-receipt/2"
+# The keys of a child's spec that its interpreter reads; recorded in the receipt.
+INTERPRETER_KEYS = ("interpret", "token_prefix", "fixtures")
 
 PASS, FAIL, NO_VERDICT = "PASS", "FAIL", "NO VERDICT"
 VERDICTS = (PASS, FAIL, NO_VERDICT)
@@ -220,7 +237,14 @@ def interpret_bound_text(spec, run, out, role):
               if ln.strip().startswith((prefix + word) if prefix else word)][:4]
     if run["rc"] != want_rc:
         return _result(NO_VERDICT, [f"printed {word} but exited {run['rc']} (expected {want_rc})"]
-                       + detail, **cov)
+                       + detail, **cov, caught=False if role == "control" else None)
+    if role == "control":
+        # These checkers have no --expect-fail: a counterexample is caught when
+        # it prints STALE AND exits 1, the checker's own FAIL convention.
+        caught = word == "STALE"
+        return _result(verdict, detail + ["caught: STALE" if caught else
+                                          f"NOT caught: printed {word}, not STALE"],
+                       metrics={"tokens": tokens}, caught=caught, **cov)
     return _result(verdict, detail, metrics={"tokens": tokens}, **cov)
 
 
@@ -388,6 +412,9 @@ def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str
     if open_:
         return NO_VERDICT, [f"{c['id']}: {c['verdict']} -- " + "; ".join(c["reasons"][:3])
                             for c in open_]
+    if not controls:
+        return NO_VERDICT, ["no control declared: the apparatus was not shown able to fail "
+                            "(docs/trials.md rule 2)"]
     missed = [c for c in controls if not c.get("caught")]
     if missed:
         return NO_VERDICT, [f"control {c['id']} not caught -- the apparatus was not shown able "
@@ -628,9 +655,14 @@ def run_trial(tid: str, *, mode: str | None = None, as_candidate: str | None = N
     results = run_all.run_all(cmds, timeout=timeout or m.get("timeout_s"), env=env,
                               cwd=str(root), on_spawn=cancel.spawned, jobs=jobs) if cmds else []
 
+    # Read once: the children are judged, and the execution status set, from
+    # the same value, so check_receipt can re-derive both consistently.
+    cancelled = cancel.cancelled
     for c, out, idx in plan:
         entry = {"id": c["id"], "role": c["role"], "checker": c["checker"],
-                 "property": c.get("property"), "intended_reason": c.get("intended_reason")}
+                 "property": c.get("property"), "intended_reason": c.get("intended_reason"),
+                 "dir": out.name,
+                 "interpreter": {k: c[k] for k in INTERPRETER_KEYS if k in c}}
         if idx is None:
             entry.update(command=None, execution={"state": "NOT-RUN", "rc": None, "secs": 0.0},
                          **_result(NO_VERDICT, staged[c["id"]],
@@ -641,13 +673,13 @@ def run_trial(tid: str, *, mode: str | None = None, as_candidate: str | None = N
             entry.update(command=run["cmd"], cwd=str(root),
                          execution={"state": run["state"], "rc": run["rc"],
                                     "secs": round(run["secs"], 1)},
-                         **judge_child(c, run, out, c["role"], cancelled=cancel.cancelled))
+                         **judge_child(c, run, out, c["role"], cancelled=cancelled))
         entry["artifacts"] = artifacts(run_dir, out)
         (receipt["controls"] if c["role"] == "control" else receipt["children"]).append(entry)
 
     verdict, reasons = composite(receipt["children"], receipt["controls"])
     status = "complete"
-    if cancel.cancelled:
+    if cancelled:
         verdict, reasons, status = NO_VERDICT, ["cancelled: children killed"] + reasons, "cancelled"
     elif any(r["rc"] is None and r["state"] == run_all.NO_VERDICT for r in results):
         status = "timeout"
@@ -665,10 +697,40 @@ def run_trial(tid: str, *, mode: str | None = None, as_candidate: str | None = N
 
 
 # ---- checking a receipt later -----------------------------------------------
+def _rederive(entry: dict, run_dir: pathlib.Path, cancelled: bool) -> tuple[dict | None, str | None]:
+    """Judge a recorded child again, from its recorded interpreter spec, its
+    recorded execution and its (already hash-checked) evidence on disk."""
+    role = entry.get("role")
+    spec = entry.get("interpreter")
+    if not isinstance(spec, dict) or spec.get("interpret") not in INTERPRETERS:
+        return None, "no known interpreter recorded, so its verdict cannot be re-derived"
+    ex = entry.get("execution") or {}
+    nv_caught = False if role == "control" else None
+    if ex.get("state") == "NOT-RUN":
+        return _result(NO_VERDICT, [], caught=nv_caught), None
+    rel = entry.get("dir")
+    child_dir = (run_dir / rel).resolve() if isinstance(rel, str) and rel else None
+    if child_dir is None or child_dir.parent != run_dir.resolve():
+        return None, f"child directory {rel!r} is not a directory of this run"
+    try:
+        out_text = (child_dir / "log.txt").read_text()
+    except OSError as exc:
+        return None, f"its log cannot be read: {exc}"
+    run = {"state": ex.get("state"), "rc": ex.get("rc"), "secs": ex.get("secs") or 0.0,
+           "out": out_text}
+    try:
+        return judge_child(dict(spec), run, child_dir, role, cancelled=cancelled), None
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        return None, f"its recorded execution cannot be re-judged: {exc!r}"
+
+
 def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
     """(valid, problems, receipt). Valid means: the receipt is intact, every
-    artifact it names is present with its recorded sha256, its verdict is the
-    one its children imply, and a PASS comes from a completed execution."""
+    artifact it names is present with its recorded sha256 and nothing else is
+    in the run directory, every child's verdict (and control's `caught`) is what
+    its own interpreter derives from that evidence and its recorded exit status,
+    the overall verdict is the one those children imply, and a PASS comes from
+    a completed execution. See the module docstring for what this cannot catch."""
     path = pathlib.Path(path)
     try:
         rec = json.loads(path.read_text())
@@ -683,14 +745,33 @@ def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
     if rec.get("verdict") not in VERDICTS:
         problems.append(f"verdict {rec.get('verdict')!r} is not one of {VERDICTS}")
     run_dir = path.parent
+    listed = {"receipt.json"}
     for c in rec.get("children", []) + rec.get("controls", []):
         for a in c.get("artifacts", []):
+            listed.add(a["path"])
             p = run_dir / a["path"]
             if not p.is_file():
                 problems.append(f"artifact missing: {a['path']}")
             elif sha256_file(p) != a["sha256"]:
                 problems.append(f"artifact altered: {a['path']}")
+    for p in sorted(run_dir.rglob("*")):
+        if p.is_file() and str(p.relative_to(run_dir)) not in listed:
+            problems.append(f"unlisted file in the run directory: {p.relative_to(run_dir)}")
     status = (rec.get("execution") or {}).get("status")
+    for key, want_control in (("children", False), ("controls", True)):
+        for c in rec.get(key, []):
+            if (c.get("role") == "control") != want_control:
+                problems.append(f"{c.get('id')}: role {c.get('role')!r} is listed under {key}")
+                continue
+            got, why = _rederive(c, run_dir, cancelled=status == "cancelled")
+            if got is None:
+                problems.append(f"{c.get('id')}: {why}")
+                continue
+            if got["verdict"] != c.get("verdict") or got.get("caught") != c.get("caught"):
+                problems.append(
+                    f"{c.get('id')}: the receipt says verdict {c.get('verdict')} caught "
+                    f"{c.get('caught')}, but its evidence re-derives to {got['verdict']} caught "
+                    f"{got.get('caught')}")
     if status == "complete":
         want, _ = composite(rec.get("children", []), rec.get("controls", []))
         if want != rec.get("verdict"):

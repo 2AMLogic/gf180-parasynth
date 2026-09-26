@@ -343,6 +343,7 @@ def test_traceback_exit_one_is_not_a_fail(repo):
 def test_bound_text_needs_token_and_exit_to_agree(repo, line, rc, want):
     repo.child({"rc": rc, "print": [line]}, interpret="bound_text",
                token_prefix="release_manifest: ")
+    repo.child(late_control(), role="control")
     _, rec = repo.run()
     assert rec["verdict"] == want, rec["verdict_reasons"]
 
@@ -351,6 +352,7 @@ def test_binding_checker_format_is_read(repo):
     repo.child({"rc": 0, "print": ["BOUND: arty_a7_top -> fpga/reports/arty/drift-clean/"
                                    "verification.json covers every compiled source"]},
                interpret="bound_text", token_prefix="")
+    repo.child(late_control(), role="control")
     _, rec = repo.run()
     assert rec["verdict"] == trial.PASS
 
@@ -470,6 +472,7 @@ def test_killed_run_leaves_only_an_in_progress_no_verdict(repo):
 # ---- altered evidence is rejected -------------------------------------------
 def _pass_run(repo):
     repo.child(ok_deadline())
+    repo.child(late_control(), role="control")
     run_dir, rec = repo.run()
     assert rec["verdict"] == trial.PASS
     return run_dir
@@ -507,6 +510,87 @@ def test_edited_verdict_is_rejected_even_when_resealed(repo):
     assert not ok and any("not what its children imply" in p for p in problems)
 
 
+def _forge(path, rec):
+    path.write_text(json.dumps(trial.seal(rec)))          # a forger who re-hashes
+    return trial.check_receipt(path)
+
+
+def test_forged_child_verdict_is_rejected_even_when_resealed(repo):
+    """The Judge's reproduction on 4eb4e72: the candidate wrote REAL_LATE and
+    exited 1 (a real FAIL); the child's verdict AND the composite are flipped
+    to PASS and re-sealed, artifacts untouched. Before the fix: VALID."""
+    repo.child({"rc": 1, "files": {"record.json": copy.deepcopy(REAL_LATE)}})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.FAIL and rec["controls"][0]["caught"] is True
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    for c in forged["children"]:
+        c["verdict"] = trial.PASS
+    forged["verdict"] = trial.PASS
+    assert trial.composite(forged["children"], forged["controls"])[0] == trial.PASS, \
+        "the forgery is self-consistent: only re-derivation can see it"
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+    assert any("c1: the receipt says verdict PASS" in p and "re-derives to FAIL" in p
+               for p in problems), problems
+
+
+def test_forged_control_catch_is_rejected_even_when_resealed(repo):
+    """A control that was NOT caught (wrong reason) is marked caught and the
+    composite flipped from NO VERDICT to PASS."""
+    wrong = copy.deepcopy(REAL_LATE)
+    wrong["deadline_failed"] = False
+    repo.child(ok_deadline())
+    repo.child({"rc": 1, "files": {"record.json": wrong}}, role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.NO_VERDICT
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    forged["controls"][0]["caught"] = True
+    forged["verdict"] = trial.PASS
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("caught True" in p and "caught False" in p for p in problems), problems
+
+
+def test_forged_record_added_where_none_was_written_is_rejected(repo):
+    """A child that wrote no record (NO VERDICT) gets one planted afterwards:
+    the planted file is not among the receipt's artifacts."""
+    repo.child({"rc": 0, "print": ["verify_deadline: PASS"]})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.NO_VERDICT
+    (run_dir / "c1" / "record.json").write_text(json.dumps(deadline()))
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    forged["children"][0]["verdict"] = trial.PASS
+    forged["verdict"] = trial.PASS
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("unlisted file in the run directory: c1/record.json" in p
+                          for p in problems), problems
+
+
+def test_failing_child_moved_into_controls_is_rejected(repo):
+    repo.child({"rc": 1, "files": {"record.json": copy.deepcopy(REAL_LATE)}})
+    repo.child(late_control(), role="control")
+    run_dir, _ = repo.run()
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    forged["controls"].append(forged["children"].pop(0))
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("is listed under controls" in p for p in problems), problems
+
+
+def test_receipt_without_a_recorded_interpreter_is_rejected(repo):
+    """A trial-receipt/1 receipt (no interpreter spec) cannot be re-derived."""
+    run_dir = _pass_run(repo)
+    path = run_dir / "receipt.json"
+    old = json.loads(path.read_text())
+    del old["children"][0]["interpreter"]
+    ok, problems, _ = _forge(path, old)
+    assert not ok and any("cannot be re-derived" in p for p in problems), problems
+
+
 def test_pass_from_an_incomplete_execution_is_rejected(repo):
     run_dir = _pass_run(repo)
     path = run_dir / "receipt.json"
@@ -541,6 +625,7 @@ def test_retained_evidence_altered_is_refused_before_the_checker_runs(repo):
     st = {"gunzip": "traces", "hashes": "hashes.json", "hash_key": ["reanalysis", "capture_sha256"],
           "into": "capture"}
     repo.child(ok_deadline(), stage=st)
+    repo.child(late_control(), role="control")
     _, rec = repo.run()
     assert rec["verdict"] == trial.PASS
     (traces / "uart_i2s.txt.gz").write_bytes(gzip.compress(b"0 1 1\n"))   # truncated
@@ -549,6 +634,54 @@ def test_retained_evidence_altered_is_refused_before_the_checker_runs(repo):
     c = rec["children"][0]
     assert c["execution"]["state"] == "NOT-RUN"
     assert "retained evidence altered: uart_i2s.txt" in c["reasons"][0]
+
+
+# ---- a mode with no control cannot PASS -------------------------------------
+def test_no_control_declared_is_no_verdict_not_pass(repo):
+    """[naive-red] 4eb4e72 PASSed a mode with `"controls": []` (T-RELEASE-BOUND):
+    nothing showed the apparatus able to fail (verification-rules 2)."""
+    repo.child(ok_deadline())
+    run_dir, rec = repo.run()
+    assert rec["children"][0]["verdict"] == trial.PASS
+    assert rec["verdict"] == trial.NO_VERDICT
+    assert "no control declared" in rec["verdict_reasons"][0]
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems                              # a valid receipt -- of NO VERDICT
+
+
+def test_no_control_declared_still_reports_a_conclusive_fail(repo):
+    repo.child({"rc": 1, "files": {"record.json": copy.deepcopy(REAL_LATE)}})
+    _, rec = repo.run()
+    assert rec["verdict"] == trial.FAIL
+
+
+def test_committed_release_bound_is_no_verdict_until_it_has_a_control():
+    """T-RELEASE-BOUND declares no control (none can exist until #255 lands
+    release_manifest.py), so even with every required child BOUND it is NO VERDICT."""
+    mode = trial.load_registry()["trials"]["T-RELEASE-BOUND"]["modes"]["check"]
+    assert mode["controls"] == []
+    passing = [{"id": c["id"], "verdict": trial.PASS, "reasons": []} for c in mode["required"]]
+    assert trial.composite(passing, [])[0] == trial.NO_VERDICT
+
+
+@pytest.mark.parametrize("line,rc,caught", [
+    ("release_manifest: STALE -- differs", 1, True),
+    ("release_manifest: BOUND -- equals", 0, False),       # the counterexample was not seen
+    ("release_manifest: STALE -- differs", 0, False),      # printed and exit disagree
+    ("release_manifest: REFUSED -- missing input", 2, False),
+    ("Traceback (most recent call last):", 1, False),     # a crash is not a catch
+])
+def test_bound_text_control_is_caught_only_by_stale_with_exit_one(repo, line, rc, caught):
+    """The control T-RELEASE-BOUND needs once #255 lands: a STALE fixture."""
+    repo.child({"rc": 0, "print": ["release_manifest: BOUND -- equals"]}, interpret="bound_text",
+               token_prefix="release_manifest: ")
+    repo.child({"rc": rc, "print": [line]}, interpret="bound_text",
+               token_prefix="release_manifest: ", role="control")
+    run_dir, rec = repo.run()
+    assert rec["controls"][0]["caught"] is caught
+    assert rec["verdict"] == (trial.PASS if caught else trial.NO_VERDICT)
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
 
 
 # ---- cross-environment comparison -------------------------------------------
@@ -619,6 +752,7 @@ def test_the_naive_exit_code_rule_would_certify_each_of_these(repo, monkeypatch,
     """Each case is a false PASS under the naive rule and not a PASS here, so the
     suite above discriminates rather than agreeing with whatever it wraps."""
     repo.child(behaviour, interpret=interpret, token_prefix="release_manifest: ")
+    repo.child(late_control(), role="control")
     _, real = repo.run()
     assert real["verdict"] != trial.PASS
     monkeypatch.setattr(trial, "judge_child", _naive_judge)

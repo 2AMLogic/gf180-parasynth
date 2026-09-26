@@ -13,7 +13,9 @@
 # NOT gated: T-RELEASE-BOUND. Its manifest (fpga/release/baseline-2025.1.json)
 # is in open PR #255, so on main it is an honest NO VERDICT (missing asset),
 # and a gate that cannot pass trains everyone to ignore gates. It runs and its
-# receipt is checked for integrity; gate it when #255 lands.
+# receipt is checked for integrity. It also declares no control yet, and a
+# mode with no control is NO VERDICT, never PASS. Gate it only after #255 lands
+# and a STALE-manifest control is added (docs/trials.json).
 name: trials
 
 on: [push, pull_request, workflow_dispatch]

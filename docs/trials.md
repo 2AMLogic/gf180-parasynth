@@ -194,8 +194,13 @@ environments reached the same numbers from the same inputs.
 ### Pilot receipts, 2026-09-26 (a snapshot, not maintained state)
 
 `docs/trials/pilot-2026-09-26.tgz` holds every receipt bundle the pilot
-produced on the build box (`tar xzf` it, then `python3 tools/trial.py
-check-all pilot`: 12/12 valid). `main-c50abf9/` is this branch's own tree;
+produced on the build box. At the time, `python3 tools/trial.py check-all
+pilot` reported 12/12 valid. They are `trial-receipt/1` receipts, and the
+current checker **rejects** them. A /1 receipt does not record each child's
+interpreter, so a child's verdict cannot be re-derived from its evidence. That
+was the defect: a re-sealed receipt with a FAIL child flipped to PASS was
+reported valid (review of 4eb4e72). The table below is what the pilot printed.
+It is kept as a record, not as receipts the current checker accepts. `main-c50abf9/` is this branch's own tree;
 `cand255-5a8f87d/` is this branch merged locally with open PR #255's head
 `b2ccc12` (never pushed), to show what the two #255-dependent trials return
 once its manifest and held-note checker land. CI's receipts for the same
@@ -206,7 +211,7 @@ T-DEADLINE modes.
 | trial | tree | verdict | what it shows |
 |---|---|---|---|
 | T-RELEASE-BOUND | main | NO VERDICT (preflight) | manifest and `release_manifest.py` absent until #255 |
-| T-RELEASE-BOUND | +#255 | PASS | manifest BOUND; Arty evidence binding BOUND |
+| T-RELEASE-BOUND | +#255 | ~~PASS~~ NO VERDICT | manifest BOUND; Arty evidence binding BOUND. It was reported PASS with **no control declared**, a vacuous pass. The composite now refuses that. It stays NO VERDICT until a STALE counterexample control exists (after #255) |
 | T-DEADLINE reanalyse | main | PASS | retained traces: slack 14, 3300/3300 I2S periods; late160 control caught |
 | T-DEADLINE sim | main | PASS | this tree's RTL: slack 13 (one cycle less than the published image's 14), 3300/3300 periods; control caught |
 | T-DEADLINE sim, candidate late160 | main | FAIL | 3496 missed frames, overrun: the deadline reason |
