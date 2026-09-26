@@ -368,7 +368,79 @@ def interpret_held_note_record(spec, run, out, role):
     return _result(verdict, reasons, metrics=metrics, **cov)
 
 
+def interpret_live_midi_record(spec, run, out, role):
+    """fpga/verify_live_midi.py writes <outdir>/verification.json. As a required
+    child: every clean scenario compared something and passed, every control in
+    the record was caught, and each RTL scenario named in `fixtures` compared
+    I2S periods. As a control (`--control X --expect-fail`): caught means the
+    injected run FAILED with its own named property MOVED, and exit 0."""
+    rec, err = _load_json(out / "verification.json")
+    nv_caught = False if role == "control" else None
+    if rec is None:
+        return _result(NO_VERDICT, [err], caught=nv_caught)
+    if role == "control":
+        c = rec.get("control") or {}
+        caught = bool(c.get("caught")) and run["rc"] == 0
+        matrix = c.get("matrix") or {}
+        return _result(FAIL if c.get("verdict") == "FAIL" else NO_VERDICT,
+                       [f"{c.get('control')}: must move {c.get('must_move')}; "
+                        f"{'caught' if caught else 'NOT caught'} (exit {run['rc']})"],
+                       metrics={"matrix": matrix}, caught=caught)
+    verdict = rec.get("verdict")
+    if run["rc"] != {"PASS": 0, "FAIL": 1}.get(verdict, 2):
+        return _result(NO_VERDICT, [f"exit status {run['rc']} disagrees with the record's "
+                                    f"verdict {verdict!r}"])
+    fails, gaps = [], []
+    clean = rec.get("clean") or {}
+    for name in ("coverage", "pressure", "sustained"):
+        r = clean.get(name)
+        if r is None:
+            gaps.append(f"scenario {name} did not run")
+            continue
+        if not (r.get("expected") or {}).get("timed"):
+            gaps.append(f"scenario {name} compared no scheduled writes")
+        if r.get("verdict") == "FAIL":
+            fails.append(f"{name}: {r.get('reasons')}")
+        elif r.get("verdict") != "PASS":
+            gaps.append(f"{name}: {r.get('verdict')} {r.get('preconditions')}")
+    lat = ((clean.get("sustained") or {}).get("latency") or {})
+    if not lat.get("n"):
+        gaps.append("no latency measured under the declared load")
+    missed = [f"control {n} not caught" for n, c in (rec.get("controls") or {}).items()
+              if not c.get("caught")]
+    if not rec.get("controls"):
+        missed.append("the record holds no controls")
+    metrics = {"latency_sustained": {k: lat.get(k) for k in ("n", "p50_ms", "p95_ms",
+                                                            "p99_ms", "max_ms")}}
+    periods = {}
+    for sc in spec.get("fixtures", []):
+        rr = (rec.get("rtl") or {}).get(sc)
+        if rr is None:
+            gaps.append(f"no RTL replay recorded for {sc}")
+            continue
+        comp = rr.get("comparison") or {}
+        periods[sc] = comp.get("periods")
+        if not comp.get("periods"):
+            gaps.append(f"RTL replay {sc} compared {comp.get('periods')!r} I2S periods")
+        elif rr.get("state") == "FAIL":
+            fails.append(f"RTL replay {sc}: {rr.get('detail')}")
+        elif rr.get("state") != "PASS":
+            gaps.append(f"RTL replay {sc}: {rr.get('state')} {rr.get('reason')}")
+    for name, rr in (rec.get("rtl") or {}).items():
+        if name.startswith("control-") and not rr.get("caught_by_i2s"):
+            missed.append(f"RTL {name} not caught by the I2S comparison")
+    cov = dict(expected={"scenarios": ["coverage", "pressure", "sustained"],
+                         "rtl": spec.get("fixtures", [])},
+               observed={"scenarios": sorted(clean), "i2s_periods": periods})
+    if fails and not gaps:
+        return _result(FAIL, fails + missed, metrics=metrics, **cov)
+    if gaps or missed or verdict != "PASS":
+        return _result(NO_VERDICT, gaps + missed + fails, metrics=metrics, **cov)
+    return _result(PASS, [], metrics=metrics, **cov)
+
+
 INTERPRETERS = {
+    "live_midi_record": interpret_live_midi_record,
     "deadline_record": interpret_deadline_record,
     "bound_text": interpret_bound_text,
     "rolling_record": interpret_rolling_record,

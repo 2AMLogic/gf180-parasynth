@@ -55,7 +55,8 @@ verify:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
-	  "$(PY) tools/check_doc_claims.py"
+	  "$(PY) tools/check_doc_claims.py" \
+	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -83,7 +84,8 @@ verify:
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py -q" \
+	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
 	  "$(PY) tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json" \
@@ -105,7 +107,8 @@ verify-full:
 	  "$(PY) rtl-sketch/verify_voice.py --set full" \
 	  "$(PY) rtl-sketch/verify_drums.py" \
 	  "$(PY) tools/verify_m5a_filter2x_i2s.py" \
-	  "$(PY) rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control"
+	  "$(PY) rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control" \
+	  "$(PY) fpga/verify_live_midi.py --rtl coverage pressure sustained --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT --outdir build/live-midi-full"
 
 ## Every injected control that must turn something red, together.
 ## A run where these do not fire is a broken run, not a quiet one.

@@ -713,7 +713,9 @@ def test_registry_refuses_copied_commands_and_unknown_dag_nodes(repo):
 
 def test_the_committed_registry_loads_and_names_the_three_pilot_trials():
     reg = trial.load_registry()
-    assert set(reg["trials"]) == {"T-RELEASE-BOUND", "T-DEADLINE", "T-PLAY-DIGITAL"}
+    # the three pilot trials, and T-LIVE-MIDI (#281) registered after them
+    assert set(reg["trials"]) == {"T-RELEASE-BOUND", "T-DEADLINE", "T-PLAY-DIGITAL",
+                                  "T-LIVE-MIDI"}
     for tid, t in reg["trials"].items():
         for mode in t["modes"].values():
             for c in mode["required"] + mode.get("controls", []):
@@ -758,3 +760,44 @@ def test_the_naive_exit_code_rule_would_certify_each_of_these(repo, monkeypatch,
     monkeypatch.setattr(trial, "judge_child", _naive_judge)
     _, naive = repo.run()
     assert naive["verdict"] == trial.PASS
+
+
+# ---- T-LIVE-MIDI's interpreter (fpga/verify_live_midi.py's record) -----------
+def _lm_record(tmp_path, **over):
+    lat = {"n": 905, "p50_ms": 16.0, "p95_ms": 16.7, "p99_ms": 17.0, "max_ms": 17.0}
+    rec = {"verdict": "PASS",
+           "clean": {n: {"verdict": "PASS", "expected": {"timed": 10},
+                         **({"latency": lat} if n == "sustained" else {})}
+                     for n in ("coverage", "pressure", "sustained")},
+           "controls": {"DROP_NOTE_OFF": {"caught": True}}}
+    rec.update(over)
+    (tmp_path / "verification.json").write_text(json.dumps(rec))
+    return tmp_path
+
+
+def test_live_midi_pass_needs_every_scenario_and_a_caught_control(tmp_path):
+    spec = {"interpret": "live_midi_record"}
+    run = {"rc": 0}
+    assert trial.interpret_live_midi_record(spec, run, _lm_record(tmp_path), "required")[
+        "verdict"] == trial.PASS
+    missed = _lm_record(tmp_path, controls={"DROP_NOTE_OFF": {"caught": False}})
+    assert trial.interpret_live_midi_record(spec, run, missed, "required")[
+        "verdict"] == trial.NO_VERDICT
+    empty = _lm_record(tmp_path, clean={"coverage": {"verdict": "PASS", "expected": {"timed": 0}}})
+    assert trial.interpret_live_midi_record(spec, run, empty, "required")[
+        "verdict"] == trial.NO_VERDICT
+
+
+def test_live_midi_rtl_with_zero_periods_is_no_verdict(tmp_path):
+    spec = {"interpret": "live_midi_record", "fixtures": ["coverage"]}
+    d = _lm_record(tmp_path, rtl={"coverage": {"state": "PASS", "comparison": {"periods": 0}}})
+    assert trial.interpret_live_midi_record(spec, {"rc": 0}, d, "required")[
+        "verdict"] == trial.NO_VERDICT
+
+
+def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
+    spec = {"interpret": "live_midi_record"}
+    rec = {"verdict": "FAIL", "control": {"control": "X", "caught": True, "verdict": "FAIL"}}
+    (tmp_path / "verification.json").write_text(json.dumps(rec))
+    assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
+    assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]

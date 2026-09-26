@@ -717,6 +717,12 @@ class Bridge:
         while True:
             pkts, consumed = scan_packets(self.buf)
             self.buf = self.buf[consumed:]
+            # every consumed packet is a delivery and is counted BEFORE the
+            # first match returns: returning mid-scan dropped the rest of the
+            # chunk from the counts, so a burst whose ACKs arrived four to a
+            # read counted one in four (#281: 48 of 190 on a real-time pty;
+            # SimSerial delivers one ACK per read and could not show it)
+            match = None
             for p in pkts:
                 if p.kind == "ack":
                     self.acks_seen += 1
@@ -724,8 +730,10 @@ class Bridge:
                     self.boots_seen += 1
                 elif p.kind == "err":
                     self.device_errors.append((p.code, p.info))
-                if p.kind in kinds:
-                    return p
+                if match is None and p.kind in kinds:
+                    match = p
+            if match is not None:
+                return match
             now = self.clock.monotonic()
             if now >= deadline:
                 return None

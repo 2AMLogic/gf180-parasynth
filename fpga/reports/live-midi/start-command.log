@@ -1,0 +1,18 @@
+midi_session: scripted keyboard `scripted:coverage` (190 messages) through a pipe
+midi_session: known state sent (190 writes, acknowledged); device frame 16642 at host 27238.585304 s
+midi_session: playing -- voice on MIDI channel 1, drums on 10, lookahead 16 ms; Ctrl-C ends with a panic
+midi_session: REFUSED simultaneous: CH within 1 ms of OH: one instrument, one strike (further simultaneous refusals are counted, not printed)
+midi_session: REFUSED sustain: sustain (CC64) is not supported: a held pedal would silently hold nothing (further sustain refusals are counted, not printed)
+midi_session: REFUSED pitch-bend: pitch bend is not supported (further pitch-bend refusals are counted, not printed)
+midi_session: REFUSED program-change: program change is not supported (further program-change refusals are counted, not printed)
+midi_session: REFUSED mod-unrouted: the loaded patch routes no modulation (MROUTE osc/filter off): the wheel would do nothing (further mod-unrouted refusals are counted, not printed)
+midi_session: REFUSED channel: MIDI channel 3: the voice is on 1 and the drums on 10 (further channel refusals are counted, not printed)
+midi_session: REFUSED unmapped-drum: GM note 37 has no 808 voice in the loaded kit (further unmapped-drum refusals are counted, not printed)
+midi_session: REFUSED domain: [INC_RANGE] MIDI note 127 at osc 1 transposition +0.07 semitones: osc 1 increment 4402158 (12594.68 Hz) is outside the qualified [2858, 4384395] (8.18..12543.85 Hz, MIDI 0..127 after transposition); this patch plays MIDI 12..126 (further domain refusals are counted, not printed)
+midi_session: REFUSED cc-unsupported: CC121 is not mapped (further cc-unsupported refusals are counted, not printed)
+midi_session: REFUSED aftertouch: channel aftertouch is not supported (further aftertouch refusals are counted, not printed)
+midi_session: REFUSED sysex: system exclusive is not supported (further sysex refusals are counted, not printed)
+midi_session: REFUSED realtime: real-time 0xf8 (clock/transport/reset are not supported; the session has no sequencer) (further realtime refusals are counted, not printed)
+midi_session: REFUSED poly-aftertouch: polyphonic aftertouch is not supported (further poly-aftertouch refusals are counted, not printed)
+midi_session: closed (end of input): 203 event packets, 14 refused {'simultaneous': 1, 'sustain': 1, 'pitch-bend': 1, 'program-change': 1, 'mod-unrouted': 1, 'channel': 1, 'unmapped-drum': 1, 'domain': 2, 'cc-unsupported': 1, 'aftertouch': 1, 'sysex': 1, 'realtime': 1, 'poly-aftertouch': 1}, 114 knob values superseded; device queue 0, drops 0, errors 0
+midi_session: simulated device executed 203 scheduled writes, 190 live; errors [], drops 0, queue peak 17
