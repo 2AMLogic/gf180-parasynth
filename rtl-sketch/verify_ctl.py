@@ -225,7 +225,20 @@ def compare_writes(writes: list, rtl_out: str) -> int:
     defects with different fixes.
 
     Records every property's numerator AND the population it was counted over
-    in `LAST`, for `print_blindness` -- see `PROPERTIES`."""
+    in `LAST`, for `print_blindness` -- see `PROPERTIES`.
+
+    Clears `LAST` first, unconditionally. Every `return` below happens before
+    the `LAST.update(...)` line, so a call that returns 2 leaves nothing
+    behind -- without the clear, a SECOND call in the same process that
+    returns 2 (no RTL output this time) would leave the FIRST call's counters
+    in place, and `print_blindness` would then print a full, confident matrix
+    for a run that delivered nothing. `main()` only calls this once per
+    process today, but the precondition `print_blindness` documents -- empty
+    `LAST` means nothing was recorded -- has to be true unconditionally, not
+    just true for a single call, or the missing-keys refusal below cannot see
+    the difference: the keys are all present, they just describe a run that
+    already ended."""
+    LAST.clear()
     try:
         rows = [l.split() for l in open(rtl_out).read().splitlines() if l.strip()]
     except OSError:
@@ -285,7 +298,7 @@ def compare_writes(writes: list, rtl_out: str) -> int:
     return 1
 
 
-def print_blindness(tag: str) -> None:
+def print_blindness(tag: str, simulated: bool = True) -> None:
     """Which of `PROPERTIES` this control moved and which it did not -- the
     same MOVED/BLIND distinction `model/sound_report.py --inject` makes for
     the sound model, extended here to a second, differently-shaped suite
@@ -296,20 +309,42 @@ def print_blindness(tag: str) -> None:
     two of them out is what made SPI_ANYLEN and SPI_DRAIN_LATE -- each caught
     by one of the omitted rows -- print as "no property moved".
 
-    Three outcomes are distinct, and none may be dressed as another:
+    `simulated` distinguishes an apparatus failure from a DUT failure: pass
+    False when `simulate()` itself returned `None` (iverilog/vvp missing,
+    compile failure, vvp failure, or a timeout), so `compare_writes` was
+    never even called. Without that flag this function had exactly one way
+    to render "no data", worded as a claim about the LINK ("the link
+    delivered no writes at all") -- which is wrong when the link was never
+    exercised in the first place: the correct-instrument-in-a-wrong-state
+    shape from CLAUDE.md, reported as a property of the design instead of the
+    apparatus.
 
-      MOVED/BLIND  measured: the property had a population, and did or did not
-                   see the defect.
-      REFUSED      a property whose population is zero was never measured at
-                   all. "0 of 0" would render as BLIND, i.e. as evidence that
-                   the property cannot see this defect, which is a claim no
-                   data was taken for.
-      no matrix    `LAST` is empty (`compare_writes` returned 2 before
-                   recording anything -- no RTL output, or an empty one), or
-                   predates this row set. NOTE that a mere write-count
-                   MISMATCH does not land here: that run still populates
-                   `LAST` and is reported by the `count` row.
+    Four outcomes are distinct, and none may be dressed as another:
+
+      MOVED/BLIND    measured: the property had a population, and did or did
+                     not see the defect.
+      REFUSED (row)  a property whose population is zero was never measured
+                     at all. "0 of 0" would render as BLIND, i.e. as evidence
+                     that the property cannot see this defect, which is a
+                     claim no data was taken for.
+      REFUSED (sim)  `simulated` is False: the simulator did not produce a
+                     run at all, so nothing about the LINK was exercised.
+                     This is not the same claim as the next line, even though
+                     both look like "no matrix": one says the comparison ran
+                     and saw nothing arrive, the other says the comparison
+                     never started.
+      no matrix      `simulated` is True but `LAST` is empty (`compare_writes`
+                     returned 2 before recording anything -- no RTL output,
+                     or an empty one), or `LAST` predates this row set. NOTE
+                     that a mere write-count MISMATCH does not land here:
+                     that run still populates `LAST` and is reported by the
+                     `count` row.
     """
+    if not simulated:
+        print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- "
+              "REFUSED: the simulator did not run, so the comparison was never attempted "
+              "and this says nothing about the link")
+        return
     if not LAST:
         print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- "
               "the comparison recorded nothing: the link delivered no writes at all")
@@ -366,7 +401,7 @@ def main(argv=None) -> int:
     out = simulate(a.link, defines, a.outdir, bits)
     status = 2 if out is None else compare_writes(writes, out)
     if a.inject or a.link != "rev2":
-        print_blindness(a.inject or a.link)
+        print_blindness(a.inject or a.link, simulated=out is not None)
     if a.expect_fail:
         tag = a.inject or a.link
         if status == 1:
