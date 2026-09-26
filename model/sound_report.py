@@ -417,7 +417,55 @@ INJECTIONS = {
 #                Outside it means the model CHANGED, which may be intended --
 #                the commit that changes it re-locks it and says why.
 # ===========================================================================
-LOCK = "ce400a6"          # the commit the locks below were measured at
+# The commit the locks below were measured at. This read `ce400a6` until issue
+# #242 and that object does not exist in this repository -- it was a pre-squash
+# commit on #51's branch, so every "locked at ce400a6" line in the report below
+# pointed at nothing and the bisect its own "suggested next step" recommended
+# could not be started. `28dfd55` is the squash-merge of #51 that actually
+# introduced this table, and re-measuring that tree reproduces every value in
+# `LOCKS` as it was first written (model/drift_probe.py, issue #242).
+LOCK = "28dfd55"
+
+
+# Re-lock provenance: which commit moved a lock, and why the new value is the
+# right one. A lock that drifts is the report doing its job; a lock that drifts
+# and is then silently re-locked destroys the only record of what changed the
+# sound. #242 had to re-measure 17 historical trees, across a 44-commit range,
+# to recover two such records, because the `LOCK` above named a commit that did
+# not exist -- so a re-lock now writes the answer down here, next to the
+# number, and the report prints it on the row.
+#
+#   (voice, property) -> (commit that moved it, the value before it, why)
+RELOCKS = {
+    ("LADDER", "corner ratio drift"): (
+        "50d7aaf", 9.40462,
+        "DR 0011 baked CUT_TRIM * Huovilainen's fcr() into voice_fx.make_g_rom(), "
+        "so the shipped cutoff ROM is the TUNED one. The cutoff scaling got more "
+        "uniform, 9.40 % -> 4.21 %. This property IS the defect contract 17.12 "
+        "records and DR 0011 is its identified fix, so the lock falling is the fix "
+        "landing, not a regression: the sibling 'self-oscillation tuning spread' "
+        "target fell 7.92 -> 0.51 pp in the same commit"),
+    ("LT", "attack"): (
+        "80b3756", 16.625,
+        "the toms' pitch drop was corrected from the inferred x1.7 to the x1.06 "
+        "measured over 99 clean-digital TR-808 files (docs/tom-pitch-drop-"
+        "correction.md). The x1.7 sweep detuned the resonator while the exciter "
+        "pulse was still in it -- 'costing the toms 38-44 % of their ring' -- which "
+        "delayed the envelope peak that drum_verify.attack_ms measures from onset. "
+        "16.625 ms was 1.50 periods of LT's own 90 Hz, an outlier against every "
+        "other voice; 6.27083 ms is 0.57, in family with BD 0.72 and HT 0.89"),
+}
+
+
+def _apply_relocks(props):
+    """Put each re-locked property's provenance in its own `source` line, which
+    is what `Result.sentence()` prints when that property next goes OUT."""
+    for p in props:
+        rl = RELOCKS.get((p.voice, p.name))
+        if rl:
+            commit, was, why = rl
+            p.source += f"; RE-LOCKED at {commit} (was {was:g}) -- {why}"
+    return props
 
 
 def build_properties():
@@ -479,16 +527,24 @@ def build_properties():
                   "still show a 6.5 kHz magnitude centroid') -- ground truth in "
                   "test_audio_measure.test_amplitude_weighted_centroid_reads_a_quiet_wideband_floor_as_bright",
                   m_sd_brightness))
-    return P
+    return _apply_relocks(P)
 
 
 # Locked values, measured on LOCK. `--relock` prints a fresh block to paste
 # here. A commit that intends to move one of these re-locks it and says why in
 # its message; a commit that moves one without meaning to is what this table
 # is for.
+#
+# Do NOT paste `--relock`'s whole block. It reprints every lock at today's
+# measurement, including ones that have drifted a little and are still INSIDE
+# their tolerance -- pasting those baked-in silently re-baselines drift the
+# table is supposed to keep accumulating until it is worth an argument. Two
+# entries below were re-locked in #242 and they are the only two that moved;
+# the rest are untouched at their 28dfd55 values on purpose.
 LOCKS = {
     ("LADDER", "corner at 800 Hz / commanded"): 0.786039,
-    ("LADDER", "corner ratio drift"): 9.40462,
+    # re-locked from 9.40462 in #242; see RELOCKS above (50d7aaf, DR 0011)
+    ("LADDER", "corner ratio drift"): 4.21473,
     ("LADDER", "h3 at self-oscillation (res 1.3)"): -45.3762,
     ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): -13.7836,
     ("BD", "T20"): 307.979,
@@ -496,7 +552,8 @@ LOCKS = {
     ("SD", "T20"): 56.3958,
     ("SD", "attack"): 4.27083,
     ("LT", "T20"): 198.229,
-    ("LT", "attack"): 16.625,
+    # re-locked from 16.625 in #242; see RELOCKS above (80b3756, the tom drop)
+    ("LT", "attack"): 6.27083,
     ("HT", "T20"): 89.3125,
     ("HT", "attack"): 4.20833,
     ("CH", "T20"): 42.5417,
