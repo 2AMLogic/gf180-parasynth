@@ -97,6 +97,18 @@ LIMITS = {
 WIN = 2048            # local lag / gain window, samples
 BLOCK = 240           # 5 ms, dropout / stuck blocks
 COARSE_S = 0.5        # the coarse-search template, from the calibration window start
+CLUSTER_S = 0.25      # coarse candidates closer than this are one placement
+# THE DECLARED ANALYSIS BAND. Capture and prediction pass through the SAME
+# zero-phase filter before every waveform comparison (delay, lags, gains,
+# residual, repeat, dropout, stuck). It is declared, identical for every take
+# and never fitted: it removes what the analog path is allowed to do outside
+# the audio band (AC coupling below ~20 Hz, the DAC/ADC anti-image filters
+# near Nyquist) and nothing inside it. The first clean synthetic run, with a
+# 5 Hz AC-coupling high-pass, FAILED timing by 1.0 sample and residual by
+# 0.5 dB without it: a first-order high-pass moves a 50 Hz kick's local lag.
+BAND_HZ = (100.0, 16000.0)
+PEAK_TIE = 0.97       # correlation peaks this close to the best are ties
+ENV_LP_HZ = 100.0     # the alignment envelope: x^2, zero-phase low-pass, sqrt
 TONE_COMMANDS = {"held-m5a-saw", "held-m5a-pulse"}     # single-oscillator presets
 REQUIRED_COMMANDS = ("silence", "held-m5a-saw", "held-default", "bar808-full", "demo")
 PROPERTIES = ("routing", "silence", "clipping", "pitch", "clock", "timing", "gain",
@@ -156,10 +168,16 @@ def unwarp_capture(cap: np.ndarray, n_ref: int, d: float, rho: float) -> np.ndar
     return interp(cap, d + np.arange(n_ref) / rho)
 
 
-def ncc_lag(template: np.ndarray, signal: np.ndarray, lo: int, hi: int):
+def ncc_lag(template: np.ndarray, signal: np.ndarray, lo: int, hi: int,
+            center: float | None = None):
     """Best normalised cross-correlation of `template` placed at integer lags
-    lo..hi of `signal`, refined by a parabola. Returns (lag, ncc, all_ncc)
-    or (None, 0.0, None) when the range holds no complete placement."""
+    lo..hi of `signal`, refined to a fraction of a sample. Returns (lag, ncc,
+    all_ncc), or (None, 0.0, None) when the range holds no complete placement.
+
+    `center`: a periodic tone matches itself one period off almost exactly as
+    well as in place (0.9986 against 0.9974 on the dev reference: sub-sample
+    sampling of a sharp peak decides it), so with a center the answer is the
+    local maximum within PEAK_TIE of the best that lies NEAREST the center."""
     template = np.asarray(template, dtype=np.float64)
     signal = np.asarray(signal, dtype=np.float64)
     n = template.size
@@ -177,9 +195,14 @@ def ncc_lag(template: np.ndarray, signal: np.ndarray, lo: int, hi: int):
     # denominator of ~0 is not a match (the first run found "matches" there)
     c[win_e < 1e-9 * max(te, 1e-30)] = 0.0
     i = int(np.argmax(c))
+    if center is not None and c.size >= 3:
+        pk = np.flatnonzero((c[1:-1] >= c[:-2]) & (c[1:-1] >= c[2:])) + 1
+        pk = pk[c[pk] >= PEAK_TIE * c[i]]
+        if pk.size:
+            i = int(pk[np.argmin(np.abs(lo + pk - center))])
     t = _refine_peak(c, i)
     peak = float(interp(c, np.array([t]), half=16)[0]) if t != i else float(c[i])
-    return lo + t, max(peak, float(c[i])), c
+    return lo + t, min(1.0, max(peak, float(c[i]))), c
 
 
 def _refine_peak(c: np.ndarray, i: int) -> float:
@@ -215,7 +238,13 @@ def first_strong_lag(template, signal, lo, hi, frac=0.9):
     if lag is None:
         return None, 0.0
     cand = np.flatnonzero(c >= frac * best)
-    i = int(cand[0])
+    # candidates within CLUSTER_S of each other are one placement seen at
+    # neighbouring periods of a tone (a held note matches itself one and two
+    # periods off at 0.9 of the peak -- the first dev run locked there); take
+    # the best of the FIRST cluster
+    gaps = np.flatnonzero(np.diff(cand) > int(CLUSTER_S * SR))
+    first = cand[: gaps[0] + 1] if gaps.size else cand
+    i = int(first[np.argmax(c[first])])
     lo_c = max(lo, 0)
     # refine around that earliest candidate
     l2, n2, _ = ncc_lag(template, signal, lo_c + i - 40, lo_c + i + 40)
@@ -257,6 +286,15 @@ def tone_f0(x: np.ndarray, sr: float, lo_hz: float, hi_hz: float) -> float | Non
             c2 = a + gr * (b - a)
             m2 = mag(c2)
     return float((a + b) / 2)
+
+
+def band(x: np.ndarray, sr: int = SR) -> np.ndarray:
+    """The declared analysis band (BAND_HZ): 4th-order Butterworth band-pass,
+    zero-phase, no edge padding -- every comparison region sits at least
+    0.5 s from a take's edges, so the edge transient is never scored."""
+    from scipy.signal import butter, sosfiltfilt
+    sos = butter(4, BAND_HZ, btype="bandpass", fs=sr, output="sos")
+    return sosfiltfilt(sos, np.asarray(x, dtype=np.float64), padtype=None)
 
 
 def clip_runs(x: np.ndarray, level: float, run: int) -> int:
@@ -332,8 +370,11 @@ def load_reference(refdir: pathlib.Path, command_id: str) -> dict:
         raise Refused(f"reference {command_id} declares no calibration window")
     plan = refdir / f"{command_id}.plan.json"
     pl = json.loads(plan.read_text()) if plan.is_file() else None
-    return {"record": rec, "x": x[:, 0] / 32768.0, "cal": (int(cal["start"]), int(cal["stop"])),
-            "plan": pl, "hold": planned_hold(pl)}
+    xf = x[:, 0] / 32768.0
+    pad = np.zeros(SR // 2)       # the reference is silence outside itself: say so to the filter
+    xb = band(np.concatenate([pad, xf, pad]))[pad.size:pad.size + xf.size]
+    return {"record": rec, "x": xf, "xb": xb, "env": envelope(xb),
+            "cal": (int(cal["start"]), int(cal["stop"])), "plan": pl, "hold": planned_hold(pl)}
 
 
 SESSION_REQUIRED = {
@@ -447,10 +488,34 @@ def command_identity(plan_ref: dict | None, plan_cap: dict) -> list:
 # =============================================================================
 # the analysis
 # =============================================================================
-def _coarse(ref, cal, cap, sr=SR):
+def envelope(x: np.ndarray, sr: int = SR) -> np.ndarray:
+    """Alignment envelope: sqrt of x^2 low-passed at ENV_LP_HZ (4th-order
+    Butterworth, zero-phase). Used ONLY to choose which period of a tone the
+    waveform correlation locks to -- never as a measured quantity."""
+    from scipy.signal import butter, sosfiltfilt
+    sos = butter(4, ENV_LP_HZ, fs=sr, output="sos")
+    return np.sqrt(np.maximum(sosfiltfilt(sos, np.asarray(x, np.float64) ** 2, padtype=None),
+                              0.0))
+
+
+def _coarse(ref, cal, cap, sr=SR, *, ref_env=None, polarity=False):
+    """Where the reference's calibration window starts in `cap`: the envelope
+    finds the placement (a tone's periods are indistinguishable to the
+    waveform), the waveform then refines it to the nearest correlation peak.
+    Returns (lag, ncc, envelope_lag, envelope_ncc); with `polarity`, ncc is
+    signed: the better of cap and -cap, negative when inverted."""
     t = ref[cal[0]:cal[0] + int(COARSE_S * sr)]
-    lag, ncc = first_strong_lag(t, cap, 0, cap.size - t.size)
-    return lag, ncc
+    renv = envelope(ref) if ref_env is None else ref_env
+    te = renv[cal[0]:cal[0] + int(COARSE_S * sr)]
+    elag, encc = first_strong_lag(te, envelope(cap), 0, cap.size - t.size)
+    if elag is None:
+        return None, 0.0, None, 0.0
+    lag, ncc, _ = ncc_lag(t, cap, int(elag) - 128, int(elag) + 128, center=elag)
+    if polarity:
+        nlag, nncc, _ = ncc_lag(t, -cap, int(elag) - 128, int(elag) + 128, center=elag)
+        if nncc > ncc:
+            return nlag, -nncc, elag, encc
+    return lag, ncc, elag, encc
 
 
 def _local_lags(ref, cap, d, rho, lo, hi, *, search=128, min_dbfs=-40.0, min_ncc=0.9):
@@ -461,7 +526,8 @@ def _local_lags(ref, cap, d, rho, lo, hi, *, search=128, min_dbfs=-40.0, min_ncc
         if dbfs(rms(t)) < min_dbfs:
             continue
         pred = d + m / rho
-        lag, ncc, _ = ncc_lag(t, cap, int(round(pred)) - search, int(round(pred)) + search)
+        lag, ncc, _ = ncc_lag(t, cap, int(round(pred)) - search, int(round(pred)) + search,
+                              center=pred)
         if lag is None or ncc < min_ncc:
             continue
         out.append((m, lag - pred, ncc))
@@ -470,7 +536,7 @@ def _local_lags(ref, cap, d, rho, lo, hi, *, search=128, min_dbfs=-40.0, min_ncc
 
 def calibrate(ref, cal, cap, sr=SR) -> dict:
     """Session constants from the declared calibration take (whole take)."""
-    lag, ncc = _coarse(ref, cal, cap, sr)
+    lag, ncc, _, _ = _coarse(ref, cal, cap, sr)
     if lag is None or ncc < LIMITS["coarse_ncc_min"]:
         return {"ok": False, "reason": f"the reference is not in the calibration take "
                                         f"(coarse ncc {ncc:.2f})"}
@@ -500,7 +566,7 @@ def calibrate(ref, cal, cap, sr=SR) -> dict:
 
 
 def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
-                 hold_offset=None) -> dict:
+                 hold_offset=None, capb_all=None) -> dict:
     """Every property of one take. `frozen` = {rho, gain}; d_t is estimated
     here from the declared window only.
 
@@ -530,14 +596,18 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
         if max(lv) > LIMITS["noise_dbfs_max"]:
             F["noise"] = f"floor {max(lv):.1f} dBFS > {LIMITS['noise_dbfs_max']} dBFS"
         return out
-    x, cal = ref["x"], ref["cal"]
+    # every waveform comparison below is in the declared analysis band
+    x_raw, A_raw = ref["x"], A
+    if capb_all is None:
+        capb_all = np.column_stack([band(cap_all[:, k]) for k in range(cap_all.shape[1])])
+    x, cal = ref["xb"], ref["cal"]
+    A, Bc = capb_all[:, dac[0] - 1], capb_all[:, dac[1] - 1]
     rho, g = frozen["rho"], frozen["gain"]
     # routing: where is the reference?
-    nccs = {}
+    nccs, found = {}, {}
     for k in range(cap_all.shape[1]):
-        _, n_k = _coarse(x, cal, cap_all[:, k], sr)
-        _, n_neg = _coarse(x, cal, -cap_all[:, k], sr)
-        nccs[k + 1] = round(max(n_k, n_neg) * (1 if n_k >= n_neg else -1), 3)
+        found[k + 1] = _coarse(x, cal, capb_all[:, k], sr, ref_env=ref["env"], polarity=True)
+        nccs[k + 1] = round(found[k + 1][1], 3)
     M["routing_ncc"] = nccs
     route = []
     for c in dac:
@@ -547,13 +617,20 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
         if k not in dac and abs(v) > LIMITS["foreign_ncc_max"]:
             route.append(f"the reference is on undeclared input {k} (ncc {v})")
     # the fixed per-take delay, from the declared window only
-    lag, ncc = _coarse(x, cal, A, sr)
+    lag, ncc, elag, encc = found[dac[0]]
     if lag is None or ncc < LIMITS["coarse_ncc_min"]:
         F["routing"] = "; ".join(route) or f"reference not found (ncc {ncc:.2f})"
-        lvA = dbfs(rms(A))
-        F["silence"] = f"declared DAC input carries {lvA:.1f} dBFS and no reference"
+        # a tone at the wrong pitch does not correlate as a waveform, but its
+        # envelope still places it: measure the pitch there, so the failure
+        # carries its cause (the first dev run reported only routing/silence)
+        if elag is not None and encc >= LIMITS["coarse_ncc_min"]:
+            _pitch(take, x_raw, A_raw, elag - cal[0] / rho, rho, M, F, sr)
+        if "pitch" not in F:
+            lvA = dbfs(rms(A))
+            F["silence"] = f"declared DAC input carries {lvA:.1f} dBFS and no reference"
         return out
-    wl, wn, _ = ncc_lag(x[cal[0]:cal[1]], A, int(round(lag)) - 40, int(round(lag)) + 40)
+    wl, wn, _ = ncc_lag(x[cal[0]:cal[1]], A, int(round(lag)) - 40, int(round(lag)) + 40,
+                        center=lag)
     d = wl - cal[0] / rho
     M["delay_samples"] = round(d, 3)
     M["cal_window_ncc"] = round(wn, 4)
@@ -581,7 +658,7 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     if route:
         F["routing"] = "; ".join(route)
     # unexpected silence, per channel, where the prediction sounds
-    for c, ch in zip(dac, chans):
+    for c, ch in zip(dac, (A, Bc)):
         lv = dbfs(rms(ch[seg]))
         want = dbfs(rms(p[seg]))
         if lv < max(noise_floor_dbfs + LIMITS["silent_margin_db"], want - 20.0):
@@ -589,7 +666,7 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
                             f"{want:.1f} dBFS is predicted; ").strip()
     # residual over the evaluation region (after the calibration window)
     if hold_offset:
-        nz = np.flatnonzero(x)
+        nz = np.flatnonzero(x_raw)
         rel = int(nz[0]) + int(ref["hold"]) - BLOCK if nz.size and ref.get("hold") else None
         M["hold_offset_frames"] = int(hold_offset)
         M["release_compared"] = False
@@ -652,14 +729,21 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
     M["stuck_s"] = round(stuck * BLOCK / sr, 3)
     if stuck * BLOCK / sr >= LIMITS["stuck_min_s"]:
         F["stuck"] = f"{M['stuck_s']} s of output where the reference is silent"
-    # pitch, single-oscillator tones only
+    _pitch(take, x_raw, A_raw, d, rho, M, F, sr)
+    out["_aligned"] = (d, rho)
+    return out
+
+
+def _pitch(take, x_raw, A_raw, d, rho, M, F, sr=SR):
+    """f0 of a single-oscillator tone take, capture against reference, over
+    the reference's loud span mapped through the frozen alignment."""
     if take["command_id"] in TONE_COMMANDS:
-        env = block_rms(x)
+        env = block_rms(x_raw)
         loud_b = np.flatnonzero(env >= env.max() * 0.1)
         s0, s1 = int(loud_b[0] * BLOCK), int((loud_b[-1] + 1) * BLOCK)
-        f_ref = tone_f0(x[s0:s1], sr, 30.0, 5000.0)
+        f_ref = tone_f0(x_raw[s0:s1], sr, 30.0, 5000.0)
         c0, c1 = int(d + s0 / rho), int(d + s1 / rho)
-        f_cap = tone_f0(A[c0:c1], sr, 30.0, 5000.0)
+        f_cap = tone_f0(A_raw[c0:c1], sr, 30.0, 5000.0)
         if f_ref and f_cap:
             cents = 1200 * math.log2(f_cap / f_ref)
             M["pitch"] = {"f_ref_hz": round(f_ref, 4), "f_cap_hz": round(f_cap, 4),
@@ -668,8 +752,6 @@ def analyse_take(take, ref, cap_all, dac, frozen, noise_floor_dbfs, sr=SR,
             if abs(M["pitch"]["cents_vs_clock"]) > LIMITS["pitch_cents_max"]:
                 F["pitch"] = (f"{M['pitch']['cents_vs_clock']:+.2f} cents against the frozen "
                               "clock ratio")
-    out["_aligned"] = (d, rho)
-    return out
 
 
 def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
@@ -700,7 +782,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         rec["inputs_sha256"][s["image"]["program_transcript"]] = sha256_file(
             bundle / s["image"]["program_transcript"])
         dac = s["interface"]["dac_channels"]
-        takes, refs, caps, hold_offsets = s["takes"], {}, {}, {}
+        takes, refs, caps, capb, hold_offsets = s["takes"], {}, {}, {}, {}
         for tk in takes:
             refs[tk["command_id"]] = refs.get(tk["command_id"]) or load_reference(
                 refdir, tk["command_id"])
@@ -712,6 +794,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 raise Refused(f"take {tk['id']}: {y.shape[1]} channels; the DAC is declared on "
                               f"input {max(dac)}")
             caps[tk["id"]] = y
+            capb[tk["id"]] = np.column_stack([band(y[:, k]) for k in range(y.shape[1])])
             if tk["command_id"] != "silence":
                 hp = bundle / f"{tk['host_capture']}.plan.json"
                 if not hp.is_file():
@@ -744,7 +827,7 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         if ctk["command_id"] == "silence":
             raise Refused("the calibration take is the silence take")
         cref = refs[ctk["command_id"]]
-        cal = calibrate(cref["x"], cref["cal"], caps[ctk["id"]][:, dac[0] - 1])
+        cal = calibrate(cref["xb"], cref["cal"], capb[ctk["id"]][:, dac[0] - 1])
         rec["calibration"] = {"take": ctk["id"], **{k: (round(v, 9) if isinstance(v, float)
                                                         else v) for k, v in cal.items()}}
         results = list(sil)
@@ -759,7 +842,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
             if tk["command_id"] == "silence":
                 continue
             results.append(analyse_take(tk, refs[tk["command_id"]], caps[tk["id"]], dac,
-                                        frozen, floor, hold_offset=hold_offsets.get(tk["id"])))
+                                        frozen, floor, hold_offset=hold_offsets.get(tk["id"]),
+                                        capb_all=capb[tk["id"]]))
         # repeat-take stability, on the reference timeline
         by_cmd = {}
         for t, tk in zip(results, [*[x for x in takes if x["command_id"] == "silence"],
@@ -769,15 +853,15 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
         for cmd, lst in by_cmd.items():
             if len(lst) < 2:
                 continue
-            x = refs[cmd]["x"]
+            x = refs[cmd]["xb"]
             a, b = sounding_extent(x)
             if any(hold_offsets.get(k["id"]) for _, k in lst) and refs[cmd].get("hold"):
                 # the holds were planned differently: compare up to the release
-                b = min(b, int(np.flatnonzero(x)[0]) + int(refs[cmd]["hold"]) - BLOCK)
+                b = min(b, int(np.flatnonzero(refs[cmd]["x"])[0]) + int(refs[cmd]["hold"]) - BLOCK)
             (t0, k0) = lst[0]
-            u0 = unwarp_capture(caps[k0["id"]][:, dac[0] - 1], len(x), *t0["_aligned"])[a:b]
+            u0 = unwarp_capture(capb[k0["id"]][:, dac[0] - 1], len(x), *t0["_aligned"])[a:b]
             for t1, k1 in lst[1:]:
-                u1 = unwarp_capture(caps[k1["id"]][:, dac[0] - 1], len(x), *t1["_aligned"])[a:b]
+                u1 = unwarp_capture(capb[k1["id"]][:, dac[0] - 1], len(x), *t1["_aligned"])[a:b]
                 r = 10 * math.log10(max(float(np.sum((u1 - u0) ** 2)) /
                                         max(float(np.sum(u0 ** 2)), 1e-30), 1e-30))
                 t1["metrics"]["repeat_db_vs_" + k0["id"]] = round(r, 2)
@@ -860,7 +944,11 @@ def synth_take(ref_x, *, delay, gain, ppm, noise_dbfs, hpf_hz, rng, defect=None,
     elif defect == "gain":
         dacsig = gain * 10 ** (3 / 20) * warp_reference(ref_x, n, delay, rho)
     elif defect == "clipping":
-        dacsig = np.clip(gain * 6.0 * warp_reference(ref_x, n, delay, rho), -1.0, 1.0)
+        w = warp_reference(ref_x, n, delay, rho)
+        # peaks at twice full scale; the interface's converter clips it (the
+        # final clip below), AFTER the analog path -- clipping before the
+        # AC-coupling high-pass would tilt the flat tops off full scale
+        dacsig = 2.0 * w / np.max(np.abs(w))
     else:
         dacsig = gain * warp_reference(ref_x, n, delay, rho)
     if defect == "stuck" and ref_x is not None:
@@ -942,6 +1030,50 @@ def synth_session(out: pathlib.Path, *, refdir=REFERENCES, defect=None, seed=1,
     return out
 
 
+# The procedure's takes (docs/capture-r0.md section 7), in recording order.
+PROCEDURE_TAKES = SYNTH_TAKES
+RECORDER = "sox -D -t coreaudio M4 -b 24 takes/<id>.wav trim 0 <seconds>"
+
+
+def new_session(bundle: pathlib.Path, manifest_path=rr.MANIFEST) -> pathlib.Path:
+    """The session.json skeleton the operator completes. Everything the
+    procedure fixes is filled in; everything only the operator can know is
+    left empty, and `analyse` REFUSES until it is filled."""
+    manifest = rr.load_manifest(manifest_path)
+    p = bundle / "session.json"
+    if p.exists():
+        raise Refused(f"{p} exists; a session is never overwritten")
+    bundle.mkdir(parents=True, exist_ok=True)
+    (bundle / "takes").mkdir(exist_ok=True)
+    (bundle / "host").mkdir(exist_ok=True)
+    s = {"schema": SESSION_SCHEMA,
+         "operator": "", "date": datetime.date.today().isoformat(),
+         "image": {"bitstream_sha256": manifest["image"]["bitstream_sha256"],
+                   "bitstream": manifest["image"]["bitstream"],
+                   "programmer": "", "program_transcript": "program.txt",
+                   "readback": False,
+                   "_readback": "false unless an actual configuration readback was compared; "
+                                "a programming transcript is not a readback"},
+         "board": {"model": "Arty A7-100T", "revision": "", "power": "",
+                   "_power": "USB (J10) or external 7-15 V on J13; the Arty A7 selects "
+                             "automatically and has no power-select jumper"},
+         "dac": {"model": "Adafruit PCM5102 I2S DAC breakout #6250",
+                 "wiring": "fpga/ARTY.md Wiring: JA1 BCK, JA2 WSEL, JA3 DIN, JA5 GND, "
+                           "JA6 VIN (3.3 V); MCK, DE, FIL, MU, FM unconnected"},
+         "interface": {"model": "MOTU M4", "sample_rate": SR, "dac_channels": [3, 4],
+                       "gain": "fixed: M4 line inputs 3/4 have no gain control",
+                       "processing": "none", "monitor": "", "recorder": RECORDER,
+                       "cable": "3.5 mm TRS to two 1/4-inch TS, tip -> input 3, ring -> input 4"},
+         "calibration": {"take": "demo-1"},
+         "takes": [{"id": tid, "command_id": cmd, "wav": f"takes/{tid}.wav",
+                    "host_capture": None if cmd == "silence" else f"host/{tid}",
+                    "command": (None if cmd == "silence" else
+                                manifest["commands"][cmd]["command"]),
+                    "started": ""} for tid, cmd in PROCEDURE_TAKES]}
+    p.write_text(json.dumps(s, indent=1) + "\n")
+    return p
+
+
 def stub_analyse(bundle, refdir=REFERENCES, manifest_path=rr.MANIFEST) -> dict:
     """The starting stub: right interface, no behaviour. Every control must be
     NOT caught against it (docs/verification-rules.md rule 1)."""
@@ -1011,11 +1143,23 @@ def main(argv=None) -> int:
     a2.add_argument("--out", type=pathlib.Path, required=True)
     a2.add_argument("--defect", choices=sorted(DEFECTS), default=None)
     a2.add_argument("--references", type=pathlib.Path, default=REFERENCES)
+    a4 = sub.add_parser("new-session")
+    a4.add_argument("--bundle", type=pathlib.Path,
+                    default=pathlib.Path(os.environ.get("R0_CAPTURE_BUNDLE", DEFAULT_BUNDLE)))
     a3 = sub.add_parser("controls")
     a3.add_argument("--out", type=pathlib.Path, required=True)
     a3.add_argument("--references", type=pathlib.Path, default=REFERENCES)
     a3.add_argument("--analyser", choices=("real", "stub"), default="real")
     a = ap.parse_args(argv)
+    if a.cmd == "new-session":
+        try:
+            p = new_session(a.bundle)
+        except Refused as exc:
+            print(f"r0_capture: REFUSED -- {exc}")
+            return 2
+        print(f"r0_capture: session skeleton at {p}; fill image.programmer, board.revision "
+              "and board.power (analyse refuses until they are filled)")
+        return 0
     if a.cmd == "synth":
         p = synth_session(a.out, refdir=a.references, defect=a.defect)
         print(f"r0_capture: synthetic session ({a.defect or 'clean'}) at {p}")

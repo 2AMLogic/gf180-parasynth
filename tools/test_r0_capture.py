@@ -268,3 +268,27 @@ def test_a_host_planned_hold_offset_is_read_from_the_log_and_stops_the_release_c
     assert t["metrics"]["hold_offset_frames"] == 30
     assert t["metrics"]["release_compared"] is False
     assert rec["verdict"] == rc.PASS, rec["reasons"]
+
+
+def test_t_physical_trial_without_a_capture_is_no_verdict_with_its_control_caught(
+        tmp_path, monkeypatch):
+    """The registered trial, end to end through tools/trial.py: with no capture
+    session it is NO VERDICT for the operator-blocked reason, never PASS, and
+    its synthetic-defect control is caught. The environment spec is this
+    interpreter's (the trial's own pins are checked by the CI job that
+    bootstraps them); nothing else is stubbed."""
+    import trial
+    spec = tmp_path / "env.json"
+    spec.write_text(json.dumps({
+        "version": "test-env/1", "python": "%d.%d" % sys.version_info[:2], "packages": {},
+        "toolchain": {"installer": "none", "bin": "nobin", "record": "none", "tools": {}}}))
+    monkeypatch.setenv("R0_CAPTURE_BUNDLE", str(tmp_path / "no-session-here"))
+    run_dir, rec = trial.run_trial("T-PHYSICAL", env_spec=spec, out_base=tmp_path / "trials")
+    assert rec["execution"]["status"] == "complete", rec["execution"]
+    assert rec["verdict"] == trial.NO_VERDICT
+    child = rec["children"][0]
+    assert child["verdict"] == trial.NO_VERDICT
+    assert "operator-blocked" in child["reasons"][0]
+    assert rec["controls"][0]["caught"] is True, rec["controls"][0]["reasons"]
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
