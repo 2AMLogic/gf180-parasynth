@@ -1,0 +1,11 @@
+# 55e12bd: tools/clap_d12a_start_red.py ( mutants of run_case._early_late_db)
+split 30->40 ms 44100 {} caught
+split 30->40 ms 44100 {'b': 0.05} caught
+split 30->40 ms 48000 {} caught
+split 30->40 ms 48000 {'b': 0.05} caught
+window end 200->150 ms 44100 {} caught
+window end 200->150 ms 44100 {'b': 0.05} caught
+window end 200->150 ms 48000 {} caught
+window end 200->150 ms 48000 {'b': 0.05} caught
+red run: 8/8 closed-form tests failed against mutated scorer estimators
+exit=0
