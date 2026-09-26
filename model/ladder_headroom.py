@@ -409,6 +409,30 @@ def resonance_offset_table(cuts=REPORT_CUTS, resonances=REPORT_RES, cfg=None) ->
     return out
 
 
+def offset_vs_resonance_fit(degree: int, cuts=REPORT_CUTS, resonances=REPORT_RES,
+                            table: dict = None) -> tuple[np.ndarray, float]:
+    """How much of `resonance_offset_table`'s `mean_offset_pct` is a smooth
+    function of the RESONANCE KNOB ALONE -- issue #237's question, asked with a
+    fit rather than a description. Fits a degree-`degree` polynomial in `res`
+    to the mean offset (independent of cutoff, unlike `refit_tuning`'s fit in
+    frequency) and returns `(coefficients, worst residual in percentage
+    points)`. The residual is what NO function of resonance alone -- not "a
+    better constant", not any polynomial, however high its degree -- could
+    remove; a small residual says a per-frame term keyed on resonance (`k`,
+    already available every frame in the datapath) could recover most of the
+    travel IN PRINCIPLE, which is a different question from whether it is
+    free: see `spec/decision-records/0011-cutoff-tuning-polynomial.md`'s
+    amendment for issue #237, which sizes the win here and defers building it
+    because it is a datapath change, not the ROM-build-time class `fcr` and
+    `CUT_TRIM` are."""
+    tab = resonance_offset_table(cuts, resonances) if table is None else table
+    res = np.array(sorted(tab), dtype=np.float64)
+    off = np.array([tab[r]["mean_offset_pct"] for r in res], dtype=np.float64)
+    p = np.polyfit(res, off, degree)
+    resid = off - np.polyval(p, res)
+    return p, float(np.abs(resid).max())
+
+
 # ===========================================================================
 # axis: numerical precision
 # ===========================================================================
