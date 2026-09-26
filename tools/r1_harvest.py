@@ -129,7 +129,10 @@ def harvest(runs: Path, to: Path) -> dict:
             "control_reasons": {c["id"]: c.get("reasons", [])[:2] for c in rec["controls"]},
         })
     dom = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-                          "fpga/release/test_release_domain.py", "fpga/release/test_r1_candidate.py"],
+                          "fpga/release/test_release_domain.py", "fpga/release/test_r1_candidate.py",
+                          # the record/view binding tests depend on THIS summary; the
+                          # binding is its own check (r1_candidate.py BOUND)
+                          "-k", "not committed_r1_record and not scorecard_view_is_current"],
                          cwd=ROOT, capture_output=True, text=True)
     tail = (dom.stdout.strip().splitlines() or ["?"])[-1]
     rows.append({"name": "supported domain + session start (unit)", "gate": "implementation",
