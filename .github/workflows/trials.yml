@@ -1,0 +1,55 @@
+# The pilot trials (docs/trials.md section 4, docs/trials.json).
+#
+# This job installs its environment from spec/trial-environment.json through
+# tools/trial_env.py -- the SAME bootstrap the build box runs -- rather than
+# from its own pip line and the distribution's iverilog. That is the point of
+# it: a verdict here and a verdict on the box are comparable only when both
+# came from one versioned spec (`python tools/trial.py compare A B`).
+#
+# Gated: T-DEADLINE, both modes. Its receipts and every artifact they name are
+# uploaded, so the published bundle can be re-checked with
+#   python tools/trial.py check-receipt <bundle>/T-DEADLINE/<run>/receipt.json
+#
+# NOT gated: T-RELEASE-BOUND. Its manifest (fpga/release/baseline-2025.1.json)
+# is in open PR #255, so on main it is an honest NO VERDICT (missing asset),
+# and a gate that cannot pass trains everyone to ignore gates. It runs and its
+# receipt is checked for integrity; gate it when #255 lands.
+name: trials
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  trial-deadline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    concurrency:
+      group: trials-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # receipts record origin/main and the merge-base as the integration identity
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: bootstrap from the one environment spec (idempotent; run twice to prove it)
+        run: |
+          python tools/trial_env.py bootstrap
+          python tools/trial_env.py bootstrap
+      - name: the dispatcher's own tests
+        run: python -m pytest tools/test_trial.py tools/test_run_all.py -q
+      - name: T-DEADLINE, retained evidence (no simulation)
+        run: python tools/trial.py run T-DEADLINE --mode reanalyse
+      - name: T-DEADLINE, simulation of this tree
+        run: python tools/trial.py run T-DEADLINE --mode sim
+      - name: T-RELEASE-BOUND (report only until #255 lands the manifest)
+        continue-on-error: true
+        run: python tools/trial.py run T-RELEASE-BOUND
+      - name: every receipt is intact and matches its artifacts
+        if: always()
+        run: python tools/trial.py check-all build/trials
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trial-receipts
+          path: build/trials/

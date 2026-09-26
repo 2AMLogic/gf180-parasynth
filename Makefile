@@ -11,7 +11,7 @@
 PY  := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN := $(PY) tools/run_all.py
 
-.PHONY: help verify verify-fast verify-full controls test dag board claims reference-integration
+.PHONY: help verify verify-fast verify-full controls test dag board claims reference-integration trial trial-bootstrap
 
 help:
 	@echo "make verify       broad repository checks, run independently in parallel"
@@ -23,6 +23,8 @@ help:
 	@echo "make board        fill the scorecard's first batch and re-render the board"
 	@echo "make reference-integration  the Fischer-corpus tests as a REQUIRED gate (refuses if absent)"
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
+	@echo "make trial T=<id> [ARGS=...]  one product question -> PASS/FAIL/NO VERDICT + receipt (docs/trials.json)"
+	@echo "make trial-bootstrap [ARGS=--venv DIR]  install spec/trial-environment.json (box and CI)"
 
 ## Everything a push should run.
 ## The 7200s per-job cap is a runaway kill, not a schedule: measured on the
@@ -261,6 +263,18 @@ claims:
 
 dag:
 	@$(PY) tools/compile_dag.py --run && $(PY) tools/compile_dag.py
+
+## A trial: one product question answered by EXISTING checkers (docs/trials.md,
+## docs/trials.json). All logic is in tools/trial.py; this line only forwards.
+## Exit 0 PASS, 1 FAIL, 2 NO VERDICT -- the receipt it prints is the record.
+##   make trial T=T-DEADLINE
+##   make trial T=T-DEADLINE ARGS="--mode reanalyse"
+trial:
+	@$(PY) tools/trial.py run $(T) $(ARGS)
+
+## The one environment spec, installed idempotently (spec/trial-environment.json).
+trial-bootstrap:
+	@$(PY) tools/trial_env.py bootstrap $(ARGS)
 
 ## Fill the scorecard and re-render the board from what came back. The runner's
 ## own exit convention is 0 match / 1 mismatch / 2 no evidence, and a first

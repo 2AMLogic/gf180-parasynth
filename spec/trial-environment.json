@@ -1,0 +1,34 @@
+{
+ "_comment": [
+  "The ONE dependency/tool specification for running trials. The build box and CI",
+  "both install from this file through `python tools/trial_env.py bootstrap`, and",
+  "`tools/trial.py` refuses (NO VERDICT) before a long run when the running",
+  "environment does not satisfy it. Change a pin here, bump `version`, and every",
+  "receipt records which version it ran under.",
+  "",
+  "The simulator is not pinned here by hash: tools/setup_ci_oss_cad.py already owns",
+  "the oss-cad-suite release and its archive sha256, and this file references it",
+  "rather than copying either. `version_contains` is the identity the preflight",
+  "checks at the point of use, because a correct tool from a different release is",
+  "exactly the 'correct instrument in a wrong state' CLAUDE.md warns about."
+ ],
+ "version": "trial-env/1",
+ "python": "3.12",
+ "packages": {
+  "numpy": "2.3.3",
+  "scipy": "1.16.2",
+  "pytest": "8.4.2",
+  "pyyaml": "6.0.3",
+  "pyserial": "3.5"
+ },
+ "import_names": {"pyyaml": "yaml", "pyserial": "serial"},
+ "toolchain": {
+  "installer": "tools/setup_ci_oss_cad.py",
+  "bin": "build/oss-cad-pinned/oss-cad-suite/bin",
+  "record": "build/oss-cad-pinned/toolchain.json",
+  "tools": {
+   "iverilog": {"version_arg": "-V", "version_contains": "Icarus Verilog version 14"},
+   "vvp": {"version_arg": "-V", "version_contains": "Icarus Verilog runtime version 14"}
+  }
+ }
+}
