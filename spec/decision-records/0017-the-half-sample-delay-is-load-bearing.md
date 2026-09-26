@@ -56,6 +56,32 @@ contributes the missing phase.
 So the structure DR 0001 describes as an approximation is doing load-bearing
 work, and "fixing" it removes a feature.
 
+#### The closed form is a ceiling, and it is not the ceiling a player meets
+
+**This record first stated the limit as 5295.6 Hz and that is a loose upper
+bound, not the measurement.** The bound is on the *phase*: below it a −180°
+crossing exists, but as the per-stage lag falls towards 45° the crossing
+retreats into a band where the cascade's own magnitude is small, so the
+feedback needed to close the loop runs away before the phase does. Swept
+(`model/probe_rungs_2_4_gaps.py` probe 3, resonance to 4.0 — well past anything
+the knob commands):
+
+| cutoff | per-stage max lag | delay-free: first resonance that sings | shipped |
+|---:|---:|---|---|
+| 800 Hz | 71.6° | 1.45 | 1.05 |
+| 1600 Hz | 64.2° | 1.45 | 1.05 |
+| 3200 Hz | 54.2° | 2.00 | 1.05 |
+| 3600 Hz | 52.2° | 2.00 | 1.05 |
+| 4000 Hz | 50.3° | 2.00 | 1.45 |
+| 4800 Hz | 46.9° | **never**, to res 4.0 | 1.45 |
+| 6400 Hz | 41.1° | **never**, to res 4.0 | 1.45 |
+
+So the delay-free ladder's **usable** ceiling is between 4000 and 4800 Hz —
+*below* the closed form's 5295.6 Hz, which remains correct as the frequency
+above which no feedback whatsoever suffices. The contrast that makes the delay
+load-bearing is the right-hand column: the shipped filter sings at every one of
+those cutoffs, including both where the delay-free form cannot.
+
 ### 2. The implicit trapezoidal form holds the resonance where ours loses it
 
 <!-- claim: test=model/test_ladder_candidates.py::test_the_implicit_candidate_holds_the_resonant_peak_where_the_shipped_one_loses_it -->
@@ -77,21 +103,36 @@ at the cutoff clamp, which does not fit the Q0.16 word at all.
 
 <!-- claim: test=model/test_ladder_candidates.py::test_the_instrumented_cost_is_the_shape_each_core_declares -->
 
-Per oversampled sub-step, counted by the inner loop rather than declared:
+Per oversampled sub-step, counted by the inner loop rather than declared, and
+per output sample at 2x oversampling:
 
-| candidate | `tanh` | divide | multiply | clocks/sample at 17-clock divider |
-|---|---:|---:|---:|---:|
-| shipped (Huovilainen) | 5 | **0** | 6 | see the report |
-| implicit Newton, 2 iterations | 10 | **8** | 43 | see the report |
-| implicit Newton, 3 iterations | 15 | **12** | 60 | see the report |
-| explicit delay-free | 10 | **1** | 25 | see the report |
+| candidate | `tanh` | divide | multiply | clocks/sample @ d=1 | @ d=8 | @ d=17 |
+|---|---:|---:|---:|---:|---:|---:|
+| shipped (Huovilainen) | 5 | **0** | 6 | 35 | 35 | 35 |
+| implicit Newton, 2 iterations | 10 | **8** | 43 | 145 | **257** | 401 |
+| implicit Newton, 3 iterations | 15 | **12** | 60 | 207 | 375 | 591 |
+| explicit delay-free | 10 | **1** | 25 | 95 | 109 | 127 |
 
 DR 0001's budget is 256 clocks per sample at 12.288 MHz over 48 kHz. **The
 whole cost difference is divides**, and whether the 2-iteration solve fits
 depends entirely on the divider's latency — which is why
-`tools/compare_ladder_candidates.py` sweeps it (1, 8 and 17 clocks) instead of
-assuming one. A restoring divider at 17 clocks does not fit; a short-latency
-reciprocal does.
+`tools/compare_ladder_candidates.py` sweeps it instead of assuming one.
+
+**And the sweep is then solved rather than read off, because reading it off got
+this record's central number wrong.** Cost is affine in the divider latency, so
+the threshold is arithmetic: the 2-iteration solve is `129 + 16 d` clocks and
+needs `d <= 7`. This record first said "≤ 8 clocks", because 8 was the grid
+point below 17 — and at exactly 8 it is **257 clocks against a 256 budget**, one
+clock over. The report now prints `max_divider_latency_that_fits` per candidate
+and `model/test_ladder_candidates.py::test_the_divider_latency_the_budget_allows_is_exact_not_read_off_the_grid`
+pins it from both sides.
+
+| candidate | divider latency the budget allows |
+|---|---|
+| shipped | no divider at all |
+| implicit Newton, 2 iterations | **≤ 7 clocks** |
+| implicit Newton, 3 iterations | ≤ 3 clocks |
+| explicit delay-free | ≤ 81 clocks |
 
 That turns DR 0001's reversal from a filter question into a **divider**
 question, which is a different and much more tractable piece of work than
@@ -101,9 +142,9 @@ re-deciding the filter.
 
 Three things, all now specific rather than general:
 
-1. **A reciprocal unit of ≤ 8 clocks in the ladder datapath**, measured in
+1. **A reciprocal unit of ≤ 7 clocks in the ladder datapath**, measured in
    place, not estimated. With one the 2-iteration solve fits and the reversal
-   condition is met in full.
+   condition is met in full. Seven, not eight: see §3.
 2. **A complaint that is actually about resonance above 3 kHz.** The shipped
    filter's peak deficit up there is real and measured; nothing currently says
    a player minds. DR 0015 (the scorecard) is where that would show up.

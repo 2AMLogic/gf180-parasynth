@@ -97,7 +97,17 @@ DRIVE_H3_DB = -40.0
 DRIVE_LEVELS = (-24.0, -18.0, -12.0, -9.0, -8.0, -7.0, -6.0, -5.0, -3.0, 0.0)
 CHORD_F0, CHORD_CUT, CHORD_RES, CHORD_AMP = 110.0, 2000.0, 1.2, 0.20
 MOVE_SWEEPS = ((60.0, 960.0, 0.1), (500.0, 8000.0, 0.4))
-CLEAN_F0, CLEAN_CUT, CLEAN_RES, CLEAN_AMP = 2000.0, 9000.0, 0.8, 0.5
+# CLEAN_F0 IS 2093 AND NOT 2000, AND THE REASON IS THE ESTIMATOR'S PRECONDITION.
+# `audio_measure.foldback_alias_db` finds aliases by looking at the PREDICTED
+# image frequency of each harmonic above Nyquist. 48000 / 2000 = 24 exactly, so
+# every image of every harmonic of a 2 kHz tone folds back onto a multiple of
+# 2 kHz -- i.e. onto a real harmonic -- and none of them can be attributed.
+# Measured: at 2000 Hz the estimator reports 0 usable images and 121 collisions
+# and correctly REFUSES; the report then printed `alias_db=None` for every
+# candidate, so the aliasing half of the cleanliness dimension was unmeasured
+# and looked like a measurement. 2093 Hz (C7, not a submultiple of the sample
+# rate) gives 126 usable images and 0 collisions.
+CLEAN_F0, CLEAN_CUT, CLEAN_RES, CLEAN_AMP = 2093.0, 9000.0, 0.8, 0.5
 
 # The clock budget of DR 0001: 12.288 MHz over 48 kHz. `DIV_CLOCKS` is a
 # restoring divider's latency for a 17-bit quotient; `TANH_CLOCKS` is one ROM
@@ -361,6 +371,10 @@ def stage_cleanliness(names, **kw) -> dict:
         tail = q[int(0.8 * len(q)):]
         out[name] = dict(
             alias_db=round(alias.value, 1) if alias.ok else None,
+            # a bare `None` is indistinguishable from "we did not look", which
+            # is how this axis sat unmeasured; say WHY instead
+            alias_refused=None if alias.ok else str(alias.reason),
+            alias_images=(alias.detail or {}).get("images"),
             clamp_fraction=round(cand.last_clamp, 5),
             decay_tail_rms=float(am.rms(tail)),
             decays_to_silence=bool(am.is_silent(tail, floor=1e-9)),
@@ -453,12 +467,29 @@ def stage_controls(cuts, resonances, ring_cuts, ring_res) -> dict:
     ref = stage_linear([base], cuts, resonances)[base]
     ring = stage_resonance([base], ring_cuts, ring_res)[base]
     inj = {}
-    # a dropped pole: 3 stages, not 4
+    # a dropped pole: 3 stages, not 4.
+    #
+    # THIS CONTROL GOES RED BY REFUSING, AND THE REPORT MUST SAY SO. It was
+    # first written to subtract two `worst_peak_db` figures, and three poles
+    # push the resonant peak out of the four-pole search window at EVERY
+    # operating point -- so the stage refuses, `worst_peak_db` is `nan`, and
+    # the report printed `moved_peak_db=nan`: an unknown rendered in the place
+    # where a verdict belongs, which is the `FAIL(??)` failure `tools/
+    # run_all.py` exists to prevent. A refusal is a first-class red outcome and
+    # is recorded as one; a MIXTURE of refusals and small moves would be the
+    # suspicious result, so both halves are reported.
     d = stage_linear([base], cuts, resonances, stages=3)[base]
-    inj["dropped-pole"] = dict(
-        dimension="linear/resonance", moved_peak_db=round(
+    n_pts = len(d["points"])
+    moved = {}
+    if d["refused"] < n_pts:            # some points still scored -- use them
+        moved = dict(moved_peak_db=round(
             abs(d["worst_peak_db"] - ref["worst_peak_db"]), 2),
-        moved_cents=round(abs(d["worst_cents"] - ref["worst_cents"]), 1))
+            moved_cents=round(abs(d["worst_cents"] - ref["worst_cents"]), 1))
+    inj["dropped-pole"] = dict(
+        dimension="linear/resonance",
+        moved_refused_points=f"{d['refused']}/{n_pts}",
+        baseline_refused_points=f"{ref['refused']}/{len(ref['points'])}",
+        **moved)
     # a 6 % cutoff skew: the tuning defect DR 0011 guards with
     d = stage_linear([base], cuts, resonances, cut_skew=1.06)[base]
     inj["cutoff-skew-6pct"] = dict(
@@ -536,7 +567,7 @@ def _verdict(rep: dict, names) -> dict:
     numbers, not written."""
     base = "shipped"
     b = rep["candidates"][base]
-    wins, notes = [], []
+    wins, blocked, notes = [], [], []
     for n in names:
         if n == base:
             continue
@@ -545,11 +576,20 @@ def _verdict(rep: dict, names) -> dict:
         better_peak = c["matches"]["worst_peak_db"] < b["matches"]["worst_peak_db"] - 0.5
         sings = c["bigger"]["sings_everywhere"] and not b["bigger"]["sings_everywhere"]
         fits = c["cost"]["fits"][DIV_CLOCKS[-1]]
-        if (better_tuning or better_peak or sings) and fits:
+        on_merit = bool(better_tuning or better_peak or sings)
+        if on_merit and fits:
             wins.append(n)
+        elif on_merit:
+            # A candidate that WINS on sound and is excluded by cost alone is
+            # the whole of DR 0001's reversal condition, and burying it in a
+            # boolean would hide the one result a reader must not miss.
+            blocked.append((n, c["cost"]["max_divider_latency_that_fits"]))
         notes.append(dict(candidate=n, better_tuning=bool(better_tuning),
                           better_peak=bool(better_peak), sings_where_we_do_not=bool(sings),
-                          fits_budget_worst_case_divider=bool(fits)))
+                          wins_on_merit=on_merit,
+                          fits_budget_worst_case_divider=bool(fits),
+                          max_divider_latency_that_fits=c["cost"][
+                              "max_divider_latency_that_fits"]))
     if wins:
         text = ("A candidate clears the bar: " + ", ".join(wins) +
                 " improves on the shipped ladder by more than the harness's own "
@@ -559,7 +599,15 @@ def _verdict(rep: dict, names) -> dict:
                 "ladder by more than this harness can resolve while fitting the "
                 "clock budget -- which is issue #46's own bar, and a complete "
                 "result rather than a failure to deliver a change.")
-    return dict(retain=not wins, winners=wins, per_candidate=notes, text=text)
+    if blocked:
+        text += ("\n  EXCLUDED BY COST ALONE, which is DR 0001's reversal "
+                 "condition and not a tie: "
+                 + "; ".join(f"{n} wins on sound and needs a divider of "
+                             f"{'no latency that fits' if d is None else f'<= {d} clocks'}"
+                             for n, d in blocked) + ".")
+    return dict(retain=not wins, winners=wins,
+                blocked_by_cost=[n for n, _ in blocked],
+                per_candidate=notes, text=text)
 
 
 def _print(rep: dict) -> None:
@@ -598,7 +646,9 @@ def _print(rep: dict) -> None:
         print(f"    {k_:14s} {state}")
     print("\n  INJECTED DEFECTS -- each must move its own dimension:")
     for k_, v in rep["controls"]["injected"].items():
-        moved = ", ".join(f"{kk}={vv}" for kk, vv in v.items() if kk.startswith("moved"))
+        # every key except the dimension label, so a control that goes red by
+        # REFUSING cannot be printed as a blank line or as `nan`
+        moved = ", ".join(f"{kk}={vv}" for kk, vv in v.items() if kk != "dimension")
         print(f"    {k_:22s} ({v['dimension']:18s}) {moved}")
     print("\n  " + rep["verdict"]["text"])
 

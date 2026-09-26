@@ -28,6 +28,7 @@ this repository keeps re-finding:
   * the **zero-order hold** carries its own control, because omitting it was a
     real 1.02 dB error in this harness before it was found.
 """
+import json
 import math
 import os
 import sys
@@ -45,6 +46,7 @@ import fixed                                                        # noqa: E402
 import ladder_candidates as lc                                      # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+from dsp import SR                                                  # noqa: E402
 
 # Short windows: every reference run in this file is a convergence or
 # calibration check, not a reported number, so it buys nothing from the long
@@ -329,11 +331,17 @@ def test_start_red_the_null_core_is_silent():
     assert "null" not in lc.SHIPPABLE
 
 
-@pytest.mark.parametrize("stage", ["linear", "resonance", "bass", "drive"])
+@pytest.mark.parametrize("stage", ["linear", "resonance", "bass", "drive",
+                                   "movement", "cleanliness"])
 def test_start_red_every_dimension_refuses_or_condemns_the_null_core(stage):
     """A stage that returns a plausible number for silence is not a
     measurement. Four harnesses in this repository shipped in exactly that
-    state, which is why this runs before any candidate is believed."""
+    state, which is why this runs before any candidate is believed.
+
+    **All six dimensions, not the four that were easy.** `movement` and
+    `cleanliness` were outside this parametrisation while the report's own
+    start-red section covered them, so the two stages whose estimators are
+    most likely to return a number for silence were the two not pinned here."""
     import compare_ladder_candidates as cc
     if stage == "linear":
         r = cc.stage_linear(["null"], (400.0,), (0.9,))["null"]
@@ -344,9 +352,47 @@ def test_start_red_every_dimension_refuses_or_condemns_the_null_core(stage):
     elif stage == "bass":
         r = cc.stage_bass(["null"])["null"]
         assert "refused" in r
+    elif stage == "movement":
+        r = cc.stage_movement(["null"])["null"]
+        assert r["refused"] == len(r["sweeps"]) > 0, r
+    elif stage == "cleanliness":
+        # NOTE THE ASYMMETRY, IT IS THE POINT. `decays_to_silence` is a
+        # sub-axis on which SILENCE SCORES BEST -- the null core "passes" it
+        # and every real candidate "fails" it at the Q15 floor. So it can
+        # never condemn anything on its own, and what condemns silence here is
+        # the aliasing estimator refusing outright. Read together, never apart.
+        r = cc.stage_cleanliness(["null"])["null"]
+        assert r["alias_db"] is None and r["alias_refused"] == "silent", r
+        assert r["decay_tail_rms"] == 0.0 and r["decays_to_silence"] is True, r
     else:
         r = cc.stage_drive(["null"])["null"]
         assert r["saturation_dbfs"] is None and r["chord_rms"] == 0.0
+
+
+def test_the_aliasing_probe_frequency_is_one_its_estimator_can_attribute():
+    """`foldback_alias_db` finds aliases at the PREDICTED image of each
+    harmonic above Nyquist, so a probe frequency that divides the sample rate
+    folds every image back onto a real harmonic and nothing is attributable.
+
+    48000 / 2000 = 24 exactly. `CLEAN_F0` was 2000 Hz, the estimator refused
+    for every candidate, and the report printed `alias_db=None` -- the
+    aliasing half of the cleanliness dimension unmeasured and looking like a
+    measurement. This test asserts the precondition at the point of use."""
+    import compare_ladder_candidates as cc
+    t = np.arange(int(0.5 * SR)) / SR
+    hot = np.tanh(6.0 * np.sin(2.0 * math.pi * cc.CLEAN_F0 * t))
+    good = am.foldback_alias_db(hot, cc.CLEAN_F0, SR)
+    assert good.ok, (cc.CLEAN_F0, good.reason, good.detail)
+    assert good.detail["collided"] == 0, good.detail
+    assert good.detail["images"] >= 50, good.detail
+
+    # and the degenerate frequency it replaced still refuses, so the test is
+    # known to be able to fail
+    bad_f0 = 2000.0
+    bad = am.foldback_alias_db(np.tanh(6.0 * np.sin(2.0 * math.pi * bad_f0 * t)),
+                               bad_f0, SR)
+    assert not bad.ok and bad.detail["images"] == 0, bad.detail
+    assert SR % cc.CLEAN_F0 != 0
 
 
 # =============================================================================
@@ -470,3 +516,68 @@ def test_a_divide_by_zero_in_a_solver_refuses_rather_than_crashes():
     with pytest.raises(lc.Refused):
         lc._div(1, 0)
     assert lc._div(-7, 2) == -3 and lc._div(7, 2) == 3        # toward zero, not floor
+
+
+# =============================================================================
+# 5. the committed report: the artefact `docs/ladder-rungs-2-4.md` reads from
+# =============================================================================
+DIMENSIONS = ("bass", "drive", "movement", "resonance", "cleanliness", "cost")
+SCORED = ("linear",) + DIMENSIONS
+
+
+def test_the_committed_report_scores_every_candidate_on_every_dimension():
+    """Issue #46's acceptance bar in one assertion: every candidate scored on
+    all six named dimensions with NUMERIC results, not prose impressions --
+    checked against the committed `docs/ladder-rungs-2-4-results.json`, which
+    is the artefact the document's tables are read from.
+
+    This is a shape-and-freshness test, not a re-measurement: it is cheap
+    enough to live in `make verify`, where a twenty-minute report run is not.
+    What it catches is the report drifting out from under the document -- a
+    candidate added to `CORES` and never scored, a dimension quietly dropped,
+    a score that went `None` because its estimator started refusing."""
+    path = os.path.join(HERE, "..", "docs", "ladder-rungs-2-4-results.json")
+    assert os.path.exists(path), (
+        f"{path} is missing; regenerate with\n"
+        "  python3 tools/compare_ladder_candidates.py "
+        "--json docs/ladder-rungs-2-4-results.json")
+    with open(path) as fh:
+        rep = json.load(fh)
+
+    assert rep["quick"] is False, "the committed report must be a full run"
+    names = list(lc.SHIPPABLE)
+    assert set(rep["candidates"]) == set(names), (sorted(rep["candidates"]), names)
+
+    # every dimension carries every candidate ...
+    for dim in SCORED:
+        assert set(rep[dim]) == set(names), (dim, sorted(rep[dim]))
+
+    # ... and the summary each candidate is judged on is numeric throughout.
+    for n in names:
+        c = rep["candidates"][n]
+        for key in ("worst_cents", "worst_peak_db", "worst_pass_db"):
+            assert isinstance(c["matches"][key], (int, float)), (n, key)
+            assert not math.isnan(c["matches"][key]), (n, key)
+        for key in ("bass_weight_db", "compression_db_per_db", "saturation_dbfs"):
+            assert isinstance(c["bigger"][key], (int, float)), (n, key)
+        assert isinstance(c["bigger"]["sings_everywhere"], bool), n
+        for key in ("tanh", "divide", "multiply"):
+            assert isinstance(c["cost"][key], (int, float)), (n, key)
+        assert c["cost"]["max_divider_latency_that_fits"] is not None, n
+        # coefficient-update cost under MOVING controls, per issue #46
+        assert rep["movement"][n]["coefficient_update_mults_per_sample"] == 3, n
+        assert rep["movement"][n]["inner_loop_cost_moves"] is False, n
+
+    # the controls ran in the same report as the result they guard
+    red = rep["controls"]["start_red"]
+    assert set(red) >= set(("linear", "resonance", "bass", "drive", "movement",
+                            "cleanliness")), sorted(red)
+    injected = rep["controls"]["injected"]
+    assert set(injected) == {"dropped-pole", "cutoff-skew-6pct", "tanh-4-entries",
+                             "control-quantum-32hz"}, sorted(injected)
+    for name, v in injected.items():
+        moved = [vv for kk, vv in v.items() if kk.startswith("moved")]
+        assert moved, (name, v)
+
+    # the verdict is derived from the numbers, not written into the file
+    assert rep["verdict"]["retain"] is (not rep["verdict"]["winners"])
