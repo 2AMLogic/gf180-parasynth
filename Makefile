@@ -37,7 +37,7 @@ help:
 ## 0.2s, naming the source file that moved, is worth a job slot.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -69,9 +69,18 @@ verify:
 ## fpga/test_uart_host_rolling.py IS gated: the same host logic against the
 ## same device contract (uart_device_sim) on SIMULATED time -- no pty, no
 ## thread, no wall clock -- so a shared runner's noise cannot move it.
+##
+## rtl-sketch/test_verify_ctl_blindness.py is here despite being named for an
+## RTL bench because THIS target is the only one CI runs (rungs.yml `make
+## verify-fast`), and it is the gate on verify_ctl's blindness matrix
+## (docs/verification-rules.md 4). It runs no simulator at all -- it calls
+## `print_blindness` against injected counters and reads the text back, 0.18 s
+## measured with iverilog removed from PATH -- so it costs the shared runner
+## nothing and cannot go red on simulator noise. The rest of rtl-sketch's
+## pytest files DO need iverilog and stay in `make verify` only.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
@@ -82,7 +91,7 @@ verify-fast:
 ## Adds the runs that take an hour. Still one turn.
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
-	  "$(PY) -m pytest model/ spec/ tools/ fpga/ -q" \
+	  "$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -170,6 +179,21 @@ verify-full:
 ## other's intermediate files and the results would be meaningless in a way
 ## that still looks like a clean run. Any future concurrent variants of one
 ## verifier need the same treatment.
+##
+## THE TWO sound_report CONTROLS reinstate defects this project actually
+## SHIPPED at the measurement layer, rather than defects someone invented --
+## the same principle as SPI_ADDR7/SPI_DATA24 above, which replay the exact
+## broken SPI frame that shipped (issue #52, docs/verification-rules.md 4).
+## Their exit convention is sound_report's own and is the inverse of
+## `--expect-fail`: 0 means at least one property MOVED past its tolerance --
+## the control fired -- and 1 means nothing moved, i.e. a coverage hole. So
+## they are listed bare, with no `--expect-fail`. They write no files and so
+## need no --outdir; each takes about 90 s (two full kit renders, clean and
+## injected). Measured on this tree, 2026-09-26:
+##   bd-ma-envelope            BD T20 308 -> 207 ms, BD attack 14.56 -> 9.94 ms
+##                             (BD fundamental and decay tau stay BLIND)
+##   sd-centroid-amp-weighted  SD brightness 1918 -> 5868 Hz
+##                             (all five other SD properties stay BLIND)
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
@@ -218,10 +242,12 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-noclip --expect 'no verdict'" \
 	  "$(PY) tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-badhash --expect 'no verdict'" \
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
-	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'"
+	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
+	  "$(PY) model/sound_report.py --inject bd-ma-envelope" \
+	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted"
 
 test:
-	@$(PY) -m pytest model/ spec/ tools/ fpga/ -q
+	@$(PY) -m pytest model/ spec/ tools/ fpga/ rtl-sketch/test_verify_ctl_blindness.py -q
 
 ## Re-derive every marked prose claim in docs/ from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts
