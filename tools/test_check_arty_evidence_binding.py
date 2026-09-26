@@ -82,7 +82,7 @@ def test_superseded_records_are_data_and_never_a_failure(capsys):
     assert "fpga/reports/arty/uart-clean/verification.json" in records
     # EXACT lists, and they grow only when a compiled source changes: the
     # pre-drift proof (the one the published R0 image cites) differs by drift
-    # (voice_dp.v) and by the clap's final strike (contract rev 13: the drum
+    # (voice_dp.v) and by the clap's final strike (contract rev 14: the drum
     # RTL and the top that carries ENV_FRATE); the pre-L2 drift proof by
     # exactly the latter.
     L2 = ["rtl-sketch/drum_dp.v", "rtl-sketch/drum_kit.v",

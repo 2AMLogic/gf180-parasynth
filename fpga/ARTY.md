@@ -17,7 +17,7 @@ reports. Physical playback remains under review; this is not yet a
 qualified hardware audio result.
 
 **The published baseline predates per-oscillator drift and the clap's final
-strike (contract revision 13), and only a real Vivado run can change that.** Contract 6.11 / DR 0019 added drift to
+strike (contract revision 14), and only a real Vivado run can change that.** Contract 6.11 / DR 0019 added drift to
 `rtl-sketch/voice_dp.v` (five datapath states, three 16-bit walk
 accumulators, three deviations, a 10-bit decimation counter and register
 `0x2D`). Every figure in the table below — LUTs, registers, DSPs, both slack
@@ -435,7 +435,7 @@ demonstrated to turn the bench red. The controls are bench-logic controls
 
 The clean run for the **current** tree is
 [reports/arty/l2-clean](reports/arty/l2-clean) (the clap's final strike,
-contract revision 13: four drum/top source hashes move against `drift-clean`
+contract revision 14: four drum/top source hashes move against `drift-clean`
 and no measured field or transcript byte does, because the `phrase` scenario
 does not fire the clap — the clap's pin-level evidence is
 `docs/scorecard/clap-l2/`). Before it,

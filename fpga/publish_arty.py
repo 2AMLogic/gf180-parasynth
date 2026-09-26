@@ -39,19 +39,23 @@ ROOT = Path(__file__).resolve().parents[1]
 # The proof must cover the tree it is bound to, so this entry MOVES whenever
 # a compiled source changes; validate_verification hash-checks it against the
 # live source set and refuses otherwise. Superseded runs stay where they are:
-#   reports/arty/clean       the pre-uart SPI wrapper (fpga/verify_arty.py)
-#   reports/arty/uart-clean  the pre-drift UART wrapper -- still the proof the
-#                            PUBLISHED integrated baseline bitstream cites by
-#                            hash, so it is never rewritten in place
-#   reports/arty/drift-clean the pre-L2 tree: per-oscillator drift in voice_dp.v
-#                            (contract 6.11, DR 0019) moved the frame's sample
-#                            strobe from cycle 175 to 176 and left the audio
-#                            byte-identical. See that directory's README.
-#   reports/arty/l2-clean    this tree: the clap's final strike (contract rev
-#                            13, ENV_FRATE) in drum_dp/drum_regs/drum_kit and
-#                            synth_top. See that directory's README.
+#   reports/arty/clean            the pre-uart SPI wrapper (fpga/verify_arty.py)
+#   reports/arty/uart-clean       the pre-drift UART wrapper (contract revision
+#                                 11) -- still the proof the PUBLISHED
+#                                 integrated baseline bitstream (R0) cites by
+#                                 hash, so it is never rewritten in place
+#   reports/arty/drift-clean      per-oscillator drift in voice_dp.v (revision
+#                                 12, DR 0019) moved the frame's sample strobe
+#                                 from cycle 175 to 176 and left the audio
+#                                 byte-identical. See that directory's README.
+#   reports/arty/shark-blamp-clean  the shark-tooth's polyBLAMP (revision 13,
+#                                 DR 0017), before the clap's final strike.
+#   reports/arty/l2-clean         the clap's final strike (revision 14,
+#                                 ENV_FRATE) before polyBLAMP merged.
+#   reports/arty/rev14-clean      this tree: revision 14, both of the above.
+#                                 See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/l2-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
 }
 
 

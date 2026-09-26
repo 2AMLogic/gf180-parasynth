@@ -123,17 +123,17 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 # ---- the image this CLI drives, and so the drum kit it sends ------------------
 # The kit is a property of the IMAGE on the board, not of the tree the CLI runs
 # from. The published R1 image (fpga/release, integrated-baseline-2025.1) is
-# contract revision 12 RTL: no ENV_FRATE, no final strike. Revision 13's
+# contract revision 11 RTL: no ENV_FRATE, no final strike. Revision 14's
 # `kit_808()` programs a clap that image cannot play, so the default -- the
-# image a player actually has -- sends revision 12's frozen kit, and a board
+# image a player actually has -- sends revision 11's frozen kit, and a board
 # built from this tree is named explicitly (`--image tree`).
-IMAGE_REVISION = {"release": 12, "tree": 13}
+IMAGE_REVISION = {"release": 11, "tree": 14}
 DEFAULT_IMAGE = "release"
 
 
 def image_kit(image: str = DEFAULT_IMAGE) -> list:
     """The drum kit `image` plays (drums_fx.KITS_BY_REVISION). The frozen
-    revision-12 kit REFUSES (drums_fx.KitRefused) if it no longer hashes to the
+    revision-11 kit REFUSES (drums_fx.KitRefused) if it no longer hashes to the
     image it was verified with."""
     import drums_fx as dx
     if image not in IMAGE_REVISION:
@@ -1664,8 +1664,8 @@ def main(argv=None, *, bridge_factory=None) -> int:
     ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit a "
                          "fixture sends: release (the published R1 image, contract "
-                         "revision 12, no final strike -- the DEFAULT) or tree (an "
-                         "image built from this tree, revision 13)")
+                         "revision 11, no final strike -- the DEFAULT) or tree (an "
+                         "image built from this tree, revision 14)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
     ap.add_argument("--engineering", action="store_true",

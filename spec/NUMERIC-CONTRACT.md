@@ -1,6 +1,11 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 13 — 2026-09-26 — status: PROPOSED. Not ratified.**
+**Revision 14 — 2026-09-26 — status: PROPOSED. Not ratified.**
+
+Revision 13 is one normative change: the shark-tooth's triangle share now
+carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
+its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
+Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Section 18 has both.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -10,7 +15,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 13,
+through the two-key process this fleet uses; until then it is revision 14,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -548,7 +553,7 @@ Let `p` be the 24-bit phase before advance. `naive` is signed 16-bit
 | 2 | pulse25 | `+32767` if `p < 0x400000`, else `−32768` — 25 %; **not a Model D width** |
 | 3 | tri | `q = p >> 7` (0..131071); `q − 32768` if `q < 65536`, else `98303 − q` |
 | 4 | sine | `SINE(p)`, section 6.5; **not a Model D waveform** |
-| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth |
+| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth. **Naive only**: the band-limited form is 6.6.5, and it corrects BOTH shares |
 | 6 | revsaw | `sat16(−saw)` — oscillator 3's reverse sawtooth |
 | 7 | pulse29 | `+32767` if `p < 4 865 393`, else `−32768` — **29 % duty**, the wide rectangle |
 | 8 | pulse15 | `+32767` if `p < 2 516 582`, else `−32768` — **15 % duty**, the narrow rectangle |
@@ -562,10 +567,18 @@ drawing's pulse-width divider read against SM 2.3's 50 % and 15 %.
 
 The square and pulse step **up** at the wrap (p = 0) and **down** at the
 duty point; the saw steps **down** at the wrap. That difference fixes the sign
-of the correction in 6.6.4. The shark-tooth mixes the **corrected** saw (6.6)
-with the naive triangle, as the switch mixes two buffered outputs, so its step
-at the wrap is 10/57 of the sawtooth's and needs no second correction; the
-reverse sawtooth negates the corrected saw, for the same reason.
+of the correction in 6.6.4. The reverse sawtooth negates the **corrected** saw,
+because the switch mixes two buffered outputs and oscillator 3's Q20 inverts
+what the saw buffer already carries.
+
+The shark-tooth mixes the **corrected** saw with the **corrected** triangle, and
+the two corrections are different ones (revision 13, DR 0017). Its step at the
+wrap is 10/57 of the sawtooth's and PolyBLEP is what removes it. Its triangle
+share also **corners** twice per cycle — at `p = 0` and at `p = 2^23` — and a
+corner is a discontinuity in the SLOPE, not in the value, so no step correction
+can see it. That takes the ramp residual of 6.6.5. Before revision 13 the
+triangle share went to the divider naive, which cost up to 6.3 dB of inharmonic
+energy at the top of the register (DR 0017).
 
 ### 6.5 Sine
 
@@ -590,9 +603,12 @@ even-symmetric about 255.5.
 
 ### 6.6 PolyBLEP
 
-Applied to saw, square and pulse25 only. Triangle and sine are the naive
-waveform (the model constructs `OscFx` with `blep = blep and shape in (saw,
-square, pulse25)`). The integer model's aliasing suppression equals the float
+Applied to the discontinuous shapes of 6.4 — saw, revsaw, shark, square,
+pulse25, pulse29 and pulse15 (`voice_fx.BLEP_SHAPES`, which also carries the
+model-only `pulse479`). Triangle and sine are the naive waveform, and sine has
+no discontinuity of either kind. 6.6.1–6.6.3 are the machinery, 6.6.4 the
+application to the shapes of revision 4, and 6.6.5 the shark-tooth's, which is
+the one shape needing a correction 6.6.3 does not provide. The integer model's aliasing suppression equals the float
 PolyBLEP's at every note measured (DESIGN.md section 6); the widths below were
 set by tracking the float waveform inside Q1.15, not by aliasing.
 
@@ -688,6 +704,51 @@ than the naive square (`test_square_correction_has_the_right_sign`).
 Consequences: at `p = 0` the band-limited saw is `sat16(−32768 − (−32768)) =
 0`, the midpoint of its step, and the square is `sat16(32767 − 32768 − 0) =
 −1`. Both differ from the naive values by design.
+
+#### 6.6.5 polyBLAMP, and the shark-tooth (revision 13, DR 0017)
+
+A **slope** discontinuity is not corrected by 6.6.3 at all: the signal is
+continuous across it, so `c` has nothing to subtract. The correction it takes is
+the integral of 6.6.3's, evaluated in the same window from the same `s`
+(`voice_fx.blamp_slope`, `voice_fx.blamp_fx`):
+
+```
+m3 = (inc · 21845) >> 15                  once per oscillator per frame; 24 bits
+b  = 0
+if p < inc:                               just after the corner
+    s  = 65536 − frac(p)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+q = 2^24 − p
+if q < inc:                               just before the corner
+    s  = 65536 − frac(q)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+```
+
+`b` ranges **0..43690** — 17 bits UNSIGNED, and it is never negative: the sign
+belongs to the caller, because the same residual raises a valley and lowers a
+peak. If both conditions hold (only when `inc > 2^23`) the second assignment
+wins, as in 6.6.3. With `inc = 0`, `b = 0` for every `p`.
+
+`21845` is `round(2^16 / 3)` and MUST be used as written. It is a constant
+multiply, not a division: an implementation that divides by 3 exactly is **not**
+bit-exact with this specification.
+
+The shark-tooth (code 5) is then, with `c(·)` from 6.6.3, `b(·)` from above and
+`tri`, `saw` from 6.4, all evaluated with this oscillator's `inc, e, r`:
+
+```
+shark:    p2   = (p + 0x800000) mod 2^24                  the triangle's peak
+          tric = sat16( tri + b(p) − b(p2) )              valley up, peak down
+          sawc = sat16( saw − c(p) )
+          osc  = sat16(( 5749 · sawc + 27019 · tric ) >> 15)
+```
+
+*Informative:* the residual is `R(x) = (1 − |x|)^3 / 3` for a sample `x` samples
+from the corner, scaled by half the slope change. The triangle of 6.4 reads
+`p >> 7`, so its slope is `inc/128` Q1.15 LSB per sample and half its change at
+a corner is the same `inc/128`; `m3` is that over three. Getting the two corners
+the wrong way round sharpens them and measures *worse* than no correction at all
+(DR 0017's control table).
 
 ### 6.7 Glide (DR 0004)
 
@@ -1392,7 +1453,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
-| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 13**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is the envelope of revisions 10 to 12 exactly |
+| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 14**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is the envelope of revisions 10 to 13 exactly |
 | `0x90 + p` | `PATH[p]` | 25 | `[4:0] src`, `[9:5] e1`, `[14:10] e2`, `[16:15] nl`, `[19:17] att`, `[24:20] dest` (15.5) |
 | `0xB0 + 4m` | `MODE_A1[m]` | 26 s | Q2.24 coefficient a1 = 2r·cos ω |
 | `0xB1 + 4m` | `MODE_A2[m]` | 26 s | Q2.24 coefficient a2 = −r² |
@@ -1420,7 +1481,7 @@ bus.
 
 State registers, not host-writable except by
 RESET: `stops_prev` (11), per envelope `level` (24), `strike` (24), `t`
-(11), `fcap` (24, revision 13: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
+(11), `fcap` (24, revision 14: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
 `y2[m]`, `exc[m]` (21), `h1[m]`, `h2[m]` (21, modes 0..`N_NUMS`−1). The gains
 `dvol`, `bvol` of the output stage (12) are the instrument's, 16 bits
 unsigned each.
@@ -1473,7 +1534,7 @@ if choke < 8 and fire[choke]:  level ← 0                    choked, after ever
 ENV(e) = level >> 9                                         Q0.15, what the paths multiply by
 ```
 
-**Revision 13: the final strike** (plan084; the clap's confirmed "L2",
+**Revision 14: the final strike** (plan084; the clap's confirmed "L2",
 `docs/scorecard/clap-d12a/README.md` section 10). With `FRATE = 0` nothing
 below applies and the envelope is revision 10 exactly. With `FRATE ≠ 0`, and
 `last = bursts · period`:
@@ -1681,7 +1742,7 @@ says so:
 | 1 SD | PULSE × 0.1 ms → modes 7 (173 Hz, Q 16.3) and 8 (336 Hz, Q 9.9); NOISE × 15 ms → mode 3 (**BP** 2.75 kHz, Q 0.7) | 7, 8 (RAW), 3 (**BP**) | 2, 3 | both f0/Q, the snappy filter's pole, τ 15 ms | both bodies from the pulse, not the cascade (17.15); the snappy filter's **numerator**: reference 3 calls it a high-pass and the machine measures a band-pass on the same pole (17.22); SNAPPY level set to the knob's own curve at 5.0 |
 | 2 LT, 3 HT | PULSE × 0.1 ms → mode 9 (90 Hz, Q 25) / 10 (185 Hz, Q 25); the host's diode pitch drop sweeps f0 from ×1.06 down over 60 ms, scaled by accent above a threshold and by the TUNING pot (15.7.1) | 9, 10 (RAW) | 4, 5 | f0, Q, **the pitch drop** (reference 4) | no pink-noise rumble (17.14) |
 | 4 CH, 5 OH | SQSUM → mode 0 (BP 7117 Hz, Q 6, amp 0); TAP 0, SWING × envelope → mode 2 (HP 11.7 kHz, Q 2.5) / mode 1 (HP 7.8 kHz, Q 2.5); CH chokes OH | 0 (BP), 1, 2 (HP) | 6 (20 ms), 7 (150 ms, choke 4) | oscillators, BP, HPs, CH τ, the choke | OH τ 150 ms (DECAY mid) |
-| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 13 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
+| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 14 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
 | 7 CB | **SQ 4 and SQ 5 on two separate paths**, each SWING × (τ 5 ms at 0.5 + **τ 100 ms** at 0.5) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010) | nothing: the BP centre was 17.16 and is now fitted to a recording (1100 Hz Q 2.8), and the tail is the measured 98 ms |
 
 Fourteen of the sixteen paths are used; mode 11 is spare (zero). Levels are
@@ -1763,7 +1824,7 @@ which is why `verify_drums.py`'s stimulus carries them.
 ### 15.8 Reset
 
 RESET (`0xFF`, or hardware reset) sets every register of 15.1 (including
-revision 13's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
+revision 14's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).
@@ -2158,12 +2219,12 @@ record that extends this document; none may be resolved by picking a reading.
 
 ## 18. Revision history
 
-- **Rev 13 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
+- **Rev 14 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
   "L2" level frozen and confirmed in `docs/scorecard/clap-d12a/README.md`
   section 10, implemented in `docs/scorecard/clap-l2/`). One new register per
   envelope, `ENV_FRATE[e]` at `0x43 + 4e` (the stride's spare slot, so no
   address moves), 16 bits, Q0.16, reset 0; one new state register per
-  envelope, `fcap` (24). With `FRATE = 0` the envelope is revisions 10 to 12
+  envelope, `fcap` (24). With `FRATE = 0` the envelope is revisions 10 to 13
   exactly. The reference kit's clap (Appendix G) changes: 4 strikes at period
   511, the last at the fire level with `FRATE` τ 20 ms, tail τ 80 ms.
   **KIT808 moves from `a43fe2a7…` to `321a9354…`, 147 writes → 148.**
@@ -2171,14 +2232,26 @@ record that extends this document; none may be resolved by picking a reading.
   `ENV_CTL[8]` at 0x60, 125960438 → 134152438 (bursts 2 → 3, period 480 →
   511); `ENV_FRATE[8]` at 0x63, new, 68 (τ 20 ms); `ENV_RATE[9]` at 0x66,
   29 → 17 (τ 47 → 80 ms). Every other table is unchanged.
-  `test_revision_13_changes_only_the_clap_final_strike_registers` rebuilds
+  `test_revision_14_changes_only_the_clap_final_strike_registers` rebuilds
   revision 11's image from the live one by undoing exactly those three and
   requires revision 11's hash; `test_revision_11_…` now starts from that
   rebuilt image. This change was first written as "revision 11", colliding
-  with the tom rebalance below, and was renumbered before merge. The
-  `*_rev10` keys in `docs/scorecard/clap-l2/clap-phrase.json` name the
-  pre-L2 clap image, whose clap settings date from revision 10 and did not
-  change through revision 12.
+  with the tom rebalance below, then renumbered 13, and finally 14 because
+  polyBLAMP (Rev 13) merged first. The `*_rev10` keys in
+  `docs/scorecard/clap-l2/clap-phrase.json` name the pre-L2 clap image, whose
+  clap settings date from revision 10 and did not change through revision 13.
+  **Hosts name the image they drive** (`fpga/uart_host.py` and
+  `fpga/midi_session.py` `--image`): the published R0/R1 Arty image
+  (`a66c9349…`, source `d089c678`) is **revision 11** RTL -- it predates drift,
+  polyBLAMP and this revision -- and is sent `drums_fx.kit_808_rev11()`, frozen
+  to REV11's hash; `--image tree` sends this revision's kit.
+
+- **Rev 13 (2026-09-26)** — **polyBLAMP on the shark-tooth's corners** (6.4,
+  6.6, 6.6.5; DR 0017). The shark-tooth's triangle share gains a polyBLAMP
+  correction on its two corners, alongside the PolyBLEP its saw share already
+  carried. Nothing else moves: no register, no pinned table. It merged (#244)
+  with its header and DR 0017 calling it "revision 12", which drift (below)
+  already was; renumbered here, the first place both were in one tree (#293).
 
 - **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0019), closing
   17.18's mechanism half. One new register, `DRIFT` at 0x2D, 16 bits, Q0.16,

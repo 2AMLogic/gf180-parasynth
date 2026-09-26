@@ -2,7 +2,7 @@
 
 This folder is the evidence for the one production-clap change: the confirmed
 L2 final strike (`docs/scorecard/clap-d12a/README.md` §10), implemented in
-`model/drums_fx.py` and the drum RTL as **contract revision 13**. Every heavy
+`model/drums_fx.py` and the drum RTL as **contract revision 14**. Every heavy
 run was on the build box, and every verdict below comes from a checked exit
 status recorded by `tools/run_all.py`.
 
@@ -163,9 +163,10 @@ CI failed on four jobs. All of them were stale inputs, and each guard was kept:
 
 1. **Contract revision (python, acceptance).** L2 was written as "contract
    revision 11", but revision 11 (the tom rebalance) and revision 12 (drift)
-   already existed. The kit changed without the pins changing, so
+   already existed; it was renumbered 13, and then 14 when polyBLAMP (DR 0017)
+   merged to main first and took 13. The kit changed without the pins changing, so
    `spec/reference/test_tables.py` failed 5 tests. The change is renumbered as
-   **revision 13**, and KIT808 is re-pinned `a43fe2a7…` → `321a9354…` (147 →
+   **revision 14**, and KIT808 is re-pinned `a43fe2a7…` → `321a9354…` (147 →
    148 writes). A new test rebuilds revision 11's image from the live one by
    undoing exactly the three clap writes, and requires revision 11's hash.
 2. **Arty binding (spi-i2s, m5a-fast).** The live-tree UART proof still named

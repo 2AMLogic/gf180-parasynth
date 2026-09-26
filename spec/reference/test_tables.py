@@ -6,7 +6,7 @@ same revision and then LEFT in revision 6 -- the kit was fitted to a real
 TR-808 (DR 0009, DR 0010) and its hash moved. It moved again in revision 7
 (the snare) and in revision 10, which is the first move that is
 not a refit: six more SOUNDS, 100 writes -> 147. Revision 11 records the
-tom level rebalance after the measured pitch correction. Revision 13 is the
+tom level rebalance after the measured pitch correction. Revision 14 is the
 clap's final strike (plan084 "L2"): one new register write and two changed
 values, 147 writes -> 148. It is the first pinned table in
 this contract's history to change, and the pair below is how that is visible
@@ -61,19 +61,19 @@ REV10 = {
 REV11 = {
     "KIT808": "a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19",
 }
-# Revision 13 (plan084 "L2", the clap's final strike; revision 12 moved no
-# table). KIT808 moves a FIFTH time, and only on the clap's two envelopes:
+# Revision 14 (plan084 "L2", the clap's final strike; revisions 12 (drift) and
+# 13 (polyBLAMP) moved no table). KIT808 moves a FIFTH time, and only on the clap's two envelopes:
 # ENV_CTL[8] 3 -> 4 strikes at period 480 -> 511, the NEW write ENV_FRATE[8]
 # (tau 20 ms), and ENV_RATE[9] tau 47 -> 80 ms. 147 writes -> 148.
-# `test_revision_13_changes_only_the_clap_final_strike_registers` rebuilds
+# `test_revision_14_changes_only_the_clap_final_strike_registers` rebuilds
 # REV11 from the live image by undoing exactly those, so updating this literal
 # to whatever the generator produced cannot pass on its own.
-REV13 = {
+REV14 = {
     "KIT808": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683",
 }
-# the three clap writes revision 13 changed: address -> (revision 11's value,
-# None where the write did not exist; revision 13's value)
-REV13_CLAP = {0x60: (125960438, 134152438),   # ENV_CTL[8]: bursts 2 -> 3, period 480 -> 511
+# the three clap writes revision 14 changed: address -> (revision 11's value,
+# None where the write did not exist; revision 14's value)
+REV14_CLAP = {0x60: (125960438, 134152438),   # ENV_CTL[8]: bursts 2 -> 3, period 480 -> 511
               0x63: (None, 68),               # ENV_FRATE[8]: new, tau 20 ms
               0x66: (29, 17)}                 # ENV_RATE[9]: tail tau 47 -> 80 ms
 # Revision 9 (DR 0011) moved the cutoff ROM, and with it the resonance-
@@ -107,7 +107,7 @@ def test_rev3_hashes_are_unchanged_and_rev5_adds_two():
     got = {name: gt.sha(vals) for name, vals, _, _, _ in gt.tables()}
     assert {k: got[k] for k in REV3_STILL} == REV3_STILL
     assert {k: got[k] for k in REV5} == REV5
-    assert {k: got[k] for k in REV13} == REV13
+    assert {k: got[k] for k in REV14} == REV14
     assert {k: got[k] for k in REV9} == REV9
     assert {k: got[k] for k in REV9_NEW} == REV9_NEW
     assert set(got) == set(REV3) | set(REV5) | set(REV10) | set(REV9_NEW)
@@ -117,7 +117,7 @@ def test_exactly_three_pinned_tables_have_ever_moved():
     """Loudly, because a pinned table moving is the expensive kind of change.
     KIT808 moved five times: revisions 6 and 7 were fits to a real machine,
     revision 10 is six more SOUNDS (the kit went 100 -> 147 writes),
-    revision 11 records the tom level rebalance, and revision 13 is the
+    revision 11 records the tom level rebalance, and revision 14 is the
     clap's final strike (147 -> 148 writes). G_ROM128
     and K_ROM32 moved once, together, in revision 9 (DR 0011's tuning
     polynomial -- K_ROM32 is derived from G_ROM128, so it could not not move).
@@ -129,7 +129,7 @@ def test_exactly_three_pinned_tables_have_ever_moved():
     was = {**REV3, **REV5, "KIT808": KIT808_REV5}   # EXP_ROM65 did not exist then
     moved = sorted(k for k, v in was.items() if got[k] != v)
     assert moved == ["G_ROM128", "KIT808", "K_ROM32"], f"against revision 5's pins: {moved}"
-    assert got["KIT808"] == REV13["KIT808"]
+    assert got["KIT808"] == REV14["KIT808"]
     # The check that makes re-pinning honest rather than a rubber stamp: against
     # revision 9's pins -- the ones immediately before this change -- the kit
     # must be the ONLY thing that moved.
@@ -186,35 +186,35 @@ def test_note_inc_is_the_siblings():
 
 def _kit_rev11():
     """Revision 11's image, rebuilt from the live one by undoing exactly
-    revision 13's three clap writes (REV13_CLAP), in the live write order."""
+    revision 14's three clap writes (REV14_CLAP), in the live write order."""
     kit = gt.kit808()
-    for addr, (_, after) in REV13_CLAP.items():
+    for addr, (_, after) in REV14_CLAP.items():
         assert dict(kit)[addr] == after, hex(addr)
-    return [(a, REV13_CLAP[a][0] if a in REV13_CLAP else v) for a, v in kit
-            if not (a in REV13_CLAP and REV13_CLAP[a][0] is None)]
+    return [(a, REV14_CLAP[a][0] if a in REV14_CLAP else v) for a, v in kit
+            if not (a in REV14_CLAP and REV14_CLAP[a][0] is None)]
 
 
-def test_revision_13_changes_only_the_clap_final_strike_registers():
+def test_revision_14_changes_only_the_clap_final_strike_registers():
     """Reconstruct revision 11's image independently of the new hash pin: undo
     the three documented clap writes and nothing else, and it must hash to
     REV11. A different register, a moved write, or an extra change cannot pass
-    by updating REV13 alone. The values are also decoded, so the pin says what
+    by updating REV14 alone. The values are also decoded, so the pin says what
     the contract says (drums_fx's own encoders, not literals)."""
     import drums_fx as dx
     assert gt.sha([(a << 32) | v for a, v in _kit_rev11()]) == REV11["KIT808"]
     burst = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE
     tail = dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE
-    assert set(REV13_CLAP) == {burst, burst + 3, tail + 2}
-    assert REV13_CLAP[burst] == (dx.env_ctl(dx.CP, 15, 0, 2, 480),
+    assert set(REV14_CLAP) == {burst, burst + 3, tail + 2}
+    assert REV14_CLAP[burst] == (dx.env_ctl(dx.CP, 15, 0, 2, 480),
                                  dx.env_ctl(dx.CP, 15, 0, 3, 511))
-    assert REV13_CLAP[burst + 3][1] == dx.rate_reg(20e-3)
-    assert REV13_CLAP[tail + 2] == (dx.rate_reg(47e-3), dx.rate_reg(80e-3))
+    assert REV14_CLAP[burst + 3][1] == dx.rate_reg(20e-3)
+    assert REV14_CLAP[tail + 2] == (dx.rate_reg(47e-3), dx.rate_reg(80e-3))
 
 
 def test_revision_11_changes_only_the_three_documented_tom_levels():
     """Reconstruct the previous image independently of the new hash pin.
     A different register, write order, or amplitude change cannot pass merely
-    by updating REV11 to whatever the generator produced. Since revision 13 it
+    by updating REV11 to whatever the generator produced. Since revision 14 it
     starts from revision 11's image (`_kit_rev11`), not the live one.
     """
     kit = _kit_rev11()

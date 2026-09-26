@@ -178,7 +178,7 @@ TRACE = os.path.join(ROOT, "docs", "deadline", "traces")
 # stimulus, so _capture asserts it -- the same precondition
 # verify_deadline.analyse_capture enforces with REFUSED. The retained
 # `prod-stress-saw` / `ctl-prod-stress-late15` captures (2221d2c) predate
-# contract revision 13, whose kit has one more write (461 vs 460), and stay in
+# contract revision 14, whose kit has one more write (461 vs 460), and stay in
 # the tree as history; these tests use the `-l2` re-captures
 # (docs/deadline/runs/*-l2.json, build box, tools/run_all.py 2/2).
 CLEAN, LATE15 = "prod-stress-saw-l2", "ctl-prod-stress-late15-l2"
@@ -208,7 +208,7 @@ def _capture(tmp_path, record, scenario="stress-saw"):
     return dict(i2s=str(d / i2s), wrs=str(d / wrs), sched=str(d / (wrs + ".sched")))
 
 
-def test_the_pre_revision_13_captures_are_history_not_this_trees_stimulus(tmp_path):
+def test_the_pre_revision_14_captures_are_history_not_this_trees_stimulus(tmp_path):
     """The control for _capture's precondition: the retained pre-L2 capture is
     refused as this tree's evidence (it stays in the tree, unmodified)."""
     with pytest.raises(AssertionError, match="not driven by this tree"):
@@ -250,7 +250,7 @@ def test_i2s_completeness_names_every_defect():
 def test_the_retained_clean_capture_passes_and_each_corruption_refuses(tmp_path):
     files = _capture(tmp_path, CLEAN)
     res, st, reasons, dl = _judge(files)
-    # 2158 on the revision-13 re-capture; the pre-L2 capture required 2156
+    # 2158 on the revision-14 re-capture; the pre-L2 capture required 2156
     assert st == 0 and res["periods"] == res["periods_required"] == 2158
     corruptions = {
         "i2s-empty": ("i2s", lambda L: []),
@@ -271,7 +271,7 @@ def test_the_retained_clean_capture_passes_and_each_corruption_refuses(tmp_path)
 
 def test_a_late_but_complete_capture_is_still_a_deadline_fail(tmp_path):
     """late:15 on stress-saw: complete evidence, frames missed (32 on the
-    revision-13 re-capture, the first at 539)."""
+    revision-14 re-capture, the first at 539)."""
     files = _capture(tmp_path, LATE15)
     res, st, reasons, dl = _judge(files)
     assert res["evidence"] == [] and st == 1 and dl and "missed" in reasons[0]

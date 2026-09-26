@@ -1,7 +1,7 @@
-# Arty wrapper UART-bridge clean run, clap-L2 tree (contract revision 13)
+# Arty wrapper UART-bridge clean run, clap-L2 tree (contract revision 14)
 
 The wrapper's digital proof for the tree that carries the clap's final strike
-(contract revision 13: `ENV_FRATE` in `drum_regs.v`/`drum_dp.v`/`drum_kit.v`,
+(contract revision 14: `ENV_FRATE` in `drum_regs.v`/`drum_dp.v`/`drum_kit.v`,
 wired through `synth_top.v`). This is what `fpga/publish_arty.py`'s
 `VERIFICATION_BY_WRAPPER["arty_a7_top"]` binds and what
 `fpga/build_arty.py --prepare-only` validates against the live source set.

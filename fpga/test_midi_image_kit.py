@@ -2,16 +2,16 @@
 
 `fpga/midi_session.py` is a second host, separate from `uart_host.py run`, and it
 built `spi_host.MusicHost` with no kit, so it fell back to `drums_fx.kit_808()`:
-after #273 that is revision 13's clap (ENV_CTL[8] burst 3, the new ENV_FRATE[8],
-ENV_RATE[9] 80 ms). The published R1 Arty image is revision 12 and does not
+after #273 that is revision 14's clap (ENV_CTL[8] burst 3, the new ENV_FRATE[8],
+ENV_RATE[9] 80 ms). The published R1 Arty image is revision 11 and does not
 decode ENV_FRATE, so a live session on a real board played an unverified clap
 and nothing refused or reported it.
 
 The mechanism mirrors `uart_host --image` (fpga/test_image_kit.py):
-  * `MidiSession(image=...)`, default `release` (the frozen revision-12 kit);
+  * `MidiSession(image=...)`, default `release` (the frozen revision-11 kit);
   * the CLI's `--image`: a serial port defaults to `release`; `--port sim` is the
     tree's device contract and implies `tree`; `--port sim --image release` is
-    REFUSED rather than letting a revision-12 kit pass against a revision-13
+    REFUSED rather than letting a revision-11 kit pass against a revision-14
     simulator;
   * the verification harness drives the tree (sim and arty_a7_top RTL), so it
     names `tree` explicitly for both the session and its oracle.
@@ -39,7 +39,7 @@ import uart_device_sim as dev         # noqa: E402
 import uart_host as uh                # noqa: E402
 
 BURST = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE          # ENV_CTL[8]
-FRATE = BURST + 3                                       # ENV_FRATE[8], revision 13 only
+FRATE = BURST + 3                                       # ENV_FRATE[8], revision 14 only
 TAIL_RATE = dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE + 2    # ENV_RATE[9]
 
 
@@ -55,17 +55,17 @@ def _drums(writes) -> dict:
 
 
 def test_default_session_sends_the_release_kit():
-    """RED before the fix: the session sent kit_808() (revision 13)."""
+    """RED before the fix: the session sent kit_808() (revision 14)."""
     s = _session()
     assert s.image == uh.DEFAULT_IMAGE == "release"
-    assert s.mh.kit == dx.kit_808_rev12()
+    assert s.mh.kit == dx.kit_808_rev11()
     drums = _drums(s.init_writes())
     assert FRATE not in drums
     assert drums[BURST] == dx.env_ctl(dx.CP, 15, 0, 2, 480)
     assert drums[TAIL_RATE] == dx.rate_reg(47e-3)
 
 
-def test_control_tree_session_sends_revision_13():
+def test_control_tree_session_sends_revision_14():
     """The check discriminates: the tree image's known state has the write the
     release image cannot decode, and its values are kit_808()'s."""
     s = _session(image="tree")
@@ -109,7 +109,7 @@ def test_cli_refuses_sim_with_the_release_image(capsys):
 
 
 def test_harness_drives_the_tree_image():
-    """verify_live_midi's sim and RTL replay are this tree (revision 13): the
+    """verify_live_midi's sim and RTL replay are this tree (revision 14): the
     session and its oracle both name it, so the oracle's known state has
     ENV_FRATE[8] and matches the tree session's write for write."""
     import verify_live_midi as vlm
@@ -126,7 +126,7 @@ def test_doc_and_start_command_log_state_the_measured_counts():
     n_tree = len(_session(image="tree").init_writes())
     n_rel = len(_session(image="release").init_writes())
     doc = " ".join((ROOT / "docs/live-midi.md").read_text().split())
-    assert (f"That is {n_tree} writes on the tree image (revision 13) and {n_rel} "
+    assert (f"That is {n_tree} writes on the tree image (revision 14) and {n_rel} "
             f"on the release image") in doc
     assert f"{n_tree} init writes acknowledged (kit for image tree" in doc
     assert f"static image 0/{n_tree}" in doc

@@ -10,10 +10,10 @@
 THE IMAGE (#273). The drum kit in the known-state image is a property of the
 Arty image on the board, not of the tree this runs from (uart_host.image_kit).
 On a serial port the default is `--image release`: the published R1 image,
-contract revision 12, which has no ENV_FRATE and plays revision 12's clap.
-`--image tree` is a board built from this tree (revision 13). `--port sim` is
+contract revision 11, which has no ENV_FRATE and plays revision 11's clap.
+`--image tree` is a board built from this tree (revision 14). `--port sim` is
 this tree's device contract, so it implies `tree`, and `--port sim --image
-release` is REFUSED rather than letting a revision-12 kit pass against it.
+release` is REFUSED rather than letting a revision-11 kit pass against it.
 
 A keyboard's MIDI stream in, register writes out, over the existing USB-UART
 control link (fpga/uart_host.py's packets, rtl-sketch/uart_bridge.v's device
@@ -295,7 +295,7 @@ class MidiSession:
         # refused before anything is sent
         self.patch_summary = qd.check_patch(regs, name=preset or "default")
         # the kit the IMAGE on the board plays (uart_host.image_kit): the frozen
-        # revision-12 kit for the published release REFUSES (KitRefused) if it
+        # revision-11 kit for the published release REFUSES (KitRefused) if it
         # has drifted; never MusicHost's fallback to the tree's kit_808()
         self.image = image
         self.mh = sh.MusicHost(patch=dict(regs), kit=uh.image_kit(image))
@@ -841,7 +841,7 @@ def run_live(session: MidiSession, source: RawMidiInput, *, duration_s: float | 
 
 def resolve_image(port: str, image: str | None) -> str:
     """The image a session drives. A serial port defaults to the published
-    release (revision 12); `sim` is this tree's device contract (revision 13), so
+    release (revision 11); `sim` is this tree's device contract (revision 14), so
     it implies `tree` and REFUSES `release`."""
     if port == "sim":
         if image == "release":
@@ -866,9 +866,9 @@ def main(argv=None) -> int:
     ap.add_argument("--duration", type=float, default=None, help="stop after this many seconds")
     ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit sent: "
-                         "release (the published R1 image, contract revision 12 -- the "
+                         "release (the published R1 image, contract revision 11 -- the "
                          "DEFAULT on a serial port) or tree (built from this tree, "
-                         "revision 13 -- implied by --port sim, which refuses release)")
+                         "revision 14 -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
     try:
         image = resolve_image(a.port, a.image)

@@ -182,7 +182,7 @@ class EnvFx:
         choked (its choke stop went 0->1 this frame): level <- 0
         ENV = level >> 9                      (Q0.15, what the paths multiply by)
 
-    THE FINAL STRIKE (contract revision 13, 15.3; plan084, the clap's L2).
+    THE FINAL STRIKE (contract revision 14, 15.3; plan084, the clap's L2).
     With FRATE = 0 -- the reset value, and every envelope but the clap's burst
     -- nothing below changes and the envelope is bit-identical to revision 10.
     With FRATE != 0:
@@ -318,7 +318,7 @@ class DrumsFx:
             elif f == 2:
                 self.envs[e].rate = value & 0xFFFF
             else:
-                self.envs[e].frate = value & 0xFFFF   # revision 13: the final strike (15.3)
+                self.envs[e].frate = value & 0xFFFF   # revision 14: the final strike (15.3)
         elif A_PATH <= addr < A_PATH + self.P:
             self.paths[addr - A_PATH] = value & ((1 << 25) - 1)
         elif A_MODE <= addr < A_MODE + self.M * MODE_STRIDE:
@@ -489,7 +489,7 @@ def mode_writes(m: int, f0_hz: float, q: float, amp: float, num: int = RAW) -> l
 def env_writes(e: int, stop: int, tau_s: float, peak: float, *, choke: int = 15,
                hold: int = 0, bursts: int = 0, period: int = 0,
                final_tau: float | None = None) -> list:
-    """`final_tau` (revision 13) writes FRATE: None writes nothing (the register
+    """`final_tau` (revision 14) writes FRATE: None writes nothing (the register
     keeps what it had -- 0 from reset), 0 writes 0 (the feature OFF, which a
     preset that shares an envelope with a final-strike sound MUST do), and a
     time constant writes its rate."""
@@ -550,7 +550,7 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
 PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
-# ---- the clap, contract revision 13 (plan081 C / plan084: "L2") ---------------
+# ---- the clap, contract revision 14 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
 # 21.3, 31.9 ms), the first three at the kept 4 ms decay and 13/16 re-strike,
@@ -1027,19 +1027,19 @@ def kit_808() -> list:
     return w
 
 
-# ---- the kit an image that predates revision 13 plays --------------------------
+# ---- the kit an image that predates revision 14 plays --------------------------
 # The published R1 Arty image (fpga/reports/arty/integrated-baseline-2025.1,
 # built at fpga/release/release_manifest.IMAGE_SOURCE_COMMIT) is contract
-# revision 12 RTL: it has no ENV_FRATE register and no final strike. Sending it
-# revision 13's `kit_808()` would program four strikes at period 511 and an
+# revision 11 RTL: it has no ENV_FRATE register and no final strike. Sending it
+# revision 14's `kit_808()` would program four strikes at period 511 and an
 # 80 ms tail on a clap that cannot play the fourth at the fire level -- a clap
 # nobody verified. So the kit a host sends is a property of the IMAGE it drives,
 # not of the tree it runs from.
 #
-# KIT808 as revisions 11 and 12 stated it (revision 12 moved no table): the
+# KIT808 as revision 11 stated it (revisions 12 and 13 moved no table): the
 # hash in spec/reference/test_tables.py's REV11 pin, computed the same way
 # (sha256 of the decimal words `addr << 32 | value`, comma-joined).
-KIT808_REV12_SHA256 = "a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19"
+KIT808_REV11_SHA256 = "a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19"
 
 
 class KitRefused(RuntimeError):
@@ -1052,15 +1052,15 @@ def _kit_sha256(kit: list) -> str:
                           .encode()).hexdigest()
 
 
-def kit_808_rev12() -> list:
-    """The reference kit a revision-12 image plays: `kit_808()` with revision
+def kit_808_rev11() -> list:
+    """The reference kit a revision-11 image plays: `kit_808()` with revision
     13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
     480, no ENV_FRATE[8] write at all (the register does not exist there), and
     ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
     its order.
 
     FROZEN BY HASH, CHECKED AT THE POINT OF USE: the result must hash to
-    KIT808_REV12_SHA256, or this REFUSES (KitRefused). A later change to any
+    KIT808_REV11_SHA256, or this REFUSES (KitRefused). A later change to any
     other kit value moves `kit_808()` for the tree, but it did not move the
     published image; deriving this kit would then silently send the old image
     bytes it was never verified with. Refusing makes that a decision someone
@@ -1071,17 +1071,17 @@ def kit_808_rev12() -> list:
             tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
     kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
     got = _kit_sha256(kit)
-    if got != KIT808_REV12_SHA256:
-        raise KitRefused(f"kit_808_rev12() hashes to {got[:12]}, not revision 12's "
-                         f"KIT808 {KIT808_REV12_SHA256[:12]}: kit_808() changed a write "
-                         "the revision-12 image was verified with; freeze the literal "
+    if got != KIT808_REV11_SHA256:
+        raise KitRefused(f"kit_808_rev11() hashes to {got[:12]}, not revision 11's "
+                         f"KIT808 {KIT808_REV11_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-11 image was verified with; freeze the literal "
                          "image or cut a new release")
     return kit
 
 
 # The kit each supported image revision plays. A host names the image it
 # drives; it does not assume the tree's.
-KITS_BY_REVISION = {12: kit_808_rev12, 13: kit_808}
+KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808}
 
 
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:
