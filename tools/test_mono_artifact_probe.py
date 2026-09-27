@@ -154,3 +154,13 @@ def test_out_of_domain_stimuli_refuse():
         p.render_held("r1", 84, p.held_patch(q=1.0))
     with pytest.raises(p.Refused):
         p.render_held("r1", 84, p.held_patch(noise=0.5))
+
+
+def test_oversampled_stage_splits_unwanted_by_band():
+    x = bl_saw(F0, sr=2 * SR, n=2 * N, top=SR / 2)
+    t = np.arange(2 * N) / (2 * SR)
+    lo = math.sqrt(2) * 10 ** (-70 / 20) * np.sin(2 * math.pi * 13_333.0 * t)   # in band
+    hi = math.sqrt(2) * 10 ** (-60 / 20) * np.sin(2 * math.pi * 36_111.0 * t)   # above 24 kHz
+    r = p.split_spectrum(x + lo + hi, 2 * SR, F0, band_hz=SR / 2)
+    assert r["unwanted_inband_dbfs"] == pytest.approx(-70.0, abs=0.5)
+    assert r["unwanted_outband_dbfs"] == pytest.approx(-60.0, abs=0.5)

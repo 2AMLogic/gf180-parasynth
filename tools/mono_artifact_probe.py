@@ -152,6 +152,9 @@ def split_spectrum(x, sr: float, f0: float, *, band_hz: float | None = None,
     p_res = float(pw[residual].sum())
     p_sup = float(pw[supra].sum())
     freqs = np.arange(nb) * bin_hz
+    inb = freqs < band
+    p_unw_in = float(pw[(image | residual) & inb].sum())
+    p_unw_out = float(pw[(image | residual) & ~inb].sum())
     up = intended & (freqs >= UPPER_BAND[0]) & (freqs < min(UPPER_BAND[1], band))
     p_up = float(pw[up].sum())
     hk = np.array(sorted(harmonics))
@@ -167,6 +170,9 @@ def split_spectrum(x, sr: float, f0: float, *, band_hz: float | None = None,
         "residual_dbfs": round(_dbfs(p_res), 4),
         "unwanted_dbfs": round(_dbfs(p_img + p_res), 4),
         "supra_dbfs": round(_dbfs(p_sup), 4) if supra.any() else None,
+        # below the stage's audio band vs above it (the part a decimator must remove)
+        "unwanted_inband_dbfs": round(_dbfs(p_unw_in), 4),
+        "unwanted_outband_dbfs": round(_dbfs(p_unw_out), 4) if (~inb).any() else None,
         "image_rel_db": round(_dbfs(p_img) - _dbfs(p_int), 4),
         "residual_rel_db": round(_dbfs(p_res) - _dbfs(p_int), 4),
         "unwanted_rel_db": round(_dbfs(p_img + p_res) - _dbfs(p_int), 4),
