@@ -55,12 +55,18 @@ def tol_hz(k: int, f0: float) -> float:
 
 def decompose(y, sr, split, f0) -> dict:
     """Energy fractions of a prepared strike's first 150 ms (the scorer's window)."""
-    w = np.asarray(y[: int(WIN_S * sr)], dtype=np.float64)
+    # The scorer's own window: t = 0 is TRIM_MS before the onset, and
+    # prepare() puts a guaranteed lead of silence in front of it. The first
+    # version sliced y from its start, so "early" was the silent lead and the
+    # strike landed in "late" (wrong-then-right, #334).
+    seg, o = rc.window_with_lead(y, sr, 0.0, WIN_S)
+    seg = np.asarray(seg, dtype=np.float64)
+    w = seg[o:]
     total = float(np.sum(w * w))
     if total <= 0:
         raise rc.Refused("silent window")
     sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
-    hb = sosfiltfilt(sos, np.concatenate([np.zeros(sr // 10), w]))[sr // 10:]
+    hb = sosfiltfilt(sos, np.concatenate([np.zeros(sr // 10), seg]))[sr // 10 + o:]
     ne = int(EARLY_S * sr)
     e_early = float(np.sum(hb[:ne] ** 2)) / total
     e_late_band = float(np.sum(hb[ne:] ** 2)) / total
@@ -106,7 +112,7 @@ def _harmonic_levels(spec, f, f0, total):
     return out
 
 
-BLOCKS = ((0.010, 0.030), (0.030, 0.060), (0.060, 0.100), (0.100, 0.150),
+BLOCKS = ((0.000, 0.004), (0.004, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.100), (0.100, 0.150),
           (0.150, 0.300), (0.300, 0.600))
 
 
@@ -117,7 +123,9 @@ def time_profile(y, sr, split) -> dict:
     sits at the tail's level it is the recording's floor, not the instrument."""
     y = np.asarray(y, dtype=np.float64)
     sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
-    hb = sosfiltfilt(sos, y)
+    o = rc.required_lead_samples(sr)
+    hb = sosfiltfilt(sos, y)[o:]
+    y = y[o:]                                   # t = 0 as the scorer defines it
     pk = float(np.max(np.abs(y)))
 
     def rms_db(x):
@@ -137,17 +145,19 @@ def time_profile(y, sr, split) -> dict:
 def fine_profile(y, sr, split, f0) -> dict:
     """2 ms blocks over the first 60 ms: above-split and full-band RMS (dB re
     peak), and the above-split band's spectral centroid and harmonic share
-    over 10-30 ms, where both sides hold nearly all of that energy."""
+    over 0-20 ms after t = 0, where both sides hold nearly all of it."""
     y = np.asarray(y, dtype=np.float64)
     sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
-    hb = sosfiltfilt(sos, y)
+    o = rc.required_lead_samples(sr)
+    hb = sosfiltfilt(sos, y)[o:]
+    y = y[o:]
     pk = float(np.max(np.abs(y)))
     step = int(0.002 * sr)
     band, full = [], []
     for i in range(0, int(0.060 * sr), step):
         band.append(round(20 * math.log10(max(float(np.sqrt(np.mean(hb[i:i + step] ** 2))), 1e-12) / pk), 1))
         full.append(round(20 * math.log10(max(float(np.sqrt(np.mean(y[i:i + step] ** 2))), 1e-12) / pk), 1))
-    seg = y[int(0.010 * sr):int(0.030 * sr)]
+    seg = y[:int(0.020 * sr)]
     m = len(seg)
     t = 2 * np.pi * np.arange(m) / m
     bh = 0.35875 - 0.48829 * np.cos(t) + 0.14128 * np.cos(2 * t) - 0.01168 * np.cos(3 * t)
@@ -156,8 +166,8 @@ def fine_profile(y, sr, split, f0) -> dict:
     f = np.fft.rfftfreq(n, 1.0 / sr)
     bnd = (f >= split) & (f < TOP_HZ)
     cen = float((f[bnd] * sp[bnd]).sum() / sp[bnd].sum())
-    return {"band_2ms_db": band, "full_2ms_db": full, "centroid_10_30ms_hz": round(cen, 1),
-            "peak_bin_10_30ms_hz": round(float(f[bnd][np.argmax(sp[bnd])]), 1),
+    return {"band_2ms_db": band, "full_2ms_db": full, "centroid_0_20ms_hz": round(cen, 1),
+            "peak_bin_0_20ms_hz": round(float(f[bnd][np.argmax(sp[bnd])]), 1),
             "peak_bin_over_f0": round(float(f[bnd][np.argmax(sp[bnd])]) / f0, 3)}
 
 

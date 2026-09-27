@@ -15,6 +15,11 @@ SR = 48_000
 F0, SPLIT = 135.0, 500.0
 
 
+def _prep(y):
+    """Through the scorer's own prepare(), as every real signal is."""
+    return d.rc.prepare(np.concatenate([np.zeros(SR // 20), y]), SR)
+
+
 def _strike(h3=0.0, click=0.0, noise=0.0, seed=1):
     t = np.arange(int(0.2 * SR)) / SR
     env = np.exp(-t / 0.058)
@@ -31,7 +36,7 @@ def _strike(h3=0.0, click=0.0, noise=0.0, seed=1):
         nz = sosfilt(butter(4, [900, 1100], btype="bandpass", fs=SR, output="sos"),
                      rng.standard_normal(len(t)))
         y += noise * nz * env
-    return y
+    return _prep(y)
 
 
 def test_pure_ring_has_no_late_above_split_energy():
@@ -74,5 +79,5 @@ def test_broadband_noise_at_high_k_is_not_called_harmonic():
     rng = np.random.default_rng(3)
     y = np.sin(2 * math.pi * 185 * t) * env + 0.5 * env * sosfilt(
         butter(4, [1200, 1900], btype="bandpass", fs=SR, output="sos"), rng.standard_normal(len(t)))
-    r = d.decompose(y, SR, 700.0, 185.0)
+    r = d.decompose(_prep(y), SR, 700.0, 185.0)
     assert r["late_harmonic_share"] < r["mask_coverage"] + 0.15 and r["mask_coverage"] <= 0.41
