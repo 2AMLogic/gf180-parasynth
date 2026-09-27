@@ -134,6 +134,33 @@ def time_profile(y, sr, split) -> dict:
     return out
 
 
+def fine_profile(y, sr, split, f0) -> dict:
+    """2 ms blocks over the first 60 ms: above-split and full-band RMS (dB re
+    peak), and the above-split band's spectral centroid and harmonic share
+    over 10-30 ms, where both sides hold nearly all of that energy."""
+    y = np.asarray(y, dtype=np.float64)
+    sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
+    hb = sosfiltfilt(sos, y)
+    pk = float(np.max(np.abs(y)))
+    step = int(0.002 * sr)
+    band, full = [], []
+    for i in range(0, int(0.060 * sr), step):
+        band.append(round(20 * math.log10(max(float(np.sqrt(np.mean(hb[i:i + step] ** 2))), 1e-12) / pk), 1))
+        full.append(round(20 * math.log10(max(float(np.sqrt(np.mean(y[i:i + step] ** 2))), 1e-12) / pk), 1))
+    seg = y[int(0.010 * sr):int(0.030 * sr)]
+    m = len(seg)
+    t = 2 * np.pi * np.arange(m) / m
+    bh = 0.35875 - 0.48829 * np.cos(t) + 0.14128 * np.cos(2 * t) - 0.01168 * np.cos(3 * t)
+    n = 1 << 16
+    sp = np.abs(np.fft.rfft(seg * bh, n)) ** 2
+    f = np.fft.rfftfreq(n, 1.0 / sr)
+    bnd = (f >= split) & (f < TOP_HZ)
+    cen = float((f[bnd] * sp[bnd]).sum() / sp[bnd].sum())
+    return {"band_2ms_db": band, "full_2ms_db": full, "centroid_10_30ms_hz": round(cen, 1),
+            "peak_bin_10_30ms_hz": round(float(f[bnd][np.argmax(sp[bnd])]), 1),
+            "peak_bin_over_f0": round(float(f[bnd][np.argmax(sp[bnd])]) / f0, 3)}
+
+
 def kit_identity() -> dict:
     import drums_fx as dx
     pinned = json.loads((ROOT / "fpga/release/r1-candidate.json").read_text())["kit"]["sha256"]
@@ -157,7 +184,8 @@ def diagnose(refdir: pathlib.Path) -> dict:
                 raise rc.Refused(f"{voice} {side}: {bs.reason or f0.reason}")
             row[side] = {"body_spectrum_db": round(bs.value, 3), "f0_hz": round(f0.value, 2),
                          "sr": sr, **decompose(y, sr, split, f0.value),
-                         "time_profile": time_profile(y, sr, split)}
+                         "time_profile": time_profile(y, sr, split),
+                         "fine_profile": fine_profile(y, sr, split, f0.value)}
         r, o = row["reference"], row["ours"]
         row["deficit_db"] = {k: (None if r[k] is None or o[k] is None else round(o[k] - r[k], 2))
                              for k in ("early_db", "harmonic_db", "other_db")}
