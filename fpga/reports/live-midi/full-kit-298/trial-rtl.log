@@ -1,0 +1,43 @@
+live-midi[coverage]: PASS -- timed 211, refusals 14 (aftertouch, cc-unsupported, channel, domain, mod-unrouted, pitch-bend, poly-aftertouch, program-change, realtime, simultaneous, sustain, sysex, unmapped-drum), superseded 113; latency n 57 p95 16.979166666666668 p99 25.979166666666668 max 25.979166666666668 ms
+live-midi[coverage@65000]: PASS -- timed 211, refusals 14 (aftertouch, cc-unsupported, channel, domain, mod-unrouted, pitch-bend, poly-aftertouch, program-change, realtime, simultaneous, sustain, sysex, unmapped-drum), superseded 113; latency n 57 p95 16.979166666666668 p99 25.979166666666668 max 25.979166666666668 ms
+live-midi[alternates]: PASS -- timed 397, refusals 1 (simultaneous), superseded 0; latency n 69 p95 16.0625 p99 16.083333333333332 max 16.083333333333332 ms
+live-midi[pressure]: PASS -- timed 395, refusals 193 (queue-pressure), superseded 807; latency n 120 p95 17.0 p99 17.0 max 17.625 ms
+live-midi[sustained]: PASS -- timed 2669, refusals 0 (), superseded 0; latency n 905 p95 16.729166666666668 p99 16.979166666666668 max 17.041666666666668 ms
+live-midi control DROP_NOTE_OFF: CAUGHT (must move ['voice_gate', 'stuck_notes']) -- static_image=. voice_gate=M voice_pitch=M drum_strikes=. drum_sounds=. drum_coeffs=. knobs=. timing=. stuck_notes=M refusals=. release_domain=. queues=. latency=.
+live-midi control WRONG_DRUM_MAP: CAUGHT (must move ['drum_strikes']) -- static_image=. voice_gate=. voice_pitch=. drum_strikes=M drum_sounds=. drum_coeffs=M knobs=. timing=. stuck_notes=. refusals=. release_domain=. queues=. latency=.
+live-midi control DELAYED_EVENT: CAUGHT (must move ['timing']) -- static_image=. voice_gate=. voice_pitch=M drum_strikes=. drum_sounds=. drum_coeffs=. knobs=. timing=M stuck_notes=. refusals=. release_domain=. queues=. latency=.
+live-midi control WRONG_ALT: CAUGHT (must move ['drum_sounds']) -- static_image=. voice_gate=. voice_pitch=. drum_strikes=. drum_sounds=M drum_coeffs=M knobs=. timing=. stuck_notes=. refusals=. release_domain=. queues=. latency=.
+live-midi control NO_TAIL_CUT: CAUGHT (must move ['drum_coeffs']) -- static_image=. voice_gate=M voice_pitch=M drum_strikes=M drum_sounds=M drum_coeffs=M knobs=M timing=M stuck_notes=. refusals=. release_domain=. queues=. latency=.
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+live-midi RTL[coverage]: PASS -- writes 404/404, timing bad 0, I2S mismatch 0 over 109053 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+live-midi RTL[alternates]: PASS -- writes 590/590, timing bad 0, I2S mismatch 0 over 212733 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+live-midi RTL[pressure]: PASS -- writes 588/588, timing bad 0, I2S mismatch 0 over 46653 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+live-midi RTL[sustained]: PASS -- writes 502/502, timing bad 0, I2S mismatch 0 over 166513 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+    write 349: intended f/sec/a/d 0/1/0x11/0x9d42, got 0/1/0x16/0x9d42
+    write 350: intended f/sec/a/d 0/1/0x0/0x2, got 0/1/0x0/0x40
+    seg 0 period 61053: model -2763, wire -2352, error +411 LSB
+    seg 0 period 61054: model -2349, wire -5968, error -3619 LSB
+    seg 0 period 61055: model -114, wire -5917, error -5803 LSB
+live-midi RTL control WRONG_DRUM_MAP: CAUGHT -- I2S mismatch 47837 over 109053 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+    write 208 (a=0x0): contract frame 13052, landed 13292
+    write 209 (a=0x1): contract frame 13052, landed 13292
+    write 210 (a=0x2): contract frame 13053, landed 13293
+    write 211 (a=0x1a): contract frame 13053, landed 13293
+    seg 0 period 13061: model 253, wire 252, error -1 LSB
+    seg 0 period 13064: model -1516, wire -1514, error +2 LSB
+    seg 0 period 13065: model -1615, wire -1621, error -6 LSB
+live-midi RTL control DELAYED_EVENT: CAUGHT -- I2S mismatch 84474 over 109053 periods
+verify_uart_bridge: no identical run on disk (stimulus); simulating
+    write 202: intended f/sec/a/d 0/1/0xdc/0x1ffb614, got 0/1/0xdc/0x1ffd807
+    write 203: intended f/sec/a/d 0/1/0xdd/0x300237f, got 0/1/0xdd/0x3001ee0
+    write 204: intended f/sec/a/d 0/1/0xde/0x265, got 0/1/0xde/0x13b
+    seg 0 period 9693: model -5570, wire -5573, error -3 LSB
+    seg 0 period 9694: model -10727, wire -5517, error +5210 LSB
+    seg 0 period 9695: model -10609, wire -5459, error +5150 LSB
+live-midi RTL control WRONG_ALT: CAUGHT -- I2S mismatch 202649 over 212733 periods
+T-LIVE-MIDI: PASS
