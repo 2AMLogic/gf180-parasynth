@@ -1,0 +1,21 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date         : Sun Sep 27 06:40:07 2026
+| Host         : ip-172-31-72-198 running 64-bit Ubuntu 22.04.5 LTS
+| Command      : report_exceptions -file /home/ubuntu/work/xdc-315/build/xdc-probe/control-r1-as-built/exceptions.rpt
+| Design       : arty_a7_top
+| Device       : 7a100t-csg324
+| Speed File   : -1  PRODUCTION 1.23 2018-06-13
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Exceptions Report
+
+Position  From                   Through         To                                                    Setup           Hold            Status           
+--------  ---------------------  --------------  ----------------------------------------------------  --------------  --------------  -----------------
+2         [get_ports spi_sck]    *               [get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]   false           false           
+3         [get_ports spi_mosi]   *               [get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]  false           false           
+4         [get_ports spi_cs_n]   *               [get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]   false           false           
+5         [get_ports btn_reset]  *               *                                                     false           false           
+
