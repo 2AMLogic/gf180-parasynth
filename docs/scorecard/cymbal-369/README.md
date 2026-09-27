@@ -24,16 +24,47 @@ DR 0022). No kit, RTL or scorer changes. R1 is unchanged.
 - the record ends less than 15 dB (of envelope) after the −30 dB point;
 - the late residual exceeds 1.5 dB.
 
-**Known answers (6 tests, passing).** These are synthetic three-band strikes with planted time constants and levels:
+**Known answers (8 tests, passing).** These are synthetic three-band strikes with planted time constants and levels:
 - single-exponential T20 to within 5 %;
 - a two-slope high band, where EDT reads the short component and the late T20 reads the DECAY component to within 8 %;
 - a planted 6 dB level change reads as 6 dB;
 - invariance to scale and to prepended silence;
 - swapped band decays move both bands;
-- a truncated record refuses.
+- a truncated record refuses;
+- the crosstalk control below (must pass at the real low-band decay, must fail its paired negative);
+- the candidate bank's HP3 numerator is the planted third difference (`model/cymbal_candidate.py`, a separate module, not this measurement).
 
 **Wrong-then-right 1.** The first version fitted the raw 5 ms envelope and refused **every** 808 file, because six
 beating squares make the envelope wander 2–4 dB. It now uses the Schroeder curve.
+
+**Wrong-then-right 2 (#376): the crosstalk control could not fail.** #371 added a control for the "recordings
+contradict §10" finding below: hold the low band's own decay fixed and sweep only the high DECAY band's decay over
+the 808's range, and check that the narrow low band (Ln) does not track it — ruling out "it's just the high band's
+skirt leaking into Ln" as the explanation for Ln actually moving on the recordings. That control built its high band
+out of a steep, synthetic 6th-order 7–12 kHz window (`strike()`'s default `hi_shape="wide"`, still used by every other
+known-answer test above, where a clean high band is what's wanted). That window has essentially no energy at
+2.9–4.1 kHz, so Ln could not move **no matter what** — the control passed, but vacuously; it could not have failed on
+any input.
+
+The fix (`tools/test_cymbal_bands.py::_q6_skirt_noise`) drives the control's high band through the 808's actual shape
+instead: a constant-skirt-gain 2-pole/2-zero band-pass at 7.1 kHz, Q 6 (the RBJ cookbook form). Its analytic magnitude
+response is **−17.74 dB at 4.1 kHz and −13.81 dB at 5 kHz** relative to its 7.1 kHz peak, which reproduces the "~17 dB
+down (at 5 kHz only ~13 dB)" figures `tools/cymbal_bands.py`'s `BANDS` comment states for the real circuit's skirt to
+**within ~0.8 dB** — close enough to be the right stand-in rather than an arbitrary choice, but not the "within 0.2 dB"
+an earlier draft of this file claimed (#383 review: the real deviations are 0.74 dB and 0.81 dB, ~4× the figure
+originally stated here). Both numbers are now asserted by
+`test_q6_skirt_matches_the_documented_808_skirt_figures`, so the claim is checked rather than merely written down.
+Two paired cases, both reported (`_skirt_growth`):
+
+| low band's own decay | Ln EDT10, high-band DECAY short (250 ms) | Ln EDT10, high-band DECAY long (1,090 ms) | growth | bound |
+|---|---:|---:|---:|---|
+| 0.35 s (the real 808's, §10 "fixed, medium") | 390.8 ms | 403.8 ms | **1.03×** | < 1.25 — passes |
+| 0.10 s (paired negative, unrealistically short) | 105.8 ms | 223.7 ms | **2.11×** | must be ≥ 1.25 — and does fail |
+
+At the real 808's low-band decay the control still passes (skirt leakage alone cannot explain Ln's ~3.2× move on the
+recordings), so the "recordings contradict §10" finding below is unchanged. But the control is no longer vacuous: at
+an unrealistic 0.10 s it demonstrably **can** fail, which is the only way the passing case above is evidence rather
+than a foregone conclusion.
 
 **Checked against the recordings themselves** (`fischer.json`, all 25 settings). These are consistency checks against
 the knobs' known physics, not a fit:

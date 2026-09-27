@@ -29,11 +29,11 @@ section 10 for where the chip sits against the wafer.space quarter slot.
 ### The board
 
 <!-- BOARD:BEGIN -->
-**19 of 100 acceptance cases have a valid measurement.** 9 pass · 10 fail · 7 no verdict · 74 not run.
+**18 of 100 acceptance cases have a valid measurement.** 9 pass · 9 fail · 8 no verdict · 74 not run.
 
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
-| Drums | 32 | 11 | 3 | 8 | 6 | 15 |
+| Drums | 32 | 10 | 3 | 7 | 7 | 15 |
 | Mono | 32 | 2 | 0 | 2 | 1 | 29 |
 | Filters | 24 | 3 | 3 | 0 | 0 | 21 |
 | Ensemble | 12 | 3 | 3 | 0 | 0 | 9 |
@@ -44,11 +44,11 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **937 commits over 229 hours.**
+Measured from git, not remembered. **952 commits over 231 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 1624 | 7.1 |
+| tests | 1631 | 7.1 |
 | injected controls | 194 | 0.8 |
 | bit-exact verifiers | 8 | — |
 | lines of RTL | 9,942 | 43 |
@@ -130,14 +130,14 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 135 passed in 1.43s |
+| `F3` | Measurement ground truth | **GREEN** | 135 passed in 2.09s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 176.73s (0:02:56) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 200.76s (0:03:20) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |

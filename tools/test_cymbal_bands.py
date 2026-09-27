@@ -6,7 +6,7 @@ import sys
 
 import numpy as np
 import pytest
-from scipy.signal import butter, sosfilt
+from scipy.signal import butter, freqz, lfilter, sosfilt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_bands as cb  # noqa: E402
@@ -19,13 +19,54 @@ def _band_noise(lo, hi, n, seed):
     return sosfilt(butter(6, [lo, hi], btype="bandpass", fs=SR, output="sos"), rng.standard_normal(n))
 
 
-def strike(tau_l=0.10, tau_hs=0.012, tau_hd=0.20, a_l=1.0, a_hs=1.0, a_hd=0.3, dur=3.0, seed=1):
-    """Low band 2.6-4.4 kHz (one exponential), high band 7-12 kHz as the sum of a
-    SHORT and a DECAY exponential -- the 808's structure, with every constant known."""
+def _q6_skirt_noise(f0, q, n, seed, fs=SR):
+    """The 808's own band-pass shape: a 2-pole/2-zero constant-skirt-gain
+    band-pass (RBJ cookbook form), NOT a steep synthetic window. This is the
+    same analytic filter `tools/cymbal_bands.py`'s BANDS comment cites for the
+    shared 7.1 kHz Q~6 filter's skirt ("~17 dB down [at 4.1 kHz], at 5 kHz only
+    ~13 dB"). This exact biquad is -17.74 dB at 4.1 kHz and -13.81 dB at 5 kHz
+    relative to its 7.1 kHz peak, so it reproduces those figures to within
+    ~0.8 dB (0.74 and 0.81 dB respectively), NOT to within 0.2 dB as an earlier
+    revision of this docstring claimed (#383 review). ~0.8 dB is still close
+    enough to make it the right stand-in for "the 808's Q6 skirt", where the
+    steep 6th-order 7-12 kHz window used by every OTHER test below has
+    essentially none (#376); the numbers themselves are asserted by
+    `test_q6_skirt_matches_the_documented_808_skirt_figures` so this docstring
+    cannot drift from the filter again."""
+    b, a = _q6_biquad(f0, q, fs)
+    x = np.random.default_rng(seed).standard_normal(n)
+    return lfilter(b, a, x)
+
+
+def _q6_biquad(f0, q, fs=SR):
+    """The coefficients `_q6_skirt_noise` actually filters with, factored out so
+    `test_q6_skirt_matches_the_documented_808_skirt_figures` can check the
+    SHIPPED filter's response rather than a second derivation of it that could
+    drift from this one."""
+    w0 = 2 * math.pi * f0 / fs
+    alpha = math.sin(w0) / (2 * q)
+    b = [q * alpha, 0.0, -q * alpha]
+    a = [1 + alpha, -2 * math.cos(w0), 1 - alpha]
+    return [c / a[0] for c in b], [c / a[0] for c in a]
+
+
+def strike(tau_l=0.10, tau_hs=0.012, tau_hd=0.20, a_l=1.0, a_hs=1.0, a_hd=0.3, dur=3.0, seed=1,
+           hi_shape="wide"):
+    """Low band 2.6-4.4 kHz (one exponential), high band as the sum of a SHORT
+    and a DECAY exponential -- the 808's structure, with every constant known.
+    `hi_shape="wide"` (every test below except the crosstalk control) is a
+    steep 6th-order 7-12 kHz window with no meaningful skirt below ~6 kHz --
+    fine for reading the high band's own decay, wrong for a control that is
+    specifically about how much of the high band leaks into the low band's
+    2.9-4.1 kHz peak (Ln). `hi_shape="q6"` uses the 808's actual 7.1 kHz Q6
+    band-pass shape (`_q6_skirt_noise`) instead."""
     n = int(dur * SR)
     t = np.arange(n) / SR
     low = a_l * _band_noise(2600, 4400, n, seed) * np.exp(-t / tau_l)
-    hn = _band_noise(7000, 12000, n, seed + 1)
+    if hi_shape == "q6":
+        hn = _q6_skirt_noise(7100.0, 6.0, n, seed + 1)
+    else:
+        hn = _band_noise(7000, 12000, n, seed + 1)
     high = hn * (a_hs * np.exp(-t / tau_hs) + a_hd * np.exp(-t / tau_hd))
     y = low + high
     y /= np.max(np.abs(y))
@@ -80,13 +121,82 @@ def test_truncated_record_refuses_rather_than_answers():
     assert r["H"]["t20_late_ms"] is None and r["H"]["t20_refused"]
 
 
+def test_q6_skirt_matches_the_documented_808_skirt_figures():
+    """`cymbal_bands.BANDS`'s comment justifies the Ln window with the shared
+    7.1 kHz Q 6 band-pass being "~17 dB down (at 5 kHz only ~13 dB)" at Ln's
+    edges, and `_q6_skirt_noise` is only a legitimate stand-in for that skirt if
+    its own response really is near those figures. Pin the measured values so
+    neither the docstring nor `docs/scorecard/cymbal-369/README.md` can claim a
+    precision the filter does not have: an earlier revision of both said "to
+    within 0.2 dB" when the true deviations are 0.74 dB and 0.81 dB (#383
+    review). The bound asserted here is therefore ~1 dB, not 0.2 dB."""
+    b, a = _q6_biquad(7100.0, 6.0)
+    f = np.array([4100.0, 5000.0, 7100.0])
+    mag_db = 20 * np.log10(np.abs(freqz(b, a, worN=2 * np.pi * f / SR)[1]))
+    peak_db = mag_db[2]
+    # the constant-skirt-gain form peaks at f0 itself, so 7.1 kHz IS the peak
+    assert peak_db == pytest.approx(np.max(20 * np.log10(np.abs(
+        freqz(b, a, worN=2 * np.pi * np.linspace(5000, 9000, 40001) / SR)[1]))), abs=1e-6)
+
+    skirt_db = mag_db[:2] - peak_db
+    assert skirt_db[0] == pytest.approx(-17.744, abs=0.01), skirt_db
+    assert skirt_db[1] == pytest.approx(-13.806, abs=0.01), skirt_db
+    # ... which is what makes it a fair stand-in for the documented skirt, to
+    # ~1 dB -- the honest tolerance, four times looser than "within 0.2 dB".
+    for got, documented in zip(skirt_db, (-17.0, -13.0)):
+        assert abs(got - documented) < 1.0, (got, documented)
+        assert abs(got - documented) > 0.2, (
+            "if this ever tightens to within 0.2 dB, the docstring and scorecard "
+            "prose that now say ~0.8 dB are the things that are stale", got, documented)
+
+
+def _skirt_growth(tau_l, hi_shape):
+    """Hold the low band's own decay FIXED at `tau_l` and move only the high
+    DECAY band's decay over the 808's range (late T20 ~250 -> ~1,090 ms, the
+    range `cymbal_bands.fischer()` reads off the real recordings). Returns how
+    much the narrow low band (Ln)'s EDT10 grows -- i.e. how much of that move
+    could be explained by the high band's OWN skirt leaking into Ln, rather
+    than the low band's own envelope actually moving."""
+    lo = cb.measure(strike(tau_l=tau_l, tau_hd=0.25 / 2.303, a_hd=0.5, hi_shape=hi_shape), SR)
+    hi = cb.measure(strike(tau_l=tau_l, tau_hd=1.09 / 2.303, a_hd=0.5, hi_shape=hi_shape), SR)
+    return hi["Ln"]["edt10_ms"] / lo["Ln"]["edt10_ms"], lo["Ln"]["edt10_ms"], hi["Ln"]["edt10_ms"]
+
+
 def test_skirt_leakage_alone_cannot_explain_the_low_band_tracking_decay():
-    """The Judge's crosstalk control for the §10 contradiction. Hold the low
-    band's own decay FIXED and move only the high DECAY band's decay over the
-    808's range (late T20 ~250 -> ~1,090 ms): the narrow low band (Ln) must
-    barely move. On the recordings Ln's EDT moves ~400 -> ~1,280 ms, so a
-    change of that size cannot be the high band's skirt leaking into Ln."""
-    lo = cb.measure(strike(tau_l=0.10, tau_hd=0.25 / 2.303, a_hd=0.5), SR)
-    hi = cb.measure(strike(tau_l=0.10, tau_hd=1.09 / 2.303, a_hd=0.5), SR)
-    grow = hi["Ln"]["edt10_ms"] / lo["Ln"]["edt10_ms"]
-    assert grow < 1.25, (lo["Ln"]["edt10_ms"], hi["Ln"]["edt10_ms"])
+    """The Judge's crosstalk control for the §10 contradiction (#371), tightened
+    by #376: the first version built its high band with the steep, unrealistic
+    `hi_shape="wide"` 6th-order 7-12 kHz window (`strike()`'s default, used by
+    every OTHER test in this file), which leaks essentially nothing into Ln no
+    matter how the high band's decay or level move -- the control could not
+    fail. This uses `hi_shape="q6"`, the 808's actual 7.1 kHz Q6 skirt.
+
+    POSITIVE case: the low band's own decay held at 0.35 s, the real 808's
+    figure (`docs/tr808-reference.md` §10, "fixed, medium"; #376). At this
+    realistic decay, Ln barely moves (< 1.25x) even though the high band's
+    decay moves ~250 -> ~1,090 ms and the recordings' actual Ln move
+    (~400 -> ~1,280 ms, ~3.2x) cannot be that leakage.
+
+    NEGATIVE case, paired, and it MUST fail the same 1.25 bound: the same
+    high-band sweep with the low band's decay held at an unrealistically
+    short 0.10 s instead. Here the high band's tail lives many decay-constants
+    past the low band's own -30 dB point, so its skirt genuinely does drag Ln's
+    late reading up. Both cases must be shown -- the positive case is only
+    evidence if the control can also fail."""
+    grow_real, lo_real, hi_real = _skirt_growth(0.35, "q6")
+    assert grow_real < 1.25, (lo_real, hi_real, grow_real)
+
+    grow_short, lo_short, hi_short = _skirt_growth(0.10, "q6")
+    assert grow_short >= 1.25, (
+        "the paired negative case must fail this bound -- if it doesn't, the "
+        "control isn't sensitive to skirt leakage at all", lo_short, hi_short, grow_short)
+
+
+def test_hp3_numerator_is_the_third_difference():
+    """The candidate bank's HP3 code (model/cymbal_candidate.py, not the shared decode): a mode with zero poles is its numerator, so an
+    impulse must come out as (1 - z^-1)^3 = 1, -3, 3, -1 (times the state scale)."""
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "model"))
+    import cymbal_candidate as cc
+    b = cc.ModalFxHP3(modes=1, nums=1, headroom=0, out_bits=28)
+    y = [b.step([v], [(0, 0, 65535)], num=[cc.HP3]) for v in (1000, 0, 0, 0, 0)]
+    # amp 65535/65536 floors each output by at most one LSB
+    assert all(abs(v - w * 1000) <= 1 for v, w in zip(y, (1, -3, 3, -1, 0))), y
