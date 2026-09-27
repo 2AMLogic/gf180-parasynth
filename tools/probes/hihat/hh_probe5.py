@@ -925,7 +925,7 @@ def main(argv=None) -> int:
                          "committed CY knob laws. #102 asked whether a true "
                          "3rd-order Hh3 should replace it; the answer, on this "
                          "record and on D14A, was no -- see "
-                         "tools/probes/hihat/hh_probe5.py and DR 0021."))
+                         "tools/probes/hihat/hh_probe5.py and DR 0022."))
         p.write_text(json.dumps(rec, indent=2, default=float) + "\n")
         say(f"(written {p})")
     return 0

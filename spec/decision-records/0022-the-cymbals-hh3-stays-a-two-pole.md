@@ -1,4 +1,4 @@
-# 0021: The cymbal's Hh3 stays a two-pole — a third pole is buildable, priced, measured, and rejected on a holdout
+# 0022: The cymbal's Hh3 stays a two-pole — a third pole is buildable, priced, measured, and rejected on a holdout
 
 - **Status**: proposed
 - **Date**: 2026-09-27

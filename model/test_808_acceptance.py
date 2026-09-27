@@ -2043,7 +2043,7 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
     Reference 10 calls Hh3 3rd-order and the model realises it as this single
     2-pole. A genuine third pole -- the 2-pole cascaded with ONE real pole at
     the same corner, in both orientations -- was built, rendered through the
-    fixed-point block and judged by the scorecard (DR 0015, DR 0021,
+    fixed-point block and judged by the scorecard (DR 0015, DR 0022,
     `tools/probes/hihat/hh_probe5.py`). **It lost, on the development case and
     on a held-out recording.** Each structure got its own (Q, gain) fit against
     D14A only; the two-pole reaches `Band energy` 0.098 against 0.258 and 0.163
@@ -2051,7 +2051,7 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
     every pairing -- `total decay` is required and is invalid on the reference
     side of D14A and our side of D14B, so neither case has a verdict -- and the
     same rule read over the properties that DO have distances REJECTS both arms
-    on both cases. That read is INDICATIVE and DR 0021 labels it so.
+    on both cases. That read is INDICATIVE and DR 0022 labels it so.
     Three reasons it loses, all measured:
       * at 48 kHz a 1-pole at 10.5 kHz has r = 0.253 and only 1.19 octaves above
         it, so the low-pass orientation delivers 2.0 dB/octave, not 6;

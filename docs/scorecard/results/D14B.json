@@ -129,5 +129,5 @@
     ],
     "why": "unread by every fit in the repo; both knobs interpolated, not extrapolated; shortest decay, so the record has the best chance of supporting schroeder_t20"
   },
-  "note": "The SHIPPED structure and setting: the 2-pole M_CYHI at CY_HI_Q with AMP_CY_HI unchanged, rendered at this recording's documented knob setting through the committed CY knob laws. #102 asked whether a true 3rd-order Hh3 should replace it; the answer, on this record and on D14A, was no -- see tools/probes/hihat/hh_probe5.py and DR 0021."
+  "note": "The SHIPPED structure and setting: the 2-pole M_CYHI at CY_HI_Q with AMP_CY_HI unchanged, rendered at this recording's documented knob setting through the committed CY knob laws. #102 asked whether a true 3rd-order Hh3 should replace it; the answer, on this record and on D14A, was no -- see tools/probes/hihat/hh_probe5.py and DR 0022."
 }
