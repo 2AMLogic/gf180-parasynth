@@ -287,6 +287,7 @@ def render_held(engine: str, note: int, patch: dict, *, blep: bool = True,
     clip = {
         "output_rail_samples": int(np.count_nonzero((out[a:b] >= 32767) | (out[a:b] <= -32768))),
         "oscillator_rail_samples": int(np.count_nonzero(np.abs(np.asarray(tr["osc"][0])[a:b]) >= 32767)),
+        "mixer_rail_samples": int(np.count_nonzero(np.abs(np.asarray(tr["mixed"])[a:b]) >= 32767)),
         "reconstruction_would_clip": (tr.get("filter_reconstruction") or {}).get("would_clip_count"),
         "decimation_would_clip": (tr.get("filter_decimation") or {}).get("would_clip_count"),
     }
@@ -451,6 +452,7 @@ def schedule() -> list:
 
 
 RECT_GAIN_Q15 = None      # None: the model's own; else the pulse2x engine's rectangle gain (R2: 24248)
+RECT_MIX_COMP = None      # None: unchanged; else the pulse2x rectangles' mixer weight (a preset-level repair)
 
 
 def _rect_ctx(engine):
@@ -467,6 +469,8 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
         if i % parts != part:
             continue
         patch = held_patch(**over)
+        if RECT_MIX_COMP is not None and engine == "pulse2x" and over["waves"][0] in vf.TWO_EDGE:
+            patch = {**patch, "mix": (RECT_MIX_COMP, 0.0, 0.0)}
         try:
             with _rect_ctx(engine):
                 row = measure_point(engine, note, patch)
@@ -615,6 +619,8 @@ def main(argv=None) -> int:
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
+    w.add_argument("--rect-mix-comp", type=float, default=None,
+                   help="pulse2x rectangles' mixer weight (the bounded level repair); r1 rows unaffected")
     w.add_argument("--rect-gain-q15", type=int, default=None,
                    help="pulse2x rectangles at this gain (R2: 24248); r1 rows are unaffected")
     for p in (s, c, w, dv, sm):
@@ -639,10 +645,12 @@ def main(argv=None) -> int:
             res = drive_sweep()
             rc = 0
         else:
-            global RECT_GAIN_Q15
+            global RECT_GAIN_Q15, RECT_MIX_COMP
             RECT_GAIN_Q15 = a.rect_gain_q15
+            RECT_MIX_COMP = a.rect_mix_comp
             res = run_sweep(a.out, a.part, a.parts)
             res["pulse2x_rect_gain_q15"] = RECT_GAIN_Q15
+            res["pulse2x_rect_mix_comp"] = RECT_MIX_COMP
             rc = 0
     except Refused as e:
         print(f"REFUSED: {e}")
