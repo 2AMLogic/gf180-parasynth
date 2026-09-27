@@ -68,4 +68,10 @@ by the R1 (`PULSE2X=0`) image.
    - `verify_synth_top` M5A/M5B full phrases with `--pulse2x`: 1,305,533 and 729,533 periods;
    - the full-kit phrase: 2,851 periods;
    - `verify_deadline` `stress-pulse --pulse2x`, `stress-saw` and `arty-uart`, plus late-completion boundary controls re-bracketed at the new slack.
-5. **Open before build** (sound owner): at MIDI ≥ 108, the 2x rectangle's decimator output reaches its rail with the 0.85 headroom, which was sized on the saw sweep. Measuring clipped energy against a 0.80 challenger is the next sound-owner task. The CI Verilator 5.020 discrepancy (#8442) is also still open.
+5. **Rectangle headroom (resolved by the sound owner; include it in the same image).** At 0.85 every rectangle saturates the 2x decimator's Q1.15 output near the top of the range (pulse15 from MIDI 99, pulse25 from 108, 47.9 % and square from 119). The chosen value is **rectangles 24248/32768 (0.74), saw unchanged at 27853**. It was selected by a rule frozen in advance: zero clipped samples and ≥ 0.1 dB margin on a 1/8-semitone sweep.
+   - **Model:** in `voice_fx.py`, add `_OS2_RECT_GAIN_Q15 = 24248`, used in `_render_2x` when `o.shape in TWO_EDGE`.
+   - **RTL:** in `polyblep_saw_pair.v`, under `ifdef VOICE_PULSE_2X`, select `rectangular ? 16'sd24248 : SUBSTEP_GAIN_Q15`. This file is in R1's pin set, so the change belongs to the new image only.
+   - **Control:** `INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM` restores 27853 and must fail the RTL/model comparison.
+   - **Expected phrase numbers at the new head:** M5A/M5B foldback 2.21/1.91 dB, Gain 1.54/2.05 dB (limit 3).
+   - Evidence and costs are in `docs/scorecard/m5-artifacts-333/pulse2x-headroom/` (PR #343).
+6. The CI Verilator 5.020 discrepancy (#8442) is still open.
