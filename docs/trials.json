@@ -148,6 +148,64 @@
     }
    }
   },
+  "T-RELEASE-BOUND-R2": {
+   "question": "Do the built R2 image, its frozen sources, the host's --image r2 bytes, the presets, the supported domain, the R2 RTL evidence and the image's fit/timing/external-I/O/DSP/#315-constraint evidence agree with one committed R2 release manifest, with R1 BOUND as the named rollback and R0 behind it?",
+   "criterion_version": "release-bound-r2/1",
+   "scope": {
+    "board": "Arty A7-100T",
+    "image": "fpga/reports/arty/r2-2025.1",
+    "configuration": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1},
+    "contract_revision": 14,
+    "host_image": "r2",
+    "rollback": "fpga/reports/arty/r1-player-preview-2025.1 (R1), then fpga/reports/arty/integrated-baseline-2025.1 (R0)",
+    "operator_override": "pulse2x is in R2 by operator decision (#282), not by its acceptance rule; the manifest lists the known limitations"
+   },
+   "dag_nodes": ["I2"],
+   "preservation": ["T-RELEASE-BOUND", "T-RELEASE-BOUND-R1", "T-PLAY-DIGITAL"],
+   "resource_class": "light",
+   "modes": {
+    "check": {
+     "timeout_s": 600,
+     "tools": [],
+     "requires": [
+      "fpga/release/r2_release.py",
+      "fpga/release/r2-2025.1.json",
+      "fpga/release/r1-2025.1.json",
+      "fpga/reports/arty/r2-2025.1/publication.json",
+      "fpga/reports/arty/r2-2025.1/ext-io/ext-io-extract.json"
+     ],
+     "required": [
+      {
+       "id": "r2-release-manifest",
+       "property": "the committed R2 manifest equals a fresh derivation: bitstream, publication, report.json, the shipped reports (re-parsed by the publisher), the DSP evidence (re-derived), the per-port external-I/O extraction and the routed.dcp digest agree; the #315 constraint reports re-check; the compiled inputs are verified at R2's freeze and differ from R1's only in the reviewed set; the CLI's --image r2 bytes equal R1's bound bytes; every R2 RTL run identity names R2's sources and VOICE_PULSE_2X; R1 is BOUND and pinned, R0 behind it",
+       "checker": "fpga/release/r2_release.py",
+       "args": [],
+       "interpret": "bound_text",
+       "token_prefix": "r2_release: "
+      }
+     ],
+     "controls": [
+      {
+       "id": "stale-r2-image",
+       "intended_reason": "a copy of the committed R2 manifest naming R1's image (its bitstream, routed.dcp and publication) -- the PULSE2X=1 release bound to the PULSE2X=0 image -- is STALE at exactly image.bitstream_sha256/.publication_sha256/.routed_dcp_sha256, while the unmodified copy is BOUND",
+       "checker": "fpga/release/r2_release.py",
+       "args": ["stale-control", "image", "--out", "{out}"],
+       "interpret": "bound_text",
+       "token_prefix": "stale_control: "
+      },
+      {
+       "id": "stale-r2-host",
+       "intended_reason": "a copy of the committed R2 manifest naming the bytes `run --fixture demo` emits for R0 (--image release: no known-state preamble, the revision-11 kit) is STALE at exactly host.commands.demo.cmds_sha256/.packets, while the unmodified copy is BOUND",
+       "checker": "fpga/release/r2_release.py",
+       "args": ["stale-control", "host", "--out", "{out}"],
+       "interpret": "bound_text",
+       "token_prefix": "stale_control: "
+      }
+     ],
+     "_controls": "Both controls work on copies: the committed R2 manifest, R1's and R0's files and the tree are only read. R2's host bytes equal R1's, so an R1-host control would be BOUND by design (the host cannot tell R1 from R2); the image control is what separates them. A control that cannot show its counterexample prints REFUSED, which is NO VERDICT, never a catch."
+    }
+   }
+  },
   "T-DEADLINE": {
    "question": "Does the published Arty configuration meet the 256-cycle frame deadline at its pins, with complete I2S evidence equal to the model?",
    "criterion_version": "deadline/1 (rtl-sketch/verify_deadline.py analysis v2: sample strobe <= 254, not busy at 255, zero missed frames, every required I2S period present once and equal to the model)",
