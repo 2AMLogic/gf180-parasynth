@@ -1869,6 +1869,16 @@ def test_rimshot_decay_matches_the_machine_and_the_chart():
         f"RS T20 {t20*1e3:.1f} ms against a real TR-808's {HW_T20['RS']*1e3:.1f} ms and the chart's 10 ms"
 
 
+def _rs_harm_db(kit, name):
+    """Harmonics 2-5 of RS_LO_HZ re its fundamental, on one RS strike from
+    `kit`. Shared by the distortion test and its estimator control below."""
+    at = int(PRE_ROLL_S * SR)
+    x = render([(at, dx.CL, 1.0)], 0.4 + PRE_ROLL_S, kit=sorted(dict(kit).items()),
+               name=name).after_hit(0, 0.4, "dmix")
+    p = am.harmonic_powers(x, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
+    return 10 * math.log10(max(p[1:].sum(), 1e-30) / max(p[0], 1e-30))
+
+
 def test_rimshot_is_distorted_and_that_is_the_sound():
     """[source-verified: SN, "VCA of this type is intended to provide many high
     harmonics in the output signals"; reference 5, "The distortion is the sound;
@@ -1877,22 +1887,50 @@ def test_rimshot_is_distorted_and_that_is_the_sound():
     nothing else changed: the harmonics above the 455 Hz fundamental must be
     materially louder with the VCA than without it.
 
+    MEASURED ON THE 455 Hz MODE ALONE -- the 1786 Hz mode's OUTPUT path muted in
+    BOTH arms (#388). `harmonic_powers` cannot separate 4 x 455 = 1820 Hz from
+    RS_HI_HZ 1786 (1.9 %, and both modes' bandwidths are hundreds of Hz), so on
+    the two-mode voice the fourth bin holds the second MODE and not a harmonic.
+    That was invisible while the high mode sat 12 dB down and became the whole
+    reading when #388 brought it up to the machine's +6.6 dB: the LIN arm's bin
+    4 went -23.6 -> -5.7 dB and this test read 1.4 dB on a voice whose
+    distortion had not changed. On one mode it reads +21.9 dB before the change
+    and +22.6 after. The per-bin numbers, the sweep that refutes "the drive
+    correction removed the distortion", and a pure-1786 Hz control that reports
+    +73.6 dB in the fourth bin with no distortion in the signal at all are in
+    `tools/probes/rs_mode_drive.py distort`.
+
     Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
     """
-    lin = dict(dx.kit_with_sounds("RS"))
-    for p in (dx.P_RS1OUT, dx.P_RS2OUT):
-        w = lin[dx.A_PATH + p]
-        lin[dx.A_PATH + p] = (w & ~(3 << 15)) | (dx.NL_LIN << 15)
-    at = int(PRE_ROLL_S * SR)
-    swung = sound("RS", 1.0, 0.4).after_hit(0, 0.4, "dmix")
-    plain = render([(at, dx.CL, 1.0)], 0.4 + PRE_ROLL_S, kit=sorted(lin.items()),
-                   name="RS-linear").after_hit(0, 0.4, "dmix")
-    def harm_db(x):
-        p = am.harmonic_powers(x, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
-        return 10 * math.log10(max(p[1:].sum(), 1e-30) / max(p[0], 1e-30))
-    assert harm_db(swung) - harm_db(plain) >= 6.0, (
-        f"the swing VCA added only {harm_db(swung) - harm_db(plain):.1f} dB of harmonics "
-        f"(swung {harm_db(swung):.1f} dB, linear {harm_db(plain):.1f} dB above the fundamental)")
+    base = dict(dx.kit_with_sounds("RS"))
+    base[dx.A_PATH + dx.P_RS2OUT] = dx.path_word(dx.SRC_OFF, dx.ENV_NONE,
+                                                 dest=dx.DEST_MIX)
+    lin = dict(base)
+    w = lin[dx.A_PATH + dx.P_RS1OUT]
+    lin[dx.A_PATH + dx.P_RS1OUT] = (w & ~(3 << 15)) | (dx.NL_LIN << 15)
+    swung_db = _rs_harm_db(base, "RS-lo-only-swing")
+    plain_db = _rs_harm_db(lin, "RS-lo-only-linear")
+    assert swung_db - plain_db >= 6.0, (
+        f"the swing VCA added only {swung_db - plain_db:.1f} dB of harmonics "
+        f"(swung {swung_db:.1f} dB, linear {plain_db:.1f} dB above the fundamental)")
+
+
+def test_control_the_harmonic_estimator_cannot_separate_the_second_rimshot_mode():
+    """The control for the change above, so the reason it was made is a test and
+    not a comment: a PURE decaying sinusoid at RS_HI_HZ, with no nonlinearity and
+    no 455 Hz content in it at all, must still report a large "harmonic" in the
+    fourth bin of RS_LO_HZ. If a future estimator could separate them this turns
+    red, and the two-mode measurement becomes available again."""
+    n = int((0.4 + PRE_ROLL_S) * SR)
+    t = np.arange(n) / SR
+    pure = np.sin(2 * math.pi * dx.RS_HI_HZ * t) * np.exp(-t / 2.4e-3) * 8000.0
+    p = am.harmonic_powers(pure, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
+    bin4 = 10 * math.log10(max(p[3], 1e-30) / max(p[0], 1e-30))
+    assert abs(4 * dx.RS_LO_HZ / dx.RS_HI_HZ - 1) < 0.03, "the two are no longer adjacent"
+    assert bin4 > 20.0, (
+        f"the fourth bin of {dx.RS_LO_HZ:.0f} Hz reads {bin4:+.1f} dB on a pure "
+        f"{dx.RS_HI_HZ:.0f} Hz tone: the estimator now separates them, so the "
+        f"one-mode workaround in the test above can be retired")
 
 
 def test_claves_frequency_and_decay_match_the_machine():

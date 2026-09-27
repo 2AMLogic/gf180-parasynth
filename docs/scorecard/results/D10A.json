@@ -2,13 +2,13 @@
   "engine": "fixed-model",
   "case_id": "D10A",
   "subject": "Rimshot / anchor",
-  "source_commit": "8e521d4",
-  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T20:28:28Z",
+  "source_commit": "719f6fe",
+  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T22:00:26Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "8e521d4",
-      "described": "node/D-drums-bitexact-978-g8e521d4",
+      "commit": "719f6fe",
+      "described": "node/D-drums-bitexact-981-g719f6fe",
       "branch": "feature/issue-388",
       "dirty": false,
       "uncommitted_sha256": "e3b0c44298fc1c14",
@@ -16,21 +16,22 @@
     },
     "base_check": {
       "checked": true,
-      "origin_main": "9528c95cf554",
-      "behind_commits": 0,
-      "ahead_commits": 1,
+      "origin_main": "094ad68a2283",
+      "behind_commits": 4,
+      "ahead_commits": 4,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {
         "model/drums_fx.py": {
           "origin_main": "034b9efb4397",
-          "here": "5620c6ca3e7e"
+          "here": "b800dfdda3a6"
         }
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py.",
+      "note": "4 commit(s) behind origin/main, none of them touching an input this measurement depends on"
     },
     "command": "tools/run_case.py D10A --no-audio",
     "config": {
@@ -43,9 +44,9 @@
       "level_matched": true
     },
     "python": "3.14.7",
-    "run_at": "2026-09-27T20:28:49Z",
+    "run_at": "2026-09-27T22:00:56Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:5620c6ca3e7ef6a5",
+      "model/drums_fx.py": "sha256:b800dfdda3a6cea6",
       "model/voice_fx.py": "sha256:876b31f280fd3ef4",
       "model/audio_measure.py": "sha256:ff1ae641f70752d1",
       "model/reference_rigs.py": "sha256:c31aadac74845fc7",
@@ -67,7 +68,7 @@
   },
   "reference_profile": "fischer-tr808-103852:rs8/RS.WAV (no knob)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@5620c6ca3e7e kit_with_sounds('RS') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 9 of 11",
+  "render_run": "drums_fx@b800dfdda3a6 kit_with_sounds('RS') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 9 of 11",
   "audio": "reference rs8/RS.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
@@ -114,10 +115,10 @@
   },
   "metrics": {
     "Partial balance": {
-      "value": -4.6839,
+      "value": -4.6859,
       "units": "dB",
       "reference": 3.8537,
-      "error": -8.5376,
+      "error": -8.5396,
       "tolerance": 3.0,
       "valid": true,
       "tolerance_basis": "energy ratio",
@@ -134,10 +135,10 @@
       "purpose": "match"
     },
     "tail decay": {
-      "value": 7.8789,
+      "value": 7.8569,
       "units": "ms",
       "reference": 7.2369,
-      "error": 0.6419,
+      "error": 0.62,
       "tolerance": 3.6185,
       "valid": true,
       "tolerance_basis": "time",
@@ -145,8 +146,8 @@
     }
   },
   "diagnostics": {
-    "ours_peak_fs": 0.085571,
-    "ours_rms_fs": 0.001386,
+    "ours_peak_fs": 0.192902,
+    "ours_rms_fs": 0.003124,
     "reference_peak_fs": 0.751526,
     "reference_rate_hz": 44100,
     "ours_rate_hz": 48000,

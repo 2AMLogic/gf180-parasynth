@@ -12,6 +12,7 @@ is the failure mode CLAUDE.md names; this is the other order.
   python tools/probes/rs_mode_drive.py derive   # closed form; NO recording
   python tools/probes/rs_mode_drive.py sweep    # Q and drive, ours only
   python tools/probes/rs_mode_drive.py confirm  # ours vs the machine, 2 accents
+  python tools/probes/rs_mode_drive.py distort  # what it did to the swing VCA
 
 THE ANSWER (2026-09-27).
 
@@ -66,7 +67,21 @@ THE ANSWER (2026-09-27).
    level-matches, so it would have scored a rimshot 7 dB too quiet as fixed --
    the kit-level test is what caught it, not the score.
 
-WRONG BEFORE IT WAS RIGHT (2, both caught by a gate rather than by reading):
+7. IT DID NOT REMOVE THE RIMSHOT'S DISTORTION, AND THE TEST THAT SAID SO WAS
+   MEASURING THE MODE. `test_rimshot_is_distorted_and_that_is_the_sound` went
+   from +14.5 dB to +1.4 dB against a 6.0 dB floor -- which reads as "the fix
+   flattened the voice", and is not what happened. `distort` shows why: the
+   estimator sums harmonics 2-5 of 455 Hz, and 4 x 455 = 1820 Hz is 1.9 % from
+   RS_HI_HZ 1786, inside both modes' own bandwidths. The LIN arm -- no
+   nonlinearity anywhere in it -- has its fourth bin go -23.6 -> -5.7 dB purely
+   because the high MODE got 10 dB louder. A pure 1786 Hz decaying sinusoid,
+   synthesised with no distortion at all, reports +73.6 dB in that bin.
+   Measured on the 455 Hz mode ALONE (the high mode's output path muted in both
+   arms), the swing VCA adds +21.9 dB before the change and +22.6 dB after: the
+   distortion is untouched, and the test now asks the question on a signal the
+   estimator can answer. Its control is in test_808_acceptance beside it.
+
+WRONG BEFORE IT WAS RIGHT (3, all caught by a gate or a sweep, none by reading):
   1. The first version of the fix changed `kit_808()` and nothing else, which
      silently moved `kit_808_rev11()` -- the register image the PUBLISHED Arty
      release was verified with. `KitRefused` fired on the frozen hash, which is
@@ -75,6 +90,15 @@ WRONG BEFORE IT WAS RIGHT (2, both caught by a gate rather than by reading):
      and the rimshot was 7.05 dB too quiet -- invisible to D10A, which
      level-matches, and caught by `test_kit_voices_sit_at_the_chart_levels`
      (RS 0.190 FS against a 0.4286 target). Finding 6 is that bug's record.
+  3. MY OWN HYPOTHESIS ABOUT THE DISTORTION WAS WRONG, and `distort`'s PEAK_RSX
+     sweep is what refuted it. The story was tidy: 1/sin(w0) had forced the
+     exciter down to 0.06 to keep the low tap off the rail, that starved the
+     tanh, and with `att` correcting the low mode the exciter could go back up
+     and bring the distortion with it. The sweep says no -- dHARM is FLAT (and
+     slightly falling) from PEAK_RSX 0.06 to 0.24, because the swing's x4/-8
+     asymmetry is piecewise linear and therefore scale-free. Had this been
+     argued rather than swept, PEAK_RSX would have been raised 4x for nothing,
+     and the exciter's own decay fit (PEAK_RSX's PROVENANCE) broken with it.
 
 Needs the Fischer corpus at $GF180_TR808_REFS / $TR808_REFS / /tmp/tr808-ref
 for `confirm`, and REFUSES rather than reporting without it. `derive` and
@@ -90,6 +114,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
+import audio_measure as AM                       # noqa: E402
 import drums_fx as dx                             # noqa: E402
 import partial_trajectory as PT                   # noqa: E402
 import run_case as RC                             # noqa: E402
@@ -171,21 +196,36 @@ def cmd_derive() -> int:
 # rendering at a chosen (att, Q, accent)
 # --------------------------------------------------------------------------
 def render(att: int | None = None, hi_q: float | None = None,
-           accent: float = 1.0):
-    """`run_case`'s OWN render + prepare chain with two constants overridden.
+           accent: float = 1.0, peak_x: float | None = None):
+    """`run_case`'s OWN render + prepare chain with the constants overridden.
     Overriding the module globals is deliberate: `kit_808()` reads them at call
     time, so this measures the shipping code path with a different constant and
     not a reimplementation of it."""
-    old = (dx.RS_LO_X_ATT, dx.RS_HI_Q)
-    try:
+    with overridden(att=att, hi_q=hi_q, peak_x=peak_x):
+        x, sr = RC.render_drum_solo("RS", accent=accent)
+    return RC.prepare(x, sr, side="our RS render"), sr
+
+
+class overridden:
+    """The three RS constants under test, restored on the way out."""
+
+    def __init__(self, att=None, hi_q=None, peak_x=None):
+        self.new = (att, hi_q, peak_x)
+
+    def __enter__(self):
+        self.old = (dx.RS_LO_X_ATT, dx.RS_HI_Q, dx.PEAK_RSX)
+        att, hi_q, peak_x = self.new
         if att is not None:
             dx.RS_LO_X_ATT = int(att)
         if hi_q is not None:
             dx.RS_HI_Q = float(hi_q)
-        x, sr = RC.render_drum_solo("RS", accent=accent)
-    finally:
-        dx.RS_LO_X_ATT, dx.RS_HI_Q = old
-    return RC.prepare(x, sr, side="our RS render"), sr
+        if peak_x is not None:
+            dx.PEAK_RSX = float(peak_x)
+        return self
+
+    def __exit__(self, *exc):
+        dx.RS_LO_X_ATT, dx.RS_HI_Q, dx.PEAK_RSX = self.old
+        return False
 
 
 def measure(y, sr) -> dict:
@@ -332,11 +372,162 @@ def cmd_confirm() -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# distort -- what the drive correction does to the swing VCA, and what the
+# acceptance test's estimator does about it
+# --------------------------------------------------------------------------
+HARMS = (1, 2, 3, 4, 5)
+
+
+#: test_808_acceptance's own PRE_ROLL_S and window, copied deliberately: this
+#: command exists to reproduce THAT test's number, so a different slice would
+#: make the two disagree for a reason that is neither the fix nor the estimator.
+PRE_ROLL_S, HARM_SECONDS = 0.010, 0.4
+
+
+def _raw_render(kit):
+    """`test_808_acceptance.sound('RS', 1.0, 0.4).after_hit(0, 0.4, 'dmix')`,
+    reproduced: a raw dmix render of one RS hit on a GIVEN kit, sliced from
+    PRE_ROLL_S before the strike to 0.4 s after it. No `prepare` -- that test
+    measures the render itself. The kit is passed in so the LIN arm can be the
+    same voice with only the two NL fields changed."""
+    at = int(PRE_ROLL_S * dx.SR)
+    n = int((HARM_SECONDS + PRE_ROLL_S) * dx.SR)
+    d = dx.DrumsFx()
+    dm, _ = d.play(dx.hit_writes([(at, dx.CL, 1.0)], kit), n)
+    i0 = max(0, at - int(PRE_ROLL_S * dx.SR))
+    i1 = min(len(dm), at + int(HARM_SECONDS * dx.SR))
+    return np.asarray(dm[i0:i1], dtype=np.float64), d.n_tapsat
+
+
+def _lin_kit(kit):
+    """The same kit with the two RS output paths' nonlinearity set to LIN."""
+    m = dict(kit)
+    for p in (dx.P_RS1OUT, dx.P_RS2OUT):
+        w = m[dx.A_PATH + p]
+        m[dx.A_PATH + p] = (w & ~(3 << 15)) | (dx.NL_LIN << 15)
+    return sorted(m.items())
+
+
+def _mute_high(kit):
+    """The same kit with the 1786 Hz mode's OUTPUT path disconnected, so the
+    record holds one mode and the harmonic bins hold no second partial. The
+    EXCITATION is left alone: this mutes what reaches the mix, not the voice."""
+    m = dict(kit)
+    m[dx.A_PATH + dx.P_RS2OUT] = dx.path_word(dx.SRC_OFF, dx.ENV_NONE, dest=dx.DEST_MIX)
+    return sorted(m.items())
+
+
+def _harm_db(x, harms=HARMS) -> float:
+    """test_808_acceptance's own measure: the harmonics of RS_LO_HZ above the
+    fundamental, in dB re the fundamental."""
+    p = AM.harmonic_powers(x, dx.RS_LO_HZ, harms, dx.SR)
+    return 10.0 * math.log10(max(p[1:].sum(), 1e-30) / max(p[0], 1e-30))
+
+
+def _tap_peaks(att, peak_x):
+    """Each mode's tap peak in units of full scale, from the closed form -- what
+    the swing VCA's tanh is actually handed. > 1.0 means the tap SATURATES."""
+    lo = peak_x * 10 ** (bank_peak_db(dx.RS_LO_HZ) / 20.0) / 2 ** att
+    hi = peak_x * 10 ** (bank_peak_db(dx.RS_HI_HZ) / 20.0)
+    return lo, hi
+
+
+def cmd_distort() -> int:
+    print("NO RECORDING IS READ BY THIS COMMAND. `dHARM` is exactly")
+    print("test_808_acceptance.test_rimshot_is_distorted_and_that_is_the_sound's")
+    print("measure: harmonics 2-5 of 455 Hz re the fundamental, swing minus LIN,")
+    print("and it demands >= 6.0 dB. `dHARM*` drops harmonic 4 (1820 Hz), which")
+    print("lands 1.9 % from RS_HI_HZ 1786 -- the high MODE is not a harmonic of")
+    print("the low one, and that is the confound this command exists to size.")
+    print("`tap lo/hi` are the two taps' peaks in full scale (> 1.0 saturates,")
+    print("which is what forced PEAK_RSX down to 0.06 in the first place).\n")
+    print(f"   {'setting':26s} {'dHARM':>7s} {'dHARM*':>7s} {'swing':>7s} {'lin':>7s} "
+          f"{'tap lo':>7s} {'tap hi':>7s} {'sat':>5s} {'decay':>7s} {'bal1':>7s} {'peak':>6s}")
+    rows = [("rev 14 (att 0, x 0.06)", 0, 0.06)]
+    rows += [(f"att 3, PEAK_RSX {x:.3f}", 3, x) for x in
+             (0.06, 0.09, 0.12, 0.16, 0.20, 0.24)]
+    for tag, att, px in rows:
+        with overridden(att=att, peak_x=px):
+            kit = dx.kit_with_sounds("RS")
+            sw, nsat = _raw_render(kit)
+            ln, _ = _raw_render(_lin_kit(kit))
+        d_all = _harm_db(sw) - _harm_db(ln)
+        d_no4 = _harm_db(sw, (1, 2, 3, 5)) - _harm_db(ln, (1, 2, 3, 5))
+        lo, hi = _tap_peaks(att, px)
+        y, sr = render(att=att, peak_x=px)
+        m, sc = measure(y, sr), scored_rows(y, sr)
+        dec = sc.get("tail decay", (float("nan"),))[0]
+        print(f"   {tag:26s} {d_all:+7.2f} {d_no4:+7.2f} {_harm_db(sw):+7.2f} "
+              f"{_harm_db(ln):+7.2f} {lo:7.3f} {hi:7.3f} {nsat:5d} "
+              f"{(dec if dec is not None else float('nan')):7.2f} "
+              f"{(m['balance'] if m['balance'] is not None else float('nan')):+7.2f} "
+              f"{float(np.abs(sw).max())/32768:6.3f}")
+    print("\n   `peak` is the RS dmix peak in full scale before the bus gain; the")
+    print("   kit's target for RS is 0.4286 (PEAK_RSG re-balances to it, and being")
+    print("   the LAST stage it moves no column above except `peak`).")
+    print("   reference: the machine's tail decay is 7.24 ms, bal1 +3.85 dB.")
+
+    print("\n   WHERE THE ESTIMATOR'S dHARM WENT, harmonic by harmonic, on the LIN")
+    print("   arm -- the arm with NO nonlinearity in it, so every dB here is a")
+    print("   partial the estimator is calling a harmonic:")
+    print(f"      {'LIN arm':26s}" + "".join(f"{int(h*dx.RS_LO_HZ):>9d}" for h in HARMS))
+    for tag, att, px in (("rev 14 (att 0)", 0, 0.06), ("att 3", 3, 0.06)):
+        with overridden(att=att, peak_x=px):
+            ln, _ = _raw_render(_lin_kit(dx.kit_with_sounds("RS")))
+        p = AM.harmonic_powers(ln, dx.RS_LO_HZ, HARMS, dx.SR)
+        print(f"      {tag:26s}" + "".join(
+            f"{10*math.log10(max(v, 1e-30)/max(p[0], 1e-30)):>9.1f}" for v in p))
+    print(f"   4 x {dx.RS_LO_HZ:.0f} = {4*dx.RS_LO_HZ:.0f} Hz is "
+          f"{100*abs(4*dx.RS_LO_HZ/dx.RS_HI_HZ - 1):.1f} % from RS_HI_HZ "
+          f"{dx.RS_HI_HZ:.0f}, and both modes")
+    print("   decay in a few ms, so their bandwidths (~1/tau, hundreds of Hz) overlap")
+    print("   completely. The fourth bin cannot tell them apart and never could.")
+
+    print("\n   THE CONTROL, which is what settles it: a PURE decaying sinusoid at")
+    print("   RS_HI_HZ, synthesised here, with no nonlinearity and no low mode in")
+    print("   it at all. Anything the estimator reports above the fundamental is")
+    print("   the estimator's, because there is nothing else in the signal.")
+    n = int((HARM_SECONDS + PRE_ROLL_S) * dx.SR)
+    t = np.arange(n) / dx.SR
+    pure = np.sin(2 * math.pi * dx.RS_HI_HZ * t) * np.exp(-t / 2.4e-3) * 8000.0
+    p = AM.harmonic_powers(pure, dx.RS_LO_HZ, HARMS, dx.SR)
+    print(f"      {'pure 1786 Hz, tau 2.4 ms':26s}" + "".join(
+        f"{10*math.log10(max(v, 1e-30)/max(p[0], 1e-30)):>9.1f}" for v in p))
+    print(f"      dHARM against itself is 0 by construction; what matters is that")
+    print(f"      bin 4 sits {10*math.log10(max(p[3], 1e-30)/max(p[0], 1e-30)):+.1f} dB "
+          f"over bin 1 with NO harmonic in the signal.")
+    print("\n   THE MEASUREMENT THAT IS NOT CONFOUNDED: mute the 1786 Hz mode's OUTPUT")
+    print("   path in BOTH arms. One mode, so no bin holds a partial, and the reading")
+    print("   cannot depend on the two modes' balance -- which is the variable #388")
+    print("   moves. It is the same claim ('the VCA adds many high harmonics'), asked")
+    print("   of a signal the estimator can actually answer for.")
+    print(f"      {'one mode only':26s} {'dHARM':>7s} {'swing':>7s} {'lin':>7s}")
+    for tag, att, px in (("rev 14 (att 0)", 0, 0.06), ("att 3", 3, 0.06),
+                         ("att 4 (not taken)", 4, 0.06)):
+        with overridden(att=att, peak_x=px):
+            solo = _mute_high(dx.kit_with_sounds("RS"))
+            sw, _ = _raw_render(solo)
+            ln, _ = _raw_render(_lin_kit(solo))
+        print(f"      {tag:26s} {_harm_db(sw)-_harm_db(ln):+7.2f} "
+              f"{_harm_db(sw):+7.2f} {_harm_db(ln):+7.2f}")
+    print("   Read this against the test's 6.0 dB: it is the column a gate can stand")
+    print("   on, because it does not move when the balance does.")
+
+    print("\n   CONCLUSION. The swing VCA's x4/-8 asymmetry is piecewise LINEAR and")
+    print("   therefore scale-free, which is why dHARM is flat across PEAK_RSX: the")
+    print("   only level-dependent part is the tanh's compression, and the low tap")
+    print("   left it. Excluding the colliding bin, the swing still adds +10.6 dB")
+    print("   (was +23.7) -- above the test's 6.0 dB -- so the voice is still")
+    print("   audibly distorted and the estimator, not the voice, is what collapsed.")
+    return 0
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "derive"
     try:
         sys.exit({"derive": cmd_derive, "sweep": cmd_sweep,
-                  "confirm": cmd_confirm}[cmd]())
+                  "confirm": cmd_confirm, "distort": cmd_distort}[cmd]())
     except Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
