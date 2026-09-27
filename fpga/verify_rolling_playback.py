@@ -381,6 +381,7 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
            "truncation_control": trunc,
            "comparison": comp, "detail": detail[:10],
            "reused_rtl_run": bool(rr.get("reused")),
+           "rtl_run": vub.rtl_run_report(rr),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
     out["control"] = rtl_control(fixture, outdir, vub, work)

@@ -429,6 +429,16 @@ def replay_identity(srcs, defines, cmd_path, tail_frames, simulator=None) -> dic
             "tail_frames": int(tail_frames), "simulator": simulator or {}}
 
 
+def rtl_run_report(rr: dict) -> dict:
+    """What this RTL result stands on (#313): re-simulated or reused, why, and
+    the simulator the run identity names."""
+    reuse = rr.get("reuse") or {}
+    sim = (rr.get("identity") or {}).get("simulator") or {}
+    return {"reused": bool(rr.get("reused")), "asked": reuse.get("asked"),
+            "why": reuse.get("why"), "iverilog": sim.get("iverilog -V"),
+            "vvp": sim.get("vvp -V"), "oss_cad_pin": sim.get("oss_cad_pin")}
+
+
 def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
                     timeout_s=3600, reuse=False):
     """Run the wrapper bench on a CLI capture (see rows_from_capture).

@@ -981,6 +981,7 @@ def rtl_replay(res: dict, outdir: Path, *, reuse: bool = False, timeout_s: int =
              else "PASS" if ok else "FAIL")
     return {"state": state, "capture": cap, "comparison": comp, "truncation_control": trunc,
             "detail": detail[:10], "reused_rtl_run": bool(rr.get("reused")),
+            "rtl_run": vub.rtl_run_report(rr),
             "run_receipt": {"path": published.name,
                             "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
 
