@@ -82,7 +82,7 @@ jobs:
     # `runs-on: ubuntu-latest` in its own copy of this file and will keep
     # hitting the 20-minute cap until it does -- the runner class comes from
     # the branch's workflow file, not from main's.
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     # Measured worst case on this runner class is 12.3 min (n=49). See the
     # header comment before changing this.
     timeout-minutes: 20

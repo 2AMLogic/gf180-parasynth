@@ -124,7 +124,7 @@ jobs:
   python:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     # 30 was already marginal before the claim-checker steps below: the two
     # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
     # spends the cap on its own. The claim checker and its controls measured
@@ -445,7 +445,7 @@ jobs:
   rtl:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -493,7 +493,7 @@ jobs:
   # rather than per push.
   rtl-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
