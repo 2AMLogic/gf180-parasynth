@@ -24,10 +24,17 @@ no-verdict with the reason (we tried, the apparatus said no) or listed by
 `--list` as deliberately not run with the reason (we did not try, and why).
 Both are in `COVERAGE` below; neither is silent.
 
-**Every result names its engine.** `fixed-model` for everything here: the
-integer models `model/drums_fx.py` and `model/voice_fx.py`, in this process,
-never a committed WAV. No case here has been measured on the integrated RTL,
-and `tools/scorecard.py` says so out loud on the board.
+**Every result names its engine.** `fixed-model` for everything *this runner*
+produces: the integer models `model/drums_fx.py` and `model/voice_fx.py`, in
+this process, never a committed WAV. A case measured on the chip is scored
+elsewhere -- `tools/score_m5a_i2s.py` for the mono anchor,
+`tools/score_ensemble_i2s.py` for the ensemble one -- and carries
+`integrated-rtl`; `tools/scorecard.py` prints which engines the board holds and
+says so out loud when the instrument is absent from it. **This runner will not
+overwrite one of those anchors with a model result**: see `result_destination`,
+which keeps the anchor and writes the model's measurement beside it. A model
+result replacing a measurement of the instrument, silently, is the one way this
+file could make the board less true than it was.
 
 **Tolerances are frozen before the measurement, from the reference's own
 documentation, and are never per case.** Three classes, chosen before any
@@ -2191,6 +2198,47 @@ def analysis_run() -> str:
 RUBRIC_CHANGE = "rubric change (measurement-version change), not a sound change"
 
 
+#: Where a `fixed-model` result goes when the case it names is already anchored
+#: on the integrated RTL. A SUBDIRECTORY of results/ rather than a sibling file,
+#: because `tools/scorecard.py` reads `results/<case>.json` and
+#: `tools/scorecard_delta.py` globs `results/*.json` -- a sibling
+#: `E1A-fixed-model.json` would read as a case called "E1A-fixed-model".
+MODEL_TWIN_DIR = "model-twin"
+
+
+def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
+    """Where this result may be written, which is not always where it was asked
+    to go.
+
+    A MODEL RESULT MUST NOT SILENTLY REPLACE AN INTEGRATED-RTL ANCHOR. Every
+    case here is scored `fixed-model`, and the board has exactly one result path
+    per case -- so `run_case.py --batch "First 32"` (which `make board` runs)
+    would overwrite an anchor measured on the chip with a measurement of the
+    model of the chip, leave no trace, and the board would go back to saying no
+    case has been measured on the instrument. That is the expensive direction of
+    the mistake: the model can be re-derived in seconds, the anchor is a
+    twenty-five-minute RTL run.
+
+    So an anchor is kept and the model result is written beside it under
+    `results/model-twin/`, with the swap announced. Neither is discarded, and
+    `tools/compare_ensemble_candidate.py` is the tool that compares them."""
+    if res.get("engine") == "integrated-rtl" or not dest.is_file():
+        return dest
+    try:
+        held = json.loads(dest.read_text())
+    except (OSError, ValueError):
+        return dest
+    if held.get("engine") != "integrated-rtl":
+        return dest
+    twin = dest.parent / MODEL_TWIN_DIR / dest.name
+    twin.parent.mkdir(parents=True, exist_ok=True)
+    print(f"{dest.stem}: {dest.name} holds an integrated-rtl measurement "
+          f"({held.get('source_commit', '?')}); this {res.get('engine')} result is written to "
+          f"{twin.relative_to(dest.parent.parent) if dest.parent.parent in twin.parents else twin}"
+          f" rather than replacing it. Neither is discarded.")
+    return twin
+
+
 def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
     """Keep a record's earlier scores when the RUBRIC under it changes.
 
@@ -2870,7 +2918,7 @@ def main(argv=None) -> int:
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
-            dest = outdir / f"{cid}.json"
+            dest = result_destination(outdir / f"{cid}.json", res)
             if not a.inject:
                 carry_rubric_history(c, dest, res)
             dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")

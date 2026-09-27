@@ -93,7 +93,7 @@ verify:
 ## pytest files DO need iverilog and stay in `make verify` only.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
@@ -105,8 +105,26 @@ verify-fast:
 	  "$(PY) tools/inject_manifest_defects.py"
 
 ## Adds the runs that take an hour. Still one turn.
+##
+## THE ENSEMBLE ANCHOR is here and not in `verify`, and not in `controls`.
+## `score_ensemble_i2s.py --case E1A` is thirteen six-second whole-chip runs --
+## the four bus parts, the eight per-stop rows, and the DRUM_BUS_STALE negative
+## control -- at about 2.1 minutes each on Verilator (measured, 2026-09-26, this
+## host): 27 minutes at --jobs 1, which is what it uses so it does not fan out
+## underneath run_all.py's own fan-out. `--reuse` makes a re-run on an unchanged
+## tree nearly free, so this is cheap on a warm build/ and honest on a cold one.
+##
+## It writes to build/, NOT to docs/scorecard/results/E1A.json: this job is a
+## regression gate on the anchor's machinery and its control, not a licence to
+## quietly re-cut the committed record. Re-cut that deliberately, by running the
+## tool without --out, and commit the record with the reports that produced it.
+##
+## It needs Verilator. On iverilog the same thirteen runs are about three hours,
+## which is past this target's cap -- so a runner without Verilator gets a
+## NO-VERDICT from run_all.py rather than a quiet skip.
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
+	  "$(PY) tools/score_ensemble_i2s.py --case E1A --jobs 1 --reuse --simulator verilator --out build/scorecard/E1A-integrated-rtl.json --audio build/scorecard/E1A-integrated-rtl-mix.wav --twin build/scorecard/E1A-fixed-model-twin.json" \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
