@@ -11,8 +11,8 @@ checks that every saw event is identical. The record is `sweep.json`, commit `f5
 | pulse cutoff | M5A pulse objective (worst partial, dB) | M5B pulse objective | M5A / M5B foldback (limit 3) | M5A gain | verdict |
 |---|---:|---:|---|---:|---|
 | 14,073 (baseline) | 5.297 | 4.957 | 2.206 / 1.913 | −1.544 | — |
-| **17,000** | **3.947** | **4.369** | 2.206 / — | +1.421 | admissible on M5A; **fails confirmation** |
-| 20,000 | 3.771 | 3.977 | **3.733** / — | +1.421 | **rejected**: M5A pulse-96 foldback 3.73 > 3 |
+| **17,000** | **3.947** | **4.369** | 2.206 / 1.913 | +1.421 (sign flip: the worst event moves from pulse 96 to saw 84) | admissible on M5A; **fails confirmation** |
+| 20,000 | 3.771 | 3.977 | **3.733** / 2.108 | +1.421 | **rejected**: M5A pulse-96 foldback 3.73 > 3 |
 
 **Selection.** 17 kHz is the only admissible candidate on M5A.
 - It brightens the pulse. The worst partial error falls from 5.30 to 3.95 dB, and at the untouched M5B MIDI 72 from 4.96 to 4.37 dB.

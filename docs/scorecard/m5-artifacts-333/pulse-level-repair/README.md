@@ -27,7 +27,7 @@ records are at `1af59e1`, and sources are clean.
 
 | | foldback | Gain |
 |---|---|---|
-| M5A | 2.21 dB, unchanged | 1.42 dB, unchanged |
+| M5A | 2.21 dB, unchanged | −1.54 → **+1.42 dB**: the worst event changes from the too-quiet pulse at MIDI 96 to the too-loud saw at MIDI 84 (the magnitude falls by 0.12 dB) |
 | M5B | unchanged | 2.05 → **2.71 dB** |
 
 M5B's gain change is **0.66 dB**, which exceeds the 0.5 dB preservation allowance. It stays within the 3 dB
