@@ -358,19 +358,23 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
     cap = write_rtl_capture(run, outdir / fixture)
     work = "rolling-rtl" if (image, target) == (uh.DEFAULT_IMAGE, uh.DEFAULT_IMAGE) \
         else f"rolling-rtl-{image}-for-{target}"
-    rr = vub.simulate_replay(str(outdir / fixture),
-                             ROOT / "build" / work / fixture,
-                             tail_frames=int(TAIL_S * SR),
-                             # ~258k frames of the full wrapper: 3600 s
-                             # reached 87% on a loaded machine (62 fr/s)
-                             timeout_s=RTL_TIMEOUT_S, reuse=reuse)
-    if rr is None:
-        return {"state": "REFUSED", "reason": "RTL replay did not run",
-                "capture": cap}
-    ok, comp, detail = vub.analyze(rr)
-    # completeness (#300 review): every period the stimulus requires, and a
-    # control showing the check can fail
-    trunc = vub.truncation_control(rr)
+    # the RTL defines and the model are the TARGET image's configuration
+    # (r2: PULSE2X=1; vub.image_config); the run identity records the defines,
+    # so a reuse can never cross configurations either
+    with vub.image_config(target):
+        rr = vub.simulate_replay(str(outdir / fixture),
+                                 ROOT / "build" / work / fixture,
+                                 tail_frames=int(TAIL_S * SR),
+                                 # ~258k frames of the full wrapper: 3600 s
+                                 # reached 87% on a loaded machine (62 fr/s)
+                                 timeout_s=RTL_TIMEOUT_S, reuse=reuse)
+        if rr is None:
+            return {"state": "REFUSED", "reason": "RTL replay did not run",
+                    "capture": cap}
+        ok, comp, detail = vub.analyze(rr)
+        # completeness (#300 review): every period the stimulus requires, and a
+        # control showing the check can fail
+        trunc = vub.truncation_control(rr)
     # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
     # digests) is published beside the result it produced
     receipt = Path(rr["outdir"]) / "run_identity.json"
@@ -384,7 +388,8 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
            "rtl_run": vub.rtl_run_report(rr),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
-    out["control"] = rtl_control(fixture, outdir, vub, work)
+    with vub.image_config(target):
+        out["control"] = rtl_control(fixture, outdir, vub, work)
     if not out["control"]["caught"] and out["state"] == "PASS":
         out["state"] = "FAIL"
     return out

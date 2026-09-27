@@ -115,6 +115,14 @@ class with_config:
         global CONFIG
         CONFIG = self.old
 
+def image_config(image: str):
+    """The bench configuration of a named host image: PULSE2X=1 on the images
+    qualified_domain.PULSE2X_IMAGES names (r2), else the default (R1's)."""
+    sys.path.insert(0, str(ROOT / "fpga" / "release"))
+    import qualified_domain as qd
+    return with_config(PULSE2X=1) if image in qd.PULSE2X_IMAGES else contextlib.nullcontext()
+
+
 RE_SEG = re.compile(r"SEG (\d+) origin_tcc (\d+) periods (\d+) strobes (\d+)")
 RE_RAN = re.compile(r"ran (\d+) frames in (\d+) segments; (\d+) I2S periods decoded")
 RE_WRT = re.compile(r"writes drained (\d+), spi\+uart slot collisions (\d+)")

@@ -35,7 +35,7 @@ def _bytes(argv):
 
 def test_the_defaults_do_not_move():
     assert uh.DEFAULT_IMAGE == "release"
-    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14}
+    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14, "r2": 14}
     assert ms.resolve_image("/dev/ttyUSB1", None) == "release"
     assert ms.resolve_image("sim", None) == "tree"
     assert ms.resolve_image("sim", "r1") == "r1"

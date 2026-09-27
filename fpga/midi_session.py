@@ -15,7 +15,8 @@ THE IMAGE (#273). The drum kit in the known-state image is a property of the
 Arty image on the board, not of the tree this runs from (uart_host.image_kit).
 On a serial port the default is `--image release`: the published R0 image,
 contract revision 11, which has no ENV_FRATE and plays revision 11's clap.
-`--image tree` is a board built from this tree (revision 14). `--port sim` is
+`--image tree` is a board built from this tree (revision 14); `--image r1` and
+`--image r2` are the named R1 and R2 images (R1's frozen kit). `--port sim` is
 this tree's device contract, so it implies `tree`, and `--port sim --image
 release` is REFUSED rather than letting a revision-11 kit pass against it.
 
@@ -941,11 +942,11 @@ def run_live(session: MidiSession, source, *, duration_s: float | None = None,
 def resolve_image(port: str, image: str | None) -> str:
     """The image a session drives. A serial port defaults to the published
     release (revision 11); `sim` is this tree's device contract (revision 14), so
-    it implies `tree`, accepts `r1` (revision 14, R1's frozen kit) and REFUSES
-    `release`."""
+    it implies `tree`, accepts `r1` and `r2` (revision 14, R1's frozen kit) and
+    REFUSES `release`."""
     if port == "sim":
-        if image == "r1":
-            return "r1"
+        if image in uh.R1_KIT_IMAGES:
+            return image
         if image == "release":
             raise uh.Refused("--port sim is this tree's device contract (contract "
                              f"revision {uh.IMAGE_REVISION['tree']}); a revision-"
@@ -994,7 +995,8 @@ def main(argv=None) -> int:
                     help="the Arty image on the board, which decides the drum kit sent: "
                          "release (the published R0 image, contract revision 11 -- the "
                          "DEFAULT on a serial port), r1 (the published R1 player release, "
-                         "its frozen kit) or tree (built from this tree, revision 14, "
+                         "its frozen kit), r2 (the R2 image, PULSE2X=1; R1's frozen kit) "
+                         "or tree (built from this tree, revision 14, "
                          "development -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
     if a.list_midi_ports:

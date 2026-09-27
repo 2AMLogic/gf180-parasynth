@@ -135,10 +135,20 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 # on the tree's kit cannot change what an R1 board is sent. `tree` stays the
 # development selector: whatever this tree builds. `release` and no --image
 # stay R0 (plan092: the public default does not flip).
-IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14}
+#
+# `r2` (fpga/release/R2.md) is the NAMED R2 image: OSC2X=1 FILTER2X=1
+# PULSE2X=1 with the R2 RTL changes. Its drum RTL and contract revision are
+# R1's, and it has no preset or kit change, so it is sent R1's kit frozen by
+# value and R1's known-state start: its bytes equal `r1`'s, command for
+# command (fpga/test_named_r2.py). What differs is the image on the board and
+# the qualified domain (qualified_domain.PULSE2X_IMAGES admits PULSE2X on r2).
+# The host cannot read the image back, so the name is declared, not verified.
+IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14, "r2": 14}
 DEFAULT_IMAGE = "release"
 # the images whose sessions start from the known state (voice + drum RESET)
-KNOWN_STATE_IMAGES = ("tree", "r1")
+KNOWN_STATE_IMAGES = ("tree", "r1", "r2")
+# the images that are sent R1's frozen kit (uart_host.r1_kit)
+R1_KIT_IMAGES = ("r1", "r2")
 R1_KIT = Path(__file__).resolve().parent / "release/r1-kit.json"
 R1_KIT_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
 
@@ -167,7 +177,7 @@ def image_kit(image: str = DEFAULT_IMAGE) -> list:
     if "WRONG_KIT" in INJECT_BUGS and image in KNOWN_STATE_IMAGES:
         # the control (#279, plan088): the release kit under `--image tree|r1`
         return dx.KITS_BY_REVISION[IMAGE_REVISION["release"]]()
-    if image == "r1":
+    if image in R1_KIT_IMAGES:
         return r1_kit()
     return dx.KITS_BY_REVISION[IMAGE_REVISION[image]]()
 BITS_PER_BYTE = 10
@@ -1721,8 +1731,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "fixture sends: release (the published R0 image, contract "
                          "revision 11, no final strike -- the DEFAULT), r1 (the "
                          "published R1 player release, its frozen kit and known-state "
-                         "start) or tree (an image built from this tree, revision 14; "
-                         "development)")
+                         "start), r2 (the R2 image, PULSE2X=1: the same bytes as r1, "
+                         "fpga/release/R2.md) or tree (an image built from this tree, "
+                         "revision 14; development)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
     ap.add_argument("--engineering", action="store_true",
