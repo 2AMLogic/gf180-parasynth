@@ -38,13 +38,18 @@ KNOB = {"00": 0.0, "25": 2.5, "50": 5.0, "75": 7.5, "10": 10.0}
 SETTINGS = [t + d for t in CODES for d in CODES]
 DEV = sorted({t + "50" for t in CODES} | {"50" + d for d in CODES})
 UNTOUCHED = [s for s in SETTINGS if s not in DEV]
-CANDIDATES = (0.0, 4.0, 8.0, 14.0)
+# (V_trig, steps). The first four were frozen before any render. The 32-step
+# rows were ADDED after the first run, which showed 8 coefficient steps
+# clicking in a long ring (impulse up to 6x at DECAY 10) -- an implementation
+# refinement of the same mechanism, disclosed as such (#379).
+CANDIDATES = ((0.0, 8), (4.0, 8), (8.0, 8), (14.0, 8), (4.0, 32), (8.0, 32), (14.0, 32))
 NOISE = 0.05                      # ratio units: a feature "worse beyond noise"
 HIT, SECONDS = 480, 2.2
 
 
-def render_bd(decay_knob: float, v_trig: float, accent: float = 1.0) -> np.ndarray:
+def render_bd(decay_knob: float, v_trig: float, accent: float = 1.0, steps: int = 8) -> np.ndarray:
     dx.BD_SIGH_VTRIG = v_trig
+    dx.BD_SIGH_STEPS = steps
     kit = dict(dx.kit_with_sounds("BD"))
     base = dx.A_MODE + dx.M_BD * dx.MODE_STRIDE
     amp = kit[base + 2] / 65536.0
@@ -58,18 +63,20 @@ def render_bd(decay_knob: float, v_trig: float, accent: float = 1.0) -> np.ndarr
 
 
 def _job(args):
-    refs, setting, vt = args
+    refs, setting, (vt, steps) = args
     rel = f"bd8/BD{setting}.WAV"
     T = g.Target(*g.load_wav(refs / rel), "BD", rel)
     b = g.bar_for("BD", refs, T, rel)
-    y = render_bd(KNOB[setting[2:]], vt)
+    y = render_bd(KNOB[setting[2:]], vt, steps=steps)
     v = g.verdict(T.distance(y, dx.SR, f"BD vt={vt}"), b["bar"])
-    return setting, vt, {"worst": v["worst_ratio"], "worst_feature": v["worst_feature"],
+    return setting, (vt, steps), {"worst": v["worst_ratio"], "worst_feature": v["worst_feature"],
                          "ratios": {f: x.get("ratio") for f, x in v["features"].items()},
                          "bar_from": b["from"]}
 
 
-def preservation(vt: float) -> dict:
+def preservation(cand: str) -> dict:
+    vt, steps = float(cand.split("/")[0]), int(cand.split("/")[1])
+    dx.BD_SIGH_STEPS = steps
     import run_case as rc
     out = {}
     dx.BD_SIGH_VTRIG = 0.0
@@ -99,15 +106,15 @@ def main(argv=None) -> int:
         rows = pool.map(_job, jobs)
     res = {"dev": DEV, "untouched": UNTOUCHED, "noise": NOISE, "by": {}}
     for s, vt, r in rows:
-        res["by"].setdefault(str(vt), {})[s] = r
-    base = res["by"]["0.0"]
+        res["by"].setdefault(f"{vt[0]}/{vt[1]}", {})[s] = r
+    base = res["by"]["0.0/8"]
     summary = {}
-    for vt in CANDIDATES[1:]:
-        c = res["by"][str(vt)]
+    for vt in (f"{v}/{n}" for v, n in CANDIDATES[1:]):
+        c = res["by"][vt]
         worse = {s: [f for f, r in c[s]["ratios"].items()
                      if r is not None and base[s]["ratios"][f] is not None
                      and r > base[s]["ratios"][f] + NOISE] for s in SETTINGS}
-        summary[str(vt)] = {
+        summary[vt] = {
             "dev_worst": max(c[s]["worst"] for s in DEV),
             "dev_worse_features": {s: worse[s] for s in DEV if worse[s]},
             "untouched_worst_before_after": {s: (round(base[s]["worst"], 2), round(c[s]["worst"], 2))
@@ -121,7 +128,7 @@ def main(argv=None) -> int:
     res["baseline_dev_worst"] = max(base[s]["worst"] for s in DEV)
     res["selected"] = sel
     if sel is not None:
-        res["preservation"] = preservation(float(sel))
+        res["preservation"] = preservation(sel)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
     print(json.dumps({"baseline_dev_worst": res["baseline_dev_worst"], "selected": sel,
