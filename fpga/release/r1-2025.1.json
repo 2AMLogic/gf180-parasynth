@@ -343,13 +343,13 @@
         ]
       },
       "session_start": "every R1 image-loading command (uart_host run/load --image tree, midi_session --image tree) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
-      "physical_precondition": "the board is programmed with the R1 bitstream (#280, not yet built). The host cannot read the image identity back, so this is declared, not verified.",
+      "physical_precondition": "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). The host cannot read the image identity back, so this is declared, not verified.",
       "open_defect": "#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent",
       "drift": "DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player domain: a nonzero write is refused (NOT_IN_IMAGE rule, R1 wording)"
     },
     "candidate": {
       "record": "fpga/release/r1-candidate.json",
-      "sha256": "5b6aa44489b34326e803aee982754214a7f4cc8d6a37ac28981747ecece5f286",
+      "sha256": "558d09b77d3447eda47dadda264659165c58e650151827ec7579959fd5ea4a9c",
       "evidence_dir": "fpga/reports/r1-candidate",
       "rtl_runs_bound": 12
     }
@@ -371,7 +371,7 @@
   "default_switch": {
     "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image targets R0; R1 is selected with --image tree",
     "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
-    "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then reports R0 STALE at commands.* -- the gate doing its job: the same change must give R0's documented commands an explicit --image release. This manifest records host.default_image and goes STALE too, and is re-bound with --write.",
+    "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 ('held-note default: the replayed capture is not what the CLI emits now', measured by fpga/release/test_r1_release.py) -- the gate doing its job: the same change must give R0's documented commands and its manifest's captures an explicit --image release. This manifest records host.default_image and goes STALE, and is re-bound with --write.",
     "decided_by": "the operator (#280 keeps release as the default)"
   },
   "physical_capture": {

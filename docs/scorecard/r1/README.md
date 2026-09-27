@@ -9,10 +9,10 @@ Evidence produced at `14e12bc02808, ccf7ed49515b` (origin/main `86838760ccce`) o
 | gate | question | verdict | evidence level |
 |---|---|---|---|
 | trust | are the results trustworthy? | **PASS** | receipts re-checked; every declared control caught |
-| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path, no image) |
+| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, T-RELEASE-BOUND-R1) |
 | playability | is it an instrument? | **PASS** (digital, 11 of 16 sounds mapped) | live-MIDI session against the device contract and the RTL; no hardware latency |
 | sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 6 no verdict, 75 not run of 100 | mostly fixed-point model |
-| physical | did the device produce it? | **BLOCKED** | no R1 bitstream (#280), no capture (#208); simulation cannot satisfy this gate |
+| physical | did the device produce it? | **BLOCKED** | R1 image `544499e2c970` published, not yet programmed on a board, no capture (#208); simulation cannot satisfy this gate |
 
 ## Implementation
 
@@ -51,7 +51,7 @@ None of these was measured on the R1 production path. Each row names its engine 
 | case | subject | state | properties | evidence level | measured at |
 |---|---|---|---|---|---|
 | D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.07; early/body energy 0.07 | fixed-point model | `7dd6337` |
-| D02A | Snare / anchor | pass | Body/noise balance 0.58; attack 0.05; noise decay 0.05 | fixed-point model | `7dd6337` |
+| D02A | Snare / anchor | pass | Body/noise balance 0.65; attack 0.02; noise decay 0.04 | integrated RTL (component bench) | `99637db` |
 | D03A | Low tom / anchor | fail | Pitch drop 0.06; body spectrum 6.04; decay 0.04 | fixed-point model | `7dd6337` |
 | D04A | Low conga / anchor | no verdict | Pitch 0.77; body spectrum 4.14 | fixed-point model | `7dd6337` |
 | D05A | Mid tom / anchor | fail | Pitch drop 0.14; body spectrum 5.46; decay 0.04 | fixed-point model | `7dd6337` |

@@ -308,3 +308,15 @@ is **R0**; the "R1 release receipts" section above is about R0.
 
 `sim` mode of T-PLAY-DIGITAL (R0 bytes through the current RTL) was not re-run:
 it is a compatibility test and says nothing about either image's playback.
+
+### R1 image receipts, 2026-09-27 (#280; a snapshot, not maintained state)
+
+On the build box, after the one R1 build (bitstream `544499e2...`, routed
+checkpoint `0f81026e...`, Vivado 2025.1 SW Build 6140274):
+
+| trial | verdict | what it shows |
+|---|---|---|
+| T-RELEASE-BOUND-R1 | **PASS** | `r1-2025.1.json` BOUND: image, publication, shipped reports (re-parsed), DSP evidence (re-derived), per-port external I/O and routed.dcp agree; compiled inputs are the candidate's at `6864435`; `--image tree` bytes are the ones the candidate's RTL evidence replayed; R0 pinned |
+| T-RELEASE-BOUND-R1, `stale-r1-image` | caught | the R1 manifest naming R0's bitstream/checkpoint/publication is STALE at exactly those three fields |
+| T-RELEASE-BOUND-R1, `stale-r1-host` | caught | the R1 manifest naming R0's `run --fixture demo` bytes (508 packets, no preamble, revision-11 kit) is STALE at exactly `host.commands.demo.cmds_sha256`/`.packets` |
+| T-RELEASE-BOUND | **PASS** | R0 untouched: its manifest still BOUND, both of its stale controls caught |
