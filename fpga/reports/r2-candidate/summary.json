@@ -17,10 +17,10 @@
   "M5B full phrase --pulse2x": "729533/729533 I2S periods exact (M5B.json)"
  },
  "not_passed": {
-  "verify_voice --set full (R2 config)": "FAIL: 5338 of 442596 samples differ (extremes; runall.log). PRE-EXISTING: R1's published voice_dp.v (67d59af7) fails the same audition+extremes subset with the same counts (5581 PULSE2X=0, 5021 PULSE2X=1), and R2's RTL output equals R1's in every value column on that subset (121040 frames x 27 columns, both configs) -- only the strobe cycle moved, 2..21 cycles earlier (runall3.log, runall4.log). Filed as its own issue; blocks an R2 build until explained"
+  "verify_voice --set full (R2 config)": "FAIL: 5338 of 442596 samples differ (extremes; runall.log). PRE-EXISTING: R1's published voice_dp.v (67d59af7) fails the same audition+extremes subset with the same counts (5581 PULSE2X=0, 5021 PULSE2X=1), and R2's RTL output equals R1's in every value column on that subset (121040 frames x 27 columns, both configs) -- only the strobe cycle moved, 2..21 cycles earlier (runall3.log, runall4.log). Filed as #354; blocks an R2 build until explained"
  },
  "not_run": [
-  "Vivado build (on hold: decimator headroom value pending from the sound owner; #315)"
+  "Vivado build of R2: after the settled set lands (#354 resolved; #323, #356, #358, #359 merged) -- the headroom value is delivered and in (0.74), #315 is carried"
  ],
  "headroom": {
   "change": "rectangles 24248/32768 (0.74) in polyblep_saw_pair.v under VOICE_PULSE_2X and voice_fx._render_2x; saw unchanged 27853",

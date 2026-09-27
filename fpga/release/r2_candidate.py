@@ -24,12 +24,15 @@ built. Open before a freeze or a Vivado build:
     unchanged at 0.85 -- recheck-333 item 5; in polyblep_saw_pair.v and
     voice_fx._render_2x, with the INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM
     control);
-  * the #315 XDC constraint repair, if it is ready and reviewed;
+  * (carried: the #315 XDC repair, PR #358);
+  * #354 (verify_voice --set full, inherited from R1); its repair joins
+    EXPECTED_CHANGES by review if it is an RTL change;
+  * confirmed preset changes, only through a versioned profile;
   * the named image selector (#323). The host has no `--image r2` yet, so
     the domain admission cannot be used from the CLI.
 
 The record binds what exists: the configuration, the exact compiled sources
-at this tree, how they differ from R1's freeze (voice_dp.v only), and the
+at this tree, how they differ from R1's freeze (exactly EXPECTED_CHANGES), and the
 domain rule. The evidence is fpga/reports/r2-candidate/summary.json, bound
 by digest. BOUND means the committed record equals a fresh derivation.
 STALE means something moved. R1's records (r1-candidate.json,
