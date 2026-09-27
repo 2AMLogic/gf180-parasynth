@@ -170,17 +170,46 @@ def _load(p):
 
 
 KNOB = {"00": 0.0, "10": 10.0, "25": 2.5, "50": 5.0, "75": 7.5}
+CODES = ("00", "10", "25", "50", "75")
+# FROZEN before any candidate is rendered or judged (#369 acceptance 3). The
+# development subset is the settings the knob laws were fitted on (TONE 5.0
+# column and DECAY 5.0 row; model/test_discrimination FIT_KNOBS reads 0/5/10
+# of each) plus the D14A anchor CY5025. Everything else -- including CY2500,
+# D14B's holdout -- is confirmation only.
+DEVELOPMENT = tuple(sorted({f"CY50{d}" for d in CODES} | {f"CY{t}50" for t in CODES}))
+CONFIRMATION = tuple(sorted(f"CY{t}{d}" for t in CODES for d in CODES if f"CY{t}{d}" not in DEVELOPMENT))
+
+
+def ours(refs: pathlib.Path, seconds: float = 4.0) -> dict:
+    """Our cymbal at every Fischer setting, through the kit's knob laws
+    (model/test_discrimination.kit_at, the 'ours' arm) and render_drum_solo's
+    exact render path: one strike at accent 1.0, both drum buses at 0.45."""
+    import drums_fx as dx
+    import test_discrimination as td
+    laws = td.fit_laws(str(refs))
+    out = {}
+    n = int(seconds * dx.SR)
+    for t in CODES:
+        for d in CODES:
+            kit = td.kit_at("CY", (KNOB[t], KNOB[d]), laws, "ours")
+            dm, bd = dx.DrumsFx().play(dx.hit_writes([(rc.DRUM_SOLO_HIT_FRAME, dx.SOUND_STOP["CY"], 1.0)], kit), n)
+            g = dx.accent_reg(0.45)
+            y = np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g), dtype=np.float64) / 32768.0
+            out[f"CY{t}{d}"] = measure(rc.prepare(y, dx.SR, side=f"our CY{t}{d}"), dx.SR)
+    return out
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
+    ap.add_argument("--ours", action="store_true", help="measure our cymbal at every setting instead")
     a = ap.parse_args(argv)
-    res = fischer(pathlib.Path(a.refs))
+    res = ours(pathlib.Path(a.refs)) if a.ours else fischer(pathlib.Path(a.refs))
+    res["_split"] = {"development": list(DEVELOPMENT), "confirmation": list(CONFIRMATION)}
     print(f"{'file':8s} {'tone':>4s} {'decay':>5s} | {'L share':>7s} {'L EDT':>6s} {'L T20':>6s} | "
           f"{'H share':>7s} {'H EDT':>6s} {'H T20':>6s} | H-L")
-    for k in sorted(res, key=lambda k: (KNOB[k[2:4]], KNOB[k[4:6]])):
+    for k in sorted((k for k in res if not k.startswith("_")), key=lambda k: (KNOB[k[2:4]], KNOB[k[4:6]])):
         r = res[k]
         f = lambda v: "   REF" if v is None else f"{v:6.1f}"
         print(f"{k:8s} {KNOB[k[2:4]]:4.1f} {KNOB[k[4:6]]:5.1f} | {r['L']['energy_share_db']:7.2f} "
