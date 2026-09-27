@@ -218,13 +218,38 @@ def timing_section(m: dict, post: set, src: dict) -> str:
     return "\n".join(lines)
 
 
-def iteration_section(run_dir: str) -> str:
-    """What the router's iterations after convergence cost — the §6.5 evidence.
+def plateaus(done: list[dict]) -> list[dict]:
+    """Runs of consecutive iterations at one violation count.
 
-    Generated rather than typed because the claim is quantitative: the violation
-    count stops moving many iterations before the router stops, and the iterations
-    after that point are the expensive ones.  A prose summary of this would be an
-    argument; the table is a measurement.
+    This is the quantity that decides whether "stop after K iterations without
+    improvement" would have been the right fix, and on this run it says NO -- which
+    is the opposite of what a draft of §6.5 claimed.  So it is computed, not argued.
+    """
+    out: list[dict] = []
+    for r in done:
+        if out and out[-1]["violations"] == r["violations"]:
+            out[-1]["iterations"] += 1
+            out[-1]["last"] = r["iteration"]
+            out[-1]["cpu_s"] += r["cpu_s"] or 0
+            out[-1]["elapsed_s"] += r["elapsed_s"] or 0
+        else:
+            out.append({"violations": r["violations"], "iterations": 1,
+                        "first": r["iteration"], "last": r["iteration"],
+                        "cpu_s": r["cpu_s"] or 0, "elapsed_s": r["elapsed_s"] or 0})
+    return out
+
+
+def iteration_section(run_dir: str) -> str:
+    """What the router's iteration schedule costs -- the §6.5 evidence.
+
+    Generated rather than typed, and the reason is specific: a draft of §6.5 was
+    written off a NINETY-MINUTE-STALE copy of this log and claimed the router
+    "improves nothing" after a plateau.  On the completed log the count improved
+    *after* the longest plateau, so the claim was false and the fix it proposed
+    ("stop after K iterations with no improvement") would have truncated the run
+    before the improvement.  Every number below is therefore computed here, and the
+    two that decide the argument -- the longest plateau and whether the count moved
+    after it -- are in the table rather than in the prose.
     """
     step = fh.find_step(run_dir, fh.DETAILED_ROUTING)
     if not step:
@@ -236,10 +261,16 @@ def iteration_section(run_dir: str) -> str:
     done = [r for r in its if r["violations"] is not None]
     if not done:
         raise cr.Refusal("the router log has no completed iteration")
+
     final = done[-1]["violations"]
-    # The first iteration that reached the count the router ended on.
     first_at_final = next(r for r in done if r["violations"] == final)
     after = [r for r in done if r["iteration"] > first_at_final["iteration"]]
+    runs = plateaus(done)
+    longest = max(runs, key=lambda p: p["iterations"])
+    improved_after = any(p["violations"] != longest["violations"]
+                         for p in runs[runs.index(longest) + 1:])
+    stub = [r for r in done if r["kind"] == "stubborn" and r["elapsed_s"]]
+
     cap = None
     cfg = os.path.join(run_dir, step, "config.json")
     if os.path.exists(cfg):
@@ -250,28 +281,44 @@ def iteration_section(run_dir: str) -> str:
         "| | |",
         "|---|---:|",
         f"| iterations logged | {len(done)} |",
-        f"| `DRT_OPT_ITERS` — **INPUT** | {num(cap)} |",
+        f"| `DRT_OPT_ITERS` — **INPUT**, a count and not a budget | {num(cap)} |",
         f"| final violation count | {num(final)} |",
         f"| first iteration to reach it | **{first_at_final['iteration']}** |",
         f"| iterations after that | {len(after)} |",
+        f"| CPU time in those iterations | {sum(r['cpu_s'] or 0 for r in after) / 3600:.2f} h |",
+        f"| wall time in those iterations | {sum(r['elapsed_s'] or 0 for r in after) / 3600:.2f} h |",
+        f"| longest run at one count | **{longest['iterations']}** iterations "
+        f"({longest['first']}–{longest['last']}) at {num(longest['violations'])} "
+        f"violations, {longest['cpu_s'] / 3600:.2f} CPU-h |",
+        f"| **did the count improve after that run?** | "
+        f"**{'YES' if improved_after else 'no'}** |",
     ]
-    cpu_after = sum(r["cpu_s"] or 0 for r in after)
-    wall_after = sum(r["elapsed_s"] or 0 for r in after)
-    lines += [
-        f"| CPU time in those iterations | {cpu_after / 3600:.2f} h |",
-        f"| wall time in those iterations | {wall_after / 3600:.2f} h |",
-        "",
-        "| iteration | kind | violations | elapsed | CPU |",
-        "|---:|---|---:|---:|---:|",
-    ]
-    for r in done[-12:]:
+    if stub:
+        lo = min(r["elapsed_s"] for r in stub) / 60
+        hi = max(r["elapsed_s"] for r in stub) / 60
+        lines.append(f"| `stubborn` iteration wall time, min → max | "
+                     f"{lo:.1f} → {hi:.1f} min ({hi / max(lo, 1e-9):.0f}×) |")
+    lines += ["", "| iteration | kind | violations | wall | CPU |",
+              "|---:|---|---:|---:|---:|"]
+    for r in done[-14:]:
         lines.append(
             f"| {r['iteration']} | {r['kind']} | {num(r['violations'])} | "
             f"{(r['elapsed_s'] or 0) / 60:.1f} min | {(r['cpu_s'] or 0) / 60:.1f} min |")
-    lines += ["", f"The count has not moved since iteration "
-                  f"**{first_at_final['iteration']}**. `stubborn` iterations cost minutes "
-                  f"to tens of minutes each and `guides` iterations seconds, so the cost is "
-                  f"concentrated in exactly the iterations that are not improving anything."]
+    lines.append("")
+    if improved_after:
+        lines.append(
+            f"**The count improved after a run of {longest['iterations']} iterations "
+            f"that did not move it.** So an early stop keyed on "
+            f"\"no improvement for K iterations\" would have had to allow "
+            f"K > {longest['iterations']} to keep this result — which is most of the "
+            f"cap. That is the measurement that refutes the first draft of §6.5, and "
+            f"it is why the finding there is about the *cost schedule* rather than "
+            f"about stopping early.")
+    else:
+        lines.append(
+            f"**The count did not improve after iteration "
+            f"{first_at_final['iteration']}.** On this run an early stop keyed on "
+            f"no-improvement would have been free.")
     return "\n".join(lines)
 
 

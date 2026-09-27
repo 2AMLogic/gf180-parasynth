@@ -254,11 +254,12 @@ sign-off by an unknown amount.
 <!-- BEGIN measured:router -->
 <!-- END measured:router -->
 
-### 4.6 What the router's iterations cost after it stopped improving
+### 4.6 What the router's iteration schedule cost
 
-The router keeps iterating long after the violation count stops moving, and the
-iterations that do not improve anything are the expensive ones. This table is the
-evidence for §6.5; it is generated from the router's own log.
+The router's effort is bounded by an iteration *count*, and an iteration costs
+anywhere from seconds to over an hour. The two rows that matter most are the longest
+run at one violation count and whether the count improved **after** it — because a
+draft of §6.5 assumed it did not, and was wrong. Generated from the router's own log.
 
 <!-- BEGIN measured:iterations -->
 <!-- END measured:iterations -->
