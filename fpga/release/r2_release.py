@@ -61,7 +61,7 @@ IMAGE_KEY = "r2"                                            # build_arty.IMAGE_C
 PREFIX = "r2_release: "
 # The commit R2 was built from. Every compiled source is verified here with
 # `git show`, and the per-port ext-I/O instrument is pinned here by version.
-R2_FROZEN_AT = None                                         # set when the image is built
+R2_FROZEN_AT = "3182638c4349d174bff0b3d127fb13ab3f14a560"   # the build ran on this commit (build/r2-arty, 2026-09-27)
 PULSE2X_DEFINE = "VOICE_PULSE_2X"
 
 Refused = r1r.Refused
