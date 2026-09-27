@@ -163,6 +163,30 @@ def fine_sweep(gains, lo=90.0, hi=127.0, step=0.125, n=48_000) -> dict:
             "candidates": out}
 
 
+def probe_points(gain: float, notes=(36, 60, 84, 96, 108, 114, 120, 127)) -> dict:
+    """Stage/output artifact numbers (mono_artifact_probe) for the reachable
+    rectangles on the pulse2x engine, as built (0.85) and with the candidate
+    rectangle gain: unwanted energy, upper wanted power and oscillator rail."""
+    import mono_artifact_probe as mp
+    res = {}
+    for shape in ("square", "pulse29", "pulse25", "pulse15"):
+        for nt in notes:
+            row = {}
+            for label, g in (("0.850", None), (f"{gain:.3f}", q15(gain))):
+                with candidate(g, "rect"):
+                    r = mp.measure_point("pulse2x", nt, mp.held_patch(waves=(shape,) * 3))
+                o = r["stages"]["output"]
+                row[label] = {"osc_rail": r["clip"]["oscillator_rail_samples"],
+                              "unwanted_dbfs": o["unwanted_dbfs"], "unwanted_rel_db": o["unwanted_rel_db"],
+                              "intended_dbfs": o["intended_dbfs"], "upper_wanted_rel_db": o["upper_wanted_rel_db"]}
+            res[f"{shape}/{nt}"] = row
+            a, b = row["0.850"], row[f"{gain:.3f}"]
+            print(f"{shape:8s} n{nt:3d} osc rail {a['osc_rail']:5d}->{b['osc_rail']:5d}  unwanted rel "
+                  f"{a['unwanted_rel_db']:7.2f}->{b['unwanted_rel_db']:7.2f}  intended {a['intended_dbfs']:6.2f}->"
+                  f"{b['intended_dbfs']:6.2f}  upper {a['upper_wanted_rel_db']}->{b['upper_wanted_rel_db']}", flush=True)
+    return res
+
+
 def mix_check(gains, scope="rect", notes=(24, 36, 48, 60, 72, 84, 96, 108, 120, 127)) -> dict:
     """The default preset (saw, saw+7c, square-12) and a three-rectangle mix
     through the pulse2x voice: rail samples at the mixer and the output."""
@@ -221,13 +245,15 @@ def phrases(gains, scope="rect") -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("mode", choices=("decimator", "fine", "mix", "phrases"))
+    ap.add_argument("mode", choices=("decimator", "fine", "mix", "phrases", "probe"))
     ap.add_argument("--gains", type=float, nargs="+", default=[0.85, 0.84, 0.83, 0.82, 0.80])
     ap.add_argument("--scope", choices=("rect", "all"), default="rect")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     if a.mode == "decimator":
         res = decimator_sweep(a.gains)
+    elif a.mode == "probe":
+        res = probe_points(a.gains[0])
     elif a.mode == "fine":
         res = fine_sweep(a.gains)
     elif a.mode == "mix":
