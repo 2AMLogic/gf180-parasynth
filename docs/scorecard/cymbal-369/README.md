@@ -120,6 +120,14 @@ the shipped instrument does not have.
 > about −20 dB from 1 kHz to 20 kHz, which nearly cancels the LEVEL stage's +16.6 dB that the candidate
 > applies on its own. That is the right sign and size for candidate 2's +24.0 dB excess tilt. No candidate
 > is built there, because the same figure shows it does not determine the inter-band balance.
+>
+> **Step 5 is `candidate3/README.md`** — the tilt applied, and the chain's first candidate that beats the
+> shipped kit on the defect the operator's A/B named: during the strike, no 1/3 octave is more than 5.7 dB
+> from the 808 (shipped 15.4, candidate 2 15.3), and the residual tilt closes from +24.0 to +6.6 dB.
+> It is **still not promoted**, because the tail windows remain worse than shipped — and the same
+> measurement says why: the 1–2.5 kHz error that remains is **time-dependent** (our thirds fall 5–11 dB
+> more than the 808's between the strike and 50–300 ms, a figure identical in the shipped kit, candidate 2
+> and candidate 3), so no filter magnitude and no inter-band balance can be the answer to it.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
