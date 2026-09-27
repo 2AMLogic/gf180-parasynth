@@ -23,9 +23,9 @@ per candidate:
               of the loudest one, the rule tools/ab_808_loud.py uses for the
               listening packs, set to the same value for every signal. So the
               gate compares at the level the operator listens at.
-  span        from t = 0 to the last 10 ms frame where the TARGET is within
-              60 dB of its loudest frame, capped at 3.0 s. The candidate is
-              read over the same span (zero-padded if shorter).
+  span        from t = 0 to TWICE the last 10 ms frame where the TARGET is
+              within 60 dB of its loudest frame (+50 ms), capped at 3.0 s, so a
+              candidate that rings on is seen. Both sides are read over it.
   floor       a fixed power floor, 60 dB under the target's loudest
               critical-band cell, is added to both sides before any log or
               loudness, so recording hiss and digital silence compare equal.
@@ -35,15 +35,19 @@ FEATURES (each a distance; 0 = identical):
   spec       critical-band (25 Zwicker bands) spectrogram, 10 ms hop, 21 ms
              Hann frames, compared as specific loudness N = P**0.23:
              sum|N_o - N_t| / sum N_t. Loudness-weighted by construction.
-  centroid   the Bark centroid trajectory, RMS difference in Bark, frames
+  centroid   the Bark centroid of specific loudness (Zwicker's sharpness
+             weighting) as a trajectory, RMS difference in Bark, frames
              weighted by max(loudness_t, loudness_o).
   flatness   the spectral-flatness trajectory (100 Hz - 16 kHz), RMS
              difference in dB, weighted the same way.
-  spec_peak  the same, frame by frame: the worst 10 ms frame's loudness
-             difference over the loudest target frame's loudness. A summed
+  spec_peak  the same on 5.3 ms frames every 2.7 ms: the worst frame's
+             loudness difference over the loudest target frame's loudness. A summed
              distance averages a click away; this does not.
-  attack     per band group (6 groups), the times the analytic envelope
-             first reaches -20/-10/-3/0 dB of its peak in the first 150 ms;
+  impulse    the worst sample's crest over its 5 ms RMS, above 2 kHz, for
+             the strike (first 10 ms) and the body; the larger dB difference.
+             A click is an outlier sample, which frame spectra average away.
+  attack     per band group (6 groups), the times the band's forward-
+             cumulative energy over the first 100 ms reaches 5/20/50 %;
              RMS difference in ms; the WORST band group holding >= 10 % of
              either side's loudness.
   decay      per band group, the Schroeder energy-decay curve over the span
@@ -57,8 +61,9 @@ FEATURES (each a distance; 0 = identical):
   pitch      pitched sounds only (BD, toms, congas, CB, CL): each side's own
              strongest line within x1.5 of the target's (first 150 ms),
              tracked by amplitude-weighted instantaneous frequency every 5 ms
-             in a +-25 % band while the target is within 30 dB of its peak;
-             target-amplitude-weighted RMS difference in cents.
+             in a +-25 % band while both sides are within 30 dB of their
+             peaks. `pitch` is the median offset in cents (tuning);
+             `pitch_shape` the worst 20 ms after removing it (a slide).
 
 THE BAR comes from the 808 (see `bar_for`), and the verdict is per feature:
 a sound PASSES only if every applicable feature is within its bar. There is
@@ -93,9 +98,14 @@ BARK_EDGES = (0, 100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270, 1480, 1720,
               2700, 3150, 3700, 4400, 5300, 6400, 7700, 9500, 12000, 15500, 22050)
 GROUPS = ((20, 150), (150, 500), (500, 1500), (1500, 4000), (4000, 9000), (9000, 20000))
 GROUP_MIN_SHARE = 0.10
-ATTACK_S = 0.150
-ATTACK_DB = (-20.0, -10.0, -3.0, 0.0)
+ATTACK_S = 0.100
+ATTACK_FRACS = (0.05, 0.20, 0.50)
 ENV_RMS_S = 0.001
+#: Hearing's temporal resolution floor on the attack bar: half the ~2 ms
+#: broadband gap-detection threshold. Rise times that differ by less are not
+#: resolved by the ear, and sub-ms sample jitter failed a half-size resample
+#: of RS and CH (#379).
+ATTACK_JND_MS = 1.0
 DECAY_DB = 40.0
 DECAY_CLIP_DB = 50.0
 MOD_RATE = 2000
@@ -107,13 +117,25 @@ MOD_EDGES = (10, 20, 40, 80, 160, 320, 640)
 PITCH_SOUNDS = ("BD", "LT", "MT", "HT", "LC", "MC", "HC", "CB", "CL")
 PITCH_SEARCH_S = 0.150
 PITCH_HOP_S = 0.005
+IMPULSE_HP = 2000.0
+IMPULSE_STRIKE_S = 0.010
 PITCH_DB = 30.0
+PITCH_WORST_FRAMES = 4      # 20 ms
 
-FEATURES = ("spec", "spec_peak", "centroid", "flatness", "attack", "decay", "modulation", "pitch")
+FEATURES = ("spec", "spec_peak", "centroid", "flatness", "impulse", "attack", "decay", "modulation",
+            "pitch", "pitch_shape")
 UNITS = {"spec": "loudness L1 fraction", "spec_peak": "worst frame, fraction of loudest frame",
          "centroid": "Bark RMS", "flatness": "dB RMS",
-         "attack": "ms RMS of -20/-10/-3/0 dB rise times (worst band)", "decay": "dB RMS (worst band)",
-         "modulation": "dB RMS (worst band)", "pitch": "cents RMS"}
+         "attack": "ms RMS of 5/20/50 % cumulative-energy times, first 100 ms (worst band)", "decay": "dB RMS (worst band)",
+         "modulation": "dB RMS (worst band)", "impulse": "dB, worst-sample crest >2 kHz (strike, body)",
+         "pitch": "cents, median offset", "pitch_shape": "cents, worst 20 ms after the offset"}
+
+
+#: Rule 5 (docs/verification-rules.md): the apparatus bugs found while this
+#: gate was built, reinstated on demand. Each must turn a known answer red
+#: (tools/test_perceptual_gate.py::test_injection_*).
+INJECTIONS = ("pitch-rms", "centroid-max-weights", "span-target-only")
+INJECT: set = set()
 
 
 class Refused(RuntimeError):
@@ -184,27 +206,55 @@ def condition(x, sr: int, *, side: str = "signal") -> np.ndarray:
 _LEAD = int(round(LEAD_S * SR))
 
 
+def _hz_to_bark_index(f):
+    """Fractional band index: band b spans [b, b+1) on this axis, linear in Hz
+    inside each Zwicker band."""
+    e = np.asarray(BARK_EDGES, dtype=float)
+    return np.interp(f, e, np.arange(len(e)))
+
+
+def _tri_bank(f):
+    """Overlapping triangular critical-band filters (unit sum per bin), centred
+    on each band's middle. RECTANGULAR bands were used first: a line crossing a
+    band edge jumped a whole band, and a 3 % resample of CB moved the centroid
+    further than a 6 % one (wrong-then-right, #379)."""
+    nb = len(BARK_EDGES) - 1
+    x = _hz_to_bark_index(f) - 0.5
+    m = np.zeros((nb, len(f)))
+    for b in range(nb):
+        m[b] = np.maximum(0.0, 1.0 - np.abs(x - b))
+    m[0, x < 0] = 1.0
+    m[-1, x > nb - 1] = 1.0
+    return m
+
+
 def _bark_matrix():
     f = np.fft.rfftfreq(NFFT, 1 / SR)
-    m = np.zeros((len(BARK_EDGES) - 1, len(f)))
-    for b in range(len(BARK_EDGES) - 1):
-        m[b] = (f >= BARK_EDGES[b]) & (f < BARK_EDGES[b + 1])
+    m = _tri_bank(f)
     centres = np.array([0.5 * (BARK_EDGES[b] + BARK_EDGES[b + 1]) for b in range(len(BARK_EDGES) - 1)])
     return m, f, centres
 
 
 _BARKM, _FREQS, _BCENT = _bark_matrix()
+NFFT_FINE, HOP_FINE = 256, 128           # 5.3 ms frames every 2.7 ms, for spec_peak
+
+
+def _bark_matrix_fine():
+    return _tri_bank(np.fft.rfftfreq(NFFT_FINE, 1 / SR))
+
+
+_BARKM_FINE = _bark_matrix_fine()
 _BARK_OF_BAND = np.arange(len(BARK_EDGES) - 1) + 0.5
 
 
-def _frames(y, n_frames: int) -> np.ndarray:
-    """|STFT|^2, frame k centred at t = k * 10 ms."""
-    need = _LEAD + n_frames * HOP + NFFT
+def _frames(y, n_frames: int, nfft: int = NFFT, hop: int = HOP) -> np.ndarray:
+    """|STFT|^2, frame k centred at t = k * hop."""
+    need = _LEAD + n_frames * hop + nfft
     if len(y) < need:
         y = np.concatenate([y, np.zeros(need - len(y))])
-    w = np.hanning(NFFT)
-    starts = _LEAD + np.arange(n_frames) * HOP - NFFT // 2
-    idx = starts[:, None] + np.arange(NFFT)[None, :]
+    w = np.hanning(nfft)
+    starts = _LEAD + np.arange(n_frames) * hop - nfft // 2
+    idx = starts[:, None] + np.arange(nfft)[None, :]
     seg = y[np.clip(idx, 0, len(y) - 1)] * (idx >= 0)
     return np.abs(np.fft.rfft(seg * w, axis=1)) ** 2 / np.sum(w ** 2)
 
@@ -221,19 +271,30 @@ def plan_from_target(yt, sound: str) -> dict:
     P = _frames(yt, min(n_max, n_avail + 1))
     fp = P.sum(axis=1)
     live = np.nonzero(fp > fp.max() * 10 ** (-SPAN_DB / 10))[0]
-    n = int(min(live[-1] + 1, n_max))
+    # twice the target's own -60 dB span (+50 ms): a candidate that rings on
+    # after the target has gone must be SEEN (a doubled MA decay was invisible
+    # inside the target's span -- wrong-then-right, #379).
+    n = int(min(2 * (live[-1] + 1) + 5, n_max))
+    if "span-target-only" in INJECT:
+        n = int(min(live[-1] + 1, n_max))
     B = (P[:n] @ _BARKM.T)
     plan = {"sound": sound, "n_frames": n, "span_s": n * HOP / SR,
             "floor_cell": float(B.max()) * 10 ** (-FLOOR_DB / 10),
             "floor_bin": float(P[:n].max()) * 10 ** (-FLOOR_DB / 10)}
-    # per band group: an energy floor 60 dB under the target group's loudest
-    # 10 ms, and the modulation region
+    nf = n * HOP // HOP_FINE
+    plan["n_fine"] = nf
+    plan["floor_fine"] = float((_frames(yt, nf, NFFT_FINE, HOP_FINE) @ _BARKM_FINE.T).max()) \
+        * 10 ** (-FLOOR_DB / 10)
+    # per band group: a WHITE energy floor 60 dB under the target's loudest
+    # broadband 10 ms, spread over the group's share of the spectrum -- not
+    # relative to the group's own peak, which put an empty group's floor under
+    # 16-bit dither and failed the target against itself (MT, HT --
+    # wrong-then-right, #379). And the modulation region.
     regions, gfloor = [], []
     end = _LEAD + n * HOP
-    ytp = _pad(yt, end + SR // 10)
+    bb = float(_moving(yt[_LEAD:end] ** 2, int(0.01 * SR)).max()) * 10 ** (-FLOOR_DB / 10)
     for lo, hi in GROUPS:
-        e = _bandpass(ytp, lo, hi)[_LEAD:end] ** 2
-        gfloor.append(float(_moving(e, int(0.01 * SR)).max()) * 10 ** (-FLOOR_DB / 10))
+        gfloor.append(bb * (min(hi, SR / 2) - lo) / (SR / 2))
         env = _group_env(yt, lo, hi, n)
         sm = _moving(env ** 2, int(0.02 * MOD_RATE)) ** 0.5
         a = int(MOD_START_S * MOD_RATE)
@@ -283,14 +344,25 @@ def _strongest_line(y, lo, hi) -> float:
 def analyse(y, plan: dict) -> dict:
     n = plan["n_frames"]
     P = _frames(y, n)
-    B = P @ _BARKM.T + plan["floor_cell"]
+    Bp = P @ _BARKM.T
+    B = Bp + plan["floor_cell"]
     N = B ** LOUD_EXP
-    loud = N.sum(axis=1) - len(BARK_EDGES[:-1]) * plan["floor_cell"] ** LOUD_EXP
-    cent = (B * _BARK_OF_BAND).sum(axis=1) / B.sum(axis=1)
+    # loudness ABOVE the floor, exactly zero under it. (P+floor)^0.23 -
+    # floor^0.23 was used first: it is linear, not zero, below the floor, so
+    # 16-bit requantisation steered the centroid of quiet frames by 13 %
+    # (wrong-then-right, #379).
+    Nx = np.maximum(Bp ** LOUD_EXP - plan["floor_cell"] ** LOUD_EXP, 0.0)
+    loud = Nx.sum(axis=1)
+    # the Bark centroid of SPECIFIC LOUDNESS (Zwicker's sharpness weighting),
+    # not of power: a power centroid on a low tom is its fundamental and was
+    # blind to a 6 dB/oct tilt (wrong-then-right, #379)
+    cent = (Nx * _BARK_OF_BAND).sum(axis=1) / (Nx.sum(axis=1) + 1e-30)
+    Bf = _frames(y, plan["n_fine"], NFFT_FINE, HOP_FINE) @ _BARKM_FINE.T + plan["floor_fine"]
     sel = (_FREQS >= 100) & (_FREQS <= 16000)
     Pf = P[:, sel] + plan["floor_bin"]
     flat = 10 * np.log10(np.exp(np.mean(np.log(Pf), axis=1)) / np.mean(Pf, axis=1))
-    out = {"N": N, "loud": np.maximum(loud, 0.0), "centroid": cent, "flatness": flat}
+    out = {"N": N, "Nx": Nx, "loud": loud, "centroid": cent, "flatness": flat,
+           "Nfine": Bf ** LOUD_EXP}
     # per band group
     end = _LEAD + n * HOP
     yp = _pad(y, end + SR // 10)
@@ -299,17 +371,17 @@ def analyse(y, plan: dict) -> dict:
         z = _bandpass(yp, lo, hi)[:end]
         e = z[_LEAD:] ** 2
         shares.append(float(np.sum(e)))
-        # attack: when the band's envelope (analytic, 1 ms smoothed) first
-        # reaches -20, -10, -3 and 0 dB of its peak in the first 150 ms, in ms.
-        # Crossing TIMES, not dB-vs-time: on a steep edge a 0.1 ms shift is
-        # tens of dB, so a 2 % resample of BD read 4.4 dB (wrong-then-right
-        # twice, #379: a 2 ms RMS window first, then the dB curve).
-        env = _moving(np.abs(hilbert(z))[_LEAD:], int(ENV_RMS_S * SR))
-        head = env[:int(ATTACK_S * SR)]
-        pk = float(head.max()) + 1e-30
-        ip = int(np.argmax(head))
-        att.append(np.array([float(np.argmax(head[:ip + 1] >= pk * 10 ** (db / 20))) / SR * 1e3
-                             for db in ATTACK_DB]))
+        # attack: when the band's FORWARD-cumulative energy over the first
+        # 100 ms reaches 5, 20 and 50 %, in ms. Integrated, like the decay's
+        # Schroeder curve, so envelope ripple cannot move it. Three earlier
+        # forms failed the apparatus checks (wrong-then-right x3, #379): a
+        # 2 ms RMS envelope in dB rippled with a 50 Hz wave; dB-vs-time on a
+        # steep edge swung tens of dB on a 0.1 ms shift; first-crossing times
+        # jumped between noise peaks (RS, CP, MA under a 3 % resample).
+        head = e[:int(ATTACK_S * SR)]
+        cum = np.cumsum(head)
+        cum = cum / (cum[-1] + 1e-30)
+        att.append(np.array([float(np.searchsorted(cum, q)) / SR * 1e3 for q in ATTACK_FRACS]))
         # decay: Schroeder EDC, floored by the plan's floor spread over the band
         fl = plan["group_floor"][gi]
         ef = e + fl
@@ -334,10 +406,27 @@ def analyse(y, plan: dict) -> dict:
     tot = sum(shares) + 1e-30
     out.update({"share": np.array(shares) / tot, "attack": att, "edc": edc, "mod": mods})
     # band-group loudness share (for choosing which groups count)
-    out["gshare"] = _group_loudness_share(N)
+    out["gshare"] = _group_loudness_share(Nx)
+    out["impulse"] = _impulse(y, plan)
     if "f_ref" in plan:
         out["pitch"] = _pitch_track(y, plan)
     return out
+
+
+def _impulse(y, plan):
+    """Crest of the >2 kHz waveform over its own 5 ms RMS, the worst sample,
+    separately for the strike (first 10 ms) and the body (after it), in dB.
+    A click is an outlier SAMPLE; 10 ms spectra average it into the noise
+    around it (a snare click was missed at 10 ms and at 2.7 ms frames -- #379).
+    The floor keeps silence from reading as infinitely impulsive."""
+    end = _LEAD + plan["n_frames"] * HOP
+    z = sosfiltfilt(butter(4, IMPULSE_HP / (SR / 2), btype="highpass", output="sos"),
+                    _pad(y, end + SR // 10))[_LEAD:end]
+    fl = plan["group_floor"][-1] + plan["group_floor"][-2]
+    rms = np.sqrt(_moving(z * z, int(0.005 * SR)) + fl)
+    c = 20 * np.log10(np.abs(z) / rms + 1e-9)
+    k = int(IMPULSE_STRIKE_S * SR)
+    return np.array([float(c[:k].max()), float(c[k:].max()) if len(c) > k else 0.0])
 
 
 def _group_loudness_share(N):
@@ -372,15 +461,21 @@ def _pitch_track(y, plan):
 def distances(at: dict, ao: dict, plan: dict) -> dict:
     d = {}
     d["spec"] = float(np.abs(ao["N"] - at["N"]).sum() / at["N"].sum())
-    w = np.maximum(at["loud"], ao["loud"])
+    # frames where BOTH sides sound (geometric-mean weights): a silent frame
+    # has no centroid, and max() weights read 0 Bark there and turned the
+    # centroid into a second decay detector (OH, wrong-then-right, #379).
+    # Whether energy is present at all is `spec` and `decay`'s job.
+    w = (np.maximum(at["loud"], ao["loud"]) if "centroid-max-weights" in INJECT
+         else np.sqrt(at["loud"] * ao["loud"]))
     w = w / (w.sum() + 1e-30)
     d["centroid"] = float(math.sqrt(np.sum(w * (ao["centroid"] - at["centroid"]) ** 2)))
     d["flatness"] = float(math.sqrt(np.sum(w * (ao["flatness"] - at["flatness"]) ** 2)))
     use = [g for g in range(len(GROUPS))
            if max(at["gshare"][g], ao["gshare"][g]) >= GROUP_MIN_SHARE]
+    d["impulse"] = float(np.max(np.abs(ao["impulse"] - at["impulse"])))
     d["attack"] = max(float(np.sqrt(np.mean((ao["attack"][g] - at["attack"][g]) ** 2))) for g in use)
-    fd = np.abs(ao["N"] - at["N"]).sum(axis=1)
-    d["spec_peak"] = float(fd.max() / at["N"].sum(axis=1).max())
+    fd = np.abs(ao["Nfine"] - at["Nfine"]).sum(axis=1)
+    d["spec_peak"] = float(fd.max() / at["Nfine"].sum(axis=1).max())
     dec = []
     for g in use:
         et, eo = at["edc"][g], ao["edc"][g]
@@ -401,11 +496,27 @@ def distances(at: dict, ao: dict, plan: dict) -> dict:
                 & (po["amp"] > po["amp"].max() * 10 ** (-PITCH_DB / 20)))
         if live.sum() < 3:
             raise Refused("fewer than 3 frames where both sides carry the pitched line")
-        c = 1200 * np.log2(np.maximum(po["f"][live], 1.0) / np.maximum(pt["f"][live], 1.0))
-        wa = pt["amp"][live]
-        d["pitch"] = float(math.sqrt(np.sum(wa * c ** 2) / np.sum(wa)))
+        # Two numbers, because a TUNING step and a spurious slide are
+        # different defects: `pitch` is the median offset (the tuning), and
+        # `pitch_shape` the WORST 20 ms of the trajectory after that offset is
+        # removed. One RMS over the hit averaged a 30 ms slide away, and a
+        # worst-20 ms of the raw difference could not tell a slide from a
+        # tuning step one knob away (wrong-then-right twice, #379).
+        c = 1200 * np.log2(np.maximum(po["f"], 1.0) / np.maximum(pt["f"], 1.0))
+        off = float(np.median(c[live]))
+        k = PITCH_WORST_FRAMES
+        best = [abs(float(np.mean(c[i:i + k])) - off) for i in range(0, len(c) - k + 1)
+                if live[i:i + k].all()]
+        if not best:
+            best = [abs(float(v) - off) for v in c[live]]
+        d["pitch"] = abs(off)
+        d["pitch_shape"] = max(best)
+        if "pitch-rms" in INJECT:
+            wa = pt["amp"][live]
+            d["pitch"] = d["pitch_shape"] = float(math.sqrt(np.sum(wa * c[live] ** 2) / np.sum(wa)))
     else:
         d["pitch"] = None
+        d["pitch_shape"] = None
     return d
 
 
@@ -502,6 +613,15 @@ WEAK_R = 2 ** (WEAK_CENTS / 1200)
 def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     """The per-feature pass bar for one sound.
 
+    The attack bar is floored at ATTACK_JND_MS. Every bar is that distance PLUS the apparatus's own floor: the target
+    against itself through `candidate_path` (48 kHz, another lead and gain,
+    16-bit). Without it the nearest neighbour sits exactly on its own bar and
+    a resample's rounding fails it (wrong-then-right, #379).
+
+    Every 808 take that forms a bar is measured THROUGH `candidate_path`,
+    exactly as a candidate is, so the bar and the candidate carry the same
+    apparatus.
+
     Multi-take sounds: the NEAREST real-808 neighbour -- the adjacent knob
     setting (one step on one knob) with the smallest `spec` distance to the
     target -- and that neighbour's distance on every feature. So "as close as
@@ -514,15 +634,21 @@ def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     nbs = {}
     for nb in neighbours(sound, rel):
         if (refs / nb).exists():
-            nbs[nb] = T.distance(*load_wav(refs / nb), nb)
+            nbs[nb] = T.distance(*candidate_path(*load_wav(refs / nb)), nb)
+    x, sr = load_wav(refs / rel)
+    floor = T.distance(*candidate_path(x, sr), "apparatus floor")
     if nbs:
         best = min(nbs, key=lambda k: nbs[k]["spec"])
-        return {"sound": sound, "target": rel, "kind": "808-neighbour", "from": best,
-                "bar": nbs[best], "neighbours": nbs}
-    x, sr = load_wav(refs / rel)
-    return {"sound": sound, "target": rel, "kind": "WEAK-resampled-take",
-            "from": f"{rel} played x{WEAK_R:.4f} ({WEAK_CENTS} cents, the 808's median TUNING step)",
-            "bar": T.distance(*resampled(x, sr, WEAK_R), "weak"), "neighbours": {}}
+        base, kind, frm = nbs[best], "808-neighbour", best
+    else:
+        base = T.distance(*candidate_path(*resampled(x, sr, WEAK_R)), "weak")
+        kind = "WEAK-resampled-take"
+        frm = f"{rel} played x{WEAK_R:.4f} ({WEAK_CENTS} cents, the 808's median TUNING step)"
+    bar = {f: (None if base[f] is None else base[f] + (floor[f] or 0.0)) for f in base}
+    if bar.get("attack") is not None:
+        bar["attack"] = max(bar["attack"], ATTACK_JND_MS)
+    return {"sound": sound, "target": rel, "kind": kind, "from": frm, "bar": bar,
+            "base": base, "apparatus_floor": floor, "neighbours": nbs}
 
 
 def verdict(d: dict, bar: dict) -> dict:
@@ -561,8 +687,8 @@ SLIDE_TAU_S = 0.030         # ... relaxing with a 30 ms time constant
 DEFECTS = ("darker", "brighter", "decay_short", "decay_long", "missing_band", "click",
            "wrong_pitch", "slide")
 INTENDED = {"darker": ("centroid",), "brighter": ("centroid",), "decay_short": ("decay",),
-            "decay_long": ("decay",), "missing_band": ("spec",), "click": ("spec_peak",),
-            "wrong_pitch": ("pitch",), "slide": ("pitch",)}
+            "decay_long": ("decay",), "missing_band": ("spec",), "click": ("impulse",),
+            "wrong_pitch": ("pitch",), "slide": ("pitch_shape",)}
 INTENDED_UNPITCHED = {"wrong_pitch": ("spec", "centroid")}
 
 
@@ -596,10 +722,12 @@ def seed(x, sr, defect: str, sound: str, T: "Target"):
         g = np.exp(-t * (1 / (k * tau) - 1 / tau))
         return x * np.minimum(g, 100.0), sr
     if defect == "missing_band":
-        share = T.a["N"].sum(axis=0)
-        fc = _BCENT[int(np.argmax(share))]
+        # the octave around the target's long-term spectral peak (the Bark
+        # band's CENTRE was used first, which for LT is 50 Hz and missed its
+        # 89 Hz line -- wrong-then-right, #379)
         X = np.fft.rfft(x)
         f = np.fft.rfftfreq(len(x), 1 / sr)
+        fc = float(f[1 + int(np.argmax(np.abs(X[1:])))])
         X[(f >= fc / math.sqrt(2)) & (f <= fc * math.sqrt(2))] = 0
         return np.fft.irfft(X, len(x)), sr
     if defect == "click":
@@ -676,7 +804,7 @@ def prove(refs: pathlib.Path, fixtures: pathlib.Path | None) -> dict:
         x, sr = load_wav(refs / rel)
         T = Target(x, sr, s, rel)
         b = bar_for(s, refs, T)
-        out["bars"][s] = {k: b[k] for k in ("target", "kind", "from", "bar")}
+        out["bars"][s] = {k: b[k] for k in ("target", "kind", "from", "bar", "base", "apparatus_floor")}
         # start red
         out["start_red"][s] = verdict(T.distance(*stub_candidate(s), "stub"), b["bar"])["verdict"]
         try:
@@ -746,6 +874,23 @@ def rank(refs: pathlib.Path, wavdir: pathlib.Path | None) -> dict:
     return {"order": order, "rows": rows}
 
 
+def provenance(a) -> dict:
+    import hashlib
+    import subprocess
+    run = lambda *c: subprocess.run(c, cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    fx = {}
+    if getattr(a, "fixtures", None) and a.fixtures.exists():
+        fx = {q.name: hashlib.sha256(q.read_bytes()).hexdigest()[:16] for q in sorted(a.fixtures.glob("*.wav"))}
+    return {"commit": run("git", "rev-parse", "HEAD"),
+            "sources_dirty": bool(run("git", "status", "--porcelain", "--", "tools", "model")),
+            "refs": str(a.refs), "fixtures_sha256_16": fx,
+            "features": list(FEATURES), "units": UNITS, "weak_r": WEAK_R,
+            "conventions": {"rate": SR, "hp_hz": HP_HZ, "onset_frac": ONSET_FRAC, "trim_s": TRIM_S,
+                            "loudness": "BS.1770 K, 50 ms blocks, 20 dB relative gate, -23",
+                            "span": f"2 x target -{SPAN_DB:.0f} dB + 50 ms, cap {SPAN_MAX_S} s",
+                            "floor_db": FLOOR_DB}}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -775,6 +920,7 @@ def main(argv=None) -> int:
         return 0
     if a.cmd in ("prove", "rank"):
         res = prove(a.refs, a.fixtures) if a.cmd == "prove" else rank(a.refs, a.wavs)
+        res["provenance"] = provenance(a)
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(_r(res), indent=1) + "\n")
         return 0
