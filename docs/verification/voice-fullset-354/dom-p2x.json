@@ -1,0 +1,112 @@
+{
+ "headroom": {
+  "worst": {
+   "ladder_y19_abs": 65286,
+   "mixed_abs": 31578,
+   "out_abs": 32253,
+   "vca_abs": 64448,
+   "ladder_margin_db": 12.07
+  },
+  "per_scenario": [
+   {
+    "name": "default: res 0.0, cutoff 40 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+    "ladder_y19_abs": 37942,
+    "mixed_abs": 29221,
+    "out_abs": 32253,
+    "vca_abs": 35838
+   },
+   {
+    "name": "default: res 0.0, cutoff 8000 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+    "ladder_y19_abs": 32759,
+    "mixed_abs": 28165,
+    "out_abs": 29176,
+    "vca_abs": 32417
+   },
+   {
+    "name": "default: res 1.0, cutoff 40 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+    "ladder_y19_abs": 31869,
+    "mixed_abs": 27300,
+    "out_abs": 25218,
+    "vca_abs": 28020
+   },
+   {
+    "name": "default: res 1.0, cutoff 8000 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+    "ladder_y19_abs": 29654,
+    "mixed_abs": 26904,
+    "out_abs": 25643,
+    "vca_abs": 28492
+   },
+   {
+    "name": "m5a-saw: res 0.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 21053,
+    "mixed_abs": 31540,
+    "out_abs": 18946,
+    "vca_abs": 21052
+   },
+   {
+    "name": "m5a-saw: res 0.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 21043,
+    "mixed_abs": 31512,
+    "out_abs": 18937,
+    "vca_abs": 21042
+   },
+   {
+    "name": "m5a-saw: res 1.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 21432,
+    "mixed_abs": 31547,
+    "out_abs": 19289,
+    "vca_abs": 21432
+   },
+   {
+    "name": "m5a-saw: res 1.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 21453,
+    "mixed_abs": 31450,
+    "out_abs": 19308,
+    "vca_abs": 21453
+   },
+   {
+    "name": "m5a-pulse: res 0.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 20949,
+    "mixed_abs": 31577,
+    "out_abs": 18854,
+    "vca_abs": 20948
+   },
+   {
+    "name": "m5a-pulse: res 0.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 20953,
+    "mixed_abs": 31576,
+    "out_abs": 18856,
+    "vca_abs": 20952
+   },
+   {
+    "name": "m5a-pulse: res 1.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 65286,
+    "mixed_abs": 31555,
+    "out_abs": 19600,
+    "vca_abs": 64448
+   },
+   {
+    "name": "m5a-pulse: res 1.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+    "ladder_y19_abs": 19039,
+    "mixed_abs": 31578,
+    "out_abs": 17134,
+    "vca_abs": 19038
+   }
+  ]
+ },
+ "verify_voice_exit": 0,
+ "scenarios": [
+  "default: res 0.0, cutoff 40 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+  "default: res 0.0, cutoff 8000 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+  "default: res 1.0, cutoff 40 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+  "default: res 1.0, cutoff 8000 Hz, vol 0.9, notes [12, 126, 36, 84, 96, 126], glide, retrigger, release",
+  "m5a-saw: res 0.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-saw: res 0.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-saw: res 1.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-saw: res 1.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-pulse: res 0.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-pulse: res 0.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-pulse: res 1.0, cutoff 40 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release",
+  "m5a-pulse: res 1.0, cutoff 8000 Hz, vol 0.9, notes [0, 127, 36, 84, 96, 127], glide, retrigger, release"
+ ]
+}

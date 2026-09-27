@@ -1,0 +1,209 @@
+{
+ "tool": "fpga/measure_mac_midi_latency.py",
+ "issue": 322,
+ "criterion_version": "live-midi/1",
+ "target": {
+  "p95_ms": 20.0,
+  "p99_ms": 30.0
+ },
+ "host": {
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "mac_ver": "26.5.1",
+  "python": "3.14.7",
+  "cpus": 10,
+  "loadavg": [
+   80.38,
+   116.63,
+   123.57
+  ],
+  "git_sha": "842659fdca7a1ddaec82503e62e9e9669f73ec33",
+  "git_dirty": false
+ },
+ "host_loaded": true,
+ "scope": "host only: UART and device are the modelled contract (SimSerial on wall time); USB/FTDI/board are the hardware capture's",
+ "clean": {
+  "source": "coremidi",
+  "seconds": 20.0,
+  "events": 933,
+  "why_closed": "duration reached",
+  "stall_ms": 0.0,
+  "stalled": false,
+  "loadavg_before_after": [
+   80.38,
+   65.28
+  ],
+  "preconditions": [],
+  "endpoint_ms": {
+   "n": 685,
+   "min": 15.979166666666666,
+   "p50": 16.125,
+   "p95": 22.791666666666668,
+   "p99": 32.625,
+   "max": 45.395833333333336
+  },
+  "endpoint_histogram_ms": {
+   "[15,16)": 6,
+   "[16,17)": 475,
+   "[17,18)": 62,
+   "[18,19)": 43,
+   "[19,20)": 28,
+   "[20,21)": 23,
+   "[21,22)": 5,
+   "[22,23)": 12,
+   "[23,24)": 9,
+   "[24,25)": 9,
+   "[25,26)": 2,
+   "[26,27)": 1,
+   "[27,28)": 1,
+   "[28,29)": 1,
+   "[29,30)": 1,
+   "[32,33)": 1,
+   "[34,35)": 1,
+   "[35,36)": 1,
+   "[36,37)": 1,
+   "[39,40)": 1,
+   "[41,42)": 1,
+   "[45,46)": 1
+  },
+  "endpoint_by_kind_max_ms": {
+   "note-on": 34.125,
+   "hit": 45.395833333333336,
+   "note-off": 32.625,
+   "knob": 39.3125
+  },
+  "host_hold_ms": {
+   "n": 685,
+   "min": 0.06766710430383682,
+   "p50": 0.7903329096734524,
+   "p95": 8.582375012338161,
+   "p99": 30.921374913305044,
+   "max": 36.72216692939401
+  },
+  "lateness_ms": {
+   "n": 2638,
+   "min": 0.009721610695123672,
+   "p50": 0.5548475310206413,
+   "p95": 4.330207593739033,
+   "p99": 27.147472370415926,
+   "max": 36.72216692939401
+  },
+  "map_error_frames": {
+   "min": -1,
+   "max": 12
+  },
+  "anchors_off_due": 14,
+  "anchors_unpaired": 205,
+  "superseded": 11,
+  "refused": {
+   "queue-pressure": 3
+  },
+  "deadline_misses": 49,
+  "device_errors": [
+   2,
+   3
+  ],
+  "reanchors": 21,
+  "props": {
+   "target": false,
+   "on_time": false,
+   "load_admitted": false
+  },
+  "delivery_ms": {
+   "n": 933,
+   "min": 0.015458092093467712,
+   "p50": 0.049416907131671906,
+   "p95": 0.20474987104535103,
+   "p99": 1.2492500245571136,
+   "max": 57.85724986344576
+  }
+ },
+ "control": {
+  "source": "coremidi",
+  "seconds": 6.0,
+  "events": 235,
+  "why_closed": "duration reached",
+  "stall_ms": 25.0,
+  "stalled": true,
+  "loadavg_before_after": [
+   65.28,
+   60.37
+  ],
+  "preconditions": [],
+  "endpoint_ms": {
+   "n": 172,
+   "min": 15.979166666666666,
+   "p50": 16.0625,
+   "p95": 18.666666666666668,
+   "p99": 32.6875,
+   "max": 37.270833333333336
+  },
+  "endpoint_histogram_ms": {
+   "[15,16)": 3,
+   "[16,17)": 154,
+   "[18,19)": 11,
+   "[21,22)": 1,
+   "[29,30)": 1,
+   "[32,33)": 1,
+   "[37,38)": 1
+  },
+  "endpoint_by_kind_max_ms": {
+   "note-on": 37.270833333333336,
+   "hit": 32.6875,
+   "note-off": 18.645833333333332,
+   "knob": 21.1875
+  },
+  "host_hold_ms": {
+   "n": 172,
+   "min": 0.11304207146167755,
+   "p50": 0.23908307775855064,
+   "p95": 1.8802499398589134,
+   "p99": 25.136624928563833,
+   "max": 25.924000423401594
+  },
+  "lateness_ms": {
+   "n": 622,
+   "min": 0.05647214129567146,
+   "p50": 0.2612629905343056,
+   "p95": 2.842457965016365,
+   "p99": 25.136624928563833,
+   "max": 25.924000423401594
+  },
+  "map_error_frames": {
+   "min": -1,
+   "max": 127
+  },
+  "anchors_off_due": 4,
+  "anchors_unpaired": 56,
+  "superseded": 0,
+  "refused": {
+   "queue-pressure": 1
+  },
+  "deadline_misses": 18,
+  "device_errors": [
+   2,
+   3
+  ],
+  "reanchors": 7,
+  "props": {
+   "target": false,
+   "on_time": false,
+   "load_admitted": false
+  },
+  "delivery_ms": {
+   "n": 235,
+   "min": 0.01154094934463501,
+   "p50": 0.03845803439617157,
+   "p95": 0.12625008821487427,
+   "p99": 0.2743341028690338,
+   "max": 0.4196660593152046
+  }
+ },
+ "control_matrix": {
+  "target": "BLIND",
+  "on_time": "BLIND",
+  "load_admitted": "BLIND"
+ },
+ "control_caught": false,
+ "verdict": "NO VERDICT"
+}

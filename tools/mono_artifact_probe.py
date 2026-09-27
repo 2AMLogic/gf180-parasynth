@@ -287,6 +287,7 @@ def render_held(engine: str, note: int, patch: dict, *, blep: bool = True,
     clip = {
         "output_rail_samples": int(np.count_nonzero((out[a:b] >= 32767) | (out[a:b] <= -32768))),
         "oscillator_rail_samples": int(np.count_nonzero(np.abs(np.asarray(tr["osc"][0])[a:b]) >= 32767)),
+        "mixer_rail_samples": int(np.count_nonzero(np.abs(np.asarray(tr["mixed"])[a:b]) >= 32767)),
         "reconstruction_would_clip": (tr.get("filter_reconstruction") or {}).get("would_clip_count"),
         "decimation_would_clip": (tr.get("filter_decimation") or {}).get("would_clip_count"),
     }
@@ -474,6 +475,8 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
             row = {"engine": engine, "note": note, "patch": over, "verdict": "REFUSED",
                    "reason": str(e)}
         row["group"] = group
+        row["nominal"] = {"waves": list(over["waves"]), "cutoff": list(over.get("cutoff", (20000, 20000))),
+                          "q": over.get("q", 0.0), "drive": over.get("drive", 0.75)}   # the schedule's point, before any repair
         rows.append(row)
         o = row.get("stages", {}).get("output", {})
         print(f"{group:8s} {engine:7s} {over['waves'][0]:8s} n{note:3d} "

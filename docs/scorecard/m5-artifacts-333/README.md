@@ -170,38 +170,76 @@ No rubric is changed here.
 **The unused anti-alias computation is still valid on current sources.** The
 records are in `docs/deadline/recheck-333/`, in a separate PR.
 
-## D. Promotion status of pulse2x
+## D. Promotion status of pulse2x: NOT ACCEPTED under the declared rule
 
-The candidate was selected on development conditions: pulse29 at the M5 notes
-72/84/96, preset filter. It is confirmed on **107 untouched** points: other
-notes, other duty shapes, and the cutoff/q/drive pairwise set. **This table
-was measured at rectangle gain 0.85** (`probe/summary.json`, provenance commit
-`d1fe013`, before the rectangle-headroom work `a4e2f0a`/`97a7078`/`1063bfc`
-picked 0.74 for R2). It is evidence for pulse2x at 0.85 against R1, not for
-R2's actual 0.74 configuration.
+**The declared rule** is the one `mono_artifact_probe.summarize` applied when committed at `d1fe013`, before any
+0.74 result existed. Per condition, the candidate fails if it is worse than R1 by **more than 1.00 dB** (exactly:
+1.02 fails) on any of:
 
-| property (pulse2x − R1, at rectangle gain 0.85) | development (3) | untouched (107) |
-|---|---|---|
-| output unwanted, dBFS | 3 improved > 1 dB (−7.7 to −8.6) | 95 improved, 1 regressed (+1.2 dB: MIDI 120 at cutoff 400, where the intended note is −106 dBFS, i.e. filtered to inaudibility) |
-| output unwanted, relative | 3 improved (−7.5 to −8.1) | 93 improved, **0 regressed** |
-| upper wanted power, relative | within 0.22 dB | 9 brighter and 6 darker by > 1 dB (worst −1.69 dB, all at q ≥ 0.5 or cutoff 400) |
-| intended level | −0.24 to −0.74 dB | −1.47 to +7.5 dB (the 0.85 headroom gain) |
-| new rail samples / new dropouts at output | 0 / 0 | 0 / 0 |
+- absolute unwanted energy;
+- unwanted energy relative to the intended signal;
+- upper wanted power (darker is worse).
 
-At rectangle gain 0.85, the candidate improves unwanted energy both
-absolutely and relative to the signal. It does not win by getting quieter
-there: the relative gain is as large as the absolute one, and the gain-only
-control explains 0.86/0.83 dB of foldback at 0.85 (M5A/M5B), against
-7.21/6.11 dB for the rate change.
+It also fails if it adds output rail samples or a dropout. `tools/compare_r2_pulse.py` applies this rule mechanically
+and exits non-zero when it is not met. "Numbers that moved adversely" and "conditions that fail the rule" are
+reported separately below.
 
-**At R2's rectangle gain of 0.74**, the 107-point untouched comparison above
-has not been re-run; only a narrower gain-only check exists
-(`pulse2x-headroom/probe-074.json`, 32 points, comparing 0.74 against 0.85):
-**7 of the 32 worsen, one by more than 1 dB (pulse15 MIDI 84, +1.02 dB)**. The
-gain-only control at 0.74 explains 1.66/1.65 dB of foldback (M5A/M5B), against
-6.41/5.28 dB for the rate change (§C). The "93 improved, 0 regressed" row
-above is established for pulse2x at 0.85 against R1; it is **not** established
-for pulse2x at R2's 0.74.
+These 110 conditions (3 development, 107 untouched) were held out for the first experiment. They have been examined
+since, so they are regression coverage now, not a fresh holdout.
+
+### At R2's configuration: pulse2x, rectangles at 0.74, against R1
+
+Record: `r2-compare/r2-074.json`, sweep `r2-compare/s074-*.json.gz`, probe at `9a2b903`, sources clean. 110 of 110
+measured, none refused or not run.
+
+| property (candidate − R1), untouched 107 | improved > 1 dB | within ±1 dB | any adverse change | **fails the rule (> 1.00 dB worse)** | worst adverse |
+|---|---:|---:|---:|---:|---:|
+| absolute unwanted | 105 | 1 | 1 | **1** | +1.35 dB |
+| relative unwanted | 101 | 5 | 1 | **1** | +2.92 dB |
+| upper wanted (brightness) | 19 | 83 | 32 | **5** | −4.82 dB |
+| new output rail / new dropout | — | — | — | 0 / 0 | — |
+| internal rails (oscillator, mixer, reconstruction, decimator) | reported, not ruled | | 0 points with more | — | — |
+
+The three development points pass (unwanted −7.8 to −9.4 dB, brightness within −0.32 dB).
+
+**Verdict: NOT ACCEPTED.** 6 of 107 untouched conditions fail the rule:
+
+| condition | failing property | candidate − R1 | note |
+|---|---|---:|---|
+| pulse29, MIDI 120, cutoff 400, q 0.5, drive 0.75 | absolute and relative unwanted | +1.35 / +2.92 dB | R1's intended level is −112.9 dBFS: an 8.4 kHz note through 400 Hz |
+| pulse29, MIDI 36, cutoff 400, q 0.5, drive 1.6 | brightness | −3.46 dB | unwanted −10.6 dB relative |
+| square, MIDI 36, cutoff 400, q 0.5, drive 1.6 | brightness | −4.82 dB | unwanted −8.6 dB relative |
+| pulse29, MIDI 96, cutoff 20 kHz, q 0.5, drive 1.6 | brightness | −2.45 dB | unwanted −9.1 dB relative |
+| square, MIDI 96, cutoff 20 kHz, q 0.5, drive 1.6 | brightness | −2.46 dB | unwanted −10.2 dB relative |
+| pulse29, MIDI 84, cutoff 400, q 0, drive 1.6 | brightness | −1.64 dB | unwanted −4.9 dB relative |
+
+The five brightness failures are all at drive 1.6. The 0.74 rectangle drives the tanh ladder about 2.6 dB less hard
+than R1's full-scale base-rate rectangle, so the ladder generates fewer upper harmonics. The one unwanted failure is a
+near-silent point, and it is counted anyway.
+
+The level-only control at 0.74 accounts for 1.66/1.65 dB of the M5A/M5B foldback reduction. The rate change accounts
+for the remaining 6.41/5.28 dB (§C), so the alias benefit beyond level is real. The rule fails on brightness, not on
+aliasing.
+
+**The bounded repair** raises the rectangle-only presets' ladder drive by 1/0.74 to restore R1's level into the
+ladder. It is on its own branch and PR, and it **also fails**. Promotion stays open.
+
+### The earlier configuration: pulse2x at 0.85, against R1 (not R2)
+
+Record: `r2-compare/r2-085.json`, from `probe/sweep2-*`, probe at `5765cdf`/`d1fe013`. The same rule gives **NOT
+ACCEPTED**: 7 of 107 untouched conditions fail.
+
+- 1 on absolute unwanted: pulse29, MIDI 120, cutoff 400, q 0.5, +1.20 dB. Its relative unwanted is −5.8 dB.
+- 6 on brightness, −1.17 to −1.69 dB.
+
+The earlier text of this section said "93 improved, 0 regressed". That counted relative unwanted only and **did not
+apply the rule's brightness and absolute terms**. It was wrong, and it is corrected here.
+
+| property, 0.85, untouched 107 | improved > 1 dB | fails the rule |
+|---|---:|---:|
+| absolute unwanted | 95 | 1 |
+| relative unwanted | 93 | 0 |
+| upper wanted | 9 | 6 |
 
 **Production path, PULSE2X=1, unmutated RTL, current sources:**
 
@@ -219,11 +257,11 @@ in `docs/deadline/recheck-333/README.md`:
 
 ## Remaining critical defects and the next decisive action
 
-1. **M5A/M5B harmonic shape (7.56×/5.96×)**, localized to the ladder's tanh operating level at drive 0.75, is resolved for the saw: the bounded operating-level candidate was run and a shared-drive lower operating point was a **negative result** (`operating-level/`), so the fix is a saw-only drive. **Recommended: saw drive 0.35** (`saw-drive/`), giving M5A 5.30× and M5B 4.96×, both now limited by the pulse.
+1. **M5A/M5B harmonic shape (7.56×/5.96×)**, localized to the ladder's tanh operating level at drive 0.75, is **improved, not resolved**. A shared lower drive was a **negative result** (`operating-level/`); a saw-only drive of **0.35**, recommended after a disclosed tie (`saw-drive/`), gives M5A 5.30× and M5B 4.96×. Both still fail, now limited by the pulse. Saw partials themselves remain 3.2–3.7 dB off at their worst.
 2. **Pulse2x rectangular headroom at MIDI ≥ 108** is resolved: clipped energy was measured against a 0.80 headroom challenger (`pulse2x-headroom/`); 0.80 fails, and **0.74 was selected by the frozen rule** (§C).
 3. **Pulse brightness deficit**, the new limiting factor after the saw-only drive fix, is filed as #347.
 4. **Dynamic coverage.** Transitions, glides and modulation have no artifact coverage (§B) and need a validated time-varying oracle before this probe can be extended to them.
-5. **Fresh-condition confirmation of saw drive 0.35** has not yet been run under a control that can demonstrably fail.
+5. **Saw drive 0.35 FAILED its fresh-condition confirmation**: 21 of 28 conditions pass. Resonance 0.5 at MIDI 42/54/66 raises relative unwanted energy by 1.0–4.2 dB, and one level drift is +3.67 dB. It is **not promoted** (`saw-drive/README.md`).
 6. **Attack** (1.07×/1.21×) is unchanged and outside this batch.
 
 ## Wrong-then-right, this batch: 3
