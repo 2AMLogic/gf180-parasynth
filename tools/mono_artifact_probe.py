@@ -363,6 +363,11 @@ EXPECTED = {   # the property each control exists to move
     "SPUR_M70": "residual_dbfs", "CLIP_2XFS": "output_rail_samples",
     "DROPOUT_10MS": "dropout_depth_db", "SILENCE": "activity",
 }
+# The direction each defect must push its property: +1 up, -1 down. A control
+# that moves its property the WRONG way is not caught (the matrix still says
+# MOVED, but `caught` requires the sign).
+DIRECTION = {"ALIAS_NOBLEP": +1, "DARKEN_LP4K": -1, "SPUR_M70": +1,
+             "CLIP_2XFS": +1, "DROPOUT_10MS": -1}
 
 
 def _moved(prop, clean, dirty) -> bool:
@@ -371,6 +376,12 @@ def _moved(prop, clean, dirty) -> bool:
     if prop == "output_rail_samples":
         return dirty != clean
     return abs(dirty - clean) > MOVE_DB
+
+
+def _moved_way(prop, clean, dirty, sign) -> bool:
+    if not _moved(prop, clean, dirty) or clean is None or dirty is None:
+        return False
+    return (dirty - clean) * sign > 0
 
 
 def controls(engine="r1", note=84, wave="saw") -> dict:
@@ -393,7 +404,8 @@ def controls(engine="r1", note=84, wave="saw") -> dict:
             c, d = get(clean), get(dirty)
             row[p] = {"clean": c, "dirty": d, "state": "MOVED" if _moved(p, c, d) else "BLIND"}
         matrix[inj] = row
-        caught[inj] = row[EXPECTED[inj]]["state"] == "MOVED"
+        p = EXPECTED[inj]
+        caught[inj] = _moved_way(p, row[p]["clean"], row[p]["dirty"], DIRECTION[inj])
     return {"canary": {"engine": engine, "note": note, "wave": wave},
             "clean_output": clean["stages"]["output"], "matrix": matrix, "caught": caught,
             "all_caught": all(caught.values())}
@@ -438,6 +450,17 @@ def schedule() -> list:
     return pts
 
 
+RECT_GAIN_Q15 = None      # None: the model's own; else the pulse2x engine's rectangle gain (R2: 24248)
+
+
+def _rect_ctx(engine):
+    import contextlib
+    if engine != "pulse2x" or RECT_GAIN_Q15 is None:
+        return contextlib.nullcontext()
+    import measure_pulse2x_headroom as hr
+    return hr.candidate(RECT_GAIN_Q15, "rect")
+
+
 def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
     rows = []
     for i, (group, engine, note, over) in enumerate(schedule()):
@@ -445,7 +468,8 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
             continue
         patch = held_patch(**over)
         try:
-            row = measure_point(engine, note, patch)
+            with _rect_ctx(engine):
+                row = measure_point(engine, note, patch)
         except Refused as e:
             row = {"engine": engine, "note": note, "patch": over, "verdict": "REFUSED",
                    "reason": str(e)}
@@ -591,6 +615,8 @@ def main(argv=None) -> int:
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
+    w.add_argument("--rect-gain-q15", type=int, default=None,
+                   help="pulse2x rectangles at this gain (R2: 24248); r1 rows are unaffected")
     for p in (s, c, w, dv, sm):
         p.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
@@ -613,7 +639,10 @@ def main(argv=None) -> int:
             res = drive_sweep()
             rc = 0
         else:
+            global RECT_GAIN_Q15
+            RECT_GAIN_Q15 = a.rect_gain_q15
             res = run_sweep(a.out, a.part, a.parts)
+            res["pulse2x_rect_gain_q15"] = RECT_GAIN_Q15
             rc = 0
     except Refused as e:
         print(f"REFUSED: {e}")

@@ -59,6 +59,22 @@ def point(drive, vol, note, cut, q):
             "output_rail": r["clip"]["output_rail_samples"]}
 
 
+def judge(b: dict, c: dict) -> list:
+    """The frozen rule for one fresh point: the reasons it fails, or []."""
+    why = []
+    if c["unwanted_rel_db"] - b["unwanted_rel_db"] > 1.0:
+        why.append("unwanted")
+    if b["upper_wanted_rel_db"] is not None and c["upper_wanted_rel_db"] < b["upper_wanted_rel_db"] - 0.1:
+        why.append("darker")
+    if b["ladder_deficit_db"] is not None and c["ladder_deficit_db"] < b["ladder_deficit_db"]:
+        why.append("deficit worse")
+    if abs(c["intended_dbfs"] - b["intended_dbfs"]) > 1.5:
+        why.append("level drift")
+    if c["output_rail"]:
+        why.append("rail")
+    return why
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", type=pathlib.Path, required=True)
@@ -70,17 +86,7 @@ def main(argv=None) -> int:
             for nt in NOTES:
                 b = point(BASE, SAW_VOL, nt, cut, q)
                 c = point(CAND, SAW_VOL * f, nt, cut, q)
-                why = []
-                if c["unwanted_rel_db"] - b["unwanted_rel_db"] > 1.0:
-                    why.append("unwanted")
-                if b["upper_wanted_rel_db"] is not None and c["upper_wanted_rel_db"] < b["upper_wanted_rel_db"] - 0.1:
-                    why.append("darker")
-                if b["ladder_deficit_db"] is not None and c["ladder_deficit_db"] < b["ladder_deficit_db"]:
-                    why.append("deficit worse")
-                if abs(c["intended_dbfs"] - b["intended_dbfs"]) > 1.5:
-                    why.append("level drift")
-                if c["output_rail"]:
-                    why.append("rail")
+                why = judge(b, c)
                 row = {"note": nt, "cutoff": cut, "q": q, "baseline": b, "candidate": c, "fails": why}
                 rows.append(row)
                 if why:

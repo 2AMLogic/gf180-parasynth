@@ -733,7 +733,11 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
             # A write serializes for about 1.55 frames. Reserve ten frames for
             # the three increment writes and gate write, then use the pin-side
             # report below as the authoritative event time.
-            margin = 16 if segment_controls else 10
+            # A saw-drive override adds three writes (K, GAIN, OGAIN) to the
+            # segment's first event: 12 writes, about 18.6 frames, past the
+            # 16 reserved for 9. Reserve 22 then, so the note still lands on
+            # time; without the override the bytes are unchanged.
+            margin = (22 if saw_drive is not None else 16) if segment_controls else 10
             wait = max(0, round((on_s - previous_off_s) * 48000) - margin)
             if event_index == 0:
                 if segment_controls:

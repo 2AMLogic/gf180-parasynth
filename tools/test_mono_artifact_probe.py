@@ -164,3 +164,11 @@ def test_oversampled_stage_splits_unwanted_by_band():
     r = p.split_spectrum(x + lo + hi, 2 * SR, F0, band_hz=SR / 2)
     assert r["unwanted_inband_dbfs"] == pytest.approx(-70.0, abs=0.5)
     assert r["unwanted_outband_dbfs"] == pytest.approx(-60.0, abs=0.5)
+
+
+def test_a_control_moved_the_wrong_way_is_not_caught():
+    assert p._moved_way("image_dbfs", -60.0, -50.0, +1)
+    assert not p._moved_way("image_dbfs", -60.0, -70.0, +1)        # moved, but the wrong way
+    assert not p._moved_way("image_dbfs", -60.0, -60.5, +1)        # inside MOVE_DB
+    assert p._moved_way("output_rail_samples", 0, 5, +1)
+    assert not p._moved_way("output_rail_samples", 5, 0, +1)
