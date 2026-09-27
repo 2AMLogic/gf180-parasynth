@@ -21,8 +21,10 @@ for addr, val in kit:
         m, off = divmod(addr - A_MODE, STRIDE)
         mode_regs[m][off] = val
 
-MNAMES = ['M_HATBP','M_OHHP','M_CHHP','M_SDN','M_CPBP','M_CBBP',
-          'M_BD','M_SDLO','M_SDHI','M_LT','M_HT','M_SPARE']
+# the names from drums_fx itself: a literal list here was revision 5's twelve
+# and indexed past its end once MODES reached 16 (found under #107)
+MNAMES = {getattr(D, n): n for n in dir(D) if n.startswith('M_') and isinstance(getattr(D, n), int)}
+MNAMES = [MNAMES.get(m, 'M_SPARE') for m in range(D.N_MODES)]
 print("=== modal bank occupancy of the shipped eight-stop kit (MODES=%d provisioned) ===" % D.N_MODES)
 active = []
 for m in range(D.N_MODES):

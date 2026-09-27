@@ -323,7 +323,8 @@ The honest list. Nothing below is in progress unless a linked PR says so.
   bench can fail (`rtl-sketch/test_rtl.py`), and so is the whole voice,
   `voice_dp.v`, against `model/voice_fx.py`. `drum_section_placeholder` is
   **gone**: `synth_top.v` instantiates `drum_kit` at revision 10's size
-  (16 modes / 11 numerators / 18 envelopes / 23 paths / 11 stops) through the
+  (16 modes / 11 numerators / 18 envelopes / 23 paths / 11 stops; 20
+  envelopes since revision 15, DR 0023) through the
   22-bit mix bus, the 19-bit body bus, the `drum_done` handshake and the
   output stage of contract 12. `rtl-sketch/verify_synth_top.py` drives all
   eleven circuits and all sixteen sounds over the SPI pins and compares the
