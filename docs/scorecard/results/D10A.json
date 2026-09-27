@@ -2,23 +2,23 @@
   "engine": "fixed-model",
   "case_id": "D10A",
   "subject": "Rimshot / anchor",
-  "source_commit": "719f6fe",
-  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T22:00:26Z",
+  "source_commit": "811acdf",
+  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T23:01:32Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "719f6fe",
-      "described": "node/D-drums-bitexact-981-g719f6fe",
+      "commit": "811acdf",
+      "described": "node/D-drums-bitexact-991-g811acdf-dirty",
       "branch": "feature/issue-388",
-      "dirty": false,
-      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "dirty": true,
+      "uncommitted_sha256": "ec085c7dff7dd35b",
       "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "094ad68a2283",
-      "behind_commits": 4,
-      "ahead_commits": 4,
+      "origin_main": "38911709f9bb",
+      "behind_commits": 0,
+      "ahead_commits": 5,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
@@ -30,8 +30,7 @@
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py.",
-      "note": "4 commit(s) behind origin/main, none of them touching an input this measurement depends on"
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
     },
     "command": "tools/run_case.py D10A --no-audio",
     "config": {
@@ -44,7 +43,7 @@
       "level_matched": true
     },
     "python": "3.14.7",
-    "run_at": "2026-09-27T22:00:56Z",
+    "run_at": "2026-09-27T23:02:22Z",
     "inputs": {
       "model/drums_fx.py": "sha256:b800dfdda3a6cea6",
       "model/voice_fx.py": "sha256:876b31f280fd3ef4",
