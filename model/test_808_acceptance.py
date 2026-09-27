@@ -2047,7 +2047,11 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
     `tools/probes/hihat/hh_probe5.py`). **It lost, on the development case and
     on a held-out recording.** Each structure got its own (Q, gain) fit against
     D14A only; the two-pole reaches `Band energy` 0.098 against 0.258 and 0.163
-    for the two 3-pole arms, and `scorecard.compare` REJECTS both on both cases.
+    for the two 3-pole arms. `scorecard.compare` itself returns INCOMPARABLE on
+    every pairing -- `total decay` is required and is invalid on the reference
+    side of D14A and our side of D14B, so neither case has a verdict -- and the
+    same rule read over the properties that DO have distances REJECTS both arms
+    on both cases. That read is INDICATIVE and DR 0021 labels it so.
     Three reasons it loses, all measured:
       * at 48 kHz a 1-pole at 10.5 kHz has r = 0.253 and only 1.19 octaves above
         it, so the low-pass orientation delivers 2.0 dB/octave, not 6;
@@ -2057,6 +2061,15 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
       * `TAP_SHIFT = 3` throws away 18.1 dB that `amp` (Q0.16, ceiling 1.0)
         cannot recover, and `PATH.src`'s 5 bits mean mode 16 cannot be tapped.
     So reference 10's third pole joins Hh1 as a DOCUMENTED OMISSION.
+
+    THE HOLDOUT SEPARATES NOTHING, AND THAT IS ITS MOST USEFUL RESULT.
+    docs/scorecard/results/D14B.json is the cymbal's first held-out recording
+    (cy8/CY2500.WAV, TONE 2.5 DECAY 0.0, read by no fit in this repository).
+    All four arms land at `Band energy` 3.566 / 3.767 / 3.794 / 3.812 -- a
+    spread of 0.25 tolerances inside a 3.5-tolerance error, with the SHIPPED
+    2-pole the best of the four. What dominates there is not the high band's
+    order but the CY DECAY law: at knob 0.0 we render T20 ~830 ms against the
+    recording's 456 ms. A decision taken on D14A alone could not have seen that.
 
     AND THE Q 2.5 -> 4.0 RETUNE IS NOT THE ANSWER EITHER. It takes the
     five-band cost from 18.1 to 6.0 -- and takes the scorecard's `Band energy`

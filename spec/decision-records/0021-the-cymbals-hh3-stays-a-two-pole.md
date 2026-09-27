@@ -37,26 +37,49 @@ orientations, because "a 6 dB/octave skirt" does not say which side:
 
 | structure | fitted on D14A | `Band energy` | `band decay` |
 |---|---|--:|--:|
-| **2-pole (the decision)** | Q 4.0, gain 0.80 | **0.098** | **0.159** |
+| **2-pole — the structure that ships** | Q 4.0, gain 0.80 | **0.098** | **0.159** |
 | 3-pole, 1-pole BP (skirt below the corner) | Q 2.5, gain 1.00 | 0.258 | 0.190 |
 | 3-pole, 1-pole RAW (skirt above the corner) | Q 4.0, gain 0.80 | 0.163 | 0.158 |
 
 Property distances, `|error| / tolerance`. **Each structure was given its own
 (Q, gain) fit against the development case only**, so this is each structure at
-its own best, not the shipped setting against a tuned rival. The two-pole is
-better on the development case *and* the holdout rejects both candidates:
+its own best, not the shipped setting against a tuned rival.
 
-| holdout `D14B` = `cy8/CY2500.WAV` | `Band energy` |
-|---|--:|
-| 2-pole, shipped Q 2.5 / gain 1.00 | 3.794 |
-| 3-pole BP | 3.767 |
-| 3-pole RAW | 3.812 |
+**Read that first row as the structure, not as a setting to ship.** What ships
+is the two-pole at its *committed* `CY_HI_Q = 2.5`, `AMP_CY_HI = 1.0`, which
+reads `Band energy` **0.501** and `band decay` **0.253** on D14A. The Q 4.0 /
+gain 0.80 column is the two-pole's own best available fit, carried here so the
+comparison is structure-against-structure; whether to ship it is a separate,
+continuous retune, filed and not taken (see Alternatives).
 
-`scorecard.compare` returns **REJECT** for both candidates on both cases: no
-required property improves by more than `DEFAULT_ALLOWANCE` (0.05) and
-`Band energy` regresses beyond it on the development case.
+The two-pole is better on the development case *and* the holdout rejects both
+candidates. Every arm is evaluated on the holdout at the setting its **D14A**
+fit chose, with the shipped setting carried alongside:
 
-### Four findings that stand on their own
+| holdout `D14B` = `cy8/CY2500.WAV` | setting | `Band energy` |
+|---|---|--:|
+| 2-pole, its D14A fit | Q 4.0, gain 0.80 | 3.794 |
+| 3-pole BP, its D14A fit | Q 2.5, gain 1.00 | 3.767 |
+| 3-pole RAW, its D14A fit | Q 4.0, gain 0.80 | 3.812 |
+| **2-pole, shipped** | **Q 2.5, gain 1.00** | **3.566** |
+
+The shipped two-pole is the best of the four on the holdout, and it is the row
+`docs/scorecard/results/D14B.json` records, since that file is a record of what
+ships. Every arm is 3.5–3.8 tolerances out, so the holdout separates nothing
+about this structural question — it says the whole voice is wrong at this knob
+setting, which is finding 5 below.
+
+**What `scorecard.compare` actually returns is `INCOMPARABLE`, on all four
+pairings, not `REJECT`** — `total decay` is a required component and is invalid
+on the reference side of D14A and on our side of D14B, so neither case has a
+verdict to compare (see Consequences). Read over the properties that *do* have
+distances, under the same rule, it is **REJECT** for both candidates on both
+cases: no required property improves by more than `DEFAULT_ALLOWANCE` (0.05) and
+`Band energy` regresses beyond it on the development case. That indicative read
+is what this decision rests on, and it is labelled INDICATIVE everywhere the
+probe prints it.
+
+### Five findings that stand on their own
 
 1. **At 48 kHz, "a 6 dB/octave skirt" is only available on the low side.** A
    one-pole section at 10.5 kHz has `r = e^{-w0} = 0.253` — nearly at the
@@ -96,6 +119,18 @@ required property improves by more than `DEFAULT_ALLOWANCE` (0.05) and
    one-sided.** It is 1.0 and `amp` is Q0.16; every `gain > 1.0` in the grid
    renders identically to `gain = 1.0`. The cymbal's high band cannot be made
    louder without moving the drive.
+
+5. **The holdout does not separate this structural question, and that is its
+   most useful result.** All four arms read `Band energy` 3.566–3.812 on
+   `cy8/CY2500.WAV` — a spread of 0.25 tolerances across a 3.5-tolerance error.
+   A held-out case that answers "every candidate is equally wrong" has not
+   failed; it has said the error under test is not the dominant error at this
+   knob setting. The dominant one is the CY DECAY law: at knob 0.0 our render's
+   T20 is ~830 ms against the recording's 456 ms. **A structural decision taken
+   on the development case alone would have had no way to know that**, and it is
+   why the criterion was "source a holdout", not "let the holdout pick the
+   winner". It is also why no `µm²` was spent: the 17th mode was being priced
+   against a 0.25-tolerance difference sitting inside a 3.5-tolerance one.
 
 ## Alternatives considered
 
@@ -147,6 +182,19 @@ required property improves by more than `DEFAULT_ALLOWANCE` (0.05) and
   DR 0015's "a surrogate proposes, the exact rule accepts" is necessary and not
   sufficient: the rule accepts a *comparison*, and the surrogate was proposing
   both sides of it.
+- **Wrong-then-right, twice, and the second was caught by re-running rather than
+  by reading.** The first is the surrogate-chose-the-baseline ACCEPT above. The
+  second is in this document: its holdout table labelled the **3.794** row
+  "2-pole, shipped Q 2.5 / gain 1.00". 3.794 is the two-pole at its *fitted*
+  Q 4.0 / gain 0.80; the shipped setting reads **3.566**, and 3.566 is what the
+  committed `D14B.json` records. Re-running `hh_probe5.py` at the commit this
+  lands on and diffing its printout against the prose caught it; reading the
+  prose did not, twice. The verdict does not move — the shipped two-pole is the
+  *best* of the four on the holdout, so the corrected number strengthens the
+  decision — but a table that mislabels which setting produced a number is how a
+  later reader ships the wrong one. **Any number quoted here can be regenerated
+  with `python3 tools/probes/hihat/hh_probe5.py --refs <corpus> --out <dir>`**,
+  which prints the full grid, both fits, both cases and every verdict.
 - **`cy8/CY5025.WAV` is TONE 5.0, DECAY 2.5 — not the chart condition.** Five
   places in this repository called it "TONE 5.0, DECAY 5.0, Roland's own chart
   condition". `tools/probe_new_voice_knobs.py` findings 2 and 4 established the
