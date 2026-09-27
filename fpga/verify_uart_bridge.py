@@ -393,15 +393,40 @@ def _rel(p) -> str:
     return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
 
 
-def replay_identity(srcs, defines, cmd_path, tail_frames) -> dict:
+def simulator_identity(iverilog, vvp) -> dict:
+    """The simulator that would run (#313): what `iverilog -V` and `vvp -V`
+    report, first line each, and the repository's oss-cad-suite pin
+    (tools/setup_ci_oss_cad.py). A version that cannot be read is recorded
+    as empty, and an empty version never matches, so it is never reused."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "setup_ci_oss_cad", ROOT / "tools/setup_ci_oss_cad.py")
+    pin = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pin)
+
+    def first_line(tool_path):
+        if not tool_path:
+            return ""
+        try:
+            r = subprocess.run([str(tool_path), "-V"], capture_output=True, text=True,
+                               timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        return ((r.stdout or "").strip().splitlines() or [""])[0]
+    return {"iverilog -V": first_line(iverilog), "vvp -V": first_line(vvp),
+            "oss_cad_pin": {"release": pin.VERSION, "sha256": pin.SHA256}}
+
+
+def replay_identity(srcs, defines, cmd_path, tail_frames, simulator=None) -> dict:
     """Everything a replay's outputs depend on: the compiled sources, the
     ROM images the RTL $readmemh's (they shape the sound as much as the
     Verilog does), the defines (so an injection is part of the identity),
-    the stimulus and the frames run. A reused run must match ALL of it."""
+    the stimulus, the frames run and the simulator (#313). A reused run must
+    match ALL of it."""
     return {"sources": {_rel(p): _sha(p) for p in srcs},
             "roms": {_rel(p): _sha(p) for p in roms()},
             "defines": list(defines), "stimulus": _sha(cmd_path),
-            "tail_frames": int(tail_frames)}
+            "tail_frames": int(tail_frames), "simulator": simulator or {}}
 
 
 def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
@@ -420,6 +445,8 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     SIMULATES instead of refusing when the run on disk is not this run --
     so a fresh machine runs, and an identical run is never repeated."""
     auto = reuse == "auto"
+    asked = "auto" if auto else bool(reuse)
+    why_simulated = "no reuse asked"
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     items, planned_segments, _origin, _baud = rows_from_capture(prefix)
@@ -432,6 +459,7 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
                   "differs from the run on disk (or there is none)")
             return None
         print("verify_uart_bridge: no identical run on disk (stimulus); simulating")
+        why_simulated = "no identical run on disk: the stimulus differs (or there is none)"
         reuse = False
     last_due = max([r.due for rows in planned_segments for r in rows if r.due >= 0]
                    + [0])
@@ -446,7 +474,9 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
-    identity = replay_identity(srcs, defines, cmd_path, tail_frames)
+    iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
+    simulator = simulator_identity(iverilog, vvp)
+    identity = replay_identity(srcs, defines, cmd_path, tail_frames, simulator)
     id_path = outdir / "run_identity.json"
     files = {k: str(outdir / f"uart_{k}.txt") for k in ("i2s", "wrs", "txd", "samp")}
     if reuse:
@@ -457,9 +487,16 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
         why = None
         if rec is None:
             why = "no run identity on disk (not a fresh run of this tool)"
+        elif not (simulator["iverilog -V"] and simulator["vvp -V"]):
+            why = ("the simulator version cannot be read (iverilog/vvp -V), so the run "
+                   "on disk cannot be shown to come from this simulator")
         elif rec.get("identity") != identity:
             diff = [k for k in identity if rec["identity"].get(k) != identity[k]]
             why = f"the run on disk differs in {diff}"
+            if "simulator" in diff:
+                old = (rec["identity"].get("simulator") or {}).get("iverilog -V")
+                why += (f" (simulator: on disk {old!r}, now "
+                        f"{simulator['iverilog -V']!r})")
         else:
             bad = [k for k, f in files.items()
                    if not Path(f).exists() or _sha(f) != rec["outputs"].get(k)]
@@ -468,6 +505,7 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
                 why = f"outputs changed since that run wrote them: {bad or ['transcript']}"
         if why and auto:
             print(f"verify_uart_bridge: no identical run on disk ({why}); simulating")
+            why_simulated = f"no identical run on disk: {why}"
             reuse = False
         elif why:
             print(f"verify_uart_bridge: REFUSED -- reuse asked, but {why}")
@@ -478,8 +516,9 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
                 "planned": planned_segments, "reset_frames": [],
                 "report": report, "files": files,
                 "scenario": "replay", "inject": inject,
-                "defines": defines, "model_tail": model_tail, "reused": True}
-    iverilog, vvp = top.tool("iverilog"), top.tool("vvp")
+                "defines": defines, "model_tail": model_tail, "reused": True,
+                "reuse": {"asked": asked, "reused": True, "why": "identical run on disk"},
+                "identity": identity}
     if not iverilog or not vvp:
         print("verify_uart_bridge: REFUSED -- iverilog/vvp not on PATH")
         return None
@@ -513,7 +552,9 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
             "planned": planned_segments, "reset_frames": [],
             "report": report, "files": files,
             "scenario": "replay", "inject": inject,
-            "defines": defines, "model_tail": model_tail}
+            "defines": defines, "model_tail": model_tail, "reused": False,
+            "reuse": {"asked": asked, "reused": False, "why": why_simulated},
+            "identity": identity}
 
 
 def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
