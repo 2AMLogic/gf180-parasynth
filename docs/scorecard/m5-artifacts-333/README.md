@@ -194,14 +194,20 @@ there: the relative gain is as large as the absolute one, and the gain-only
 control explains 0.86/0.83 dB of foldback at 0.85 (M5A/M5B), against
 7.21/6.11 dB for the rate change.
 
-**At R2's rectangle gain of 0.74**, the 107-point untouched comparison above
-has not been re-run; only a narrower gain-only check exists
-(`pulse2x-headroom/probe-074.json`, 32 points, comparing 0.74 against 0.85):
-**7 of the 32 worsen, one by more than 1 dB (pulse15 MIDI 84, +1.02 dB)**. The
-gain-only control at 0.74 explains 1.66/1.65 dB of foldback (M5A/M5B), against
-6.41/5.28 dB for the rate change (§C). The "93 improved, 0 regressed" row
-above is established for pulse2x at 0.85 against R1; it is **not** established
-for pulse2x at R2's 0.74.
+**Re-run at R2's rectangle gain of 0.74** (`probe-rect074/`, the same 110 points, pulse2x with rectangles at
+0.74 against R1, sources at `46844fb`). The direction-aware controls were all caught at both canaries.
+
+| property (pulse2x at 0.74 − R1) | development (3) | untouched (107) |
+|---|---|---|
+| output unwanted, dBFS | 3 improved > 1 dB (−8.5 to −9.4) | 105 improved, **1 regressed** (+1.35 dB) |
+| output unwanted, relative | 3 improved (−7.8 to −8.2) | 101 improved, **1 regressed** (+2.92 dB) |
+| upper wanted power, relative | within 0.32 dB | 19 brighter and 5 darker by > 1 dB (worst −4.82 dB) |
+| intended level | −0.58 to −1.60 dB | −8.1 to +17.4 dB (the extremes are MIDI 120/127 points filtered to near the floor) |
+| new rail samples / new dropouts at output | 0 / 0 | 0 / 0 |
+
+- **The one regression.** Pulse29 at MIDI 120, cutoff 400 Hz, q 0.5 (drive 0.75): +2.92 dB relative and +1.35 dB absolute. An 8.4 kHz note through a 400 Hz cutoff leaves the intended signal near the floor. It is reported, not excused.
+- **The darker points.** All five are at q 0.5 or cutoff 400 Hz: square and pulse29 at MIDI 36 and 96 (−2.4 to −4.8 dB), and pulse29 at MIDI 84 at cutoff 400 (−1.6 dB).
+- **At 0.74, "0 regressed" does not hold.** One point regresses, so the 0.85 row above stays labelled as 0.85 evidence only.
 
 **Production path, PULSE2X=1, unmutated RTL, current sources:**
 

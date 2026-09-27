@@ -1,0 +1,241 @@
+{
+ "canary": {
+  "engine": "r1",
+  "note": 84,
+  "wave": "saw"
+ },
+ "clean_output": {
+  "f0_hz": 1046.499252,
+  "sr": 48000,
+  "band_hz": 24000.0,
+  "samples": 36000,
+  "bin_hz": 1.333333,
+  "guard_bins": 6,
+  "level_dbfs": -17.3111,
+  "intended_dbfs": -17.3125,
+  "image_dbfs": -65.5174,
+  "residual_dbfs": -94.4468,
+  "unwanted_dbfs": -65.5118,
+  "supra_dbfs": null,
+  "unwanted_inband_dbfs": -65.5118,
+  "unwanted_outband_dbfs": -152.5803,
+  "image_rel_db": -48.2049,
+  "residual_rel_db": -77.1343,
+  "unwanted_rel_db": -48.1994,
+  "upper_wanted_dbfs": -32.8383,
+  "upper_wanted_rel_db": -15.5259,
+  "harmonic_centroid_hz": 1466.217,
+  "harmonics_rel_h1_db": {
+   "h1": 0.0,
+   "h2": -7.937,
+   "h3": -14.813,
+   "h4": -17.589,
+   "h5": -19.068,
+   "h6": -21.604,
+   "h7": -23.645,
+   "h8": -24.867,
+   "h9": -26.352,
+   "h10": -28.474,
+   "h11": -29.777,
+   "h12": -30.401,
+   "h13": -32.01,
+   "h14": -33.14,
+   "h15": -33.859,
+   "h16": -35.627
+  },
+  "harmonics_below_band": 22,
+  "images_used": 329,
+  "images_collided": 0,
+  "mask_fraction": 0.2505
+ },
+ "matrix": {
+  "ALIAS_NOBLEP": {
+   "unwanted_dbfs": {
+    "clean": -65.5118,
+    "dirty": -45.546,
+    "state": "MOVED"
+   },
+   "image_dbfs": {
+    "clean": -65.5174,
+    "dirty": -45.9626,
+    "state": "MOVED"
+   },
+   "residual_dbfs": {
+    "clean": -94.4468,
+    "dirty": -55.9329,
+    "state": "MOVED"
+   },
+   "upper_wanted_rel_db": {
+    "clean": -15.5259,
+    "dirty": -15.6254,
+    "state": "BLIND"
+   },
+   "output_rail_samples": {
+    "clean": 0,
+    "dirty": 0,
+    "state": "BLIND"
+   },
+   "dropout_depth_db": {
+    "clean": -0.22,
+    "dirty": -0.222,
+    "state": "BLIND"
+   }
+  },
+  "DARKEN_LP4K": {
+   "unwanted_dbfs": {
+    "clean": -65.5118,
+    "dirty": -79.8923,
+    "state": "MOVED"
+   },
+   "image_dbfs": {
+    "clean": -65.5174,
+    "dirty": -79.9527,
+    "state": "MOVED"
+   },
+   "residual_dbfs": {
+    "clean": -94.4468,
+    "dirty": -98.4897,
+    "state": "MOVED"
+   },
+   "upper_wanted_rel_db": {
+    "clean": -15.5259,
+    "dirty": -24.3529,
+    "state": "MOVED"
+   },
+   "output_rail_samples": {
+    "clean": 0,
+    "dirty": 0,
+    "state": "BLIND"
+   },
+   "dropout_depth_db": {
+    "clean": -0.22,
+    "dirty": -0.218,
+    "state": "BLIND"
+   }
+  },
+  "SPUR_M70": {
+   "unwanted_dbfs": {
+    "clean": -65.5118,
+    "dirty": -64.1907,
+    "state": "MOVED"
+   },
+   "image_dbfs": {
+    "clean": -65.5174,
+    "dirty": -65.5174,
+    "state": "BLIND"
+   },
+   "residual_dbfs": {
+    "clean": -94.4468,
+    "dirty": -69.9874,
+    "state": "MOVED"
+   },
+   "upper_wanted_rel_db": {
+    "clean": -15.5259,
+    "dirty": -15.5259,
+    "state": "BLIND"
+   },
+   "output_rail_samples": {
+    "clean": 0,
+    "dirty": 0,
+    "state": "BLIND"
+   },
+   "dropout_depth_db": {
+    "clean": -0.22,
+    "dirty": -0.219,
+    "state": "BLIND"
+   }
+  },
+  "CLIP_2XFS": {
+   "unwanted_dbfs": {
+    "clean": -65.5118,
+    "dirty": -33.7761,
+    "state": "MOVED"
+   },
+   "image_dbfs": {
+    "clean": -65.5174,
+    "dirty": -33.7768,
+    "state": "MOVED"
+   },
+   "residual_dbfs": {
+    "clean": -94.4468,
+    "dirty": -71.4614,
+    "state": "MOVED"
+   },
+   "upper_wanted_rel_db": {
+    "clean": -15.5259,
+    "dirty": -14.583,
+    "state": "BLIND"
+   },
+   "output_rail_samples": {
+    "clean": 0,
+    "dirty": 21731,
+    "state": "MOVED"
+   },
+   "dropout_depth_db": {
+    "clean": -0.22,
+    "dirty": -0.195,
+    "state": "BLIND"
+   }
+  },
+  "DROPOUT_10MS": {
+   "unwanted_dbfs": {
+    "clean": -65.5118,
+    "dirty": -31.0004,
+    "state": "MOVED"
+   },
+   "image_dbfs": {
+    "clean": -65.5174,
+    "dirty": -42.0862,
+    "state": "MOVED"
+   },
+   "residual_dbfs": {
+    "clean": -94.4468,
+    "dirty": -31.3526,
+    "state": "MOVED"
+   },
+   "upper_wanted_rel_db": {
+    "clean": -15.5259,
+    "dirty": -15.496,
+    "state": "BLIND"
+   },
+   "output_rail_samples": {
+    "clean": 0,
+    "dirty": 0,
+    "state": "BLIND"
+   },
+   "dropout_depth_db": {
+    "clean": -0.22,
+    "dirty": -222.723,
+    "state": "MOVED"
+   }
+  },
+  "SILENCE": {
+   "unwanted_dbfs": "REFUSED",
+   "image_dbfs": "REFUSED",
+   "residual_dbfs": "REFUSED",
+   "upper_wanted_rel_db": "REFUSED",
+   "output_rail_samples": "REFUSED",
+   "dropout_depth_db": "REFUSED"
+  }
+ },
+ "caught": {
+  "ALIAS_NOBLEP": true,
+  "DARKEN_LP4K": true,
+  "SPUR_M70": true,
+  "CLIP_2XFS": true,
+  "DROPOUT_10MS": true,
+  "SILENCE": true
+ },
+ "all_caught": true,
+ "provenance": {
+  "analysis_version": "mono-artifact-probe-v1",
+  "commit": "46844fbaf2b6f102f054749984ffd4302dd45694",
+  "sources_dirty": false,
+  "sha256": {
+   "tools/mono_artifact_probe.py": "0a1c698e056282cd",
+   "model/voice_fx.py": "876b31f280fd3ef4",
+   "model/filter_rate_chain.py": "134b958dec5308fd",
+   "model/fixed.py": "eec1c66158a611dc"
+  }
+ }
+}

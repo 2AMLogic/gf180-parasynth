@@ -75,3 +75,33 @@ is committed there.
 Both M5 cases are now held by the **pulse** segments' brightness deficit, 5.0–5.3 dB. The pulse runs at the
 Mini V3 calibrated 14,073 Hz cutoff, where the linear 4-pole removes upper pulse partials. That is a cutoff/voicing
 question for the `m5a-pulse` preset, filed separately and not pursued here.
+
+## Fresh-condition confirmation: NOT confirmed (`confirm/`)
+
+`tools/confirm_m5_saw_drive.py` checks drive 0.35 against 0.75 at 28 conditions not inspected in the experiment:
+
+- notes: MIDI 42, 54, 66, 78, 90, 102, 114;
+- cutoff: 20 kHz and 8 kHz;
+- resonance: 0 and 0.5.
+
+The rule was fixed in its docstring before any render, and the rule has its own tests. **21 of 28 pass, so it is not
+confirmed.**
+
+| region | result |
+|---|---|
+| resonance 0, both cutoffs (14 points) | all pass: relative unwanted −1.1 to −7.0 dB, brighter, ladder deficit smaller, level within ±1.4 dB |
+| resonance 0.5, MIDI 78–114 | pass |
+| **resonance 0.5, MIDI 42/54/66, both cutoffs (6 points)** | **fail: relative unwanted +1.0 to +4.2 dB** |
+| resonance 0.5, MIDI 114, 8 kHz | fail: level drift +3.67 dB |
+
+At resonance 0 the candidate is better everywhere, notes 42–114. With resonance, which the player reaches on CC71,
+lower drive raises the low notes' unwanted energy relative to the signal. **The preset is not promoted.**
+
+The next question is what the resonant low-note unwanted energy is: images, or residual from the resonance peak.
+Only after that can a drive be tied to resonance, and that is its own experiment.
+
+**Production path, run before this verdict.** The M5A/M5B SPI→I²S phrases with saw drive 0.35 on saw segments are
+bit-exact with the model: M5A 1,305,543 periods, M5B 729,543, 73 writes each (`confirm/M5A.txt`, `M5B.txt`). These
+ran with the 16-frame write margin. The three extra writes pushed each segment's first event about 10 frames late in
+total, which is the +10 periods. The margin is now 22 when a saw drive is overridden. This is delivery evidence for
+the mechanism, not a promoted preset. R1's `m5a-saw` is unchanged.

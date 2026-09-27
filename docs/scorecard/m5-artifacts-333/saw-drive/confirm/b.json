@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/confirm_m5_saw_drive.py --out build/sawprod/confirm.json",
+    "state": "FAIL",
+    "rc": 1,
+    "out": "MIDI  42 cut 20000 q 0.0: unwanted rel  -70.16 ->  -73.77; upper -26.7497 -> -25.429; deficit -0.313 -> -0.021; level -0.78 dB; OK\nMIDI  54 cut 20000 q 0.0: unwanted rel  -57.77 ->  -58.88; upper -23.8875 -> -22.4915; deficit -0.957 -> -0.081; level -0.67 dB; OK\nMIDI  66 cut 20000 q 0.0: unwanted rel  -54.14 ->  -55.62; upper -20.7244 -> -19.1789; deficit -2.315 -> -0.305; level -0.46 dB; OK\nMIDI  78 cut 20000 q 0.0: unwanted rel  -52.14 ->  -53.49; upper -17.4899 -> -15.5255; deficit -3.837 -> -1.062; level -0.17 dB; OK\nMIDI  90 cut 20000 q 0.0: unwanted rel  -50.35 ->  -52.72; upper -14.7619 -> -12.9961; deficit -5.947 -> -3.032; level +0.21 dB; OK\nMIDI 102 cut 20000 q 0.0: unwanted rel  -51.17 ->  -53.97; upper -10.5013 -> -7.6382; deficit -8.763 -> -6.711; level +0.67 dB; OK\nMIDI 114 cut 20000 q 0.0: unwanted rel  -47.19 ->  -51.77; upper -0.0014 -> -0.0008; deficit -9.898 -> -7.71; level +1.19 dB; OK\nMIDI  42 cut 20000 q 0.5: unwanted rel  -64.35 ->  -61.94; upper -20.7832 -> -18.1927; deficit -0.0 -> 0.002; level -0.91 dB; ['unwanted']\nMIDI  54 cut 20000 q 0.5: unwanted rel  -53.12 ->  -51.15; upper -17.791 -> -15.2298; deficit 0.001 -> 0.008; level -0.88 dB; ['unwanted']\nMIDI  66 cut 20000 q 0.5: unwanted rel  -49.20 ->  -47.89; upper -14.6123 -> -12.1813; deficit 0.013 -> 0.037; level -0.81 dB; ['unwanted']\nMIDI  78 cut 20000 q 0.5: unwanted rel  -46.36 ->  -45.46; upper -11.2829 -> -9.1004; deficit 0.126 -> 0.204; level -0.69 dB; OK\nMIDI  90 cut 20000 q 0.5: unwanted rel  -43.92 ->  -44.01; upper -8.5543 -> -6.5023; deficit 0.633 -> 1.051; level -0.44 dB; OK\nMIDI 102 cut 20000 q 0.5: unwanted rel  -43.98 ->  -47.91; upper -4.4617 -> -3.3132; deficit -3.364 -> 3.414; level -0.02 dB; OK\nMIDI 114 cut 20000 q 0.5: unwanted rel  -42.84 ->  -46.94; upper -0.0151 -> -0.0041; deficit -1.453 -> 3.475; level +0.33 dB; OK\nMIDI  42 cut  8000 q 0.0: unwanted rel  -73.00 ->  -77.84; upper -32.4022 -> -32.4351; deficit -0.935 -> -0.099; level -0.68 dB; OK\nMIDI  54 cut  8000 q 0.0: unwanted rel  -71.16 ->  -74.77; upper -29.6074 -> -29.4621; deficit -2.336 -> -0.381; level -0.48 dB; OK\nMIDI  66 cut  8000 q 0.0: unwanted rel  -66.21 ->  -71.46; upper -26.5233 -> -26.0343; deficit -4.054 -> -1.374; level -0.20 dB; OK\nMIDI  78 cut  8000 q 0.0: unwanted rel  -63.29 ->  -67.80; upper -22.881 -> -21.9019; deficit -6.585 -> -3.965; level +0.16 dB; OK\nMIDI  90 cut  8000 q 0.0: unwanted rel  -59.16 ->  -66.17; upper -20.1613 -> -20.2278; deficit -10.578 -> -9.2; level +0.59 dB; OK\nMIDI 102 cut  8000 q 0.0: unwanted rel  -54.59 ->  -60.78; upper -16.6813 -> -13.3051; deficit -19.867 -> -19.344; level +1.10 dB; OK\nMIDI 114 cut  8000 q 0.0: unwanted rel  -44.12 ->  -49.64; upper -0.0 -> -0.0; deficit -22.493 -> -19.877; level +1.38 dB; OK\nMIDI  42 cut  8000 q 0.5: unwanted rel  -74.27 ->  -70.07; upper -27.6146 -> -19.3124; deficit 0.002 -> 0.014; level -0.87 dB; ['unwanted']\nMIDI  54 cut  8000 q 0.5: unwanted rel  -67.72 ->  -66.69; upper -24.2753 -> -16.4205; deficit 0.021 -> 0.062; level -0.81 dB; ['unwanted']\nMIDI  66 cut  8000 q 0.5: unwanted rel  -65.56 ->  -63.25; upper -19.6231 -> -13.2177; deficit 0.158 -> 0.288; level -0.68 dB; ['unwanted']\nMIDI  78 cut  8000 q 0.5: unwanted rel  -61.56 ->  -60.83; upper -14.4905 -> -9.8901; deficit 0.905 -> 1.467; level -0.45 dB; OK\nMIDI  90 cut  8000 q 0.5: unwanted rel  -56.98 ->  -57.77; upper -11.4549 -> -7.7536; deficit -3.179 -> 0.748; level -0.06 dB; OK\nMIDI 102 cut  8000 q 0.5: unwanted rel  -52.91 ->  -58.28; upper -5.4234 -> -3.4924; deficit -19.532 -> -12.612; level +0.94 dB; OK\nMIDI 114 cut  8000 q 0.5: unwanted rel  -47.46 ->  -52.71; upper -0.0 -> -0.0; deficit -24.386 -> -23.461; level +3.67 dB; ['level drift']\n21/28 fresh points pass; confirmed=False; wrote build/sawprod/confirm.json\n",
+    "secs": 93.45169854164124
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --m5a --filter2x --pulse2x --m5a-pulse-shape pulse29 --m5a-saw-cutoff-hz 20000 --m5a-saw-drive 0.35 --m5a-saw-volume-correction-db 5.225757 --simulator verilator --outdir build/sawprod/M5A --wav-out build/sawprod/M5A-i2s.wav > build/sawprod/M5A.txt 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 636.8873610496521
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --m5a --filter2x --pulse2x --m5a-manifest docs/scorecard/mono-m5b-miniv3/manifest.json --m5a-pulse-shape pulse29 --m5a-saw-cutoff-hz 20000 --m5a-saw-drive 0.35 --m5a-saw-volume-correction-db 5.225757 --simulator verilator --outdir build/sawprod/M5B --wav-out build/sawprod/M5B-i2s.wav > build/sawprod/M5B.txt 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 361.23084712028503
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_pulse_cutoff.py --out build/pulsecut/sweep.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "pulse cutoff 14073: M5A pulse objective 5.2968 (case 7.56136), M5B pulse objective 4.9573 (case 5.96219); foldback 2.20593/1.91296; gain -1.54373/2.04851\npulse cutoff 17000: M5A pulse objective 3.9468 (case 7.56136), M5B pulse objective 4.3693 (case 5.96219); foldback 2.20593/1.91296; gain 1.42087/2.04851\npulse cutoff 20000: M5A pulse objective 3.7708 (case 7.56136), M5B pulse objective 3.9773 (case 5.96219); foldback 3.73345/2.10762; gain 1.42087/2.04851\n{\n \"selection\": {\n  \"17000\": {\n   \"objective\": 3.9468,\n   \"admissible\": true,\n   \"reasons\": []\n  },\n  \"20000\": {\n   \"objective\": 3.7708,\n   \"admissible\": false,\n   \"reasons\": [\n    \"M5A pulse 96 foldback 3.7335\"\n   ]\n  }\n },\n \"baseline_objective\": 5.2968,\n \"chosen\": 17000,\n \"confirmation\": {\n  \"reasons\": [\n   \"held pulse 60 unwanted +3.65 dB\",\n   \"held pulse 108 unwanted +3.64 dB\"\n  ],\n  \"m5b_pulse_objective\": [\n   4.9573,\n   4.3693\n  ],\n  \"passes\": false\n }\n}\n",
+    "secs": 154.2204532623291
+  }
+]
