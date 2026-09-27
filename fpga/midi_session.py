@@ -345,6 +345,7 @@ class MidiSession:
         # the loaded kit puts it in, read from the kit, not assumed
         self.presets = uh.image_sound_presets(image)
         self.position = circuit_positions(self.mh.image, self.presets)
+        self.circuit_tail: dict = {}          # circuit -> its last hit's timed tail
         self.keys = MonoKeys(regs)
         self.mod_routed = bool(int(regs["mroute"]) & (vf.MR_OSC | vf.MR_FILT))
         self.parser = MidiParser()
@@ -376,7 +377,7 @@ class MidiSession:
                       "pushed_events": 0, "reanchors": 0, "device_errors": [],
                       "boots": 0, "groups": {}, "refused": {}, "superseded": 0,
                       "packets": 0, "drum_noteoffs": 0, "noops": 0,
-                      "order_guarded": 0}
+                      "order_guarded": 0, "tails_cut": 0}
 
     # ---- output ---------------------------------------------------------------
     def _say(self, msg: str) -> None:
@@ -817,13 +818,28 @@ class MidiSession:
         image = dict(self.mh.image)
         position = dict(self.position)
         n0 = len(self.mh.w)
+        cut = []
         if self.presets and self.position.get(stop_name) not in (None, name):
-            # the circuit is in its other sound's position: select this one first
+            # the circuit is in its other sound's position: select this one first.
+            # The previous sound's per-hit sequence (the tom pitch drop) may still
+            # be pending: its unsent writes would retune the NEW sound mid-note,
+            # and its last write would put the circuit back in the OLD position.
+            # They are cut; the ones already sent land before the switch (FIFO).
+            cut = [p for p in self.circuit_tail.get(stop_name, ()) if not p.sent]
+            self._cut(cut)
             sel = name
             if "WRONG_ALT" in self.inject:
                 sel = self.position[stop_name]         # the injected defect: re-send the other
+            # Only the registers the switch changes: a whole position is up to 18
+            # packets (RS/CL), which at 115200 baud (41.7 frames each) does not
+            # fit the 16 ms lookahead with the admission reserve, so it would be
+            # refused on an idle link. The two positions differ in 3 (toms), 7
+            # (RS/CL) and 10 (CP/MA) registers. A register a cut sequence left
+            # mid-way is not what the image says, so it is always re-written.
+            dirty = {p.write[2] for p in cut if p.write[1] == 1}
             for a, v in self.presets[sel]:
-                self.mh.drum(0, a, v, tag="select")
+                if a in dirty or self.mh.image.get(a) != v:
+                    self.mh.drum(0, a, v, tag="select")
             self.position[stop_name] = name
         self.mh.hits([(0, stop, accent)])
         new = self.mh.w[n0:]
@@ -831,12 +847,29 @@ class MidiSession:
         self.mh.events.clear()
         head = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in new if w.frame == 0]
         tail = [(w.frame, (w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF)) for w in new if w.frame]
-        if self._schedule("hit", t, head, tail, conditional=True) is None:
+        new = self._schedule("hit", t, head, tail, conditional=True)
+        if new is None:
             self.mh.image = image
             self.position = position
+            self._uncut(cut)
             return self._refuse(t, m, "queue-pressure", f"{name}: the link cannot deliver "
                                 "it within the lookahead")
         self.last_strike[stop_name] = r
+        if stop_name in self.position:
+            self.circuit_tail[stop_name] = [p for p in new if p.role == "tail"]
+        self.stats["tails_cut"] += len(cut)
+
+    def _cut(self, pkts: list) -> None:
+        for p in pkts:
+            self.unsent.remove(p)
+            self.timeline.remove(p)
+            self.slots[p.due] -= 1
+
+    def _uncut(self, pkts: list) -> None:
+        for p in pkts:
+            bisect.insort(self.unsent, p, key=lambda q: q.key)
+            bisect.insort(self.timeline, p, key=lambda q: q.key)
+            self.slots[p.due] = self.slots.get(p.due, 0) + 1
 
     def _cc(self, t: float, m: bytes, cc: int, v: int) -> None:
         import synth_top_model as stm

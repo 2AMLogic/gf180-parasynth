@@ -106,7 +106,7 @@ def executed(sim):
     ((0xB0, 64, 127), "sustain"), ((0xB9, 64, 127), "sustain"), ((0xE0, 0, 64), "pitch-bend"),
     ((0xC0, 3), "program-change"), ((0xD0, 40), "aftertouch"), ((0xA0, 60, 9), "poly-aftertouch"),
     ((0xB0, 121, 0), "cc-unsupported"), ((0xB0, 1, 64), "mod-unrouted"),
-    ((0x92, 60, 100), "channel"), ((0x99, 37, 100), "unmapped-drum"),
+    ((0x92, 60, 100), "channel"), ((0x99, 60, 100), "unmapped-drum"),
     ((0x90, 127, 100), "domain"), ((0x90, 5, 100), "domain"), ((0xF8,), "realtime"),
     ((0xF0, 1, 0xF7), "sysex"), ((0xF3, 1), "system"), ((0x33,), "stray-data"),
 ])
@@ -175,8 +175,90 @@ def test_the_time_map_holds_across_a_counter_wrap():
 
 # ---- the documented maps: the session and the oracle agree ------------------------
 def test_session_and_oracle_drum_maps_are_the_documented_one():
+    dx = __import__("drums_fx")
     assert ms.DRUM_MAP == vlm.DRUM_MAP
-    assert set(ms.DRUM_MAP.values()) <= set(__import__("drums_fx").STOP_NAMES)
+    # #298: all sixteen sounds are playable, and every alternate is a real one
+    assert set(ms.DRUM_MAP.values()) == set(dx.SOUND_NAMES)
+    assert set(ms.ALTERNATES) == set(dx.SOUND_NAMES) - set(dx.STOP_NAMES)
+    assert {n for n, snd in ms.DRUM_MAP.items() if snd in ms.ALTERNATES} == {37, 62, 63, 64, 70}
+
+
+# ---- #298: the shared circuits ---------------------------------------------------
+def drum_image(sim, upto=None) -> dict:
+    """The device's drum registers: the known state, then the events, in the
+    order the device applied them (optionally only before write `upto`)."""
+    img = {}
+    for w in sim.writes[:upto]:
+        if w[2] == 1:
+            img[w[3]] = w[4]
+    return img
+
+
+def strikes(sim, stop):
+    import drums_fx as dx
+    bit = 1 << dx.STOP_NAMES.index(stop)
+    return [i for i, w in enumerate(sim.writes) if w[2] == 1 and w[3] == dx.A_STOPS
+            and w[4] & bit]
+
+
+@pytest.mark.parametrize("a,b", [("LT", "LC"), ("MT", "MC"), ("HT", "HC"), ("RS", "CL"),
+                                 ("CP", "MA")])
+def test_each_pair_switches_both_ways_and_each_strike_plays_its_own_sound(a, b):
+    import drums_fx as dx
+    note = {snd: n for n, snd in sorted(ms.DRUM_MAP.items(), reverse=True)}
+    presets = __import__("uart_host").image_sound_presets("tree")
+    stop = dx.STOP_NAMES[dx.SOUND_STOP[a]]
+    tom = stop in ("LT", "MT", "HT")
+    for first, second in ((a, b), (b, a)):
+        s, sim, _, clock = session()
+        # 30 ms apart: a tom's 60 ms pitch drop is still pending at the switch
+        play(s, clock, [(0x99, note[first], 100), (0x99, note[second], 100)], dt=0.030)
+        assert not s.refusals
+        edges = strikes(sim, stop)
+        assert len(edges) == 2
+        for snd, edge in zip((first, second), edges):
+            at = drum_image(sim, edge)
+            # the pitch drop retunes a tom's pole pair AT the strike, by design
+            bend = {r for r, _ in presets[snd][:2]} if tom else set()
+            assert all(at.get(r) == v for r, v in presets[snd] if r not in bend), (snd, edge)
+        end = drum_image(sim)
+        if tom:
+            # without the cut, the old drop's last write puts the OLD tuning back
+            for r, v in presets[second][:2]:
+                old = dict(presets[first])[r]
+                assert end[r] == s.mh.image[r] and abs(end[r] - v) < abs(end[r] - old) / 10
+            assert all(end[r] == v for r, v in presets[second][2:])
+            # and between: after the second strike the pole pair carries only the
+            # NEW sound's drop, computed here from the model and its preset
+            mode = {"LT": dx.M_LT, "MT": dx.M_MT, "HT": dx.M_HT}[stop]
+            (a1r, a1), (a2r, a2), (ampr, amp) = presets[second][:3]
+            f0, q = dx.poles_from_regs(a1, a2)
+            drop = {(r, v) for _, r, v in dx.tom_pitch_drop_writes(
+                0, mode, f0, q, amp / float(1 << 15), 0.6 + 0.8 * 99 / 126.0)}
+            after = {(w[3], w[4]) for w in sim.writes[edges[1]:]
+                     if w[2] == 1 and w[3] in (a1r, a2r)}
+            assert after <= drop, (first, second, sorted(after - drop)[:3])
+            assert s.stats["tails_cut"] > 0
+        else:
+            assert all(end[r] == v for r, v in presets[second])
+
+
+def test_a_switch_writes_the_new_position_before_the_stop_edge():
+    presets = __import__("uart_host").image_sound_presets("tree")
+    s, sim, _, clock = session()
+    play(s, clock, [(0x99, 75, 100)])            # CL: the kit loads RS on that circuit
+    assert not s.refusals
+    boot = drum_image(sim, [w[5] for w in sim.writes].index("event"))
+    assert all(boot.get(a) == v for a, v in presets["RS"])
+    at = drum_image(sim, strikes(sim, "CL")[0])
+    assert all(at.get(a) == v for a, v in presets["CL"])
+
+
+def test_the_release_image_refuses_the_alternates_by_name():
+    s, sim, _, clock = session()
+    s.presets, s.position = {}, {}               # the R0 image: 11 sounds, no positions
+    play(s, clock, [(0x99, 37, 100), (0x99, 36, 100)])
+    assert [r.category for r in s.refusals] == ["not-in-image"]
 
 
 def test_raw_midi_input_reads_a_pipe_and_reports_end_of_input():

@@ -87,6 +87,19 @@ REPORT_DIR = ROOT / "fpga/reports/live-midi"
 # frozen R1 target -- named, never MusicHost's silent fallback. The live CLI's
 # default on a serial port is the release image (#273).
 HARNESS_IMAGE = "r1"
+HARNESS_IMAGES = ("r1", "tree")    # `--image`: the two known-state images (#298)
+
+
+def target_kit_and_presets(image: str) -> tuple:
+    """The oracle's expectation for `image`, never through the selector the
+    session under test uses: `r1` is R1's kit and sound table frozen BY VALUE
+    (each refused unless it hashes to R1's digest); `tree` is this tree's model
+    (drums_fx), read directly so an injected selector defect cannot reach it."""
+    if image == "r1":
+        return r1c.frozen_kit(), uh.image_sound_presets("r1")
+    if image == "tree":
+        return dx.kit_808(), {snd: dx.preset_writes(snd) for snd in dx.SOUND_NAMES}
+    raise ValueError(f"no oracle target for image {image!r}")
 RTL_TAIL_S = 0.3
 
 # ---- the oracle's OWN maps (docs/live-midi.md; written here, not imported) ---
@@ -330,17 +343,18 @@ class Oracle:
         # the R1 target is FROZEN (fpga/release/r1_candidate.py), never read
         # from the image selector the session under test was given (plan088):
         # the revision-14 kit by digest, after the known-state preamble
-        assert HARNESS_IMAGE == r1c.HOST_IMAGE, (HARNESS_IMAGE, r1c.HOST_IMAGE)
-        self.mh = sh.MusicHost(patch=dict(self.regs), kit=r1c.frozen_kit())
+        assert HARNESS_IMAGE in HARNESS_IMAGES and r1c.HOST_IMAGE == "r1"
+        kit, self.presets = target_kit_and_presets(HARNESS_IMAGE)
+        self.mh = sh.MusicHost(patch=dict(self.regs), kit=kit)
         self.mh.load(0)
         # the frozen R1 target's sound positions (uart_host.image_sound_presets
         # reads R1's table by value, refused unless it hashes to R1's digest)
-        self.presets = uh.image_sound_presets(r1c.HOST_IMAGE)
-        img = dict(r1c.frozen_kit())
+        img = dict(kit)
         for c, snd in KIT_LOADS.items():
             assert all(img.get(a) == v for a, v in self.presets[snd]), (c, snd)
         self.position = dict(KIT_LOADS)
-        self.sounds: list = []                            # (anchor entry, circuit, sound)
+        self.sounds: list = []                            # (anchor entry, circuit, sound, bend)
+        self.circuit_tail: dict = {}                      # circuit -> its last hit's tail
         self.static = [tuple(w) for w in r1c.PREAMBLE]
         self.static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in self.mh.w]
         for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
@@ -557,9 +571,21 @@ class Oracle:
         image = dict(self.mh.image)
         position = dict(self.position)
         n0 = len(self.mh.w)
+        cut = []
         if name in self.position and self.position[name] != sound:
-            for a, v in self.presets[sound]:            # select the sound, then strike
-                self.mh.drum(0, a, v, tag="select")
+            # the spec (#298): the previous sound's per-hit sequence entries not
+            # yet released at this receipt are cut; released ones land first
+            cut = [x for x in self.circuit_tail.get(name, ()) if self.release(x.due) > t]
+            for x in cut:
+                self.plan.remove(x)
+                self.slots[x.due] -= 1
+                x.cut = True
+            # select the sound, then strike: the registers that differ from the
+            # image, and any a cut sequence left mid-way, in the preset's order
+            dirty = {x.write[2] for x in cut if x.write[1] == 1}
+            for a, v in self.presets[sound]:
+                if a in dirty or self.mh.image.get(a) != v:
+                    self.mh.drum(0, a, v, tag="select")
             self.position[name] = sound
         self.mh.hits([(0, stop, accent_of(e.b))])
         new = self.mh.w[n0:]
@@ -570,15 +596,22 @@ class Oracle:
         # the stop bit's rising edge is the audible instant: it is the head's LAST write
         assert head[-1][2] == dx.A_STOPS
         g = self._group("hit", idx, t)
+        bend = {w.addr for w in new if w.frame == 0 and w.tag == "tom-bend"}
         if not self._schedule(g, head, tail, t, conditional=True):
             self.mh.image = image
             self.position = position
+            for x in cut:
+                self.plan.append(x)
+                self.slots[x.due] = self.slots.get(x.due, 0) + 1
+                x.cut = False
+            self.plan.sort(key=lambda e_: (e_.due, e_.seq))
             refuse("queue-pressure")
             return
         self.strikes[name] = r
         if name in CIRCUITS:
             anchor = next(x for x in g.entries if x.role == "anchor")
-            self.sounds.append((anchor, name, sound))
+            self.sounds.append((anchor, name, sound, bend))
+            self.circuit_tail[name] = [x for x in g.entries if x.role == "tail"]
 
     def _knob(self, idx, t, cc, name, value):
         regs = dict(self.mh.regs)
@@ -615,7 +648,8 @@ class Oracle:
         for i, (e, t) in enumerate(zip(events, times)):
             self.event(i, t, e)
         self._panic(-1, close_t)                          # the session's own cleanup
-        timed = sorted((e for g in self.groups for e in g.entries), key=lambda e: (e.due, e.seq))
+        timed = sorted((e for g in self.groups for e in g.entries
+                        if not getattr(e, "cut", False)), key=lambda e: (e.due, e.seq))
         pos = {id(e): i for i, e in enumerate(timed)}
         anchors = []
         for g in self.groups:
@@ -625,7 +659,7 @@ class Oracle:
                             "due": a.due, "deferred": g.deferred, "pushed": g.pushed})
         return {"static": self.static,
                 "timed": [(e.due, *e.write) for e in timed],
-                "sounds": [(a.due, c, snd) for a, c, snd in self.sounds],
+                "sounds": [(a.due, c, snd, sorted(b)) for a, c, snd, b in self.sounds],
                 "anchors": anchors, "refusals": self.refusals,
                 "superseded": self.superseded}
 
@@ -806,7 +840,7 @@ def check(run: dict, *, target: bool = False) -> dict:
     # #298: at every strike of a shared circuit, the circuit's registers AS
     # EXECUTED are the expected sound's position (a stop pulse alone, or the
     # right number of strikes, proves nothing about WHICH sound played)
-    presets = uh.image_sound_presets(r1c.HOST_IMAGE)
+    presets = target_kit_and_presets(HARNESS_IMAGE)[1]
     img = {a: d for fl, sec, a, d in got_static if sec == 1}
     struck, stops = {}, 0
     for f, _fl, sec, a, d in got:
@@ -819,14 +853,18 @@ def check(run: dict, *, target: bool = False) -> dict:
             stops = d
         img[a] = d
     bad_snd, first_snd = 0, None
-    for due, circ, snd in exp["sounds"]:
+    for due, circ, snd, bend in exp["sounds"]:
         snap = struck.get((due, circ))
-        wrong = snap is None or any(snap.get(a) != v for a, v in presets[snd])
+        # the per-hit pitch drop retunes a tom's pole pair AT the strike, by
+        # design: those registers are excluded; the sound's level, routing and
+        # envelopes (every other register of its position) must be its own
+        keep = [(a, v) for a, v in presets[snd] if a not in bend]
+        wrong = snap is None or any(snap.get(a) != v for a, v in keep)
         if wrong:
             bad_snd += 1
             if first_snd is None:
                 heard = next((x for x in CIRCUITS[circ] if snap is not None and all(
-                    snap.get(a) == v for a, v in presets[x])), None)
+                    snap.get(a) == v for a, v in presets[x] if a not in bend)), None)
                 first_snd = {"frame": due, "circuit": circ, "expected": snd,
                              "executed": heard if snap is not None else "no strike"}
     put("drum_sounds", bad_snd, f"{bad_snd} of {len(exp['sounds'])} shared-circuit strikes "
@@ -1095,8 +1133,12 @@ def _clean(obj):
 
 
 def main(argv=None) -> int:
+    global HARNESS_IMAGE
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--outdir", type=Path, default=REPORT_DIR)
+    ap.add_argument("--image", choices=HARNESS_IMAGES, default=HARNESS_IMAGE,
+                    help="the known-state image the session plays and the oracle "
+                         "expects (default r1, the release target)")
     ap.add_argument("--start-red", action="store_true",
                     help="run the harness against fpga/stubs/midi_session_stub.py")
     ap.add_argument("--rtl", nargs="*", default=None, metavar="SCENARIO",
@@ -1120,6 +1162,9 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true",
                     help="with --control: exit 0 only when it is caught by its own property")
     a = ap.parse_args(argv)
+    HARNESS_IMAGE = a.image
+    if a.image != "r1" and a.json is None:
+        a.outdir = a.outdir / a.image              # never over the release target's record
     a.outdir.mkdir(parents=True, exist_ok=True)
     if a.control:
         c = run_control(a.control)
@@ -1137,7 +1182,7 @@ def main(argv=None) -> int:
     record = {"tool": "fpga/verify_live_midi.py", "trial": "T-LIVE-MIDI",
               "criterion_version": C.CRITERION_VERSION, "timing_contract": C.TIMING_CONTRACT,
               "lookahead_ms": C.LOOKAHEAD_MS, "target": C.LATENCY_TARGET,
-              "stub": a.start_red, "clean": {}, "controls": {}}
+              "image": HARNESS_IMAGE, "stub": a.start_red, "clean": {}, "controls": {}}
     verdicts = []
     for name, kw in (("coverage", {}), ("coverage@65000", {"epoch": 65000}), ("alternates", {}),
                      ("pressure", {}), ("sustained", {"seconds": a.sustained_s})):
