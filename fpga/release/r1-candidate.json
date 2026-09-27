@@ -7,7 +7,6 @@
   "host_image_selector": "--image tree",
   "rtl": {
     "frozen_at": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
-    "moved_since_freeze": [],
     "configuration": {
       "OSC2X": 1,
       "FILTER2X": 1,
@@ -147,7 +146,7 @@
       "fpga/midi_session.py": "e8111ec8e6a517499c6b002d40469a233b1832c7a1479fc81375869be5cfce24",
       "fpga/live_midi_contract.py": "314c45fd0de8ebb3b3169840a56f473b511867bdf1059e02cf8c38a9d8b50ccb",
       "fpga/release/qualified_domain.py": "b554ba57f0b988b98db8cd9b1dddd5607abaf7eaa2f76aebf3c17e9e2008d7fe",
-      "fpga/release/r1_candidate.py": "4f19709b98e3a69150e660c2c6f34989ff03918ed06b18ef4e0344b048e6682c",
+      "fpga/release/r1_candidate.py": "ca8c597c83f2ece84284c3ea5719aaea082acdbe55392bc9847cc7b491076212",
       "fpga/spi_host.py": "c3dabc9bcb09af0db7d71bf262bcd6eba327917060e58135cb3361a1668cdaa6",
       "fpga/fixtures.py": "681a999cba70ce79996fbbbd333b594531af48e9e38def34d83fce5269064a38",
       "fpga/selected_preset.py": "22a9c04087492333d540627a14a9865d3618cb614bc3aa27be7fe499f2899ad1",
