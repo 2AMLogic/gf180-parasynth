@@ -380,6 +380,7 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                            f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
                            dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
                                 best_headroom_db=float(headroom[i])))
+    shapes = {}
     for tag, f in (("low", f_lo), ("high", f_hi)):
         shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
         if not shape["ok"]:
@@ -391,11 +392,29 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                                     line_resid_db=shape["resid_db"],
                                     line_tau_ms=shape["tau_ms"],
                                     line_drop1_db=shape["drop1_db"]))
+        shapes[tag] = shape
     i1 = int(idxs[0])
     balance1 = 20.0 * math.log10(ah[i1] / al[i1])
+    # THE SHAPE EVIDENCE TRAVELS WITH AN ACCEPTED VERDICT TOO, not only with a
+    # refusal (review of #405). `line_is_resolved`'s own docstring tells a reader
+    # to watch the residual against its tolerance -- the margin is 1.29x on the
+    # worst real partial measured -- and a verdict that records the number only
+    # when it fails cannot show that margin moving. The gate's value is recorded
+    # beside the two residuals so the pair is readable without going to look up
+    # which default was in force; `max_resid_db` and `n_bins` are still
+    # `partial_trajectory` defaults rather than members of the OP dicts, and
+    # `detail` is not serialised on the accepted path, so the scorecard JSON
+    # still cannot show this (Judge's non-blocking (2)/(3) on PR #405 -- the
+    # remaining half is plumbing `detail` into `diagnostics`, which touches every
+    # metric and is not this change).
     detail = dict(f_lo=f_lo, f_hi=f_hi, t1_ms=float(ts[i1] * 1e3),
                  balance1_db=balance1, headroom1_db=float(headroom[i1]),
-                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)))
+                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)),
+                 lo_resid_db=shapes["low"]["resid_db"],
+                 lo_tau_ms=shapes["low"]["tau_ms"],
+                 hi_resid_db=shapes["high"]["resid_db"],
+                 hi_tau_ms=shapes["high"]["tau_ms"],
+                 line_max_resid_db=shapes["low"]["max_resid_db"])
     later = idxs[ts[idxs] > ts[i1] + min_gap_ms * 1e-3]
     if len(later):
         i2 = int(later[-1])

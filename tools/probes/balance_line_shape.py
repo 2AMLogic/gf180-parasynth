@@ -92,6 +92,7 @@ COMMANDS:
 
     python tools/probes/balance_line_shape.py theory      # closed form; no corpus needed
     python tools/probes/balance_line_shape.py synthetics  # signals whose answer is chosen
+    python tools/probes/balance_line_shape.py fixture     # the guard-burst amplitude sweep
     python tools/probes/balance_line_shape.py noise [N]   # N white-noise seeds, both OPs
     python tools/probes/balance_line_shape.py records      # the four real records
     python tools/probes/balance_line_shape.py survey [N]   # records vs noise, all candidates
@@ -101,8 +102,9 @@ COMMANDS:
 `records`, `survey`, `margin` and `sweep` need the Fischer corpus (tidalcycles/sounds-tr808-fischer)
 at $GF180_TR808_REFS / $TR808_REFS / /tmp/tr808-ref and REFUSE without it.
 
-WRONG BEFORE IT WAS RIGHT (5, every one caught by a measurement rather than by
-inspection -- the rate a reader should calibrate the tables above against):
+WRONG BEFORE IT WAS RIGHT (6 -- five caught by a measurement rather than by
+inspection, the sixth by review; the rate a reader should calibrate the tables
+above against):
 
   1. The direction of the peak test, item 1. Written the way #389 suggested it,
      the gate refuses all four real records and passes noise.
@@ -127,6 +129,18 @@ inspection -- the rate a reader should calibrate the tables above against):
      `margin` was run. The real numbers were 1.70 and 2.91, so 3.5 would have
      passed white noise. The gate was never wrong in the tree -- the claim about
      it was, for about twenty minutes, in a docstring.
+  6. A PREMISE ASSERTION THAT COULD NOT FAIL, and the one item here found by
+     review rather than by running something (PR #405). The fix above added an
+     asserted premise to `test_balance_trajectory_db_excludes_a_point_below_the_
+     floor` -- written precisely because that fixture had violated its premise in
+     prose for its whole first life -- and set its bar at -`floor_margin_db`,
+     -6 dB. Every amplitude in the `fixture` table clears -6 dB, INCLUDING the
+     5.0 the shape gate refuses and which the assertion was written to reject.
+     The bar was off by the ~20 dB between the floor gate's sensitivity and the
+     shape gate's; what actually failed at 5.0 was the estimator's own verdict.
+     An assertion that cannot fail on the case it names is the `failure-modes.md`
+     pattern one level up: rigorous in form, and not a check. `fixture` exists
+     because the bar now has to be read off a measurement.
 
 """
 import math
@@ -321,6 +335,73 @@ def cmd_synthetics(argv):
         print(f"    {name:34s} {fmt(vals, t_fit, shipped)}{mark}")
     print(f"\n    {len(cases) - bad} of {len(cases)} as chosen.")
     return 1 if bad else 0
+
+
+def cmd_fixture(argv):
+    """The guard-burst amplitude sweep behind
+    `test_balance_trajectory_db_excludes_a_point_below_the_floor`, and the bar
+    that test's premise assertion is set from. No corpus needed.
+
+    The fixture's premise is that the burst "raises the floor at the guard and
+    nowhere else". THE QUANTITY THAT DECIDES THAT IS NOT THE FLOOR MARGIN. The
+    first version of the assertion compared the burst's spill onto each partial
+    against -`floor_margin_db` (-6 dB) and passed at every amplitude in this
+    table, including the 5.0 the fixture was written with and which the shape
+    gate REFUSES -- an assertion that reads like a precondition and holds
+    whatever the fixture does (Judge, PR #405). The gate that actually notices
+    the contamination is the LINE SHAPE, and it notices it about 20 dB below the
+    floor margin, so the bar has to come from this sweep:
+
+        `spill` is the burst alone at the partial's own frequency, in dB re the
+        partial alone, both projected over the burst's own 20 ms; `resid` is
+        `line_is_resolved`'s RMS dB residual on the low line of the summed
+        record (gate 2.2 dB); `t1` is what the estimator reports.
+
+    Read the `resid` column against 2.2 dB and the `spill lo` column beside it:
+    the largest spill the shape gate still accepts is about -28 dB, i.e. four to
+    five dB quieter than the floor-margin bar would have allowed and 14 dB
+    quieter than the old fixture. That measured edge is `SPILL_BAR_DB` in the
+    test, and the test carries the 5.0 row as the control that the bar is not
+    vacuous."""
+    n = int(0.060 * SR)
+    t = np.arange(n) / SR
+    op = RC.RS_BALANCE_OP
+    kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+    two = damped(460.0, 0.020, 1.0, n, SR, 0.3) + damped(1800.0, 0.020, 1.0, n, SR, 1.9)
+    m = int(0.020 * SR)
+    clean = RC.balance_trajectory_db(two, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+    print(f"guard {kw['guards'][0]:.0f} Hz burst over the first 20 ms of the "
+          f"two-partial fixture, {SR} Hz.")
+    print(f"clean (no burst): t1 {clean.detail['t1_ms']:.1f} ms, "
+          f"resid {PT.line_is_resolved(two, SR, 460.0, seconds=op['t_end'])['resid_db']:.2f} dB")
+    print(f"    {'A':>5s} {'spill lo':>9s} {'spill hi':>9s} {'resid lo':>9s} "
+          f"{'resid hi':>9s} {'t1':>9s}")
+    for amp in (0.4, 0.5, 0.6, 0.75, 1.0, 5.0):
+        burst = amp * np.sin(2 * math.pi * kw["guards"][0] * t) * (t < 0.020)
+        dirty = two + burst
+        spill = {}
+        for f in (460.0, 1800.0):
+            spill[f] = 20.0 * math.log10(PT.project(burst[:m], f, SR)
+                                         / PT.project(two[:m], f, SR))
+        # the lines the ESTIMATOR reads, not the nominal ones, so `resid` is the
+        # number the gate actually scored on this record
+        r = {}
+        for tag, rng in (("lo", op["f_lo_range"]), ("hi", op["f_hi_range"])):
+            f = PT.find_partial(dirty, SR, *rng, seconds=op["t_end"])
+            r[tag] = PT.line_is_resolved(dirty, SR, f, seconds=op["t_end"])
+        e = RC.balance_trajectory_db(dirty, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+        t1 = f"{e.detail['t1_ms']:.1f} ms" if e.ok else "REFUSED"
+        print(f"    {amp:5.2f} {spill[460.0]:9.1f} {spill[1800.0]:9.1f} "
+              f"{r['lo']['resid_db']:9.2f} {r['hi']['resid_db']:9.2f} {t1:>9s}")
+    floor_margin = __import__("inspect").signature(
+        RC.balance_trajectory_db).parameters["floor_margin_db"].default
+    print("\n    dB re the partial at the same frequency, so a MORE NEGATIVE spill")
+    print("    is a quieter burst. The floor margin the premise assertion used to")
+    print(f"    be set from is -{floor_margin:.0f} dB, which EVERY row above clears, "
+          "including")
+    print("    the 5.00 the shape gate refuses -- which is why the bar is read off")
+    print("    the resid column instead.")
+    return 0
 
 
 def cmd_noise(argv):
@@ -590,9 +671,9 @@ if __name__ == "__main__":
     rest = sys.argv[2:]
     try:
         sys.exit({"theory": cmd_theory, "synthetics": cmd_synthetics,
-                  "noise": cmd_noise, "records": cmd_records,
-                  "survey": cmd_survey, "sweep": cmd_sweep,
-                  "margin": cmd_margin}[cmd](rest))
+                  "fixture": cmd_fixture, "noise": cmd_noise,
+                  "records": cmd_records, "survey": cmd_survey,
+                  "sweep": cmd_sweep, "margin": cmd_margin}[cmd](rest))
     except Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)

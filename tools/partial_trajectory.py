@@ -194,9 +194,12 @@ def line_is_resolved(x, sr, f, *, seconds, n_bins=6, max_resid_db=2.2):
     is thin, it rests on 8 real partials, and `margin` is the command to re-run
     before trusting this gate on a fifth record or a third voice.
 
-    Returns dict(ok, tau_ms, resid_db, drop1_db, n_points, reason). This is a
-    PRECONDITION, so the reason names what failed and `ok=False` is REFUSED
-    rather than a verdict.
+    Returns dict(ok, tau_ms, resid_db, drop1_db, n_points, max_resid_db, reason).
+    This is a PRECONDITION, so the reason names what failed and `ok=False` is
+    REFUSED rather than a verdict. `max_resid_db` is echoed back because the
+    residual is only readable against the tolerance that scored it, and callers
+    that record the one (`run_case.balance_trajectory_db`'s `detail`) should not
+    have to re-derive the other from this signature.
 
     Ground truth: test_line_is_resolved_passes_a_damped_mode_at_every_tau,
     test_line_is_resolved_refuses_white_noise,
@@ -206,10 +209,11 @@ def line_is_resolved(x, sr, f, *, seconds, n_bins=6, max_resid_db=2.2):
     drop1 = tuple(float(v) for v in drops[:2])
     if not (p0 > 0):
         return dict(ok=False, tau_ms=math.inf, resid_db=math.inf, drop1_db=drop1,
-                    n_points=0, reason=f"no energy at all at {f:.1f} Hz")
+                    n_points=0, max_resid_db=float(max_resid_db),
+                    reason=f"no energy at all at {f:.1f} Hz")
     fit = _lorentzian_fit(ds, drops)
     out = dict(tau_ms=fit["tau_ms"], resid_db=fit["resid_db"], drop1_db=drop1,
-               n_points=fit["n_points"])
+               n_points=fit["n_points"], max_resid_db=float(max_resid_db))
     if not fit["ok"]:
         return dict(ok=False, reason=fit["reason"], **out)
     if not (fit["tau_ms"] * 1e-3 < seconds):

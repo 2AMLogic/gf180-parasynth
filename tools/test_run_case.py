@@ -344,20 +344,42 @@ def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     not look like an isolated mode, so there was nothing there to take a verdict
     from.
 
-    So the premise is now a pair of assertions rather than a sentence, and the
-    amplitude was SWEPT rather than guessed (0.4, 0.5, 0.6, 0.75, 1.0, 5.0):
+    So the premise is now assertions rather than a sentence, and the amplitude
+    was SWEPT rather than guessed -- `balance_line_shape.py fixture` is the
+    sweep, so this table is a command and not a transcription:
 
-        A      t1     spill onto 460 Hz   shape residual   headroom at 3 ms
-        0.4   3.0 ms        -36.5 dB        1.09 dB           +6.7 dB
-        0.6  21.0 ms        -33.0 dB        1.42 dB           +3.1 dB
-        1.0  21.5 ms        -28.6 dB        2.07 dB           -1.3 dB
-        5.0  REFUSED        -14.6 dB        4.15 dB          -15.3 dB
+        A      t1     spill onto 460 Hz   shape residual lo / hi
+        0.4   3.0 ms        -36.5 dB        1.09 dB   0.31 dB
+        0.6  21.0 ms        -33.0 dB        1.42 dB   0.32 dB
+        1.0  21.5 ms        -28.6 dB        2.07 dB   0.39 dB
+        5.0  REFUSED        -14.6 dB        3.72 dB   1.56 dB
 
     0.4 is too quiet to raise the floor past the estimator's own 6 dB gate at
     all, so the fixture stops testing anything; 1.0 leaves the shape residual
     within 6 % of the gate's 2.2 dB tolerance, which is a flake waiting to
     happen. 0.6 is 2.9 dB inside the floor gate and 1.55x inside the shape gate.
-    5.0 bought nothing this test asserts and cost the premise it claims."""
+    5.0 bought nothing this test asserts and cost the premise it claims.
+
+    WHERE THE PREMISE BAR COMES FROM, which is the review finding on PR #405 and
+    the reason this docstring changed. The first version of the assertion
+    compared the burst's spill onto each partial against -`FLOOR_MARGIN_DB`
+    (-6 dB) -- and EVERY row of that table clears -6 dB, including the 5.0 the
+    gate refuses. It was a precondition that read stronger than it was: it could
+    not fail on the drift it was written to catch, and what actually failed at
+    5.0 was `contaminated.ok`. The floor margin is the wrong scale because the
+    gate that notices this contamination is the LINE SHAPE, and the sweep above
+    puts its sensitivity about 20 dB below the floor margin: the largest spill
+    whose residual still fits inside 2.2 dB is near -28 dB (1.0 reads 2.07 at
+    -28.6 dB; interpolating the two rows either side puts the crossing at
+    -27.8 dB). `spill_bar_db = -30.0` is 2 dB inside that measured edge and
+    3.0 dB clear of the shipping fixture's -33.0, the 5.0 case is carried below
+    as the control that the bar is not vacuous, and "nowhere else" is asserted at
+    the HIGH partial as a residual rather than as a spill -- because 1000 and
+    1800 Hz are both whole numbers of cycles over the burst's own 20 ms, so a
+    projection of the burst at 1800 Hz is exactly orthogonal to it and reads
+    -316 dB whatever the amplitude. A spill assertion there would be vacuous by
+    construction; the residual is not (0.319 dB clean, 0.323 with the burst,
+    1.56 at 5.0)."""
     tau, a_lo, a_hi = 0.020, 1.0, 1.0
     x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
     clean = rc.balance_trajectory_db(x, SR, *RS_TEST_RANGES, **RS_TEST_OP)
@@ -368,25 +390,55 @@ def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     burst = 0.6 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
     dirty = x + burst
 
-    # THE PREMISE, ASSERTED: the burst dominates the guard it is meant to raise,
-    # and is well under the floor margin at BOTH partials -- "there, and nowhere
-    # else". Without this the fixture can drift back to contaminating the very
-    # thing it claims to leave alone, which is how it spent its first life.
-    for f, tag in ((460.0, "low"), (1800.0, "high")):
-        partial = pt.project(x[: int(0.020 * SR)], f, SR)
-        spill = pt.project(burst[: int(0.020 * SR)], f, SR)
-        assert 20.0 * math.log10(spill / partial) < -FLOOR_MARGIN_DB, (
-            f"the burst spills onto the {tag} partial at {f} Hz to within "
-            f"{20*math.log10(spill/partial):.1f} dB of it: this fixture is then "
-            f"contaminating the partials, not only the guard")
-    at_guard = pt.project(burst[: int(0.020 * SR)], guard_hz, SR)
-    assert at_guard > pt.project(x[: int(0.020 * SR)], guard_hz, SR) * 10.0, \
+    # THE PREMISE, ASSERTED, at the scale the SHAPE gate works on rather than at
+    # the floor margin -- see the docstring: a -6 dB bar here passes on the 5.0
+    # fixture it exists to reject, so it could not have caught the drift it was
+    # written for. -30 dB is 2 dB inside the measured edge of the shape gate's
+    # own sensitivity (`balance_line_shape.py fixture`).
+    spill_bar_db = -30.0
+    m = int(0.020 * SR)
+    partial_lo = pt.project(x[:m], 460.0, SR)
+    spill_lo_db = 20.0 * math.log10(pt.project(burst[:m], 460.0, SR) / partial_lo)
+    assert spill_lo_db < spill_bar_db, (
+        f"the burst spills onto the low partial at 460 Hz at {spill_lo_db:.1f} dB "
+        f"re that partial, past the {spill_bar_db:.0f} dB this fixture is allowed: "
+        f"it is then contaminating the partial, not only the guard")
+    # AND THE CONTROL THAT THE BAR IS NOT VACUOUS (verification-rules.md rule 2):
+    # the 5.0 burst this fixture was written with must FAIL it. The -6 dB bar this
+    # replaces passed at 5.0 -- an assertion that holds whatever the fixture does
+    # is documentation, not a precondition.
+    old_burst = 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    old_spill_db = 20.0 * math.log10(pt.project(old_burst[:m], 460.0, SR) / partial_lo)
+    assert old_spill_db > spill_bar_db, (
+        f"the 5.0 burst spills onto the low partial at {old_spill_db:.1f} dB and the "
+        f"bar is {spill_bar_db:.0f} dB: the bar no longer rejects the fixture this "
+        f"test spent its first life with, so it is not guarding anything")
+    assert old_spill_db < -FLOOR_MARGIN_DB, (
+        "and this is why the bar is NOT the floor margin, pinned as code rather "
+        "than left in prose: the 5.0 fixture clears -6 dB comfortably, so an "
+        "assertion set from the floor margin cannot fail on it (review of #405)")
+    at_guard = pt.project(burst[:m], guard_hz, SR)
+    assert at_guard > pt.project(x[:m], guard_hz, SR) * 10.0, \
         "the burst must be what sets the floor at the guard, or this tests nothing"
 
     contaminated = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
     assert contaminated.ok, contaminated.reason
     assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
     assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
+    # "THERE, AND NOWHERE ELSE" AS A NUMBER: the burst moves the guard's floor by
+    # >20 dB (asserted above) and the LOW line's shape residual by ~0.95 dB, and
+    # leaves the HIGH line's alone to within 0.005 dB. Read off the accepted
+    # verdict's own detail, which is why those fields exist on this path.
+    assert contaminated.detail["hi_resid_db"] == pytest.approx(
+        clean.detail["hi_resid_db"], abs=0.05), (
+        "the burst was supposed to leave the high partial's line shape alone; it "
+        f"moved from {clean.detail['hi_resid_db']:.3f} to "
+        f"{contaminated.detail['hi_resid_db']:.3f} dB")
+    assert contaminated.detail["lo_resid_db"] > clean.detail["lo_resid_db"] + 0.5, (
+        "the burst must actually reach the low partial's neighbourhood, or the "
+        "spill bar above is satisfied by a fixture that does nothing")
+    assert (contaminated.detail["lo_resid_db"]
+            < contaminated.detail["line_max_resid_db"])
 
 
 def test_rs_guards_sit_clear_of_the_strikes_own_broadband_splash():
@@ -574,14 +626,44 @@ def test_line_is_resolved_passes_a_damped_mode_at_every_tau():
 def test_line_is_resolved_refuses_white_noise():
     """The other side of the same gate, at the unit rather than the estimator.
 
-    16 seeds at both operating points' windows, because a precondition that
+    8 seeds at both operating points' windows, because a precondition that
     holds on most records is not a precondition. The reason must name the
     statistic and its tolerance, so a reader of a REFUSED verdict can tell
-    whether the record was nearly a partial or nowhere near one."""
+    whether the record was nearly a partial or nowhere near one.
+
+    WHY 8 AND NOT THE 16 THIS WAS WRITTEN WITH, and why the record is no longer
+    3x the window (review of PR #405 -- this test cost 81 s of a 600 s CI budget
+    and took `make verify-fast`'s first pytest bundle over it):
+
+      - The cost is `find_partial`, and it is grid x samples: 4800 grid points
+        (240 Hz at df=0.05) against `seconds` of record, twice per seed. At the
+        cowbell's 600 ms window that is 138 M complex projections per seed, and
+        it is ~90 % of this test's wall clock. Halving the seeds halves it;
+        measured 81.2 s -> 40.6 s on an 8-vCPU worker.
+      - The 3x record length was NOT where the time went, which is worth
+        recording because it was the first hypothesis. `find_partial` and
+        `line_offsets` both slice `x[: int(seconds * sr)]`, so the last two
+        thirds of the record were never read: dropping the multiplier leaves the
+        analysed samples BIT-IDENTICAL (asserted in this test) and saves only the
+        RNG draw, about 1 ms.
+      - Seeds 1000..1007 are the same eight records the 16-seed version tested
+        first, at the same two windows, so this is a strict subset of what was
+        green and not a re-roll onto easier draws. The estimator-level test keeps
+        its 8 seeds per operating point, which is where #389's acceptance
+        criterion put the >=8 requirement.
+
+    8 seeds x 2 windows is still 16 independent noise records, every one of which
+    must be refused; the gate's null distribution is characterised over 96
+    partials in `balance_line_shape.py margin`, not here."""
     for seconds in (RS_TEST_OP["t_end"], rc.CB_BALANCE_OP["t_end"]):
-        for seed in range(16):
-            x = 0.01 * np.random.default_rng(1000 + seed).standard_normal(
-                int(3.0 * seconds * SR))
+        n_read = int(seconds * SR)
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(1000 + seed).standard_normal(n_read)
+            # the slice both functions below actually read, so "shortening the
+            # record changed nothing" is asserted rather than reasoned about
+            assert len(x) == n_read
+            assert np.array_equal(x, 0.01 * np.random.default_rng(
+                1000 + seed).standard_normal(int(3.0 * seconds * SR))[:n_read])
             f = pt.find_partial(x, SR, *RS_TEST_RANGES[0], seconds=seconds)
             r = pt.line_is_resolved(x, SR, f, seconds=seconds)
             assert not r["ok"], (
