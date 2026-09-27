@@ -270,7 +270,7 @@
     "modes": {
      "sim": "R0 host bytes (--image release, the default) through the current tree's RTL: a compatibility test, never a claim about the R0 image",
      "r1": "the R1 candidate's bytes (--image r1) against the frozen R1 target",
-   "r2": "R2's bytes (--image r2, equal to R1's) through the RTL in R2's configuration (PULSE2X=1)"
+     "r2": "R2's bytes (--image r2, equal to R1's) through the RTL in R2's configuration (PULSE2X=1)"
     }
    },
    "dag_nodes": ["I1", "I2"],
