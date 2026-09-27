@@ -13,6 +13,9 @@ due frame.
 | `fpga/verify_live_midi.py` | the independently built expected schedule, twelve properties, three controls, RTL replay |
 | `fpga/sweep_live_midi.py` | the lookahead / reserve / redundant-write sweep that chose the lookahead |
 | `fpga/test_midi_session.py` | unit tests |
+| `fpga/coremidi_input.py` | the macOS MIDI input (CoreMIDI through ctypes, #322) |
+| `fpga/test_coremidi_input.py` | its tests: hardware-free, plus two Mac-only tests through a virtual source |
+| `fpga/measure_mac_midi_latency.py` | Mac host scheduling latency on the contract's endpoints (#322) |
 | `fpga/reports/live-midi/` | evidence: `verification.json`, `start-red.log`, `sweep.json`, RTL captures and receipts |
 
 ## Start command
@@ -39,7 +42,8 @@ device, for example `--port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0`. **It has
 not been exercised on a board.** Hardware MIDI-to-audio latency is a later
 capture measurement with its own endpoints (plan087 section 8). `--midi-in -`
 reads raw MIDI bytes from stdin. The raw input uses only the standard library
-(`os`, `select`); no MIDI package is required.
+(`os`, `select`), and no MIDI package is required. On macOS, use
+`--midi-in coremidi:<name>` (next section).
 
 **The image decides the kit (#273).** The drum kit in the known state is a
 property of the Arty image on the board, not of the tree the session runs
@@ -51,6 +55,154 @@ tree (the R1 candidate, `fpga/release/R1.md`). `--port sim` is this tree's devic
 `--port sim --image release` is REFUSED before anything is opened. The frozen
 kit refuses (`KitRefused`) if it no longer hashes to the image it was verified
 with. `fpga/test_midi_image_kit.py` holds all of this, with controls.
+
+## macOS: a USB controller through CoreMIDI (#322)
+
+`--midi-in coremidi:<source name>` reads a CoreMIDI source, such as the
+operator's Novation Launchkey 37 over USB. `--list-midi-ports` lists the
+sources. The adapter is `fpga/coremidi_input.py`. It calls the CoreMIDI
+system framework through `ctypes`, so it needs no package and nothing changes
+in `spec/trial-environment.json`, on the build box or in CI.
+
+The adapter is only an input. It hands the received bytes to the same
+`MidiSession.feed` as the raw and scripted inputs, and through the same
+`read(timeout)` shape. It filters no channel and parses nothing. Routing
+(channel 1 voice, channel 10 drums), every refusal and all scheduling stay the
+session's, and T-LIVE-MIDI is still their source of truth.
+
+- **Selection is by name.** An exact display name wins. Otherwise one unique
+  case-insensitive substring is accepted. The adapter never guesses; each of
+  these is **REFUSED** (exit 2), listing the sources that do exist:
+  - two or more matches;
+  - no match;
+  - no sources at all;
+  - an offline source (CoreMIDI remembers it but the device is gone).
+
+  The MIDI input is opened before any serial port or simulated device, so a
+  missing controller refuses before anything is sent.
+- **Unplugging mid-session:** everything received before the loss is still
+  played. Then the session closes with its PANIC (GATE_OFF, stops cleared),
+  prints `ERROR -- the MIDI input was lost mid-session (...)` on stderr and
+  exits 1. The adapter detects the loss from CoreMIDI's setup notifications
+  and a 100 ms re-check of the endpoint (removed, or `offline`). A raw device
+  whose read fails (`OSError`) is handled the same way. Before #322 that
+  escaped `run_live` with no panic.
+- **Receipt time** is the host monotonic clock in CoreMIDI's read callback.
+  That is the latency endpoint's start: "the instant the session's MIDI input
+  hands the message over".
+- `--echo-midi` prints every chunk of bytes received, with its receipt time.
+  At exit the CLI prints `accepted events by kind {...}`.
+- CoreMIDI may deliver several messages in one packet: it did so on macOS
+  26.5 for back-to-back sends. The session's parser already accepts any
+  chunking.
+
+Tests (`fpga/test_coremidi_input.py`):
+
+- **Hardware-free**, on the simulated device with a fake CoreMIDI backend:
+  - naming and selection;
+  - the refusals;
+  - a missing port refusing before any device opens;
+  - all 16 channels reaching the session byte for byte (1 and 10 routed,
+    the other 14 refused as `channel`);
+  - a disconnect mid-session (played, then panic, then error);
+  - a raw device's `OSError`;
+  - the CLI's exit 1.
+- **Mac-only** (skipped elsewhere): they drive the real framework through an
+  in-process virtual source, with no controller.
+  - The `MIDIPacketList` layout is checked against CoreMIDI's own encoder.
+  - A control: the other alignment rule must misread it.
+  - Listing, open by name, delivery on channels 1/10/16, and loss after
+    `MIDIEndpointDispose`.
+- **Start red.** Against a mutant `run_live` that does not catch a lost
+  input, the disconnect, raw-`OSError` and channel tests fail with the
+  uncaught loss. Against `origin/main`, the missing-port test fails because
+  a device was opened first.
+
+### Operator smoke procedure (Launchkey 37): NOT YET RUN
+
+A person runs this on the Mac with the controller plugged in. It is not
+claimed until they do. Paste the terminal output and the log into #322.
+
+The live player maps **11 of the 16 808 sounds** (BD, SD, LT, MT, HT, CH, OH,
+CP, CB, CL, CY). Pads that send conga, rimshot or maraca notes (for example GM
+37, the side stick) are refused as `unmapped-drum`. That is expected, and
+#298 tracks it.
+
+Run this on a quiet Mac. The `--port sim` board is a real-time simulation in
+the same process. At a load average around 100 on this laptop, one CoreMIDI
+dry run ended with `FAIL -- device errors ... deadline misses`, and the same
+run at load ~38 exited 0. That is host timing, measured below. It is not a
+MIDI input fault.
+
+From the repository root (zsh, the macOS default shell; the repository's `.venv`):
+
+```
+# 0. the adapter works on this Mac, with no controller (expect 0 skipped)
+.venv/bin/python -m pytest fpga/test_coremidi_input.py -q -rs
+
+# 1. list the sources with the Launchkey plugged in
+.venv/bin/python fpga/midi_session.py --list-midi-ports
+```
+
+Step 1 should list the Launchkey's MIDI port and its DAW port. Use the
+**MIDI** port, not the DAW port, and copy its exact name.
+
+```
+# 2. a 60 s session on the simulated board, driven by the Launchkey
+mkdir -p build
+.venv/bin/python fpga/midi_session.py --port sim \
+    --midi-in "coremidi:<exact MIDI port name from step 1>" \
+    --echo-midi --duration 60 2>&1 | tee build/live-midi-launchkey.log
+echo "exit=${pipestatus[1]}"     # the session's status, not tee's
+```
+
+During the 60 s:
+
+- **Note.** Press and release a key. The log shows
+  `MIDI in ... 90 <note> <vel>` and then `80 <note> ..` (or `90 <note> 00`).
+- **Drum.** Put the pads in Drum mode and hit several. The log shows
+  `MIDI in ... 99 <note> <vel>`: 36 is BD, 38 SD, 42 CH, 46 OH. Pad pressure
+  may add `REFUSED poly-aftertouch`, which is expected.
+- **Knob.** Turn a pot. The log shows `MIDI in ... b0 <cc> <value>`.
+  - If the CC is 74, 71 or 7, it is accepted as a knob event.
+  - Any other CC prints `REFUSED cc-unsupported: CC<n>`. The event arrived,
+    but that CC is unmapped. To exercise a mapped knob, set a pot to CC74 in
+    the Launchkey's custom mode (Novation Components).
+
+At the end, check the log for:
+
+- the line `accepted events by kind {...}`, with `note-on`, `note-off` and
+  `hit` at least 1, plus `knob` if a mapped CC was used, and `panic: 1`;
+- `device errors 0, drops 0`;
+- `exit=0`.
+
+```
+# 3. unplug: start the same session without --duration, hold a key, pull the USB cable
+.venv/bin/python fpga/midi_session.py --port sim \
+    --midi-in "coremidi:<exact MIDI port name>" --echo-midi 2>&1 | tee build/live-midi-unplug.log
+echo "exit=${pipestatus[1]}"
+```
+
+After step 3, expect:
+
+- `closed (MIDI input lost (... removed ... / ... offline ...))`;
+- `ERROR -- the MIDI input was lost mid-session`;
+- `'panic': 1`;
+- `exit=1`.
+
+```
+# 4. Mac host latency on a quiet machine (refuses if the load average > CPU count)
+.venv/bin/python fpga/measure_mac_midi_latency.py
+```
+
+The same session was dry-run on this Mac with an in-process virtual keyboard
+instead of the Launchkey (`Parasynth Smoke Keyboard`). It listed the source,
+played two note-ons, a note-off, three hits and a CC74 knob. It refused GM 37,
+CC21, poly aftertouch and channel 3 by name, and exited 0 at load ~38. On an
+unplug (`MIDIEndpointDispose`) it printed the explicit error and exited 1.
+Asking for `coremidi:Launchkey` with no Launchkey attached was REFUSED
+(exit 2), listing the two sources present. That is evidence for the adapter
+and the CLI, **not** for the Launchkey.
 
 ## Conventional defaults (chosen by the owner, per plan087 section 8)
 
@@ -207,6 +359,69 @@ Outside the declared load:
 - **pressure:** max 17.6 ms for what was admitted. 193 note-ons and hits were
   refused. Superseded knob values reached the device within p95 18.0 ms.
 
+### Mac host scheduling (#322): measured on a LOADED laptop
+
+`fpga/measure_mac_midi_latency.py` separates the host from UART and device
+timing:
+
+- **Real:** the session and `run_live` loop run on this Mac's scheduler and
+  wall clock. The CoreMIDI adapter feeds them from an **in-process virtual
+  source** that plays the declared load (`sustained`, seed 281, 20 s) in
+  real time.
+- **Modelled:** the UART and the device are the contract model
+  (`SimSerial` evaluated on the wall clock, with no pty and no thread).
+  USB, the FTDI bridge and the board belong to the hardware capture.
+
+It reports four measurements:
+
+- **endpoint:** receipt → applied, on the device's own timeline, using the
+  contract's endpoints. A superseded knob value starts at its own receipt.
+- **host hold:** receipt → the anchor packet written.
+- **lateness:** each packet's write time minus its planned release
+  (due − 16 ms). This is the number the host alone decides.
+- **delivery:** CoreMIDI's own hand-off, which comes before the endpoint's
+  start and is not in the target.
+
+How the apparatus is checked:
+
+- **Known answer.** On simulated time its endpoint distribution equals
+  `verify_live_midi.check()`'s to 1e-9 (n, min, p50, p95, p99, max).
+  `check()` pairs through the independent oracle.
+- **Control.** One 25 ms send-loop stall must turn `on_time` red. It does, and
+  deterministically on simulated time (`fpga/test_measure_mac_midi_latency.py`).
+- **Load precondition.** The tool REFUSES when the 1-minute load average
+  exceeds the CPU count, unless `--allow-loaded` labels the result.
+
+**No quiet-machine measurement exists yet.** Both runs below were on the
+development laptop (M-series, 10 CPUs, macOS 26.5.1) while other agents'
+jobs held it at a load average far above its CPU count, so they are
+**LOADED-host** results. The quiet-Mac run is step 4 of the smoke procedure.
+
+| run (`fpga/reports/live-midi/`) | load (1 min) | lateness p50 / p95 / p99 / max | deadline misses | endpoint p50 / p95 / p99 / max | CoreMIDI delivery p50 / p99 / max |
+|---|---|---|---|---|---|
+| `mac-host-latency-run1.json` | 80 | 0.56 / 4.33 / **27.15** / 36.72 ms | 49 | 16.13 / **22.79** / **32.63** / 45.40 ms | 0.05 / 1.25 / 57.9 ms |
+| `mac-host-latency-run2.json` | 30 | 0.46 / 2.00 / 4.97 / 14.37 ms | 8 | 16.10 / 19.75 / 20.88 / 21.31 ms | 0.05 / 0.47 / 1.53 ms |
+
+Against the frozen target (p95 ≤ 20 ms, p99 ≤ 30 ms):
+
+- **Run 1 fails** both percentiles.
+- **Run 2 meets** both percentiles, but `on_time` fails: 8 packets missed
+  their frame.
+- **Neither is a clean result, for two reasons:**
+  - A packet sent more than about 15 ms late misses its frame. On this
+    loaded laptop the p99 lateness reached 27 ms.
+  - The device **model** holds a late event for a full counter revolution
+    and drops what queues behind it (#329, model defect, RTL unverified).
+    The anchors after a miss (114 in run 2, 205 in run 1) have no executed
+    write and are excluded as `anchors_unpaired`, so the endpoint
+    percentiles cover the paired anchors only.
+- **The host-only numbers (lateness, hold, delivery) are the result.** The
+  endpoint numbers are context.
+- **The load bursts.** The in-process player also runs on the loaded
+  scheduler, so its sends bunch together. That defers knob updates behind
+  the 10 ms knob rate: knob max 21.3 ms in run 2, where the simulator's
+  whole distribution ended at 17.04 ms.
+
 ## Verification
 
 ```
@@ -333,6 +548,31 @@ before publishing it. One was caught by actually running the start command:
    read, and every deterministic test passed. A real-time pty delivers four,
    and `Bridge._take` counted only the first of each chunk.
 
+### Wrong-then-right, #322 (Mac input and host latency)
+
+Four more, all caught before publishing:
+
+8. **One packet per send.** The Mac loopback test assumed one CoreMIDI
+   packet per `MIDIReceived`. CoreMIDI coalesced three back-to-back sends
+   into one. The test now compares the byte stream (chunking is the parser's
+   job). The test caught it on its first Mac run.
+9. **Real clock through `check()`.** The first latency apparatus ran
+   T-LIVE-MIDI's `check()` on a real-clock run. `check()` assumes one time
+   anchor; a real host re-anchored 34 times, and every frame was unwrapped
+   from the final anchor, giving an "endpoint" p50 of 17.8 **seconds**. The
+   tool now computes the endpoint itself, and is held to `check()`'s numbers
+   on simulated time.
+10. **Greedy pairing.** The second version paired executed writes with sent
+    packets greedily in order. After one dropped packet it consumed the rest
+    of the stream: 3 anchors paired of about 230. It now uses sequence
+    matching. The unpaired count caught it.
+11. **Negative histogram bin.** The stall control crashed `check()` in
+    `_hist` on a negative histogram bin instead of returning a verdict. The
+    control test caught it, and it is reported in #329.
+
+All four were caught by a test, a control or an absurd number before
+anything was published.
+
 ## Known limits
 
 - **USB latency is not modelled.** The FTDI USB path adds delay that the
@@ -342,5 +582,11 @@ before publishing it. One was caught by actually running the start command:
   millisecond generates a pitch return for each release. These are
   unconditional, so they are delivered late (up to 50 ms) rather than refused,
   and each move is counted. The declared load never does this.
+- **The device model mishandles late events (#329).** A late event waits a
+  full counter revolution in `uart_device_sim`. Any host stall long enough
+  to miss a frame therefore costs over a second of dropped events in
+  simulation. What the RTL does is unverified.
+- **The Launchkey itself is unverified.** The smoke procedure above is NOT
+  YET RUN, and the Mac latency has only been measured on a loaded host.
 - **The mod wheel is untested on the release image.** CC1 is refused on the
   default patch; a routed patch is exercised only by a unit test.
