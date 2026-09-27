@@ -270,8 +270,9 @@ lives only in a script is a finding nobody else can use (`CLAUDE.md`).
 
 **LibreLane 3.1.0.dev2.** LibreLane's metrics are cumulative: every step's
 `state_out.json` carries forward every key any earlier step set. The mid-PnR STA
-steps (`OpenROAD.STAMidPNR*`) update the un-suffixed `timing__setup__ws` but **not**
-the `timing__setup__ws__corner:*` keys. So on this run,
+steps (`OpenROAD.STAMidPNR*`) analyse the default corner only: they update the
+un-suffixed `timing__setup__ws` and the `nom_tt_025C_5v00` corner's keys, but **not**
+the other corners' `timing__*__corner:*` keys. So on this run,
 `timing__setup__ws__corner:nom_ss_125C_4v50 = -178.5 ns` is present, byte-identical,
 in all thirty steps after the one that wrote it — `12-openroad-staprepnr`, an
 unplaced, unrouted netlist with an ideal clock.
@@ -286,8 +287,13 @@ fossil; it took diffing the metrics step by step to see it.
   `report_halfslot.worst_setup()` returns "not measured" rather than falling back to
   the nominal-corner key.
 - *Upstream shape*: a step that re-computes a metric family should clear or rewrite
-  the whole family, or the payload should carry the writing step per key. **Not yet
-  filed** — see §7.
+  the whole family, or the payload should carry the writing step per key. **Filed as
+  [librelane/librelane#1040](https://github.com/librelane/librelane/issues/1040).**
+- *Wrong before it was right, while filing*: the first draft of this finding (and of
+  #342) said the mid-PnR steps rewrite **no** per-corner key. The committed evidence
+  (`pnr/shuttle/evidence/halfslot-metrics.json`) shows `…__corner:nom_tt_025C_5v00`
+  rewritten by `42-openroad-stamidpnr-3`; the stale keys are the corners the mid-PnR
+  STA does not analyse. The upstream report states the corrected form.
 
 ### 6.2 `--skip Checker.X` does not remove X from the flow's advertised claims
 
@@ -296,6 +302,11 @@ one's `Checker.*`. The flow then completes with no indication in its own summary
 the skipped checks never ran — the distinction lives only in the invocation. §5 of
 this page exists to carry it, which is the same workaround shape `CLAUDE.md` records
 for `klt` placing no PDN without saying so.
+
+- **Not filed — declined as a reporting preference, not a defect.** The skip is an
+  explicit instruction on the command line, and the flow does what it was told. What
+  is missing is a line in the summary, which is a request, not a bug, and this page
+  already carries the equivalent in §5. Recorded under #342.
 
 ### 6.3 gf180mcu's default `ciel` library set omits the pad library
 
@@ -306,6 +317,12 @@ minutes in with an opaque Tcl `no files matched glob pattern` from
 asserts the pad library's presence up front and REFUSES; `bootstrap-pdk` installs with
 `-l all`. The same glob also swallows a pad library predating `*__blackbox_pp.v`.
 
+- **Not filed — declined as configuration/documentation, not a defect.** `ciel enable`
+  installing only the standard cells by default is a documented choice, and the fix
+  on our side (`-l all`, plus the up-front REFUSE) is complete. The opaque glob error
+  is a usability gap in the PDK's `libs.tech/librelane/config.tcl`, not a wrong
+  result. Recorded under #342.
+
 ### 6.4 `DRT-0349`: `LEF58_ENCLOSURE with no CUTCLASS is not supported`
 
 **OpenROAD 2026-02-17, gf180mcuD tech LEF.** The detailed router prints this for
@@ -313,6 +330,31 @@ asserts the pad library's presence up front and REFUSES; `bootstrap-pdk` install
 run proceeds. A skipped enclosure rule is a rule the router is not honouring, so the
 router's own violation count is an *under*-count against sign-off by an unknown
 amount — which is a further reason §5's "no sign-off DRC" caveat is not a formality.
+
+- **Not re-filed — already reported upstream.** The same warning for the same via
+  layers (on sky130) is
+  [librelane/librelane#550](https://github.com/librelane/librelane/issues/550) (open,
+  migrated from efabless/openlane2#550, 2024). The maintainers' position there is that
+  the PDK is correct and OpenROAD does not support the rule form, and it was taken to
+  [OpenROAD discussion #5839](https://github.com/The-OpenROAD-Project/OpenROAD/discussions/5839).
+  A duplicate would add nothing.
+
+### 6.5 The detailed router spends hours on iterations that improve nothing
+
+**OpenROAD 2026-02-17 via LibreLane 3.1.0.dev2, `DRT_OPT_ITERS = 64`.** On this run,
+the router's violation count reached its final value at iteration 35 and did not
+move again, while the router carried on toward the cap. `guides tiles` iterations
+took seconds; `stubborn tiles` iterations took tens of minutes each, and the time
+kept rising. `FlexDR::main()` exits only on zero markers or the iteration cap
+(checked against OpenROAD `master` `80c6be93c2`). Its `SKIP` flow state does not
+help, because `strategy()` changes the args every iteration.
+
+- *Shape of the fix*: an opt-in stop after K iterations without improvement, or
+  the per-iteration history in the step's metrics so a wrapper can see the plateau.
+- **Filed as
+  [The-OpenROAD-Project/OpenROAD#11537](https://github.com/The-OpenROAD-Project/OpenROAD/issues/11537).**
+  The LibreLane half (surfacing the plateau in the `OpenROAD.DetailedRouting`
+  step's metrics) waits on whatever OpenROAD exposes, and is not filed separately.
 
 <!-- END tool-findings -->
 
@@ -326,7 +368,18 @@ amount — which is a further reason §5's "no sign-off DRC" caveat is not a for
   it (filed as #310). `CLAUDE.md` places work of this size on the pinned build box.
   Nothing about the *numbers* is affected — but the eight-thread router was competing
   with other sweeps for eight cores, and the completing run belongs on the box.
-- **The tool findings in §6 are not filed upstream yet.** §6.1 is the one worth
-  filing; it is a defect shape rather than a configuration mistake.
+- **The tool findings in §6 were filed, or declined with a reason, under #342:**
+
+  | finding | outcome |
+  |---|---|
+  | §6.1 stale per-corner slack | filed, [librelane/librelane#1040](https://github.com/librelane/librelane/issues/1040) |
+  | §6.2 `--skip` absent from summary | declined: reporting preference, not a defect |
+  | §6.3 `ciel` default omits pad library | declined: configuration/documentation |
+  | §6.4 `DRT-0349` | already reported: [librelane/librelane#550](https://github.com/librelane/librelane/issues/550), [OpenROAD discussion #5839](https://github.com/The-OpenROAD-Project/OpenROAD/discussions/5839) |
+  | §6.5 router runs past its plateau | filed, [The-OpenROAD-Project/OpenROAD#11537](https://github.com/The-OpenROAD-Project/OpenROAD/issues/11537) |
+
+  Both direct upstream filings went through `./.loom/scripts/create-issue.sh --repo
+  <owner/repo>` on the first attempt. The `2AMLogic/klayout-tools` canary-sink
+  fallback was not needed.
 
 <!-- generated-from: halfslot step 42-openroad-stamidpnr-3 by pnr/shuttle/report_halfslot.py -->
