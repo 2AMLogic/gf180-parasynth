@@ -54,6 +54,16 @@ and the short band +10.0 dB above the low band. Adopting those is a SECOND
 question, and changing the levels in the same step as the filter shapes would
 make neither answerable. They are recorded here (HH2_PASS_DB, HH3_PASS_DB,
 BP_PEAK_DB) and not applied.
+
+STILL MISSING, AND NOW MEASURED: THE TONE STAGE. Revision 2 has no tone stage
+at all, and `docs/scorecard/cymbal-369/tone-stage/` shows that is why it
+overcorrects. W14b Figure 9 puts every band's path to the output at about
+-20 dB of tilt from 1 kHz to 20 kHz, which very nearly cancels the LEVEL
+stage's +16.6 dB -- and this module applies that +16.6 with nothing against it.
+Candidate 2's residual at CY5025 climbs +24.0 dB across the same span. The
+values are recorded below as TONE_K1 and are NOT applied: the tilt is measured,
+the inter-band balance is not, and moving both at once would again make neither
+answerable.
 """
 from __future__ import annotations
 
@@ -133,6 +143,34 @@ HH3_HZ, HH3_Q = 10323.0, 5.64
 HH3_P1_HZ = 5195.0                       # Hh3's third pole, NOT at its corner
 HH1_PASS_DB, HH2_PASS_DB, HH3_PASS_DB = 0.0, 6.03, 8.86     # recorded, not applied
 BP_PEAK_DB = {"low": 22.95, "high": 24.10}                  # recorded, not applied
+
+# The TONE stage at k = 1.0, from W14b Figure 9 via tools/werner_fig9.py
+# (docs/scorecard/cymbal-369/tone-stage/). Each band's path to the output is a
+# 2-pole band-pass whose poles are both REAL, so each is one RC high-pass
+# cascaded with one RC low-pass. RECORDED, NOT APPLIED -- revision 3's job.
+#
+# Read the two columns separately, because the evidence for them is not the
+# same strength:
+#   * (f0, q) is a SHAPE and is what costs each band about -20 dB from 1 kHz to
+#     20 kHz. That tilt is the measured headline: it nearly cancels the LEVEL
+#     stage's +16.6 dB, which this module applies and the machine does not
+#     apply alone.
+#   * `peak_db` is the inter-band BALANCE and is NOT resolved. Figure 9 plots
+#     Ht1 on a 4 dB axis and Ht2 on a 3 dB axis, so neither is plotted in the
+#     cymbal's band; their 7.1 kHz values carry an 18 dB and a 9 dB bound.
+#     Applying these three peak levels as if they were circuit values is the
+#     mistake this comment exists to prevent.
+TONE_K1 = {
+    "low":   {"f0": 274.4, "q": 0.383, "peak_db": -26.44,
+              "poles_hz": (127.7, 589.5), "plotted_hz": (121.0, 563.8)},
+    "decay": {"f0": 972.0, "q": 0.450, "peak_db": -15.12,
+              "poles_hz": (609.9, 1549.0), "plotted_hz": (561.6, 1640.1)},
+    "short": {"f0": 783.3, "q": 0.409, "peak_db": -22.09,
+              "poles_hz": (406.0, 1511.2), "plotted_hz": (20.0, 19905.4)},
+}
+# Ht3 is the one path plotted across the whole axis; this is its own measured
+# tilt over 2-20 kHz, against the LEVEL stage's +16.6 dB from Figure 10.
+TONE_TILT_2K_20K_DB = -17.7
 P_CYS, P_CYD, P_CYL = 20, 21, 22                             # indices in kit_808's path list
 P_CYH3 = 23
 

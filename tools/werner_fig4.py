@@ -305,7 +305,12 @@ def gridlines(polylines, box):
     Tick *labels* give the value but not the position -- a `Td` is a glyph
     baseline, offset from the tick by most of a cap height, which read the
     axis 1.4 dB low the first time this was written. The grid lines are the
-    tick positions exactly."""
+    tick positions exactly.
+
+    Only lines that lie inside THIS box count. Figure 4 has one axes box and
+    the filter is a no-op there; Figure 9 has three stacked sub-plots sharing
+    one content stream, and without it every sub-plot sees all three grids.
+    """
     (bx0, by0), (bx1, by1) = box
     w, h = bx1 - bx0, by1 - by0
     hor, ver = set(), set()
@@ -313,20 +318,29 @@ def gridlines(polylines, box):
         if len(pts) != 2:
             continue
         (x0, y0), (x1, y1) = pts
-        if abs(y0 - y1) < 1e-6 and abs(x1 - x0) > 0.9 * w:
+        if (abs(y0 - y1) < 1e-6 and abs(x1 - x0) > 0.9 * w
+                and by0 - BOX_TOL <= y0 <= by1 + BOX_TOL):
             hor.add(round(y0, 4))
-        if abs(x0 - x1) < 1e-6 and abs(y1 - y0) > 0.9 * h:
+        if (abs(x0 - x1) < 1e-6 and abs(y1 - y0) > 0.9 * h
+                and bx0 - BOX_TOL <= x0 <= bx1 + BOX_TOL
+                and by0 - BOX_TOL <= min(y0, y1)
+                and max(y0, y1) <= by1 + BOX_TOL):
             ver.add(round(x0, 4))
     return sorted(hor), sorted(ver)
 
 
-def calibrate(polylines, rects, texts):
-    """Axis calibration from the figure's own grid geometry.
+# MATLAB's exporter rounds path coordinates to 1/60 pt in the 0.1-scaled space
+# it emits, so a point that belongs exactly on an axes edge can read 1e-5 pt
+# outside it. A 1e-6 containment test dropped the last 6.5 kHz of every curve
+# in Figure 9's top sub-plot (wrong-then-right #1 of tools/werner_fig9.py).
+BOX_TOL = 0.05
 
-    The value of each tick comes from the text labels; the *position* of each
-    tick comes from the grid lines. Both axes are then re-checked by requiring
-    every other grid line to land on a round value -- ten frequency decades
-    steps and four 10 dB steps that were not used to fit anything.
+
+def axes_boxes(rects):
+    """The figure's plot boxes, largest-area last, page background dropped.
+
+    Figure 4 and Figure 10 have one; Figure 9 has three of equal area. The
+    largest rectangle is always the page/figure background.
     """
     uniq = {(round(r[0][0], 4), round(r[0][1], 4),
              round(r[1][0], 4), round(r[1][1], 4)) for r in rects}
@@ -334,15 +348,39 @@ def calibrate(polylines, rects, texts):
                    key=lambda r: (r[1][0] - r[0][0]) * (r[1][1] - r[0][1]))
     if len(boxes) < 2:
         raise Refused("figure has fewer than two rectangles; no axes box to find")
-    box = boxes[-2]
+    return boxes[:-1]
+
+
+def calibrate(polylines, rects, texts, box=None):
+    """Axis calibration from the figure's own grid geometry.
+
+    The value of each tick comes from the text labels; the *position* of each
+    tick comes from the grid lines. Both axes are then re-checked by requiring
+    every other grid line to land on a round value -- frequency decade steps
+    and whole multiples of the labelled dB step, neither used to fit anything.
+
+    `box` selects the axes for a multi-axes figure. The default reproduces the
+    single-axes behaviour exactly (the second-largest rectangle).
+    """
+    boxes = axes_boxes(rects)
+    if box is None:
+        box = boxes[-1]
     (bx0, by0), (bx1, by1) = box
+    bh = by1 - by0
     hor, ver = gridlines(polylines, box)
 
     # --- y: tick values from the labels, tick positions from the grid -------
+    # A label baseline sits a fraction of a cap height BELOW its tick, so the
+    # bottom-most label of a box falls outside the box. The window below is
+    # generous downward and tight upward for that reason; on Figure 9 the
+    # 35 pt gutter between sub-plots is what keeps it unambiguous, and the
+    # "two labels claim the same grid line" refusal below is what catches it
+    # if it ever is not.
     ylab = sorted({(float(t), p[1]) for t, p in texts
-                   if re.fullmatch(r"-?\d+", t) and p[0] < bx0})
-    if len(ylab) < 3:
-        raise Refused(f"expected at least three y tick labels, found {len(ylab)}")
+                   if re.fullmatch(r"-?\d+", t) and p[0] < bx0
+                   and by0 - 0.15 * bh <= p[1] <= by1 + 0.05 * bh})
+    if len(ylab) < 2:
+        raise Refused(f"expected at least two y tick labels, found {len(ylab)}")
     if len(hor) < len(ylab):
         raise Refused(
             f"{len(ylab)} y tick labels but only {len(hor)} horizontal grid "
@@ -374,22 +412,34 @@ def calibrate(polylines, rects, texts):
         return (np.asarray(y, dtype=float) - intercept) / slope
 
     # The axes box edges are the axis limits and need not be ticks; every
-    # grid line strictly inside it is one.
-    for y in [v for v in hor if by0 + 1e-6 < v < by1 - 1e-6]:
+    # grid line strictly inside it is one, and must land on a whole multiple
+    # of the LABELLED step. Figure 4's step is 10 dB, Figure 9's sub-plots are
+    # 20, 1 and 2 dB, so the step is read off the labels rather than assumed.
+    db_step = float(np.min(np.diff(vals))) if len(vals) > 1 else 10.0
+    # 0.05 dB is what Figure 4's 10 dB step has always been held to; the bound
+    # keeps that, and keeps a 1 dB step from being held to an unreachable
+    # 0.005 dB.
+    db_tol = min(0.05, max(0.005 * abs(db_step), 0.02))
+    for y in [v for v in hor if by0 + BOX_TOL < v < by1 - BOX_TOL]:
         db = float(y_to_db(y))
-        if abs(db - round(db / 10.0) * 10.0) > 0.05:
+        if abs(db - round(db / db_step) * db_step) > db_tol:
             raise Refused(
                 f"horizontal grid line at y={y:.3f} reads {db:.3f} dB, not a "
-                "multiple of 10 dB; the y calibration is wrong"
+                f"multiple of the labelled {db_step:g} dB step; the y "
+                "calibration is wrong"
             )
 
     # --- x: the decade pair, from the grid, confirmed by the two labels -----
     # Each x tick label is a "10" mantissa followed by its exponent glyph, so
     # the decade's VALUE is read too -- Figure 4 starts at 10^3, Figure 10 at
     # 10^2, and assuming either one would silently shift the other by a decade.
+    # `by0 - 0.5 * bh < y < by0` keeps a stacked sub-plot from reading the
+    # decade labels of the one below it. On Figure 9 the labels sit 22.7 pt
+    # under their own box and 113 pt under the next one up, so the window is
+    # not marginal; on Figure 4 and Figure 10 it excludes nothing.
     dec = []
     for i, (t, pos) in enumerate(texts):
-        if t == "10" and pos[1] < by0 and i + 1 < len(texts):
+        if t == "10" and by0 - 0.5 * bh < pos[1] < by0 and i + 1 < len(texts):
             exp, epos = texts[i + 1]
             if re.fullmatch(r"-?\d", exp) and epos[0] > pos[0]:
                 dec.append((pos[0], int(exp), epos[0] - pos[0]))
@@ -439,7 +489,7 @@ def calibrate(polylines, rects, texts):
         return 10.0 ** dec_exp * 10 ** (
             (np.asarray(x, dtype=float) - x1k) / pt_per_decade)
 
-    for x in [v for v in ver if bx0 + 1e-6 < v < bx1 - 1e-6]:
+    for x in [v for v in ver if bx0 + BOX_TOL < v < bx1 - BOX_TOL]:
         hz = float(x_to_hz(x))
         dec_part = 10 ** math.floor(math.log10(hz))
         mant = round(hz / dec_part)

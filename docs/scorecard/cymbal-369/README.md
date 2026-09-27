@@ -115,6 +115,11 @@ the shipped instrument does not have.
 > **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
 > `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by
 > `tools/werner_fig4.py`, and a second negative that eliminates the filter values as the cause).
+> **Step 4 is `tone-stage/README.md`** — the tone stage read off W14b Figure 9 by
+> `tools/werner_fig9.py`, and the first *positive* result of the chain: the tone stage tilts every band
+> about −20 dB from 1 kHz to 20 kHz, which nearly cancels the LEVEL stage's +16.6 dB that the candidate
+> applies on its own. That is the right sign and size for candidate 2's +24.0 dB excess tilt. No candidate
+> is built there, because the same figure shows it does not determine the inter-band balance.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
