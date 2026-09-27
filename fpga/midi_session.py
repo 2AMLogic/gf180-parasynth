@@ -134,6 +134,8 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 #   DELAYED_EVENT   the fourth scheduled event is placed 5 ms (240 frames) late
 #   WRONG_ALT       a switch to the other sound of a pair sends the OTHER
 #                   sound's position (e.g. a low-conga note re-sends the low tom)
+#   NO_TAIL_CUT     a switch leaves the previous sound's pending pitch drop in
+#                   the queue, so it retunes the new sound mid-note
 # and the two overload repairs of timing contract 3, reinstated as they were
 # (fpga/test_measure_mac_midi_latency.py: a 1 s stall must then LOSE events):
 #   NO_STALE        a stale chunk is scheduled at its old receipt, notes included
@@ -826,6 +828,8 @@ class MidiSession:
             # and its last write would put the circuit back in the OLD position.
             # They are cut; the ones already sent land before the switch (FIFO).
             cut = [p for p in self.circuit_tail.get(stop_name, ()) if not p.sent]
+            if "NO_TAIL_CUT" in self.inject:
+                cut = []                               # the injected defect
             self._cut(cut)
             sel = name
             if "WRONG_ALT" in self.inject:

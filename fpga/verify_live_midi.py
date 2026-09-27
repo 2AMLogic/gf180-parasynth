@@ -45,6 +45,8 @@ CONTROLS (each must be caught by the property named, for its own reason):
   DROP_NOTE_OFF   one voice note-off is lost in the session -> voice_gate, stuck_notes
   WRONG_DRUM_MAP  GM 38 (snare) is struck as the clap -> drum_strikes
   DELAYED_EVENT   one event is scheduled 5 ms late -> timing
+  WRONG_ALT       a pair switch re-sends the sound it leaves -> drum_sounds
+  NO_TAIL_CUT     a switch keeps the old tom's pending pitch drop -> drum_coeffs
 
 Exit 0 PASS, 1 FAIL, 2 NO VERDICT (an apparatus precondition failed).
 """
@@ -1014,6 +1016,8 @@ CONTROLS = {
                       "one event's writes land 5 ms after their frame"),
     "WRONG_ALT": ("alternates", ("drum_sounds",),
                   "a switch to the other sound of a pair re-sends the sound it leaves"),
+    "NO_TAIL_CUT": ("alternates", ("drum_coeffs",),
+                    "a switch mid pitch-drop lets the old tom's drop retune the new sound"),
 }
 PROPS = ("static_image", "voice_gate", "voice_pitch", "drum_strikes", "drum_sounds", "drum_coeffs", "knobs",
          "timing", "stuck_notes", "refusals", "release_domain", "queues", "latency",
