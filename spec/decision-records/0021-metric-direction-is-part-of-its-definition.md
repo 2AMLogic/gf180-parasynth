@@ -1,4 +1,4 @@
-# 0017: A metric's direction is part of its definition — the cowbell's difference tone is a defect ceiling
+# 0021: A metric's direction is part of its definition — the cowbell's difference tone is a defect ceiling
 
 - **Status**: proposed
 - **Date**: 2026-09-25

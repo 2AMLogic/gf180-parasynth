@@ -45,6 +45,12 @@ help:
 ## 39 minutes in as 23 failures across three files, and the one sentence that
 ## explains all 23 is buried in a traceback. The same question answered in
 ## 0.2s, naming the source file that moved, is worth a job slot.
+##
+## check_decision_record_numbers.py is here because a DR number cannot be
+## allocated correctly from one branch: two PRs each took 0017 within two
+## minutes in September, on branches that never saw each other, and both merges
+## were clean because the FILENAMES differ (#250). The directory is the only
+## place the answer exists, so the directory is what gets read. 0.05s.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
@@ -66,6 +72,7 @@ verify:
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
+	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -230,6 +237,19 @@ verify-full:
 ##   sd-centroid-amp-weighted  SD brightness 1918 -> 5868 Hz
 ##                             (all five other SD properties stay BLIND)
 ##
+## THE FIVE DECISION-RECORD NUMBERING CONTROLS (issue #250) are rule 5 applied
+## to a bookkeeping defect: `0017` was allocated twice on `origin/main` by two
+## PRs that never saw one another, and `DUPLICATE_NUMBER` re-creates a second
+## file under an already-used number, so the exact shipped defect stays runnable.
+## THE CLEAN CASE IS LISTED FIRST for condition 1 -- all four injections stage a
+## COPY of `spec/decision-records/` and never touch the tree, so a checker broken
+## for every input would look like four firing controls without it. `--expect`
+## names the verdict, not merely that something was red: `UNNUMBERED_FILE` and
+## `EMPTY_DIRECTORY` must REFUSE (nothing checked), and a uniqueness test over
+## zero files passing vacuously is the failure this pair exists to catch. The
+## `-k issue_250` pytest job replays the historical two-file `0017` state
+## itself. All six are pure Python, about 1.5 s together.
+##
 ## THE TWO BUILD/REPORT-TOOL CONTROLS (issue #245) are the other half of rule 5:
 ## the two bugs its debt marker named, X-propagation quoted as an area and a die
 ## area recovered from its own utilisation input. Both are REFUSAL controls, so
@@ -315,6 +335,12 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
+	  "$(PY) tools/check_decision_record_numbers.py --inject DUPLICATE_NUMBER --expect collision" \
+	  "$(PY) tools/check_decision_record_numbers.py --inject HEADER_MISMATCH --expect misnumbered" \
+	  "$(PY) tools/check_decision_record_numbers.py --inject UNNUMBERED_FILE --expect refused" \
+	  "$(PY) tools/check_decision_record_numbers.py --inject EMPTY_DIRECTORY --expect refused" \
+	  "$(PY) -m pytest tools/test_check_decision_record_numbers.py -q -k issue_250" \
 	  "$(PY) model/sound_report.py --inject bd-ma-envelope" \
 	  "$(PY) model/sound_report.py --inject sd-centroid-amp-weighted" \
 	  "$(PY) tools/stage_case.py controls --root build/provenance-controls" \

@@ -187,6 +187,19 @@ jobs:
       - name: the oscillator-1 comment still transcribes the sweep
         run: python tools/check_surge_waveform_comment.py
 
+      # Decision-record numbering, and this one has to run ON THE PULL REQUEST
+      # or it gates nothing: the next free DR number cannot be read off your own
+      # branch, so two PRs each took 0017 within two minutes and both merges
+      # were clean because the filenames differ (issue #250). The pull request is
+      # the only place the collision is visible before it is on main. `make
+      # verify` is invoked by no workflow, so the Makefile job alone would not
+      # have caught either of the two collisions that shipped. Controls first,
+      # same reason as above. Measured 0.9s + 0.05s.
+      - name: the DR-numbering checker's controls
+        run: python -m pytest tools/test_check_decision_record_numbers.py -q
+      - name: every decision record owns its number
+        run: python tools/check_decision_record_numbers.py
+
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
       # renamed a parameter into `def rms(_unused=None, x)`, which is a syntax
