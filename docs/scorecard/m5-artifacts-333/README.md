@@ -219,7 +219,7 @@ in `docs/deadline/recheck-333/README.md`:
 
 ## Remaining critical defects and the next decisive action
 
-1. **M5A/M5B harmonic shape (7.56×/5.96×)**, localized to the ladder's tanh operating level at drive 0.75, is resolved for the saw: the bounded operating-level candidate was run and a shared-drive lower operating point was a **negative result** (`operating-level/`), so the fix is a saw-only drive. **Recommended: saw drive 0.35** (`saw-drive/`), giving M5A 5.30× and M5B 4.96×, both now limited by the pulse.
+1. **M5A/M5B harmonic shape (7.56×/5.96×)**, localized to the ladder's tanh operating level at drive 0.75, is **improved, not resolved**. A shared lower drive was a **negative result** (`operating-level/`); a saw-only drive of **0.35**, recommended after a disclosed tie (`saw-drive/`), gives M5A 5.30× and M5B 4.96×. Both still fail, now limited by the pulse. Saw partials themselves remain 3.2–3.7 dB off at their worst.
 2. **Pulse2x rectangular headroom at MIDI ≥ 108** is resolved: clipped energy was measured against a 0.80 headroom challenger (`pulse2x-headroom/`); 0.80 fails, and **0.74 was selected by the frozen rule** (§C).
 3. **Pulse brightness deficit**, the new limiting factor after the saw-only drive fix, is filed as #347.
 4. **Dynamic coverage.** Transitions, glides and modulation have no artifact coverage (§B) and need a validated time-varying oracle before this probe can be extended to them.

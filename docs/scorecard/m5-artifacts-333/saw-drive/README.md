@@ -8,12 +8,15 @@ at `69523c3`, with sources clean.
 
 ## Result
 
-| saw drive | saw vol | M5A harmonic | M5B harmonic | M5A gain | M5A/M5B foldback | M5A/M5B attack | clipping |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 0.75 (baseline) | 0.427 | 7.561 | 5.962 | −1.544 | 2.206 / 1.913 | 5.271 / 6.125 | 0 |
-| 0.5 | 0.593 | **5.297** | **4.957** | −1.544 | 2.313 / 2.312 | 5.438 / 6.125 | 0 |
-| 0.35 | 0.821 | **5.297** | **4.957** | −1.544 | 0.316 / 0.317 | 5.438 / 6.208 | 0 |
-| 0.3 | 0.952 | **5.297** | **4.957** | −1.544 | 0.413 / 0.407 | 5.438 / 6.208 | 0 |
+| saw drive | saw vol | M5A harmonic | M5B harmonic | M5A gain | M5B gain | M5A/M5B foldback | M5A/M5B attack | M5B release (tol 125 ms) | clipping |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.75 (baseline) | 0.427 | 7.561 | 5.962 | −1.544 | 2.049 | 2.206 / 1.913 | 5.271 / 6.125 | −30.00 | 0 |
+| 0.5 | 0.593 | **5.297** | **4.957** | −1.544 | 1.845 | 2.313 / 2.312 | 5.438 / 6.125 | −33.92 | 0 |
+| 0.35 | 0.821 | **5.297** | **4.957** | −1.544 | 1.728 | 0.316 / 0.317 | 5.438 / 6.208 | −35.85 | 0 |
+| 0.3 | 0.952 | **5.297** | **4.957** | −1.544 | 1.700 | 0.413 / 0.407 | 5.438 / 6.208 | −35.88 | 0 |
+
+Attack (errors in ms against a 5 ms tolerance) moves by at most +0.17 ms. That is inside the 0.5 ms preservation
+allowance, but **attack still fails its absolute tolerance** (1.09× M5A, 1.24× M5B at 0.35), as it did before.
 
 - **The prediction held.** M5A harmonic shape is 5.297 against the ~5.3 predicted from the shared-drive run's per-event data. M5B is 4.957.
 - **Both case figures are now set by the pulse, not the saw:** M5A by pulse MIDI 96, h9 −5.30 dB; M5B by pulse MIDI 84, h9 −4.96 dB. That is why every candidate reads the same.
