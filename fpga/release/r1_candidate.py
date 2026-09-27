@@ -241,11 +241,18 @@ def tree_drift(rtl: dict | None = None) -> list:
 
 
 def kit_identity() -> dict:
+    import drums_fx as dx
     import uart_host as uh
     if uh.IMAGE_REVISION.get(HOST_IMAGE) != CONTRACT_REVISION:
         raise Refused(f"uart_host.IMAGE_REVISION[{HOST_IMAGE!r}] is "
                       f"{uh.IMAGE_REVISION.get(HOST_IMAGE)}, not R1's {CONTRACT_REVISION}")
-    if uh.image_kit(HOST_IMAGE) != frozen_kit():
+    try:
+        # a tampered r1-kit.json: the host refuses it (KitRefused); the check
+        # REFUSES with that reason, never a traceback (Judge on 74ec7d5)
+        hosted = uh.image_kit(HOST_IMAGE)
+    except dx.KitRefused as exc:
+        raise Refused(f"the host refuses R1's kit: {exc}") from None
+    if hosted != frozen_kit():
         raise Refused(f"uart_host.image_kit({HOST_IMAGE!r}) is not R1's frozen kit")
     addr, val = clap_final_strike()
     return {"revision": CONTRACT_REVISION, "sha256": KIT_R14_SHA256, "writes": KIT_R14_WRITES,
@@ -255,6 +262,7 @@ def kit_identity() -> dict:
 
 
 def commands() -> dict:
+    import drums_fx as dx
     import release_manifest as rm
     out = {}
     with tempfile.TemporaryDirectory() as d:
@@ -262,8 +270,11 @@ def commands() -> dict:
             sub = Path(d) / name
             sub.mkdir()
             full = [*argv, "--image", HOST_IMAGE]
-            cap = rm._capture(full, sub)
-            setup, kit = emitted_setup(full)
+            try:
+                cap = rm._capture(full, sub)
+                setup, kit = emitted_setup(full)
+            except dx.KitRefused as exc:          # the CLI refused R1's kit: say why
+                raise Refused(f"the host refuses R1's kit: {exc}") from None
             probs = check_init(setup, kit_expected=kit)
             if probs:
                 raise Refused(f"{name}: emitted setup is not the frozen R1 target: {probs}")

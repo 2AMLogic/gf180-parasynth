@@ -100,3 +100,40 @@ def test_midi_session_r1_known_state_is_the_frozen_target():
     s_r1 = ms.MidiSession(_Nul(), image="r1").init_writes()
     s_tree = ms.MidiSession(_Nul(), image="tree").init_writes()
     assert s_r1 == s_tree and r1c.check_init(s_r1, kit_expected=True) == []
+
+
+def _tampered_kit(tmp_path, monkeypatch):
+    """R1's frozen kit with ONE value changed (the Judge's case on 74ec7d5)."""
+    rec = json.loads(uh.R1_KIT.read_text())
+    a, v = rec["writes"][0]
+    rec["writes"][0] = [a, v ^ 1]
+    p = tmp_path / "r1-kit.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(uh, "R1_KIT", p)
+    with pytest.raises(dx.KitRefused):
+        uh.r1_kit()                               # the host refuses it, as it should
+
+
+def test_a_tampered_r1_kit_makes_the_candidate_check_refuse_with_the_reason(tmp_path,
+                                                                             monkeypatch):
+    _tampered_kit(tmp_path, monkeypatch)
+    verdict, detail = r1c.check()
+    assert verdict == "REFUSED", (verdict, detail)
+    assert "r1-kit.json" in detail and "frozen kit" in detail, detail
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert r1c.main(["check"]) == 2
+    assert "REFUSED" in out.getvalue() and "r1-kit.json" in out.getvalue()
+
+
+def test_a_tampered_r1_kit_makes_the_release_check_refuse_with_the_reason(tmp_path,
+                                                                           monkeypatch):
+    import r1_release as r1r
+    _tampered_kit(tmp_path, monkeypatch)
+    verdict, detail = r1r.check()
+    assert verdict == "REFUSED", (verdict, detail)
+    assert "r1-kit.json" in detail and "frozen kit" in detail, detail
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert r1r.main(["check"]) == 2
+    assert "REFUSED" in out.getvalue() and "r1-kit.json" in out.getvalue()
