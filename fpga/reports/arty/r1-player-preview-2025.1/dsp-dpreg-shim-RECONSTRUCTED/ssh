@@ -1,0 +1,4 @@
+#!/bin/bash
+# RECONSTRUCTED (#319) from the text of issue #316 -- NOT the original file,
+# which was not preserved. Local-exec stand-in for `ssh r1-self CMD`.
+[ "$1" = "r1-self" ] || exit 97; shift; exec bash -c "$*"

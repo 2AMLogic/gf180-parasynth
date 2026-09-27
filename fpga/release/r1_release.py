@@ -403,9 +403,10 @@ DECLARED = {
         "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
         "consequences": "fpga/midi_session.py follows (resolve_image falls back to "
                         "uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands "
-                        "WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 ('held-note "
-                        "default: the replayed capture is not what the CLI emits now', measured "
-                        "by fpga/release/test_r1_release.py) -- the gate doing its job: the same "
+                        "WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 (measured by "
+                        "fpga/release/test_r1_release.py; only the verdict is quoted, because "
+                        "the first reason printed depends on how the default is flipped, "
+                        "#319) -- the gate doing its job: the same "
                         "change must give R0's documented commands and its manifest's captures an "
                         "explicit --image release. This manifest records host.default_image and "
                         "goes STALE, and is re-bound with --write.",
