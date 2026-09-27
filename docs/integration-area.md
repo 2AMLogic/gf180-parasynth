@@ -303,7 +303,7 @@ the mode was the smaller half of the bill:
   contract change (`path` 25 → 26 bits), not a synthesis result.
 
 **These rows were NOT re-measured for that work** — the structure lost on
-fidelity first (DR 0021), so nothing was re-synthesised and the figures above
+fidelity first (DR 0022), so nothing was re-synthesised and the figures above
 are still the 2026-09-18 measurement they always were. Re-verify them against
 the tree you are pricing before quoting them for a change that does go ahead.
 
