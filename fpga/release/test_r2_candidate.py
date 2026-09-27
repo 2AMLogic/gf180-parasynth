@@ -22,7 +22,7 @@ def test_r2_differs_from_r1s_freeze_only_in_its_reviewed_set():
                                                           "rtl-sketch/polyblep_saw_pair.v",
                                                           "rtl-sketch/voice_dp.v"]
     assert rec["rtl"]["configuration"] == {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
-    assert rec["status"].startswith("DRAFT")
+    assert rec["status"].startswith("CANDIDATE") and "OVERRIDE" in rec["status"]
 
 
 def test_another_source_moving_refuses(monkeypatch):

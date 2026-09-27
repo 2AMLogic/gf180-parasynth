@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fpga/release/r2_candidate.py -- the R2 candidate record: DRAFT, alongside R1, never replacing it.
+"""fpga/release/r2_candidate.py -- the R2 candidate record (the tree's sources), alongside R1, never replacing it.
 
     python fpga/release/r2_candidate.py            # BOUND (0) / STALE (1) / REFUSED (2)
     python fpga/release/r2_candidate.py --write    # re-derive r2-candidate.json
@@ -17,23 +17,15 @@ WHAT R2 IS (so far). The next image, grouping the confirmed sound repairs
   * PULSE2X admitted by the host's qualified domain, for this image only
     (qualified_domain.PULSE2X_IMAGES).
 
-WHAT IT IS NOT YET. This record is a DRAFT: nothing is frozen and no image is
-built. Open before a freeze or a Vivado build:
-
-  * (resolved: the rectangle decimator headroom is 24248/32768, 0.74, saw
-    unchanged at 0.85 -- recheck-333 item 5; in polyblep_saw_pair.v and
-    voice_fx._render_2x, with the INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM
-    control);
-  * (carried: the #315 XDC repair, PR #358);
-  * (settled: the #354 repair is an RTL change, ladder_dp_n.v's xg held in
-    26 bits (PR #364), and joins EXPECTED_CHANGES by review);
-  * confirmed preset changes, only through a versioned profile;
-  * the named image selector (#323). The host has no `--image r2` yet, so
-    the domain admission cannot be used from the CLI.
+WHAT IT BECAME. The set is settled (#282): the rectangle headroom 0.74,
+the #315 XDC repair, and the #354 ladder repair (ladder_dp_n.v, PR #364)
+join the two changes above. No preset change is confirmed. The image is
+built and bound as the R2 release (r2_release.py, r2-2025.1.json); the
+host selects it by name (`--image r2`).
 
 The record binds what exists: the configuration, the exact compiled sources
 at this tree, how they differ from R1's freeze (exactly EXPECTED_CHANGES), and the
-domain rule. The evidence is fpga/reports/r2-candidate/summary.json, bound
+domain rule. The evidence is fpga/reports/r2/summary.json, bound
 by digest. BOUND means the committed record equals a fresh derivation.
 STALE means something moved. R1's records (r1-candidate.json,
 r1-2025.1.json) are neither read for writing nor changed by this module.
@@ -59,11 +51,10 @@ NAME = "R2 candidate"
 IMAGE = "r2"                                # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
 DEFINES = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "VOICE_PULSE_2X"]
-STATUS = ("DRAFT -- not frozen, no image built. The set is settled (operator, #282/#355): "
-          "pulse2x at 0.74 rectangle headroom (an operator OVERRIDE of the acceptance rule, "
-          "known limitations in R2.md), skip2xwin, the #354 repair (#364), #315. Open: the "
-          "settled combination's evidence, the named `r2` selection, the Vivado build "
-          "(constraint_matches.rpt and exceptions.rpt)")
+STATUS = ("CANDIDATE -- the settled set (operator, #282/#355): pulse2x at 0.74 rectangle "
+          "headroom (an operator OVERRIDE of the acceptance rule, known limitations in R2.md), "
+          "skip2xwin, the #354 repair (#364), #315. Built once and bound as the R2 release in "
+          "fpga/release/r2-2025.1.json (r2_release.py); this record binds the tree's sources")
 # the only compiled source R2 may differ in from R1's freeze, and why
 EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)",
                     "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 "
