@@ -50,6 +50,7 @@ Formats (contract 15.1):
     bank        ModalFx(modes=12, nums=6, headroom=0, out_bits=19)
 """
 from __future__ import annotations
+import dataclasses
 import math
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audition"))
@@ -802,6 +803,500 @@ CY_FIT = dict(tau_s=0.243, t20_s=0.318, schroeder_t20_s=0.903,
               shares=(0.013, 0.063, 0.584, 0.153, 0.067),
               real_tau_s=0.2564, real_t20_s=0.3077, real_schroeder_t20_s=0.798,
               real_shares=(0.011, 0.103, 0.532, 0.233, 0.060))
+
+
+# ---- what each constant above rests on, as data (#114) ------------------------
+# The comments above are the justification and they stay: they say things no
+# schema can. What follows is the machine-readable half, so that "which of
+# these is inferred?" and "which fit had nothing held out?" are queries rather
+# than a grep plus judgement -- the exact step that found #95 by someone going
+# looking instead of the system pointing.
+#
+# STATUS is one of four, deliberately narrow:
+#   derived-from-circuit  traceable to the hardware's own documentation: a
+#                         component-value computation, a service-note
+#                         statement, or Roland's published table. Nothing of
+#                         ours was measured or fitted to obtain it.
+#   measured              read off a recording of a real machine, and carrying
+#                         the sample it was read from (n, spread, source, date).
+#   inferred              nobody measured it and no source states it: a reading
+#                         of the circuit that could be wrong.
+#   fitted                searched against data, which is NOT a measurement of
+#                         the quantity: it carries what it was fitted on and
+#                         what, if anything, was held out.
+#
+# `prose_tag` records the comment tag an entry was migrated from, so the
+# mapping from prose to status is itself auditable rather than assumed --
+# and it does not always agree. TOM_DROP_RATIO's comment says HARDWARE-MEASURED
+# and the value is the fitted law evaluated at a reference setting; the entry
+# says `fitted` and records the difference.
+#
+# A constant that is NOT here has no provenance record: `provenance_of` raises
+# UntaggedConstant rather than defaulting, and `unregistered_constants()` lists
+# every one. This pass covers the constants whose comments carry one of the
+# four prose tags; the remaining kit levels (AMP_TOM, CHART_VPP, BUS_TARGET and
+# the other PEAK_*) are `drums_fx_render.py --balance` output and are still
+# unregistered, which the listing says out loud instead of implying a status.
+PROV_DERIVED = "derived-from-circuit"
+PROV_MEASURED = "measured"
+PROV_INFERRED = "inferred"
+PROV_FITTED = "fitted"
+PROV_STATUSES = (PROV_DERIVED, PROV_MEASURED, PROV_INFERRED, PROV_FITTED)
+PROSE_TAGS = ("VERIFIED IN A SOURCE", "HARDWARE-MEASURED", "INFERRED", "FITTED")
+HOLDOUT_NONE = "none"
+# The registry's own vocabulary: module constants that describe provenance
+# rather than the drum section, and so are not themselves candidates for it.
+PROV_SCHEMA_NAMES = ("PROV_DERIVED", "PROV_MEASURED", "PROV_INFERRED", "PROV_FITTED",
+                     "PROV_STATUSES", "PROSE_TAGS", "HOLDOUT_NONE",
+                     "PROV_SCHEMA_NAMES", "PROVENANCE")
+
+
+class UntaggedConstant(LookupError):
+    """Asked for the provenance of a constant that has none.
+
+    REFUSED, not a default: a constant with no record is exactly the case this
+    registry exists to make visible, so answering `inferred` (or anything else)
+    would put a guess where the absence of evidence belongs."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Provenance:
+    """What one constant rests on. `status` is closed; the rest is per status.
+
+    A `measured` entry must carry its sample (n, spread, date) and a `fitted`
+    one what it was fitted on and what was held out -- `holdout=HOLDOUT_NONE`
+    where nothing was, which is a statement rather than an omission. Neither is
+    a courtesy: a fit whose holdout field could be left empty is a fit that
+    silently becomes a fact, which is what happened to the tom pitch drop."""
+
+    status: str
+    source: str
+    justification: str
+    prose_tag: str = ""
+    n: int | None = None
+    spread: str | None = None
+    date: str | None = None
+    fitted_on: str | None = None
+    holdout: str | None = None
+    docs: tuple[str, ...] = ()
+    notes: str = ""
+
+    def __post_init__(self):
+        if self.status not in PROV_STATUSES:
+            raise ValueError(f"status {self.status!r} is not one of {PROV_STATUSES}")
+        if self.prose_tag and self.prose_tag not in PROSE_TAGS:
+            raise ValueError(f"prose_tag {self.prose_tag!r} is not one of {PROSE_TAGS}")
+        for field in ("source", "justification"):
+            if not str(getattr(self, field) or "").strip():
+                raise ValueError(f"every Provenance needs a {field}")
+        if self.status == PROV_MEASURED:
+            missing = [f for f in ("n", "spread", "date")
+                       if getattr(self, f) is None or getattr(self, f) == ""]
+            if missing:
+                raise ValueError(f"a measured constant must carry its sample; "
+                                 f"{', '.join(missing)} missing")
+            if int(self.n) <= 0:
+                raise ValueError(f"n = {self.n} is not a sample")
+        if self.status == PROV_FITTED:
+            missing = [f for f in ("fitted_on", "holdout") if not getattr(self, f)]
+            if missing:
+                raise ValueError(f"a fitted constant must say what it was fitted on and "
+                                 f"what was held out ({HOLDOUT_NONE!r} if nothing); "
+                                 f"{', '.join(missing)} missing")
+        elif self.fitted_on or self.holdout:
+            raise ValueError(f"only a {PROV_FITTED} constant has fitted_on / holdout")
+        # `holdout` is HOLDOUT_NONE or names what was held out, and nothing in
+        # between: the first draft of this registry said "none: one record, the
+        # fit and its check are the same file", which reads as a confession and
+        # compares as a holdout, so `fits_without_holdout()` missed the cymbal.
+        if self.holdout and self.holdout != HOLDOUT_NONE \
+                and self.holdout.strip().lower().startswith(HOLDOUT_NONE):
+            raise ValueError(f"holdout {self.holdout!r} says {HOLDOUT_NONE!r} and then "
+                             f"qualifies it; write holdout=HOLDOUT_NONE and put the "
+                             f"reason in notes, or no query can count it")
+
+    @property
+    def has_holdout(self) -> bool:
+        """A fit checked on data it was not chosen on. HOLDOUT_NONE is False."""
+        return self.status == PROV_FITTED and self.holdout != HOLDOUT_NONE
+
+
+_TOM_CORPUS = ("docs/tom-pitch-drop-measurement.md", "docs/tom-pitch-drop-law.json",
+               "docs/tom-pitch-drop-correction.md")
+_TOM_FIT_ON = ("152 usable rows of docs/tom-pitch-drop-results.json (89 tom, 63 conga) "
+               "through model/tom_drop_fit.py: excess = max(0, K (accent - A0)) exp(G u), "
+               "K = 0.18245")
+_TOM_HOLDOUT = ("four splits in docs/tom-pitch-drop-law.json: accent B unseen, even "
+                "tuning positions unseen, MT unseen, pot ends unseen (excess rms "
+                "0.018-0.029, max 0.085)")
+_TOM_CONGA_NOTE = ("nothing is held out of the conga terms: the four splits in "
+                   "docs/tom-pitch-drop-law.json test the TOM law, and the conga rows "
+                   "carry one usable accent level (B), the other sitting at the "
+                   "measurement floor")
+_CY_FILE = "Fischer s/n 103852, cy8/CY5025.WAV (TONE 5.0, DECAY 2.5)"
+_CY_FIT_ON = ("four measurements of that one file at once: log-envelope tau over "
+              "-3..-30 dB, t(-20 dB), the Schroeder T20 and a five-band energy split")
+_CY_NOTE = ("nothing is held out: there is one record, so the fit and its check are the "
+            "same file -- and matching the Schroeder T20 alone left the voice's audible "
+            "decay 46 % long (tau 374 ms against 256)")
+_CP_EXPERIMENT = ("the D12A final-strike experiment, frozen at 4059834 before any render "
+                  "(docs/scorecard/clap-d12a/README.md section 10, final-strike.json); "
+                  "selection used the #253 development offsets only")
+_CP_HOLDOUT = ("8 fresh noise offsets (3301 5557 8803 10501 14009 16411 18503 20011) "
+               "rendered after selection and never looked at before it: L2 passes 8/8 "
+               "ratio and 8/8 decay, median |ratio err| 0.47 dB")
+
+_PROVENANCE_TABLE = (
+    # ---- rimshot and claves exciter levels (the comment above PEAK_RSX) ----
+    (("PEAK_RSX",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="Fischer s/n 103852, rs8/RS.WAV through model/drum_verify.decay_fit",
+        justification="the RS exciter level, set low so the distorted tap decays like "
+                      "the machine's rimshot instead of the 22 ms gate",
+        fitted_on="rs8/RS.WAV: the machine is tau 3.2 ms / t(-20 dB) 9.0 ms; ours "
+                  "measures 5.55 / 13.85 ms at the usual 0.25 and 4.30 / 9.60 at 0.06",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="one file and one knob: the level was chosen against the same recording "
+              "that defines the target, so nothing checks it out of sample"),),
+    (("PEAK_CLX",), Provenance(
+        status=PROV_FITTED,
+        source="model/drums_fx_render.py --balance against CHART_VPP (reference 1.6)",
+        justification="the claves exciter level, balanced so CL alone peaks at its "
+                      "share of Roland's chart",
+        fitted_on="BUS_TARGET['CL'], i.e. the chart's normal Vpp for CL",
+        holdout=HOLDOUT_NONE,
+        notes="shares its assignment with PEAK_RSX, whose comment's "
+              "HARDWARE-MEASURED tag is not a claim about this value"),),
+    # ---- the bass drum ----
+    (("BD_HZ",), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="docs/tr808-reference.md section 2 / W14a section 5, computed with "
+               "section 1.2 from R161, R165, R166, R170, C41/C42",
+        justification="the bridged-T's f0, 49.4 Hz; Werner measures ~49.5 and two "
+                      "sample sets corroborate 49-51 Hz",
+        docs=("docs/tr808-reference.md",),
+        notes="DR 0009 resolves the conflict with Roland's chart (BD_HZ_CHART) in "
+              "favour of this value: section 2's Q table satisfies tau = Q/(pi f0) to "
+              "1.5 % here and to 12.8 % at 56 Hz"),),
+    (("BD_HZ_CHART",), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="Roland's tuning chart via docs/tr808-reference.md section 2",
+        justification="the chart's 56 Hz, kept for comparison and not used to tune "
+                      "the BD",
+        notes="the reference calls the chart figure 'typical and variable' and tells "
+              "the implementer to treat 50-56 Hz as the target"),),
+    (("BD_DECAY_Q",), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="docs/tr808-reference.md section 2 / W14a section 6: the VR6 feedback "
+               "buffer's own law",
+        justification="Q against the DECAY knob position, the reference's own table "
+                      "(the panel's 0..10 against VR6's 0..1)"),),
+    (("BD_ATTACK_HZ", "BD_ATTACK_Q", "BD_ATTACK_MS"), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="docs/tr808-reference.md section 2 / W14a section 8.1; SN p.6",
+        justification="while Q43 shorts R165 the foot resistance falls and the SAME "
+                      "resonator rises to ~130 Hz at Q ~6 for ~4 ms",
+        notes="the SN gives 4 ms for Q43's ON period; Werner measures ~6 ms"),),
+    # ---- the toms' diode pitch drop ----
+    (("TOM_DROP_RATIO",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="docs/tom-pitch-drop-law.json, from 99 tom and 66 conga files of a real "
+               "TR-808 (808 From Mars) measured by model/tom_pitch_probe.py",
+        justification="onset / settled at the stated reference setting -- accent 1.0, "
+                      "TUNING pot centre, TOM position -- and still the one knob that "
+                      "scales the whole sweep",
+        fitted_on=_TOM_FIT_ON, holdout=_TOM_HOLDOUT, date="2026-09-18",
+        spread="the corpus's largest drop in any of the 99 files is x1.344; x1.7, which "
+               "this constant used to be, occurs nowhere in it",
+        docs=_TOM_CORPUS,
+        notes="FITTED, and the comment above it says 'measured': 1.060 is the law "
+              "evaluated at accent 1.0 (excess 0.0602, = K (1 - A0)) where that cell's "
+              "own measured median excess is 0.0543, i.e. x1.054. The difference is "
+              "small and the label is not -- test_tom_drop_law pins it to the law"),),
+    (("TOM_DROP_ACCENT_0",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="docs/tom-pitch-drop-law.json, tom rows",
+        justification="the accent below which the germanium diodes do not conduct: the "
+                      "drop has a THRESHOLD, not the old min(max(accent, 0), 1) clamp "
+                      "that handed an unaccented hit the full drop",
+        fitted_on=_TOM_FIT_ON, holdout=_TOM_HOLDOUT, date="2026-09-18",
+        spread="measured excess 0.054 / 0.143 / 0.239 at the three recorded accent "
+               "levels: a straight line that does not pass through the origin",
+        docs=_TOM_CORPUS),),
+    (("TOM_DROP_ACCENT_0_CONGA",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="docs/tom-pitch-drop-law.json, conga rows",
+        justification="the conga position's own threshold: HT and LC are both nominally "
+                      "185 Hz on one bridged-T with a capacitor switched, and unaccented "
+                      "their drops differ by 11x (excess 0.061 against 0.0055)",
+        fitted_on="the conga rows' Accent level only, with K and G held: A0 = 1.0636, "
+                  "which predicts no drop at all unaccented (measured 0.0041)",
+        holdout=HOLDOUT_NONE, date="2026-09-18", docs=_TOM_CORPUS,
+        notes=_TOM_CONGA_NOTE),),
+    (("TOM_DROP_TUNING_G",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="docs/tom-pitch-drop-law.json, tom rows",
+        justification="d ln(excess) / d (f0 / f0_nominal) for the tom position: the "
+                      "TUNING pot the old sequence ignored (LT at More Accent runs "
+                      "x1.169 at 82 Hz and x1.325 at 101 Hz)",
+        fitted_on="one slope over nine cells, log excess ~ cell + G u: 3.584 +- 0.142, "
+                  "rms_log 0.085",
+        holdout=_TOM_HOLDOUT, date="2026-09-18", docs=_TOM_CORPUS,
+        notes="G is fitted per POSITION, not pooled: 3.58 for the toms against 7.46 for "
+              "the congas is not a disagreement to average away"),),
+    (("TOM_DROP_TUNING_G_CONGA",), Provenance(
+        status=PROV_FITTED, prose_tag="HARDWARE-MEASURED",
+        source="docs/tom-pitch-drop-law.json, conga rows",
+        justification="the conga position's tuning slope, about twice the tom's",
+        fitted_on="the conga cells' Accent level: 7.461 +- 0.085, rms_log 0.032",
+        holdout=HOLDOUT_NONE, date="2026-09-18", docs=_TOM_CORPUS,
+        notes=_TOM_CONGA_NOTE),),
+    (("TOM_DROP_TUNING_SPAN",), Provenance(
+        status=PROV_DERIVED,
+        source="docs/tr808-reference.md 1.7: the TUNING pot spans +-10 %",
+        justification="the tuning term is clamped to the pot's own range, which is also "
+                      "the span the 99 measured files cover",
+        notes="past it the law would extrapolate outside every file it was fitted to"),),
+    (("TOM_DROP_MS", "TOM_DROP_STEPS"), Provenance(
+        status=PROV_INFERRED,
+        source="contract 15.7.1 as shipped at revision 5",
+        justification="exp(-3 t / 60 ms), i.e. tau 20 ms, kept deliberately: the "
+                      "exponential beat a linear ramp in 88 of 89 measured rows",
+        docs=("docs/tom-pitch-drop-correction.md",),
+        notes="the machine's relaxation tau is accent-dependent (13 / 24.5 / 33 ms at "
+              "the three levels) and this law is not -- a reported deviation, not an "
+              "oversight"),),
+    # ---- the toms and congas themselves ----
+    (("TOM_PRESET",), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 4's component table (R1/R2/C1/C2 with "
+               "the germanium diodes open)",
+        justification="the (f0, Q) of each of the six positions; the table is "
+                      "self-consistent under tau = Q / (pi f0) to better than 5 %",
+        notes="SW8's one-circuit fact is VERIFIED IN A SOURCE (SN p.6), the numbers are "
+              "not. The three CONGA Q values here are no longer reference 4's: they are "
+              "Q = pi f0 tau at the chart f0 from TOM_HW_TAU's measurement, which is a "
+              "`measured` basis inside an `inferred` table -- per-name granularity "
+              "cannot say that, so it is said here"),),
+    (("TOM_HW_TAU",), Provenance(
+        status=PROV_MEASURED, prose_tag="HARDWARE-MEASURED",
+        source="Fischer s/n 103852, one file per position (LC50/MC50/HC50.WAV named in "
+               "the comment) through model/drum_verify.decay_fit over -3..-30 dB",
+        justification="the measured amplitude time constant of each tom and conga "
+                      "position, which amends reference 4's inferred conga Q column",
+        n=6,
+        spread="R^2 0.999 on all three congas; the three TOM rows agree with reference "
+               "4's computed tau inside 3 % (88.4/87.6, 56.6/57.7, 43.0/41.7 ms) and "
+               "the three CONGA rows are 12-30 % shorter than it",
+        date="2026-09-18",
+        notes="f0 is left at the chart's: the machine reads 200 / 282 / 413 Hz for the "
+              "congas, inside reference 1.7's +-10 %"),),
+    # ---- rimshot, claves, maracas ----
+    (("RS_LO_HZ", "RS_LO_Q", "RS_HI_HZ", "RS_HI_Q"), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 5, from R315/R316/C115/C116 and the "
+               "switch wiring on SN p.9",
+        justification="the two bridged-T networks of the RS/CL circuit: 455 Hz Q 6.7 "
+                      "and 1786 Hz Q 13.5",
+        notes="the chart's RS 'H' 1667 / 'L' 455 Hz is VERIFIED IN A SOURCE; the "
+              "schematic's 1786 is preferred to it (7 % apart, inside reference 1.7's "
+              "+-10 %) on DR 0009's rule"),),
+    (("CL_HZ", "CL_Q"), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 5: IC20b's feedback wired for high Q",
+        justification="2500 Hz is the chart's; Q 200 is a reading of 'high Q' and no "
+                      "source states a number",
+        notes="what stops the claves is RS_GATE_TAU's ~22 ms window, not this Q -- the "
+              "resonator alone would ring for 25 ms"),),
+    (("RS_GATE_TAU",), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="SN, 'this switching is provided to eliminate noise leaking from IC20': "
+               "JFET Q74 through C112 0.022 uF / R305 1 MOhm",
+        justification="the ~22 ms gate window both RS and CL are gated by"),),
+    (("MA_HP_HZ", "MA_HP_Q"), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 8: Sallen-Key on Q68 with "
+               "C132 = C133 = 0.001 uF, R339 3.3 k, R340 68 k",
+        justification="a 2-pole high-pass at 10.6 kHz, Q 2.3"),),
+    (("MA_TAU",), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 8: R341 470 k / C134 0.033 uF (~15 ms) "
+               "against the chart's 25-35 ms decay",
+        justification="tau 12 ms (T20 28 ms) is the value that satisfies both"),),
+    # ---- cymbal ----
+    (("CY_LO_HZ",), Provenance(
+        status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
+        source="W14b section 4, 'around 3440 Hz'; SN p.13 R56/R57/C13/C14",
+        justification="the cymbal's low band-pass; the six-square sum is band-passed by "
+                      "two filters and the 7.1 kHz one is the hats' band as well"),),
+    (("CY_Q",), Provenance(
+        status=PROV_INFERRED, prose_tag="INFERRED",
+        source="docs/tr808-reference.md section 10",
+        justification="Q 6 for both cymbal band-passes; no source states it"),),
+    (("CY_HI_HZ",), Provenance(
+        status=PROV_DERIVED,
+        source="docs/tr808-reference.md section 10's Hh3, 'resonant ~10.5 kHz'",
+        justification="the high band's post filter, and a BAND-pass: an 11.7 kHz "
+                      "two-pole HIGH-pass puts 42 % of its output above 13 kHz where "
+                      "the machine has 6 %",
+        notes="which two of reference 10's three post-filters the bank hosts was settled "
+              "by measurement on " + _CY_FILE + ": keeping Hh3 over Hh1 fits the band "
+              "split about twice as well (cost 0.56 against 1.48). Hh1 is the documented "
+              "omission"),),
+    (("CY_HI_Q",), Provenance(
+        status=PROV_INFERRED,
+        source="docs/tr808-reference.md section 10 (Hh3's Q is unspecified there)",
+        justification="Q 2.5, the same reading as the hats' high-passes"),),
+    (("CY_TAU_SHORT", "CY_TAU_DECAY", "CY_TAU_LOW",
+      "PEAK_CYS", "PEAK_CYD", "PEAK_CYL"), Provenance(
+        status=PROV_FITTED, prose_tag="FITTED",
+        source=_CY_FILE,
+        justification="the cymbal's three envelopes AND their levels, searched against "
+                      "the recording rather than derived from reference 10",
+        fitted_on=_CY_FIT_ON, holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes=_CY_NOTE + ". Fitting any one of the four measurements alone moves the "
+              "others the wrong way. The recording's identity was itself wrong here for "
+              "months (labelled DECAY 5.0; it is DECAY 2.5) and was corrected under #102 "
+              "without re-measuring anything: what moved is what the file is, and "
+              "therefore what this fit generalises to"),),
+    (("CY_DECAY_T20",), Provenance(
+        status=PROV_MEASURED, prose_tag="HARDWARE-MEASURED",
+        source="Fischer s/n 103852, cy8/CY50{00,25,50,75,10}.WAV -- TONE 5.0, the second "
+               "code being DECAY, so '10' is knob 10.0",
+        justification="the cymbal's Schroeder T20 against the DECAY knob",
+        n=5,
+        spread="435 / 798 / 1281 / 1674 / 1888 ms, monotonic in the knob once the "
+               "filename codes are decoded (the recordist's own file lengths -- 1.50 / "
+               "2.00 / 2.50 / 3.50 / 4.00 s -- confirm the decode independently)",
+        date="2026-09-18",
+        notes="kept as the record of what was measured, NOT as a law to fit: a backward "
+              "integral over a record that ends before the decay does reports the cut "
+              "(#118), and docs/scorecard/results/D14A.json records 'total decay' as "
+              "INVALID on the reference side of CY5025. The fitted DECAY law lives in "
+              "test_discrimination.fit_laws and uses measure_tau, which needs only "
+              "27 dB of record. RE-LABELLED under #102; nothing re-measured"),),
+    (("CY_FIT",), Provenance(
+        status=PROV_FITTED, prose_tag="FITTED",
+        source=_CY_FILE,
+        justification="what the cymbal fit achieved, recorded so a regression can see it "
+                      "move: ours tau 243 / t(-20 dB) 318 / Schroeder T20 903 ms against "
+                      "the machine's 256 / 308 / 798",
+        fitted_on=_CY_FIT_ON, holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="the real_* fields are the measurement, not the fit: they are CY5025's own "
+              "numbers, on a render the same length as the reference file. " + _CY_NOTE),),
+    # ---- the clap (contract revision 14) ----
+    (("CP_TAIL_TAU",), Provenance(
+        status=PROV_MEASURED,
+        source="docs/scorecard/clap-d12a/README.md section 10 (final-strike.json)",
+        justification="the clap tail's 80 ms, replacing reference 7's R348 x C138 "
+                      "estimate of 47 ms",
+        n=1, spread="none stated: one record", date="2026-09-26",
+        notes="its prose tag is a bare 'MEASURED (plan084)' beside the kit_808() write, "
+              "not one of the four block tags"),),
+    (("CP_BURST_TAU", "CP_BURSTS", "CP_PERIOD", "CP_FINAL_TAU"), Provenance(
+        status=PROV_FITTED,
+        source="docs/scorecard/clap-d12a/README.md section 10 (final-strike.json)",
+        justification="four strikes at period 511 frames (0, 10.6, 21.3, 31.9 ms), the "
+                      "first three at the kept 4 ms decay and 13/16 re-strike and the "
+                      "LAST at the accent-scaled fire level decaying at 20 ms",
+        fitted_on=_CP_EXPERIMENT, holdout=_CP_HOLDOUT, date="2026-09-26",
+        notes="the one fit here with a real holdout: the level was selected on the "
+              "development offsets and confirmed on eight offsets nobody had looked at"),),
+)
+
+PROVENANCE: dict[str, Provenance] = {n: p for names, p in _PROVENANCE_TABLE for n in names}
+
+
+def provenance_of(name: str) -> Provenance:
+    """What constant `name` rests on, or REFUSE.
+
+    Raises UntaggedConstant for a constant with no record, including one that
+    does not exist: both are 'this registry cannot tell you', and neither is a
+    status."""
+    try:
+        return PROVENANCE[name]
+    except KeyError:
+        raise UntaggedConstant(
+            f"{name}: no provenance record in model/drums_fx.py. Add one to "
+            f"PROVENANCE (statuses: {', '.join(PROV_STATUSES)}) rather than reading the "
+            f"constant as though its basis were known") from None
+
+
+def constants_by_status() -> dict[str, tuple[str, ...]]:
+    """Every registered constant grouped by status, in registry order."""
+    return {s: tuple(n for n, p in PROVENANCE.items() if p.status == s)
+            for s in PROV_STATUSES}
+
+
+def fits_without_holdout() -> tuple[str, ...]:
+    """Every fitted constant checked only on what it was fitted to."""
+    return tuple(n for n, p in PROVENANCE.items()
+                 if p.status == PROV_FITTED and not p.has_holdout)
+
+
+def _source_text() -> str:
+    with open(os.path.abspath(__file__), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _module_assignments(src: str = None):
+    """(line, names) for every module-level assignment, in source order."""
+    import ast
+    out = []
+    for node in ast.parse(src if src is not None else _source_text()).body:
+        targets = (node.targets if isinstance(node, ast.Assign)
+                   else [node.target] if isinstance(node, ast.AnnAssign) else [])
+        names = []
+        for t in targets:
+            elts = t.elts if isinstance(t, (ast.Tuple, ast.List)) else [t]
+            names += [e.id for e in elts if isinstance(e, ast.Name)]
+        if names:
+            out.append((node.lineno, tuple(names)))
+    return out
+
+
+def module_constants(src: str = None) -> tuple[str, ...]:
+    """Every module-level ALL-CAPS constant, in source order."""
+    seen = []
+    for _, names in _module_assignments(src):
+        seen += [n for n in names if n == n.upper() and n[0].isalpha() and n not in seen]
+    return tuple(seen)
+
+
+def unregistered_constants(src: str = None) -> tuple[str, ...]:
+    """Module constants with no provenance record, the registry's own aside.
+
+    Not an accusation: the register map's field widths rest on the contract, not
+    on evidence about a circuit. It is the list a reader needs before treating
+    the registry as complete."""
+    return tuple(n for n in module_constants(src)
+                 if n not in PROVENANCE and n not in PROV_SCHEMA_NAMES)
+
+
+def prose_tagged_constants(src: str = None) -> dict[str, tuple[str, ...]]:
+    """{constant: prose tags} read out of the comments, not the registry.
+
+    The comment block is the run of `#` lines immediately above an assignment,
+    and only the FIRST assignment under a block is attributed to it -- which is
+    how the comments read, and why this cannot be a grep: a tag names the
+    constant under it, while a grep names a line number. It exists so that
+    adding a tagged constant and forgetting to register it turns a test red."""
+    src = src if src is not None else _source_text()
+    lines = src.splitlines()
+    out = {}
+    for line, names in _module_assignments(src):
+        block = []
+        i = line - 2
+        while i >= 0 and lines[i].lstrip().startswith("#"):
+            block.append(lines[i])
+            i -= 1
+        text = "\n".join(block)
+        tags = tuple(t for t in PROSE_TAGS if t in text)
+        if tags:
+            for n in names:
+                if n not in PROV_SCHEMA_NAMES:      # the header above the vocabulary
+                    out[n] = tags                   # quotes all four tags by name
+    return out
 
 
 def bd_decay_q(knob: float) -> float:

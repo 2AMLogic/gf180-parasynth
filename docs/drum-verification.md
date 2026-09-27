@@ -20,6 +20,26 @@ weak". **All four of the previously suspected defects are refuted**: they were
 measurement artefacts, not design faults. The real faults are different ones,
 listed below.
 
+**What each constant rests on is a query, not a read (#114).** Every constant in
+`model/drums_fx.py` whose comment claims a basis has a record in that module's
+`PROVENANCE` registry, under a closed status — `derived-from-circuit` /
+`measured` / `inferred` / `fitted` — carrying, for a measurement, its sample
+(n, spread, date) and, for a fit, what it was fitted on and what was held out.
+<!-- claim: test=model/test_drums_provenance.py::test_every_prose_tagged_constant_in_the_source_is_registered -->
+
+A constant with no record REFUSES rather than reporting a status, so the
+registry's boundary is stated instead of implied.
+<!-- claim: test=model/test_drums_provenance.py::test_a_constant_with_no_record_is_refused_rather_than_defaulted -->
+
+```
+python model/drums_provenance.py                 # every constant by status
+python model/drums_provenance.py --no-holdout    # fits with nothing held out
+```
+
+The prose comments beside each constant remain the justification; the registry
+is the machine-readable half, so a failing case here can be asked what kind of
+evidence it rests on rather than grepped for one.
+
 ---
 
 ## 1. The reference audio
