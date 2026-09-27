@@ -450,3 +450,174 @@ def test_flops_by_block_counts_each_flop_once_and_spans_wrapped_nets(tmp_path):
     # reported rather than dropped, so the total reconciles with the flow's own count
     assert got["placed but Q drives no net"] == 1
     assert sum(got.values()) == 4
+
+
+# --------------------------------------------------------------------------- #
+# resume: the mode that exists because ERROR_ON_TR_DRC aborts before STAPostPNR
+# --------------------------------------------------------------------------- #
+#
+# The failure being guarded is quiet rather than loud.  `librelane --run-tag X
+# --from OpenROAD.RCX` pointed at a path that is NOT an existing run does not
+# error: it creates the directory and starts the flow at that step with an empty
+# initial state.  A post-route STA on an empty state produces a report, and the
+# report is of nothing.  So the resumable state is asserted on the host, before a
+# container is started, and REFUSED (exit 3) is the outcome when it is absent.
+
+def _fake_ll_run(tmp_path, steps):
+    """steps = [(dirname, has_state)] -- a minimal LibreLane run directory."""
+    run = tmp_path / "runs" / "halfslot"
+    run.mkdir(parents=True)
+    for name, has_state in steps:
+        d = run / name
+        d.mkdir()
+        if has_state:
+            (d / "state_out.json").write_text("{}")
+    return str(run)
+
+
+def test_resume_refuses_when_the_run_directory_does_not_exist(tmp_path):
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(str(tmp_path / "runs" / "nope"), "OpenROAD.RCX")
+    assert "nothing to resume" in str(e.value)
+
+
+def test_resume_refuses_a_run_directory_with_no_state(tmp_path):
+    """A directory full of step folders that never got as far as writing a state is
+    not resumable, and resuming it would run STA on an empty design."""
+    run = _fake_ll_run(tmp_path, [("01-verilator-lint", False)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, "OpenROAD.RCX")
+    assert "state_out.json" in str(e.value)
+
+
+def test_resume_refuses_without_a_from_step(tmp_path):
+    """Without --from, LibreLane restarts the flow from step 1 in the same run
+    directory -- overwriting the very layout being resumed."""
+    run = _fake_ll_run(tmp_path, [("43-openroad-detailedrouting", True)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, None)
+    assert "--from" in str(e.value)
+
+
+def test_resume_reports_the_last_step_that_holds_a_state(tmp_path):
+    run = _fake_ll_run(tmp_path, [
+        ("09-checker-netlistassignstatements", True),
+        ("43-openroad-detailedrouting", True),
+        ("44-checker-trdrc", False),          # aborted before writing a state
+    ])
+    assert rl.check_resume(run, "OpenROAD.RCX") == "43-openroad-detailedrouting"
+
+
+def test_resume_carries_full_s_skip_list_exactly():
+    """--from resolves against the CONFIGURED step list. Resuming with a different
+    skip set resumes into a different flow; that does not error, it runs the wrong
+    steps."""
+    assert rl.stage_args("resume", "/runs") == rl.stage_args("full", "/runs")
+
+
+def test_resume_does_not_skip_the_router_s_own_drc_checker():
+    """`full` skips the sign-off decks and names them. Checker.TrDRC is not one of
+    them: silencing the router's own violation count in the wrapper would remove
+    the only DRC number this flow produces."""
+    assert "Checker.TrDRC" not in rl.SIGNOFF_SKIPS
+    assert "Checker.TrDRC" not in rl.stage_args("resume", "/runs")
+
+
+@pytest.mark.parametrize("rest,want", [
+    (["--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag=halfslot"], "halfslot"),
+    (["-c", "ERROR_ON_TR_DRC=false", "--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag"], None),                       # dangling: no value to read
+    ([], None),
+])
+def test_run_tag_is_read_from_the_forwarded_args(rest, want):
+    """`rest` is an argparse.REMAINDER, so every flag after the mode goes to
+    librelane. Declaring --run-tag on the wrapper too would create a second
+    spelling that reaches the precondition check but not the tool (or vice
+    versa); the check reads what the tool is actually given."""
+    assert rl.passthrough_opt(rest, "--run-tag") == want
+
+
+def test_from_step_accepts_librelane_s_short_spelling():
+    assert rl.passthrough_opt(["-F", "OpenROAD.RCX"], "--from", "-F") == "OpenROAD.RCX"
+
+
+# --------------------------------------------------------------------------- #
+# verify(): the gate itself, with injected defects
+# --------------------------------------------------------------------------- #
+#
+# Everything above tests a PART of the collapse gate.  These four run `verify` end
+# to end, because the gate's only failure mode that matters is a false green and a
+# gate has to be shown going red against the current state before it is worth
+# anything (CLAUDE.md: "Run a gate against the current state before committing it").
+#
+# The injected defects are the three shapes this project has actually hit or
+# recorded: a netlist that collapsed (drum_regs short of its declared bits -- the
+# "1,917-cell all-X ladder_dp" shape), a die with no padframe (docs/dag.json S2's
+# own blocking condition, "routed die has padcells: 0"), and a missing mandatory
+# wafer.space IP macro.
+
+CENSUS_3520 = {"flops_declared_per_module": {"drum_regs": 3520}}
+
+
+def _synthetic_run(tmp_path, *, dregs_flops, pads=754, ws_ip=5):
+    """A minimal LibreLane run directory whose DEF has a known flop census.
+
+    The net names come from the REAL rtl-sketch/synth_top.v, because verify() reads
+    that file rather than taking a net set as an argument -- so a port rename breaks
+    these controls too, which is the point.
+    """
+    nets = sorted(cr.dregs_output_nets(os.path.join(cr.REPO, "rtl-sketch",
+                                                    "synth_top.v")))
+    run = tmp_path / "runs" / "halfslot"
+    step = run / "43-openroad-detailedrouting"
+    step.mkdir(parents=True)
+
+    comps, netlines, n = [], [], 0
+    for i in range(dregs_flops):
+        inst = f"_{i:06d}_"
+        comps.append(f"    - {inst} gf180mcu_fd_sc_mcu7t5v0__dffq_1 "
+                     f"+ PLACED ( 0 0 ) N ;")
+        net = nets[i % len(nets)]
+        netlines.append(f"    - i_chip_core.u_synth.{net}\\[{i}\\] "
+                        f"( {inst} Q ) + USE SIGNAL ;")
+        n += 1
+    for i in range(pads):
+        comps.append(f"    - pad_{i} gf180mcu_fd_io__bi_t + PLACED ( 0 0 ) N ;")
+    for i in range(ws_ip):
+        comps.append(f"    - ws_{i} gf180mcu_ws_ip__qrcode_id + PLACED ( 0 0 ) N ;")
+
+    (step / "chip_top.def").write_text(
+        "COMPONENTS %d ;\n%s\nEND COMPONENTS\nNETS %d ;\n%s\nEND NETS\n"
+        % (len(comps), "\n".join(comps), n, "\n".join(netlines)))
+    (step / "state_out.json").write_text('{"metrics": {"route__drc_errors": 3}}')
+    return str(run)
+
+
+def test_verify_passes_a_healthy_synthetic_layout(tmp_path, capsys):
+    """The green case, so the three reds below are known not to be red for free."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 0
+    assert "VERDICT: the layout places the flops the RTL declares" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_collapsed_drum_regs(tmp_path, capsys):
+    """ONE flop short must fail. A collapsed netlist is smaller AND cleaner."""
+    run = _synthetic_run(tmp_path, dregs_flops=3519)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    out = capsys.readouterr().out
+    assert "VERDICT: MISMATCH" in out
+    assert "collapse signature" in out
+
+
+def test_verify_goes_red_on_a_die_with_no_padframe(tmp_path, capsys):
+    """docs/dag.json S2's own blocking condition was 'routed die has padcells: 0'."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520, pads=0)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "not a chip on" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_missing_wafer_space_ip_macro(tmp_path, capsys):
+    run = _synthetic_run(tmp_path, dregs_flops=3520, ws_ip=4)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "mandatory" in capsys.readouterr().out

@@ -23,7 +23,8 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import check_route as cr   # noqa: E402
+import check_route as cr      # noqa: E402
+import finish_halfslot as fh  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -217,6 +218,110 @@ def timing_section(m: dict, post: set, src: dict) -> str:
     return "\n".join(lines)
 
 
+def plateaus(done: list[dict]) -> list[dict]:
+    """Runs of consecutive iterations at one violation count.
+
+    This is the quantity that decides whether "stop after K iterations without
+    improvement" would have been the right fix, and on this run it says NO -- which
+    is the opposite of what a draft of §6.5 claimed.  So it is computed, not argued.
+    """
+    out: list[dict] = []
+    for r in done:
+        if out and out[-1]["violations"] == r["violations"]:
+            out[-1]["iterations"] += 1
+            out[-1]["last"] = r["iteration"]
+            out[-1]["cpu_s"] += r["cpu_s"] or 0
+            out[-1]["elapsed_s"] += r["elapsed_s"] or 0
+        else:
+            out.append({"violations": r["violations"], "iterations": 1,
+                        "first": r["iteration"], "last": r["iteration"],
+                        "cpu_s": r["cpu_s"] or 0, "elapsed_s": r["elapsed_s"] or 0})
+    return out
+
+
+def iteration_section(run_dir: str) -> str:
+    """What the router's iteration schedule costs -- the §6.5 evidence.
+
+    Generated rather than typed, and the reason is specific: a draft of §6.5 was
+    written off a NINETY-MINUTE-STALE copy of this log and claimed the router
+    "improves nothing" after a plateau.  On the completed log the count improved
+    *after* the longest plateau, so the claim was false and the fix it proposed
+    ("stop after K iterations with no improvement") would have truncated the run
+    before the improvement.  Every number below is therefore computed here, and the
+    two that decide the argument -- the longest plateau and whether the count moved
+    after it -- are in the table rather than in the prose.
+    """
+    step = fh.find_step(run_dir, fh.DETAILED_ROUTING)
+    if not step:
+        raise cr.Refusal(f"{run_dir} has no {fh.DETAILED_ROUTING} step")
+    log = os.path.join(run_dir, step, "openroad-detailedrouting.log")
+    if not os.path.exists(log):
+        raise cr.Refusal(f"{step} has no openroad-detailedrouting.log")
+    its = fh.parse_drt_iterations(open(log, encoding="utf-8", errors="replace").read())
+    done = [r for r in its if r["violations"] is not None]
+    if not done:
+        raise cr.Refusal("the router log has no completed iteration")
+
+    final = done[-1]["violations"]
+    first_at_final = next(r for r in done if r["violations"] == final)
+    after = [r for r in done if r["iteration"] > first_at_final["iteration"]]
+    runs = plateaus(done)
+    longest = max(runs, key=lambda p: p["iterations"])
+    improved_after = any(p["violations"] != longest["violations"]
+                         for p in runs[runs.index(longest) + 1:])
+    stub = [r for r in done if r["kind"] == "stubborn" and r["elapsed_s"]]
+
+    cap = None
+    cfg = os.path.join(run_dir, step, "config.json")
+    if os.path.exists(cfg):
+        import json as _json
+        cap = _json.load(open(cfg, encoding="utf-8")).get("DRT_OPT_ITERS")
+
+    lines = [
+        "| | |",
+        "|---|---:|",
+        f"| iterations logged | {len(done)} |",
+        f"| `DRT_OPT_ITERS` — **INPUT**, a count and not a budget | {num(cap)} |",
+        f"| final violation count | {num(final)} |",
+        f"| first iteration to reach it | **{first_at_final['iteration']}** |",
+        f"| iterations after that | {len(after)} |",
+        f"| CPU time in those iterations | {sum(r['cpu_s'] or 0 for r in after) / 3600:.2f} h |",
+        f"| wall time in those iterations | {sum(r['elapsed_s'] or 0 for r in after) / 3600:.2f} h |",
+        f"| longest run at one count | **{longest['iterations']}** iterations "
+        f"({longest['first']}–{longest['last']}) at {num(longest['violations'])} "
+        f"violations, {longest['cpu_s'] / 3600:.2f} CPU-h |",
+        f"| **did the count improve after that run?** | "
+        f"**{'YES' if improved_after else 'no'}** |",
+    ]
+    if stub:
+        lo = min(r["elapsed_s"] for r in stub) / 60
+        hi = max(r["elapsed_s"] for r in stub) / 60
+        lines.append(f"| `stubborn` iteration wall time, min → max | "
+                     f"{lo:.1f} → {hi:.1f} min ({hi / max(lo, 1e-9):.0f}×) |")
+    lines += ["", "| iteration | kind | violations | wall | CPU |",
+              "|---:|---|---:|---:|---:|"]
+    for r in done[-14:]:
+        lines.append(
+            f"| {r['iteration']} | {r['kind']} | {num(r['violations'])} | "
+            f"{(r['elapsed_s'] or 0) / 60:.1f} min | {(r['cpu_s'] or 0) / 60:.1f} min |")
+    lines.append("")
+    if improved_after:
+        lines.append(
+            f"**The count improved after a run of {longest['iterations']} iterations "
+            f"that did not move it.** So an early stop keyed on "
+            f"\"no improvement for K iterations\" would have had to allow "
+            f"K > {longest['iterations']} to keep this result — which is most of the "
+            f"cap. That is the measurement that refutes the first draft of §6.5, and "
+            f"it is why the finding there is about the *cost schedule* rather than "
+            f"about stopping early.")
+    else:
+        lines.append(
+            f"**The count did not improve after iteration "
+            f"{first_at_final['iteration']}.** On this run an early stop keyed on "
+            f"no-improvement would have been free.")
+    return "\n".join(lines)
+
+
 def padframe_section(m: dict) -> str:
     if "design__instance__count__padcells" not in m:
         raise cr.Refusal("the run has no design__instance__count__padcells")
@@ -333,27 +438,30 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
-def verdict_section(m: dict, post: set, src: dict) -> str:
-    """#33's question, answered from the metrics rather than from the narrative.
+def conditions(m: dict, post: set, src: dict):
+    """(fit_checks, clean_checks) as (label, verdict-or-None, evidence) triples.
 
-    Three independent conditions, each printed with the key it came from and each
-    allowed to fail on its own.  A single "it fits"/"it does not fit" line would let
-    a design that places cleanly but misses timing by two periods be reported as a
-    pass, which is what this run would have done.
+    Extracted so the markdown verdict and the machine-readable one in
+    ``pnr/shuttle/evidence/halfslot-verdict.json`` -- which is what
+    ``docs/dag.json`` node ``S2`` reads -- cannot drift apart.  A DAG node whose
+    colour is computed from a different predicate than the document a reader sees
+    is the exact failure ``tools/compile_dag.py`` was written to stop.
     """
     util = m.get("design__instance__utilization")
     drc = m.get("route__drc_errors")
     pads = m.get("design__instance__count__padcells")
     worst_s, worst_c = worst_setup(m, post)
 
-    checks = [
+    # Does one half slot hold this design?  Geometry, a populated padframe, a route
+    # that finished, and timing that closes.
+    fit_checks = [
         ("placed inside the template's own die and core",
          (util is not None and util < 1.0),
          f"`design__instance__utilization` = {util * 100:.2f} %" if util is not None
          else "no utilisation metric"),
-        ("detailed router reports no violations",
-         (drc == 0) if drc is not None else None,
-         f"`route__drc_errors` = {num(drc)} (`{src.get('route__drc_errors', '?')}`)"
+        ("the detailed route ran to completion",
+         True if drc is not None else None,
+         f"`route__drc_errors` present, written by `{src.get('route__drc_errors', '?')}`"
          if drc is not None
          else "the run has not completed a detailed route — no `route__drc_errors`"),
         ("a populated padframe (S2's own condition)",
@@ -364,22 +472,65 @@ def verdict_section(m: dict, post: set, src: dict) -> str:
          None if worst_s is None else worst_s >= 0,
          f"worst `{worst_c}` = {worst_s:+.3f} ns" if worst_s is not None else worst_c),
     ]
-    lines = ["| condition | verdict | measured |", "|---|---|---|"]
-    for label, ok, ev in checks:
-        mark = {True: "**yes**", False: "**NO**", None: "*not measured*"}[ok]
-        lines.append(f"| {label} | {mark} | {ev} |")
-    failed = [c[0] for c in checks if c[1] is False]
-    unknown = [c[0] for c in checks if c[1] is None]
+    # Is the layout clean?  This run can only speak to the router's own check; every
+    # other row of that list is in §5 and was skipped, so it is NOT aggregated here.
+    clean_checks = [
+        ("the detailed router reports no violations of its own",
+         (drc == 0) if drc is not None else None,
+         f"`route__drc_errors` = {num(drc)} (`{src.get('route__drc_errors', '?')}`)"
+         if drc is not None
+         else "the run has not completed a detailed route — no `route__drc_errors`"),
+    ]
+
+    return fit_checks, clean_checks
+
+
+def verdict_section(m: dict, post: set, src: dict) -> str:
+    """#33's question, answered from the metrics rather than from the narrative.
+
+    Independent conditions, each printed with the key it came from and each allowed
+    to fail on its own.  A single "it fits"/"it does not fit" line would let a design
+    that places cleanly but misses timing by two periods be reported as a pass, which
+    is what an earlier state of this run would have done.
+
+    AND THE TWO QUESTIONS ARE KEPT APART, which is the change that matters here.
+    #33 asks an AREA question: does the joined chip need two quarter slots or a
+    structural cut, or does one half slot hold it?  "Is this layout ready for
+    tapeout?" is a different question with a much longer condition list (§5), and
+    the run's router-DRC count belongs to the second.  Folding them together makes
+    a route that completes with a handful of shorts report as *"does not fit"* --
+    which would send this issue to a business decision about dies per wafer on the
+    strength of three Metal2 shorts.  It is equally wrong to let the area answer
+    launder the DRC count into a clean bill; both verdicts are printed, separately,
+    with their own condition lists.
+    """
+    fit_checks, clean_checks = conditions(m, post, src)
+    drc = m.get("route__drc_errors")
+
+    def table(checks):
+        out = ["| condition | verdict | measured |", "|---|---|---|"]
+        for label, ok, ev in checks:
+            mark = {True: "**yes**", False: "**NO**", None: "*not measured*"}[ok]
+            out.append(f"| {label} | {mark} | {ev} |")
+        return out
+
+    lines = ["#### Does the joined chip fit one half slot? — #33's question", ""]
+    lines += table(fit_checks)
     lines.append("")
-    if not failed and not unknown:
-        lines.append("**The joined chip fits one half slot.** Every condition above is "
-                     "measured from this run. The original issue's choice between two "
-                     "quarter slots and a structural cut does not arise.")
+    fit_failed = [c[0] for c in fit_checks if c[1] is False]
+    fit_unknown = [c[0] for c in fit_checks if c[1] is None]
+    if not fit_failed and not fit_unknown:
+        lines.append(
+            "**Yes — measured, on one half slot.** Every condition above is measured "
+            "from this run. The original issue's choice between two quarter slots and a "
+            "structural cut (dropping the modal bank, the voice, or the writable "
+            "configuration) **does not arise**: no capability has to be given up and no "
+            "second die has to be paid for.")
     else:
         lines.append("**This run does not establish that the joined chip fits one half slot.**")
-        for f in failed:
+        for f in fit_failed:
             lines.append(f"\n- FAILED: {f}")
-        for u in unknown:
+        for u in fit_unknown:
             lines.append(f"\n- NOT MEASURED: {u}")
         lines.append(
             "\n**NOT MEASURED is not FAILED**, and neither is evidence that the design is too "
@@ -387,6 +538,74 @@ def verdict_section(m: dict, post: set, src: dict) -> str:
             "above is a claim about **this run of this flow**. Read which condition is which "
             "before re-opening the area question — and in particular do not read an unfinished "
             "run as a negative result.")
+
+    lines += ["", "#### Is the layout clean? — a different question, and not #33's", ""]
+    lines += table(clean_checks)
+    lines.append("")
+    clean_failed = [c[0] for c in clean_checks if c[1] is False]
+    clean_unknown = [c[0] for c in clean_checks if c[1] is None]
+    if clean_unknown:
+        lines.append("**Not measured.** The router has not reported a violation count.")
+    elif clean_failed:
+        lines.append(
+            f"**No — the route is not clean.** The router leaves **{num(drc)}** violation"
+            f"{'' if drc == 1 else 's'} of its own (§4.5 breaks them down by layer from a "
+            "second, independent source). That is a sign-off question, not an area "
+            "question: it does not become a reason to spend a second die or cut a "
+            "capability, and it is **not** cleared by the area answer above. Everything in "
+            "§5 — sign-off DRC, LVS, XOR, antenna and density decks, IR drop, gate-level "
+            "simulation — is additionally unrun, so this row is the *weakest* of the "
+            "cleanliness claims and not a summary of them.")
+    else:
+        lines.append(
+            "**The router reports no violations of its own.** That is the router checking "
+            "its own work; §5 lists the sign-off decks this run did not run, and this row "
+            "does not stand in for them.")
+    return "\n".join(lines)
+
+
+def router_section(run_dir: str, m: dict, src: dict) -> str:
+    """The router's violation count from BOTH places that hold it.
+
+    The metric and the router's log have different producers, and §6.1 is a finding
+    about a metric that was byte-identical for thirty steps after the run that wrote
+    it.  A count that agrees across two producers is a count; one source is a claim.
+    """
+    try:
+        d = fh.drc_verdict(run_dir)
+    except fh.Refusal as e:
+        # finish_halfslot has its own Refusal; main() catches check_route's.  Left
+        # unconverted this is a traceback in the place a REFUSED belongs.
+        raise cr.Refusal(str(e)) from e
+    metric = d["route__drc_errors"]
+    log_n = d["log_violations"]
+    lines = [
+        "| | violations | source |",
+        "|---|---:|---|",
+        f"| flow metric | {num(metric)} | `route__drc_errors`, written by "
+        f"`{src.get('route__drc_errors', '?')}` |",
+        f"| the router's own log | {num(log_n)} | `{d['step']}/"
+        "openroad-detailedrouting.log`, last `DRT-0199` |",
+    ]
+    lines.append("")
+    if metric is not None and log_n is not None and int(metric) == int(log_n):
+        lines.append("The two agree. `finish_halfslot.py drc` REFUSES if they do not — "
+                     "one source cannot tell a fresh count from a carried-forward one.")
+    else:
+        lines.append("**The two do not agree**, and `finish_halfslot.py drc` refuses on "
+                     "that; treat neither as the run's count.")
+    if d["by_layer"]:
+        lines += ["", "| layer | violations |", "|---|---:|"]
+        for layer, n in sorted(d["by_layer"].items()):
+            lines.append(f"| `{layer}` | {num(n)} |")
+    if d["log_iteration"] is not None:
+        lines += ["", f"Reported at the router's **{d['log_iteration']}th** iteration of "
+                      f"{d['log_iterations_seen']} logged. §6.5 is about what those "
+                      "iterations cost."]
+    if log_n:
+        lines += ["", "These are **shorts the router could not resolve**, not rule "
+                      "violations it never checked — for the rules it never checked, see "
+                      "§6.4 and §5."]
     return "\n".join(lines)
 
 
@@ -424,6 +643,64 @@ def growth_section(m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
+def verdict_json(run_dir: str, step: str, m: dict, post: set, src: dict,
+                 census: dict) -> dict:
+    """The verdict table as data, for docs/dag.json node S2.
+
+    ``passed`` is the FIT question and only the FIT question -- S2 is named "Fits a
+    real shuttle padframe".  The router's own DRC count is carried in the payload as
+    ``router_clean`` and is deliberately NOT part of ``passed``: a node that goes red
+    on three Metal2 shorts would be reporting a sign-off problem in the place a
+    reader looks for an area answer, and a node that goes green while hiding the
+    count would be worse.  ``tools/compile_dag.py`` honours ``passed``; everything
+    else here is for the human who follows the link.
+
+    A condition that is NOT MEASURED makes ``passed`` false.  That is deliberate and
+    it is not the same as FAILED: the ``conditions`` list distinguishes them, and
+    ``blocked_on`` names the unmeasured ones so the node's note can say which.
+    """
+    fit, clean = conditions(m, post, src)
+    unmeasured = [c[0] for c in fit if c[1] is None]
+    failed = [c[0] for c in fit if c[1] is False]
+    drc = m.get("route__drc_errors")
+    declared = census.get("flops_declared_per_module", {}).get("drum_regs")
+    seq = None
+    try:
+        def_path = cr.find_final_def(run_dir)
+        dregs = cr.dregs_output_nets(os.path.join(REPO, "rtl-sketch", "synth_top.v"))
+        seq = cr.flops_by_block(def_path, dregs).get(cr.DREGS_BUCKET)
+    except cr.Refusal:
+        pass
+    worst_s, worst_c = worst_setup(m, post)
+    return {
+        "passed": not failed and not unmeasured,
+        "question": "Does the joined chip fit one wafer.space gf180mcu half slot "
+                    "(slot_1x0p5) -- issue #33",
+        "run": os.path.basename(run_dir),
+        "last_step_with_metrics": step,
+        "conditions": [{"condition": c[0],
+                        "verdict": {True: "yes", False: "no", None: "not measured"}[c[1]],
+                        "measured": c[2]} for c in fit],
+        "failed": failed,
+        "not_measured": unmeasured,
+        "router_clean": None if drc is None else (drc == 0),
+        "route__drc_errors": drc,
+        "utilisation": m.get("design__instance__utilization"),
+        "padcells": m.get("design__instance__count__padcells"),
+        "ws_ip_macros": m.get("design__instance__count__macros"),
+        "worst_post_route_setup_ns": worst_s,
+        "worst_post_route_setup_corner": worst_c if worst_s is not None else None,
+        "clock_period_ns": CLOCK_PERIOD_NS,
+        "drum_regs_flops_placed": seq,
+        "drum_regs_flops_declared": declared,
+        "signoff_checks_run": [],
+        "note": "passed is the AREA question only. Sign-off DRC, LVS, XOR, antenna, "
+                "density, IR drop and gate-level simulation were NOT run -- see "
+                "docs/pnr-shuttle-halfslot.md section 5.",
+        "doc": "docs/pnr-shuttle-halfslot.md",
+    }
+
+
 # name -> (fn, what it is called with).  "prov" means (metrics, post_route_keys,
 # source_step_by_key); the provenance arguments exist so no section can print a
 # carried-forward pre-route metric as a post-route one.
@@ -450,6 +727,9 @@ def main(argv=None) -> int:
     ap.add_argument("run_dir")
     ap.add_argument("--doc", default=os.path.join(REPO, "docs", "pnr-shuttle-halfslot.md"))
     ap.add_argument("--census", default=os.path.join(HERE, "evidence", "flop-census.json"))
+    ap.add_argument("--verdict-json",
+                    default=os.path.join(HERE, "evidence", "halfslot-verdict.json"),
+                    help="the verdict as data; docs/dag.json node S2 reads this")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the document on disk differs from the generated one")
     a = ap.parse_args(argv)
@@ -465,6 +745,8 @@ def main(argv=None) -> int:
             doc = splice(doc, name,
                          fn(metrics, post, src) if kind == "prov" else fn(metrics))
         doc = splice(doc, "measured:growth", growth_section(metrics, census))
+        doc = splice(doc, "measured:router", router_section(a.run_dir, metrics, src))
+        doc = splice(doc, "measured:iterations", iteration_section(a.run_dir))
         doc = splice(doc, "measured:crosscheck",
                      crosscheck_section(a.run_dir, metrics, census))
         doc = re.sub(r"(?m)^<!-- generated-from:.*\n", "", doc)
@@ -484,6 +766,13 @@ def main(argv=None) -> int:
     with open(a.doc, "w", encoding="utf-8") as f:
         f.write(doc)
     print(f"wrote {a.doc} from {a.run_dir} step {step}")
+    v = verdict_json(a.run_dir, step, metrics, post, src, census)
+    with open(a.verdict_json, "w", encoding="utf-8") as f:
+        import json as _json
+        _json.dump(v, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"wrote {a.verdict_json}: passed={v['passed']} "
+          f"router_clean={v['router_clean']}")
     return 0
 
 
