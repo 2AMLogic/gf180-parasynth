@@ -174,9 +174,13 @@ records are in `docs/deadline/recheck-333/`, in a separate PR.
 
 The candidate was selected on development conditions: pulse29 at the M5 notes
 72/84/96, preset filter. It is confirmed on **107 untouched** points: other
-notes, other duty shapes, and the cutoff/q/drive pairwise set.
+notes, other duty shapes, and the cutoff/q/drive pairwise set. **This table
+was measured at rectangle gain 0.85** (`probe/summary.json`, provenance commit
+`d1fe013`, before the rectangle-headroom work `a4e2f0a`/`97a7078`/`1063bfc`
+picked 0.74 for R2). It is evidence for pulse2x at 0.85 against R1, not for
+R2's actual 0.74 configuration.
 
-| property (pulse2x − R1) | development (3) | untouched (107) |
+| property (pulse2x − R1, at rectangle gain 0.85) | development (3) | untouched (107) |
 |---|---|---|
 | output unwanted, dBFS | 3 improved > 1 dB (−7.7 to −8.6) | 95 improved, 1 regressed (+1.2 dB: MIDI 120 at cutoff 400, where the intended note is −106 dBFS, i.e. filtered to inaudibility) |
 | output unwanted, relative | 3 improved (−7.5 to −8.1) | 93 improved, **0 regressed** |
@@ -184,10 +188,20 @@ notes, other duty shapes, and the cutoff/q/drive pairwise set.
 | intended level | −0.24 to −0.74 dB | −1.47 to +7.5 dB (the 0.85 headroom gain) |
 | new rail samples / new dropouts at output | 0 / 0 | 0 / 0 |
 
-The candidate improves unwanted energy both absolutely and relative to the
-signal. It does not win by getting quieter: the relative gain is as large as
-the absolute one, and the gain-only control explains 1.65 dB of foldback at
-R2's rectangle gain, against 5.3–6.4 dB for the rate change.
+At rectangle gain 0.85, the candidate improves unwanted energy both
+absolutely and relative to the signal. It does not win by getting quieter
+there: the relative gain is as large as the absolute one, and the gain-only
+control explains 0.86/0.83 dB of foldback at 0.85 (M5A/M5B), against
+7.21/6.11 dB for the rate change.
+
+**At R2's rectangle gain of 0.74**, the 107-point untouched comparison above
+has not been re-run; only a narrower gain-only check exists
+(`pulse2x-headroom/probe-074.json`, 32 points, comparing 0.74 against 0.85):
+**7 of the 32 worsen, one by more than 1 dB (pulse15 MIDI 84, +1.02 dB)**. The
+gain-only control at 0.74 explains 1.66/1.65 dB of foldback (M5A/M5B), against
+6.41/5.28 dB for the rate change (§C). The "93 improved, 0 regressed" row
+above is established for pulse2x at 0.85 against R1; it is **not** established
+for pulse2x at R2's 0.74.
 
 **Production path, PULSE2X=1, unmutated RTL, current sources:**
 
@@ -205,12 +219,12 @@ in `docs/deadline/recheck-333/README.md`:
 
 ## Remaining critical defects and the next decisive action
 
-1. **M5A/M5B harmonic shape (7.56×/5.96×)** is localized to the ladder's tanh operating level at drive 0.75. **Next:** one bounded operating-level candidate:
-   - lower drive, with output gain (`ogain`/`vol`) restoring the M5 gain property to within ±0.5 dB;
-   - selected on M5A 84/96, confirmed on M5B 72 and untouched notes;
-   - output unwanted and upper-wanted must be preserved, as measured by this probe.
-2. **Pulse2x rectangular headroom at MIDI ≥ 108.** The decimator rail is reached. **Next:** measure clipped energy (not rail counts) against a 0.80 headroom challenger before the image is built.
-3. **Attack** (1.07×/1.21×) is unchanged and outside this batch.
+1. **M5A/M5B harmonic shape (7.56×/5.96×)**, localized to the ladder's tanh operating level at drive 0.75, is resolved for the saw: the bounded operating-level candidate was run and a shared-drive lower operating point was a **negative result** (`operating-level/`), so the fix is a saw-only drive. **Recommended: saw drive 0.35** (`saw-drive/`), giving M5A 5.30× and M5B 4.96×, both now limited by the pulse.
+2. **Pulse2x rectangular headroom at MIDI ≥ 108** is resolved: clipped energy was measured against a 0.80 headroom challenger (`pulse2x-headroom/`); 0.80 fails, and **0.74 was selected by the frozen rule** (§C).
+3. **Pulse brightness deficit**, the new limiting factor after the saw-only drive fix, is filed as #347.
+4. **Dynamic coverage.** Transitions, glides and modulation have no artifact coverage (§B) and need a validated time-varying oracle before this probe can be extended to them.
+5. **Fresh-condition confirmation of saw drive 0.35** has not yet been run under a control that can demonstrably fail.
+6. **Attack** (1.07×/1.21×) is unchanged and outside this batch.
 
 ## Wrong-then-right, this batch: 3
 
