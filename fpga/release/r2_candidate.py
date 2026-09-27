@@ -54,7 +54,7 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "rtl-sketch"):
         sys.path.insert(0, str(_p))
 
 RECORD = HERE / "r2-candidate.json"
-EVIDENCE = ROOT / "fpga/reports/r2-candidate/summary.json"
+EVIDENCE = ROOT / "fpga/reports/r2/summary.json"   # the settled set (r2-candidate/ is history)
 NAME = "R2 candidate"
 IMAGE = "r2"                                # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}

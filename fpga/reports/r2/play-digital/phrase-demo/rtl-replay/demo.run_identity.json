@@ -1,0 +1,56 @@
+{
+ "identity": {
+  "sources": {
+   "rtl-sketch/tb_uart_bx.v": "3d0e792b0de173c56f517786e2454c902a6e12af7bf4c80ff6be148b4e46d27e",
+   "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+   "rtl-sketch/voice_dp.v": "c1d21f5b8e0c616960e5626bdb76a0ce3fa2379de3670f89408b6e94c17acc59",
+   "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+   "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+   "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+   "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+   "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+   "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+   "rtl-sketch/ladder_dp_n.v": "2276e89d112bd24d6384f3deed427bcabb9525d3df68ded8c61d2c681a3a8373",
+   "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+   "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+   "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+   "rtl-sketch/polyblep_saw_pair.v": "cac599b32b23227827dbf3f3b7225a4d1fa8843e1d90d6877ad5916be6d3c886",
+   "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+   "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+   "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+   "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+   "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1"
+  },
+  "roms": {
+   "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+   "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+   "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+   "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+   "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+   "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
+  },
+  "defines": [
+   "VOICE_OSC_2X",
+   "VOICE_FILTER_2X",
+   "VOICE_PULSE_2X",
+   "UART_HIER"
+  ],
+  "stimulus": "b93fc4dd2e3e535542ac41dbb5f04635f86aa40d1240c62d5b4c90fbb5d7857e",
+  "tail_frames": 47320,
+  "simulator": {
+   "iverilog -V": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+   "vvp -V": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+   "oss_cad_pin": {
+    "release": "2026-09-21",
+    "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+   }
+  }
+ },
+ "outputs": {
+  "i2s": "16d9097163f94597e05a0a018e6783bd715c6ba93470d216231a317540ab17fb",
+  "wrs": "bb72324b68d24dbe698e5ee21c19b0c81a8b019f62d701698255369675da9230",
+  "txd": "7521c7b2e7f374ec0c0f1f42833580b5d84ea7805f007bc5b869224ef9632155",
+  "samp": "d2b610001449013d866f9b168ea339e9d382f4990e4cc4276d5be197b3653acf",
+  "transcript": "495d82b416c4d2bcc0ded1c3e93f39859dcc6515e99ecef6345a6943be42abf7"
+ }
+}
