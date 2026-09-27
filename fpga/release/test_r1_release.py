@@ -271,12 +271,12 @@ def test_control_a_record_from_another_instrument_is_refused(tmp_path, monkeypat
 
 
 def test_control_a_wrong_pin_is_refused(monkeypatch, no_pinned_cache):
-    """Pinned at the commit BEFORE the instrument's last change: its bytes are
-    not the record's instrument."""
+    """Pinned at the commit before the instrument existed (it was added in
+    EXT_IO_INSTRUMENT_COMMIT): nothing can be verified, so REFUSED."""
     import subprocess
     parent = subprocess.run(["git", "-C", str(ROOT), "rev-parse",
                              rr.EXT_IO_INSTRUMENT_COMMIT + "^"],
                             capture_output=True, text=True, check=True).stdout.strip()
     monkeypatch.setattr(rr, "EXT_IO_INSTRUMENT_COMMIT", parent)
     verdict, detail = rr.check()
-    assert verdict == "REFUSED" and "other than the one pinned" in detail, detail
+    assert verdict == "REFUSED" and "cannot read fpga/ext_io_extract.py" in detail, detail
