@@ -147,8 +147,20 @@ on its own.
 Both phrases now pass foldback (limit 3 dB). Harmonic shape is unchanged
 (7.56/5.96: saw is untouched, and the probe test shows R1 and pulse2x saw are
 bit-identical). The disabled control is byte-identical to the baseline and is
-not promoted. The gain-only control shows that the 0.85 level change explains
-under 0.9 dB of the gain.
+not promoted. The gain-only control applies the candidate's level change to
+the baseline without changing the oscillator rate:
+
+| rectangle gain | gain-only foldback (M5A / M5B) | due to level alone | pulse2x foldback | due to the rate change |
+|---|---|---:|---|---:|
+| 0.85 (pulse2x as first built) | 9.413 / 8.019 dB | 0.86 / 0.83 dB | 2.206 / 1.913 dB | 7.21 / 6.11 dB |
+| **0.74 (R2, with the rectangle headroom)** | **8.618 / 7.195 dB** | **1.66 / 1.65 dB** | 2.206 / 1.913 dB | **6.41 / 5.28 dB** |
+
+At 0.85, the control scaled rectangles by the saw's gain; R2 uses 0.74 for
+rectangles. `tools/measure_mono_pulse_2x.py` now takes one rectangle gain for
+both candidate and control (`--rect-gain-q15 24248`, `pulse2x-rect074/`).
+The earlier "under 0.9 dB" held only for 0.85. **At R2's 0.74 the level
+change accounts for 1.65 dB of foldback.** The rate change still accounts for
+5.3–6.4 dB, so the candidate does not pass by being quieter.
 
 The strict incremental comparator still rejects the candidate: an
 already-failing pulse partial moves by 0.347 dB. That is the tradeoff already
@@ -174,7 +186,8 @@ notes, other duty shapes, and the cutoff/q/drive pairwise set.
 
 The candidate improves unwanted energy both absolutely and relative to the
 signal. It does not win by getting quieter: the relative gain is as large as
-the absolute one, and the gain-only control is under 0.9 dB.
+the absolute one, and the gain-only control explains 1.65 dB of foldback at
+R2's rectangle gain, against 5.3–6.4 dB for the rate change.
 
 **Production path, PULSE2X=1, unmutated RTL, current sources:**
 
