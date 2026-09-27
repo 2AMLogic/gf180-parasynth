@@ -53,10 +53,13 @@ ROOT = Path(__file__).resolve().parents[1]
 #                                 DR 0017), before the clap's final strike.
 #   reports/arty/l2-clean         the clap's final strike (revision 14,
 #                                 ENV_FRATE) before polyBLAMP merged.
-#   reports/arty/rev14-clean      this tree: revision 14, both of the above.
-#                                 See that directory's README.
+#   reports/arty/rev14-clean      revision 14, both of the above: R1's sources,
+#                                 frozen at r1_candidate.RTL_FROZEN_AT (R1 is
+#                                 published; build_arty.IMAGE_VERIFICATION["r1"]).
+#   reports/arty/r2-clean         this tree: R2 (PULSE2X=1 and R2's RTL set,
+#                                 fpga/release/R2.md). See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
+    "arty_a7_top": build.IMAGE_VERIFICATION[build.TREE_IMAGE],
 }
 
 
@@ -317,8 +320,7 @@ def publish(artifact, output):
     if sorted(compiled_sources + compiled_xdc) != non_rom:
         raise ValueError("compiled input set differs from the build record's "
                          "source_sha256")
-    ver_path = VERIFICATION_BY_WRAPPER.get(top) if image == "r1" \
-        else build.IMAGE_VERIFICATION.get(image)
+    ver_path = build.IMAGE_VERIFICATION.get(image) if top in VERIFICATION_BY_WRAPPER else None
     if ver_path is None:
         raise ValueError("no bound verification evidence for wrapper " + top)
     proof = build.validate_verification(ver_path,

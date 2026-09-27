@@ -26,6 +26,11 @@ CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 IMAGE_CONFIGS = {"r1": CONFIG, "r2": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}}
 IMAGE_VERIFICATION = {"r1": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
                       "r2": ROOT / "fpga/reports/arty/r2-clean/verification.json"}
+# The image THIS tree's compiled sources are (fpga/release/R2.md). R1's sources
+# are frozen at r1_candidate.RTL_FROZEN_AT and differ from the tree's, so an
+# `--image r1` build of this tree REFUSES at its verification record (the
+# source digests), rather than labelling R2's RTL with R1's configuration.
+TREE_IMAGE = "r2"
 
 
 def config_defines(config) -> list:
@@ -128,8 +133,9 @@ def main(argv=None):
                         default=ROOT / "build/arty-controls/clean/verification.json")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--vivado", default="vivado")
-    parser.add_argument("--image", choices=sorted(IMAGE_CONFIGS), default="r1",
-                        help="which image's configuration to build (default r1)")
+    parser.add_argument("--image", choices=sorted(IMAGE_CONFIGS), default=TREE_IMAGE,
+                        help=f"which image's configuration to build (default {TREE_IMAGE}, "
+                             "the tree's image)")
     args = parser.parse_args(argv)
     config = IMAGE_CONFIGS[args.image]
     directory = args.out.resolve()
