@@ -1,0 +1,759 @@
+{
+ "CY0000": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.955,
+   "floor_db_re_peak": -280.15,
+   "edt10_ms": 414.52,
+   "end_margin_db": 250.25,
+   "late_residual_db": 0.44,
+   "t20_late_ms": 890.73
+  },
+  "Ln": {
+   "energy_share_db": -4.632,
+   "floor_db_re_peak": -278.51,
+   "edt10_ms": 417.33,
+   "end_margin_db": 248.45,
+   "late_residual_db": 0.48,
+   "t20_late_ms": 891.31
+  },
+  "H": {
+   "energy_share_db": -5.371,
+   "floor_db_re_peak": -281.57,
+   "edt10_ms": 172.29,
+   "end_margin_db": 247.82,
+   "late_residual_db": 1.07,
+   "t20_late_ms": 803.38
+  },
+  "H_minus_L_db": -2.416
+ },
+ "CY0010": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.929,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1607.85,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.585,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1613.94,
+   "end_margin_db": 1.41,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.045,
+   "floor_db_re_peak": -32.99,
+   "edt10_ms": 742.4,
+   "end_margin_db": 3.38,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.116
+ },
+ "CY0025": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.793,
+   "floor_db_re_peak": -280.52,
+   "edt10_ms": 839.27,
+   "end_margin_db": 251.54,
+   "late_residual_db": 0.33,
+   "t20_late_ms": 1888.73
+  },
+  "Ln": {
+   "energy_share_db": -4.453,
+   "floor_db_re_peak": -278.93,
+   "edt10_ms": 842.33,
+   "end_margin_db": 249.8,
+   "late_residual_db": 0.3,
+   "t20_late_ms": 1887.47
+  },
+  "H": {
+   "energy_share_db": -5.419,
+   "floor_db_re_peak": -282.17,
+   "edt10_ms": 364.27,
+   "end_margin_db": 247.27,
+   "late_residual_db": 1.18,
+   "t20_late_ms": 1730.95
+  },
+  "H_minus_L_db": -2.626
+ },
+ "CY0050": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.607,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1603.81,
+   "end_margin_db": 1.47,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.255,
+   "floor_db_re_peak": -21.48,
+   "edt10_ms": 1608.88,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.69,
+   "floor_db_re_peak": -32.87,
+   "edt10_ms": 732.69,
+   "end_margin_db": 3.02,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.0 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -3.083
+ },
+ "CY0075": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.929,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1607.85,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.585,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1613.94,
+   "end_margin_db": 1.41,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.045,
+   "floor_db_re_peak": -32.99,
+   "edt10_ms": 742.4,
+   "end_margin_db": 3.38,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.116
+ },
+ "CY1000": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.53,
+   "floor_db_re_peak": -279.35,
+   "edt10_ms": 416.31,
+   "end_margin_db": 249.26,
+   "late_residual_db": 0.43,
+   "t20_late_ms": 891.34
+  },
+  "Ln": {
+   "energy_share_db": -5.219,
+   "floor_db_re_peak": -277.69,
+   "edt10_ms": 419.67,
+   "end_margin_db": 247.7,
+   "late_residual_db": 0.48,
+   "t20_late_ms": 892.05
+  },
+  "H": {
+   "energy_share_db": -4.404,
+   "floor_db_re_peak": -282.32,
+   "edt10_ms": 153.02,
+   "end_margin_db": 249.04,
+   "late_residual_db": 1.48,
+   "t20_late_ms": 763.36
+  },
+  "H_minus_L_db": -0.874
+ },
+ "CY1010": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.665,
+   "floor_db_re_peak": -21.35,
+   "edt10_ms": 1616.0,
+   "end_margin_db": 1.39,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -5.336,
+   "floor_db_re_peak": -21.35,
+   "edt10_ms": 1622.62,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -3.981,
+   "floor_db_re_peak": -34.58,
+   "edt10_ms": 658.85,
+   "end_margin_db": 4.2,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 4.2 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -0.316
+ },
+ "CY1025": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.418,
+   "floor_db_re_peak": -279.72,
+   "edt10_ms": 844.5,
+   "end_margin_db": 250.79,
+   "late_residual_db": 0.32,
+   "t20_late_ms": 1889.38
+  },
+  "Ln": {
+   "energy_share_db": -5.089,
+   "floor_db_re_peak": -278.11,
+   "edt10_ms": 846.92,
+   "end_margin_db": 249.02,
+   "late_residual_db": 0.3,
+   "t20_late_ms": 1888.05
+  },
+  "H": {
+   "energy_share_db": -4.371,
+   "floor_db_re_peak": -283.0,
+   "edt10_ms": 328.85,
+   "end_margin_db": 248.35,
+   "late_residual_db": 1.81,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H_minus_L_db": -0.953
+ },
+ "CY1050": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.204,
+   "floor_db_re_peak": -21.37,
+   "edt10_ms": 1609.81,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.863,
+   "floor_db_re_peak": -21.37,
+   "edt10_ms": 1616.4,
+   "end_margin_db": 1.41,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -4.596,
+   "floor_db_re_peak": -34.45,
+   "edt10_ms": 592.4,
+   "end_margin_db": 3.7,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.7 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -1.392
+ },
+ "CY1075": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.665,
+   "floor_db_re_peak": -21.35,
+   "edt10_ms": 1616.0,
+   "end_margin_db": 1.39,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -5.336,
+   "floor_db_re_peak": -21.35,
+   "edt10_ms": 1622.62,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -3.981,
+   "floor_db_re_peak": -34.58,
+   "edt10_ms": 658.85,
+   "end_margin_db": 4.2,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 4.2 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -0.316
+ },
+ "CY2500": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.957,
+   "floor_db_re_peak": -280.14,
+   "edt10_ms": 414.52,
+   "end_margin_db": 250.24,
+   "late_residual_db": 0.44,
+   "t20_late_ms": 890.73
+  },
+  "Ln": {
+   "energy_share_db": -4.635,
+   "floor_db_re_peak": -278.5,
+   "edt10_ms": 417.4,
+   "end_margin_db": 248.45,
+   "late_residual_db": 0.48,
+   "t20_late_ms": 891.33
+  },
+  "H": {
+   "energy_share_db": -5.366,
+   "floor_db_re_peak": -281.58,
+   "edt10_ms": 172.25,
+   "end_margin_db": 247.81,
+   "late_residual_db": 1.07,
+   "t20_late_ms": 803.27
+  },
+  "H_minus_L_db": -2.409
+ },
+ "CY2510": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.932,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1607.94,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.588,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1613.96,
+   "end_margin_db": 1.41,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.039,
+   "floor_db_re_peak": -33.0,
+   "edt10_ms": 742.19,
+   "end_margin_db": 3.42,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.107
+ },
+ "CY2525": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.796,
+   "floor_db_re_peak": -280.52,
+   "edt10_ms": 839.35,
+   "end_margin_db": 251.54,
+   "late_residual_db": 0.33,
+   "t20_late_ms": 1888.73
+  },
+  "Ln": {
+   "energy_share_db": -4.455,
+   "floor_db_re_peak": -278.93,
+   "edt10_ms": 842.33,
+   "end_margin_db": 249.8,
+   "late_residual_db": 0.3,
+   "t20_late_ms": 1887.47
+  },
+  "H": {
+   "energy_share_db": -5.413,
+   "floor_db_re_peak": -282.17,
+   "edt10_ms": 364.17,
+   "end_margin_db": 247.32,
+   "late_residual_db": 1.19,
+   "t20_late_ms": 1730.74
+  },
+  "H_minus_L_db": -2.617
+ },
+ "CY2550": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.61,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1603.81,
+   "end_margin_db": 1.47,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.258,
+   "floor_db_re_peak": -21.48,
+   "edt10_ms": 1608.9,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.684,
+   "floor_db_re_peak": -32.88,
+   "edt10_ms": 731.9,
+   "end_margin_db": 3.05,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.1 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -3.074
+ },
+ "CY2575": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.932,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1607.94,
+   "end_margin_db": 1.53,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.588,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1613.96,
+   "end_margin_db": 1.41,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.039,
+   "floor_db_re_peak": -33.0,
+   "edt10_ms": 742.19,
+   "end_margin_db": 3.42,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.107
+ },
+ "CY5000": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.039,
+   "floor_db_re_peak": -280.02,
+   "edt10_ms": 414.71,
+   "end_margin_db": 250.07,
+   "late_residual_db": 0.43,
+   "t20_late_ms": 890.79
+  },
+  "Ln": {
+   "energy_share_db": -4.718,
+   "floor_db_re_peak": -278.37,
+   "edt10_ms": 418.62,
+   "end_margin_db": 248.33,
+   "late_residual_db": 0.49,
+   "t20_late_ms": 891.34
+  },
+  "H": {
+   "energy_share_db": -5.205,
+   "floor_db_re_peak": -281.69,
+   "edt10_ms": 169.31,
+   "end_margin_db": 248.06,
+   "late_residual_db": 1.16,
+   "t20_late_ms": 798.13
+  },
+  "H_minus_L_db": -2.166
+ },
+ "CY5010": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.039,
+   "floor_db_re_peak": -21.43,
+   "edt10_ms": 1609.19,
+   "end_margin_db": 1.5,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.697,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1615.69,
+   "end_margin_db": 1.43,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -4.855,
+   "floor_db_re_peak": -33.25,
+   "edt10_ms": 725.75,
+   "end_margin_db": 3.55,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -1.816
+ },
+ "CY5025": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.885,
+   "floor_db_re_peak": -280.39,
+   "edt10_ms": 840.67,
+   "end_margin_db": 251.43,
+   "late_residual_db": 0.32,
+   "t20_late_ms": 1888.91
+  },
+  "Ln": {
+   "energy_share_db": -4.547,
+   "floor_db_re_peak": -278.8,
+   "edt10_ms": 842.62,
+   "end_margin_db": 249.73,
+   "late_residual_db": 0.3,
+   "t20_late_ms": 1887.55
+  },
+  "H": {
+   "energy_share_db": -5.236,
+   "floor_db_re_peak": -282.3,
+   "edt10_ms": 355.98,
+   "end_margin_db": 247.38,
+   "late_residual_db": 1.27,
+   "t20_late_ms": 1718.3
+  },
+  "H_minus_L_db": -2.351
+ },
+ "CY5050": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.695,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1604.44,
+   "end_margin_db": 1.48,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.345,
+   "floor_db_re_peak": -21.46,
+   "edt10_ms": 1609.4,
+   "end_margin_db": 1.48,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.499,
+   "floor_db_re_peak": -33.13,
+   "edt10_ms": 707.29,
+   "end_margin_db": 3.19,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.2 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.804
+ },
+ "CY5075": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.039,
+   "floor_db_re_peak": -21.43,
+   "edt10_ms": 1609.19,
+   "end_margin_db": 1.5,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.697,
+   "floor_db_re_peak": -21.45,
+   "edt10_ms": 1615.69,
+   "end_margin_db": 1.43,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -4.855,
+   "floor_db_re_peak": -33.25,
+   "edt10_ms": 725.75,
+   "end_margin_db": 3.55,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -1.816
+ },
+ "CY7500": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.218,
+   "floor_db_re_peak": -279.76,
+   "edt10_ms": 415.15,
+   "end_margin_db": 249.75,
+   "late_residual_db": 0.43,
+   "t20_late_ms": 890.96
+  },
+  "Ln": {
+   "energy_share_db": -4.901,
+   "floor_db_re_peak": -278.11,
+   "edt10_ms": 419.15,
+   "end_margin_db": 248.08,
+   "late_residual_db": 0.48,
+   "t20_late_ms": 891.55
+  },
+  "H": {
+   "energy_share_db": -4.885,
+   "floor_db_re_peak": -281.93,
+   "edt10_ms": 162.04,
+   "end_margin_db": 248.5,
+   "late_residual_db": 1.27,
+   "t20_late_ms": 785.46
+  },
+  "H_minus_L_db": -1.667
+ },
+ "CY7510": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.27,
+   "floor_db_re_peak": -21.4,
+   "edt10_ms": 1610.9,
+   "end_margin_db": 1.44,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.932,
+   "floor_db_re_peak": -21.41,
+   "edt10_ms": 1618.56,
+   "end_margin_db": 1.47,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -4.497,
+   "floor_db_re_peak": -33.77,
+   "edt10_ms": 697.08,
+   "end_margin_db": 3.82,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.8 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -1.227
+ },
+ "CY7525": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.08,
+   "floor_db_re_peak": -280.13,
+   "edt10_ms": 842.15,
+   "end_margin_db": 251.16,
+   "late_residual_db": 0.33,
+   "t20_late_ms": 1889.05
+  },
+  "Ln": {
+   "energy_share_db": -4.745,
+   "floor_db_re_peak": -278.53,
+   "edt10_ms": 844.85,
+   "end_margin_db": 249.46,
+   "late_residual_db": 0.31,
+   "t20_late_ms": 1887.87
+  },
+  "H": {
+   "energy_share_db": -4.886,
+   "floor_db_re_peak": -282.57,
+   "edt10_ms": 345.04,
+   "end_margin_db": 247.72,
+   "late_residual_db": 1.5,
+   "t20_late_ms": 1692.34
+  },
+  "H_minus_L_db": -1.806
+ },
+ "CY7550": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -2.881,
+   "floor_db_re_peak": -21.42,
+   "edt10_ms": 1606.94,
+   "end_margin_db": 1.51,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.534,
+   "floor_db_re_peak": -21.43,
+   "edt10_ms": 1611.94,
+   "end_margin_db": 1.42,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -5.134,
+   "floor_db_re_peak": -33.64,
+   "edt10_ms": 655.58,
+   "end_margin_db": 3.29,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.3 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -2.253
+ },
+ "CY7575": {
+  "sr": 48000,
+  "record_s": 3.991,
+  "L": {
+   "energy_share_db": -3.27,
+   "floor_db_re_peak": -21.4,
+   "edt10_ms": 1610.9,
+   "end_margin_db": 1.44,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.4 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "Ln": {
+   "energy_share_db": -4.932,
+   "floor_db_re_peak": -21.41,
+   "edt10_ms": 1618.56,
+   "end_margin_db": 1.47,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 1.5 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H": {
+   "energy_share_db": -4.497,
+   "floor_db_re_peak": -33.77,
+   "edt10_ms": 697.08,
+   "end_margin_db": 3.82,
+   "t20_late_ms": null,
+   "t20_refused": "record too short: the envelope at the end is only 3.8 dB below its level at the -30 dB point (need 15.0)"
+  },
+  "H_minus_L_db": -1.227
+ },
+ "_split": {
+  "development": [
+   "CY0050",
+   "CY1050",
+   "CY2550",
+   "CY5000",
+   "CY5010",
+   "CY5025",
+   "CY5050",
+   "CY5075",
+   "CY7550"
+  ],
+  "confirmation": [
+   "CY0000",
+   "CY0010",
+   "CY0025",
+   "CY0075",
+   "CY1000",
+   "CY1010",
+   "CY1025",
+   "CY1075",
+   "CY2500",
+   "CY2510",
+   "CY2525",
+   "CY2575",
+   "CY7500",
+   "CY7510",
+   "CY7525",
+   "CY7575"
+  ]
+ }
+}

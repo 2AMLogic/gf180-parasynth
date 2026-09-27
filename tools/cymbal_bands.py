@@ -149,6 +149,41 @@ def measure(y, sr) -> dict:
     return res
 
 
+THIRDS = tuple(1000.0 * 2 ** (k / 3) for k in range(0, 14))     # 1.0 .. 20.2 kHz centres
+
+
+def thirds(y, sr, t0=0.0, t1=ENERGY_S) -> dict:
+    """1/3-octave energy (dB re the 200 Hz-20 kHz energy) in [t0, t1) after
+    t = 0, zero-phase from the lead. Finer than L/H: where inside a band the
+    two sides differ."""
+    y = np.asarray(y, dtype=np.float64)
+    tot = _bp(y, sr, *TOTAL)
+    a, b = int(t0 * sr), int(t1 * sr)
+    e_tot = float(np.sum(tot[a:b] ** 2))
+    out = {}
+    for fc in THIRDS:
+        lo, hi = fc / 2 ** (1 / 6), min(fc * 2 ** (1 / 6), 0.45 * sr)
+        if lo >= hi:
+            continue
+        xb = _bp(y, sr, lo, hi)
+        out[f"{fc:.0f}"] = round(10 * math.log10(max(float(np.sum(xb[a:b] ** 2)), 1e-30) / e_tot), 2)
+    return out
+
+
+def shipped_vs_fischer(refs: pathlib.Path) -> dict:
+    """The SHIPPED cymbal (run_case.render_drum_solo, the kit R1 plays, which
+    has no TONE/DECAY knob) against its anchor recording CY5025, on the
+    band measures and 1/3-octave energy in three time windows."""
+    x, sr = rc.render_drum_solo("CY")
+    ours_y = rc.prepare(x, sr, side="shipped CY")
+    rx, rsr = _load(refs / "cy8" / "CY5025.WAV")
+    ref_y = rc.prepare(rx, rsr, side="CY5025")
+    res = {"shipped": measure(ours_y, sr), "fischer_CY5025": measure(ref_y, rsr), "thirds": {}}
+    for label, (t0, t1) in {"0-50ms": (0.0, 0.05), "50-300ms": (0.05, 0.3), "300-1000ms": (0.3, 1.0)}.items():
+        res["thirds"][label] = {"shipped": thirds(ours_y, sr, t0, t1), "fischer": thirds(ref_y, rsr, t0, t1)}
+    return res
+
+
 def fischer(refs: pathlib.Path) -> dict:
     """Every Fischer CY file: CY{TONE}{DECAY}.WAV (DR 0022's decode)."""
     out = {}
@@ -204,7 +239,15 @@ def main(argv=None) -> int:
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--ours", action="store_true", help="measure our cymbal at every setting instead")
+    ap.add_argument("--shipped", action="store_true", help="the shipped kit against CY5025, with 1/3 octaves")
     a = ap.parse_args(argv)
+    if a.shipped:
+        res = shipped_vs_fischer(pathlib.Path(a.refs))
+        for w, d in res["thirds"].items():
+            print(w, " ".join(f"{fc}:{d['shipped'][fc] - d['fischer'][fc]:+.1f}" for fc in d["shipped"]))
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     res = ours(pathlib.Path(a.refs)) if a.ours else fischer(pathlib.Path(a.refs))
     res["_split"] = {"development": list(DEVELOPMENT), "confirmation": list(CONFIRMATION)}
     print(f"{'file':8s} {'tone':>4s} {'decay':>5s} | {'L share':>7s} {'L EDT':>6s} {'L T20':>6s} | "
