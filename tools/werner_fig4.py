@@ -77,6 +77,11 @@ KNOWN = {
     },
     "Hh1": {
         "reader": "fit_hp2", "f0": 2500.0, "q": 0.97, "rms_tol_db": 0.05,
+        # W14b eq. 16 has beta2 == alpha2 exactly, so Hh1's pass band is unity
+        # by construction. That is the gate's only ABSOLUTE level known answer,
+        # and without it a uniform dB offset -- the very error the tick-label
+        # baseline produced here -- passes every shape check untouched.
+        "gain_db": 0.0, "gain_tol_db": 0.5,
         "source": "SN p.13 R124 22k / R127 82k / C48=C59 1.5 nF, unity-gain Sallen-Key (ref §10, W14b eq. 16)",
     },
 }
@@ -84,7 +89,9 @@ KNOWN = {
 # units; this bar is much tighter because both sides describe the SAME nominal
 # design -- it is about the digitiser, not about unit spread.
 F0_TOL = 0.05
-Q_TOL = 0.20
+# 0.10, not 0.20: the real curves read 0.3 % and 1.2 %, and at 0.20 a 20 %
+# error in the dB scale passed the gate (tools/test_werner_fig4.py).
+Q_TOL = 0.10
 
 
 class Refused(Exception):
@@ -214,18 +221,40 @@ def parse_content(stream: str):
 LEGEND = ("bp1", "bp2", "h1", "h2", "h3")
 
 
-def find_figure(pdf: bytes):
+def _figure(pdf: bytes, needles, what: str):
     for num, raw in _streams(pdf):
         try:
             text = raw.decode("latin-1")
         except UnicodeDecodeError:
             continue
-        if all(f"({lab})Tj" in text for lab in LEGEND) and "(frequency" in text:
+        if all(n in text for n in needles):
             return num, text
-    raise Refused(
-        "no XObject in this PDF carries all five Figure 4 legend labels "
-        "(Hbp1, Hbp2, Hh1, Hh2, Hh3) together with the frequency axis title"
+    raise Refused(f"no XObject in this PDF carries {what}")
+
+
+def find_figure(pdf: bytes):
+    return _figure(
+        pdf,
+        [f"({lab})Tj" for lab in LEGEND] + ["(frequency"],
+        "all five Figure 4 legend labels (Hbp1, Hbp2, Hh1, Hh2, Hh3) together "
+        "with the frequency axis title",
     )
+
+
+def find_level_figure(pdf: bytes):
+    """Figure 10, the level-control family. Its caption marks the k = 1.0
+    response with a single asterisk; Figure 9's caption marks three, so the
+    count separates the two families."""
+    num, text = _figure(
+        pdf, ["(frequency", "(magnitude", "(*)Tj"],
+        "a magnitude-response family with an asterisk marker (Figure 10)",
+    )
+    if text.count("(*)Tj") != 1:
+        raise Refused(
+            f"that figure carries {text.count('(*)Tj')} asterisks; Figure 10 "
+            "marks exactly one response"
+        )
+    return num, text
 
 
 def _dedupe(polylines):
@@ -355,15 +384,39 @@ def calibrate(polylines, rects, texts):
             )
 
     # --- x: the decade pair, from the grid, confirmed by the two labels -----
-    dec_lab = sorted([p[0] for t, p in texts if t == "10" and p[1] < by0])
-    if len(dec_lab) != 2:
+    # Each x tick label is a "10" mantissa followed by its exponent glyph, so
+    # the decade's VALUE is read too -- Figure 4 starts at 10^3, Figure 10 at
+    # 10^2, and assuming either one would silently shift the other by a decade.
+    dec = []
+    for i, (t, pos) in enumerate(texts):
+        if t == "10" and pos[1] < by0 and i + 1 < len(texts):
+            exp, epos = texts[i + 1]
+            if re.fullmatch(r"-?\d", exp) and epos[0] > pos[0]:
+                dec.append((pos[0], int(exp), epos[0] - pos[0]))
+    dec.sort()
+    if len(dec) >= 2 and [e for _, e, _ in dec] != list(
+            range(dec[0][1], dec[0][1] + len(dec))):
         raise Refused(
-            f"expected exactly two decade mantissa labels below the axes, "
+            f"x tick exponents are not consecutive: {[e for _, e, _ in dec]}")
+    dec_exp = dec[0][1] if dec else 0
+    dec_lab = [x for x, _, _ in dec]
+    # The mantissa glyphs "10" run from the label origin to the exponent's
+    # origin, so the label is at least that wide; a centred label therefore
+    # puts its tick between half and one and a half of that distance to the
+    # right of the origin. Figure 10's decade is only 145 pt wide, so a plain
+    # "within a quarter decade" rule leaves two grid lines eligible.
+    mant_w = float(np.mean([w for _, _, w in dec]))
+    if len(dec_lab) < 2:
+        raise Refused(
+            f"expected at least two decade mantissa labels below the axes, "
             f"found {len(dec_lab)}"
         )
-    pt_per_decade = dec_lab[1] - dec_lab[0]
-    if pt_per_decade <= 0:
-        raise Refused("decade labels are not in increasing x order")
+    gaps = np.diff(dec_lab)
+    if gaps.min() <= 0 or (gaps.max() - gaps.min()) > 0.05:
+        raise Refused(
+            f"decade labels are not evenly spaced: {list(np.round(gaps, 3))}"
+        )
+    pt_per_decade = float(gaps.mean())
     # Several pairs of grid lines are a decade apart (700/7000, 800/8000 ...).
     # The decade pair is the one the two mantissa labels sit under. MATLAB
     # centres a tick label on its tick, so the tick is to the RIGHT of the
@@ -372,26 +425,33 @@ def calibrate(polylines, rects, texts):
     pairs = [(a, b) for a in ver for b in ver
              if abs((b - a) - pt_per_decade) < 0.05]
     cands = [(a, b) for a, b in pairs
-             if 0.0 < a - dec_lab[0] < 0.25 * pt_per_decade
+             if 0.5 * mant_w <= a - dec_lab[0] <= 1.5 * mant_w
              and abs((a - dec_lab[0]) - (b - dec_lab[1])) < 0.2]
     if len(cands) != 1:
         raise Refused(
             f"{len(pairs)} vertical grid-line pairs are one decade "
-            f"({pt_per_decade:.3f} pt) apart and {len(cands)} of them sit "
-            "under the two mantissa labels; expected exactly one"
+            f"({pt_per_decade:.3f} pt) apart and {len(cands)} of them are "
+            f"centred under a {mant_w:.2f} pt mantissa label; expected one"
         )
     x1k, x10k = cands[0]
 
     def x_to_hz(x):
-        return 1000.0 * 10 ** ((np.asarray(x, dtype=float) - x1k) / pt_per_decade)
+        return 10.0 ** dec_exp * 10 ** (
+            (np.asarray(x, dtype=float) - x1k) / pt_per_decade)
 
     for x in [v for v in ver if bx0 + 1e-6 < v < bx1 - 1e-6]:
         hz = float(x_to_hz(x))
-        mant = hz / 10 ** math.floor(math.log10(hz))
-        if abs(mant - round(mant)) > 0.004:
+        dec_part = 10 ** math.floor(math.log10(hz))
+        mant = round(hz / dec_part)
+        # The tolerance is in DECADES, not in mantissa units: MATLAB's exporter
+        # rounds coordinates, and Figure 10's decade is only half as wide in
+        # points as Figure 4's, so a fixed mantissa tolerance is twice as tight
+        # on one figure as on the other.
+        if abs(math.log10(hz / (mant * dec_part))) > 0.0015:
             raise Refused(
                 f"vertical grid line at x={x:.3f} reads {hz:.2f} Hz, which is "
-                "not a round mantissa; the x calibration is wrong"
+                f"{100 * (hz / (mant * dec_part) - 1):+.2f} % off the nearest "
+                "round mantissa; the x calibration is wrong"
             )
 
     return {
@@ -621,6 +681,80 @@ def _slope_db_per_octave(hz, db, f_lo, f_hi):
     return float(a)
 
 
+def level_tilt(pdf: bytes):
+    """The LEVEL buffer's rising slope, off Figure 10.
+
+    W14b §11 gives the stage as eq. 17 -- a zero at DC, a second zero and two
+    poles -- and says only that it "acts as a differentiator in the audio
+    band ... a 6 dB/octave rising slope". What the cymbal model needs is
+    where that rise STOPS, because a pure `1 - z^-1` that never stops is what
+    `docs/scorecard/cymbal-369/candidate/README.md` blamed for overshooting
+    both ends of the spectrum.
+
+    The family's curves are all black and nested, so individual curves are not
+    separated here. The UPPER envelope of the family is taken instead: it is a
+    genuine response (the one with the most high-frequency gain), and a corner
+    anywhere in the band would show as a bend in it.
+    """
+    _, text = find_level_figure(pdf)
+    polys, rects, texts = parse_content(text)
+    cal = calibrate(polys, rects, texts)
+    (bx0, by0), (bx1, by1) = cal["box"]
+    pts = [(x, y) for c, pl in polys if c == (0.0, 0.0, 0.0) and len(pl) > 20
+           for x, y in pl if bx0 - 1e-6 <= x <= bx1 + 1e-6 and by0 < y < by1]
+    if len(pts) < 1000:
+        raise Refused(
+            f"only {len(pts)} plotted points inside Figure 10's axes; the "
+            "family did not parse"
+        )
+    xs = np.array([p[0] for p in pts])
+    ys = np.array([p[1] for p in pts])
+    edges = np.linspace(bx0, bx1, 61)
+    idx = np.digitize(xs, edges)
+    fh, top = [], []
+    for i in range(1, len(edges)):
+        m = idx == i
+        if m.sum() < 3:
+            continue
+        fh.append(float(cal["x_to_hz"](0.5 * (edges[i - 1] + edges[i]))))
+        top.append(float(cal["y_to_db"](ys[m].max())))
+    fh, top = np.array(fh), np.array(top)
+    slope, _ = np.polyfit(np.log2(fh), top, 1)
+    resid = top - np.polyval(np.polyfit(np.log2(fh), top, 1), np.log2(fh))
+    # Where a corner would be: the slope of the top half-decade against the
+    # slope of the bottom half-decade. A single pole inside the band shows as
+    # the second being 6 dB/octave shallower than the first.
+    lo = fh < fh.min() * 10 ** 0.5
+    hi = fh > fh.max() / 10 ** 0.5
+    # A single-pole differentiator, K*s/(s + wp), is the shape eq. 17 reduces
+    # to away from its second zero. Fitting it says where -- if anywhere in
+    # band -- the 6 dB/octave rise stops.
+    from scipy.optimize import least_squares
+
+    def one_pole(par):
+        g, fp = par
+        w = 2 * np.pi * fh
+        return g + _db(1j * w / (1j * w + 2 * np.pi * fp)) - top
+
+    fit = least_squares(one_pole, [top.max(), 5.0 * fh.max()],
+                        bounds=([-80.0, 0.1], [80.0, 1e7]))
+    # The tilt the cymbal's own band actually sees.
+    def at(f):
+        return float(np.interp(math.log10(f), np.log10(fh), top))
+
+    return {
+        "f_range_hz": [float(fh.min()), float(fh.max())],
+        "slope_db_per_octave": float(slope),
+        "one_pole_corner_hz": float(fit.x[1]),
+        "one_pole_rms_db": float(np.sqrt(np.mean(fit.fun ** 2))),
+        "tilt_2k_to_20k_db": at(min(20000.0, fh.max())) - at(2000.0),
+        "straight_line_max_resid_db": float(np.abs(resid).max()),
+        "slope_low_decade": float(np.polyfit(np.log2(fh[lo]), top[lo], 1)[0]),
+        "slope_high_decade": float(np.polyfit(np.log2(fh[hi]), top[hi], 1)[0]),
+        "envelope": [[round(f, 2), round(d, 3)] for f, d in zip(fh, top)],
+    }
+
+
 # ---------------------------------------------------------------------------
 # The known-answer gate
 # ---------------------------------------------------------------------------
@@ -648,7 +782,12 @@ def check(data) -> tuple[bool, list[str]]:
             continue
         f_err = abs(got["f0"] - want["f0"]) / want["f0"]
         q_err = abs(got["q"] - want["q"]) / want["q"]
-        good = f_err <= F0_TOL and q_err <= Q_TOL and rms_ok
+        g_err = None
+        if "gain_db" in want:
+            g_err = abs(got["gain_db"] - want["gain_db"])
+            extra += f"  gain {got['gain_db']:+.2f} dB (known {want['gain_db']:+.1f})"
+        good = (f_err <= F0_TOL and q_err <= Q_TOL and rms_ok
+                and (g_err is None or g_err <= want["gain_tol_db"]))
         ok = ok and good
         lines.append(
             f"{'PASS' if good else 'FAIL'} {name:5s} {want['reader']:12s} "
@@ -666,6 +805,45 @@ def check(data) -> tuple[bool, list[str]]:
         f"(W14b §9: \"around 10500 Hz\", {100 * err:.1f}%)"
     )
     return ok, lines
+
+
+ARTIFACT = pathlib.Path(__file__).resolve().parents[1] / \
+    "docs" / "scorecard" / "cymbal-369" / "werner-fig4.json"
+# Every 8th plotted point. The fits below read 0.008 dB RMS on the full curves
+# and are unchanged by this; `--json` asserts that before writing.
+DECIMATE = 8
+
+
+def to_artifact(data, cal, level) -> dict:
+    return {
+        "source": {
+            "paper": "K. J. Werner, J. S. Abel, J. O. Smith, "
+                     "\"The TR-808 Cymbal\", ICMC|SMC 2014 (W14b), Figures 4 and 10",
+            "url": W14B_URL,
+            "sha256": W14B_SHA256,
+            "produced_by": "tools/werner_fig4.py --json",
+        },
+        "axes": {"xlim_hz": list(cal["xlim"]), "ylim_db": list(cal["ylim"]),
+                 "pt_per_decade": cal["pt_per_decade"],
+                 "pt_per_db": cal["pt_per_db"]},
+        "decimation": DECIMATE,
+        "level_stage": level,
+        "curves": {k: {"hz": [round(float(v), 4) for v in h[::DECIMATE]],
+                       "db": [round(float(v), 4) for v in d[::DECIMATE]]}
+                   for k, (h, d) in data.items()},
+    }
+
+
+def from_artifact(path: pathlib.Path = ARTIFACT):
+    """The digitised curves without the paper. The PDF is not redistributable
+    and CI has no network, so the gate has to be runnable from the committed
+    evidence -- a gate that only runs where the PDF happens to be present is a
+    gate that never runs."""
+    if not path.exists():
+        raise Refused(f"{path} is absent; run --json with the paper present")
+    blob = json.loads(path.read_text())
+    return {k: (np.array(v["hz"]), np.array(v["db"]))
+            for k, v in blob["curves"].items()}, blob
 
 
 def load_pdf(path: pathlib.Path, allow_download: bool) -> bytes:
@@ -692,25 +870,37 @@ def load_pdf(path: pathlib.Path, allow_download: bool) -> bytes:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pdf", default=os.environ.get("W14B_PDF", "/tmp/w14b.pdf"))
+    ap.add_argument("--artifact", default=str(ARTIFACT))
+    ap.add_argument("--from-pdf", dest="pdf_required", action="store_true",
+                    help="re-derive from the paper instead of the committed "
+                         "evidence file")
     ap.add_argument("--download", action="store_true",
                     help="fetch the paper from Zenodo if --pdf is absent")
     ap.add_argument("--check", action="store_true",
                     help="known-answer gate against the three filters the "
                          "schematic already resolves")
     ap.add_argument("--fit", action="store_true", help="derived filter values")
-    ap.add_argument("--json", help="write the five digitised curves here")
+    ap.add_argument("--level", action="store_true",
+                    help="the LEVEL buffer's rising slope, off Figure 10")
+    ap.add_argument("--json", help="write the evidence file (needs --from-pdf)")
     a = ap.parse_args(argv)
 
     try:
-        pdf = load_pdf(pathlib.Path(a.pdf), a.download)
-        data, cal = curves(pdf)
+        if a.pdf_required:
+            pdf = load_pdf(pathlib.Path(a.pdf), a.download)
+            data, cal = curves(pdf)
+            level = level_tilt(pdf)
+            print(f"axes: {cal['xlim'][0]:.0f}-{cal['xlim'][1]:.0f} Hz, "
+                  f"{cal['ylim'][0]:.1f}..{cal['ylim'][1]:.1f} dB, "
+                  f"{cal['pt_per_decade']:.3f} pt/decade, "
+                  f"{cal['pt_per_db']:.4f} pt/dB")
+        else:
+            data, blob = from_artifact(pathlib.Path(a.artifact))
+            level = blob["level_stage"]
+            print(f"from {a.artifact} (decimation {blob['decimation']})")
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
-
-    print(f"axes: {cal['xlim'][0]:.0f}-{cal['xlim'][1]:.0f} Hz, "
-          f"{cal['ylim'][0]:.1f}..{cal['ylim'][1]:.1f} dB, "
-          f"{cal['pt_per_decade']:.3f} pt/decade, {cal['pt_per_db']:.4f} pt/dB")
 
     rc = 0
     if a.check or not (a.fit or a.json):
@@ -723,23 +913,54 @@ def main(argv=None) -> int:
     if a.fit:
         print()
         for name in ("Hbp1", "Hbp2"):
-            print(name, json.dumps(bandpass_params(*data[name]), indent=None,
-                                   default=lambda v: round(v, 4)))
+            g = geometric_bp(*data[name])
+            print(f"{name}  peak {g['gain_db']:+6.2f} dB at {g['f0']:8.1f} Hz, "
+                  f"Q {g['q']:.2f}  (-3 dB {g['f_lo']:.0f}..{g['f_hi']:.0f} Hz)")
         for name in ("Hh1", "Hh2", "Hh3"):
-            print(name, json.dumps(highpass_params(*data[name]), indent=None,
-                                   default=lambda v: round(v, 4)))
+            d = describe(*data[name])
+            best = min(d["fits"].values(), key=lambda f: f["rms_db"])
+            print(f"{name}   plotted {d['f_range_hz'][0]:.0f}-"
+                  f"{d['f_range_hz'][1]:.0f} Hz, peak {d['peak_db']:+.2f} dB at "
+                  f"{d['peak_hz']:.0f} Hz, pass band {d['plateau_db']:+.2f} dB")
+            for k, f in d["fits"].items():
+                mark = "<--" if f is best else "   "
+                extra = f" fp {f['fp']:8.1f} Hz" if "fp" in f else ""
+                print(f"       {mark} {k:7s} rms {f['rms_db']:6.3f} dB  "
+                      f"gain {f['gain_db']:+6.2f} dB  f0 {f['f0']:8.1f} Hz  "
+                      f"Q {f['q']:5.2f}{extra}")
+
+    if a.level:
+        lv = level
+        print()
+        print(f"LEVEL stage (Figure 10 upper envelope), "
+              f"{lv['f_range_hz'][0]:.0f}-{lv['f_range_hz'][1]:.0f} Hz:")
+        print(f"  {lv['slope_db_per_octave']:+.2f} dB/octave overall, "
+              f"straight to within {lv['straight_line_max_resid_db']:.2f} dB")
+        print(f"  low half-decade {lv['slope_low_decade']:+.2f}, "
+              f"high half-decade {lv['slope_high_decade']:+.2f} dB/octave")
+        print(f"  single-pole differentiator fit: corner "
+              f"{lv['one_pole_corner_hz']:.0f} Hz, rms "
+              f"{lv['one_pole_rms_db']:.2f} dB")
+        print(f"  tilt across 2-20 kHz: {lv['tilt_2k_to_20k_db']:+.1f} dB "
+              f"(an ideal 6 dB/octave is +20.0 dB)")
 
     if a.json:
-        out = {
-            "source": {"paper": "Werner, Abel, Smith, ICMC|SMC 2014, Figure 4",
-                       "url": W14B_URL, "sha256": W14B_SHA256},
-            "axes": {"xlim_hz": list(cal["xlim"]), "ylim_db": list(cal["ylim"])},
-            "curves": {k: {"hz": [round(float(v), 4) for v in h],
-                           "db": [round(float(v), 5) for v in d]}
-                       for k, (h, d) in data.items()},
-        }
-        pathlib.Path(a.json).write_text(json.dumps(out, indent=1))
-        print(f"wrote {a.json}")
+        if not a.pdf_required:
+            print("REFUSED: --json re-derives the evidence and needs --from-pdf",
+                  file=sys.stderr)
+            return 3
+        art = to_artifact(data, cal, level)
+        thinned = {k: (np.array(v["hz"]), np.array(v["db"]))
+                   for k, v in art["curves"].items()}
+        ok_full, _ = check(data)
+        ok_thin, lines = check(thinned)
+        if not (ok_full and ok_thin):
+            print("REFUSED: decimation moved the known answers", file=sys.stderr)
+            for line in lines:
+                print("  " + line, file=sys.stderr)
+            return 3
+        pathlib.Path(a.json).write_text(json.dumps(art, indent=1))
+        print(f"wrote {a.json} ({len(json.dumps(art))} bytes)")
     return rc
 
 
