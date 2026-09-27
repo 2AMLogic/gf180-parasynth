@@ -44,14 +44,14 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **658 commits over 216 hours.**
+Measured from git, not remembered. **680 commits over 217 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 1356 | 6.3 |
-| injected controls | 149 | 0.7 |
+| tests | 1411 | 6.5 |
+| injected controls | 165 | 0.8 |
 | bit-exact verifiers | 8 | — |
-| lines of RTL | 9,560 | 44 |
+| lines of RTL | 9,754 | 45 |
 
 **Cycle time, which is the measure that matters.** 46 merged pull requests, **median 14 minutes** from open to merged, and PR size barely moves it — large changes (>1000 lines) median 16 minutes against 14 for small. That is because the work happens in the agent *before* the PR opens, so the real cost is agent wall-clock: **4–25 minutes** for a brief with one deliverable, **2–3.5 hours** for one containing "and" several times over.
 
@@ -130,20 +130,20 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 135 passed in 1.42s |
+| `F3` | Measurement ground truth | **GREEN** | 135 passed in 1.50s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 177.63s (0:02:57) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 194.66s (0:03:14) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
-| `S2` | Fits a real shuttle padframe | **BLOCKED** | routed die has padcells: 0 -- LibreLane half-slot in progress |
+| `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops -- but detailed routing has not completed, so no router DRC count and no post-route STA at any corner. docs/pnr-shuttle-halfslot.md |
 | `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared |
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>

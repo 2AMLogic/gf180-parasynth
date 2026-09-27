@@ -20,7 +20,7 @@ push. **Do not edit by hand** -- it is a view of
 |---|---|---|
 | **Drums** | fixed-model, integrated-rtl | `D02A` |
 | **Mono** | fixed-model, integrated-rtl | `M5A` |
-| **Filters** | fixed-model | **no case** |
+| **Filters** | fixed-model, integrated-rtl | `F1A` |
 | **Ensemble** | fixed-model | **no case** |
 
 ## Every case
@@ -95,7 +95,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `M8B` | Mono | Development | Oscillator-3 modulation / lower / darker | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M8C` | Mono | Development | Oscillator-3 modulation / higher / brighter | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
 | `M8D` | Mono | Development | Oscillator-3 modulation / new gesture | Mini V3; Model D cross-check | — | ⬜ not run |  |  |
-| `F1A` | Filters | Development | Cutoff response / low | Surge Type 2 / qualified path | fixed-model | ✅ pass | 0.76 |  |
+| `F1A` | Filters | Development | Cutoff response / low | Surge Type 2 / qualified path | integrated-rtl | ✅ pass | 0.76 |  |
 | `F1B` | Filters | Development | Cutoff response / mid | Surge Type 2 / qualified path | fixed-model | ✅ pass | 0.42 |  |
 | `F1C` | Filters | Development | Cutoff response / high | Surge Type 2 / qualified path | fixed-model | ✅ pass | 0.36 |  |
 | `F1D` | Filters | Holdout | Cutoff response / new setting | Surge Type 2 / qualified path | — | ⬜ not run |  |  |
