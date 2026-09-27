@@ -1,0 +1,26 @@
+{
+ "state": "PARTIAL",
+ "source_commit": "78c9df197398159c221cac082abd959097bbb5f4",
+ "host": "build box (ip-172-31-72-198), Icarus 14.0 devel s20260301-476-g1a23d1ffd, Verilator 5.053 devel",
+ "passed": {
+  "deadline stress-pulse PULSE2X=1": "0 missed, slack 20 (R1 loop: 3), I2S 2158/2158 exact, writes 461/461 (dl-stress-pulse-p2x.json)",
+  "deadline stress-saw": "0 missed, slack 20 (R1: 13), I2S 2158/2158 exact (dl-stress-saw.json)",
+  "deadline arty-uart (UART pins, PULSE2X=0 config)": "0 missed, slack 20, I2S 3300/3300 exact, writes 71/71 (dl-arty-uart.json)",
+  "late:20 boundary (stress-pulse PULSE2X=1)": "PASS at slack exactly 0 (dl-late20.json)",
+  "late:21 boundary": "CAUGHT by the deadline check: 1364 missed frames (dl-late21.json)",
+  "reference full2xwin (R1 loop, stress-pulse PULSE2X=1)": "slack 3, reproducing the pre-R2 figure (dl-ref-full2xwin.json)",
+  "control skipallwin (stress-saw)": "358 of 2158 I2S periods differ, deadline met: caught for its intended I2S reason (dl-ctl-skipallwin.json)",
+  "verify_voice quick --osc2x": "74144 frames identical (runall.log)",
+  "verify_voice quick waves3 --osc2x --filter2x --pulse2x": "2880 frames identical (runall.log)",
+  "verify_synth_top full kit --osc2x --filter2x --pulse2x": "2851/2851 I2S periods exact (runall.log)",
+  "M5A full phrase --pulse2x": "1305533/1305533 I2S periods exact (M5A.json)",
+  "M5B full phrase --pulse2x": "729533/729533 I2S periods exact (M5B.json)"
+ },
+ "not_passed": {
+  "verify_voice --set full (R2 config)": "FAIL: 5338 of 442596 samples differ (extremes; runall.log). PRE-EXISTING: R1's published voice_dp.v (67d59af7) fails the same audition+extremes subset with the same counts (5581 PULSE2X=0, 5021 PULSE2X=1), and R2's RTL output equals R1's in every value column on that subset (121040 frames x 27 columns, both configs) -- only the strobe cycle moved, 2..21 cycles earlier (runall3.log, runall4.log). Filed as its own issue; blocks an R2 build until explained",
+  "arty-uart with PULSE2X=1": "REFUSED by verify_deadline: arty-uart supports only the published R1 configuration. The UART path in R2's configuration is not yet verified"
+ },
+ "not_run": [
+  "Vivado build (on hold: decimator headroom value pending from the sound owner; #315)"
+ ]
+}

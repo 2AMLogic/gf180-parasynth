@@ -1,0 +1,22 @@
+==============================================================================
+FAIL(1)        716.6s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --only audition,extremes --osc2x --filter2x --rtl build/r2/voice_dp_r1_main.v --outdir build/r2/voice-ae-p0-R1
+                [audition] 38400 frames: 821 sample mismatches, 4443 tap mismatches
+                [audition] 38400 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: FAIL -- 5581 of 121040 samples differ; tap mismatches: y19 15056, v 14094, out_v 8092
+                first sample mismatch at frame 203 [extremes]: model 32767, RTL -32768
+                first y19 mismatch at frame 62 [extremes]: model -262119, RTL -262144
+                first v mismatch at frame 62 [extremes]: model -262112, RTL -262136
+                first out_v mismatch at frame 62 [extremes]: model -524217, RTL -524265
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 214 (slack 40), worst last-busy cycle 213 (slack 42)
+FAIL(1)        640.0s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --only audition,extremes --osc2x --filter2x --pulse2x --rtl build/r2/voice_dp_r1_main.v --outdir build/r2/voice-ae-p2x-R1
+                [audition] 38400 frames: 649 sample mismatches, 3473 tap mismatches
+                [audition] 38400 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: FAIL -- 5021 of 121040 samples differ; tap mismatches: y19 14310, v 13404, out_v 7691
+                first sample mismatch at frame 364 [extremes]: model -18304, RTL -18330
+                first y19 mismatch at frame 363 [extremes]: model 47210, RTL 47214
+                first v mismatch at frame 363 [extremes]: model 47208, RTL 47212
+                first out_v mismatch at frame 363 [extremes]: model 94414, RTL 94422
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 233 (slack 21), worst last-busy cycle 232 (slack 23)
+==============================================================================
+0/2 passed  --  FAIL /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python rtl-sketch
+runall_exit=1
