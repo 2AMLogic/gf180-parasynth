@@ -609,7 +609,8 @@ BD_ATTACK_HZ, BD_ATTACK_Q, BD_ATTACK_MS = 130.0, 6.0, 4.0
 # not a stepped envelope", and "accent changes the pitch envelope". This is the
 # toms' "doom" sweep. The EXISTENCE of the drop, its accent dependence and its
 # gradual shape are the source's. The MAGNITUDE was marked [inferred] at x1.7
-# and is now measured.
+# and is now the fitted law evaluated at a stated reference setting, with a
+# measured value nearby (see below).
 #
 # HARDWARE-MEASURED [99 clean-digital tom files and 66 conga files of a real
 # TR-808, 808 From Mars; model/tom_pitch_probe.py behind its own gate;
@@ -627,10 +628,11 @@ BD_ATTACK_HZ, BD_ATTACK_Q, BD_ATTACK_MS = 130.0, 6.0, 4.0
 #
 # The measurement found THREE separate faults, which is why one constant became
 # four:
-#   1. THE MAGNITUDE, above. TOM_DROP_RATIO is now the measured onset ratio at
-#      one stated reference setting -- accent 1.0, the TUNING pot at its centre,
-#      the TOM position of the circuit -- and the law below scales it from
-#      there. It is still the single knob that sets the size of the sweep.
+#   1. THE MAGNITUDE, above. TOM_DROP_RATIO is now the fitted law (K (1 - A0))
+#      evaluated at one stated reference setting -- accent 1.0, the TUNING pot
+#      at its centre, the TOM position of the circuit -- x1.060, against that
+#      cell's own measured median of x1.054. It is still the single knob that
+#      sets the size of the sweep.
 #   2. THE CLAMP. The old law scaled the excess by min(max(accent, 0), 1),
 #      which hands the FULL drop to an unaccented hit, where the machine does
 #      x1.06. Correcting the magnitude alone would have left the accent curve

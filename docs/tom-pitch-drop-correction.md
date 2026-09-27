@@ -8,12 +8,13 @@ was measurement: [`tom-pitch-drop-measurement.md`](tom-pitch-drop-measurement.md
 (#110) measured the drop from 99 clean-digital tom files and 66 conga files of a
 real TR-808 and changed no coefficient. This document changes the coefficient.
 
-**It is not a fit.** `TOM_DROP_RATIO` was set to a physical quantity measured
-from hardware, not tuned to improve a score. Every comparison below is against
-a named recording of that hardware; none is against ×1.7, and none is against a
-scorecard number. #99 — which blocks anything fitted to a metric — does not
-reach this, and the board movement in §6 is reported as a **consequence**, not
-as the objective.
+**It is a fit, not a tune.** `TOM_DROP_RATIO` is the fitted law evaluated at a
+stated reference setting (×1.060), close to but not identical with that
+setting's own measured median (×1.054) — grounded in hardware, not tuned to
+improve a score. Every comparison below is against a named recording of that
+hardware; none is against ×1.7, and none is against a scorecard number. #99 —
+which blocks anything fitted to a metric — does not reach this, and the board
+movement in §6 is reported as a **consequence**, not as the objective.
 
 ---
 
@@ -36,7 +37,9 @@ excess = (TOM_DROP_RATIO − 1) · max(0, accent − A0)/(1 − A0_tom)
 `TOM_DROP_RATIO` is still the single knob that scales the whole sweep. What
 changed is that it now names a **stated** setting — accent 1.0, the TUNING pot
 at its centre, the TOM position of the circuit — instead of an unqualified
-maximum, and that the number is measured rather than inferred.
+maximum, and that the number is the fitted law evaluated at that setting
+(×1.060), against that same setting's own measured median (×1.054), rather
+than inferred.
 
 The measurement, restated so this page stands alone. Onset f0 ÷ settled f0,
 median over 11 TUNING positions × 3 voices:
