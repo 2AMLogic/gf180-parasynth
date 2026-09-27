@@ -6,7 +6,7 @@ import sys
 
 import numpy as np
 import pytest
-from scipy.signal import butter, lfilter, sosfilt
+from scipy.signal import butter, freqz, lfilter, sosfilt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_bands as cb  # noqa: E402
@@ -24,18 +24,30 @@ def _q6_skirt_noise(f0, q, n, seed, fs=SR):
     band-pass (RBJ cookbook form), NOT a steep synthetic window. This is the
     same analytic filter `tools/cymbal_bands.py`'s BANDS comment cites for the
     shared 7.1 kHz Q~6 filter's skirt ("~17 dB down [at 4.1 kHz], at 5 kHz only
-    ~13 dB") -- both figures reproduce to within 0.2 dB off this exact biquad,
-    so it is the right stand-in for "the 808's Q6 skirt", where the steep
-    6th-order 7-12 kHz window used by every OTHER test below has essentially
-    none (#376)."""
+    ~13 dB"). This exact biquad is -17.74 dB at 4.1 kHz and -13.81 dB at 5 kHz
+    relative to its 7.1 kHz peak, so it reproduces those figures to within
+    ~0.8 dB (0.74 and 0.81 dB respectively), NOT to within 0.2 dB as an earlier
+    revision of this docstring claimed (#383 review). ~0.8 dB is still close
+    enough to make it the right stand-in for "the 808's Q6 skirt", where the
+    steep 6th-order 7-12 kHz window used by every OTHER test below has
+    essentially none (#376); the numbers themselves are asserted by
+    `test_q6_skirt_matches_the_documented_808_skirt_figures` so this docstring
+    cannot drift from the filter again."""
+    b, a = _q6_biquad(f0, q, fs)
+    x = np.random.default_rng(seed).standard_normal(n)
+    return lfilter(b, a, x)
+
+
+def _q6_biquad(f0, q, fs=SR):
+    """The coefficients `_q6_skirt_noise` actually filters with, factored out so
+    `test_q6_skirt_matches_the_documented_808_skirt_figures` can check the
+    SHIPPED filter's response rather than a second derivation of it that could
+    drift from this one."""
     w0 = 2 * math.pi * f0 / fs
     alpha = math.sin(w0) / (2 * q)
     b = [q * alpha, 0.0, -q * alpha]
     a = [1 + alpha, -2 * math.cos(w0), 1 - alpha]
-    b = [c / a[0] for c in b]
-    a = [c / a[0] for c in a]
-    x = np.random.default_rng(seed).standard_normal(n)
-    return lfilter(b, a, x)
+    return [c / a[0] for c in b], [c / a[0] for c in a]
 
 
 def strike(tau_l=0.10, tau_hs=0.012, tau_hd=0.20, a_l=1.0, a_hs=1.0, a_hd=0.3, dur=3.0, seed=1,
@@ -107,6 +119,35 @@ def test_truncated_record_refuses_rather_than_answers():
     cut = y[: cb.rc.required_lead_samples(SR) + int(0.25 * SR)]
     r = cb.measure(cut, SR)
     assert r["H"]["t20_late_ms"] is None and r["H"]["t20_refused"]
+
+
+def test_q6_skirt_matches_the_documented_808_skirt_figures():
+    """`cymbal_bands.BANDS`'s comment justifies the Ln window with the shared
+    7.1 kHz Q 6 band-pass being "~17 dB down (at 5 kHz only ~13 dB)" at Ln's
+    edges, and `_q6_skirt_noise` is only a legitimate stand-in for that skirt if
+    its own response really is near those figures. Pin the measured values so
+    neither the docstring nor `docs/scorecard/cymbal-369/README.md` can claim a
+    precision the filter does not have: an earlier revision of both said "to
+    within 0.2 dB" when the true deviations are 0.74 dB and 0.81 dB (#383
+    review). The bound asserted here is therefore ~1 dB, not 0.2 dB."""
+    b, a = _q6_biquad(7100.0, 6.0)
+    f = np.array([4100.0, 5000.0, 7100.0])
+    mag_db = 20 * np.log10(np.abs(freqz(b, a, worN=2 * np.pi * f / SR)[1]))
+    peak_db = mag_db[2]
+    # the constant-skirt-gain form peaks at f0 itself, so 7.1 kHz IS the peak
+    assert peak_db == pytest.approx(np.max(20 * np.log10(np.abs(
+        freqz(b, a, worN=2 * np.pi * np.linspace(5000, 9000, 40001) / SR)[1]))), abs=1e-6)
+
+    skirt_db = mag_db[:2] - peak_db
+    assert skirt_db[0] == pytest.approx(-17.744, abs=0.01), skirt_db
+    assert skirt_db[1] == pytest.approx(-13.806, abs=0.01), skirt_db
+    # ... which is what makes it a fair stand-in for the documented skirt, to
+    # ~1 dB -- the honest tolerance, four times looser than "within 0.2 dB".
+    for got, documented in zip(skirt_db, (-17.0, -13.0)):
+        assert abs(got - documented) < 1.0, (got, documented)
+        assert abs(got - documented) > 0.2, (
+            "if this ever tightens to within 0.2 dB, the docstring and scorecard "
+            "prose that now say ~0.8 dB are the things that are stale", got, documented)
 
 
 def _skirt_growth(tau_l, hi_shape):

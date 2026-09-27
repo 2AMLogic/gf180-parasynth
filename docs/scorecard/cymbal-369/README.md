@@ -47,10 +47,14 @@ known-answer test above, where a clean high band is what's wanted). That window 
 any input.
 
 The fix (`tools/test_cymbal_bands.py::_q6_skirt_noise`) drives the control's high band through the 808's actual shape
-instead: a constant-skirt-gain 2-pole/2-zero band-pass at 7.1 kHz, Q 6 (the RBJ cookbook form). That filter's own
-magnitude response reproduces the −17 dB (at 4.1 kHz) / −13 dB (at 5 kHz) figures this file's `BANDS` comment already
-states for the real circuit's skirt, to within 0.2 dB — so it's the right stand-in, not an arbitrary choice. Two
-paired cases, both reported (`_skirt_growth`):
+instead: a constant-skirt-gain 2-pole/2-zero band-pass at 7.1 kHz, Q 6 (the RBJ cookbook form). Its analytic magnitude
+response is **−17.74 dB at 4.1 kHz and −13.81 dB at 5 kHz** relative to its 7.1 kHz peak, which reproduces the "~17 dB
+down (at 5 kHz only ~13 dB)" figures `tools/cymbal_bands.py`'s `BANDS` comment states for the real circuit's skirt to
+**within ~0.8 dB** — close enough to be the right stand-in rather than an arbitrary choice, but not the "within 0.2 dB"
+an earlier draft of this file claimed (#383 review: the real deviations are 0.74 dB and 0.81 dB, ~4× the figure
+originally stated here). Both numbers are now asserted by
+`test_q6_skirt_matches_the_documented_808_skirt_figures`, so the claim is checked rather than merely written down.
+Two paired cases, both reported (`_skirt_growth`):
 
 | low band's own decay | Ln EDT10, high-band DECAY short (250 ms) | Ln EDT10, high-band DECAY long (1,090 ms) | growth | bound |
 |---|---:|---:|---:|---|
