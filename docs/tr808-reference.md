@@ -1103,7 +1103,9 @@ envelopes.
 - **CY high-pass #2/#3 exact corners** — Werner gives the topology and a
   ≈10.5 kHz resonance; I did not solve the 3rd-order network. **Partly closed
   by measurement, and not in this section's favour.** A real machine's cymbal
-  (Fischer s/n 103852, `cy8/CY5025.WAV`, TONE and DECAY at 5.0) puts
+  (Fischer s/n 103852, `cy8/CY5025.WAV`, TONE 5.0 and **DECAY 2.5** — this read
+  "TONE and DECAY at 5.0" until #102, and the second filename code is DECAY,
+  where `25` means 2.5) puts
   1.1 / 10.3 / 53.2 / 23.3 / 6.0 % of its energy in <2k / 2–5k / 5–9k / 9–13k /
   >13k, with its strongest line at **3153 Hz**. Three things in §10 do not
   survive that: the long tail is the **low** band, not a high one (2–5 kHz

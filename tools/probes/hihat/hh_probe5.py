@@ -68,6 +68,29 @@ contract's tap is `sat16(y1[m] >> 3)` (15.5). So an extra pole costs:
 
 Every one of those is asserted here rather than assumed, and a failed assertion
 is a REFUSAL, not a number.
+
+WRONG BEFORE IT WAS RIGHT -- read this before quoting any number below
+---------------------------------------------------------------------
+The first complete run of this probe reported **ACCEPT for both 3-pole arms on
+the development case.** It was wrong, and nothing about the filters changed to
+make it wrong.
+
+The shortlist was the surrogate's top TWO per structure. The surrogate is the
+five-band cost, and for the 2-pole its favourite is Q 4.0 gain 1.00 (cost 6.0
+against the shipped 18.1 -- exactly #102's headline pair). On the scorecard that
+setting is one of the WORST in the grid: `Band energy` distance 0.726, against
+0.501 for the shipped Q 2.5 and 0.098 for Q 4.0 gain 0.80. So the surrogate
+handed the acceptance rule a crippled baseline, and both candidates cleared it.
+
+Adding the shipped setting to every shortlist and widening it to three flipped
+the development verdict from ACCEPT to REJECT for both arms.
+
+**A misaligned surrogate that is allowed to choose the BASELINE manufactures an
+improvement, even when it is only allowed to propose.** DR 0015 says a surrogate
+proposes and the exact rule accepts; that is necessary and it is not sufficient,
+because the rule accepts a COMPARISON and the surrogate was picking both sides
+of it. Whatever proposes candidates must not be the only thing that proposes the
+baseline.
 """
 from __future__ import annotations
 
@@ -730,22 +753,34 @@ def main(argv=None) -> int:
     say(f"  machine    {fmt(HW_CY)}")
     out["surrogate_sweep"] = sweep
 
-    # The candidates each structure proposes. TOP TWO by the surrogate, not one:
-    # DR 0015 says the surrogate proposes and the exact rule accepts, and a
-    # surrogate that hands over a single candidate has quietly done the
-    # accepting. Both are then scored, and the choice WITHIN a structure is made
-    # on the development case only -- never on the holdout.
+    # The candidates each structure proposes. TOP THREE by the surrogate, PLUS
+    # the shipped (Q, gain) unconditionally.
+    #
+    # Not one candidate, and not the surrogate's favourite alone: DR 0015 says
+    # the surrogate proposes and the exact rule accepts, and a surrogate that
+    # hands over a single candidate has quietly done the accepting. THIS
+    # SURROGATE IS DEMONSTRABLY MISALIGNED HERE -- it ranks Q 4.0 best for the
+    # 2-pole (cost 6.0 against the shipped 18.1, which is exactly #102's
+    # headline) while the scorecard's Band energy property gets WORSE, so a
+    # shortlist of one would have handed the acceptance rule a baseline the
+    # board likes less than the one that ships. Including the shipped setting
+    # is what makes that visible instead of structural.
+    shipped = dict(q=dx.CY_HI_Q, gain=1.0, surrogate=None, shipped=True)
     shortlist = {}
     for arm, rows in sweep.items():
         ok = [r for r in rows if "cost" in r]
         if not ok:
             continue
         ok.sort(key=lambda r: r["cost"])
-        shortlist[arm] = [dict(q=r["q"], gain=r["gain"], surrogate=r["cost"])
-                          for r in ok[:1 if a.quick else 2]]
-        for c in shortlist[arm]:
-            say(f"  proposes: {arm:<10} Q {c['q']} gain {c['gain']} "
-                f"(surrogate {c['surrogate']:.1f})")
+        cands = [dict(q=r["q"], gain=r["gain"], surrogate=r["cost"])
+                 for r in ok[:1 if a.quick else 3]]
+        if not any(c["q"] == shipped["q"] and c["gain"] == shipped["gain"]
+                   for c in cands):
+            cands.append(dict(shipped))
+        shortlist[arm] = cands
+        for c in cands:
+            s = "shipped" if c.get("shipped") else f"surrogate {c['surrogate']:.1f}"
+            say(f"  proposes: {arm:<10} Q {c['q']} gain {c['gain']} ({s})")
     out["shortlist"] = shortlist
 
     # ---- the judge, on the DEVELOPMENT case, to fit Q and gain ----------
@@ -764,7 +799,8 @@ def main(argv=None) -> int:
                                    dict(structure=arm, cy_hi_q=c["q"],
                                         cy_hi_gain=c["gain"]))
             ev = score(rec, rows_dev)
-            key = f"{arm} Q{c['q']} g{c['gain']}"
+            key = (f"{arm} Q{c['q']} g{c['gain']}"
+                   + (" SHIPPED" if c.get("shipped") else ""))
             dev_all[key] = dict(evaluated=ev, record=rec, candidate=c)
             say(f"  {key:<26} {props_line(ev)}")
             # Within a structure, prefer the candidate whose property vector is
@@ -806,6 +842,27 @@ def main(argv=None) -> int:
         evh = score(rech, rows_hold)
         f["holdout"] = dict(evaluated=evh, record=rech)
         say(f"  {arm:<10} {HOLDOUT['case']}  {props_line(evh)}")
+
+    # The SHIPPED 2-pole on the holdout, always, whatever the fit chose. This is
+    # the row that goes on the board: D14B has to describe the instrument that
+    # ships, not the best candidate an experiment could reach.
+    sc_ = shipped
+    if (fitted["2pole"]["candidate"]["q"], fitted["2pole"]["candidate"]["gain"]) \
+            == (sc_["q"], sc_["gain"]):
+        shipped_hold = fitted["2pole"]["holdout"]
+    else:
+        kit_s, _ = cy_kit("2pole", q=sc_["q"], gain=sc_["gain"],
+                          tone=HOLDOUT["tone"], decay=HOLDOUT["decay"], laws=laws)
+        xs, _ = render(kit_s, 3.6, "2pole")
+        recs = scorecard_record(
+            xs, HOLDOUT["rel"], HOLDOUT["setting"], HOLDOUT["case"], refdir, prov,
+            dict(structure="2pole (SHIPPED)", cy_hi_q=sc_["q"], cy_hi_gain=sc_["gain"],
+                 knobs=dict(tone=HOLDOUT["tone"], decay=HOLDOUT["decay"]),
+                 knob_law="test_discrimination.kit_at / fit_laws"))
+        shipped_hold = dict(evaluated=score(recs, rows_hold), record=recs)
+    say(f"  {'2pole SHIPPED':<14} {HOLDOUT['case']}  "
+        f"{props_line(shipped_hold['evaluated'])}")
+    out["shipped_holdout"] = shipped_hold["evaluated"]
     out["verdicts"] = {k: {"D14A": v["dev"]["evaluated"],
                            HOLDOUT["case"]: v["holdout"]["evaluated"]}
                        for k, v in fitted.items()}
@@ -859,13 +916,16 @@ def main(argv=None) -> int:
         # measurement". This is that. `run_case.py --batch` does not yet know
         # the variation cases; teaching it is filed as a follow-up.
         p = ROOT / "docs" / "scorecard" / "results" / f"{HOLDOUT['case']}.json"
-        rec = fitted["2pole"]["holdout"]["record"]
-        rec = dict(rec, subject=case_row(HOLDOUT["case"])["subject"],
+        rec = dict(shipped_hold["record"],
+                   subject=case_row(HOLDOUT["case"])["subject"],
                    holdout_seal=HOLDOUT,
-                   note=("The SHIPPED structure (2-pole M_CYHI). #102 asked "
-                         "whether a true 3rd-order Hh3 should replace it; the "
-                         "answer, on this record and D14A, was no -- see "
-                         "tools/probes/hihat/hh_probe5.py."))
+                   note=("The SHIPPED structure and setting: the 2-pole M_CYHI "
+                         "at CY_HI_Q with AMP_CY_HI unchanged, rendered at this "
+                         "recording's documented knob setting through the "
+                         "committed CY knob laws. #102 asked whether a true "
+                         "3rd-order Hh3 should replace it; the answer, on this "
+                         "record and on D14A, was no -- see "
+                         "tools/probes/hihat/hh_probe5.py and DR 0021."))
         p.write_text(json.dumps(rec, indent=2, default=float) + "\n")
         say(f"(written {p})")
     return 0
