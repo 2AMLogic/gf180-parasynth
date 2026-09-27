@@ -94,3 +94,30 @@ jobs:
         with:
           name: trial-receipts-release-bound
           path: build/trials/
+
+  # T-PHYSICAL (#208): the R0 capture analysis. No hardware exists in CI, so the
+  # gate is the part that must hold without it: the analysis's known-answer,
+  # refusal and synthetic-defect tests, the committed reference set bound to
+  # the release manifest, and the registered trial answering NO VERDICT
+  # (operator-blocked) -- never PASS -- with its synthetic-defect control caught
+  # (tools/test_r0_capture.py runs it end to end through tools/trial.py).
+  trial-physical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    concurrency:
+      group: trials-physical-${{ github.event.pull_request.number || github.sha }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: bootstrap from the one environment spec (no simulator needed)
+        run: python tools/trial_env.py bootstrap --no-toolchain
+      - name: the committed R0 reference set is the release's
+        run: python tools/r0_reference.py check fpga/release/evidence/r0-reference
+      - name: capture analysis tests, and T-PHYSICAL end to end without a capture
+        # the last test runs the registered trial through tools/trial.py and
+        # asserts NO VERDICT (operator-blocked) with every synthetic defect caught
+        run: python -m pytest tools/test_r0_capture.py -q

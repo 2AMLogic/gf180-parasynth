@@ -1,0 +1,11 @@
+{
+ "schema": "r0-reference/1",
+ "command_id": "silence",
+ "command": null,
+ "declared": "after BTN0 reset no write has been applied; the core's sample register resets to 0 and the wire carries 0 on both channels",
+ "support": {
+  "held_default_leading_zero_periods": 1234
+ },
+ "expected_lsb": 0,
+ "verdict": "PASS"
+}

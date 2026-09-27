@@ -576,7 +576,8 @@ openFPGALoader -b arty_a7_100t fpga/reports/arty/integrated-baseline-2025.1/arty
 
 The final command loads volatile FPGA configuration; the board returns to
 its flash image at power cycle. openFPGALoader 1.1.1 is installed on the Mac and its board entry is verified.
-Physical programming has not been tested because the board has not arrived. Vivado Hardware Manager on a supported
+Physical programming has not been tested yet: the board is on hand but not yet powered up (#208). The operator
+procedure for programming R0 and recording it is [docs/capture-r0.md](../docs/capture-r0.md). Vivado Hardware Manager on a supported
 USB-connected host is another programming route.
 
 ## Remote build status

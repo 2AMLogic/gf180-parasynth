@@ -724,10 +724,10 @@ def test_registry_refuses_copied_commands_and_unknown_dag_nodes(repo):
 
 def test_the_committed_registry_loads_and_names_the_three_pilot_trials():
     reg = trial.load_registry()
-    # the three pilot trials, T-LIVE-MIDI (#281) and T-RELEASE-BOUND-R1 (#280)
-    # registered after them
+    # the three pilot trials, T-LIVE-MIDI (#281), T-RELEASE-BOUND-R1 (#280) and
+    # T-PHYSICAL (#208) registered after them
     assert set(reg["trials"]) == {"T-RELEASE-BOUND", "T-DEADLINE", "T-PLAY-DIGITAL",
-                                  "T-LIVE-MIDI", "T-RELEASE-BOUND-R1"}
+                                  "T-LIVE-MIDI", "T-RELEASE-BOUND-R1", "T-PHYSICAL"}
     for tid, t in reg["trials"].items():
         for mode in t["modes"].values():
             for c in mode["required"] + mode.get("controls", []):
@@ -814,6 +814,86 @@ def test_live_midi_control_is_caught_only_with_its_exit_zero(tmp_path):
     assert trial.interpret_live_midi_record(spec, {"rc": 0}, tmp_path, "control")["caught"]
     assert not trial.interpret_live_midi_record(spec, {"rc": 1}, tmp_path, "control")["caught"]
 
+
+# ---- T-PHYSICAL (#208): the capture record and its synthetic controls --------
+PHYS_FIXTURES = ["silence", "held-m5a-saw", "held-default", "bar808-full", "demo"]
+
+
+def _capture_rec(verdict, commands=PHYS_FIXTURES + ["demo"], **extra):
+    return {"schema": "r0-capture-analysis/1", "verdict": verdict,
+            "reasons": extra.pop("reasons", []),
+            "takes": [{"id": f"t{i}", "command_id": c} for i, c in enumerate(commands)],
+            "properties": {}, **extra}
+
+
+def _controls_rec(all_caught=True, analyser="real"):
+    return {"all_caught": all_caught, "analyser": analyser,
+            "clean": {"verdict": "PASS", "ok": all_caught},
+            "defects": {"dropout": {"intended": "dropout", "caught": all_caught,
+                                    "outcome": "caught" if all_caught else "NOT caught"}}}
+
+
+def _physical(repo, rec, rc, controls=None, crc=0):
+    repo.child({"rc": rc, "files": {"analysis.json": rec}}, interpret="physical_capture_record",
+               fixtures=PHYS_FIXTURES)
+    repo.child({"rc": crc, "files": {"controls.json": controls or _controls_rec()}},
+               interpret="capture_controls_record", role="control")
+    return repo.run()
+
+
+def test_physical_without_a_capture_session_is_operator_blocked_no_verdict(repo):
+    rec = _capture_rec("REFUSED", commands=[], operator_blocked=True,
+                       reasons=["operator-blocked: no capture session at captures/r0/session.json"])
+    run_dir, r = _physical(repo, rec, 2)
+    assert r["verdict"] == trial.NO_VERDICT
+    assert "operator-blocked" in r["children"][0]["reasons"][0]
+    assert r["controls"][0]["caught"] is True
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
+
+
+def test_physical_pass_needs_the_whole_diagnostic_set_and_a_repeat(repo):
+    _, r = _physical(repo, _capture_rec("PASS"), 0)
+    assert r["verdict"] == trial.PASS
+
+
+@pytest.mark.parametrize("commands,gap", [
+    (["silence", "held-default", "bar808-full", "demo", "demo"], "no take of held-m5a-saw"),
+    (PHYS_FIXTURES, "no repeat take"),
+])
+def test_physical_pass_record_with_missing_coverage_is_no_verdict(repo, commands, gap):
+    _, r = _physical(repo, _capture_rec("PASS", commands=commands), 0)
+    assert r["verdict"] == trial.NO_VERDICT
+    assert any(gap in x for x in r["children"][0]["reasons"])
+
+
+def test_physical_fail_is_fail_and_exit_disagreement_is_no_verdict(repo, tmp_path):
+    _, r = _physical(repo, _capture_rec("FAIL", reasons=["drums-1: dropout"]), 1)
+    assert r["verdict"] == trial.FAIL
+    (tmp_path / "b").mkdir()
+    other = Repo(tmp_path / "b")
+    _, r2 = _physical(other, _capture_rec("PASS"), 1)
+    assert r2["verdict"] == trial.NO_VERDICT
+
+
+@pytest.mark.parametrize("controls,crc", [
+    (_controls_rec(all_caught=False), 1),
+    (_controls_rec(analyser="stub"), 0),        # the start-red stub is never a catch
+    (_controls_rec(), 2),                       # a record with a refusal exit
+])
+def test_physical_controls_are_caught_only_by_the_real_analyser(repo, controls, crc):
+    _, r = _physical(repo, _capture_rec("PASS"), 0, controls=controls, crc=crc)
+    assert r["controls"][0]["caught"] is False
+    assert r["verdict"] == trial.NO_VERDICT
+
+
+def test_physical_execution_error_exit_3_is_no_verdict(repo):
+    """plan090: r0_capture.py exits 3 with an ERROR record on an unexpected
+    exception -- an execution error, never a product verdict."""
+    rec = _capture_rec("ERROR", reasons=["execution error (no verdict): KeyError: 'x'"])
+    _, r = _physical(repo, rec, 3)
+    assert r["children"][0]["verdict"] == trial.NO_VERDICT
+    assert r["verdict"] == trial.NO_VERDICT
 
 # ---- R1 (#279, plan088): the image a record ran is the image the child declares
 def _r1_rolling(image):

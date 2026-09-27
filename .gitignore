@@ -34,6 +34,11 @@ pnr/shuttle/librelane/density.yaml
 # no audio in it is summary statistics wearing a manifest. 211 kB, regenerated
 # by `tools/stage_case.py demo --out docs/provenance/bd-decay-demo`.
 !docs/provenance/bd-decay-demo/*.wav
+# ...and a second: the simulated R0 reference audio (tools/r0_reference.py), the
+# thing every physical capture is compared against. Each file's sha256 is in its
+# .json beside it; tools/r0_capture.py refuses an altered one. Physical capture
+# takes (captures/) stay ignored: they are archived with their hashes (#208).
+!fpga/release/evidence/r0-reference/*.wav
 # ...and a second, for the same reason. docs/scorecard/drum-d02a-i2s/ is the
 # evidence that D02A's board row was measured on the chip rather than the model,
 # and the record's own `decoded_i2s_sha256` binds this artefact -- a hash with no
