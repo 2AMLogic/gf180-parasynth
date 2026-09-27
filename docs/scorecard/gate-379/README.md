@@ -68,7 +68,7 @@ worst feature's ratio to its bar.
 | a half-size resample (×1.031) of the single-take sounds | PASS 6/6 |
 | the farther neighbours | FAIL, as expected: they are farther than the nearest, which is how strict a nearest-neighbour bar is |
 | **must go red**: shipped cymbal (`main`) vs CY5025 | **FAIL** on 7: spec 3.6, spec_peak 2.4, centroid 7.9, flatness 2.0, attack 6.8, decay 4.2, modulation 2.2 (× bar) |
-| #374 candidate (`sound/cymbal-369-candidate` @ `cae5f75`) | **FAIL** on 7: spec 3.7, centroid 7.3, flatness 2.7, attack 4.1, decay 7.6, modulation 2.4 |
+| #374 candidate (`sound/cymbal-369-candidate` @ `cae5f75`) | **FAIL** on 7: spec 3.7, spec_peak 1.5, centroid 7.3, flatness 2.7, attack 4.1, decay 7.6, modulation 2.4 |
 
 **Seeded defects**, applied to each 808 target, with magnitudes frozen before the first run:
 - tilt ±6 dB/oct;
