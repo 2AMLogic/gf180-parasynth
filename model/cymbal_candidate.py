@@ -44,7 +44,61 @@ import math
 import numpy as np
 
 import drums_fx as dx
-from modal_fixed import BP, HP, HP3
+import modal_fixed as mf
+from modal_fixed import BP, HP
+
+# The candidate's one new numerator: (1 - z^-1)^3 = a 2-pole high-pass's
+# numerator times the level stage's differentiator. It lives HERE, not in the
+# shared `modal_fixed` decode: code 3 reads as RAW in modal_dp.v, and the
+# shared model must not change without the matching RTL and equivalence
+# evidence (#371 review). The RTL spec is handed over only once the candidate
+# is confirmed.
+HP3 = 3
+
+
+class ModalFxHP3(mf.ModalFx):
+    """ModalFx with numerator code 3 = (1 - z^-1)^3 (candidate only)."""
+
+    def reset(self):
+        super().reset()
+        self.h3 = [0] * self.M
+
+    def step(self, exc, coefs, num=None) -> int:
+        CF, SB, SQ = self.CF, self.SB, self.SQ
+        osh = SQ - 15 + self.HR
+        y1, y2, h1, h2, h3 = self.y1, self.y2, self.h1, self.h2, self.h3
+        mix = 0
+        for m in range(self.M):
+            a1, a2, amp = coefs[m]
+            e = mf.shl(int(exc[m]), SQ - 15)
+            if m < self.NUMS and num is not None:
+                k = int(num[m])
+                if k == mf.BP:
+                    x = e - h2[m]
+                elif k == mf.HP:
+                    x = e - 2 * h1[m] + h2[m]
+                elif k == HP3:
+                    x = e - 3 * h1[m] + 3 * h2[m] - h3[m]
+                else:
+                    x = e
+                h3[m], h2[m], h1[m] = h2[m], h1[m], e
+            else:
+                x = e
+            acc = a1 * y1[m] + a2 * y2[m] + self.RND
+            y = mf.sat((acc >> CF) + x, SB)
+            y2[m], y1[m] = y1[m], y
+            mix += (y * amp) >> 16
+        return mf.sat(mix >> osh, self.OB)
+
+
+def drums(modes, paths, nums):
+    """A DrumsFx whose bank decodes HP3."""
+    d = dx.DrumsFx(modes=modes, paths=paths, nums=nums)
+    b = d.bank
+    d.bank = ModalFxHP3(coef_frac=b.CF, state_bits=b.SB, state_q=b.SQ, headroom=b.HR, modes=b.M,
+                        rounding=bool(b.RND), out_bits=b.OB, nums=b.NUMS, exc_bits=b.EW)
+    d.reset()
+    return d
 
 M_CYH1, M_CYH3, M_CYH3B = 8, 9, 10
 NEW_M = {"BD": 16, "SDLO": 17, "SDHI": 18}
@@ -133,7 +187,7 @@ def render(kit, sound: str, seconds: float = 4.0, hit_frame: int = 480, modes=N_
     buses at 0.45) on a bank of this size, with the layout's constants."""
     n = int(seconds * dx.SR)
     with layout():
-        d = dx.DrumsFx(modes=modes, paths=paths, nums=N_NUMS)
+        d = drums(modes, paths, N_NUMS)
         dm, bd = d.play(dx.hit_writes([(hit_frame, dx.SOUND_STOP[sound], 1.0)], kit), n)
     g = dx.accent_reg(0.45)
     return np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g), dtype=np.float64) / 32768.0, dx.SR
