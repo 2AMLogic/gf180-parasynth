@@ -1,0 +1,684 @@
+{
+ "last_step_with_metrics": "42-openroad-stamidpnr-3",
+ "metrics": {
+  "antenna__violating__nets": {
+   "value": 2,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "antenna__violating__pins": {
+   "value": 2,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "antenna_diodes_count": {
+   "value": 133,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "clock__skew__worst_hold": {
+   "value": -0.374566,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "clock__skew__worst_hold__corner:nom_ff_n40C_5v50": {
+   "value": -0.25,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "clock__skew__worst_hold__corner:nom_ss_125C_4v50": {
+   "value": -0.25,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "clock__skew__worst_hold__corner:nom_tt_025C_5v00": {
+   "value": -0.374566,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "clock__skew__worst_setup": {
+   "value": 0.374566,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "clock__skew__worst_setup__corner:nom_ff_n40C_5v50": {
+   "value": 0.25,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "clock__skew__worst_setup__corner:nom_ss_125C_4v50": {
+   "value": 0.25,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "clock__skew__worst_setup__corner:nom_tt_025C_5v00": {
+   "value": 0.374566,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__core__area": {
+   "value": 5005490,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__core__bbox": {
+   "value": "442.4 442.96 3489.92 2085.44",
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__die__area": {
+   "value": 9951890,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__die__bbox": {
+   "value": "0.0 0.0 3932.0 2531.0",
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__inferred_latch__count": {
+   "value": 0,
+   "written_by": "01-verilator-lint"
+  },
+  "design__instance__area": {
+   "value": 7114860,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__area__class:antenna_cell": {
+   "value": 583.923,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__area__class:buffer": {
+   "value": 579.533,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:clock_buffer": {
+   "value": 87614.8,
+   "written_by": "34-openroad-cts"
+  },
+  "design__instance__area__class:clock_inverter": {
+   "value": 4772.36,
+   "written_by": "34-openroad-cts"
+  },
+  "design__instance__area__class:endcap_cell": {
+   "value": 507779,
+   "written_by": "20-openroad-tapendcapinsertion"
+  },
+  "design__instance__area__class:input_output_pad": {
+   "value": 1312500,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:input_pad": {
+   "value": 157500,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:inverter": {
+   "value": 41915.1,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__area__class:macro": {
+   "value": 124202,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:multi_input_combinational_cell": {
+   "value": 1148000,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__area__class:pad_spacer": {
+   "value": 1567300,
+   "written_by": "17-openroad-padring"
+  },
+  "design__instance__area__class:power_pad": {
+   "value": 420000,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:sequential_cell": {
+   "value": 781500,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__area__class:tap_cell": {
+   "value": 143281,
+   "written_by": "20-openroad-tapendcapinsertion"
+  },
+  "design__instance__area__class:tie_cell": {
+   "value": 2897.66,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__class:timing_repair_buffer": {
+   "value": 814435,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__area__cover": {
+   "value": 0,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__macros": {
+   "value": 124202,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__area__padcells": {
+   "value": 3457300,
+   "written_by": "17-openroad-padring"
+  },
+  "design__instance__area__stdcell": {
+   "value": 3533360,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__count": {
+   "value": 135377,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__count__class:antenna_cell": {
+   "value": 133,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__count__class:buffer": {
+   "value": 44,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:clock_buffer": {
+   "value": 1668,
+   "written_by": "34-openroad-cts"
+  },
+  "design__instance__count__class:clock_inverter": {
+   "value": 281,
+   "written_by": "34-openroad-cts"
+  },
+  "design__instance__count__class:endcap_cell": {
+   "value": 842,
+   "written_by": "20-openroad-tapendcapinsertion"
+  },
+  "design__instance__count__class:input_output_pad": {
+   "value": 50,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:input_pad": {
+   "value": 6,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:inverter": {
+   "value": 4768,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:macro": {
+   "value": 5,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:multi_input_combinational_cell": {
+   "value": 61049,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:pad_spacer": {
+   "value": 682,
+   "written_by": "17-openroad-padring"
+  },
+  "design__instance__count__class:power_pad": {
+   "value": 16,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:sequential_cell": {
+   "value": 12275,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:tap_cell": {
+   "value": 32635,
+   "written_by": "20-openroad-tapendcapinsertion"
+  },
+  "design__instance__count__class:tie_cell": {
+   "value": 330,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__class:timing_repair_buffer": {
+   "value": 20593,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__count__cover": {
+   "value": 0,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__hold_buffer": {
+   "value": 7151,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__count__macros": {
+   "value": 5,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__instance__count__padcells": {
+   "value": 754,
+   "written_by": "17-openroad-padring"
+  },
+  "design__instance__count__setup_buffer": {
+   "value": 0,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__count__stdcell": {
+   "value": 134618,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__displacement__max": {
+   "value": 178.08,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__displacement__mean": {
+   "value": 6.0265,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__displacement__total": {
+   "value": 810534,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "design__instance__utilization": {
+   "value": 0.73071,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance__utilization__stdcell": {
+   "value": 0.723858,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "design__instance_unmapped__count": {
+   "value": 0,
+   "written_by": "06-yosys-synthesis"
+  },
+  "design__io": {
+   "value": 58,
+   "written_by": "17-openroad-padring"
+  },
+  "design__lint_error__count": {
+   "value": 0,
+   "written_by": "01-verilator-lint"
+  },
+  "design__lint_timing_construct__count": {
+   "value": 0,
+   "written_by": "01-verilator-lint"
+  },
+  "design__lint_warning__count": {
+   "value": 120,
+   "written_by": "01-verilator-lint"
+  },
+  "design__max_cap_violation__count": {
+   "value": 112,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__max_cap_violation__count__corner:nom_ff_n40C_5v50": {
+   "value": 511,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_cap_violation__count__corner:nom_ss_125C_4v50": {
+   "value": 659,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_cap_violation__count__corner:nom_tt_025C_5v00": {
+   "value": 112,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__max_fanout_violation__count": {
+   "value": 865,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__max_fanout_violation__count__corner:nom_ff_n40C_5v50": {
+   "value": 2015,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_fanout_violation__count__corner:nom_ss_125C_4v50": {
+   "value": 2015,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_fanout_violation__count__corner:nom_tt_025C_5v00": {
+   "value": 865,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__max_slew_violation__count": {
+   "value": 20,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__max_slew_violation__count__corner:nom_ff_n40C_5v50": {
+   "value": 49561,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_slew_violation__count__corner:nom_ss_125C_4v50": {
+   "value": 91404,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "design__max_slew_violation__count__corner:nom_tt_025C_5v00": {
+   "value": 20,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "design__power_grid_violation__count": {
+   "value": 0,
+   "written_by": "22-openroad-generatepdn"
+  },
+  "design__power_grid_violation__count__net:VDD": {
+   "value": 0,
+   "written_by": "22-openroad-generatepdn"
+  },
+  "design__power_grid_violation__count__net:VSS": {
+   "value": 0,
+   "written_by": "22-openroad-generatepdn"
+  },
+  "design__rows": {
+   "value": 419,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__rows:GF018hv5v_mcu_sc7": {
+   "value": 419,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__sites": {
+   "value": 2280198,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__sites:GF018hv5v_mcu_sc7": {
+   "value": 2280198,
+   "written_by": "13-openroad-floorplan"
+  },
+  "design__violations": {
+   "value": 0,
+   "written_by": "31-openroad-repairdesignpostgpl"
+  },
+  "flow__errors__count": {
+   "value": 0,
+   "written_by": "13-openroad-floorplan"
+  },
+  "flow__warnings__count": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "flow__warnings__count:GRT-0281": {
+   "value": 2,
+   "written_by": "27-openroad-globalplacement"
+  },
+  "flow__warnings__count:IFP-0028": {
+   "value": 1,
+   "written_by": "13-openroad-floorplan"
+  },
+  "flow__warnings__count:ODB-0220": {
+   "value": 21,
+   "written_by": "13-openroad-floorplan"
+  },
+  "flow__warnings__count:ORD-0039": {
+   "value": 1,
+   "written_by": "15-odb-checkmacroantennaproperties"
+  },
+  "flow__warnings__count:PAD-0033": {
+   "value": 2,
+   "written_by": "17-openroad-padring"
+  },
+  "flow__warnings__count:STA-1140": {
+   "value": 52,
+   "written_by": "31-openroad-repairdesignpostgpl"
+  },
+  "flow__warnings__type_count": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "global_route__vias": {
+   "value": 7282,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "global_route__wirelength": {
+   "value": 9621721,
+   "written_by": "38-openroad-globalrouting"
+  },
+  "power__internal__total": {
+   "value": 0.00762262,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "power__leakage__total": {
+   "value": 1.90045e-05,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "power__switching__total": {
+   "value": 0.00472612,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "power__total": {
+   "value": 0.0123677,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "route__antenna_violation__count": {
+   "value": 2,
+   "written_by": "41-openroad-repairantennas"
+  },
+  "route__wirelength__estimated": {
+   "value": 6472030,
+   "written_by": "36-openroad-resizertimingpostcts"
+  },
+  "synthesis__check_error__count": {
+   "value": 0,
+   "written_by": "06-yosys-synthesis"
+  },
+  "timing__drv__floating__nets": {
+   "value": 0,
+   "written_by": "31-openroad-repairdesignpostgpl"
+  },
+  "timing__drv__floating__pins": {
+   "value": 0,
+   "written_by": "31-openroad-repairdesignpostgpl"
+  },
+  "timing__hold__tns": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__hold__tns__corner:nom_ff_n40C_5v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__tns__corner:nom_ss_125C_4v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__tns__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__hold__wns": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__hold__wns__corner:nom_ff_n40C_5v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__wns__corner:nom_ss_125C_4v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__wns__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__hold__ws": {
+   "value": 0.723741,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__hold__ws__corner:nom_ff_n40C_5v50": {
+   "value": 0.07690384657871997,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__ws__corner:nom_ss_125C_4v50": {
+   "value": 0.7816652546479765,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold__ws__corner:nom_tt_025C_5v00": {
+   "value": 0.723741,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__hold_r2r__ws": {
+   "value": 0.723741,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__hold_r2r__ws__corner:nom_ff_n40C_5v50": {
+   "value": 0.076904,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_r2r__ws__corner:nom_ss_125C_4v50": {
+   "value": 0.781665,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_r2r__ws__corner:nom_tt_025C_5v00": {
+   "value": 0.723741,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__hold_r2r_vio__count": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_r2r_vio__count__corner:nom_ff_n40C_5v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_r2r_vio__count__corner:nom_ss_125C_4v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_r2r_vio__count__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_vio__count": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__hold_vio__count__corner:nom_ff_n40C_5v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_vio__count__corner:nom_ss_125C_4v50": {
+   "value": 0,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__hold_vio__count__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "37-openroad-stamidpnr-2"
+  },
+  "timing__setup__tns": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup__tns__corner:nom_ff_n40C_5v50": {
+   "value": -241.47372074270814,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__tns__corner:nom_ss_125C_4v50": {
+   "value": -431476.6969558461,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__tns__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup__wns": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup__wns__corner:nom_ff_n40C_5v50": {
+   "value": -2.4002560618456417,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__wns__corner:nom_ss_125C_4v50": {
+   "value": -178.51664829432545,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__wns__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup__ws": {
+   "value": 34.0607,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__setup__ws__corner:nom_ff_n40C_5v50": {
+   "value": -2.4002560618456417,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__ws__corner:nom_ss_125C_4v50": {
+   "value": -178.51664829432545,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup__ws__corner:nom_tt_025C_5v00": {
+   "value": 34.0607,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__setup_r2r__ws": {
+   "value": 34.0607,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__setup_r2r__ws__corner:nom_ff_n40C_5v50": {
+   "value": -2.400256,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_r2r__ws__corner:nom_ss_125C_4v50": {
+   "value": -178.516647,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_r2r__ws__corner:nom_tt_025C_5v00": {
+   "value": 34.0607,
+   "written_by": "42-openroad-stamidpnr-3"
+  },
+  "timing__setup_r2r_vio__count": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup_r2r_vio__count__corner:nom_ff_n40C_5v50": {
+   "value": 128,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_r2r_vio__count__corner:nom_ss_125C_4v50": {
+   "value": 9144,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_r2r_vio__count__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup_vio__count": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  },
+  "timing__setup_vio__count__corner:nom_ff_n40C_5v50": {
+   "value": 128,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_vio__count__corner:nom_ss_125C_4v50": {
+   "value": 9144,
+   "written_by": "12-openroad-staprepnr"
+  },
+  "timing__setup_vio__count__corner:nom_tt_025C_5v00": {
+   "value": 0,
+   "written_by": "35-openroad-stamidpnr-1"
+  }
+ },
+ "note": "`written_by` is the last step whose metrics CHANGED the key; LibreLane's metrics are cumulative, so a key not in `post_route_keys` is not a post-route measurement however current it looks.",
+ "post_route_keys": [],
+ "run": "halfslot",
+ "steps": [
+  "01-verilator-lint",
+  "02-checker-linttimingconstructs",
+  "03-checker-linterrors",
+  "04-checker-lintwarnings",
+  "05-yosys-jsonheader",
+  "06-yosys-synthesis",
+  "07-checker-yosysunmappedcells",
+  "08-checker-yosyssynthchecks",
+  "09-checker-netlistassignstatements",
+  "10-openroad-checksdcfiles",
+  "11-openroad-checkmacroinstances",
+  "12-openroad-staprepnr",
+  "13-openroad-floorplan",
+  "14-openroad-dumprcvalues",
+  "15-odb-checkmacroantennaproperties",
+  "16-odb-setpowerconnections",
+  "17-openroad-padring",
+  "18-odb-manualmacroplacement",
+  "19-openroad-cutrows",
+  "20-openroad-tapendcapinsertion",
+  "21-odb-addpdnobstructions",
+  "22-openroad-generatepdn",
+  "23-odb-removepdnobstructions",
+  "24-odb-addroutingobstructions",
+  "25-openroad-globalplacementskipio",
+  "26-odb-applydeftemplate",
+  "27-openroad-globalplacement",
+  "28-odb-writeverilogheader",
+  "29-checker-powergridviolations",
+  "30-openroad-stamidpnr",
+  "31-openroad-repairdesignpostgpl",
+  "32-odb-manualglobalplacement",
+  "33-openroad-detailedplacement",
+  "34-openroad-cts",
+  "35-openroad-stamidpnr-1",
+  "36-openroad-resizertimingpostcts",
+  "37-openroad-stamidpnr-2",
+  "38-openroad-globalrouting",
+  "39-openroad-checkantennas",
+  "40-odb-diodesonports",
+  "41-openroad-repairantennas",
+  "42-openroad-stamidpnr-3"
+ ]
+}

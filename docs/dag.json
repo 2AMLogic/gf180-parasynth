@@ -224,7 +224,7 @@
       "name": "Fits a real shuttle padframe",
       "group": "silicon",
       "class": "implementation",
-      "blocked": "routed die has padcells: 0 -- LibreLane half-slot in progress",
+      "blocked": "LibreLane half-slot: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops -- but detailed routing has not completed, so no router DRC count and no post-route STA at any corner. docs/pnr-shuttle-halfslot.md",
       "deps": [
         "S1"
       ]
