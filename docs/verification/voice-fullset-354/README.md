@@ -98,3 +98,27 @@ In-domain play keeps the ladder at least 10.6 dB below the rail where scenario 0
 - **The out-of-domain divergence is real.** At the ladder's 19-bit rail, model and RTL saturate differently, and the output then rails with opposite signs. Which side is right against the contract is not established here.
 - **It is also the only thing keeping `--set full` red.** Next step: capture the ladder stage words (`y19` and its inputs) at frames 55–65 of scenario 0 in both model and RTL, find the first differing operation, and fix whichever side violates the contract. Add the exact image as a permanent injection, per verification-rules rule 5.
 - **Scope.** `verify_voice.py`'s docstring now states its scope and this known out-of-domain failure. The gate's verdict logic is unchanged, so a full-set FAIL is still reported as FAIL.
+
+## 6. First wrong operation, repair and control (after the batch above)
+
+**Layer: RTL.** In `ladder_dp_n.v`, `xg <= xg_full[SW:0]` holds (x · gain) >> 11 in 25 bits. The ports (17-bit x,
+20-bit gain) span −33,554,400..33,553,888, which needs 26 bits. The slice comes before `sat_s`, so the product
+**wraps** and flips the sign of the ladder's input. The model computes it exactly and saturates. A known-answer
+width test (`tools/test_ladder_xg_width.py`) confirms the intended range independently of both implementations.
+
+**Reachable only outside the domain.** At most 272,630 of gain × 65,535 of |x| < 2^35. The all-maximum image uses
+gain 2^20 − 1.
+
+**Repair and control.** The repair (26-bit `xg`, and `INJECT_BUG_LADDER_XG25` keeping R1's width as a control) is
+PR #364, against the R2 candidate. R1's bytes are unchanged. With the repair:
+
+- `verify_voice --set full`: **PASS, 442,596 frames**.
+- `--only audition,extremes --pulse2x`: PASS, 121,040 frames.
+- The all-maximum image alone: PASS.
+- The control reproduces R1's first divergence exactly and is caught.
+- `verify_ladder`: PASS.
+
+The musical audition mismatches were this wrap, carried by the continuing voice. With the repair they pass in the
+chain, so the full set's continuity is kept rather than reset around.
+
+**Model unchanged.** No sound score is stale.

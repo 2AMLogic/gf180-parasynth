@@ -74,7 +74,10 @@ ONE continuing voice, so that divergence is CARRIED into the later scenarios:
 --pulse2x), and so does an in-domain stress of all three R1 presets at the
 live controllers' limits (`verify_voice_scoped.py --domain`, 144,000 frames).
 A full-set FAIL is therefore not evidence of an in-domain defect -- and a
-full-set PASS remains the goal: the out-of-domain divergence is open in #354.
+full-set PASS remains the goal. The out-of-domain divergence is
+ladder_dp_n.v's 25-bit (x * gain) >> 11 register wrapping (26 bits needed);
+repaired for R2 in #364 (full set then PASSES, 442,596 frames), unrepaired in
+R1's frozen bytes by design.
 
 Exit status (a CI job asserting that a negative control fails must require
 exactly 1):
