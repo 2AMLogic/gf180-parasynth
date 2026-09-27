@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""verify_voice, scoped (#354): is R1's model/RTL divergence inside the qualified domain?
+
+`rtl-sketch/verify_voice.py --set full` plays every scenario on ONE continuing
+voice, so a divergence in one scenario's internal state is carried into every
+later one. This driver runs the unchanged bench (its generate/simulate/compare)
+on a chosen scenario list from reset:
+
+  --extremes-index I   the I-th `extremes` scenario alone, from reset
+  --domain             an in-domain stress set: each R1 preset (default,
+                       m5a-saw, m5a-pulse) at the live controllers' limits --
+                       CC71 resonance 0 and 1.0 through the host's own
+                       ladder_regs, CC74 cutoff 40 Hz and 8 kHz, CC7 volume
+                       0.9 -- with the playable range's end notes, the
+                       preset's glide between them, retrigger and release.
+                       Every patch and note is checked by
+                       fpga/release/qualified_domain (check_patch, check_note)
+                       and the run REFUSES if any is outside it.
+
+It also reports the model's headroom at the ladder's 19-bit word and the
+mixer and output rails for the scenarios it ran, so "cannot reach the
+saturation that diverges" is a measured margin, not an argument.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import pathlib
+import sys
+
+import numpy as np
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "rtl-sketch"), str(ROOT / "model"), str(ROOT / "fpga"),
+                str(ROOT / "fpga/release"), str(ROOT / "tools")]
+import verify_voice as vv  # noqa: E402
+import voice_fx as vf  # noqa: E402
+import qualified_domain as qd  # noqa: E402
+
+SR = vf.SR
+Y19_RAIL = (1 << 18) - 1
+
+
+def extremes_only(index: int):
+    full = [s for s in vv.scenarios("full", {"extremes"})]
+    if not 0 <= index < len(full):
+        raise SystemExit(f"REFUSED: extremes has {len(full)} scenarios")
+    return [full[index]]
+
+
+def _preset_regs(name):
+    import uart_host as uh
+    return dict(uh.preset_regs(None if name == "default" else name))
+
+
+def domain_scenarios() -> list:
+    S = []
+    for preset in ("default", "m5a-saw", "m5a-pulse"):
+        base = _preset_regs(preset)
+        qd.check_patch(base, name=preset)
+        lo_note, hi_note = qd.playable_notes(base["detune"])
+        for res in (0.0, 1.0):
+            for cut in (40, 8000):
+                regs = dict(base)
+                k, g, og = vf.ladder_regs(res, regs["drive"], regs.get("filter_calibration"))
+                regs.update(res=res, k=k, gain=g, ogain=og, cut_lo=cut, vol=int(round(0.9 * 32768)))
+                qd.check_patch(regs, name=f"{preset} res {res} cut {cut}")
+                notes = [lo_note, hi_note, 36, 84, 96, hi_note]
+                for nt in notes:
+                    qd.check_note(nt, regs)
+                n = int(0.25 * SR)
+                w = [(0, "INC", kk, v, True) for kk, v in enumerate(vf.VoiceFx.note_incs(notes[0], regs["detune"]))]
+                w += [(0, "TRACK", vf.VoiceFx.note_track(notes[0], regs["track"])), (0, "GATE", 1)]
+                step = n // len(notes)
+                for i, nt in enumerate(notes[1:], start=1):
+                    f = i * step
+                    # a legato change: glide at the preset's own rate (non-jump INC)
+                    w += [(f, "INC", kk, v, False) for kk, v in enumerate(vf.VoiceFx.note_incs(nt, regs["detune"]))]
+                    w += [(f, "TRACK", vf.VoiceFx.note_track(nt, regs["track"]))]
+                    if i == 3:
+                        w += [(f + 5, "TRIG",)]
+                w += [(n - step // 2, "GATE", 0)]
+                S.append(("domain", f"{preset}: res {res}, cutoff {cut} Hz, vol 0.9, notes {notes}, glide, "
+                                    f"retrigger, release", regs, sorted(w, key=lambda x: x[0]), n))
+    return S
+
+
+def headroom(scns, osc2x, filter2x, pulse2x) -> dict:
+    v = vf.VoiceFx(oversample_2x=osc2x, oversample_pulse_2x=pulse2x, rate_converted_ladder=filter2x,
+                   preserve_filter_headroom=filter2x, causal_filter=filter2x,
+                   pulse479_filter_candidate=filter2x)
+    v.reset()
+    worst = {"ladder_y19_abs": 0, "mixed_abs": 0, "out_abs": 0, "vca_abs": 0}
+    per = []
+    for key, name, regs, writes, n in scns:
+        y = v.play(regs, writes, n)
+        t = v.trace
+        row = {"name": name,
+               "ladder_y19_abs": int(np.max(np.abs(t["ladder"]))),
+               "mixed_abs": int(np.max(np.abs(t["mixed"]))),
+               "out_abs": int(np.max(np.abs(y))),
+               "vca_abs": int(np.max(np.abs(t["vca"])))}
+        per.append(row)
+        for k in worst:
+            worst[k] = max(worst[k], row[k])
+    worst["ladder_margin_db"] = round(20 * math.log10(Y19_RAIL / max(worst["ladder_y19_abs"], 1)), 2)
+    return {"worst": worst, "per_scenario": per}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--extremes-index", type=int)
+    g.add_argument("--domain", action="store_true")
+    ap.add_argument("--osc2x", action="store_true")
+    ap.add_argument("--filter2x", action="store_true")
+    ap.add_argument("--pulse2x", action="store_true")
+    ap.add_argument("--rtl", default=None)
+    ap.add_argument("--inject", default=None)
+    ap.add_argument("--expect-fail", action="store_true")
+    ap.add_argument("--headroom-only", action="store_true")
+    ap.add_argument("--outdir", required=True)
+    ap.add_argument("--json", type=pathlib.Path, default=None)
+    a = ap.parse_args(argv)
+    scns = domain_scenarios() if a.domain else extremes_only(a.extremes_index)
+    hr = headroom(scns, a.osc2x, a.filter2x, a.pulse2x)
+    print("headroom (model):", json.dumps(hr["worst"]))
+    if a.headroom_only:
+        if a.json:
+            a.json.write_text(json.dumps({"headroom": hr}, indent=1) + "\n")
+        return 0
+    vv.scenarios = lambda which, only=None: scns          # the bench, on this list, from reset
+    argv2 = ["--set", "full", "--outdir", a.outdir]
+    for flag in ("osc2x", "filter2x", "pulse2x"):
+        if getattr(a, flag):
+            argv2.append(f"--{flag}")
+    if a.rtl:
+        argv2 += ["--rtl", a.rtl]
+    if a.inject:
+        argv2 += ["--inject", a.inject]
+    if a.expect_fail:
+        argv2.append("--expect-fail")
+    rc = vv.main(argv2)
+    if a.json:
+        a.json.write_text(json.dumps({"headroom": hr, "verify_voice_exit": rc,
+                                      "scenarios": [s[1] for s in scns]}, indent=1) + "\n")
+    return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
