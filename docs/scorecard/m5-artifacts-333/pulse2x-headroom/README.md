@@ -64,9 +64,11 @@ after the fact.
 
   M5A Gain gets 0.12 dB worse and stays well inside its limit. If that 0.12 dB matters, the host can compensate on the `m5a-pulse` preset's volume register; no RTL is needed.
 
-- **Unwanted energy relative to intended** (32 probe points: 4 rectangles × 8 notes):
+- **Unwanted energy relative to intended, 0.74 against 0.85** (both pulse2x; **not a comparison with R1**; 32 probe
+  points, 4 rectangles × 8 notes):
   - 25 points improve, down to −6.5 dB (pulse25 MIDI 114, where clipping was removed).
-  - 7 points worsen. Only one is worse by more than 1 dB: pulse15 MIDI 84, +1.02 dB, at about −60 dB relative.
+  - 7 points worsen. One worsens by **+1.02 dB, which FAILS a 1.00 dB bound**: pulse15 MIDI 84, at about −60 dB relative.
+  - The comparison that decides R2 (0.74 against R1) is in the top-level README §D.
 - **Upper wanted power:** within ±0.26 dB.
 - **Rails:** oscillator rail samples go from 1,007–7,107 per clipping point to **0** at every probe point.
   - Mixes (`mix-074.json`): the default preset and a three-rectangle mix at 10 notes go from 30,965 oscillator rail samples to **0**.

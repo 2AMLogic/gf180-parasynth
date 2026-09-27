@@ -452,12 +452,6 @@ def schedule() -> list:
 
 
 RECT_GAIN_Q15 = None      # None: the model's own; else the pulse2x engine's rectangle gain (R2: 24248)
-RECT_MIX_COMP = None      # None: unchanged; else the pulse2x rectangles' mixer weight. NOTE: the host's
-                          # mix_weights normalises a single oscillator back to 1.0, so this is a
-                          # no-op through patch_regs (measured: identical records) -- kept only
-                          # so that record stays reproducible
-RECT_DRIVE_COMP = None    # None: unchanged; else the pulse2x rectangles' ladder drive multiplier:
-                          # restores R1's level INTO the ladder (rectangles at 0.74 in the 2x chain)
 
 
 def _rect_ctx(engine):
@@ -468,39 +462,12 @@ def _rect_ctx(engine):
     return hr.candidate(RECT_GAIN_Q15, "rect")
 
 
-FRESH_NOTES = (42, 54, 66, 78, 90, 102, 114)   # never in schedule(): 24/36/48/.../127
-
-
-def schedule_fresh() -> list:
-    """Fresh confirmation conditions for a repair TUNED on schedule()'s points
-    (plan101 §2: re-examined points do not replenish a holdout): notes not in
-    schedule(), the R1 rectangles, both preset drives, preset and CC74-ceiling
-    cutoffs, resonance 0 and 0.5."""
-    pts = []
-    for engine in ENGINES:
-        for wave in ("pulse29", "square"):
-            for note in FRESH_NOTES:
-                for cut in (20000, 8000):
-                    for q in (0.0, 0.5):
-                        for d in (0.75, 1.6):
-                            pts.append(("fresh", engine, note, dict(waves=(wave,) * 3, cutoff=(cut, cut),
-                                                                    q=q, drive=d)))
-    return pts
-
-
-SCHEDULES = {"standard": schedule, "fresh": schedule_fresh}
-
-
-def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1, which: str = "standard") -> dict:
+def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
     rows = []
-    for i, (group, engine, note, over) in enumerate(SCHEDULES[which]()):
+    for i, (group, engine, note, over) in enumerate(schedule()):
         if i % parts != part:
             continue
         patch = held_patch(**over)
-        if RECT_MIX_COMP is not None and engine == "pulse2x" and over["waves"][0] in vf.TWO_EDGE:
-            patch = {**patch, "mix": (RECT_MIX_COMP, 0.0, 0.0)}
-        if RECT_DRIVE_COMP is not None and engine == "pulse2x" and over["waves"][0] in vf.TWO_EDGE:
-            patch = {**patch, "drive": patch["drive"] * RECT_DRIVE_COMP}
         try:
             with _rect_ctx(engine):
                 row = measure_point(engine, note, patch)
@@ -651,11 +618,6 @@ def main(argv=None) -> int:
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
-    w.add_argument("--schedule", choices=("standard", "fresh"), default="standard")
-    w.add_argument("--rect-drive-comp", type=float, default=None,
-                   help="pulse2x rectangles' ladder drive multiplier (the bounded level repair)")
-    w.add_argument("--rect-mix-comp", type=float, default=None,
-                   help="pulse2x rectangles' mixer weight (the bounded level repair); r1 rows unaffected")
     w.add_argument("--rect-gain-q15", type=int, default=None,
                    help="pulse2x rectangles at this gain (R2: 24248); r1 rows are unaffected")
     for p in (s, c, w, dv, sm):
@@ -680,15 +642,10 @@ def main(argv=None) -> int:
             res = drive_sweep()
             rc = 0
         else:
-            global RECT_GAIN_Q15, RECT_MIX_COMP, RECT_DRIVE_COMP
+            global RECT_GAIN_Q15
             RECT_GAIN_Q15 = a.rect_gain_q15
-            RECT_MIX_COMP = a.rect_mix_comp
-            RECT_DRIVE_COMP = a.rect_drive_comp
-            res = run_sweep(a.out, a.part, a.parts, a.schedule)
-            res["schedule"] = a.schedule
+            res = run_sweep(a.out, a.part, a.parts)
             res["pulse2x_rect_gain_q15"] = RECT_GAIN_Q15
-            res["pulse2x_rect_mix_comp"] = RECT_MIX_COMP
-            res["pulse2x_rect_drive_comp"] = RECT_DRIVE_COMP
             rc = 0
     except Refused as e:
         print(f"REFUSED: {e}")

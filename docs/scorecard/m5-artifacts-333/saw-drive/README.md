@@ -100,8 +100,23 @@ lower drive raises the low notes' unwanted energy relative to the signal. **The 
 The next question is what the resonant low-note unwanted energy is: images, or residual from the resonance peak.
 Only after that can a drive be tied to resonance, and that is its own experiment.
 
-**Production path, run before this verdict.** The M5A/M5B SPI→I²S phrases with saw drive 0.35 on saw segments are
-bit-exact with the model: M5A 1,305,543 periods, M5B 729,543, 73 writes each (`confirm/M5A.txt`, `M5B.txt`). These
-ran with the 16-frame write margin. The three extra writes pushed each segment's first event about 10 frames late in
-total, which is the +10 periods. The margin is now 22 when a saw drive is overridden. This is delivery evidence for
+**Production path, run before this verdict.** The M5A/M5B SPI→I²S phrases with saw drive 0.35 on saw segments
+are bit-exact with the model: M5A 1,305,543 periods and M5B 729,543, 73 writes each (`confirm/M5A.txt`, `M5B.txt`).
+
+**Applied against intended note times** (`tools/check_phrase_schedule.py`; `confirm/schedule-M5A.json`,
+`schedule-M5B.json`). This compares GATE_ON frames at the pins with the manifest's schedule, with the first event
+aligned:
+
+| run | GATE_ON offsets, frames (4 events) |
+|---|---|
+| pulse2x with no saw override (the published-style stimulus) | 0, −11, −16, −27 |
+| saw drive 0.35, 16-frame write margin | 0, −11, −11, −22 |
+| saw drive 0.35, 22-frame margin (tried, reverted) | 0, −17, −23, −40 |
+
+- **The drift predates this change.** The bench's stimulus already lands later notes early by up to 27 frames (0.56 ms) with no override. That is a property of every published M5 phrase, recorded here and not fixed in this PR.
+- **The override does not add to it.** With the 16-frame margin, the saw-drive override stays inside that drift.
+- **The 22-frame reserve made it worse** (−40 frames), because the note lands early by the unused reserve. It was reverted. Wrong-then-right 1.
+- **Effect on the envelope measures.** Attack and release are durations measured on the envelope, so an offset under 1 ms does not change them. The scorer's spectral windows start 120 ms after the note.
+
+This is delivery evidence for
 the mechanism, not a promoted preset. R1's `m5a-saw` is unchanged.

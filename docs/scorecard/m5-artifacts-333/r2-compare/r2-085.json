@@ -1,0 +1,6440 @@
+{
+ "configuration": {
+  "candidate": "pulse2x",
+  "rect_gain_q15": null,
+  "baseline": "r1",
+  "differences": "rectangles through the 2x chain at rect_gain_q15; nothing else"
+ },
+ "declared_rule": "worse by > 1.00 dB on ['unwanted_dbfs', 'unwanted_rel_db', 'upper_wanted_rel_db'], new output rail, new dropout",
+ "counts": {
+  "measured": 110,
+  "refused": 0,
+  "not_run": 0
+ },
+ "development": {
+  "unwanted_dbfs": {
+   "any_adverse_change": 0,
+   "improved_beyond_band": 3,
+   "within_band": 0,
+   "regressed_beyond_band": 0,
+   "worst_adverse": -7.696
+  },
+  "unwanted_rel_db": {
+   "any_adverse_change": 0,
+   "improved_beyond_band": 3,
+   "within_band": 0,
+   "regressed_beyond_band": 0,
+   "worst_adverse": -7.453
+  },
+  "upper_wanted_rel_db": {
+   "any_adverse_change": 3,
+   "improved_beyond_band": 0,
+   "within_band": 3,
+   "regressed_beyond_band": 0,
+   "worst_adverse": -0.222
+  },
+  "new_output_rail": 0,
+  "new_dropout": 0,
+  "points_with_more_oscillator_rail_samples": 0,
+  "points_with_more_mixer_rail_samples": 0,
+  "points_with_more_reconstruction_would_clip": 0,
+  "points_with_more_decimation_would_clip": 0,
+  "points_failing_declared_rule": 0
+ },
+ "untouched": {
+  "unwanted_dbfs": {
+   "any_adverse_change": 2,
+   "improved_beyond_band": 95,
+   "within_band": 11,
+   "regressed_beyond_band": 1,
+   "worst_adverse": 1.202
+  },
+  "unwanted_rel_db": {
+   "any_adverse_change": 1,
+   "improved_beyond_band": 93,
+   "within_band": 14,
+   "regressed_beyond_band": 0,
+   "worst_adverse": 0.075
+  },
+  "upper_wanted_rel_db": {
+   "any_adverse_change": 35,
+   "improved_beyond_band": 9,
+   "within_band": 92,
+   "regressed_beyond_band": 6,
+   "worst_adverse": -1.689
+  },
+  "new_output_rail": 0,
+  "new_dropout": 0,
+  "points_with_more_oscillator_rail_samples": 2,
+  "points_with_more_mixer_rail_samples": 0,
+  "points_with_more_reconstruction_would_clip": 0,
+  "points_with_more_decimation_would_clip": 0,
+  "points_failing_declared_rule": 7
+ },
+ "failing_points": [
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -68.985,
+    "candidate": -74.1186,
+    "delta": -5.134,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -60.9143,
+    "candidate": -64.6872,
+    "delta": -3.773,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -41.7616,
+    "candidate": -43.4511,
+    "delta": -1.689,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.0707,
+    "candidate": -9.4314,
+    "delta": -1.361
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.052,
+    "candidate": -0.021
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -84.3563,
+    "candidate": -86.7009,
+    "delta": -2.345,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -32.22,
+    "candidate": -34.5505,
+    "delta": -2.331,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -62.759,
+    "candidate": -64.0235,
+    "delta": -1.264,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -52.1363,
+    "candidate": -52.1504,
+    "delta": -0.014
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.142,
+    "candidate": -0.137
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -75.0273,
+    "candidate": -88.7557,
+    "delta": -13.728,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -9.4764,
+    "candidate": -22.9234,
+    "delta": -13.447,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -44.7098,
+    "candidate": -45.9489,
+    "delta": -1.239,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -65.5509,
+    "candidate": -65.8324,
+    "delta": -0.282
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.054,
+    "candidate": -0.027
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -43.4703,
+    "candidate": -52.0023,
+    "delta": -8.532,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.0064,
+    "candidate": -42.9102,
+    "delta": -7.904,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.2032,
+    "candidate": -12.3766,
+    "delta": -1.173,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.4638,
+    "candidate": -9.0922,
+    "delta": -0.628
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.009
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -101.3059,
+    "candidate": -100.1036,
+    "delta": 1.202,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 11.5475,
+    "candidate": 5.7105,
+    "delta": -5.837,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -112.8534,
+    "candidate": -105.8141,
+    "delta": 7.039
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": 0.0,
+    "candidate": -0.005
+   },
+   "fails_declared_rule": [
+    "unwanted_dbfs"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -90.9531,
+    "candidate": -93.0164,
+    "delta": -2.063,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -38.8305,
+    "candidate": -40.8786,
+    "delta": -2.048,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -58.6784,
+    "candidate": -60.0352,
+    "delta": -1.357,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -52.1225,
+    "candidate": -52.1378,
+    "delta": -0.015
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.157,
+    "candidate": -0.144
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.2553,
+    "candidate": -53.0705,
+    "delta": -8.815,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.8013,
+    "candidate": -43.9913,
+    "delta": -8.19,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.1405,
+    "candidate": -12.3124,
+    "delta": -1.172,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.454,
+    "candidate": -9.0792,
+    "delta": -0.625
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.01,
+    "candidate": -0.006
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  }
+ ],
+ "accepted_under_declared_rule": false,
+ "points": [
+  {
+   "wave": "pulse15",
+   "note": 24,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -56.0554,
+    "candidate": -57.6735,
+    "delta": -1.618,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -43.5099,
+    "candidate": -43.7863,
+    "delta": -0.276,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.9672,
+    "candidate": -29.7644,
+    "delta": 0.203,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.5454,
+    "candidate": -13.8872,
+    "delta": -1.342
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35905,
+     "reconstruction_would_clip": 935,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.489,
+    "candidate": -0.335
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -72.1539,
+    "candidate": -84.1328,
+    "delta": -11.979,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -59.4145,
+    "candidate": -70.127,
+    "delta": -10.712,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -26.7203,
+    "candidate": -26.5981,
+    "delta": 0.122,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.7394,
+    "candidate": -14.0058,
+    "delta": -1.266
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1873,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.549,
+    "candidate": -0.363
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 48,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -69.2906,
+    "candidate": -77.2724,
+    "delta": -7.982,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -56.1486,
+    "candidate": -63.019,
+    "delta": -6.87,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -23.6803,
+    "candidate": -23.6686,
+    "delta": 0.012,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.142,
+    "candidate": -14.2533,
+    "delta": -1.111
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35611,
+     "reconstruction_would_clip": 3754,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.138,
+    "candidate": -0.066
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 60,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -61.0149,
+    "candidate": -70.0754,
+    "delta": -9.061,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -47.1959,
+    "candidate": -55.3196,
+    "delta": -8.124,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -20.4526,
+    "candidate": -20.3985,
+    "delta": 0.054,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.819,
+    "candidate": -14.7558,
+    "delta": -0.937
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35219,
+     "reconstruction_would_clip": 7505,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.445,
+    "candidate": -0.338
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 72,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -58.3643,
+    "candidate": -68.2352,
+    "delta": -9.871,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -43.5183,
+    "candidate": -52.6455,
+    "delta": -9.127,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -15.6597,
+    "candidate": -15.7654,
+    "delta": -0.106,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.846,
+    "candidate": -15.5897,
+    "delta": -0.744
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 34441,
+     "reconstruction_would_clip": 12096,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.187,
+    "candidate": -0.134
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -55.9638,
+    "candidate": -60.9894,
+    "delta": -5.026,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -39.4315,
+    "candidate": -44.0385,
+    "delta": -4.607,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -12.5899,
+    "candidate": -13.0427,
+    "delta": -0.453,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -16.5323,
+    "candidate": -16.9509,
+    "delta": -0.419
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32883,
+     "reconstruction_would_clip": 19289,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.151,
+    "candidate": -0.146
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.1376,
+    "candidate": -59.9027,
+    "delta": -5.765,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -34.8922,
+    "candidate": -40.6343,
+    "delta": -5.742,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -6.2652,
+    "candidate": -6.5842,
+    "delta": -0.319,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -19.2454,
+    "candidate": -19.2684,
+    "delta": -0.023
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29762,
+     "reconstruction_would_clip": 31388,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.111,
+    "candidate": -0.103
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 108,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.1673,
+    "candidate": -55.676,
+    "delta": -1.509,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -30.1727,
+    "candidate": -32.0581,
+    "delta": -1.885,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -4.9386,
+    "candidate": -4.7847,
+    "delta": 0.154,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -23.9946,
+    "candidate": -23.6179,
+    "delta": 0.377
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 24366,
+     "reconstruction_would_clip": 24902,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.017,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.1985,
+    "candidate": -60.8329,
+    "delta": -15.634,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -10.3344,
+    "candidate": -29.2824,
+    "delta": -18.948,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -34.8642,
+    "candidate": -31.5505,
+    "delta": 3.314
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 18137,
+     "reconstruction_would_clip": 22548,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6064,
+     "reconstruction_would_clip": 12305,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.012,
+    "candidate": -0.01
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse15",
+   "note": 127,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -42.6397,
+    "candidate": -67.7888,
+    "delta": -25.149,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 11.4494,
+    "candidate": -21.2462,
+    "delta": -32.696,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -54.0891,
+    "candidate": -46.5426,
+    "delta": 7.547
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11932,
+     "reconstruction_would_clip": 19027,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5370,
+     "reconstruction_would_clip": 10489,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.006,
+    "candidate": -0.003
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 24,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -51.7287,
+    "candidate": -53.2365,
+    "delta": -1.508,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -40.9185,
+    "candidate": -41.0616,
+    "delta": -0.143,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -31.631,
+    "candidate": -31.4088,
+    "delta": 0.222,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -10.8102,
+    "candidate": -12.175,
+    "delta": -1.365
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35905,
+     "reconstruction_would_clip": 935,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.295,
+    "candidate": -0.184
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -71.8557,
+    "candidate": -82.3628,
+    "delta": -10.507,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -60.9164,
+    "candidate": -70.1083,
+    "delta": -9.192,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -28.4904,
+    "candidate": -28.3203,
+    "delta": 0.17,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -10.9393,
+    "candidate": -12.2546,
+    "delta": -1.315
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1881,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.311,
+    "candidate": -0.191
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 48,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -69.1193,
+    "candidate": -76.8878,
+    "delta": -7.769,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -57.9097,
+    "candidate": -64.4694,
+    "delta": -6.56,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -25.4311,
+    "candidate": -25.365,
+    "delta": 0.066,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.2096,
+    "candidate": -12.4184,
+    "delta": -1.209
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35611,
+     "reconstruction_would_clip": 3758,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.286,
+    "candidate": -0.188
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 60,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -60.8115,
+    "candidate": -69.486,
+    "delta": -8.675,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -49.0449,
+    "candidate": -56.7212,
+    "delta": -7.676,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -22.2067,
+    "candidate": -22.2566,
+    "delta": -0.05,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.7666,
+    "candidate": -12.7648,
+    "delta": -0.998
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35220,
+     "reconstruction_would_clip": 7493,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.271,
+    "candidate": -0.187
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 72,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -57.6293,
+    "candidate": -64.0839,
+    "delta": -6.455,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -44.9053,
+    "candidate": -50.6253,
+    "delta": -5.72,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -17.6261,
+    "candidate": -17.7889,
+    "delta": -0.163,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.724,
+    "candidate": -13.4586,
+    "delta": -0.735
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 34439,
+     "reconstruction_would_clip": 15012,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.228,
+    "candidate": -0.174
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.5574,
+    "candidate": -60.8413,
+    "delta": -6.284,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -40.3027,
+    "candidate": -46.1617,
+    "delta": -5.859,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -13.4766,
+    "candidate": -13.5132,
+    "delta": -0.037,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.2547,
+    "candidate": -14.6796,
+    "delta": -0.425
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32882,
+     "reconstruction_would_clip": 22937,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.088,
+    "candidate": -0.08
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.8139,
+    "candidate": -63.7246,
+    "delta": -9.911,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -37.322,
+    "candidate": -47.0589,
+    "delta": -9.737,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.0635,
+    "candidate": -11.4232,
+    "delta": -0.36,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -16.4918,
+    "candidate": -16.6657,
+    "delta": -0.174
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 29834,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.11,
+    "candidate": -0.108
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 108,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -49.6634,
+    "candidate": -58.0076,
+    "delta": -8.344,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -29.8342,
+    "candidate": -38.1039,
+    "delta": -8.27,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -5.5121,
+    "candidate": -5.5818,
+    "delta": -0.07,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -19.8292,
+    "candidate": -19.9037,
+    "delta": -0.075
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 23526,
+     "reconstruction_would_clip": 27511,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 1007,
+     "reconstruction_would_clip": 2933,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.017,
+    "candidate": -0.019
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -48.1143,
+    "candidate": -51.3174,
+    "delta": -3.203,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -22.7824,
+    "candidate": -26.4911,
+    "delta": -3.709,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -25.332,
+    "candidate": -24.8262,
+    "delta": 0.506
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 14534,
+     "reconstruction_would_clip": 19869,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5392,
+     "reconstruction_would_clip": 11395,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.02,
+    "candidate": -0.022
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse25",
+   "note": 127,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.6585,
+    "candidate": -52.9148,
+    "delta": -7.256,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -13.2533,
+    "candidate": -22.6281,
+    "delta": -9.375,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -32.4052,
+    "candidate": -30.2867,
+    "delta": 2.119
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 8330,
+     "reconstruction_would_clip": 17320,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 7107,
+     "reconstruction_would_clip": 11170,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.015,
+    "candidate": -0.022
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 24,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.4436,
+    "candidate": -55.4401,
+    "delta": -1.996,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -43.9066,
+    "candidate": -44.5265,
+    "delta": -0.62,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -32.9244,
+    "candidate": -32.6892,
+    "delta": 0.235,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.537,
+    "candidate": -10.9136,
+    "delta": -1.377
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35904,
+     "reconstruction_would_clip": 939,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.293,
+    "candidate": -0.182
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -86.0339,
+    "candidate": -98.249,
+    "delta": -12.215,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -71.1683,
+    "candidate": -83.1112,
+    "delta": -11.943,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -87.883,
+    "candidate": -87.8279,
+    "delta": 0.055,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.8656,
+    "candidate": -15.1379,
+    "delta": -0.272
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.515,
+    "candidate": -1.466
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -76.5319,
+    "candidate": -84.5461,
+    "delta": -8.014,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -67.8927,
+    "candidate": -75.5747,
+    "delta": -7.682,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -88.923,
+    "candidate": -88.017,
+    "delta": 0.906,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.6392,
+    "candidate": -8.9715,
+    "delta": -0.332
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.536,
+    "candidate": -1.409
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -65.1256,
+    "candidate": -66.3295,
+    "delta": -1.204,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -59.4802,
+    "candidate": -60.6843,
+    "delta": -1.204,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -89.1226,
+    "candidate": -89.1397,
+    "delta": -0.017,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -5.6454,
+    "candidate": -5.6452,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.567,
+    "candidate": -1.535
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -80.3463,
+    "candidate": -98.2652,
+    "delta": -17.919,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -66.6991,
+    "candidate": -83.2203,
+    "delta": -16.521,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -43.7195,
+    "candidate": -41.4233,
+    "delta": 2.296,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -13.6472,
+    "candidate": -15.0449,
+    "delta": -1.398
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.055,
+    "candidate": -0.069
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -68.985,
+    "candidate": -74.1186,
+    "delta": -5.134,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -60.9143,
+    "candidate": -64.6872,
+    "delta": -3.773,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -41.7616,
+    "candidate": -43.4511,
+    "delta": -1.689,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.0707,
+    "candidate": -9.4314,
+    "delta": -1.361
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.052,
+    "candidate": -0.021
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -71.6129,
+    "candidate": -82.7255,
+    "delta": -11.113,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -61.98,
+    "candidate": -71.7525,
+    "delta": -9.773,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.8945,
+    "candidate": -29.6996,
+    "delta": 0.195,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.6329,
+    "candidate": -10.9731,
+    "delta": -1.34
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.004,
+    "candidate": -0.002
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.7209,
+    "candidate": -53.6463,
+    "delta": 0.075,
+    "adverse": true,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -47.1287,
+    "candidate": -47.0541,
+    "delta": 0.075,
+    "adverse": true,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.8215,
+    "candidate": -29.8217,
+    "delta": -0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -6.5922,
+    "candidate": -6.5922,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.637,
+    "candidate": -0.633
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -64.6131,
+    "candidate": -68.7974,
+    "delta": -4.184,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -50.2885,
+    "candidate": -53.0726,
+    "delta": -2.784,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -21.9679,
+    "candidate": -20.3095,
+    "delta": 1.658,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -14.3247,
+    "candidate": -15.7248,
+    "delta": -1.4
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.031
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -61.3351,
+    "candidate": -63.2228,
+    "delta": -1.888,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -54.822,
+    "candidate": -56.6096,
+    "delta": -1.788,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.5279,
+    "candidate": -29.5463,
+    "delta": -0.018,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -6.513,
+    "candidate": -6.6132,
+    "delta": -0.1
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.63,
+    "candidate": -0.608
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 36,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -48.8789,
+    "candidate": -49.7273,
+    "delta": -0.848,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -48.1378,
+    "candidate": -48.9744,
+    "delta": -0.837,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.5458,
+    "candidate": -29.8768,
+    "delta": -0.331,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -0.741,
+    "candidate": -0.7529,
+    "delta": -0.012
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 15936,
+     "oscillator_rail_samples": 35806,
+     "reconstruction_would_clip": 1877,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 15200,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.365,
+    "candidate": -0.387
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 48,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -69.1225,
+    "candidate": -76.8206,
+    "delta": -7.698,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -59.2912,
+    "candidate": -65.7262,
+    "delta": -6.435,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -26.659,
+    "candidate": -26.5407,
+    "delta": 0.118,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.8313,
+    "candidate": -11.0944,
+    "delta": -1.263
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35609,
+     "reconstruction_would_clip": 3753,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.283,
+    "candidate": -0.189
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 60,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -60.6863,
+    "candidate": -69.3385,
+    "delta": -8.652,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -50.4288,
+    "candidate": -57.9907,
+    "delta": -7.562,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -23.1942,
+    "candidate": -23.2443,
+    "delta": -0.05,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -10.2575,
+    "candidate": -11.3477,
+    "delta": -1.09
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35219,
+     "reconstruction_would_clip": 7498,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.107,
+    "candidate": -0.05
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 72,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": true,
+   "unwanted_dbfs": {
+    "r1": -57.8912,
+    "candidate": -66.5051,
+    "delta": -8.614,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -46.729,
+    "candidate": -54.6039,
+    "delta": -7.875,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -19.5773,
+    "candidate": -19.7991,
+    "delta": -0.222,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.1622,
+    "candidate": -11.9012,
+    "delta": -0.739
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 34440,
+     "reconstruction_would_clip": 15006,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.141,
+    "candidate": -0.126
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -84.3563,
+    "candidate": -86.7009,
+    "delta": -2.345,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -32.22,
+    "candidate": -34.5505,
+    "delta": -2.331,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -62.759,
+    "candidate": -64.0235,
+    "delta": -1.264,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -52.1363,
+    "candidate": -52.1504,
+    "delta": -0.014
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.142,
+    "candidate": -0.137
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -68.3887,
+    "candidate": -68.7729,
+    "delta": -0.384,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -22.2756,
+    "candidate": -22.6597,
+    "delta": -0.384,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -67.4738,
+    "candidate": -67.3677,
+    "delta": 0.106,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -46.113,
+    "candidate": -46.1132,
+    "delta": -0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.201,
+    "candidate": -0.18
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -65.3931,
+    "candidate": -80.1276,
+    "delta": -14.734,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -47.9228,
+    "candidate": -62.4626,
+    "delta": -14.54,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -25.5784,
+    "candidate": -25.7849,
+    "delta": -0.207,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -17.4703,
+    "candidate": -17.665,
+    "delta": -0.195
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.119,
+    "candidate": -0.121
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.4704,
+    "candidate": -61.5699,
+    "delta": -8.099,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -42.223,
+    "candidate": -50.2852,
+    "delta": -8.062,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -25.3336,
+    "candidate": -25.3274,
+    "delta": 0.006,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.2474,
+    "candidate": -11.2847,
+    "delta": -0.037
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.123,
+    "candidate": -0.116
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.0599,
+    "candidate": -45.5935,
+    "delta": -1.534,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.7485,
+    "candidate": -37.2825,
+    "delta": -1.534,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -25.3604,
+    "candidate": -25.3522,
+    "delta": 0.008,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.3114,
+    "candidate": -8.311,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.128,
+    "candidate": -0.124
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": true,
+   "unwanted_dbfs": {
+    "r1": -55.7518,
+    "candidate": -64.2423,
+    "delta": -8.49,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -43.1455,
+    "candidate": -51.2128,
+    "delta": -8.067,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -14.5925,
+    "candidate": -14.7673,
+    "delta": -0.175,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.6063,
+    "candidate": -13.0294,
+    "delta": -0.423
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.074,
+    "candidate": -0.071
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.173,
+    "candidate": -63.715,
+    "delta": -9.542,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -40.5999,
+    "candidate": -48.7773,
+    "delta": -8.177,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.7178,
+    "candidate": -11.0273,
+    "delta": 0.691,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.5731,
+    "candidate": -14.9377,
+    "delta": -1.365
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.023,
+    "candidate": -0.019
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.5905,
+    "candidate": -52.6689,
+    "delta": -7.078,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -37.4888,
+    "candidate": -43.2337,
+    "delta": -5.745,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -12.7463,
+    "candidate": -11.7094,
+    "delta": 1.037,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.1017,
+    "candidate": -9.4352,
+    "delta": -1.334
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.027,
+    "candidate": -0.025
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.1273,
+    "candidate": -44.4163,
+    "delta": -0.289,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -32.0514,
+    "candidate": -32.3406,
+    "delta": -0.289,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -14.3881,
+    "candidate": -14.3857,
+    "delta": 0.002,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.0759,
+    "candidate": -12.0757,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.079,
+    "candidate": -0.079
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 84,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.7705,
+    "candidate": -54.1598,
+    "delta": -8.389,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -31.7829,
+    "candidate": -38.9433,
+    "delta": -7.16,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -9.672,
+    "candidate": -8.1862,
+    "delta": 1.486,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -13.9876,
+    "candidate": -15.2165,
+    "delta": -1.229
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30014,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.024,
+    "candidate": -0.022
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -77.6607,
+    "candidate": -78.0276,
+    "delta": -0.367,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -3.5222,
+    "candidate": -3.8956,
+    "delta": -0.373,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -43.7423,
+    "candidate": -43.2305,
+    "delta": 0.512,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -74.1385,
+    "candidate": -74.1321,
+    "delta": 0.006
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.058,
+    "candidate": -0.058
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -75.0273,
+    "candidate": -88.7557,
+    "delta": -13.728,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -9.4764,
+    "candidate": -22.9234,
+    "delta": -13.447,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -44.7098,
+    "candidate": -45.9489,
+    "delta": -1.239,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -65.5509,
+    "candidate": -65.8324,
+    "delta": -0.282
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.054,
+    "candidate": -0.027
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -61.0711,
+    "candidate": -63.6643,
+    "delta": -2.593,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -38.8959,
+    "candidate": -41.481,
+    "delta": -2.585,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -22.9978,
+    "candidate": -23.0023,
+    "delta": -0.005,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -22.1752,
+    "candidate": -22.1833,
+    "delta": -0.008
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.015,
+    "candidate": -0.014
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -47.1375,
+    "candidate": -47.5393,
+    "delta": -0.402,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -30.984,
+    "candidate": -31.3861,
+    "delta": -0.402,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -22.9978,
+    "candidate": -22.9952,
+    "delta": 0.003,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -16.1535,
+    "candidate": -16.1532,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.027,
+    "candidate": -0.025
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": true,
+   "unwanted_dbfs": {
+    "r1": -53.7271,
+    "candidate": -61.4227,
+    "delta": -7.696,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -39.1177,
+    "candidate": -46.5703,
+    "delta": -7.453,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.1376,
+    "candidate": -11.1976,
+    "delta": -0.06,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.6094,
+    "candidate": -14.8524,
+    "delta": -0.243
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.007
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -43.4703,
+    "candidate": -52.0023,
+    "delta": -8.532,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.0064,
+    "candidate": -42.9102,
+    "delta": -7.904,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.2032,
+    "candidate": -12.3766,
+    "delta": -1.173,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.4638,
+    "candidate": -9.0922,
+    "delta": -0.628
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.009
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -33.2274,
+    "candidate": -35.3079,
+    "delta": -2.08,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -27.8092,
+    "candidate": -29.8924,
+    "delta": -2.083,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.1194,
+    "candidate": -11.1025,
+    "delta": 0.017,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -5.4182,
+    "candidate": -5.4155,
+    "delta": 0.003
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.009
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -50.3947,
+    "candidate": -58.189,
+    "delta": -7.794,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -36.9738,
+    "candidate": -43.4699,
+    "delta": -6.496,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -8.8957,
+    "candidate": -8.1263,
+    "delta": 0.769,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.4209,
+    "candidate": -14.7191,
+    "delta": -1.298
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 96,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -41.3451,
+    "candidate": -48.2157,
+    "delta": -6.871,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -33.3553,
+    "candidate": -38.8513,
+    "delta": -5.496,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -9.3105,
+    "candidate": -9.0799,
+    "delta": 0.231,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -7.9899,
+    "candidate": -9.3644,
+    "delta": -1.375
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29761,
+     "reconstruction_would_clip": 30562,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.023
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 108,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -51.7774,
+    "candidate": -61.0066,
+    "delta": -9.229,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -34.4352,
+    "candidate": -43.5136,
+    "delta": -9.078,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -13.818,
+    "candidate": -13.8317,
+    "delta": -0.014,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -17.3422,
+    "candidate": -17.4931,
+    "delta": -0.151
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 23527,
+     "reconstruction_would_clip": 26323,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.014,
+    "candidate": -0.014
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -101.3059,
+    "candidate": -100.1036,
+    "delta": 1.202,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 11.5475,
+    "candidate": 5.7105,
+    "delta": -5.837,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -112.8534,
+    "candidate": -105.8141,
+    "delta": 7.039
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": 0.0,
+    "candidate": -0.005
+   },
+   "fails_declared_rule": [
+    "unwanted_dbfs"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -87.8058,
+    "candidate": -95.7952,
+    "delta": -7.989,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 24.027,
+    "candidate": 17.5115,
+    "delta": -6.515,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -111.8328,
+    "candidate": -113.3067,
+    "delta": -1.474
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.022,
+    "candidate": -0.003
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -52.7628,
+    "candidate": -54.1709,
+    "delta": -1.408,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -6.0082,
+    "candidate": -7.4004,
+    "delta": -1.392,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -46.7546,
+    "candidate": -46.7705,
+    "delta": -0.016
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.079,
+    "candidate": -0.089
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.5879,
+    "candidate": -68.8822,
+    "delta": -15.294,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -15.1963,
+    "candidate": -30.2944,
+    "delta": -15.098,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -38.3916,
+    "candidate": -38.5878,
+    "delta": -0.196
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.043,
+    "candidate": -0.041
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.7314,
+    "candidate": -51.441,
+    "delta": -5.71,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -24.2763,
+    "candidate": -29.88,
+    "delta": -5.604,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -21.455,
+    "candidate": -21.5611,
+    "delta": -0.106
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.019,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.2591,
+    "candidate": -48.6676,
+    "delta": -4.409,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -23.0679,
+    "candidate": -27.4667,
+    "delta": -4.399,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -21.1912,
+    "candidate": -21.2009,
+    "delta": -0.01
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.018
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -32.463,
+    "candidate": -33.5039,
+    "delta": -1.041,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -17.279,
+    "candidate": -18.3258,
+    "delta": -1.047,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -15.1841,
+    "candidate": -15.1781,
+    "delta": 0.006
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.019,
+    "candidate": -0.018
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.0389,
+    "candidate": -49.8024,
+    "delta": -4.764,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -24.1822,
+    "candidate": -28.8415,
+    "delta": -4.659,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -20.8567,
+    "candidate": -20.9608,
+    "delta": -0.104
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -36.1455,
+    "candidate": -41.2929,
+    "delta": -5.147,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -21.5604,
+    "candidate": -26.7201,
+    "delta": -5.16,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.5851,
+    "candidate": -14.5728,
+    "delta": 0.012
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -28.6555,
+    "candidate": -29.9957,
+    "delta": -1.34,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -16.9584,
+    "candidate": -18.3155,
+    "delta": -1.357,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.6971,
+    "candidate": -11.6802,
+    "delta": 0.017
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22267,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 5149,
+     "reconstruction_would_clip": 12476,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.019,
+    "candidate": -0.019
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "pulse29",
+   "note": 127,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.5561,
+    "candidate": -62.9835,
+    "delta": -9.427,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -28.7,
+    "candidate": -38.148,
+    "delta": -9.448,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -24.8561,
+    "candidate": -24.8355,
+    "delta": 0.021
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 87,
+     "reconstruction_would_clip": 8252,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 3719,
+     "reconstruction_would_clip": 7298,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.024,
+    "candidate": -0.023
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 24,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.2753,
+    "candidate": -56.3316,
+    "delta": -2.056,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -44.7461,
+    "candidate": -45.4257,
+    "delta": -0.68,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -32.9116,
+    "candidate": -32.6767,
+    "delta": 0.235,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.5292,
+    "candidate": -10.9059,
+    "delta": -1.377
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35903,
+     "reconstruction_would_clip": 934,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.293,
+    "candidate": -0.182
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -88.7224,
+    "candidate": -98.601,
+    "delta": -9.879,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -73.8682,
+    "candidate": -83.4744,
+    "delta": -9.606,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -87.635,
+    "candidate": -88.1927,
+    "delta": -0.558,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.8542,
+    "candidate": -15.1267,
+    "delta": -0.272
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.488,
+    "candidate": -1.46
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -78.9298,
+    "candidate": -84.4858,
+    "delta": -5.556,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -70.3014,
+    "candidate": -75.5273,
+    "delta": -5.226,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -88.9329,
+    "candidate": -88.2517,
+    "delta": 0.681,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.6284,
+    "candidate": -8.9585,
+    "delta": -0.33
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.495,
+    "candidate": -1.382
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -66.1654,
+    "candidate": -66.7201,
+    "delta": -0.555,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -60.5326,
+    "candidate": -61.0875,
+    "delta": -0.555,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -89.1889,
+    "candidate": -89.1932,
+    "delta": -0.004,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -5.6328,
+    "candidate": -5.6326,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.526,
+    "candidate": -1.524
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -80.4493,
+    "candidate": -98.6961,
+    "delta": -18.247,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -66.8098,
+    "candidate": -83.6589,
+    "delta": -16.849,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -43.3641,
+    "candidate": -40.9128,
+    "delta": 2.451,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -13.6395,
+    "candidate": -15.0372,
+    "delta": -1.398
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.06,
+    "candidate": -0.07
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -70.0498,
+    "candidate": -73.9899,
+    "delta": -3.94,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -61.9893,
+    "candidate": -64.5661,
+    "delta": -2.577,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -42.8235,
+    "candidate": -43.4104,
+    "delta": -0.587,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.0605,
+    "candidate": -9.4237,
+    "delta": -1.363
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.041,
+    "candidate": -0.021
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -71.4821,
+    "candidate": -81.0473,
+    "delta": -9.565,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -61.8572,
+    "candidate": -70.0821,
+    "delta": -8.225,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.803,
+    "candidate": -29.6074,
+    "delta": 0.196,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.6249,
+    "candidate": -10.9652,
+    "delta": -1.34
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.004,
+    "candidate": -0.002
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.3751,
+    "candidate": -53.6634,
+    "delta": -0.288,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -46.7917,
+    "candidate": -47.08,
+    "delta": -0.288,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.7291,
+    "candidate": -29.7266,
+    "delta": 0.002,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -6.5834,
+    "candidate": -6.5834,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.653,
+    "candidate": -0.646
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -64.4607,
+    "candidate": -68.4545,
+    "delta": -3.994,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -50.1437,
+    "candidate": -52.7374,
+    "delta": -2.594,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -21.9303,
+    "candidate": -20.2874,
+    "delta": 1.643,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -14.317,
+    "candidate": -15.7171,
+    "delta": -1.4
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.009,
+    "candidate": -0.031
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -61.2573,
+    "candidate": -63.2199,
+    "delta": -1.963,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -54.7531,
+    "candidate": -56.6153,
+    "delta": -1.862,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.4369,
+    "candidate": -29.4551,
+    "delta": -0.018,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -6.5042,
+    "candidate": -6.6045,
+    "delta": -0.1
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.645,
+    "candidate": -0.607
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 36,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -48.6633,
+    "candidate": -49.7343,
+    "delta": -1.071,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -47.9314,
+    "candidate": -48.9905,
+    "delta": -1.059,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -29.454,
+    "candidate": -29.7837,
+    "delta": -0.33,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -0.7319,
+    "candidate": -0.7438,
+    "delta": -0.012
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 15949,
+     "oscillator_rail_samples": 35805,
+     "reconstruction_would_clip": 1880,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 15240,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.373,
+    "candidate": -0.388
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 48,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -69.0256,
+    "candidate": -76.8885,
+    "delta": -7.863,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -59.2027,
+    "candidate": -65.8022,
+    "delta": -6.599,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -26.5986,
+    "candidate": -26.4803,
+    "delta": 0.118,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -9.8229,
+    "candidate": -11.0863,
+    "delta": -1.263
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35610,
+     "reconstruction_would_clip": 3756,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.278,
+    "candidate": -0.189
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 60,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -60.6963,
+    "candidate": -69.4123,
+    "delta": -8.716,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -50.448,
+    "candidate": -58.0732,
+    "delta": -7.625,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -23.6152,
+    "candidate": -23.6619,
+    "delta": -0.047,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -10.2483,
+    "candidate": -11.3392,
+    "delta": -1.091
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 35219,
+     "reconstruction_would_clip": 7505,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.11,
+    "candidate": -0.052
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 72,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -57.8962,
+    "candidate": -66.5512,
+    "delta": -8.655,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -46.7436,
+    "candidate": -54.6596,
+    "delta": -7.916,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -19.9198,
+    "candidate": -20.14,
+    "delta": -0.22,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.1526,
+    "candidate": -11.8916,
+    "delta": -0.739
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 34440,
+     "reconstruction_would_clip": 15006,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.119,
+    "candidate": -0.112
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -90.9531,
+    "candidate": -93.0164,
+    "delta": -2.063,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -38.8305,
+    "candidate": -40.8786,
+    "delta": -2.048,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -58.6784,
+    "candidate": -60.0352,
+    "delta": -1.357,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -52.1225,
+    "candidate": -52.1378,
+    "delta": -0.015
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.157,
+    "candidate": -0.144
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -71.9015,
+    "candidate": -73.9792,
+    "delta": -2.078,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -25.8111,
+    "candidate": -27.8892,
+    "delta": -2.078,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -66.7866,
+    "candidate": -66.801,
+    "delta": -0.014,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -46.0904,
+    "candidate": -46.09,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.217,
+    "candidate": -0.2
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -65.4139,
+    "candidate": -80.8065,
+    "delta": -15.393,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -47.957,
+    "candidate": -63.1544,
+    "delta": -15.197,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -25.2085,
+    "candidate": -25.437,
+    "delta": -0.229,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -17.4569,
+    "candidate": -17.652,
+    "delta": -0.195
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.119,
+    "candidate": -0.116
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.5341,
+    "candidate": -61.2845,
+    "delta": -7.75,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -42.2992,
+    "candidate": -50.0109,
+    "delta": -7.712,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -24.9928,
+    "candidate": -25.0475,
+    "delta": -0.055,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.235,
+    "candidate": -11.2737,
+    "delta": -0.039
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.117,
+    "candidate": -0.117
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.1635,
+    "candidate": -45.738,
+    "delta": -1.575,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.8654,
+    "candidate": -37.4402,
+    "delta": -1.575,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -24.996,
+    "candidate": -24.9888,
+    "delta": 0.007,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.2981,
+    "candidate": -8.2978,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.125,
+    "candidate": -0.122
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -54.6848,
+    "candidate": -59.6802,
+    "delta": -4.995,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -42.0886,
+    "candidate": -46.6607,
+    "delta": -4.572,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -14.4493,
+    "candidate": -14.6276,
+    "delta": -0.178,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.5962,
+    "candidate": -13.0195,
+    "delta": -0.423
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.075,
+    "candidate": -0.072
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.4563,
+    "candidate": -58.767,
+    "delta": -5.311,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -39.8908,
+    "candidate": -43.8375,
+    "delta": -3.947,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.5979,
+    "candidate": -10.9149,
+    "delta": 0.683,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.5655,
+    "candidate": -14.9295,
+    "delta": -1.364
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.023,
+    "candidate": -0.02
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.8455,
+    "candidate": -50.4222,
+    "delta": -5.577,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -36.7418,
+    "candidate": -40.983,
+    "delta": -4.241,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -12.6258,
+    "candidate": -11.6927,
+    "delta": 0.933,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -8.1037,
+    "candidate": -9.4392,
+    "delta": -1.335
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.023,
+    "candidate": -0.026
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.0169,
+    "candidate": -44.302,
+    "delta": -0.285,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -31.951,
+    "candidate": -32.2364,
+    "delta": -0.285,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -14.2455,
+    "candidate": -14.2431,
+    "delta": 0.002,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -12.0659,
+    "candidate": -12.0657,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.077,
+    "candidate": -0.078
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 84,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.7835,
+    "candidate": -52.1785,
+    "delta": -6.395,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -31.8148,
+    "candidate": -36.9683,
+    "delta": -5.153,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -9.513,
+    "candidate": -8.1929,
+    "delta": 1.32,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -13.9687,
+    "candidate": -15.2102,
+    "delta": -1.242
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 32880,
+     "reconstruction_would_clip": 30019,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.021,
+    "candidate": -0.022
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 400,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -76.5128,
+    "candidate": -95.0949,
+    "delta": -18.582,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -2.1938,
+    "candidate": -20.7096,
+    "delta": -18.516,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -39.3234,
+    "candidate": -32.7684,
+    "delta": 6.555,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -74.319,
+    "candidate": -74.3853,
+    "delta": -0.066
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.052,
+    "candidate": -0.13
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -57.1318,
+    "candidate": -78.5736,
+    "delta": -21.442,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 8.4276,
+    "candidate": -12.6485,
+    "delta": -21.076,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -46.6066,
+    "candidate": -42.4289,
+    "delta": 4.178,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -65.5595,
+    "candidate": -65.9251,
+    "delta": -0.366
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -1.245,
+    "candidate": -0.297
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -59.2052,
+    "candidate": -63.6302,
+    "delta": -4.425,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -37.0568,
+    "candidate": -41.4739,
+    "delta": -4.417,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -22.7315,
+    "candidate": -22.736,
+    "delta": -0.005,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -22.1483,
+    "candidate": -22.1564,
+    "delta": -0.008
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.017
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 4000,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -47.0287,
+    "candidate": -47.8009,
+    "delta": -0.772,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": -30.9,
+    "candidate": -31.6726,
+    "delta": -0.773,
+    "adverse": false,
+    "state": "within band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -22.7494,
+    "candidate": -22.746,
+    "delta": 0.003,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -16.1288,
+    "candidate": -16.1284,
+    "delta": 0.0
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.019,
+    "candidate": -0.018
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -53.4868,
+    "candidate": -67.6929,
+    "delta": -14.206,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -38.8884,
+    "candidate": -52.8515,
+    "delta": -13.963,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.0558,
+    "candidate": -11.1193,
+    "delta": -0.064,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.5984,
+    "candidate": -14.8414,
+    "delta": -0.243
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.01,
+    "candidate": -0.011
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.2553,
+    "candidate": -53.0705,
+    "delta": -8.815,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.8013,
+    "candidate": -43.9913,
+    "delta": -8.19,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.1405,
+    "candidate": -12.3124,
+    "delta": -1.172,
+    "adverse": true,
+    "state": "regressed beyond band"
+   },
+   "intended_dbfs": {
+    "r1": -8.454,
+    "candidate": -9.0792,
+    "delta": -0.625
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.01,
+    "candidate": -0.006
+   },
+   "fails_declared_rule": [
+    "upper_wanted_rel_db"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 20000,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -32.8917,
+    "candidate": -35.4154,
+    "delta": -2.524,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -27.4851,
+    "candidate": -30.0116,
+    "delta": -2.527,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -11.0351,
+    "candidate": -11.0171,
+    "delta": 0.018,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -5.4066,
+    "candidate": -5.4038,
+    "delta": 0.003
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.01,
+    "candidate": -0.011
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -50.8104,
+    "candidate": -64.9487,
+    "delta": -14.138,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -37.3952,
+    "candidate": -50.2377,
+    "delta": -12.842,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -8.8411,
+    "candidate": -8.0652,
+    "delta": 0.776,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -13.4152,
+    "candidate": -14.711,
+    "delta": -1.296
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.01,
+    "candidate": -0.012
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 96,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -43.8031,
+    "candidate": -49.8471,
+    "delta": -6.044,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.8249,
+    "candidate": -40.4715,
+    "delta": -4.647,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -9.2136,
+    "candidate": -9.0846,
+    "delta": 0.129,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -7.9783,
+    "candidate": -9.3755,
+    "delta": -1.397
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 29763,
+     "reconstruction_would_clip": 31717,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.008,
+    "candidate": -0.011
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 108,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -52.4786,
+    "candidate": -66.8932,
+    "delta": -14.415,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -35.1504,
+    "candidate": -49.4149,
+    "delta": -14.265,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": -14.083,
+    "candidate": -14.0949,
+    "delta": -0.012,
+    "adverse": true,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -17.3282,
+    "candidate": -17.4782,
+    "delta": -0.15
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 23527,
+     "reconstruction_would_clip": 26713,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 0,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.013,
+    "candidate": -0.013
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 400,
+   "q": 0.5,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -96.3715,
+    "candidate": -96.5658,
+    "delta": -0.194,
+    "adverse": false,
+    "state": "within band"
+   },
+   "unwanted_rel_db": {
+    "r1": 20.3188,
+    "candidate": 18.0239,
+    "delta": -2.295,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -116.6903,
+    "candidate": -114.5897,
+    "delta": 2.101
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.414,
+    "candidate": -0.519
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 400,
+   "q": 0.9,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -80.4729,
+    "candidate": -86.5434,
+    "delta": -6.071,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": 31.8782,
+    "candidate": 26.225,
+    "delta": -5.653,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -112.3512,
+    "candidate": -112.7683,
+    "delta": -0.417
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.992,
+    "candidate": -1.089
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 4000,
+   "q": 0.0,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -48.7682,
+    "candidate": -50.8664,
+    "delta": -2.098,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -2.055,
+    "candidate": -4.1561,
+    "delta": -2.101,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -46.7132,
+    "candidate": -46.7104,
+    "delta": 0.003
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.186,
+    "candidate": -0.089
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 4000,
+   "q": 0.9,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -57.6424,
+    "candidate": -68.7083,
+    "delta": -11.066,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -19.2654,
+    "candidate": -30.1392,
+    "delta": -10.874,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -38.377,
+    "candidate": -38.5691,
+    "delta": -0.192
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.024,
+    "candidate": -0.015
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.758,
+    "candidate": -50.9235,
+    "delta": -5.165,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -24.3268,
+    "candidate": -29.3929,
+    "delta": -5.066,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -21.4312,
+    "candidate": -21.5306,
+    "delta": -0.099
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.016,
+    "candidate": -0.015
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -44.06,
+    "candidate": -48.1022,
+    "delta": -4.042,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -22.899,
+    "candidate": -26.9403,
+    "delta": -4.041,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -21.1611,
+    "candidate": -21.1619,
+    "delta": -0.001
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.014,
+    "candidate": -0.015
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 20000,
+   "q": 0.5,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -32.1879,
+    "candidate": -33.2895,
+    "delta": -1.102,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -17.0276,
+    "candidate": -18.1426,
+    "delta": -1.115,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -15.1603,
+    "candidate": -15.1468,
+    "delta": 0.013
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.019,
+    "candidate": -0.016
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -45.0472,
+    "candidate": -49.3402,
+    "delta": -4.293,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -24.2109,
+    "candidate": -28.4039,
+    "delta": -4.193,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -20.8363,
+    "candidate": -20.9363,
+    "delta": -0.1
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.017,
+    "candidate": -0.014
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.5,
+   "drive": 1.6,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -36.1457,
+    "candidate": -41.1698,
+    "delta": -5.024,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -21.573,
+    "candidate": -26.6121,
+    "delta": -5.039,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -14.5727,
+    "candidate": -14.5577,
+    "delta": 0.015
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.018,
+    "candidate": -0.016
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 120,
+   "cutoff": 21600,
+   "q": 0.9,
+   "drive": 4.0,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -28.5489,
+    "candidate": -29.8644,
+    "delta": -1.316,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -16.8687,
+    "candidate": -18.2048,
+    "delta": -1.336,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -11.6802,
+    "candidate": -11.6596,
+    "delta": 0.021
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 11054,
+     "reconstruction_would_clip": 22242,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 6012,
+     "reconstruction_would_clip": 13379,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.021,
+    "candidate": -0.019
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  },
+  {
+   "wave": "square",
+   "note": 127,
+   "cutoff": 20000,
+   "q": 0.0,
+   "drive": 0.75,
+   "development": false,
+   "unwanted_dbfs": {
+    "r1": -55.291,
+    "candidate": -65.5952,
+    "delta": -10.304,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "unwanted_rel_db": {
+    "r1": -30.4647,
+    "candidate": -40.78,
+    "delta": -10.315,
+    "adverse": false,
+    "state": "improved beyond band"
+   },
+   "upper_wanted_rel_db": {
+    "r1": 0.0,
+    "candidate": 0.0,
+    "delta": 0.0,
+    "adverse": false,
+    "state": "within band"
+   },
+   "intended_dbfs": {
+    "r1": -24.8263,
+    "candidate": -24.8152,
+    "delta": 0.011
+   },
+   "rails": {
+    "r1": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 0,
+     "reconstruction_would_clip": 10104,
+     "decimation_would_clip": 0
+    },
+    "candidate": {
+     "output_rail_samples": 0,
+     "oscillator_rail_samples": 4721,
+     "reconstruction_would_clip": 8780,
+     "decimation_would_clip": 0
+    }
+   },
+   "dropout_depth_db": {
+    "r1": -0.017,
+    "candidate": -0.019
+   },
+   "fails_declared_rule": [],
+   "verdict": "PASS"
+  }
+ ],
+ "source_records": [
+  "docs/scorecard/m5-artifacts-333/probe/sweep2-0.json.gz",
+  "docs/scorecard/m5-artifacts-333/probe/sweep2-1.json.gz"
+ ],
+ "probe_provenance": {
+  "analysis_version": "mono-artifact-probe-v1",
+  "commit": "5765cdf73cab5203eaf174361967f65e0af856e3",
+  "sources_dirty": false,
+  "sha256": {
+   "tools/mono_artifact_probe.py": "1e67b745580b8fef",
+   "model/voice_fx.py": "876b31f280fd3ef4",
+   "model/filter_rate_chain.py": "134b958dec5308fd",
+   "model/fixed.py": "eec1c66158a611dc"
+  }
+ }
+}
