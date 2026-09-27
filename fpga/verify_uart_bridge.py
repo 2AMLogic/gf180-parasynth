@@ -412,7 +412,12 @@ def simulator_identity(iverilog, vvp) -> dict:
                                timeout=60)
         except (OSError, subprocess.TimeoutExpired):
             return ""
-        return ((r.stdout or "").strip().splitlines() or [""])[0]
+        # vvp -V prints its version on STDERR, iverilog -V on stdout (Icarus
+        # 14.0 on the box; #313's first real-simulator probe read vvp as
+        # unknown and so refused a reuse that was identical)
+        lines = [ln for ln in ((r.stdout or "") + "\n" + (r.stderr or "")).splitlines()
+                 if ln.strip()]
+        return lines[0].strip() if lines else ""
     return {"iverilog -V": first_line(iverilog), "vvp -V": first_line(vvp),
             "oss_cad_pin": {"release": pin.VERSION, "sha256": pin.SHA256}}
 

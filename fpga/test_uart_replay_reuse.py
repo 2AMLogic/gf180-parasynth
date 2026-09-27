@@ -48,6 +48,9 @@ def fake_sim(monkeypatch, tmp_path):
     def run(cmd, **kw):
         if len(cmd) == 2 and cmd[1] == "-V":                  # a version query
             name = Path(str(cmd[0])).name
+            # as the real tools do: iverilog -V on stdout, vvp -V on STDERR
+            if name == "vvp":
+                return subprocess.CompletedProcess(cmd, 0, "", SIM_VERSION[name] + "\n")
             return subprocess.CompletedProcess(cmd, 0, SIM_VERSION[name] + "\n", "")
         calls.append(cmd)
         if any(str(c).startswith("+i2s=") for c in cmd):      # the vvp run
