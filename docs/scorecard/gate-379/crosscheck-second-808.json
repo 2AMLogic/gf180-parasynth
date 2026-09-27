@@ -1,0 +1,1457 @@
+{
+ "BD": {
+  "best": "GB_Tasty808_BD1.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay",
+    "modulation",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 9.5777,
+   "worst_feature": "modulation",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.2001,
+     "bar": 0.0394,
+     "ratio": 5.0739
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3258,
+     "bar": 0.1524,
+     "ratio": 2.1379
+    },
+    "centroid": {
+     "status": "pass",
+     "d": 0.1577,
+     "bar": 0.2523,
+     "ratio": 0.6249
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 3.2776,
+     "bar": 0.6351,
+     "ratio": 5.1606
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 7.1642,
+     "bar": 3.0,
+     "ratio": 2.3881
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 7.3507,
+     "bar": 2.5271,
+     "ratio": 2.9088
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 17.6424,
+     "bar": 6.8132,
+     "ratio": 2.5894
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 11.6814,
+     "bar": 1.2196,
+     "ratio": 9.5777
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 31.3476,
+     "bar": 5.0,
+     "ratio": 6.2695
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 73.9168,
+     "bar": 10.4865,
+     "ratio": 7.0488
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_BD1.aif": [
+    "FAIL",
+    9.5777,
+    "modulation"
+   ],
+   "GB_Tasty808_BD2.aif": [
+    "FAIL",
+    29.4916,
+    "pitch"
+   ],
+   "GB_Tasty808_BD3.aif": [
+    "FAIL",
+    27.1774,
+    "pitch"
+   ],
+   "GB_Tasty808_BD4.aif": [
+    "FAIL",
+    15.3249,
+    "modulation"
+   ]
+  }
+ },
+ "SD": {
+  "best": "GB_Tasty808_SD2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay"
+   ],
+   "worst_ratio": 10.3648,
+   "worst_feature": "attack",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.2756,
+     "bar": 0.0709,
+     "ratio": 3.8862
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.215,
+     "bar": 0.1913,
+     "ratio": 1.1236
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 1.6406,
+     "bar": 0.5687,
+     "ratio": 2.8849
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 1.9996,
+     "bar": 1.378,
+     "ratio": 1.4511
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 3.2803,
+     "bar": 3.0,
+     "ratio": 1.0934
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 12.0149,
+     "bar": 1.1592,
+     "ratio": 10.3648
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 10.7459,
+     "bar": 4.8744,
+     "ratio": 2.2046
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_SD1.aif": [
+    "FAIL",
+    17.6152,
+    "attack"
+   ],
+   "GB_Tasty808_SD2.aif": [
+    "FAIL",
+    10.3648,
+    "attack"
+   ],
+   "GB_Tasty808_SD3.aif": [
+    "FAIL",
+    11.6594,
+    "attack"
+   ]
+  }
+ },
+ "LT": {
+  "best": "GB_Tasty808_Tom2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay",
+    "modulation",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 14.9346,
+   "worst_feature": "modulation",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.1228,
+     "bar": 0.0218,
+     "ratio": 5.6218
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3726,
+     "bar": 0.1755,
+     "ratio": 2.1233
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.6599,
+     "bar": 0.1356,
+     "ratio": 4.8665
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 4.5285,
+     "bar": 1.4228,
+     "ratio": 3.1827
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 4.8463,
+     "bar": 4.2625,
+     "ratio": 1.137
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 3.9545,
+     "bar": 1.0,
+     "ratio": 3.9545
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 11.2711,
+     "bar": 1.4983,
+     "ratio": 7.5227
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 26.9686,
+     "bar": 1.8058,
+     "ratio": 14.9346
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 619.5781,
+     "bar": 95.7324,
+     "ratio": 6.472
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 67.3315,
+     "bar": 8.9944,
+     "ratio": 7.4859
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Tom1.aif": [
+    "FAIL",
+    20.4353,
+    "modulation"
+   ],
+   "GB_Tasty808_Tom2.aif": [
+    "FAIL",
+    14.9346,
+    "modulation"
+   ],
+   "GB_Tasty808_Tom3.aif": [
+    "FAIL",
+    20.5435,
+    "pitch_shape"
+   ]
+  }
+ },
+ "LC": {
+  "best": "GB_Tasty808_Conga3.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay",
+    "modulation",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 17.7121,
+   "worst_feature": "flatness",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.2057,
+     "bar": 0.0321,
+     "ratio": 6.4033
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3328,
+     "bar": 0.138,
+     "ratio": 2.4117
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.5064,
+     "bar": 0.1587,
+     "ratio": 3.19
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 4.2035,
+     "bar": 0.2373,
+     "ratio": 17.7121
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 9.6159,
+     "bar": 3.0,
+     "ratio": 3.2053
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 19.925,
+     "bar": 2.827,
+     "ratio": 7.048
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 9.6918,
+     "bar": 1.1435,
+     "ratio": 8.4754
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 9.3251,
+     "bar": 2.5334,
+     "ratio": 3.6809
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 738.5132,
+     "bar": 96.9422,
+     "ratio": 7.6181
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 29.3621,
+     "bar": 1.7261,
+     "ratio": 17.0102
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Conga1.aif": [
+    "FAIL",
+    78.7638,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Conga2.aif": [
+    "FAIL",
+    33.2763,
+    "flatness"
+   ],
+   "GB_Tasty808_Conga3.aif": [
+    "FAIL",
+    17.7121,
+    "flatness"
+   ]
+  }
+ },
+ "MT": {
+  "best": "GB_Tasty808_Tom2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "attack",
+    "decay",
+    "modulation",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 6.7102,
+   "worst_feature": "pitch_shape",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.0672,
+     "bar": 0.0271,
+     "ratio": 2.4808
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3509,
+     "bar": 0.141,
+     "ratio": 2.4886
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.3708,
+     "bar": 0.1351,
+     "ratio": 2.7455
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 3.7659,
+     "bar": 0.6023,
+     "ratio": 6.2527
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 1.5527,
+     "bar": 3.0,
+     "ratio": 0.5176
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 6.8032,
+     "bar": 1.3759,
+     "ratio": 4.9444
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 7.6927,
+     "bar": 1.4329,
+     "ratio": 5.3686
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 10.6986,
+     "bar": 6.3636,
+     "ratio": 1.6812
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 111.5615,
+     "bar": 96.4112,
+     "ratio": 1.1571
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 75.325,
+     "bar": 11.2255,
+     "ratio": 6.7102
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Tom1.aif": [
+    "FAIL",
+    44.9367,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Tom2.aif": [
+    "FAIL",
+    6.7102,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Tom3.aif": [
+    "FAIL",
+    20.7526,
+    "pitch_shape"
+   ]
+  }
+ },
+ "MC": {
+  "best": "GB_Tasty808_Conga2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "decay",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 12.0972,
+   "worst_feature": "pitch_shape",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.0504,
+     "bar": 0.0304,
+     "ratio": 1.6613
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.1718,
+     "bar": 0.0813,
+     "ratio": 2.1142
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.3213,
+     "bar": 0.0882,
+     "ratio": 3.6443
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 1.1801,
+     "bar": 0.1287,
+     "ratio": 9.1703
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 6.1112,
+     "bar": 3.0,
+     "ratio": 2.0371
+    },
+    "attack": {
+     "status": "pass",
+     "d": 0.3792,
+     "bar": 1.0,
+     "ratio": 0.3792
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 0.5054,
+     "bar": 0.3104,
+     "ratio": 1.6283
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 125.2668,
+     "bar": 101.4128,
+     "ratio": 1.2352
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 15.1829,
+     "bar": 1.2551,
+     "ratio": 12.0972
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Conga1.aif": [
+    "FAIL",
+    35.3053,
+    "decay"
+   ],
+   "GB_Tasty808_Conga2.aif": [
+    "FAIL",
+    12.0972,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Conga3.aif": [
+    "FAIL",
+    81.8613,
+    "flatness"
+   ]
+  }
+ },
+ "HT": {
+  "best": "GB_Tasty808_Tom2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "attack",
+    "decay",
+    "pitch",
+    "pitch_shape"
+   ],
+   "worst_ratio": 8.5993,
+   "worst_feature": "attack",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.1135,
+     "bar": 0.0344,
+     "ratio": 3.2989
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3177,
+     "bar": 0.1297,
+     "ratio": 2.4503
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.5521,
+     "bar": 0.1814,
+     "ratio": 3.0441
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 2.8875,
+     "bar": 0.5507,
+     "ratio": 5.2433
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 0.9912,
+     "bar": 3.0,
+     "ratio": 0.3304
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 17.2002,
+     "bar": 2.0002,
+     "ratio": 8.5993
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 9.6475,
+     "bar": 1.2324,
+     "ratio": 7.8283
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "FAIL",
+     "d": 670.8255,
+     "bar": 111.4687,
+     "ratio": 6.0181
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 71.0403,
+     "bar": 15.3518,
+     "ratio": 4.6275
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Tom1.aif": [
+    "FAIL",
+    13.9598,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Tom2.aif": [
+    "FAIL",
+    8.5993,
+    "attack"
+   ],
+   "GB_Tasty808_Tom3.aif": [
+    "FAIL",
+    14.7241,
+    "decay"
+   ]
+  }
+ },
+ "HC": {
+  "best": "GB_Tasty808_Conga1.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "centroid",
+    "flatness",
+    "pitch_shape"
+   ],
+   "worst_ratio": 6.3977,
+   "worst_feature": "pitch_shape",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.0722,
+     "bar": 0.0595,
+     "ratio": 1.2131
+    },
+    "spec_peak": {
+     "status": "pass",
+     "d": 0.2479,
+     "bar": 0.2644,
+     "ratio": 0.9376
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.827,
+     "bar": 0.6868,
+     "ratio": 1.2042
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 2.6312,
+     "bar": 0.5805,
+     "ratio": 4.5323
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 2.6796,
+     "bar": 3.0471,
+     "ratio": 0.8794
+    },
+    "attack": {
+     "status": "pass",
+     "d": 0.7138,
+     "bar": 1.1038,
+     "ratio": 0.6467
+    },
+    "decay": {
+     "status": "pass",
+     "d": 3.1073,
+     "bar": 3.1947,
+     "ratio": 0.9726
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "pass",
+     "d": 91.3572,
+     "bar": 121.5287,
+     "ratio": 0.7517
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 14.463,
+     "bar": 2.2606,
+     "ratio": 6.3977
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Conga1.aif": [
+    "FAIL",
+    6.3977,
+    "pitch_shape"
+   ],
+   "GB_Tasty808_Conga2.aif": [
+    "FAIL",
+    6.4923,
+    "pitch"
+   ],
+   "GB_Tasty808_Conga3.aif": [
+    "FAIL",
+    24.1936,
+    "pitch_shape"
+   ]
+  }
+ },
+ "RS": {
+  "best": "GB_Tasty808_Rim.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay"
+   ],
+   "worst_ratio": 13.213,
+   "worst_feature": "flatness",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.2138,
+     "bar": 0.0649,
+     "ratio": 3.2947
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.2792,
+     "bar": 0.0917,
+     "ratio": 3.0455
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 1.4857,
+     "bar": 0.1809,
+     "ratio": 8.2118
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 7.6027,
+     "bar": 0.5754,
+     "ratio": 13.213
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 4.5613,
+     "bar": 3.0,
+     "ratio": 1.5204
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 2.4592,
+     "bar": 1.0654,
+     "ratio": 2.3083
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 9.388,
+     "bar": 2.2281,
+     "ratio": 4.2134
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Rim.aif": [
+    "FAIL",
+    13.213,
+    "flatness"
+   ]
+  }
+ },
+ "CL": {
+  "best": "GB_Tasty808_Clave.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "decay",
+    "pitch_shape"
+   ],
+   "worst_ratio": 21.1676,
+   "worst_feature": "pitch_shape",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.2082,
+     "bar": 0.1261,
+     "ratio": 1.6501
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.373,
+     "bar": 0.1208,
+     "ratio": 3.0882
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.954,
+     "bar": 0.4668,
+     "ratio": 2.0436
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 4.6405,
+     "bar": 0.5922,
+     "ratio": 7.8357
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 1.8518,
+     "bar": 3.0,
+     "ratio": 0.6173
+    },
+    "attack": {
+     "status": "pass",
+     "d": 0.869,
+     "bar": 1.0,
+     "ratio": 0.869
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 11.7898,
+     "bar": 2.8687,
+     "ratio": 4.1098
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "pass",
+     "d": 83.4142,
+     "bar": 105.3877,
+     "ratio": 0.7915
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 9.4859,
+     "bar": 0.4481,
+     "ratio": 21.1676
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Clave.aif": [
+    "FAIL",
+    21.1676,
+    "pitch_shape"
+   ]
+  }
+ },
+ "CP": {
+  "best": "GB_Tasty808_Clap.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "attack",
+    "decay",
+    "modulation"
+   ],
+   "worst_ratio": 7.0073,
+   "worst_feature": "decay",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.1875,
+     "bar": 0.0623,
+     "ratio": 3.0077
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.3286,
+     "bar": 0.2229,
+     "ratio": 1.4738
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 1.1789,
+     "bar": 0.3499,
+     "ratio": 3.369
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 3.0384,
+     "bar": 0.9883,
+     "ratio": 3.0743
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 0.552,
+     "bar": 3.0,
+     "ratio": 0.184
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 8.0563,
+     "bar": 1.18,
+     "ratio": 6.8271
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 5.6352,
+     "bar": 0.8042,
+     "ratio": 7.0073
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 2.6921,
+     "bar": 0.8066,
+     "ratio": 3.3375
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Clap.aif": [
+    "FAIL",
+    7.0073,
+    "decay"
+   ]
+  }
+ },
+ "MA": {
+  "best": "GB_Tasty808_Maracas1.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "attack",
+    "decay"
+   ],
+   "worst_ratio": 16.4807,
+   "worst_feature": "centroid",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.289,
+     "bar": 0.0501,
+     "ratio": 5.7643
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.5534,
+     "bar": 0.1459,
+     "ratio": 3.7917
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 2.6718,
+     "bar": 0.1621,
+     "ratio": 16.4807
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 4.0156,
+     "bar": 0.389,
+     "ratio": 10.323
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 1.0861,
+     "bar": 3.0,
+     "ratio": 0.362
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 4.8886,
+     "bar": 1.2822,
+     "ratio": 3.8128
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 14.2643,
+     "bar": 4.3905,
+     "ratio": 3.2489
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Maracas1.aif": [
+    "FAIL",
+    16.4807,
+    "centroid"
+   ],
+   "GB_Tasty808_Maracas2.aif": [
+    "FAIL",
+    20.5201,
+    "centroid"
+   ]
+  }
+ },
+ "CB": {
+  "best": "GB_Tasty808_Cow.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "impulse",
+    "attack",
+    "decay",
+    "modulation",
+    "pitch_shape"
+   ],
+   "worst_ratio": 14.9946,
+   "worst_feature": "pitch_shape",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.1376,
+     "bar": 0.077,
+     "ratio": 1.7883
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.1617,
+     "bar": 0.0977,
+     "ratio": 1.6548
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 1.2791,
+     "bar": 0.3572,
+     "ratio": 3.5808
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 2.5126,
+     "bar": 0.73,
+     "ratio": 3.4419
+    },
+    "impulse": {
+     "status": "FAIL",
+     "d": 3.5583,
+     "bar": 3.0,
+     "ratio": 1.1861
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 4.0376,
+     "bar": 1.0,
+     "ratio": 4.0376
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 5.695,
+     "bar": 1.2743,
+     "ratio": 4.4693
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 17.5968,
+     "bar": 3.4987,
+     "ratio": 5.0295
+    },
+    "pitch": {
+     "status": "pass",
+     "d": 65.5217,
+     "bar": 105.3037,
+     "ratio": 0.6222
+    },
+    "pitch_shape": {
+     "status": "FAIL",
+     "d": 30.6104,
+     "bar": 2.0414,
+     "ratio": 14.9946
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Cow.aif": [
+    "FAIL",
+    14.9946,
+    "pitch_shape"
+   ]
+  }
+ },
+ "CY": {
+  "best": "GB_Tasty808_Cym.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "attack",
+    "decay",
+    "modulation"
+   ],
+   "worst_ratio": 22.3656,
+   "worst_feature": "spec",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 1.5201,
+     "bar": 0.068,
+     "ratio": 22.3656
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.5136,
+     "bar": 0.1671,
+     "ratio": 3.0726
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 1.6876,
+     "bar": 0.3062,
+     "ratio": 5.5117
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 1.9329,
+     "bar": 0.7054,
+     "ratio": 2.7402
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 0.1254,
+     "bar": 3.0,
+     "ratio": 0.0418
+    },
+    "attack": {
+     "status": "FAIL",
+     "d": 15.8887,
+     "bar": 2.184,
+     "ratio": 7.275
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 22.6985,
+     "bar": 1.0515,
+     "ratio": 21.5864
+    },
+    "modulation": {
+     "status": "FAIL",
+     "d": 2.8672,
+     "bar": 1.4129,
+     "ratio": 2.0293
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_Cym.aif": [
+    "FAIL",
+    22.3656,
+    "spec"
+   ]
+  }
+ },
+ "OH": {
+  "best": "GB_Tasty808_HHo.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "decay"
+   ],
+   "worst_ratio": 2.6098,
+   "worst_feature": "flatness",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.6308,
+     "bar": 0.2485,
+     "ratio": 2.538
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.5557,
+     "bar": 0.4583,
+     "ratio": 1.2125
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.2348,
+     "bar": 0.1377,
+     "ratio": 1.7048
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 2.4781,
+     "bar": 0.9495,
+     "ratio": 2.6098
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 1.4406,
+     "bar": 3.0,
+     "ratio": 0.4802
+    },
+    "attack": {
+     "status": "pass",
+     "d": 2.5604,
+     "bar": 3.026,
+     "ratio": 0.8462
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 9.4439,
+     "bar": 7.0139,
+     "ratio": 1.3465
+    },
+    "modulation": {
+     "status": "pass",
+     "d": 2.7028,
+     "bar": 2.9708,
+     "ratio": 0.9098
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_HHo.aif": [
+    "FAIL",
+    2.6098,
+    "flatness"
+   ]
+  }
+ },
+ "CH": {
+  "best": "GB_Tasty808_HH2.aif",
+  "best_verdict": {
+   "verdict": "FAIL",
+   "failing": [
+    "spec",
+    "spec_peak",
+    "centroid",
+    "flatness",
+    "decay"
+   ],
+   "worst_ratio": 1.987,
+   "worst_feature": "spec_peak",
+   "features": {
+    "spec": {
+     "status": "FAIL",
+     "d": 0.0474,
+     "bar": 0.0421,
+     "ratio": 1.1248
+    },
+    "spec_peak": {
+     "status": "FAIL",
+     "d": 0.1483,
+     "bar": 0.0746,
+     "ratio": 1.987
+    },
+    "centroid": {
+     "status": "FAIL",
+     "d": 0.2314,
+     "bar": 0.2068,
+     "ratio": 1.1189
+    },
+    "flatness": {
+     "status": "FAIL",
+     "d": 0.6115,
+     "bar": 0.3467,
+     "ratio": 1.764
+    },
+    "impulse": {
+     "status": "pass",
+     "d": 1.8525,
+     "bar": 3.0,
+     "ratio": 0.6175
+    },
+    "attack": {
+     "status": "pass",
+     "d": 0.9996,
+     "bar": 1.0,
+     "ratio": 0.9996
+    },
+    "decay": {
+     "status": "FAIL",
+     "d": 1.9598,
+     "bar": 1.5161,
+     "ratio": 1.2926
+    },
+    "modulation": {
+     "status": "n/a"
+    },
+    "pitch": {
+     "status": "n/a"
+    },
+    "pitch_shape": {
+     "status": "n/a"
+    }
+   }
+  },
+  "all": {
+   "GB_Tasty808_HH1.aif": [
+    "FAIL",
+    5.0531,
+    "centroid"
+   ],
+   "GB_Tasty808_HH2.aif": [
+    "FAIL",
+    1.987,
+    "spec_peak"
+   ],
+   "GB_Tasty808_HH3.aif": [
+    "FAIL",
+    11.3227,
+    "centroid"
+   ]
+  }
+ },
+ "provenance": {
+  "commit": "1e2ab5f53d825a4b1236bd5dde365f6bc74668ee",
+  "sources_dirty": false,
+  "refs": "/home/ubuntu/dev/refs/sounds-tr808-fischer",
+  "fixtures_sha256_16": {},
+  "features": [
+   "spec",
+   "spec_peak",
+   "centroid",
+   "flatness",
+   "impulse",
+   "attack",
+   "decay",
+   "modulation",
+   "pitch",
+   "pitch_shape"
+  ],
+  "units": {
+   "spec": "loudness L1 fraction",
+   "spec_peak": "worst frame, fraction of loudest frame",
+   "centroid": "Bark RMS",
+   "flatness": "dB RMS",
+   "attack": "ms RMS of 5/20/50 % cumulative-energy times, first 100 ms (worst band)",
+   "decay": "dB RMS (worst band)",
+   "modulation": "dB RMS (worst band)",
+   "impulse": "dB, worst-sample crest >2 kHz (strike, body)",
+   "pitch": "cents, median offset",
+   "pitch_shape": "cents, worst 20 ms after the offset"
+  },
+  "weak_r": 1.0628,
+  "conventions": {
+   "rate": 48000,
+   "hp_hz": 20.0,
+   "onset_frac": 0.02,
+   "trim_s": 0.001,
+   "loudness": "BS.1770 K, 50 ms blocks, 20 dB relative gate, -23",
+   "span": "2 x target -60 dB + 50 ms, cap 3.0 s",
+   "floor_db": 60.0
+  }
+ }
+}
