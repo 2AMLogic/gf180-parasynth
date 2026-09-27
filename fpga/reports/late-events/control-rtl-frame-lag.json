@@ -1,9 +1,9 @@
 {
  "tool": "fpga/verify_late_events.py",
  "policy": "fpga/late_event_policy.py",
- "control": "model-revolution",
+ "control": "rtl-frame-lag",
  "git_head": "c3cd062ffdac1f47ed07398ea250cb106305ec77",
- "iverilog": null,
+ "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
  "sources_sha256": {
   "rtl-sketch/tb_uart_late.v": "fc5416347ccd1b156107174a2f3ae88ec39d86f69a3f0b17f7a9b87f7eea3775",
   "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
@@ -12,10 +12,9 @@
   "fpga/late_event_policy.py": "f1663d7f2b2568435e74cdbe467263951d9d948eb7da701ea359d04140f5316b",
   "fpga/verify_late_events.py": "146f743bbaad1f5d4e5f959e8654789ff9b3621ac909bce306323ffb18e0870a"
  },
- "rtl": {},
- "model": {
+ "rtl": {
   "boundary": {
-   "disagreements": 5,
+   "disagreements": 7,
    "rows": [
     {
      "step": 0,
@@ -26,10 +25,10 @@
      "got": "ack",
      "want_exec": 1061,
      "got_exec": [
-      1061
+      1062
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 1,
@@ -37,13 +36,13 @@
      "accept": 1120,
      "due16": 1120,
      "want": "late",
-     "got": "late",
+     "got": "ack",
      "want_exec": 1121,
      "got_exec": [
-      1120
+      1121
      ],
      "ok": false,
-     "beyond_effective_due": -1
+     "beyond_effective_due": 0
     },
     {
      "step": 2,
@@ -54,10 +53,10 @@
      "got": "ack",
      "want_exec": 1173,
      "got_exec": [
-      1173
+      1174
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 3,
@@ -65,13 +64,13 @@
      "accept": 1220,
      "due16": 1220,
      "want": "late",
-     "got": "late",
+     "got": "ack",
      "want_exec": 1221,
      "got_exec": [
-      1220
+      1221
      ],
      "ok": false,
-     "beyond_effective_due": -1
+     "beyond_effective_due": 0
     },
     {
      "step": 4,
@@ -82,10 +81,10 @@
      "got": "late",
      "want_exec": 1271,
      "got_exec": [
-      1270
+      1271
      ],
-     "ok": false,
-     "beyond_effective_due": -1
+     "ok": true,
+     "beyond_effective_due": 0
     },
     {
      "step": 5,
@@ -96,10 +95,10 @@
      "got": "ack",
      "want_exec": 1322,
      "got_exec": [
-      1322
+      1323
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 6,
@@ -110,10 +109,10 @@
      "got": "late",
      "want_exec": 1371,
      "got_exec": [
-      1370
+      1371
      ],
-     "ok": false,
-     "beyond_effective_due": -1
+     "ok": true,
+     "beyond_effective_due": 0
     },
     {
      "step": 7,
@@ -124,10 +123,10 @@
      "got": "ack",
      "want_exec": 1820,
      "got_exec": [
-      1820
+      1821
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 8,
@@ -149,19 +148,22 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 1920,
-     "got_exec": [],
+     "got_exec": [
+      1921
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     }
    ],
-   "worst_frames_beyond_effective_due": 0,
-   "unexpected": 5,
+   "worst_frames_beyond_effective_due": 1,
+   "unexpected": 7,
    "stale_records": [],
    "verdict": "FAIL",
+   "latency_cycles": 10650,
    "status_problems": []
   },
   "boundary-wrap": {
-   "disagreements": 5,
+   "disagreements": 7,
    "rows": [
     {
      "step": 0,
@@ -172,10 +174,10 @@
      "got": "ack",
      "want_exec": 65397,
      "got_exec": [
-      65397
+      65398
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 1,
@@ -183,13 +185,13 @@
      "accept": 65456,
      "due16": 65456,
      "want": "late",
-     "got": "late",
+     "got": "ack",
      "want_exec": 65457,
      "got_exec": [
-      65456
+      65457
      ],
      "ok": false,
-     "beyond_effective_due": -1
+     "beyond_effective_due": 0
     },
     {
      "step": 2,
@@ -200,10 +202,10 @@
      "got": "ack",
      "want_exec": 65509,
      "got_exec": [
-      65509
+      65510
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 3,
@@ -211,13 +213,13 @@
      "accept": 65556,
      "due16": 20,
      "want": "late",
-     "got": "late",
+     "got": "ack",
      "want_exec": 65557,
      "got_exec": [
-      65556
+      65557
      ],
      "ok": false,
-     "beyond_effective_due": -1
+     "beyond_effective_due": 0
     },
     {
      "step": 4,
@@ -228,10 +230,10 @@
      "got": "late",
      "want_exec": 65607,
      "got_exec": [
-      65606
+      65607
      ],
-     "ok": false,
-     "beyond_effective_due": -1
+     "ok": true,
+     "beyond_effective_due": 0
     },
     {
      "step": 5,
@@ -242,10 +244,10 @@
      "got": "ack",
      "want_exec": 65658,
      "got_exec": [
-      65658
+      65659
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 6,
@@ -256,10 +258,10 @@
      "got": "late",
      "want_exec": 65707,
      "got_exec": [
-      65706
+      65707
      ],
-     "ok": false,
-     "beyond_effective_due": -1
+     "ok": true,
+     "beyond_effective_due": 0
     },
     {
      "step": 7,
@@ -270,10 +272,10 @@
      "got": "ack",
      "want_exec": 66156,
      "got_exec": [
-      66156
+      66157
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 8,
@@ -295,19 +297,22 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 66256,
-     "got_exec": [],
+     "got_exec": [
+      66257
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     }
    ],
-   "worst_frames_beyond_effective_due": 0,
-   "unexpected": 5,
+   "worst_frames_beyond_effective_due": 1,
+   "unexpected": 7,
    "stale_records": [],
    "verdict": "FAIL",
+   "latency_cycles": 10650,
    "status_problems": []
   },
   "backlog": {
-   "disagreements": 32,
+   "disagreements": 34,
    "rows": [
     {
      "step": 0,
@@ -318,10 +323,10 @@
      "got": "ack",
      "want_exec": 4080,
      "got_exec": [
-      4080
+      4081
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 1,
@@ -332,10 +337,10 @@
      "got": "ack",
      "want_exec": 4080,
      "got_exec": [
-      4080
+      4081
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 2,
@@ -345,9 +350,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4081,
-     "got_exec": [],
+     "got_exec": [
+      4082
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 3,
@@ -357,9 +364,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4081,
-     "got_exec": [],
+     "got_exec": [
+      4082
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 4,
@@ -369,9 +378,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4082,
-     "got_exec": [],
+     "got_exec": [
+      4083
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 5,
@@ -381,9 +392,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4082,
-     "got_exec": [],
+     "got_exec": [
+      4083
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 6,
@@ -393,9 +406,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4083,
-     "got_exec": [],
+     "got_exec": [
+      4084
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 7,
@@ -405,9 +420,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4083,
-     "got_exec": [],
+     "got_exec": [
+      4084
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 8,
@@ -417,9 +434,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4084,
-     "got_exec": [],
+     "got_exec": [
+      4085
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 9,
@@ -429,9 +448,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4084,
-     "got_exec": [],
+     "got_exec": [
+      4085
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 10,
@@ -441,9 +462,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4085,
-     "got_exec": [],
+     "got_exec": [
+      4086
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 6
     },
     {
      "step": 11,
@@ -453,9 +476,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4085,
-     "got_exec": [],
+     "got_exec": [
+      4086
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 6
     },
     {
      "step": 12,
@@ -465,9 +490,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4086,
-     "got_exec": [],
+     "got_exec": [
+      4087
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 7
     },
     {
      "step": 13,
@@ -477,9 +504,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4086,
-     "got_exec": [],
+     "got_exec": [
+      4087
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 7
     },
     {
      "step": 14,
@@ -489,9 +518,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4087,
-     "got_exec": [],
+     "got_exec": [
+      4088
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 8
     },
     {
      "step": 15,
@@ -501,9 +532,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4087,
-     "got_exec": [],
+     "got_exec": [
+      4088
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 8
     },
     {
      "step": 16,
@@ -513,9 +546,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4088,
-     "got_exec": [],
+     "got_exec": [
+      4089
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 9
     },
     {
      "step": 17,
@@ -525,9 +560,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4088,
-     "got_exec": [],
+     "got_exec": [
+      4089
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 9
     },
     {
      "step": 18,
@@ -537,9 +574,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4089,
-     "got_exec": [],
+     "got_exec": [
+      4090
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 10
     },
     {
      "step": 19,
@@ -549,9 +588,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4089,
-     "got_exec": [],
+     "got_exec": [
+      4090
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 10
     },
     {
      "step": 20,
@@ -559,11 +600,13 @@
      "accept": 4083,
      "due16": 4081,
      "want": "late",
-     "got": "drop-order",
+     "got": "late",
      "want_exec": 4090,
-     "got_exec": [],
+     "got_exec": [
+      4091
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 7
     },
     {
      "step": 21,
@@ -573,9 +616,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4140,
-     "got_exec": [],
+     "got_exec": [
+      4141
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     },
     {
      "step": 22,
@@ -585,9 +630,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4720,
-     "got_exec": [],
+     "got_exec": [
+      4721
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     },
     {
      "step": 23,
@@ -597,9 +644,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4720,
-     "got_exec": [],
+     "got_exec": [
+      4721
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     },
     {
      "step": 24,
@@ -609,9 +658,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4721,
-     "got_exec": [],
+     "got_exec": [
+      4722
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 25,
@@ -621,9 +672,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4721,
-     "got_exec": [],
+     "got_exec": [
+      4722
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 26,
@@ -633,9 +686,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4722,
-     "got_exec": [],
+     "got_exec": [
+      4723
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 27,
@@ -645,9 +700,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4722,
-     "got_exec": [],
+     "got_exec": [
+      4723
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 28,
@@ -657,9 +714,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4723,
-     "got_exec": [],
+     "got_exec": [
+      4724
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 29,
@@ -669,9 +728,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4723,
-     "got_exec": [],
+     "got_exec": [
+      4724
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 30,
@@ -681,9 +742,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4724,
-     "got_exec": [],
+     "got_exec": [
+      4725
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 31,
@@ -693,9 +756,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4724,
-     "got_exec": [],
+     "got_exec": [
+      4725
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 32,
@@ -718,19 +783,22 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 4790,
-     "got_exec": [],
+     "got_exec": [
+      4791
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     }
    ],
-   "worst_frames_beyond_effective_due": 0,
-   "unexpected": 31,
+   "worst_frames_beyond_effective_due": 10,
+   "unexpected": 33,
    "stale_records": [],
    "verdict": "FAIL",
+   "latency_cycles": 10650,
    "status_problems": []
   },
   "overflow": {
-   "disagreements": 65,
+   "disagreements": 66,
    "rows": [
     {
      "step": 0,
@@ -741,10 +809,10 @@
      "got": "ack",
      "want_exec": 23376,
      "got_exec": [
-      23376
+      23377
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 1,
@@ -755,10 +823,10 @@
      "got": "ack",
      "want_exec": 23376,
      "got_exec": [
-      23376
+      23377
      ],
-     "ok": true,
-     "beyond_effective_due": 0
+     "ok": false,
+     "beyond_effective_due": 1
     },
     {
      "step": 2,
@@ -768,9 +836,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23377,
-     "got_exec": [],
+     "got_exec": [
+      23378
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 3,
@@ -780,9 +850,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23377,
-     "got_exec": [],
+     "got_exec": [
+      23378
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 2
     },
     {
      "step": 4,
@@ -792,9 +864,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23378,
-     "got_exec": [],
+     "got_exec": [
+      23379
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 5,
@@ -804,9 +878,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23378,
-     "got_exec": [],
+     "got_exec": [
+      23379
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 3
     },
     {
      "step": 6,
@@ -816,9 +892,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23379,
-     "got_exec": [],
+     "got_exec": [
+      23380
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 7,
@@ -828,9 +906,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23379,
-     "got_exec": [],
+     "got_exec": [
+      23380
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 4
     },
     {
      "step": 8,
@@ -840,9 +920,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23380,
-     "got_exec": [],
+     "got_exec": [
+      23381
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 9,
@@ -852,9 +934,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23380,
-     "got_exec": [],
+     "got_exec": [
+      23381
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 5
     },
     {
      "step": 10,
@@ -864,9 +948,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23381,
-     "got_exec": [],
+     "got_exec": [
+      23382
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 6
     },
     {
      "step": 11,
@@ -876,9 +962,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23381,
-     "got_exec": [],
+     "got_exec": [
+      23382
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 6
     },
     {
      "step": 12,
@@ -888,9 +976,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23382,
-     "got_exec": [],
+     "got_exec": [
+      23383
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 7
     },
     {
      "step": 13,
@@ -900,9 +990,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23382,
-     "got_exec": [],
+     "got_exec": [
+      23383
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 7
     },
     {
      "step": 14,
@@ -912,9 +1004,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23383,
-     "got_exec": [],
+     "got_exec": [
+      23384
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 8
     },
     {
      "step": 15,
@@ -924,9 +1018,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23383,
-     "got_exec": [],
+     "got_exec": [
+      23384
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 8
     },
     {
      "step": 16,
@@ -936,9 +1032,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23384,
-     "got_exec": [],
+     "got_exec": [
+      23385
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 9
     },
     {
      "step": 17,
@@ -948,9 +1046,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23384,
-     "got_exec": [],
+     "got_exec": [
+      23385
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 9
     },
     {
      "step": 18,
@@ -960,9 +1060,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23385,
-     "got_exec": [],
+     "got_exec": [
+      23386
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 10
     },
     {
      "step": 19,
@@ -972,9 +1074,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23385,
-     "got_exec": [],
+     "got_exec": [
+      23386
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 10
     },
     {
      "step": 20,
@@ -984,9 +1088,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23386,
-     "got_exec": [],
+     "got_exec": [
+      23387
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 11
     },
     {
      "step": 21,
@@ -996,9 +1102,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23386,
-     "got_exec": [],
+     "got_exec": [
+      23387
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 11
     },
     {
      "step": 22,
@@ -1008,9 +1116,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23387,
-     "got_exec": [],
+     "got_exec": [
+      23388
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 12
     },
     {
      "step": 23,
@@ -1020,9 +1130,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23387,
-     "got_exec": [],
+     "got_exec": [
+      23388
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 12
     },
     {
      "step": 24,
@@ -1032,9 +1144,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23388,
-     "got_exec": [],
+     "got_exec": [
+      23389
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 13
     },
     {
      "step": 25,
@@ -1044,9 +1158,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23388,
-     "got_exec": [],
+     "got_exec": [
+      23389
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 13
     },
     {
      "step": 26,
@@ -1056,9 +1172,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23389,
-     "got_exec": [],
+     "got_exec": [
+      23390
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 14
     },
     {
      "step": 27,
@@ -1068,9 +1186,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23389,
-     "got_exec": [],
+     "got_exec": [
+      23390
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 14
     },
     {
      "step": 28,
@@ -1080,9 +1200,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23390,
-     "got_exec": [],
+     "got_exec": [
+      23391
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 15
     },
     {
      "step": 29,
@@ -1092,9 +1214,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23390,
-     "got_exec": [],
+     "got_exec": [
+      23391
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 15
     },
     {
      "step": 30,
@@ -1104,9 +1228,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23391,
-     "got_exec": [],
+     "got_exec": [
+      23392
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 16
     },
     {
      "step": 31,
@@ -1116,9 +1242,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23391,
-     "got_exec": [],
+     "got_exec": [
+      23392
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 16
     },
     {
      "step": 32,
@@ -1128,9 +1256,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23392,
-     "got_exec": [],
+     "got_exec": [
+      23393
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 17
     },
     {
      "step": 33,
@@ -1140,9 +1270,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23392,
-     "got_exec": [],
+     "got_exec": [
+      23393
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 17
     },
     {
      "step": 34,
@@ -1152,9 +1284,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23393,
-     "got_exec": [],
+     "got_exec": [
+      23394
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 18
     },
     {
      "step": 35,
@@ -1164,9 +1298,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23393,
-     "got_exec": [],
+     "got_exec": [
+      23394
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 18
     },
     {
      "step": 36,
@@ -1176,9 +1312,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23394,
-     "got_exec": [],
+     "got_exec": [
+      23395
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 19
     },
     {
      "step": 37,
@@ -1188,9 +1326,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23394,
-     "got_exec": [],
+     "got_exec": [
+      23395
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 19
     },
     {
      "step": 38,
@@ -1200,9 +1340,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23395,
-     "got_exec": [],
+     "got_exec": [
+      23396
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 20
     },
     {
      "step": 39,
@@ -1212,9 +1354,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23395,
-     "got_exec": [],
+     "got_exec": [
+      23396
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 20
     },
     {
      "step": 40,
@@ -1224,9 +1368,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23396,
-     "got_exec": [],
+     "got_exec": [
+      23397
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 21
     },
     {
      "step": 41,
@@ -1236,9 +1382,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23396,
-     "got_exec": [],
+     "got_exec": [
+      23397
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 21
     },
     {
      "step": 42,
@@ -1248,9 +1396,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23397,
-     "got_exec": [],
+     "got_exec": [
+      23398
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 22
     },
     {
      "step": 43,
@@ -1260,9 +1410,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23397,
-     "got_exec": [],
+     "got_exec": [
+      23398
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 22
     },
     {
      "step": 44,
@@ -1272,9 +1424,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23398,
-     "got_exec": [],
+     "got_exec": [
+      23399
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 23
     },
     {
      "step": 45,
@@ -1284,9 +1438,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23398,
-     "got_exec": [],
+     "got_exec": [
+      23399
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 23
     },
     {
      "step": 46,
@@ -1296,9 +1452,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23399,
-     "got_exec": [],
+     "got_exec": [
+      23400
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 24
     },
     {
      "step": 47,
@@ -1308,9 +1466,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23399,
-     "got_exec": [],
+     "got_exec": [
+      23400
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 24
     },
     {
      "step": 48,
@@ -1320,9 +1480,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23400,
-     "got_exec": [],
+     "got_exec": [
+      23401
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 25
     },
     {
      "step": 49,
@@ -1332,9 +1494,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23400,
-     "got_exec": [],
+     "got_exec": [
+      23401
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 25
     },
     {
      "step": 50,
@@ -1344,9 +1508,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23401,
-     "got_exec": [],
+     "got_exec": [
+      23402
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 26
     },
     {
      "step": 51,
@@ -1356,9 +1522,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23401,
-     "got_exec": [],
+     "got_exec": [
+      23402
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 26
     },
     {
      "step": 52,
@@ -1368,9 +1536,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23402,
-     "got_exec": [],
+     "got_exec": [
+      23403
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 27
     },
     {
      "step": 53,
@@ -1380,9 +1550,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23402,
-     "got_exec": [],
+     "got_exec": [
+      23403
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 27
     },
     {
      "step": 54,
@@ -1392,9 +1564,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23403,
-     "got_exec": [],
+     "got_exec": [
+      23404
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 28
     },
     {
      "step": 55,
@@ -1404,9 +1578,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23403,
-     "got_exec": [],
+     "got_exec": [
+      23404
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 28
     },
     {
      "step": 56,
@@ -1416,9 +1592,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23404,
-     "got_exec": [],
+     "got_exec": [
+      23405
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 29
     },
     {
      "step": 57,
@@ -1428,9 +1606,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23404,
-     "got_exec": [],
+     "got_exec": [
+      23405
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 29
     },
     {
      "step": 58,
@@ -1440,9 +1620,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23405,
-     "got_exec": [],
+     "got_exec": [
+      23406
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 30
     },
     {
      "step": 59,
@@ -1452,9 +1634,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23405,
-     "got_exec": [],
+     "got_exec": [
+      23406
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 30
     },
     {
      "step": 60,
@@ -1464,9 +1648,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23406,
-     "got_exec": [],
+     "got_exec": [
+      23407
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 31
     },
     {
      "step": 61,
@@ -1476,9 +1662,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23406,
-     "got_exec": [],
+     "got_exec": [
+      23407
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 31
     },
     {
      "step": 62,
@@ -1488,9 +1676,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23407,
-     "got_exec": [],
+     "got_exec": [
+      23408
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 32
     },
     {
      "step": 63,
@@ -1500,9 +1690,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23407,
-     "got_exec": [],
+     "got_exec": [
+      23408
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 32
     },
     {
      "step": 64,
@@ -1548,9 +1740,11 @@
      "want": "ack",
      "got": "ack",
      "want_exec": 23421,
-     "got_exec": [],
+     "got_exec": [
+      23422
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     },
     {
      "step": 69,
@@ -1558,11 +1752,13 @@
      "accept": 23466,
      "due16": 23456,
      "want": "late",
-     "got": "drop-order",
+     "got": "late",
      "want_exec": 23467,
-     "got_exec": [],
-     "ok": false,
-     "beyond_effective_due": null
+     "got_exec": [
+      23467
+     ],
+     "ok": true,
+     "beyond_effective_due": 0
     },
     {
      "step": 70,
@@ -1570,17 +1766,19 @@
      "accept": 23516,
      "due16": 23526,
      "want": "ack",
-     "got": "drop-full",
+     "got": "ack",
      "want_exec": 23526,
-     "got_exec": [],
+     "got_exec": [
+      23527
+     ],
      "ok": false,
-     "beyond_effective_due": null
+     "beyond_effective_due": 1
     },
     {
      "step": 67,
      "tag": "STATUS: drops 3, overflow flag",
      "status": {
-      "frame": 23277,
+      "frame": 23284,
       "evq": 64,
       "wrq": 0,
       "drops": 3,
@@ -1592,24 +1790,24 @@
      "step": 71,
      "tag": "STATUS: flags cleared, drops still 3",
      "status": {
-      "frame": 23567,
-      "evq": 64,
+      "frame": 23574,
+      "evq": 0,
       "wrq": 0,
-      "drops": 4,
-      "errs": 5,
-      "flags": 5
+      "drops": 3,
+      "errs": 4,
+      "flags": 4
      }
     }
    ],
-   "worst_frames_beyond_effective_due": 0,
-   "unexpected": 65,
+   "worst_frames_beyond_effective_due": 32,
+   "unexpected": 66,
    "stale_records": [],
    "verdict": "FAIL",
-   "status_problems": [
-    "second STATUS {'frame': 23567, 'evq': 64, 'wrq': 0, 'drops': 4, 'errs': 5, 'flags': 5}: want drops 3 (cumulative) and the overflow flag cleared by the first STATUS"
-   ]
+   "latency_cycles": 10650,
+   "status_problems": []
   }
  },
- "control_wrong_execution_frames": 103,
+ "model": {},
+ "control_wrong_execution_frames": 109,
  "verdict": "CAUGHT"
 }
