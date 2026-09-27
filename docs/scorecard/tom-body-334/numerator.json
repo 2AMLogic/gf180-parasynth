@@ -1,0 +1,405 @@
+{
+ "control_bit_identity": {
+  "LT": true,
+  "BD": true,
+  "SD": true
+ },
+ "rows": {
+  "RAW (shipped)": {
+   "LT": {
+    "Pitch drop": {
+     "value": 2.5035,
+     "reference": 1.9531,
+     "error": 0.5504,
+     "distance": 0.062
+    },
+    "body spectrum": {
+     "value": -40.6387,
+     "reference": -22.5321,
+     "error": -18.1066,
+     "distance": 6.036
+    },
+    "decay": {
+     "value": 207.131,
+     "reference": 202.6322,
+     "error": 4.4988,
+     "distance": 0.044
+    },
+    "_peak_fs": 0.22498
+   },
+   "MT": {
+    "Pitch drop": {
+     "value": 3.873,
+     "reference": 1.9403,
+     "error": 1.9326,
+     "distance": 0.143
+    },
+    "body spectrum": {
+     "value": -38.2307,
+     "reference": -21.8384,
+     "error": -16.3923,
+     "distance": 5.464
+    },
+    "decay": {
+     "value": 130.0678,
+     "reference": 132.5847,
+     "error": -2.5169,
+     "distance": 0.038
+    },
+    "_peak_fs": 0.19275
+   },
+   "HT": {
+    "Pitch drop": {
+     "value": 5.8911,
+     "reference": 3.2033,
+     "error": 2.6879,
+     "distance": 0.143
+    },
+    "body spectrum": {
+     "value": -36.7766,
+     "reference": -23.2334,
+     "error": -13.5433,
+     "distance": 4.514
+    },
+    "decay": {
+     "value": 99.1551,
+     "reference": 97.1633,
+     "error": 1.9919,
+     "distance": 0.041
+    },
+    "_peak_fs": 0.22516
+   },
+   "LC": {
+    "Pitch": {
+     "value": 185.0383,
+     "reference": 200.426,
+     "error": -15.3877,
+     "distance": 0.768
+    },
+    "body spectrum": {
+     "value": -42.1756,
+     "reference": -29.7553,
+     "error": -12.4203,
+     "distance": 4.14
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.22516
+   },
+   "MC": {
+    "Pitch": {
+     "value": 280.0011,
+     "reference": 281.0888,
+     "error": -1.0876,
+     "distance": 0.039
+    },
+    "body spectrum": {
+     "value": -39.3938,
+     "reference": -27.4243,
+     "error": -11.9694,
+     "distance": 3.99
+    },
+    "decay": {
+     "value": 89.1222,
+     "reference": 89.2116,
+     "error": -0.0894,
+     "distance": 0.002
+    },
+    "_peak_fs": 0.19281
+   },
+   "HC": {
+    "Pitch": {
+     "value": 400.0044,
+     "reference": 412.4326,
+     "error": -12.4282,
+     "distance": 0.301
+    },
+    "body spectrum": {
+     "value": -42.2696,
+     "reference": -31.3568,
+     "error": -10.9129,
+     "distance": 3.638
+    },
+    "decay": {
+     "value": 79.1734,
+     "reference": 78.8427,
+     "error": 0.3308,
+     "distance": 0.008
+    },
+    "_peak_fs": 0.22501
+   }
+  },
+  "BP": {
+   "LT": {
+    "Pitch drop": {
+     "value": 2.996,
+     "reference": 1.9531,
+     "error": 1.0429,
+     "distance": 0.118
+    },
+    "body spectrum": {
+     "value": -24.7731,
+     "reference": -22.5321,
+     "error": -2.2409,
+     "distance": 0.747
+    },
+    "decay": {
+     "value": 256.6567,
+     "reference": 202.6322,
+     "error": 54.0245,
+     "distance": 0.533
+    },
+    "_peak_fs": 0.24628
+   },
+   "MT": {
+    "Pitch drop": {
+     "value": 3.9359,
+     "reference": 1.9403,
+     "error": 1.9955,
+     "distance": 0.148
+    },
+    "body spectrum": {
+     "value": -24.1161,
+     "reference": -21.8384,
+     "error": -2.2777,
+     "distance": 0.759
+    },
+    "decay": {
+     "value": 177.869,
+     "reference": 132.5847,
+     "error": 45.2843,
+     "distance": 0.683
+    },
+    "_peak_fs": 0.20236
+   },
+   "HT": {
+    "Pitch drop": {
+     "value": 5.0989,
+     "reference": 3.2033,
+     "error": 1.8957,
+     "distance": 0.101
+    },
+    "body spectrum": {
+     "value": -24.0256,
+     "reference": -23.2334,
+     "error": -0.7922,
+     "distance": 0.264
+    },
+    "decay": {
+     "value": 102.574,
+     "reference": 97.1633,
+     "error": 5.4107,
+     "distance": 0.111
+    },
+    "_peak_fs": 0.23337
+   },
+   "LC": {
+    "Pitch": {
+     "value": 185.0263,
+     "reference": 200.426,
+     "error": -15.3997,
+     "distance": 0.768
+    },
+    "body spectrum": {
+     "value": -27.8594,
+     "reference": -29.7553,
+     "error": 1.896,
+     "distance": 0.632
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.22556
+   },
+   "MC": {
+    "Pitch": {
+     "value": 280.051,
+     "reference": 281.0888,
+     "error": -1.0378,
+     "distance": 0.037
+    },
+    "body spectrum": {
+     "value": -26.9498,
+     "reference": -27.4243,
+     "error": 0.4745,
+     "distance": 0.158
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.19019
+   },
+   "HC": {
+    "Pitch": {
+     "value": 399.9367,
+     "reference": 412.4326,
+     "error": -12.4959,
+     "distance": 0.303
+    },
+    "body spectrum": {
+     "value": -30.5888,
+     "reference": -31.3568,
+     "error": 0.768,
+     "distance": 0.256
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.22195
+   }
+  },
+  "HP": {
+   "refused": "LT HP: compensated amp 34.632 does not fit Q0.16"
+  },
+  "BP+X4": {
+   "LT": {
+    "Pitch drop": {
+     "value": 2.8178,
+     "reference": 1.9531,
+     "error": 0.8647,
+     "distance": 0.098
+    },
+    "body spectrum": {
+     "value": -24.5724,
+     "reference": -22.5321,
+     "error": -2.0402,
+     "distance": 0.68
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.2337
+   },
+   "MT": {
+    "Pitch drop": {
+     "value": 4.063,
+     "reference": 1.9403,
+     "error": 2.1226,
+     "distance": 0.157
+    },
+    "body spectrum": {
+     "value": -24.0326,
+     "reference": -21.8384,
+     "error": -2.1942,
+     "distance": 0.731
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.19757
+   },
+   "HT": {
+    "Pitch drop": {
+     "value": 5.3447,
+     "reference": 3.2033,
+     "error": 2.1414,
+     "distance": 0.114
+    },
+    "body spectrum": {
+     "value": -23.975,
+     "reference": -23.2334,
+     "error": -0.7416,
+     "distance": 0.247
+    },
+    "decay": {
+     "value": 99.4117,
+     "reference": 97.1633,
+     "error": 2.2484,
+     "distance": 0.046
+    },
+    "_peak_fs": 0.2301
+   },
+   "LC": {
+    "Pitch": {
+     "value": 185.04,
+     "reference": 200.426,
+     "error": -15.386,
+     "distance": 0.768
+    },
+    "body spectrum": {
+     "value": -27.8727,
+     "reference": -29.7553,
+     "error": 1.8827,
+     "distance": 0.628
+    },
+    "decay": {
+     "valid": false
+    },
+    "_peak_fs": 0.22278
+   },
+   "MC": {
+    "Pitch": {
+     "value": 280.0,
+     "reference": 281.0888,
+     "error": -1.0887,
+     "distance": 0.039
+    },
+    "body spectrum": {
+     "value": -26.9511,
+     "reference": -27.4243,
+     "error": 0.4732,
+     "distance": 0.158
+    },
+    "decay": {
+     "value": 97.6338,
+     "reference": 89.2116,
+     "error": 8.4222,
+     "distance": 0.189
+    },
+    "_peak_fs": 0.18915
+   },
+   "HC": {
+    "Pitch": {
+     "value": 399.9978,
+     "reference": 412.4326,
+     "error": -12.4348,
+     "distance": 0.301
+    },
+    "body spectrum": {
+     "value": -30.5739,
+     "reference": -31.3568,
+     "error": 0.7828,
+     "distance": 0.261
+    },
+    "decay": {
+     "value": 80.4476,
+     "reference": 78.8427,
+     "error": 1.605,
+     "distance": 0.041
+    },
+    "_peak_fs": 0.22141
+   }
+  }
+ },
+ "selection": {
+  "BP": {
+   "worst_dev_body_distance": 0.759,
+   "admissible": false,
+   "reasons": [
+    "LT decay 0.044 -> 0.533",
+    "MT decay 0.038 -> 0.683"
+   ]
+  },
+  "HP": {
+   "worst_dev_body_distance": null,
+   "admissible": false,
+   "reasons": [
+    "REFUSED: LT HP: compensated amp 34.632 does not fit Q0.16"
+   ]
+  },
+  "BP+X4": {
+   "worst_dev_body_distance": 0.731,
+   "admissible": false,
+   "reasons": [
+    "LT decay became invalid",
+    "MT decay became invalid"
+   ]
+  }
+ },
+ "baseline_worst_dev_body_distance": 6.036,
+ "chosen": null,
+ "confirmation": null,
+ "commit": "15d94aab8d40902c878b55f88d1ef61be9a2c2fa",
+ "sources_dirty": false
+}

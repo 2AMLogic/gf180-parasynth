@@ -1,0 +1,26 @@
+{
+ "100": {
+  "departs_at_ms": 10,
+  "float_level_there_lsb": 7257.5,
+  "ends_at_exact_zero": false,
+  "fixed_tail_peak_lsb": 2.0
+ },
+ "1000": {
+  "departs_at_ms": 230,
+  "float_level_there_lsb": 6260.7,
+  "ends_at_exact_zero": false,
+  "fixed_tail_peak_lsb": 3.0
+ },
+ "10000": {
+  "departs_at_ms": 410,
+  "float_level_there_lsb": 7873.7,
+  "ends_at_exact_zero": false,
+  "fixed_tail_peak_lsb": 7201.0
+ },
+ "100000": {
+  "departs_at_ms": 640,
+  "float_level_there_lsb": 5990.3,
+  "ends_at_exact_zero": false,
+  "fixed_tail_peak_lsb": 7201.0
+ }
+}

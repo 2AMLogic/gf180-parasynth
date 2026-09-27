@@ -1,0 +1,178 @@
+{
+ "LT": {
+  "RAW": {
+   "ring_slope_db_per_s": -98.9,
+   "ring_t20_ms": 202.2,
+   "scorer_t20": 207.1,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -83.05411148483219,
+    "slope_db_s": -96.55725982879896,
+    "residual_db": 0.2777401059801612,
+    "n": 9929,
+    "t20_ms": 207.13098150735675,
+    "after_hi_ms": 1926.5208333333333,
+    "needed_after_hi_ms": 414.2619630147135,
+    "tail_in_t20s": 9.300978633488048,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": 0.12845857724176923,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104924,
+    "given_samples": 104924
+   }
+  },
+  "BP": {
+   "ring_slope_db_per_s": -152.3,
+   "ring_t20_ms": 131.3,
+   "scorer_t20": 256.7,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -108.41815237510376,
+    "slope_db_s": -77.92511220432972,
+    "residual_db": 0.8195544601878213,
+    "n": 11543,
+    "t20_ms": 256.65667246724536,
+    "after_hi_ms": 1894.4375,
+    "needed_after_hi_ms": 513.3133449344907,
+    "tail_in_t20s": 7.381212737579495,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -31.71271067421811,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104928,
+    "given_samples": 104928
+   }
+  }
+ },
+ "MT": {
+  "RAW": {
+   "ring_slope_db_per_s": -153.9,
+   "ring_t20_ms": 129.9,
+   "scorer_t20": 130.1,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -100.97583445276186,
+    "slope_db_s": -153.76599801615885,
+    "residual_db": 0.10201284519819609,
+    "n": 6238,
+    "t20_ms": 130.0677669838182,
+    "after_hi_ms": 2023.229166666667,
+    "needed_after_hi_ms": 260.1355339676364,
+    "tail_in_t20s": 15.55519260139507,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -0.0944225857056118,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104925,
+    "given_samples": 104925
+   }
+  },
+  "BP": {
+   "ring_slope_db_per_s": -350.6,
+   "ring_t20_ms": 57.0,
+   "scorer_t20": 177.9,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -104.51800858265929,
+    "slope_db_s": -112.44233344255633,
+    "residual_db": 2.0784455128191723,
+    "n": 8756,
+    "t20_ms": 177.8689519122924,
+    "after_hi_ms": 1970.7083333333333,
+    "needed_after_hi_ms": 355.7379038245848,
+    "tail_in_t20s": 11.079552176734556,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -17.9649784135187,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104928,
+    "given_samples": 104928
+   }
+  }
+ },
+ "MC": {
+  "RAW": {
+   "ring_slope_db_per_s": -228.1,
+   "ring_t20_ms": 87.7,
+   "scorer_t20": 89.1,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -111.05021921553995,
+    "slope_db_s": -224.41095580477125,
+    "residual_db": 0.08231477140736132,
+    "n": 4283,
+    "t20_ms": 89.12220853156215,
+    "after_hi_ms": 2074.7708333333335,
+    "needed_after_hi_ms": 178.2444170631243,
+    "tail_in_t20s": 23.280065289209755,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -0.0422867649825065,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104926,
+    "given_samples": 104926
+   }
+  },
+  "BP": {
+   "ring_slope_db_per_s": -698.4,
+   "ring_t20_ms": 28.6,
+   "scorer_t20": null,
+   "scorer_reason": "the record ends before the decay does: only 115.5 ms follow the -25 dB point and a T20 of 92.2 ms needs 184.5 ms after it, so the backward integral is reporting the cut and not the decay (1956.2 ms of trailing SILENCE was stripped first: #139, a pad is not record)",
+   "scorer_detail": {
+    "tail_db": -101.96133029394686,
+    "slope_db_s": -216.83114335139297,
+    "residual_db": 0.1939108384452508,
+    "n": 4399,
+    "t20_ms": 92.23767255420653,
+    "after_hi_ms": 115.52083333333334,
+    "needed_after_hi_ms": 184.47534510841305,
+    "tail_in_t20s": 1.252425718628619,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -51.853326861736896,
+    "trailing_silence_ms": 1956.1666666666665,
+    "sounding_samples": 11032,
+    "given_samples": 104928
+   }
+  }
+ },
+ "HC": {
+  "RAW": {
+   "ring_slope_db_per_s": -286.7,
+   "ring_t20_ms": 69.8,
+   "scorer_t20": 79.2,
+   "scorer_reason": "",
+   "scorer_detail": {
+    "tail_db": -118.72765129378897,
+    "slope_db_s": -252.60994236456685,
+    "residual_db": 0.061483517377389774,
+    "n": 3817,
+    "t20_ms": 79.1734474612879,
+    "after_hi_ms": 2087.0416666666665,
+    "needed_after_hi_ms": 158.3468949225758,
+    "tail_in_t20s": 26.360373756455807,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -0.05451993512477671,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104927,
+    "given_samples": 104927
+   }
+  },
+  "BP": {
+   "ring_slope_db_per_s": -832.9,
+   "ring_t20_ms": 24.0,
+   "scorer_t20": null,
+   "scorer_reason": "the record ends before the decay does: only 1121.7 ms follow the -25 dB point and a T20 of 3147.4 ms needs 6294.8 ms after it, so the backward integral is reporting the cut and not the decay",
+   "scorer_detail": {
+    "tail_db": -72.31105705891436,
+    "slope_db_s": -6.3544489131267285,
+    "residual_db": 14.418354122225052,
+    "n": 50127,
+    "t20_ms": 3147.4011788315615,
+    "after_hi_ms": 1121.6666666666665,
+    "needed_after_hi_ms": 6294.802357663123,
+    "tail_in_t20s": 0.356378676544524,
+    "min_tail_t20": 2.0,
+    "tail_residual_db": -39.125287675148655,
+    "trailing_silence_ms": 0.0,
+    "sounding_samples": 104928,
+    "given_samples": 104928
+   }
+  }
+ }
+}
