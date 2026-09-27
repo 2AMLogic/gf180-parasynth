@@ -61,7 +61,7 @@ DROPOUT_DB = -12.0        # a block this far under the median block is a dropout
 ANALYSIS_VERSION = "mono-artifact-probe-v1"
 
 # ---- controls: each must MOVE the property it names (rule 4 matrix) ---------
-INJECTIONS = ("ALIAS_NOBLEP", "DARKEN_LP4K", "SPUR_M70", "CLIP_12DB",
+INJECTIONS = ("ALIAS_NOBLEP", "DARKEN_LP4K", "SPUR_M70", "CLIP_2XFS",
               "DROPOUT_10MS", "SILENCE")
 MOVE_DB = 1.0             # a dB property "moved" when it changed by more than this
 
@@ -300,8 +300,10 @@ def _apply_output_injection(name: str, y: np.ndarray, f0: float) -> np.ndarray:
         while min(abs(hz - b) for b in busy) < 40:
             hz += 7.0
         y = y + math.sqrt(2) * 10 ** (-70 / 20) * np.sin(2 * np.pi * hz * np.arange(len(y)) / SR)
-    elif name == "CLIP_12DB":                      # clipping outside intentional drive
-        y = np.clip(np.round(y * 4.0 * 32768.0), -32768, 32767) / 32768.0
+    elif name == "CLIP_2XFS":                      # clipping outside intentional drive
+        # overdrive to twice full scale whatever the preset level, then the rail
+        y = np.clip(np.round(y * (2.0 / max(np.max(np.abs(y)), 1e-9)) * 32768.0),
+                    -32768, 32767) / 32768.0
     elif name == "DROPOUT_10MS":
         m = len(y) // 2
         y[m:m + 480] = 0.0
@@ -352,7 +354,7 @@ PROPERTIES = {
 }
 EXPECTED = {   # the property each control exists to move
     "ALIAS_NOBLEP": "image_dbfs", "DARKEN_LP4K": "upper_wanted_rel_db",
-    "SPUR_M70": "residual_dbfs", "CLIP_12DB": "output_rail_samples",
+    "SPUR_M70": "residual_dbfs", "CLIP_2XFS": "output_rail_samples",
     "DROPOUT_10MS": "dropout_depth_db", "SILENCE": "activity",
 }
 
