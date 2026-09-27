@@ -115,13 +115,23 @@ verify:
 ## numbers are each job's own cost and not a scheduling artifact):
 ##   tools/test_run_case.py alone   282.9 s   112 tests
 ##   every other file in the bundle 278.7 s   424 tests
-## so the split is even to within 1.5 % and the longest job is half what it was.
-## `run_all.py` runs jobs concurrently with `min(len(cmds), cpu_count)` workers,
-## and these two are submitted FIRST so they both start at t=0 on the runner's
-## two cores; the remaining jobs (93 s of the target in total) queue behind
+## AND THEN MEASURED IN CI, WHICH DISAGREED ABOUT THE BALANCE -- worth leaving
+## here rather than quoting only the local numbers, because the runner's own
+## speed is the variable this gate keeps tripping over. Two m5a-fast runs of the
+## same commit, with `measure_m5a_signal_path` alongside as the runner's ruler
+## (main measured it at 24.0 s):
+##   ruler 49.5 s   test_run_case 274.6 s   other files 323.6 s   worst 54 % of cap
+##   ruler 74.1 s   test_run_case 335.8 s   other files 444.9 s   worst 74 % of cap
+## so the split is even to ~15 % rather than to 1.5 %, the OTHER-FILES job is now
+## the longer one, and a 3.1x runner still leaves a quarter of the cap spare --
+## against 97 % of it for main's single 292 s bundle on a 2x runner, and past the
+## cap entirely for the unsplit version. `run_all.py` runs jobs concurrently with
+## `min(len(cmds), cpu_count)` workers and these two are submitted FIRST, so they
+## both start at t=0 on the runner's two cores; the remaining jobs queue behind
 ## whichever finishes first, so the target's own wall clock does not grow.
 ## Adding a file to either job is fine; adding a 150 s test to one is the thing
-## that broke this, so put the next expensive file in whichever job is shorter.
+## that broke this, so put the next expensive file in whichever job is shorter --
+## which the CI rows above, not the local ones, say is tools/test_run_case.py.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
