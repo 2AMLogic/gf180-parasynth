@@ -200,8 +200,9 @@ def check(run: dict) -> dict:
         codes = sorted({e[0] for e in sim.errors})
         res["reasons"].append(f"device errors {codes}, drops {sim.drops}")
     executed = [(w[1], w[2], w[3], w[4]) for w in live]
-    if want.get("target") == r1c.HOST_IMAGE:
-        # the frozen R1 target, checked on what the device EXECUTED from the
+    if want.get("target") in uh.R1_KIT_IMAGES:
+        # the frozen R1 target (r1, and r2, which is sent R1's kit and start),
+        # checked on what the device EXECUTED from the
         # host's bytes: a wrong kit is a host-correctness failure, named
         res["init_check"] = r1c.check_init(executed, kit_expected=True)
         for p in res["init_check"]:
@@ -491,11 +492,11 @@ def run_control(name: str, image: str = uh.DEFAULT_IMAGE, target: str | None = N
 
 
 def wrong_kit_control(fixture: str, target: str) -> dict:
-    """The sender plays the RELEASE (revision-11) kit under `--image r1`
-    (uart_host INJECT WRONG_KIT) while the expectation stays the frozen R1
-    target. Caught only if the check fails FOR THE KIT: the init-byte check
-    names the kit or the final strike (plan088)."""
-    r = check(run_cli(fixture, image=r1c.HOST_IMAGE, target=target, inject="WRONG_KIT"))
+    """The sender plays the RELEASE (revision-11) kit under `--image <target>`
+    (r1 or r2; uart_host INJECT WRONG_KIT) while the expectation stays the
+    frozen R1 target. Caught only if the check fails FOR THE KIT: the
+    init-byte check names the kit or the final strike (plan088)."""
+    r = check(run_cli(fixture, image=target, target=target, inject="WRONG_KIT"))
     init = r.get("init_check") or []
     kit_named = any("kit" in p or "ENV_FRATE" in p for p in init)
     return {"control": "WRONG_KIT", "fixture": fixture,
@@ -535,7 +536,7 @@ def main(argv=None) -> int:
     image = a.image or uh.DEFAULT_IMAGE
     target = a.expect_image or image
     try:
-        if target == r1c.HOST_IMAGE:
+        if target in uh.R1_KIT_IMAGES:
             r1c.frozen_kit()                    # the frozen target exists, or nothing runs
         for fx in FIXTURES:
             intended(fx, image=target)          # the expectation is the target, or REFUSED
@@ -564,7 +565,7 @@ def main(argv=None) -> int:
                   + ("" if r["ok"] else f" -- {r['reasons']}"))
     ident = {"sender": image, "target": target,
              "target_contract_revision": uh.IMAGE_REVISION[target],
-             "target_kit_sha256": (r1c.KIT_R14_SHA256 if target == r1c.HOST_IMAGE else None)}
+             "target_kit_sha256": (r1c.KIT_R14_SHA256 if target in uh.R1_KIT_IMAGES else None)}
     if a.expect_fail:
         fails = {k: r.get("init_check") for k, r in clean.items()}
         caught = bool(clean) and all((not r["ok"]) and r.get("init_check")
@@ -584,7 +585,7 @@ def main(argv=None) -> int:
         ok &= c["caught"]
         print(f"rolling control {name}: {'CAUGHT' if c['caught'] else 'MISSED'} "
               f"-- {c['reasons'][:2]}")
-    if target == r1c.HOST_IMAGE:
+    if target in uh.R1_KIT_IMAGES:
         for fx in FIXTURES:
             c = wrong_kit_control(fx, target)
             controls[f"WRONG_KIT:{fx}"] = c
