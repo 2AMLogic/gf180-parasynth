@@ -485,6 +485,8 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
             row = {"engine": engine, "note": note, "patch": over, "verdict": "REFUSED",
                    "reason": str(e)}
         row["group"] = group
+        row["nominal"] = {"waves": list(over["waves"]), "cutoff": list(over.get("cutoff", (20000, 20000))),
+                          "q": over.get("q", 0.0), "drive": over.get("drive", 0.75)}   # the schedule's point, before any repair
         rows.append(row)
         o = row.get("stages", {}).get("output", {})
         print(f"{group:8s} {engine:7s} {over['waves'][0]:8s} n{note:3d} "

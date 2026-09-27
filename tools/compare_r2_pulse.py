@@ -57,7 +57,11 @@ def _load(paths):
 
 
 def _key(r):
-    p = r["patch"]
+    """Pair by the SCHEDULE's point. A repair that changes the rendered patch
+    (e.g. drive compensation) must still pair with R1's row for the same
+    condition; the first version keyed on the rendered patch, paired nothing,
+    and reported acceptance over zero measured points."""
+    p = r.get("nominal") or r["patch"]
     return (p["waves"][0], r["note"], p["cutoff"][0], p["q"], p["drive"])
 
 
@@ -148,7 +152,9 @@ def main(argv=None):
            "declared_rule": f"worse by > {BAND:.2f} dB on {[p for p, _ in PROPS]}, new output rail, new dropout",
            "counts": counts, "development": tally(dev), "untouched": tally(unt),
            "failing_points": [r for r in recs if r.get("verdict") == "FAIL"],
-           "accepted_under_declared_rule": all(r.get("verdict") == "PASS" for r in recs if r.get("verdict") in ("PASS", "FAIL")),
+           "accepted_under_declared_rule": (
+               "NO VERDICT" if counts["measured"] == 0 or counts["not_run"] or counts["refused"]
+               else all(r.get("verdict") == "PASS" for r in recs if r.get("verdict") in ("PASS", "FAIL"))),
            "points": recs, "source_records": [str(p) for p in a.records], "probe_provenance": meta["provenance"]}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
@@ -157,7 +163,8 @@ def main(argv=None):
     for r in res["failing_points"]:
         print("FAIL", r["wave"], r["note"], r["cutoff"], r["q"], r["drive"], r["fails_declared_rule"],
               {p: r[p].get("delta") for p, _ in PROPS})
-    return 0 if res["accepted_under_declared_rule"] else 1
+    v = res["accepted_under_declared_rule"]
+    return 0 if v is True else (2 if v == "NO VERDICT" else 1)
 
 
 if __name__ == "__main__":
