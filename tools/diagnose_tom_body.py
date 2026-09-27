@@ -91,6 +91,10 @@ def decompose(y, sr, split, f0) -> dict:
             "early_share": round(e_early / (e_early + e_h + e_o), 3),
             "harmonic_share": round(e_h / (e_early + e_h + e_o), 3),
             "other_share": round(e_o / (e_early + e_h + e_o), 3),
+            # after 10 ms only, and what flat (inharmonic) noise would give:
+            # a harmonic ring reads ~1.0, noise reads ~mask_coverage
+            "late_harmonic_share": round(share_h, 3),
+            "mask_coverage": round(float((band & harm).sum()) / float(band.sum()), 3),
             "harmonic_levels_db": _harmonic_levels(lev, f, f0, 1.0)}
 
 

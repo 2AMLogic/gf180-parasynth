@@ -47,14 +47,15 @@ def test_planted_harmonic_is_harmonic_at_its_level():
     # (0.1)^2 of the ring's energy, times the late part's share of the window
     # (exp(-2 * 10 ms / 58 ms) = 0.71): -20 - 1.5 = -21.5 dB
     assert r["harmonic_db"] == pytest.approx(-21.5, abs=1.0)
-    assert r["harmonic_share"] > 0.95
+    assert r["late_harmonic_share"] > 0.99 and r["other_db"] < -70
 
 
 def test_planted_click_is_early_and_noise_is_other():
     c = d.decompose(_strike(click=3.0), SR, SPLIT, F0)
     assert c["early_share"] > 0.95 and c["early_db"] > -25
     n = d.decompose(_strike(noise=0.5), SR, SPLIT, F0)
-    assert n["other_share"] > 0.9 and n["other_db"] > -30
+    # noise lands on the masks only in proportion to their coverage
+    assert abs(n["late_harmonic_share"] - n["mask_coverage"]) < 0.15 and n["other_db"] > -30
 
 
 def test_scaling_does_not_move_fractions():
@@ -74,4 +75,4 @@ def test_broadband_noise_at_high_k_is_not_called_harmonic():
     y = np.sin(2 * math.pi * 185 * t) * env + 0.5 * env * sosfilt(
         butter(4, [1200, 1900], btype="bandpass", fs=SR, output="sos"), rng.standard_normal(len(t)))
     r = d.decompose(y, SR, 700.0, 185.0)
-    assert r["other_share"] > 0.5
+    assert r["late_harmonic_share"] < r["mask_coverage"] + 0.15 and r["mask_coverage"] <= 0.41
