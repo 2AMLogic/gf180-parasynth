@@ -132,8 +132,9 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 #   DROP_NOTE_OFF   the first voice note-off that would close the gate is lost
 #   WRONG_DRUM_MAP  GM 38 strikes the clap instead of the snare
 #   DELAYED_EVENT   the fourth scheduled event is placed 5 ms (240 frames) late
-#   WRONG_ALT       a switch to the other sound of a pair sends the OTHER
-#                   sound's position (e.g. a low-conga note re-sends the low tom)
+#   WRONG_ALT       a switch to the other sound of a pair writes the registers
+#                   it changes with the values of the sound it LEAVES (a
+#                   low-conga note re-sends the low tom's tuning)
 #   NO_TAIL_CUT     a switch leaves the previous sound's pending pitch drop in
 #                   the queue, so it retunes the new sound mid-note
 # and the two overload repairs of timing contract 3, reinstated as they were
@@ -831,9 +832,10 @@ class MidiSession:
             if "NO_TAIL_CUT" in self.inject:
                 cut = []                               # the injected defect
             self._cut(cut)
-            sel = name
-            if "WRONG_ALT" in self.inject:
-                sel = self.position[stop_name]         # the injected defect: re-send the other
+            # the injected defect: the same registers, with the values of the
+            # sound it leaves (the packet count is unchanged, so the RTL replay
+            # pairs its bytes with the schedule write for write)
+            other = dict(self.presets[self.position[stop_name]])
             # Only the registers the switch changes: a whole position is up to 18
             # packets (RS/CL), which at 115200 baud (41.7 frames each) does not
             # fit the 16 ms lookahead with the admission reserve, so it would be
@@ -841,9 +843,10 @@ class MidiSession:
             # (RS/CL) and 10 (CP/MA) registers. A register a cut sequence left
             # mid-way is not what the image says, so it is always re-written.
             dirty = {p.write[2] for p in cut if p.write[1] == 1}
-            for a, v in self.presets[sel]:
+            for a, v in self.presets[name]:
                 if a in dirty or self.mh.image.get(a) != v:
-                    self.mh.drum(0, a, v, tag="select")
+                    self.mh.drum(0, a, other[a] if "WRONG_ALT" in self.inject else v,
+                                 tag="select")
             self.position[stop_name] = name
         self.mh.hits([(0, stop, accent)])
         new = self.mh.w[n0:]

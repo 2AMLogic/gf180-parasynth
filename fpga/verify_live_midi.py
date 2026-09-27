@@ -1148,11 +1148,11 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl", nargs="*", default=None, metavar="SCENARIO",
                     help="also replay the session's bytes through the UART RTL wrapper")
     ap.add_argument("--rtl-inject", nargs="*", default=[], metavar="CONTROL",
-                    choices=("WRONG_DRUM_MAP", "DELAYED_EVENT"),
+                    choices=("WRONG_DRUM_MAP", "DELAYED_EVENT", "WRONG_ALT"),
                     help="also replay these controls' bytes through the RTL: the I2S "
                          "comparison must FAIL. (DROP_NOTE_OFF changes the packet count, "
                          "so its bytes cannot be paired with the schedule write for write; "
-                         "it is caught at the device contract.)")
+                         "it is caught at the device contract. So does NO_TAIL_CUT.)")
     ap.add_argument("--reuse-rtl", action="store_true")
     ap.add_argument("--reuse-rtl-if-identical", action="store_true",
                     help="re-analyse the RTL run on disk when its full identity is this "
