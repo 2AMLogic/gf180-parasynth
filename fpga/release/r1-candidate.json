@@ -143,8 +143,8 @@
     "version": "no numeric protocol version exists; the host is pinned by the sha256 of its files (host.files) and the exact bytes of every supported command (commands.*.cmds_sha256)",
     "files": {
       "fpga/uart_host.py": "e36ece62cd01eb8d1384d7428eb698bcc8b08a0247388e285687d47f65d85917",
-      "fpga/midi_session.py": "e8111ec8e6a517499c6b002d40469a233b1832c7a1479fc81375869be5cfce24",
-      "fpga/live_midi_contract.py": "314c45fd0de8ebb3b3169840a56f473b511867bdf1059e02cf8c38a9d8b50ccb",
+      "fpga/midi_session.py": "501e0f533e5a1b115bc5316af0c961a863505ef53702c372bd681e2e278c5458",
+      "fpga/live_midi_contract.py": "373ccdb1a015805591c3b93e5c44a0c9f8be2a308f3fc7e1300c4798c0cae6d8",
       "fpga/release/qualified_domain.py": "b554ba57f0b988b98db8cd9b1dddd5607abaf7eaa2f76aebf3c17e9e2008d7fe",
       "fpga/release/r1_candidate.py": "ca8c597c83f2ece84284c3ea5719aaea082acdbe55392bc9847cc7b491076212",
       "fpga/spi_host.py": "c3dabc9bcb09af0db7d71bf262bcd6eba327917060e58135cb3361a1668cdaa6",
