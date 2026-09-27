@@ -106,6 +106,34 @@ def _harmonic_levels(spec, f, f0, total):
     return out
 
 
+BLOCKS = ((0.010, 0.030), (0.030, 0.060), (0.060, 0.100), (0.100, 0.150),
+          (0.150, 0.300), (0.300, 0.600))
+
+
+def time_profile(y, sr, split) -> dict:
+    """Band-passed (split..2000 Hz) and full-band RMS per block, dB re the
+    prepared strike's peak, plus the same for the file's last 200 ms. If the
+    above-split energy decays with the ring it belongs to the strike; if it
+    sits at the tail's level it is the recording's floor, not the instrument."""
+    y = np.asarray(y, dtype=np.float64)
+    sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
+    hb = sosfiltfilt(sos, y)
+    pk = float(np.max(np.abs(y)))
+
+    def rms_db(x):
+        r = float(np.sqrt(np.mean(x * x))) if len(x) else 0.0
+        return round(20 * math.log10(r / pk), 2) if r > 0 else None
+    out = {}
+    for a, b in BLOCKS:
+        i, j = int(a * sr), min(len(y), int(b * sr))
+        if j - i > sr // 200:
+            out[f"{int(a*1e3)}-{int(b*1e3)}ms"] = {"band": rms_db(hb[i:j]), "full": rms_db(y[i:j])}
+    tail = slice(max(0, len(y) - sr // 5), len(y))
+    out["file_tail_200ms"] = {"band": rms_db(hb[tail]), "full": rms_db(y[tail]),
+                              "at_s": round(len(y) / sr, 3)}
+    return out
+
+
 def kit_identity() -> dict:
     import drums_fx as dx
     pinned = json.loads((ROOT / "fpga/release/r1-candidate.json").read_text())["kit"]["sha256"]
@@ -128,7 +156,8 @@ def diagnose(refdir: pathlib.Path) -> dict:
             if not bs.ok or not f0.ok:
                 raise rc.Refused(f"{voice} {side}: {bs.reason or f0.reason}")
             row[side] = {"body_spectrum_db": round(bs.value, 3), "f0_hz": round(f0.value, 2),
-                         "sr": sr, **decompose(y, sr, split, f0.value)}
+                         "sr": sr, **decompose(y, sr, split, f0.value),
+                         "time_profile": time_profile(y, sr, split)}
         r, o = row["reference"], row["ours"]
         row["deficit_db"] = {k: (None if r[k] is None or o[k] is None else round(o[k] - r[k], 2))
                              for k in ("early_db", "harmonic_db", "other_db")}
