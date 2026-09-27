@@ -721,6 +721,41 @@ TOM_HW_TAU = {"LT": 0.0876, "LC": 0.0769, "MT": 0.0577, "MC": 0.0387,
 RS_LO_HZ, RS_LO_Q = 455.0, 6.7
 RS_HI_HZ, RS_HI_Q = 1786.0, 13.5
 CL_HZ, CL_Q = 2500.0, 200.0
+# THE TWO NETWORKS' RELATIVE DRIVE (#388). Exciting both bridged-T bodies with
+# the SAME pulse -- which is what the circuit does -- does NOT give the two
+# modes the circuit's relative level, because the bank's RAW numerator is
+# all-pole and the circuit's networks are band-pass. The two impulse responses
+# are normalised differently, and the difference is a pure function of f0 and Q:
+#
+#   bank, y[n] = x[n] + a1 y[n-1] + a2 y[n-2]:  peak ~ 1 / sin(w0)
+#   circuit, H(s) = H0 (w0/Q) s / (s^2 + (w0/Q) s + w0^2):  peak ~ H0 w0 / Q
+#
+# High re low, from the shipping constants above at 48 kHz:
+#   bank     20 log10( sin(w_lo) / sin(w_hi) )        = -11.80 dB
+#   circuit  20 log10( (f_hi/Q_hi) / (f_lo/Q_lo) )    =  +5.79 dB
+# so an equal pulse into both modes puts our high mode 17.60 dB below where the
+# same pulse into the same two networks puts the circuit's. That is a property
+# of the DISCRETISATION, not of the rimshot: it is the same 1/sin(w0) that any
+# all-pole mode carries, and it only becomes audible where one voice sums two
+# modes an octave and a half apart.
+#
+# HARDWARE-MEASURED [Fischer s/n 103852, rs8/RS.WAV; tools/probes/rs_guard_band.py
+# compare]: the machine's 1711 Hz mode sits +6.5 dB ABOVE its 457 Hz mode. The
+# CIRCUIT's closed form above predicts +5.79 dB with no recording in it at all.
+# The two agree to 0.7 dB, and rev 14 shipped -12.1 dB -- so the 18.7 dB defect
+# #388 scored is the discretisation's, and the circuit's own transfer function
+# names the correction before the reference is consulted.
+#
+# The correction is applied where the circuit applies its own summing weights:
+# on the excitation into the LOW network, as a right shift on its path word.
+# `att` is 3 bits of 6.02 dB, so 3 (18.06 dB) is the nearest step to 17.60 and
+# is 0.46 dB from it -- inside the +-2.4 dB the balance estimator declares for
+# itself. Attenuating the low mode rather than lifting the high one is not a
+# free choice: PEAK_RSX 0.06 already puts the low mode's tap at ~1.0 x full
+# scale (0.06 x 1/sin(w_lo) = 1.008), so the 8x has to come off the loud mode
+# or the tap saturates. CL disconnects P_RS1X entirely, so this reaches the
+# rimshot and nothing else.
+RS_LO_X_ATT = 3
 # VERIFIED IN A SOURCE [SN "this switching is provided to eliminate noise
 # leaking from IC20"]: both voices are gated by JFET Q74 through C112 0.022 uF
 # / R305 1 MOhm, a ~22 ms window. It is what stops the claves, whose resonator
@@ -1611,7 +1646,7 @@ def kit_808() -> list:
         # 5's Q62 -- "the distortion is the sound; do not skip it". The two
         # taps are distorted SEPARATELY where the circuit distorts their sum;
         # the cost of that is measured in test_808_acceptance.
-        path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+        path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT, dest=M_RS1),
         path_word(SRC_PULSE, E_RSX, dest=M_RS2),
         path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
         path_word(SRC_TAP + M_RS2, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
@@ -1672,7 +1707,14 @@ def kit_808_rev11() -> list:
     burst = A_ENV + E_CPBURST * ENV_STRIDE
     tail = A_ENV + E_CPTAIL * ENV_STRIDE
     undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
-            tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
+            tail + 2: rate_reg(47e-3),                   # the R348 x C138 tail
+            # #388's RS_LO_X_ATT: the published image was verified with an
+            # UNATTENUATED pulse into the 455 Hz network, so this kit keeps it.
+            # The register field exists in revision 11 and the new word would be
+            # accepted -- which is exactly why it has to be undone here rather
+            # than left to work by accident: the released image's rimshot is the
+            # one it was measured with, and a host driving it gets that one.
+            A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1)}
     kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
@@ -1717,7 +1759,8 @@ def preset_writes(sound: str) -> list:
     if n == "RS":
         return (mode_writes(M_RS1, RS_LO_HZ, RS_LO_Q, 0.0, RAW)
                 + mode_writes(M_RS2, RS_HI_HZ, RS_HI_Q, 0.0, RAW)
-                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, dest=M_RS1)),
+                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT,
+                                               dest=M_RS1)),
                    (A_PATH + P_RS2X, path_word(SRC_PULSE, E_RSX, dest=M_RS2)),
                    (A_PATH + P_RS1OUT, path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING,
                                                  att=RS_ATT, dest=DEST_MIX)),
