@@ -40,6 +40,7 @@ import voice_fx as vf  # noqa: E402
 import qualified_domain as qd  # noqa: E402
 
 SR = vf.SR
+PRESET_DRIVES = None   # filled lazily: {drive of default, m5a-saw, m5a-pulse}
 Y19_RAIL = (1 << 18) - 1
 
 
@@ -87,6 +88,13 @@ def domain_scenarios() -> list:
     return S
 
 
+def _preset_drives():
+    global PRESET_DRIVES
+    if PRESET_DRIVES is None:
+        PRESET_DRIVES = {round(float(_preset_regs(p)["drive"]), 6) for p in ("default", "m5a-saw", "m5a-pulse")}
+    return PRESET_DRIVES
+
+
 def classify(scns) -> list:
     """Each scenario against R1's qualified domain, as the release host would
     judge it: the patch (check_patch), every programmed increment (check_inc,
@@ -94,6 +102,7 @@ def classify(scns) -> list:
     host's own conversions can produce (k, gain, ogain from ladder_regs over
     the CC71 range at the patch's drive; the mixer weights of mix_weights;
     volume up to CC7's 0.9)."""
+    _preset_drives()
     out = []
     for key, name, regs, writes, n in scns:
         why = []
@@ -108,13 +117,20 @@ def classify(scns) -> list:
                 except qd.Rejected as e:
                     why.append(f"{e.rule}: inc {w[3]} on osc {w[2]}")
                     break
-        k_max = max(vf.ladder_regs(r / 127.0, regs.get("drive", 1.0))[0] for r in range(128))
-        if int(regs["k"]) > k_max:
-            why.append(f"k {regs['k']} > {k_max}, the most CC71 can program")
-        for word, i in (("gain", 1), ("ogain", 2)):
-            reach = {vf.ladder_regs(r / 127.0, regs.get("drive", 1.0))[i] for r in range(128)}
-            if int(regs[word]) not in reach:
-                why.append(f"{word} {regs[word]} is not a word the host conversion produces at drive {regs.get('drive')}")
+        # The live host programs k/gain/ogain ONLY through ladder_regs, from a
+        # resonance in CC71's 0..1 and the loaded preset's drive (no CC moves
+        # drive). So the words must be that conversion of the patch's own res.
+        # (The first version demanded res be a CC step r/127, which rejected
+        # the default preset's own 0.62 -- wrong, a preset loads its res.)
+        res = float(regs.get("res", 0.0))
+        if not 0.0 <= res <= 1.0:
+            why.append(f"res {res} outside CC71's 0..1")
+        if (int(regs["k"]), int(regs["gain"]), int(regs["ogain"])) != \
+                tuple(vf.ladder_regs(res, regs.get("drive", 1.0), regs.get("filter_calibration"))):
+            why.append(f"k/gain/ogain {regs['k']}/{regs['gain']}/{regs['ogain']} are not the host "
+                       f"conversion of res {res} at drive {regs.get('drive')}")
+        if round(float(regs.get("drive", 0.0)), 6) not in PRESET_DRIVES:
+            why.append(f"drive {regs.get('drive')} is no release preset's ({sorted(PRESET_DRIVES)})")
         if int(regs["vol"]) > int(round(0.9 * 32768)):
             why.append(f"vol {regs['vol']} > CC7's 0.9")
         if max(int(x) for x in regs["weights"]) > (1 << 15):
