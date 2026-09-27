@@ -63,7 +63,22 @@ module polyblep_saw_pair(
 `else
     localparam signed [15:0] SUBSTEP_GAIN_Q15=16'sd27853;
 `endif
-    wire signed [31:0] scaled0=$signed(s0[15:0])*SUBSTEP_GAIN_Q15;
-    wire signed [31:0] scaled1=$signed(s1[15:0])*SUBSTEP_GAIN_Q15;
+`ifdef VOICE_PULSE_2X
+    // R2 (#333, recheck-333 item 5): the rectangles saturated the decimator's
+    // Q1.15 output at 0.85 near the top of the range (pulse15 from MIDI 99 ..
+    // square from 119). They get 24248/32768 (0.74), chosen by a rule frozen
+    // in advance: zero clipped samples and >= 0.1 dB margin on a 1/8-semitone
+    // sweep. The saw keeps 0.85, so its output is bit-identical to R1's.
+`ifdef INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM
+    localparam signed [15:0] RECT_GAIN_Q15=16'sd27853;   // NEGATIVE CONTROL: R1's 0.85
+`else
+    localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;
+`endif
+    wire signed [15:0] gain_q15=rectangular ? RECT_GAIN_Q15 : SUBSTEP_GAIN_Q15;
+`else
+    wire signed [15:0] gain_q15=SUBSTEP_GAIN_Q15;
+`endif
+    wire signed [31:0] scaled0=$signed(s0[15:0])*gain_q15;
+    wire signed [31:0] scaled1=$signed(s1[15:0])*gain_q15;
     assign sample0=scaled0 >>> 15; assign sample1=scaled1 >>> 15;
 endmodule

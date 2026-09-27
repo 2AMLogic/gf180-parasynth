@@ -12,7 +12,8 @@ def test_pulse_2x_preserves_known_duty_dc_and_harmonic_series():
     pcm, _, _ = vf._render_2x(osc, n, inc, np.zeros(30, dtype=np.int64), 0)
     steady = pcm[64:].astype(float)
     duty = 0.479
-    assert abs(np.mean(steady) - (2 * duty - 1) * vf._OS2_SUBSTEP_GAIN_Q15) < 10
+    # R2 (#333): rectangles are rendered at the rectangle headroom (0.74)
+    assert abs(np.mean(steady) - (2 * duty - 1) * vf._OS2_RECT_GAIN_Q15) < 10
     spectrum = np.abs(np.fft.rfft(steady))
     fundamental_bin = len(steady) // 64
     for harmonic in range(2, 13):
@@ -48,3 +49,23 @@ def test_pulse_2x_chunk_boundaries_and_phase_changes_are_exact(shape):
     np.testing.assert_array_equal(history, final_history)
     assert phase == final_phase
     assert split.phase == whole.phase
+
+
+def test_r2_headroom_applies_to_rectangles_only_and_saw_is_unchanged():
+    """#333 item 5: rectangles 24248/32768, saw 27853 (R1's value, bit-identical)."""
+    assert (vf._OS2_RECT_GAIN_Q15, vf._OS2_SUBSTEP_GAIN_Q15) == (24248, 27853)
+    n, inc = 1024, vf.CYCLE // 64
+    saw, _, _ = vf._render_2x(vf.OscFx("saw", smooth=False), n, inc,
+                              np.zeros(30, dtype=np.int64), 0)
+    old, vf._OS2_RECT_GAIN_Q15 = vf._OS2_RECT_GAIN_Q15, vf._OS2_SUBSTEP_GAIN_Q15
+    try:
+        saw_r1, _, _ = vf._render_2x(vf.OscFx("saw", smooth=False), n, inc,
+                                     np.zeros(30, dtype=np.int64), 0)
+        sq_r1, _, _ = vf._render_2x(vf.OscFx("square", smooth=False), n, inc,
+                                    np.zeros(30, dtype=np.int64), 0)
+    finally:
+        vf._OS2_RECT_GAIN_Q15 = old
+    sq, _, _ = vf._render_2x(vf.OscFx("square", smooth=False), n, inc,
+                             np.zeros(30, dtype=np.int64), 0)
+    assert np.array_equal(saw, saw_r1)                 # the saw is R1's, sample for sample
+    assert np.max(np.abs(sq)) < np.max(np.abs(sq_r1))  # the rectangle has more headroom
