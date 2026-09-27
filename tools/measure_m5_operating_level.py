@@ -133,6 +133,10 @@ def select(rows: dict) -> dict:
     base = rows[str(BASE_DRIVE)]["M5A"]["errors"]
     verdicts = {}
     for d in CANDIDATE_DRIVES:
+        if "refused" in rows[str(d)]:
+            verdicts[str(d)] = {"harmonic_shape": None, "admissible": False,
+                                "reasons": [f"REFUSED: {rows[str(d)]['refused']}"]}
+            continue
         c = rows[str(d)]["M5A"]["errors"]
         why = []
         if abs(abs(c["Gain"]) - abs(base["Gain"])) > 0.5:
@@ -180,8 +184,14 @@ def main(argv=None) -> int:
         rows = {}
         for d in drives:
             f = 1.0 if d == BASE_DRIVE else calibrate(a.engine, d)
+            try:
+                m5a_row = phrase(a.engine, "M5A", d, f)
+            except score.Refused as e:          # e.g. vol outside the host's 0..1 range
+                rows[str(d)] = {"drive": d, "vol_factor": round(f, 5), "refused": str(e)}
+                print(f"drive {d}: vol x{f:.4f}; REFUSED: {e}", flush=True)
+                continue
             rows[str(d)] = {"drive": d, "vol_factor": round(f, 5),
-                            "M5A": phrase(a.engine, "M5A", d, f), "M5B": phrase(a.engine, "M5B", d, f),
+                            "M5A": m5a_row, "M5B": phrase(a.engine, "M5B", d, f),
                             "probe": probe(a.engine, d, f)}
             print(f"drive {d}: vol x{f:.4f}; M5A {rows[str(d)]['M5A']['errors']}; "
                   f"M5B {rows[str(d)]['M5B']['errors']}", flush=True)
