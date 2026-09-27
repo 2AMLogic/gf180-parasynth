@@ -2,15 +2,15 @@
  "tool": "fpga/verify_late_events.py",
  "policy": "fpga/late_event_policy.py",
  "control": "rtl-frame-lag",
- "git_head": "c3cd062ffdac1f47ed07398ea250cb106305ec77",
+ "git_head": "c116ed41241f35697237caa5d1e53c99f289f283",
  "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
  "sources_sha256": {
   "rtl-sketch/tb_uart_late.v": "fc5416347ccd1b156107174a2f3ae88ec39d86f69a3f0b17f7a9b87f7eea3775",
   "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
   "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
   "fpga/uart_device_sim.py": "7b0747a58fe3ae9a873b9778bc9a7389f5d0cfaa51895745528063c1ff2fde9e",
-  "fpga/late_event_policy.py": "f1663d7f2b2568435e74cdbe467263951d9d948eb7da701ea359d04140f5316b",
-  "fpga/verify_late_events.py": "146f743bbaad1f5d4e5f959e8654789ff9b3621ac909bce306323ffb18e0870a"
+  "fpga/late_event_policy.py": "77a0573a8bca6655bf8d5a16521df788cb727d2c92bfe88d298c0fb47ff9effa",
+  "fpga/verify_late_events.py": "c0cd959a74b056e7138ab8d78080125ba9006f5cc7b21528e133a052422b4056"
  },
  "rtl": {
   "boundary": {
@@ -312,7 +312,7 @@
    "status_problems": []
   },
   "backlog": {
-   "disagreements": 34,
+   "disagreements": 33,
    "rows": [
     {
      "step": 0,
@@ -764,16 +764,15 @@
     },
     {
      "step": 32,
-     "tag": "mid-drain late, raw due D2-5 BEFORE the tail's D2 (effective D2+3)",
+     "tag": "mid-drain late, sent due D2-5 BEFORE the tail's D2: dropped (P3, #339)",
      "accept": 4722,
      "due16": 4715,
-     "want": "late",
+     "want": "drop-order",
      "got": "drop-order",
-     "want_exec": 4725,
+     "want_exec": null,
      "got_exec": [],
-     "ok": false,
-     "beyond_effective_due": null,
-     "recorded": "#339: late with a sent due before a draining tail's; the RTL (and the model) drop it by sent-due order, policy P3 orders by effective due"
+     "ok": true,
+     "beyond_effective_due": null
     },
     {
      "step": 33,
