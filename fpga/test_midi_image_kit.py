@@ -67,12 +67,13 @@ def test_default_session_sends_the_release_kit():
 
 def test_control_tree_session_sends_revision_14():
     """The check discriminates: the tree image's known state has the write the
-    release image cannot decode, and its values are kit_808()'s."""
+    release image cannot decode, and its values are the revision-14 kit's
+    (`tree` is the newest BUILT image, R1; see uart_host.IMAGE_REVISION)."""
     s = _session(image="tree")
-    assert s.mh.kit == dx.kit_808()
+    assert s.mh.kit == dx.kit_808_rev14()
     drums = _drums(s.init_writes())
     assert FRATE in drums
-    tree = dict(dx.kit_808())
+    tree = dict(dx.kit_808_rev14())
     assert drums[BURST] == tree[BURST] and drums[TAIL_RATE] == tree[TAIL_RATE]
     # one more kit write (ENV_FRATE[8]) and R1's known-state preamble (#279)
     assert len(s.init_writes()) == len(_session().init_writes()) + 1 + len(uh.known_state_preamble())

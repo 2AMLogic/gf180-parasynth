@@ -50,13 +50,14 @@ def test_rev11_kit_is_revision_11s_pinned_image():
     import test_tables as tt
     kit = dx.kit_808_rev11()
     assert _gt_sha(kit) == tt.REV11["KIT808"] == dx.KIT808_REV11_SHA256
-    assert _gt_sha(dx.kit_808()) == tt.REV14["KIT808"]
-    assert len(kit) == len(dx.kit_808()) - 1
-    assert FRATE not in dict(kit) and FRATE in dict(dx.kit_808())
+    assert _gt_sha(dx.kit_808_rev14()) == tt.REV14["KIT808"] == dx.KIT808_REV14_SHA256
+    assert _gt_sha(dx.kit_808()) == tt.REV15["KIT808"]
+    assert len(kit) == len(dx.kit_808_rev14()) - 1
+    assert FRATE not in dict(kit) and FRATE in dict(dx.kit_808_rev14())
 
 
 def test_rev11_kit_differs_from_the_tree_only_on_the_clap():
-    old, new = dict(dx.kit_808_rev11()), dict(dx.kit_808())
+    old, new = dict(dx.kit_808_rev11()), dict(dx.kit_808_rev14())
     moved = sorted(a for a in set(old) | set(new) if old.get(a) != new.get(a))
     assert moved == sorted([BURST, FRATE, TAIL_RATE])
     assert old[BURST] == dx.env_ctl(dx.CP, 15, 0, 2, 480)
@@ -75,11 +76,37 @@ def test_control_rev11_kit_refuses_when_the_tree_kit_moves(monkeypatch):
         uh.image_kit("release")
 
 
+def test_control_rev14_kit_refuses_when_the_tree_kit_moves(monkeypatch):
+    """The same for revision 14's frozen kit, which `--image tree` (R1) sends."""
+    live = dx.kit_808()
+    a, v = live[0]
+    monkeypatch.setattr(dx, "kit_808", lambda: [(a, v ^ 1)] + live[1:])
+    with pytest.raises(dx.KitRefused):
+        dx.kit_808_rev14()
+    with pytest.raises(dx.KitRefused):
+        uh.image_kit("tree")
+
+
+def _envs_read(kit):
+    words = [v for a, v in kit if dx.A_PATH <= a < dx.A_PATH + dx.N_PATH]
+    return {(w >> s) & 31 for w in words for s in (5, 10)} - {dx.ENV_FULL, dx.ENV_NONE}
+
+
+def test_every_image_kit_reads_only_envelopes_its_image_has():
+    """Revision 15 (#107) put the cowbell's 540 Hz line on envelopes 18/19. A
+    revision-14 or -11 image has 18 envelopes and reads 18/19 as ZERO, so the
+    kit each built image is sent must not read them -- and the tree's kit
+    must (the check discriminates)."""
+    for image in uh.IMAGE_REVISION:
+        assert max(_envs_read(uh.image_kit(image))) < 18, image
+    assert {dx.E_CBLA, dx.E_CBLB} <= _envs_read(dx.kit_808())
+
+
 def test_default_image_is_the_release_and_unknown_images_refuse():
     assert uh.DEFAULT_IMAGE == "release"
     assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14}
     assert uh.image_kit() == dx.kit_808_rev11()
-    assert uh.image_kit("tree") == dx.kit_808()
+    assert uh.image_kit("tree") == dx.kit_808_rev14()
     assert uh.image_kit("r1") == uh.r1_kit()                  # frozen by value (#323)
     with pytest.raises(ValueError):
         uh.image_kit("r13")

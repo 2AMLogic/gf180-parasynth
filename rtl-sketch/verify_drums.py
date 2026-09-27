@@ -17,7 +17,7 @@ Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
 
   --inject NAME     compile with -DINJECT_BUG_<NAME> (DRUM_ENV_FLOOR, DRUM_LEVEL_TRIG,
                     DRUM_LFSR_TAP, DRUM_TAP_NOSAT, DRUM_LAST_PATH, DRUM_SQ_LONE,
-                    MODAL_NUM_HOLD, MODAL_EXC_NOCLEAR, ...)
+                    DRUM_ENVS_REV14, MODAL_NUM_HOLD, MODAL_EXC_NOCLEAR, ...)
   --jitter K        apply each frame's writes K clocks after its tick (the timing
                     contract's negative control)
   --expect-fail     exit 0 only if the comparison gave 1

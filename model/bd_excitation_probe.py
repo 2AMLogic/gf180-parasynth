@@ -164,17 +164,45 @@ def inside(row, rng) -> bool:
 
 
 # ------------------------------------------------------------ the renders ----
+class _OffMapFx(dx.DrumsFx):
+    """DrumsFx with envelopes the register map has no room for. Since contract
+    revision 15 (DR 0023) ENV ends exactly at PATH, so a 21st envelope's
+    registers would BE PATH[0..3]: `DrumsFx(envs=21)` decodes 0x90..0x93 as
+    envelope 20 and the kit's first paths are lost. Here the write port keeps
+    the shipped map and the extra envelopes are programmed directly -- the
+    hypothetical hardware, not a register image any host could send."""
+
+    def write(self, addr, value):
+        e, self.E = self.E, dx.N_ENV
+        try:
+            super().write(addr, value)
+        finally:
+            self.E = e
+
+
 def render(kit: list, *, coef_seq: bool = True, accent: float = 1.0,
-           dur_s: float = DUR_S, envs: int = dx.N_ENV) -> np.ndarray:
+           dur_s: float = DUR_S, envs: int = dx.N_ENV, extra: dict = None) -> np.ndarray:
     """One BD hit through the block's real write port; the body bus as float
-    (the bus the published row is measured on)."""
-    d = dx.DrumsFx(envs=envs)
+    (the bus the published row is measured on). `extra` programs envelopes at
+    or past `N_ENV` directly, {index: (stop, tau_s, peak)}; they need `envs`
+    to cover them and are not reachable by a register write (`_OffMapFx`)."""
+    extra = extra or {}
+    if any(e >= envs for e in extra):
+        raise ValueError(f"extra envelopes {sorted(extra)} need envs > {max(extra)}")
+    d = _OffMapFx(envs=envs) if envs > dx.N_ENV else dx.DrumsFx(envs=envs)
+    for e, (stop, tau_s, peak) in extra.items():
+        d.envs[e].set_ctl(dx.env_ctl(stop))
+        d.envs[e].peak, d.envs[e].rate = dx.peak_reg(peak), dx.rate_reg(tau_s)
     _, body = d.play(dx.hit_writes([(HIT_FRAME, dx.BD, accent)], kit, coef_seq=coef_seq),
                      int(dur_s * SR))
     return body.astype(np.float64) / 32768.0
 
 
 def _set_env(kit: list, e: int, stop: int, tau_s: float, peak: float, **kw) -> list:
+    if not 0 <= e < dx.N_ENV:
+        # REFUSED rather than aliased: past N_ENV these addresses are PATH's
+        raise ValueError(f"envelope {e} has no registers (N_ENV = {dx.N_ENV}); "
+                         "program it with render(extra=...)")
     new = dict(dx.env_writes(e, stop, tau_s, peak, **kw))
     return [(a, new.get(a, v)) for a, v in kit]
 
@@ -197,13 +225,14 @@ def _set_amp(kit: list, m: int, amp: float) -> list:
 
 def spare_env(kit: list) -> int:
     """An envelope index no path in `kit` reads, or the first index past the
-    shipped bank if all 18 are taken.
+    shipped bank if all N_ENV are taken.
 
-    MEASURED, and it is what approach (a) actually costs: all 18 envelopes are
+    MEASURED, and it is what approach (a) actually costs: every envelope is
     already read by a path, so "add a second envelope segment to E_BDX" is not
-    a register change, it is a 19th envelope. The arm below renders with
-    `DrumsFx(envs=N_ENV + 1)` and says so, rather than borrowing E_BDCLICK and
-    silently changing the click path too.
+    a register change, it is one more envelope -- and since revision 15 one
+    past the end of the address map, so it would move PATH too. The arm below
+    renders with `envs=N_ENV + 1` and `extra=` and says so, rather than
+    borrowing E_BDCLICK and silently changing the click path too.
     """
     used = set()
     for a, v in kit:
@@ -451,11 +480,15 @@ def main(argv=None) -> int:
         print(row_str(f"E_BDX hold {hold} frames", first4(render(bd_kit(hold=hold)), SR)))
     kit = _set_env(dx.kit_808(), dx.E_BDX, dx.BD, KIT_TAU, 0.25)
     sp = spare_env(kit)
-    kit2 = _set_env(kit, sp, dx.BD, 4e-3, 0.06)
+    seg2 = (dx.BD, 4e-3, 0.06)
+    if sp < dx.N_ENV:
+        kit2, extra = _set_env(kit, sp, *seg2), {}
+    else:
+        kit2, extra = kit, {sp: seg2}
     kit2 = _set_path(kit2, dx.P_BDX,
                      dx.path_word(dx.SRC_PULSE, dx.E_BDX, sp, dest=dx.M_BD))
     print(row_str(f"two segments (env {sp}, +1 env)",
-                  first4(render(kit2, envs=max(dx.N_ENV, sp + 1)), SR)))
+                  first4(render(kit2, envs=max(dx.N_ENV, sp + 1), extra=extra), SR)))
     print()
 
     print("=== 3. (a2) THE BD MODE'S UNUSED NUMERATOR -- a bipolar excitation ===")

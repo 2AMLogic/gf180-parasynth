@@ -43,7 +43,7 @@ def _setup(argv):
 
 def test_frozen_kit_is_revision_14_with_a_nonzero_final_strike():
     kit = r1c.frozen_kit()
-    assert len(kit) == r1c.KIT_R14_WRITES and kit == [tuple(w) for w in dx.kit_808()]
+    assert len(kit) == r1c.KIT_R14_WRITES and kit == [tuple(w) for w in dx.kit_808_rev14()]
     addr, val = r1c.clap_final_strike()
     assert addr == FRATE == 0x63 and val != 0
     assert FRATE not in dict(dx.kit_808_rev11())

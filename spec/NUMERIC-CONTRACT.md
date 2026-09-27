@@ -1,11 +1,13 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 14 — 2026-09-26 — status: PROPOSED. Not ratified.**
+**Revision 15 — 2026-09-27 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
 its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
-Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Section 18 has both.
+Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Revision 15 is two
+more envelopes, so each cowbell partial decays at its own rate (15.1, 15.7;
+DR 0023). Section 18 has all three.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -15,7 +17,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 14,
+through the two-key process this fleet uses; until then it is revision 15,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -1424,7 +1426,7 @@ table on one multiplier — in front of the bank, and a kit is a table of
 register values (15.7, Appendix G), not a circuit.
 
 ```
-   stops[11], accent[11] ─► 18 envelopes ─┐           ┌──────────── modal bank, 16 modes ────────────┐
+   stops[11], accent[11] ─► 20 envelopes ─┐           ┌──────────── modal bank, 16 modes ────────────┐
    LFSR ─► NOISE ─┐                      │            │ exc[m] ─► num (RAW | 1−z⁻² | (1−z⁻¹)²) ─► y[m] │
    6 squares ─► SQSUM, SQPAIR ─┼─► 23 paths: v = nl(src) · (ENV(e1)+ENV(e2)) >> (15+att) ─┼─► mix ─► body (Q4.15)
    PULSE ─────────┘  TAP m ◄───┼──────────────────────┴── y1[m] >> 3 ────────────────────┘
@@ -1461,9 +1463,11 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0xB3 + 4m` | `MODE_NUM[m]` | 2 | numerator: 0 RAW, 1 BP, 2 HP, 3 reads as RAW; effective on modes 0..`N_NUMS`−1 only (15.6) |
 | `0xFF` | `RESET` | — | every register and state of this section to 15.8 |
 
-e = 0..17, p = 0..22, m = 0..15. Sizes (`drums_fx.N_*`): **11 stops, 18
+e = 0..19, p = 0..22, m = 0..15. Sizes (`drums_fx.N_*`): **11 stops, 20
 envelopes, 23 paths, 16 modes of which the first 11 (`N_NUMS`) carry a
-numerator**, 6 oscillators.
+numerator**, 6 oscillators. **Revision 15** (DR 0023) took envelopes 18 and 19
+from the gap revision 10 left below `PATH`: `ENV` is `0x40..0x8F` and now ends
+at `PATH`, so a 21st envelope moves `PATH` and `MODE`.
 
 **Revision 10 moved `PATH` and `MODE` and widened `PATH`, and neither was
 cosmetic.** Eighteen envelopes span `0x40..0x87` and collide with `PATH` at
@@ -1743,7 +1747,7 @@ says so:
 | 2 LT, 3 HT | PULSE × 0.1 ms → mode 9 (90 Hz, Q 25) / 10 (185 Hz, Q 25); the host's diode pitch drop sweeps f0 from ×1.06 down over 60 ms, scaled by accent above a threshold and by the TUNING pot (15.7.1) | 9, 10 (RAW) | 4, 5 | f0, Q, **the pitch drop** (reference 4) | no pink-noise rumble (17.14) |
 | 4 CH, 5 OH | SQSUM → mode 0 (BP 7117 Hz, Q 6, amp 0); TAP 0, SWING × envelope → mode 2 (HP 11.7 kHz, Q 2.5) / mode 1 (HP 7.8 kHz, Q 2.5); CH chokes OH | 0 (BP), 1, 2 (HP) | 6 (20 ms), 7 (150 ms, choke 4) | oscillators, BP, HPs, CH τ, the choke | OH τ 150 ms (DECAY mid) |
 | 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 14 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
-| 7 CB | **SQ 4 and SQ 5 on two separate paths**, each SWING × (τ 5 ms at 0.5 + **τ 100 ms** at 0.5) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010) | nothing: the BP centre was 17.16 and is now fitted to a recording (1100 Hz Q 2.8), and the tail is the measured 98 ms |
+| 7 CB | **SQ 4 and SQ 5 on two separate paths, each under its own envelope pair**: 800 Hz SWING × (τ 5 ms + **τ 106.6 ms**, both at 0.5), 540 Hz SWING × (τ 5 ms + **τ 121.4 ms**, both at 0.1652) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 (800 Hz); 18, 19 (540 Hz) | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010), **each line's own τ** (revision 15, DR 0023) | the 540 Hz line's level, from the measured balance trajectory (DR 0023) |
 
 Fourteen of the sixteen paths are used; mode 11 is spare (zero). Levels are
 balanced by `drums_fx_render.py
@@ -2218,6 +2222,27 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 15 (2026-09-27)** — **each cowbell partial decays at its own rate**
+  (15.1, 15.7; DR 0023; issue #107). `N_ENV` 18 → 20: envelopes 18 and 19
+  (`E_CBLA`, `E_CBLB`) at `0x88..0x8F`, the last of the gap below `PATH`; no
+  address moves, no width changes, and the `PATH` word's 5-bit envelope field
+  already reached them. `drum_dp.v`'s envelope stage is 70 clocks per frame
+  (was 68). The kit's 540 Hz path reads the new pair; each line's tail is its
+  own measured τ (800 Hz 106.6 ms, rate 14 → 13; 540 Hz 121.4 ms, rate 11)
+  and the 540 Hz line's level is 0.1652 (was 0.5, shared). Measured on a real
+  TR-808, the balance now falls 15.73 → 11.02 dB from 30 to 400 ms against
+  the machine's 15.35 → 11.33, where revision 14's was flat at 6.5.
+  **KIT808 moves from `321a9354…` to `31e6574a…`, 148 writes → 154**: six
+  new writes (`ENV_CTL/PEAK/RATE[18]` at 0x88..0x8A and `[19]` at
+  0x8C..0x8E), `ENV_RATE[11]` at 0x6E 14 → 13, `PATH[14]` at 0x9E
+  re-pointed from envelopes 10/11 to 18/19, and `MODE_AMP[5]` at 0xC6
+  1426 → 1741 (the band-pass re-balanced to the chart level, ×1.22, because
+  the 540 Hz line is quieter). `test_revision_15_changes_only_the_cowbell_registers`
+  rebuilds revision 14's image by undoing exactly those and requires REV14's
+  hash. A revision-14 image reads envelopes 18/19 as zero and would play the
+  cowbell with its 540 Hz line silent, so hosts send it
+  `drums_fx.kit_808_rev14()`, frozen to that hash.
 
 - **Rev 14 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
   "L2" level frozen and confirmed in `docs/scorecard/clap-d12a/README.md`
@@ -2807,81 +2832,84 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 
 | addr | value | register | | addr | value | register |
 |---:|---:|---|---|---:|---:|---|
-| 0x20 | 0x1184E | OSC_INC[0] | | 0x45 | 0xF5C29 | ENV_PEAK[1] |
-| 0x21 | 0x1F8A1 | OSC_INC[1] | | 0x46 | 0xFFFF | ENV_RATE[1] |
-| 0x22 | 0x19F9C | OSC_INC[2] | | 0x48 | 0xF1 | ENV_CTL[2] |
-| 0x23 | 0x2C9A9 | OSC_INC[3] | | 0x49 | 0x400000 | ENV_PEAK[2] |
-| 0x24 | 0x44444 | OSC_INC[4] | | 0x4A | 0x3025 | ENV_RATE[2] |
-| 0x25 | 0x2E148 | OSC_INC[5] | | 0x4C | 0xF1 | ENV_CTL[3] |
-| 0xB0 | 0x11A9D23 | MODE_A1[0] | | 0x4D | 0x4DFA44 | ENV_PEAK[3] |
-| 0xB1 | 0x324D110 | MODE_A2[0] | | 0x4E | 0x2D | ENV_RATE[3] |
-| 0xB2 | 0x0 | MODE_AMP[0] | | 0x50 | 0xF2 | ENV_CTL[4] |
-| 0xB3 | 0x1 | MODE_NUM[0] | | 0x51 | 0x400000 | ENV_PEAK[4] |
-| 0xB4 | 0xDA1B85 | MODE_A1[1] | | 0x52 | 0x3025 | ENV_RATE[4] |
-| 0xB5 | 0x355D5AE | MODE_A2[1] | | 0x70 | 0xF8 | ? |
-| 0xB6 | 0x7333 | MODE_AMP[1] | | 0x71 | 0x400000 | ? |
-| 0xB7 | 0x2 | MODE_NUM[1] | | 0x72 | 0x3025 | ? |
-| 0xB8 | 0xECC30 | MODE_A1[2] | | 0x54 | 0xF3 | ENV_CTL[5] |
-| 0xB9 | 0x37543CC | MODE_A2[2] | | 0x55 | 0x400000 | ENV_PEAK[5] |
-| 0xBA | 0xB0A4 | MODE_AMP[2] | | 0x56 | 0x3025 | ENV_RATE[5] |
-| 0xBB | 0x2 | MODE_NUM[2] | | 0x58 | 0xF4 | ENV_CTL[6] |
-| 0xBC | 0x1728A19 | MODE_A1[3] | | 0x59 | 0xFFFFFF | ENV_PEAK[6] |
-| 0xBD | 0x366ECC6 | MODE_A2[3] | | 0x5A | 0x44 | ENV_RATE[6] |
-| 0xBE | 0x34B6 | MODE_AMP[3] | | 0x5C | 0x45 | ENV_CTL[7] |
-| 0xBF | 0x1 | MODE_NUM[3] | | 0x5D | 0xFFFFFF | ENV_PEAK[7] |
-| 0xC0 | 0x1E53ED0 | MODE_A1[4] | | 0x5E | 0x9 | ENV_RATE[7] |
-| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x60 | 0x7FF00F6 | ENV_CTL[8] |
-| 0xC2 | 0x0 | MODE_AMP[4] | | 0x61 | 0xB0A3D6 | ENV_PEAK[8] |
-| 0xC3 | 0x1 | MODE_NUM[4] | | 0x62 | 0x154 | ENV_RATE[8] |
-| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x63 | 0x44 | ENV_FRATE[8] |
-| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x64 | 0xF6 | ENV_CTL[9] |
-| 0xC6 | 0x592 | MODE_AMP[5] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
-| 0xC7 | 0x1 | MODE_NUM[5] | | 0x66 | 0x11 | ENV_RATE[9] |
-| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x68 | 0xF7 | ENV_CTL[10] |
-| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x69 | 0x800000 | ENV_PEAK[10] |
-| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6A | 0x110 | ENV_RATE[10] |
-| 0xD3 | 0x0 | MODE_NUM[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
-| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x6D | 0x800000 | ENV_PEAK[11] |
-| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x6E | 0xE | ENV_RATE[11] |
-| 0xD6 | 0xAF | MODE_AMP[9] | | 0x74 | 0xF9 | ? |
-| 0xD7 | 0x0 | MODE_NUM[9] | | 0x75 | 0xF5C29 | ? |
-| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x76 | 0x3025 | ? |
-| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x78 | 0xF9 | ? |
-| 0xDA | 0x245 | MODE_AMP[10] | | 0x79 | 0x57CED9 | ? |
-| 0xDB | 0x0 | MODE_NUM[10] | | 0x7A | 0x3E | ? |
-| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7C | 0xFA | ? |
-| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7D | 0x52F1AA | ? |
-| 0xDE | 0x13B | MODE_AMP[11] | | 0x7E | 0x72 | ? |
-| 0xDF | 0x0 | MODE_NUM[11] | | 0x80 | 0xFA | ? |
-| 0xE0 | 0x1FFBB4C | ? | | 0x81 | 0x6E978D | ? |
-| 0xE1 | 0x300303D | ? | | 0x82 | 0xA | ? |
-| 0xE2 | 0x196 | ? | | 0x84 | 0xFA | ? |
-| 0xE3 | 0x0 | ? | | 0x85 | 0x161E4F | ? |
-| 0xE4 | 0x1FF9A1F | ? | | 0x86 | 0x3 | ? |
-| 0xE5 | 0x3003F74 | ? | | 0x90 | 0x807803 | PATH[0] |
-| 0xE6 | 0x28B | ? | | 0x91 | 0x1F07823 | PATH[1] |
-| 0xE7 | 0x0 | ? | | 0x92 | 0x907843 | PATH[2] |
-| 0xE8 | 0x1FCD356 | ? | | 0x93 | 0xA07843 | PATH[3] |
-| 0xE9 | 0x30243FF | ? | | 0x94 | 0x307861 | PATH[4] |
-| 0xEA | 0x0 | ? | | 0x95 | 0xB07883 | PATH[5] |
-| 0xEB | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
-| 0xEC | 0x1EDC70C | ? | | 0x97 | 0xD078A3 | PATH[7] |
-| 0xED | 0x3046527 | ? | | 0x98 | 0x7BE2 | PATH[8] |
-| 0xEE | 0x0 | ? | | 0x99 | 0x20F8D0 | PATH[9] |
-| 0xEF | 0x0 | ? | | 0x9A | 0x10F8F0 | PATH[10] |
-| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x9B | 0x407BE1 | PATH[11] |
-| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9C | 0x1F12514 | PATH[12] |
-| 0xCA | 0x0 | MODE_AMP[6] | | 0x9D | 0x50AD49 | PATH[13] |
-| 0xCB | 0x1 | MODE_NUM[6] | | 0x9E | 0x50AD4A | PATH[14] |
-| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9F | 0xE079A3 | PATH[15] |
-| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA0 | 0xF079A3 | ? |
-| 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA1 | 0x1F0F9DE | ? |
-| 0xCF | 0x1 | MODE_NUM[7] | | 0xA2 | 0x1F0F9DF | ? |
-| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA3 | 0x607BE2 | ? |
-| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA4 | 0x20F9F0 | ? |
-| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA5 | 0x70FA10 | ? |
-| 0x44 | 0x30F0 | ENV_CTL[1] | | 0xA6 | 0x1F0FA36 | ? |
+| 0x20 | 0x1184E | OSC_INC[0] | | 0x49 | 0x400000 | ENV_PEAK[2] |
+| 0x21 | 0x1F8A1 | OSC_INC[1] | | 0x4A | 0x3025 | ENV_RATE[2] |
+| 0x22 | 0x19F9C | OSC_INC[2] | | 0x4C | 0xF1 | ENV_CTL[3] |
+| 0x23 | 0x2C9A9 | OSC_INC[3] | | 0x4D | 0x4DFA44 | ENV_PEAK[3] |
+| 0x24 | 0x44444 | OSC_INC[4] | | 0x4E | 0x2D | ENV_RATE[3] |
+| 0x25 | 0x2E148 | OSC_INC[5] | | 0x50 | 0xF2 | ENV_CTL[4] |
+| 0xB0 | 0x11A9D23 | MODE_A1[0] | | 0x51 | 0x400000 | ENV_PEAK[4] |
+| 0xB1 | 0x324D110 | MODE_A2[0] | | 0x52 | 0x3025 | ENV_RATE[4] |
+| 0xB2 | 0x0 | MODE_AMP[0] | | 0x70 | 0xF8 | ? |
+| 0xB3 | 0x1 | MODE_NUM[0] | | 0x71 | 0x400000 | ? |
+| 0xB4 | 0xDA1B85 | MODE_A1[1] | | 0x72 | 0x3025 | ? |
+| 0xB5 | 0x355D5AE | MODE_A2[1] | | 0x54 | 0xF3 | ENV_CTL[5] |
+| 0xB6 | 0x7333 | MODE_AMP[1] | | 0x55 | 0x400000 | ENV_PEAK[5] |
+| 0xB7 | 0x2 | MODE_NUM[1] | | 0x56 | 0x3025 | ENV_RATE[5] |
+| 0xB8 | 0xECC30 | MODE_A1[2] | | 0x58 | 0xF4 | ENV_CTL[6] |
+| 0xB9 | 0x37543CC | MODE_A2[2] | | 0x59 | 0xFFFFFF | ENV_PEAK[6] |
+| 0xBA | 0xB0A4 | MODE_AMP[2] | | 0x5A | 0x44 | ENV_RATE[6] |
+| 0xBB | 0x2 | MODE_NUM[2] | | 0x5C | 0x45 | ENV_CTL[7] |
+| 0xBC | 0x1728A19 | MODE_A1[3] | | 0x5D | 0xFFFFFF | ENV_PEAK[7] |
+| 0xBD | 0x366ECC6 | MODE_A2[3] | | 0x5E | 0x9 | ENV_RATE[7] |
+| 0xBE | 0x34B6 | MODE_AMP[3] | | 0x60 | 0x7FF00F6 | ENV_CTL[8] |
+| 0xBF | 0x1 | MODE_NUM[3] | | 0x61 | 0xB0A3D6 | ENV_PEAK[8] |
+| 0xC0 | 0x1E53ED0 | MODE_A1[4] | | 0x62 | 0x154 | ENV_RATE[8] |
+| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x63 | 0x44 | ENV_FRATE[8] |
+| 0xC2 | 0x0 | MODE_AMP[4] | | 0x64 | 0xF6 | ENV_CTL[9] |
+| 0xC3 | 0x1 | MODE_NUM[4] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
+| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x66 | 0x11 | ENV_RATE[9] |
+| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x68 | 0xF7 | ENV_CTL[10] |
+| 0xC6 | 0x6CD | MODE_AMP[5] | | 0x69 | 0x800000 | ENV_PEAK[10] |
+| 0xC7 | 0x1 | MODE_NUM[5] | | 0x6A | 0x110 | ENV_RATE[10] |
+| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
+| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x6D | 0x800000 | ENV_PEAK[11] |
+| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6E | 0xD | ENV_RATE[11] |
+| 0xD3 | 0x0 | MODE_NUM[8] | | 0x74 | 0xF9 | ? |
+| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x75 | 0xF5C29 | ? |
+| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x76 | 0x3025 | ? |
+| 0xD6 | 0xAF | MODE_AMP[9] | | 0x78 | 0xF9 | ? |
+| 0xD7 | 0x0 | MODE_NUM[9] | | 0x79 | 0x57CED9 | ? |
+| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x7A | 0x3E | ? |
+| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x7C | 0xFA | ? |
+| 0xDA | 0x245 | MODE_AMP[10] | | 0x7D | 0x52F1AA | ? |
+| 0xDB | 0x0 | MODE_NUM[10] | | 0x7E | 0x72 | ? |
+| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x80 | 0xFA | ? |
+| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x81 | 0x6E978D | ? |
+| 0xDE | 0x13B | MODE_AMP[11] | | 0x82 | 0xA | ? |
+| 0xDF | 0x0 | MODE_NUM[11] | | 0x84 | 0xFA | ? |
+| 0xE0 | 0x1FFBB4C | ? | | 0x85 | 0x161E4F | ? |
+| 0xE1 | 0x300303D | ? | | 0x86 | 0x3 | ? |
+| 0xE2 | 0x196 | ? | | 0x88 | 0xF7 | ? |
+| 0xE3 | 0x0 | ? | | 0x89 | 0x2A4A8C | ? |
+| 0xE4 | 0x1FF9A1F | ? | | 0x8A | 0x110 | ? |
+| 0xE5 | 0x3003F74 | ? | | 0x8C | 0xF7 | ? |
+| 0xE6 | 0x28B | ? | | 0x8D | 0x2A4A8C | ? |
+| 0xE7 | 0x0 | ? | | 0x8E | 0xB | ? |
+| 0xE8 | 0x1FCD356 | ? | | 0x90 | 0x807803 | PATH[0] |
+| 0xE9 | 0x30243FF | ? | | 0x91 | 0x1F07823 | PATH[1] |
+| 0xEA | 0x0 | ? | | 0x92 | 0x907843 | PATH[2] |
+| 0xEB | 0x0 | ? | | 0x93 | 0xA07843 | PATH[3] |
+| 0xEC | 0x1EDC70C | ? | | 0x94 | 0x307861 | PATH[4] |
+| 0xED | 0x3046527 | ? | | 0x95 | 0xB07883 | PATH[5] |
+| 0xEE | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
+| 0xEF | 0x0 | ? | | 0x97 | 0xD078A3 | PATH[7] |
+| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x98 | 0x7BE2 | PATH[8] |
+| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x99 | 0x20F8D0 | PATH[9] |
+| 0xCA | 0x0 | MODE_AMP[6] | | 0x9A | 0x10F8F0 | PATH[10] |
+| 0xCB | 0x1 | MODE_NUM[6] | | 0x9B | 0x407BE1 | PATH[11] |
+| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9C | 0x1F12514 | PATH[12] |
+| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0x9D | 0x50AD49 | PATH[13] |
+| 0xCE | 0xFFFF | MODE_AMP[7] | | 0x9E | 0x50CE4A | PATH[14] |
+| 0xCF | 0x1 | MODE_NUM[7] | | 0x9F | 0xE079A3 | PATH[15] |
+| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA0 | 0xF079A3 | ? |
+| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA1 | 0x1F0F9DE | ? |
+| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA2 | 0x1F0F9DF | ? |
+| 0x44 | 0x30F0 | ENV_CTL[1] | | 0xA3 | 0x607BE2 | ? |
+| 0x45 | 0xF5C29 | ENV_PEAK[1] | | 0xA4 | 0x20F9F0 | ? |
+| 0x46 | 0xFFFF | ENV_RATE[1] | | 0xA5 | 0x70FA10 | ? |
+| 0x48 | 0xF1 | ENV_CTL[2] | | 0xA6 | 0x1F0FA36 | ? |
 
-SHA-256 of the 148 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683`
+SHA-256 of the 154 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `31e6574a43411ead201dc2ba9caede2c18f9f29ef714c666268b9863ff3793e7`
 
 <!-- END GENERATED APPENDICES -->

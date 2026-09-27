@@ -130,16 +130,17 @@ def test_no_non_negative_exciter_envelope_reaches_the_machines_low_band(tau_s, h
 
 def test_adding_a_second_envelope_segment_costs_an_envelope_and_buys_nothing():
     """Approach (a) as issue #21 proposes it. Two things are asserted: that
-    all 18 envelopes are already read by a path (so this is a 19th envelope of
-    real area, not a register change), and that spending it does not move the
-    measurement."""
+    every envelope is already read by a path (so this is one more envelope of
+    real area, not a register change -- and since revision 15 one past the end
+    of the address map), and that spending it does not move the measurement."""
     kit = dx.kit_808()
     sp = bx.spare_env(kit)
     assert sp == dx.N_ENV, f"an envelope is spare ({sp}); (a)'s cost has changed"
-    kit = bx._set_env(kit, sp, dx.BD, 4e-3, 0.06)
+    with pytest.raises(ValueError):
+        bx._set_env(kit, sp, dx.BD, 4e-3, 0.06)       # its registers would be PATH's
     kit = bx._set_path(kit, dx.P_BDX,
                        dx.path_word(dx.SRC_PULSE, dx.E_BDX, sp, dest=dx.M_BD))
-    row = bx.first4(bx.render(kit, envs=sp + 1), bx.SR)
+    row = bx.first4(bx.render(kit, envs=sp + 1, extra={sp: (dx.BD, 4e-3, 0.06)}), bx.SR)
     assert row[bx.LOW] > 10 * MACHINE["hi"][bx.LOW], row
 
 

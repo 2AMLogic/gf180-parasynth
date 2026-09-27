@@ -1,0 +1,32 @@
+        falls from 30 to 400 ms by the machine's 4.0 dB to within 1.5."""
+        bal = _balance("shipped")
+        bad = trajectory_failures(bal)
+        table = "  ".join(f"{t*1e3:.0f}ms {bal[t]:.2f}/{REF_BALANCE_DB[t]:.2f}" for t in REF_BALANCE_DB)
+>       assert not bad, f"ours/machine: {table}; " + "; ".join(bad)
+E       AssertionError: ours/machine: 30ms 6.50/15.35  60ms 6.54/14.86  100ms 6.58/14.58  200ms 6.57/14.17  300ms 6.58/12.87  400ms 6.56/11.33; at 30 ms ours 6.50 dB vs machine 15.35 (-8.85); at 100 ms ours 6.58 dB vs machine 14.58 (-8.00); at 400 ms ours 6.56 dB vs machine 11.33 (-4.77); fall 30->400 ms is -0.07 dB, the machine's 4.02
+E       assert not ['at 30 ms ours 6.50 dB vs machine 15.35 (-8.85)', 'at 100 ms ours 6.58 dB vs machine 14.58 (-8.00)', 'at 400 ms ours 6.56 dB vs machine 11.33 (-4.77)', "fall 30->400 ms is -0.07 dB, the machine's 4.02"]
+
+model/test_cowbell_partial_decay.py:138: AssertionError
+______________ test_each_partial_decays_at_the_machines_own_rate _______________
+
+    def test_each_partial_decays_at_the_machines_own_rate():
+        """[hardware-measured] Each line's own tau over 30-400 ms within 10 % of
+        the machine's, and the low line rings longer by the machine's ratio."""
+        x, sr = _render("shipped")
+        fit = mpb.partial_decay(x, sr)
+        for tag in ("lo", "hi"):
+            assert fit[tag]["ok"], f"{tag}: REFUSED {fit[tag]['reason']}"
+            got, want = fit[tag]["tau_ms"], REF_TAU_MS[tag]
+>           assert abs(got / want - 1) <= TAU_TOL, f"{tag} tau {got:.1f} ms, machine {want:.1f}"
+E           AssertionError: lo tau 97.8 ms, machine 121.4
+E           assert 0.19410856748783478 <= 0.1
+E            +  where 0.19410856748783478 = abs(((97.83521990697686 / 121.4) - 1))
+
+model/test_cowbell_partial_decay.py:149: AssertionError
+=========================== short test summary info ============================
+FAILED model/test_cowbell_partial_decay.py::test_the_two_partials_are_on_disjoint_envelopes
+FAILED model/test_cowbell_partial_decay.py::test_balance_follows_the_machine_over_the_note
+FAILED model/test_cowbell_partial_decay.py::test_each_partial_decays_at_the_machines_own_rate
+3 failed, 3 passed in 350.89s (0:05:50)
+python3 -m pytest model/test_cowbell_partial_decay.py -q -p no:cacheprovider   85.88s user 3.77s system 25% cpu 5:55.22 total
+tail -30  0.00s user 0.01s system 0% cpu 5:55.22 total

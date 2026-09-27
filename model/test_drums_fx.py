@@ -427,7 +427,12 @@ def test_every_legal_register_value_runs():
     writes.append((200, dx.A_RESET, 0))
     writes += [(201, a, v) for a, v in dx.kit_808()]
     dm, bd = d.play(sorted(writes, key=lambda t: t[0]), 400)
-    assert np.abs(dm).max() < (1 << 21) and np.abs(bd).max() < (1 << 18)
+    # signed ranges, not magnitudes: the 19-bit body bus legally reaches
+    # -2^18 at its negative rail, which `abs(bd) < 2^18` called a width
+    # violation. Revision 15's two extra envelopes moved this seeded sequence
+    # onto that rail for the first time (#107).
+    assert -(1 << 21) <= dm.min() and dm.max() < (1 << 21)
+    assert -(1 << 18) <= bd.min() and bd.max() < (1 << 18)
     assert all(0 <= e.level <= FULL24 and 0 <= e.t <= 2047 for e in d.envs)
     assert all(-(1 << 27) <= y < (1 << 27) for y in d.bank.y1 + d.bank.y2)
     assert np.abs(d.trace["exc"]).max() < (1 << 20)
@@ -544,7 +549,11 @@ def test_cowbell_gates_each_oscillator_separately():
     assert len(cb) == 2, f"expected one path per cowbell oscillator, got {len(cb)}"
     srcs = sorted(w & 31 for w in cb)
     assert srcs == [dx.SRC_SQ + dx.SQPAIR[0], dx.SRC_SQ + dx.SQPAIR[1]], srcs
-    assert all(((w >> 13) & 3) == dx.NL_SWING for w in cb)
+    # nl is PATH[16:15] since revision 10. This read `(w >> 13) & 3` -- the
+    # revision-8 offset, which since revision 10 is the top two bits of e2 --
+    # and passed only because E_CBB = 11 = 0b01011 happens to put 1 there.
+    # Revision 15 put the 540 Hz path on e2 = 19 and exposed it (#107).
+    assert all(((w >> 15) & 3) == dx.NL_SWING for w in cb)
     assert not any((w & 31) == dx.SRC_SQPAIR for w in paths), "SRC_SQPAIR is the defect"
 
 
@@ -592,15 +601,18 @@ def test_gating_the_sum_makes_a_difference_tone_and_gating_each_does_not():
 
 
 def test_cowbell_tail_and_band_pass_are_the_fitted_ones():
-    """MEASURED: the reference cowbell's tail is tau = 98 ms (fit over
-    -3..-30 dB), not 30; and a 2-pole band-pass fitted to 16 identified
-    partials lands at 1100 Hz Q 2.8, not 900 Hz Q 4."""
+    """MEASURED: the reference cowbell's tail is not 30 ms -- 98 ms on the
+    summed signal (DR 0010), and per line 106.6 ms at 800 Hz and 121.4 ms at
+    540 Hz (DR 0023, revision 15), each line's on its own envelope; and a
+    2-pole band-pass fitted to 16 identified partials lands at 1100 Hz Q 2.8,
+    not 900 Hz Q 4."""
     kit = dict(dx.kit_808())
     mask = (1 << 26) - 1
     a1, a2 = pole_regs(1100.0, 2.8)
     assert kit[dx.A_MODE + dx.M_CBBP * dx.MODE_STRIDE] == (a1 & mask)
     assert kit[dx.A_MODE + dx.M_CBBP * dx.MODE_STRIDE + 1] == (a2 & mask)
-    assert kit[dx.A_ENV + dx.E_CBB * dx.ENV_STRIDE + 2] == dx.rate_reg(100e-3)
+    assert kit[dx.A_ENV + dx.E_CBB * dx.ENV_STRIDE + 2] == dx.rate_reg(106.6e-3) == 13
+    assert kit[dx.A_ENV + dx.E_CBLB * dx.ENV_STRIDE + 2] == dx.rate_reg(121.4e-3) == 11
 
 
 def test_bd_pitch_is_the_reference_circuits_not_roland_s_chart():

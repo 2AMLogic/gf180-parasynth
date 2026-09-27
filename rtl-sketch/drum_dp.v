@@ -19,9 +19,15 @@
 //             added to the mix bus or pushed to the bank's exc register of
 //             its destination mode (15.5)
 //   drain     the last path's value; then bank_start, mix_out, mix_valid
-// 1 + ENVS + 1 + 2*PATHS + 2 = 68 clocks for 18 envelopes and 23 paths
-// (tb_drums.v measures it), before the bank's 3*MODES+2 = 50. 118 of the
+// 1 + ENVS + 1 + 2*PATHS + 2 = 70 clocks for 20 envelopes and 23 paths
+// (tb_drums.v measures it), before the bank's 3*MODES+2 = 50. 120 of the
 // frame's 256 (ARCHITECTURE 5), and synth_top's `overrun` flag watches it.
+//
+// REVISION 15 (#107, DR 0023) is ENVS 18 -> 20 and nothing else in this file:
+// the cowbell's two partials each get their own envelope pair, because the
+// machine's two lines decay at different rates. INJECT_BUG_DRUM_ENVS_REV14
+// reads indices 18 and 19 as zero -- revision 14's decode -- so the bench must
+// show it exercises the envelopes this revision added.
 //
 // REVISION 10 widened the PATH word from 22 bits to 25: the envelope fields
 // and the destination field are 5 bits each. At 4 bits the block could
@@ -42,7 +48,7 @@
 // from frame_tick until body_valid. frame_tick is ignored while busy.
 `default_nettype none
 module drum_dp #(
-    parameter ENVS     = 18,
+    parameter ENVS     = 20,
     parameter PATHS    = 23,
     parameter MODES    = 16,
     parameter STOPS    = 11,
@@ -243,8 +249,15 @@ module drum_dp #(
     wire signed [15:0] t0 = rom[tidx];
     wire signed [15:0] t1 = rom[tidx1];
     wire [15:0] tdelta = t1 - t0;
+`ifdef INJECT_BUG_DRUM_ENVS_REV14
+    // NEGATIVE CONTROL: revision 14's 18-envelope decode -- the two envelopes
+    // revision 15 added read as zero, so the cowbell's low partial is silent
+    wire [14:0] env1 = (p_e1 < 18) ? level[p_e1[EI-1:0]][23:9] : (p_e1 == ENV_FULL) ? 15'd32767 : 15'd0;
+    wire [14:0] env2 = (p_e2 < 18) ? level[p_e2[EI-1:0]][23:9] : (p_e2 == ENV_FULL) ? 15'd32767 : 15'd0;
+`else
     wire [14:0] env1 = (p_e1 < ENVS) ? level[p_e1[EI-1:0]][23:9] : (p_e1 == ENV_FULL) ? 15'd32767 : 15'd0;
     wire [14:0] env2 = (p_e2 < ENVS) ? level[p_e2[EI-1:0]][23:9] : (p_e2 == ENV_FULL) ? 15'd32767 : 15'd0;
+`endif
     wire [15:0] envsum = {1'b0, env1} + {1'b0, env2};
     reg  signed [15:0] t0_q;  reg tneg_q, tsat_q;  reg [1:0] nl_q;  reg signed [15:0] slin_q;
     reg  [15:0] envsum_q;  reg [2:0] att_q, att_c;  reg [4:0] dest_q, dest_c;

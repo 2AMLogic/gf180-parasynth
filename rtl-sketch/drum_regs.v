@@ -13,7 +13,7 @@
 //   0x20 + i  OSC_INC[i]      24 u     i = 0..5
 //   0x40 + 4e ENV_CTL[e]      27       e = 0..ENVS-1   <- 27 bits: the register that
 //   0x41 + 4e ENV_PEAK[e]     24 u                        does not fit a 24-bit datum
-//   0x42 + 4e ENV_RATE[e]     16 u        (18 envelopes: 0x40..0x87)
+//   0x42 + 4e ENV_RATE[e]     16 u        (20 envelopes: 0x40..0x8F, up to PATH)
 //   0x43 + 4e ENV_FRATE[e]    16 u     revision 14: the final strike's rate (15.3); 0 = off
 //   0x90 + p  PATH[p]         25       p = 0..PATHS-1  (23 paths: 0x90..0xA6)
 //   0xB0 + 4m MODE_A1[m]      26 s     m = 0..MODES-1  <- 26 bits, likewise
@@ -44,7 +44,7 @@
 // programmed, so a chip that is never told about drums makes none.
 `default_nettype none
 module drum_regs #(
-    parameter ENVS  = 18,
+    parameter ENVS  = 20,             // revision 15 (#107): 18 -> 20, the cowbell's low-partial pair
     parameter PATHS = 23,
     parameter MODES = 16,
     parameter STOPS = 11

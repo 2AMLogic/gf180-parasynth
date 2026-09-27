@@ -135,6 +135,13 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 # on the tree's kit cannot change what an R1 board is sent. `tree` stays the
 # development selector: whatever this tree builds. `release` and no --image
 # stay R0 (plan092: the public default does not flip).
+#
+# `tree` is the newest BUILT image, not the newest contract. Revision 15 (#107,
+# DR 0023) added two envelopes for the cowbell, and no image has been built
+# from it: a revision-14 board reads envelopes 18/19 as zero, so revision 15's
+# kit would play its cowbell with the 540 Hz line silent, while revision 14's
+# kit is valid on either. `tree` therefore stays 14 (`drums_fx.kit_808_rev14`,
+# frozen by hash) until a revision-15 image exists and is named here.
 IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14}
 DEFAULT_IMAGE = "release"
 # the images whose sessions start from the known state (voice + drum RESET)
@@ -160,7 +167,8 @@ def r1_kit() -> list:
 def image_kit(image: str = DEFAULT_IMAGE) -> list:
     """The drum kit `image` plays. The frozen revision-11 kit (R0) and R1's
     frozen kit REFUSE (drums_fx.KitRefused) if they no longer hash to the image
-    they were verified with; `tree` is this tree's kit_808()."""
+    they were verified with; `tree` is the kit of IMAGE_REVISION['tree'] (14:
+    `kit_808_rev14`, until a revision-15 image is built)."""
     import drums_fx as dx
     if image not in IMAGE_REVISION:
         raise ValueError(f"image {image!r} is not one of {sorted(IMAGE_REVISION)}")
