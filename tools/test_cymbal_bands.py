@@ -99,4 +99,5 @@ def test_hp3_numerator_is_the_third_difference():
     import modal_fixed as mf
     b = mf.ModalFx(modes=1, nums=1, headroom=0, out_bits=28)
     y = [b.step([v], [(0, 0, 65535)], num=[mf.HP3]) for v in (1000, 0, 0, 0, 0)]
-    assert [round(v / y[0], 3) for v in y] == [1.0, -3.0, 3.0, -1.0, 0.0]
+    # amp 65535/65536 floors each output by at most one LSB
+    assert all(abs(v - w * 1000) <= 1 for v, w in zip(y, (1, -3, 3, -1, 0))), y

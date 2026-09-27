@@ -43,7 +43,7 @@ AMP_MAX = 65535 / 65536
 
 def calibrate() -> dict:
     shipped = dx.kit_808()
-    unit = cc.candidate_kit({cc.M_CYH1: 0.25, dx.M_CYHI: 0.25, cc.M_CYH3B: 0.25})
+    unit = sorted(_variant(dict(cc.candidate_kit({cc.M_CYH1: 0.25, dx.M_CYHI: 0.25, cc.M_CYH3B: 0.25}))).items())
     out, amps = {}, {}
     for band in ("low", "decay", "short"):
         ys, sr = cc.render_shipped(cc.band_only(shipped, band), "CY")
@@ -75,10 +75,26 @@ def _abs_third(y, sr, fc):
     return float(np.sum(x * x))
 
 
+VARIANT = "full"
+
+
+def _variant(d):
+    """Diagnostic ablation of the fixed candidate (not a selection): 'notilt'
+    removes the level-stage differentiator -- Hh1 and Hh2 back to HP, and Hh3's
+    1-pole stage made a pass-through (the bank has no (1 - z^-1) numerator, so
+    Hh3 is its 2-pole alone there)."""
+    if VARIANT == "notilt":
+        for m in (cc.M_CYH1, dx.M_CYHI):
+            d[dx.A_MODE + m * dx.MODE_STRIDE + 3] = cc.HP
+        base = dx.A_MODE + cc.M_CYH3B * dx.MODE_STRIDE
+        d[base], d[base + 1], d[base + 3] = 0, 0, 0
+    return d
+
+
 def kit_with_levels(amps, sound="CY"):
     k = cc.candidate_kit({m: v for m, v in amps.items() if isinstance(m, int)},
                          kit=dx.kit_with_sounds(sound))
-    d = dict(k)
+    d = _variant(dict(k))
     for band, e in LEVEL_ENV.items():
         if f"E_{band}" in amps:
             d[dx.A_ENV + e * dx.ENV_STRIDE + 1] = dx.peak_reg(amps[f"E_{band}"])
@@ -102,7 +118,10 @@ def main(argv=None):
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--wavs", type=pathlib.Path, default=None, help="write shipped/candidate CY renders here")
+    ap.add_argument("--variant", choices=("full", "notilt"), default="full")
     a = ap.parse_args(argv)
+    global VARIANT
+    VARIANT = a.variant
     refs = pathlib.Path(a.refs)
     cal = calibrate()
     print("levels:", json.dumps({k: {kk: round(vv, 5) for kk, vv in v.items()} for k, v in cal["per_band"].items()}))
@@ -112,7 +131,7 @@ def main(argv=None):
     yc, _ = cc.render(kit_with_levels(cal["amps"]), "CY")
     rx, rsr = cb._load(refs / "cy8" / "CY5025.WAV")
     P = lambda y, s, side: rc.prepare(y, s, side=side)
-    res = {"levels": cal, "preservation": pres, "bands": {}, "thirds": {}}
+    res = {"variant": VARIANT, "levels": cal, "preservation": pres, "bands": {}, "thirds": {}}
     for label, (y, s) in {"fischer_CY5025": (rx, rsr), "shipped": (ys, sr), "candidate": (yc, sr)}.items():
         res["bands"][label] = cb.measure(P(y, s, label), s)
     for w, (t0, t1) in {"0-50ms": (0.0, 0.05), "50-300ms": (0.05, 0.3), "300-1000ms": (0.3, 1.0)}.items():
@@ -130,7 +149,7 @@ def main(argv=None):
         from scipy.io import wavfile
         a.wavs.mkdir(parents=True, exist_ok=True)
         for name, y in (("shipped", ys), ("candidate", yc)):
-            wavfile.write(a.wavs / f"CY5025-{name}.wav", sr, np.clip(y * 32767, -32768, 32767).astype(np.int16))
+            wavfile.write(a.wavs / f"CY5025-{name}{'' if VARIANT == 'full' or name == 'shipped' else '-' + VARIANT}.wav", sr, np.clip(y * 32767, -32768, 32767).astype(np.int16))
     res["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     res["sources_dirty"] = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"], cwd=ROOT).returncode != 0
     a.out.parent.mkdir(parents=True, exist_ok=True)
