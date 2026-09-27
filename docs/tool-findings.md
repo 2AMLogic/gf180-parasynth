@@ -26,6 +26,15 @@ Scope of this pass: filing target was `2AMLogic/klayout-tools`. Findings whose
 upstream is a different project are recorded below with the correct home named,
 not filed in the wrong repository.
 
+**Later passes, other upstreams.** This document is the 2026-09-18
+klayout-tools comb and is not extended in place. Findings against the other
+upstream named in `CLAUDE.md`, `rjwalters/loom`, live in their own dated
+write-ups:
+
+| pass | finding | filed |
+|---|---|---|
+| [`loom-orphan-reap-2026-09-27.md`](loom-orphan-reap-2026-09-27.md) | orphan reaping is uid-blind: a dockerd-started (root-owned) orphan survives every Loom SIGKILL with EPERM, is logged as "uninterruptible I/O", and binds no dispatch decision | [rjwalters/loom#9160](https://github.com/rjwalters/loom/issues/9160) |
+
 ---
 
 ## 1. Filed
