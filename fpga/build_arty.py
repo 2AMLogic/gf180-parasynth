@@ -23,9 +23,9 @@ CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 # The images this builder can build, by configuration. R1 is the default and
 # every existing path (R1's records, the publisher's R1 checks) uses it
 # unchanged; the R2 candidate adds PULSE2X=1 (#333, fpga/release/R2.md).
-IMAGE_CONFIGS = {"r1": CONFIG, "r2-candidate": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}}
+IMAGE_CONFIGS = {"r1": CONFIG, "r2": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}}
 IMAGE_VERIFICATION = {"r1": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
-                      "r2-candidate": ROOT / "fpga/reports/arty/r2-candidate-clean/verification.json"}
+                      "r2": ROOT / "fpga/reports/arty/r2-clean/verification.json"}
 
 
 def config_defines(config) -> list:

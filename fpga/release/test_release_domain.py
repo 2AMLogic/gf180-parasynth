@@ -227,8 +227,8 @@ def test_pulse2x_rejected_on_every_pulse2x_0_image(image):
 
 def test_pulse2x_admitted_on_the_r2_candidate_only():
     """#333: the R2 candidate is built PULSE2X=1 (fpga/release/R2.md)."""
-    assert qd.PULSE2X_IMAGES == {"r2-candidate"}
-    s = qd.check_patch(DEFAULT, pulse2x=True, image="r2-candidate")
+    assert qd.PULSE2X_IMAGES == {"r2"}
+    s = qd.check_patch(DEFAULT, pulse2x=True, image="r2")
     assert s == qd.check_patch(DEFAULT)          # every other rule is unchanged
 
 

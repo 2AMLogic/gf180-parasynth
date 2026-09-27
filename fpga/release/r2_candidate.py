@@ -56,7 +56,7 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "rtl-sketch"):
 RECORD = HERE / "r2-candidate.json"
 EVIDENCE = ROOT / "fpga/reports/r2-candidate/summary.json"
 NAME = "R2 candidate"
-IMAGE = "r2-candidate"                      # qualified_domain.PULSE2X_IMAGES
+IMAGE = "r2"                                # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
 DEFINES = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "VOICE_PULSE_2X"]
 STATUS = ("DRAFT -- not frozen, no image built. The set is settled (operator, #282/#355): "

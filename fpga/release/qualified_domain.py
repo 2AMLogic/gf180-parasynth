@@ -147,7 +147,7 @@ def mod_octaves(mroute: int, mwheel: int, mpd: int) -> float:
 # are PULSE2X=0 and keep refusing it; the R2 candidate (#333: pulse2x fixes the
 # M5A/M5B foldback, fpga/release/R2.md) admits it. An image is named here only
 # once its candidate record states PULSE2X=1 -- test_release_domain holds both.
-PULSE2X_IMAGES = frozenset({"r2-candidate"})
+PULSE2X_IMAGES = frozenset({"r2"})
 
 
 def check_patch(regs: dict, *, name: str = "patch", pulse2x: bool = False,
