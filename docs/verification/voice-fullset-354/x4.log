@@ -1,0 +1,14 @@
+headroom (model): {"ladder_y19_abs": 29958, "mixed_abs": 29679, "out_abs": 13482, "vca_abs": 29958, "ladder_margin_db": 18.84}
+verify_voice: model VoiceFx() (contract rev 4), scenario set 'full'
+  [extremes] d_dec = 0 with sus = 0 (DECAY holds at FULL) and sus = FULL (SUSTAIN at once): frames 0..499 (500), 5 writes; blep windows 9; gate on 500/500, trig 1
+  500 frames, 35 register writes; final amp level 16777215, filt level 16777215
+verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 500 frames, 35 writes at the register port
+  sim: tb_voice: 35 writes, 500 frames, 0 sample mismatches, worst |error| 0 LSB
+  sim: tb_voice: cycles from go to sample_valid: best 128, mean 128, worst 191 (chip: go at cycle 8 of 256)
+  sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 200 (sample slack 54 to cycle 254); worst last-busy cycle 199 (busy slack 56 to cycle 255); late samples 0
+  sim: tb_voice: PASS
+  sim: tb_voice.v:253: $finish called at 2565231000 (1ps)
+verify_voice: cycles from go to sample_valid: best 128, mean 128.2, worst 191 (of 256 - 8 in the chip)
+  [extremes] 500 frames: 0 sample mismatches, 0 tap mismatches
+verify_voice: PASS -- 500 frames, every sample and every tap identical to the model; final state identical
+verify_voice: deadline at launch cycle 8: worst strobe cycle 200 (slack 54), worst last-busy cycle 199 (slack 56)

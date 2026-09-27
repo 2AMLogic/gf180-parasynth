@@ -60,6 +60,22 @@ the test suite runs; --only picks by key):
              07-growl-bass and 08-self-osc-whistle through KeyHost (the first
              0.8 s of each) -- full set only
 
+SCOPE (#354). This bench deliberately exceeds R1's qualified domain
+(fpga/release/qualified_domain.py): almost every scenario uses waveform sets,
+drives, resonances or register words the release host cannot send
+(`tools/verify_voice_scoped.py --classify-full` lists each and its rule). Its
+job is component equivalence over the whole register space, not a statement
+about supported play. KNOWN FAILURE, OUT OF DOMAIN: with --osc2x --filter2x
+the all-maximum `extremes` image (inc 2^24-1, k 131071, gain/ogain 2^20-1,
+vol 65535) diverges at the ladder's 19-bit rail (frame 62: model -262119,
+RTL -262144) and the output rails with opposite signs. Every scenario runs on
+ONE continuing voice, so that divergence is CARRIED into the later scenarios:
+`--only audition` alone passes bit-exact (115,200 frames, with and without
+--pulse2x), and so does an in-domain stress of all three R1 presets at the
+live controllers' limits (`verify_voice_scoped.py --domain`, 144,000 frames).
+A full-set FAIL is therefore not evidence of an in-domain defect -- and a
+full-set PASS remains the goal: the out-of-domain divergence is open in #354.
+
 Exit status (a CI job asserting that a negative control fails must require
 exactly 1):
   0  every sample and every tap identical, final state identical
