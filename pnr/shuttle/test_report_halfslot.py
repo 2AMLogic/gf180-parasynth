@@ -127,3 +127,44 @@ def test_router_section_refuses_when_the_sources_disagree(tmp_path):
     r = _router_run(tmp_path, LOG, 0)
     with pytest.raises(cr.Refusal):
         rh.router_section(r, {"route__drc_errors": 0}, {})
+
+
+CENSUS = {"flops_declared_per_module": {"drum_regs": 3520}}
+
+
+def test_verdict_json_passed_is_the_area_question_only(tmp_path):
+    """Three Metal2 shorts must not turn docs/dag.json node S2 red.
+
+    S2 is named "Fits a real shuttle padframe".  A node that goes red on a routing
+    artefact reports a sign-off problem where a reader looks for an area answer.
+    """
+    v = rh.verdict_json(str(tmp_path), "43-x", metrics(drc=3, ss=12.0, tt=34.0),
+                        POST, {}, CENSUS)
+    assert v["passed"] is True
+    assert v["router_clean"] is False
+    assert v["route__drc_errors"] == 3
+    assert v["failed"] == []
+
+
+def test_verdict_json_not_measured_is_not_passed(tmp_path):
+    v = rh.verdict_json(str(tmp_path), "42-x", metrics(drc=None, ss=12.0),
+                        POST, {}, CENSUS)
+    assert v["passed"] is False
+    assert "the detailed route ran to completion" in v["not_measured"]
+    assert v["failed"] == []
+    assert v["router_clean"] is None
+
+
+def test_verdict_json_a_missed_corner_is_a_failure_not_an_omission(tmp_path):
+    v = rh.verdict_json(str(tmp_path), "48-x", metrics(drc=0, ss=-178.5, tt=34.0),
+                        POST, {}, CENSUS)
+    assert v["passed"] is False
+    assert v["failed"] == ["setup closes post-route at every corner against 81.38 ns"]
+    assert v["worst_post_route_setup_ns"] == -178.5
+    assert v["router_clean"] is True
+
+
+def test_verdict_json_records_that_no_signoff_check_ran(tmp_path):
+    v = rh.verdict_json(str(tmp_path), "48-x", metrics(drc=0, ss=12.0), POST, {}, CENSUS)
+    assert v["signoff_checks_run"] == []
+    assert "NOT run" in v["note"]

@@ -391,24 +391,14 @@ def crosscheck_section(run_dir: str, m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
-def verdict_section(m: dict, post: set, src: dict) -> str:
-    """#33's question, answered from the metrics rather than from the narrative.
+def conditions(m: dict, post: set, src: dict):
+    """(fit_checks, clean_checks) as (label, verdict-or-None, evidence) triples.
 
-    Independent conditions, each printed with the key it came from and each allowed
-    to fail on its own.  A single "it fits"/"it does not fit" line would let a design
-    that places cleanly but misses timing by two periods be reported as a pass, which
-    is what an earlier state of this run would have done.
-
-    AND THE TWO QUESTIONS ARE KEPT APART, which is the change that matters here.
-    #33 asks an AREA question: does the joined chip need two quarter slots or a
-    structural cut, or does one half slot hold it?  "Is this layout ready for
-    tapeout?" is a different question with a much longer condition list (§5), and
-    the run's router-DRC count belongs to the second.  Folding them together makes
-    a route that completes with a handful of shorts report as *"does not fit"* --
-    which would send this issue to a business decision about dies per wafer on the
-    strength of three Metal2 shorts.  It is equally wrong to let the area answer
-    launder the DRC count into a clean bill; both verdicts are printed, separately,
-    with their own condition lists.
+    Extracted so the markdown verdict and the machine-readable one in
+    ``pnr/shuttle/evidence/halfslot-verdict.json`` -- which is what
+    ``docs/dag.json`` node ``S2`` reads -- cannot drift apart.  A DAG node whose
+    colour is computed from a different predicate than the document a reader sees
+    is the exact failure ``tools/compile_dag.py`` was written to stop.
     """
     util = m.get("design__instance__utilization")
     drc = m.get("route__drc_errors")
@@ -444,6 +434,31 @@ def verdict_section(m: dict, post: set, src: dict) -> str:
          if drc is not None
          else "the run has not completed a detailed route — no `route__drc_errors`"),
     ]
+
+    return fit_checks, clean_checks
+
+
+def verdict_section(m: dict, post: set, src: dict) -> str:
+    """#33's question, answered from the metrics rather than from the narrative.
+
+    Independent conditions, each printed with the key it came from and each allowed
+    to fail on its own.  A single "it fits"/"it does not fit" line would let a design
+    that places cleanly but misses timing by two periods be reported as a pass, which
+    is what an earlier state of this run would have done.
+
+    AND THE TWO QUESTIONS ARE KEPT APART, which is the change that matters here.
+    #33 asks an AREA question: does the joined chip need two quarter slots or a
+    structural cut, or does one half slot hold it?  "Is this layout ready for
+    tapeout?" is a different question with a much longer condition list (§5), and
+    the run's router-DRC count belongs to the second.  Folding them together makes
+    a route that completes with a handful of shorts report as *"does not fit"* --
+    which would send this issue to a business decision about dies per wafer on the
+    strength of three Metal2 shorts.  It is equally wrong to let the area answer
+    launder the DRC count into a clean bill; both verdicts are printed, separately,
+    with their own condition lists.
+    """
+    fit_checks, clean_checks = conditions(m, post, src)
+    drc = m.get("route__drc_errors")
 
     def table(checks):
         out = ["| condition | verdict | measured |", "|---|---|---|"]
@@ -581,6 +596,64 @@ def growth_section(m: dict, census: dict) -> str:
     return "\n".join(lines)
 
 
+def verdict_json(run_dir: str, step: str, m: dict, post: set, src: dict,
+                 census: dict) -> dict:
+    """The verdict table as data, for docs/dag.json node S2.
+
+    ``passed`` is the FIT question and only the FIT question -- S2 is named "Fits a
+    real shuttle padframe".  The router's own DRC count is carried in the payload as
+    ``router_clean`` and is deliberately NOT part of ``passed``: a node that goes red
+    on three Metal2 shorts would be reporting a sign-off problem in the place a
+    reader looks for an area answer, and a node that goes green while hiding the
+    count would be worse.  ``tools/compile_dag.py`` honours ``passed``; everything
+    else here is for the human who follows the link.
+
+    A condition that is NOT MEASURED makes ``passed`` false.  That is deliberate and
+    it is not the same as FAILED: the ``conditions`` list distinguishes them, and
+    ``blocked_on`` names the unmeasured ones so the node's note can say which.
+    """
+    fit, clean = conditions(m, post, src)
+    unmeasured = [c[0] for c in fit if c[1] is None]
+    failed = [c[0] for c in fit if c[1] is False]
+    drc = m.get("route__drc_errors")
+    declared = census.get("flops_declared_per_module", {}).get("drum_regs")
+    seq = None
+    try:
+        def_path = cr.find_final_def(run_dir)
+        dregs = cr.dregs_output_nets(os.path.join(REPO, "rtl-sketch", "synth_top.v"))
+        seq = cr.flops_by_block(def_path, dregs).get(cr.DREGS_BUCKET)
+    except cr.Refusal:
+        pass
+    worst_s, worst_c = worst_setup(m, post)
+    return {
+        "passed": not failed and not unmeasured,
+        "question": "Does the joined chip fit one wafer.space gf180mcu half slot "
+                    "(slot_1x0p5) -- issue #33",
+        "run": os.path.basename(run_dir),
+        "last_step_with_metrics": step,
+        "conditions": [{"condition": c[0],
+                        "verdict": {True: "yes", False: "no", None: "not measured"}[c[1]],
+                        "measured": c[2]} for c in fit],
+        "failed": failed,
+        "not_measured": unmeasured,
+        "router_clean": None if drc is None else (drc == 0),
+        "route__drc_errors": drc,
+        "utilisation": m.get("design__instance__utilization"),
+        "padcells": m.get("design__instance__count__padcells"),
+        "ws_ip_macros": m.get("design__instance__count__macros"),
+        "worst_post_route_setup_ns": worst_s,
+        "worst_post_route_setup_corner": worst_c if worst_s is not None else None,
+        "clock_period_ns": CLOCK_PERIOD_NS,
+        "drum_regs_flops_placed": seq,
+        "drum_regs_flops_declared": declared,
+        "signoff_checks_run": [],
+        "note": "passed is the AREA question only. Sign-off DRC, LVS, XOR, antenna, "
+                "density, IR drop and gate-level simulation were NOT run -- see "
+                "docs/pnr-shuttle-halfslot.md section 5.",
+        "doc": "docs/pnr-shuttle-halfslot.md",
+    }
+
+
 # name -> (fn, what it is called with).  "prov" means (metrics, post_route_keys,
 # source_step_by_key); the provenance arguments exist so no section can print a
 # carried-forward pre-route metric as a post-route one.
@@ -607,6 +680,9 @@ def main(argv=None) -> int:
     ap.add_argument("run_dir")
     ap.add_argument("--doc", default=os.path.join(REPO, "docs", "pnr-shuttle-halfslot.md"))
     ap.add_argument("--census", default=os.path.join(HERE, "evidence", "flop-census.json"))
+    ap.add_argument("--verdict-json",
+                    default=os.path.join(HERE, "evidence", "halfslot-verdict.json"),
+                    help="the verdict as data; docs/dag.json node S2 reads this")
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if the document on disk differs from the generated one")
     a = ap.parse_args(argv)
@@ -643,6 +719,13 @@ def main(argv=None) -> int:
     with open(a.doc, "w", encoding="utf-8") as f:
         f.write(doc)
     print(f"wrote {a.doc} from {a.run_dir} step {step}")
+    v = verdict_json(a.run_dir, step, metrics, post, src, census)
+    with open(a.verdict_json, "w", encoding="utf-8") as f:
+        import json as _json
+        _json.dump(v, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"wrote {a.verdict_json}: passed={v['passed']} "
+          f"router_clean={v['router_clean']}")
     return 0
 
 
