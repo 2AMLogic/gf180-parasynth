@@ -269,7 +269,8 @@
     "phrase": "demo",
     "modes": {
      "sim": "R0 host bytes (--image release, the default) through the current tree's RTL: a compatibility test, never a claim about the R0 image",
-     "r1": "the R1 candidate's bytes (--image r1) against the frozen R1 target"
+     "r1": "the R1 candidate's bytes (--image r1) against the frozen R1 target",
+   "r2": "R2's bytes (--image r2, equal to R1's) through the RTL in R2's configuration (PULSE2X=1)"
     }
    },
    "dag_nodes": ["I1", "I2"],
@@ -485,6 +486,170 @@
        "image": {
         "sender": "release",
         "target": "r1"
+       }
+      }
+     ]
+    },
+    "r2": {
+     "description": "the R2 image (fpga/release/R2.md): every supported quick-start command as the CLI emits it with --image r2 (R1's bytes, R1's frozen target), through the CURRENT tree's Arty wrapper RTL in R2's configuration, PULSE2X=1 (verify_uart_bridge.image_config); the run identities record VOICE_PULSE_2X",
+     "timeout_s": 12600,
+     "tools": [
+      "iverilog",
+      "vvp"
+     ],
+     "requires": [
+      "fpga/release/held_note_audible.py",
+      "fpga/verify_rolling_playback.py",
+      "fpga/release/r1_candidate.py",
+      "fpga/release/r2_candidate.py"
+     ],
+     "required": [
+      {
+       "id": "held-default",
+       "property": "uart_host.py run --note 45 --fixture none --image r2: the R2 (= R1) bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "r2",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "r2"
+      },
+      {
+       "id": "held-m5a-saw",
+       "property": "uart_host.py run --preset m5a-saw --note 72 --fixture none --image r2: the R2 (= R1) bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "m5a-saw",
+        "--image",
+        "r2",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "r2"
+      },
+      {
+       "id": "held-m5a-pulse",
+       "property": "uart_host.py run --preset m5a-pulse --note 72 --fixture none --image r2: the R2 (= R1) bytes (known-state preamble first) are bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "m5a-pulse",
+        "--image",
+        "r2",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "r2"
+      },
+      {
+       "id": "run-m5a",
+       "property": "uart_host.py run --note 45 --fixture m5a --image r2: the held note then the M5A phrase, the CLI's own bytes (not the bench-built phrase) bit-exact at the pins and audible",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "r2",
+        "--fixture",
+        "m5a",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "r2"
+      },
+      {
+       "id": "phrase-demo",
+       "property": "uart_host.py run --fixture demo --image r2: the setup bytes equal the FROZEN R1 target (preamble, revision-14 kit by digest, clap ENV_FRATE[8] nonzero), every write on its frame, and the RTL wire I2S equals the model over the whole phrase",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "r2",
+        "--expect-image",
+        "r2",
+        "--rtl",
+        "demo",
+        "--reuse-rtl-if-identical"
+       ],
+       "interpret": "rolling_record",
+       "fixtures": [
+        "demo"
+       ],
+       "image": {
+        "sender": "r2",
+        "target": "r2"
+       }
+      },
+      {
+       "id": "phrase-bar808-full",
+       "property": "uart_host.py run --fixture bar808-full --image r2: the setup bytes equal the FROZEN R1 target (preamble, revision-14 kit by digest, clap ENV_FRATE[8] nonzero), every write on its frame, and the RTL wire I2S equals the model over the whole phrase",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "r2",
+        "--expect-image",
+        "r2",
+        "--rtl",
+        "bar808-full",
+        "--reuse-rtl-if-identical"
+       ],
+       "interpret": "rolling_record",
+       "fixtures": [
+        "bar808-full"
+       ],
+       "image": {
+        "sender": "r2",
+        "target": "r2"
+       }
+      }
+     ],
+     "controls": [
+      {
+       "id": "held-legacy-silent",
+       "intended_reason": "the pre-fix image (no mixer writes) under --image r2 replays bit-exact but is SILENT, and the level floor rejects it",
+       "checker": "fpga/release/held_note_audible.py",
+       "args": [
+        "--preset",
+        "default",
+        "--image",
+        "r2",
+        "--legacy-image",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "held_note_record",
+       "image": "r2"
+      },
+      {
+       "id": "wrong-kit-demo",
+       "intended_reason": "the sender on the release image (revision-11 kit, no preamble) against the frozen R1 target is a host-correctness FAIL at the init bytes, before any RTL",
+       "checker": "fpga/verify_rolling_playback.py",
+       "args": [
+        "--outdir",
+        "{out}",
+        "--image",
+        "release",
+        "--expect-image",
+        "r2",
+        "--expect-fail"
+       ],
+       "interpret": "rolling_record",
+       "image": {
+        "sender": "release",
+        "target": "r2"
        }
       }
      ]

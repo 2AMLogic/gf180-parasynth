@@ -80,7 +80,8 @@ def intended(fixture: str, preset: str | None = None,
     the hold, spacing intact.
 
     `image` is the TARGET the expectation is built for, never the sender's
-    selector. For R1 ("r1", the named release; #323) the expectation is checked against the frozen
+    selector. For R1 ("r1", the named release; #323) and R2 ("r2", which is sent R1's
+    kit and start) the expectation is checked against the frozen
     target (fpga/release/r1_candidate.py) before it is used: the known-state
     preamble and the revision-14 kit by digest, with its nonzero final
     strike. An expectation that is not that target REFUSES (Refused)."""
@@ -93,7 +94,7 @@ def intended(fixture: str, preset: str | None = None,
         static += [tuple(w) for w in uh.note_writes(note, True)]
         held = [tuple(w) for w in uh.note_writes(note, False)]
     timed = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed_w]
-    if image == r1c.HOST_IMAGE:
+    if image in uh.R1_KIT_IMAGES:           # r1, and r2 (R1's kit and start; R2.md)
         probs = r1c.check_init(static, kit_expected=True)
         if probs:
             raise r1c.Refused(f"the {fixture} expectation is not the frozen R1 target: {probs}")
