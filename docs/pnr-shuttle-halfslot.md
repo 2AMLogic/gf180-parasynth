@@ -234,6 +234,25 @@ The flow's own count of sequential cells anywhere on the die is **12,275** (`des
 
 <!-- END measured:crosscheck -->
 
+### 4.5 The router's own violation count, from both places that hold it
+
+Where this page says "DRC" it means **this number** — the detailed router checking its
+own work — and nothing else. §5 lists the sign-off decks that did not run, and §6.4 a
+rule class the router skipped outright, which makes this count an *under*-count against
+sign-off by an unknown amount.
+
+<!-- BEGIN measured:router -->
+<!-- END measured:router -->
+
+### 4.6 What the router's iterations cost after it stopped improving
+
+The router keeps iterating long after the violation count stops moving, and the
+iterations that do not improve anything are the expensive ones. This table is the
+evidence for §6.5; it is generated from the router's own log.
+
+<!-- BEGIN measured:iterations -->
+<!-- END measured:iterations -->
+
 ## 5. What this run does **not** show
 
 Stated positively so it cannot be read as a claim by omission.

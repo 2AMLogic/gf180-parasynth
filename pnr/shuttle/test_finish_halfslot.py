@@ -184,3 +184,39 @@ def test_wait_returns_not_exited_on_timeout(monkeypatch):
     monkeypatch.setattr(fh.time, "sleep", lambda _: None)
     got = fh.wait_for_exit(poll=0, timeout=-1)
     assert got["exited"] is False
+
+
+ITER_LOG = """
+[INFO DRT-0195] Start 33rd optimization iteration.
+[INFO DRT-0199]   Number of violations = 9.
+[INFO DRT-0267] cpu time = 00:00:11, elapsed time = 00:00:06, memory = 1
+[INFO DRT-0195] Start 35th stubborn tiles iteration.
+[INFO DRT-0199]   Number of violations = 3.
+[INFO DRT-0267] cpu time = 00:34:01, elapsed time = 00:07:17, memory = 1
+[INFO DRT-0195] Start 46th stubborn tiles iteration.
+[INFO DRT-0199]   Number of violations = 3.
+[INFO DRT-0267] cpu time = 01:58:06, elapsed time = 00:23:12, memory = 1
+"""
+
+
+def test_parse_drt_iterations_keeps_optimization_iterations():
+    """`optimization` iterations carry no ' tiles'; requiring it dropped them all."""
+    got = fh.parse_drt_iterations(ITER_LOG)
+    assert [r["iteration"] for r in got] == [33, 35, 46]
+    assert [r["kind"] for r in got] == ["optimization", "stubborn", "stubborn"]
+
+
+def test_parse_drt_iterations_pairs_counts_and_times_with_their_iteration():
+    got = fh.parse_drt_iterations(ITER_LOG)
+    assert got[0] == {"iteration": 33, "kind": "optimization", "violations": 9,
+                      "elapsed_s": 6, "cpu_s": 11}
+    assert got[-1]["elapsed_s"] == 23 * 60 + 12
+    assert got[-1]["cpu_s"] == 3600 + 58 * 60 + 6
+
+
+def test_parse_drt_iterations_flat_tail_is_visible():
+    """The §6.5 evidence: the count stops moving long before the router stops."""
+    got = fh.parse_drt_iterations(ITER_LOG)
+    flat = [r for r in got if r["violations"] == got[-1]["violations"]]
+    assert len(flat) == 2
+    assert sum(r["cpu_s"] for r in flat[1:]) > 0

@@ -71,7 +71,11 @@ STEP_DIR = re.compile(r"^(\d+)-(.+)$")
 # The detailed router prints this once per iteration; the LAST one is the result.
 # `Viol/Layer` + one line per layer follows it when the count is non-zero.
 DRT_VIOL = re.compile(r"^\[INFO DRT-0199\]\s+Number of violations = (\d+)\.", re.M)
-DRT_ITER = re.compile(r"^\[INFO DRT-0195\] Start (\d+)\w* (\w+) tiles? iteration", re.M)
+# `Start 46th stubborn tiles iteration.` / `Start 33rd optimization iteration.` --
+# the " tiles" is present for two of the three kinds, and requiring it silently
+# dropped every `optimization` iteration from the table.
+DRT_ITER = re.compile(r"^\[INFO DRT-0195\] Start (\d+)\w* (\w+)(?: tiles?)? iteration",
+                      re.M)
 
 # The step whose metrics are the post-route timing.  Named here rather than
 # discovered so that a flow which never reached it cannot be mistaken for one that
@@ -160,6 +164,42 @@ def parse_drt_log(text: str) -> dict:
         "by_layer": by_layer,
         "iterations_seen": len(iters),
     }
+
+
+DRT_ELAPSED = re.compile(
+    r"^\[INFO DRT-0267\] cpu time = (\d+):(\d\d):(\d\d), elapsed time = (\d+):(\d\d):(\d\d)",
+    re.M)
+
+
+def parse_drt_iterations(text: str) -> list[dict]:
+    """One record per router iteration: number, kind, elapsed seconds, violations.
+
+    The point of this is not progress reporting -- it is the evidence for §6.5.  The
+    router stops improving long before it stops iterating, and only a per-iteration
+    table shows that: the count is flat while the elapsed time per iteration grows by
+    two orders of magnitude.  A single final number cannot show it.
+    """
+    events = []
+    for m in DRT_ITER.finditer(text):
+        events.append(("start", m.start(), int(m.group(1)), m.group(2)))
+    for m in DRT_VIOL.finditer(text):
+        events.append(("viol", m.start(), int(m.group(1)), None))
+    for m in DRT_ELAPSED.finditer(text):
+        secs = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + int(m.group(6))
+        cpu = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+        events.append(("time", m.start(), secs, cpu))
+    events.sort(key=lambda e: e[1])
+    out: list[dict] = []
+    for kind, _pos, a, b in events:
+        if kind == "start":
+            out.append({"iteration": a, "kind": b, "violations": None,
+                        "elapsed_s": None, "cpu_s": None})
+        elif out and kind == "viol" and out[-1]["violations"] is None:
+            out[-1]["violations"] = a
+        elif out and kind == "time" and out[-1]["elapsed_s"] is None:
+            out[-1]["elapsed_s"] = a
+            out[-1]["cpu_s"] = b
+    return out
 
 
 def metrics_of(run_dir: str, step_suffix: str) -> dict:
