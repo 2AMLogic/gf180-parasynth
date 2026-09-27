@@ -61,7 +61,11 @@ def calibrate() -> dict:
         if env_gain != 1.0:
             base = dict(dx.kit_808())[dx.A_ENV + LEVEL_ENV[band] * dx.ENV_STRIDE + 1] / dx.FULL24
             if base * env_gain > 1.0:
-                raise SystemExit(f"REFUSED: {band} band needs envelope peak {base * env_gain:.3f} > 1.0")
+                if VARIANT == "full":
+                    raise SystemExit(f"REFUSED: {band} band needs envelope peak {base * env_gain:.3f} > 1.0")
+                # a diagnostic ablation may fall short of the level rule; record by how much
+                out[band]["level_short_db"] = round(20 * math.log10(base * env_gain), 2)
+                env_gain = 1.0 / base
             amps[f"E_{band}"] = base * env_gain
     return {"per_band": out, "amps": amps}
 
