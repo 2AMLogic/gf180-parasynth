@@ -1,7 +1,7 @@
 {
  "schema": "gf180-parasynth R2 candidate v0",
  "candidate": "R2 candidate",
- "status": "DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, inherited from R1), the named image selector (#323); #356 and #315 (#358) must merge first; the build must produce constraint_matches.rpt and exceptions.rpt",
+ "status": "CANDIDATE -- the settled set (operator, #282/#355): pulse2x at 0.74 rectangle headroom (an operator OVERRIDE of the acceptance rule, known limitations in R2.md), skip2xwin, the #354 repair (#364), #315. Built once and bound as the R2 release in fpga/release/r2-2025.1.json (r2_release.py); this record binds the tree's sources",
  "rtl": {
   "configuration": {
    "OSC2X": 1,
@@ -24,7 +24,7 @@
    "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
-   "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+   "rtl-sketch/ladder_dp_n.v": "2276e89d112bd24d6384f3deed427bcabb9525d3df68ded8c61d2c681a3a8373",
    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
@@ -47,23 +47,24 @@
   },
   "differs_from_r1_freeze": {
    "fpga/boards/arty-a7-100.xdc": "UART-RX sync constraints bind g_uart.u_uart (#315); build and publisher assert binding and effect (fpga/xdc_bindings.py)",
+   "rtl-sketch/ladder_dp_n.v": "(x * gain) >> 11 held in 26 bits, not 25: the first wrong operation behind #354 (PR #364); control INJECT_BUG_LADDER_XG25",
    "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 (#333, recheck-333 item 5)",
    "rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)"
   },
   "r1_freeze": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db"
  },
  "host_domain": {
-  "image": "r2-candidate",
+  "image": "r2",
   "pulse2x_admitted_on": [
-   "r2-candidate"
+   "r2"
   ],
-  "qualified_domain_sha256": "ac59e5c69fbce041de1b1b7949a8872b956e45f94a633dda3aab578a7f51ab94"
+  "qualified_domain_sha256": "cbd9d6eb6fb7c35d2f7cd58a1e32c5f4d092da69ce52b32e843ddbd1b0a21580"
  },
  "evidence": {
-  "summary": "fpga/reports/r2-candidate/summary.json",
-  "sha256": "1f16e9be130e9cf4cfe6f8007294c5bb7c04530dcfe86929234b0692c6dc1fbd",
-  "state": "PARTIAL",
-  "at": "c544436 (headroom c6c9440, UART c544436); first batch 78c9df1"
+  "summary": "fpga/reports/r2/summary.json",
+  "sha256": "2598541946e13e995d6369e0ab1d7aacce22a6655ce8179b8bce4eb6430fa6f4",
+  "state": "PASS",
+  "at": "9703817 (settled set; batch fpga/reports/r2/settled), 8a132ff (T-PLAY-DIGITAL r2, fpga/reports/r2/play-digital); image built at 3182638 (identical compiled sources)"
  },
  "r1_untouched": [
   "fpga/release/r1-candidate.json",

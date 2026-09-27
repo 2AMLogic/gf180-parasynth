@@ -164,7 +164,7 @@ def check(record: Path = RECORD) -> tuple:
     if committed != fresh:
         keys = sorted(k for k in set(committed) | set(fresh) if committed.get(k) != fresh.get(k))
         return "STALE", f"differs from a fresh derivation at {keys}"
-    return "BOUND", (f"{_rel(record)} equals a fresh derivation (DRAFT; differs from R1's "
+    return "BOUND", (f"{_rel(record)} equals a fresh derivation (differs from R1's "
                      f"freeze in {list(fresh['rtl']['differs_from_r1_freeze'])}; evidence "
                      f"{fresh['evidence']['state']})")
 
