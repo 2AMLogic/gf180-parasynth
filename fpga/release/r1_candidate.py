@@ -198,26 +198,39 @@ def emitted_setup(argv: list) -> tuple:
 
 
 # ---- the record ---------------------------------------------------------------
+def _frozen_blob(rel: str) -> bytes:
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), "show", f"{RTL_FROZEN_AT}:{rel}"],
+                              capture_output=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise Refused(f"cannot read {rel} at {RTL_FROZEN_AT[:12]} ({exc}); a shallow "
+                      "clone cannot verify the freeze") from None
+
+
 def rtl_identity() -> dict:
+    """R1's compiled sources, ROMs and constraints AS FROZEN: read from git at
+    RTL_FROZEN_AT, never from the working tree. The tree may move on (the
+    next image, R2, changes voice_dp.v) without touching R1's identity; how
+    far it has moved is reported by tree_drift(), not bound here."""
+    import hashlib
     import build_arty as ba
-    srcs = {_rel(p): sha(p) for p in ba.sources()}
-    roms = {_rel(p): sha(p) for p in ba.roms()}
-    moved = []
-    for rel, h in {**srcs, **roms}.items():
-        try:
-            blob = subprocess.run(["git", "-C", str(ROOT), "show", f"{RTL_FROZEN_AT}:{rel}"],
-                                  capture_output=True, check=True).stdout
-        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
-            raise Refused(f"cannot read {rel} at {RTL_FROZEN_AT[:12]} ({exc}); a shallow "
-                          "clone cannot verify the freeze") from None
-        import hashlib
-        if hashlib.sha256(blob).hexdigest() != h:
-            moved.append(rel)
+    h = lambda rel: hashlib.sha256(_frozen_blob(rel)).hexdigest()      # noqa: E731
+    srcs = {_rel(p): h(_rel(p)) for p in ba.sources()}
+    roms = {_rel(p): h(_rel(p)) for p in ba.roms()}
     synth = next(ln for ln in ba.tcl_script(Path("OUT"), []).splitlines()
                  if ln.startswith("synth_design"))
-    return {"frozen_at": RTL_FROZEN_AT, "moved_since_freeze": moved,
-            "configuration": dict(ba.CONFIG), "part": ba.PART, "synth_design": synth,
-            "constraints": {_rel(ba.XDC): sha(ba.XDC)}, "sources": srcs, "roms": roms}
+    return {"frozen_at": RTL_FROZEN_AT, "configuration": dict(ba.CONFIG), "part": ba.PART,
+            "synth_design": synth, "constraints": {_rel(ba.XDC): h(_rel(ba.XDC))},
+            "sources": srcs, "roms": roms}
+
+
+def tree_drift(rtl: dict | None = None) -> list:
+    """Frozen sources the WORKING TREE no longer holds (informational: the
+    tree has moved past R1; a new image is a new candidate, never this one)."""
+    rtl = rtl or rtl_identity()
+    frozen = {**rtl["sources"], **rtl["roms"], **rtl["constraints"]}
+    return sorted(rel for rel, want in frozen.items()
+                  if not (ROOT / rel).exists() or sha(ROOT / rel) != want)
 
 
 def kit_identity() -> dict:
@@ -391,15 +404,15 @@ def check(record: Path = RECORD) -> tuple:
         committed = json.loads(Path(record).read_text())
     except (OSError, ValueError) as exc:
         return "REFUSED", f"the candidate record is unreadable: {exc}"
-    if fresh["rtl"]["moved_since_freeze"]:
-        return "STALE", ("compiled sources moved since the freeze at "
-                         f"{RTL_FROZEN_AT[:12]}: {fresh['rtl']['moved_since_freeze']}")
     diffs = _diff(committed, fresh)
     if diffs:
         return "STALE", "differs from a fresh derivation at: " + ", ".join(diffs[:20])
+    moved = tree_drift(fresh["rtl"])
+    note = (f"; NOTE the working tree has moved past R1 in {moved} -- R1's sources are "
+            f"verified at {RTL_FROZEN_AT[:12]}") if moved else ""
     return "BOUND", (f"{_rel(record)} equals a fresh derivation (RTL frozen at "
                      f"{RTL_FROZEN_AT[:12]}, kit {KIT_R14_SHA256[:12]}, "
-                     f"{fresh['evidence']['rtl_runs_bound']} RTL runs bound)")
+                     f"{fresh['evidence']['rtl_runs_bound']} RTL runs bound){note}")
 
 
 def main(argv=None) -> int:

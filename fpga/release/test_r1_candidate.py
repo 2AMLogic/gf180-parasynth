@@ -189,6 +189,37 @@ def test_control_mutated_record_is_stale(tmp_path):
     assert verdict == "STALE" and "kit.clap_final_strike.value" in detail
 
 
+# ---- R1's RTL is bound from git at the freeze, not from the working tree --------------
+def test_a_moved_working_tree_leaves_r1_bound_with_a_note(monkeypatch):
+    """The next image (R2) changes voice_dp.v in the tree. R1's identity is its
+    freeze, read from git, so R1 stays BOUND and the move is only reported."""
+    real = r1c.sha
+    monkeypatch.setattr(r1c, "sha", lambda p: "0" * 64 if str(p).endswith(
+        "rtl-sketch/voice_dp.v") else real(p))
+    verdict, detail = r1c.check()
+    assert verdict == "BOUND", detail
+    assert "NOTE the working tree has moved past R1 in ['rtl-sketch/voice_dp.v']" in detail
+
+
+def test_control_a_tampered_frozen_source_hash_is_stale(tmp_path):
+    """The record claims a voice_dp.v the freeze commit does not hold."""
+    rec = json.loads(r1c.RECORD.read_text())
+    rec["rtl"]["sources"]["rtl-sketch/voice_dp.v"] = "0" * 64
+    p = tmp_path / "r1.json"
+    p.write_text(json.dumps(rec))
+    verdict, detail = r1c.check(p)
+    assert verdict == "STALE" and "rtl.sources.rtl-sketch/voice_dp.v" in detail
+
+
+def test_control_a_different_freeze_commit_is_stale(monkeypatch):
+    """Pointing R1 at R0's source commit (voice_dp.v before #252's drift):
+    the sources read from git are not the record's."""
+    import release_manifest as rm
+    monkeypatch.setattr(r1c, "RTL_FROZEN_AT", rm.IMAGE_SOURCE_COMMIT)
+    verdict, detail = r1c.check()
+    assert verdict == "STALE" and "rtl-sketch/voice_dp.v" in detail, detail
+
+
 def test_control_r0_run_identity_is_not_r1_evidence(tmp_path, monkeypatch):
     """The published R0 demo replay ran rev-11 voice_dp.v: as R1 evidence it REFUSES."""
     import shutil
