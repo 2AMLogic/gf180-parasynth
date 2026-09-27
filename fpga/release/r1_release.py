@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """fpga/release/r1_release.py -- the R1 release manifest: ONE record binding
 the published R1 Arty image to its frozen revision-14 sources, the host's
-`--image tree` bytes, the presets, the supported domain and the evidence,
+`--image r1` bytes (the named R1 selection, #323), the presets, the supported
+domain and the evidence,
 with R0 kept as the named rollback (#280, plan087 Milestone C).
 
 Naming (plan087/plan088). **R0** is `arty-a7-100t baseline 2025.1, r1`
@@ -29,7 +30,7 @@ selected artifact agrees with every other:
     byte-for-byte at the freeze commit (git show) -- the working tree may
     move on later without changing THIS image (reported, not bound);
   * the host: the exact bytes every supported R1 command emits NOW
-    (`--image tree`), checked against the frozen revision-14 target
+    (`--image r1`), checked against the frozen revision-14 target
     (known-state preamble, kit by digest, ENV_FRATE[8] = 68) and equal to
     the bytes the candidate's RTL evidence replayed; the presets' image
     bytes; the kit digest and contract revision 14;
@@ -399,8 +400,10 @@ DECLARED = {
               "control or audio capture has been performed on it.",
     "default_switch": {
         "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image "
-                 "targets R0; R1 is selected with --image tree",
-        "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
+                 "targets R0; R1 is selected by name with --image r1 (#323; tree stays a "
+                 "development selector)",
+        "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"r1\" (not planned: plan092 keeps "
+                    "the public default on R0)",
         "consequences": "fpga/midi_session.py follows (resolve_image falls back to "
                         "uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands "
                         "WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 (measured by "

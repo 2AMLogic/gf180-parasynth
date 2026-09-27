@@ -357,7 +357,7 @@ class MidiSession:
         # R1 (image tree, #279): the known-state preamble first -- voice and
         # drum RESET zero every register and state, so routing, modulation,
         # drift and the drum registers the kit does not write are KNOWN
-        w = list(uh.known_state_preamble()) if self.image == "tree" else []
+        w = list(uh.known_state_preamble()) if self.image in uh.KNOWN_STATE_IMAGES else []
         w += [(x.flag, x.sec, x.addr, x.data & 0xFFFFFFFF) for x in self.mh.w]
         self.mh.w.clear()
         self.mh.events.clear()
@@ -368,7 +368,7 @@ class MidiSession:
         return w
 
     def start(self, *, timeout_s: float = 5.0) -> None:
-        if self.image == "tree":
+        if self.image in uh.KNOWN_STATE_IMAGES:
             # nothing an earlier session queued may fire into this one
             self.bridge.assert_idle()
         writes = self.init_writes()
@@ -941,8 +941,11 @@ def run_live(session: MidiSession, source, *, duration_s: float | None = None,
 def resolve_image(port: str, image: str | None) -> str:
     """The image a session drives. A serial port defaults to the published
     release (revision 11); `sim` is this tree's device contract (revision 14), so
-    it implies `tree` and REFUSES `release`."""
+    it implies `tree`, accepts `r1` (revision 14, R1's frozen kit) and REFUSES
+    `release`."""
     if port == "sim":
+        if image == "r1":
+            return "r1"
         if image == "release":
             raise uh.Refused("--port sim is this tree's device contract (contract "
                              f"revision {uh.IMAGE_REVISION['tree']}); a revision-"
@@ -990,8 +993,9 @@ def main(argv=None) -> int:
     ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit sent: "
                          "release (the published R0 image, contract revision 11 -- the "
-                         "DEFAULT on a serial port) or tree (built from this tree, "
-                         "revision 14 -- implied by --port sim, which refuses release)")
+                         "DEFAULT on a serial port), r1 (the published R1 player release, "
+                         "its frozen kit) or tree (built from this tree, revision 14, "
+                         "development -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
     if a.list_midi_ports:
         try:
