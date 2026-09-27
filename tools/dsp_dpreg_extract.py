@@ -381,12 +381,34 @@ def sh(cmd, **kw):
     return subprocess.run(cmd, text=True, **kw)
 
 
+# --box local (#316): run ON the Vivado host itself, with no ssh to self. The
+# same scripts, the same preconditions, the same stdout/stderr handling, exit
+# status and post-run digest checks; only the transport differs:
+#   remote   ssh BOX CMD           scp SRC BOX:DST / scp BOX:SRC DST
+#   local    bash -c CMD           cp SRC DST
+LOCAL = "local"
+
+
+def on_box(box, command):
+    """argv that runs `command` (a shell command line) on the box."""
+    return ["bash", "-c", command] if box == LOCAL else ["ssh", box, command]
+
+
+def to_box(box, src, dst):
+    return ["cp", str(src), dst] if box == LOCAL else ["scp", str(src), f"{box}:{dst}"]
+
+
+def from_box(box, src, dst):
+    return ["cp", src, str(dst)] if box == LOCAL else ["scp", f"{box}:{src}", str(dst)]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     # no defaults: the constants above are the historical build's, and a
     # silent default once pointed a re-extraction at the wrong checkpoint
     ap.add_argument("--box", required=True,
-                    help=f"remote Vivado host (historical: {BOX})")
+                    help=f"remote Vivado host (historical: {BOX}), or `{LOCAL}` to run on "
+                         "this machine without ssh (#316)")
     ap.add_argument("--dcp", required=True,
                     help=f"routed checkpoint on the box (historical: {DCP})")
     ap.add_argument("--dcp-sha256", required=True,
@@ -403,7 +425,7 @@ def main(argv=None):
 
     # ---- phase 1: assert preconditions on the box ----
     stage = stage_script(a.dcp, a.dcp_sha256, a.drc_rpt, a.remote_dir)
-    r = sh(["ssh", a.box, "bash -s"], input=stage)
+    r = sh(on_box(a.box, "bash -s"), input=stage)
     if r.returncode != 0:
         print("REFUSED: box preconditions failed")
         return 1
@@ -413,7 +435,7 @@ def main(argv=None):
     # it and hash-binds it through the box manifest's drc_rpt.sha256 plus
     # the grep-identity check (report_drc embeds a timestamp, so the bytes
     # are bound box-side, the DPREG body both sides)
-    r = sh(["ssh", a.box, f"cat {a.drc_rpt}"],
+    r = sh(on_box(a.box, f"cat {a.drc_rpt}"),
            capture_output=True)
     if r.returncode != 0:
         print("REFUSED: could not fetch drc.rpt")
@@ -431,7 +453,7 @@ def main(argv=None):
 
     tcl_local = evidence / "dsp_dpreg_extract.tcl"
     tcl_local.write_text(make_tcl(a.dcp, a.remote_dir, cells))
-    r = sh(["scp", str(tcl_local), f"{a.box}:{a.remote_dir}/dsp_dpreg_extract.tcl"])
+    r = sh(to_box(a.box, tcl_local, f"{a.remote_dir}/dsp_dpreg_extract.tcl"))
     if r.returncode != 0:
         print("REFUSED: could not stage Tcl")
         return 1
@@ -446,28 +468,28 @@ def main(argv=None):
         "vivado -mode batch -source dsp_dpreg_extract.tcl "
         "-log vivado_extract.log -journal vivado_extract.jou\n"
     )
-    r = sh(["ssh", a.box, "bash -s"], input=run)
+    r = sh(on_box(a.box, "bash -s"), input=run)
     if r.returncode != 0:
         print(f"REFUSED: vivado batch failed rc={r.returncode}")
-        sh(["ssh", a.box, f"tail -40 {a.remote_dir}/vivado_extract.log || true"])
+        sh(on_box(a.box, f"tail -40 {a.remote_dir}/vivado_extract.log || true"))
         return 1
     # read-only means the checkpoint is byte-identical afterwards
-    r = sh(["ssh", a.box, "bash -s"], input=recheck_script(a.dcp, a.dcp_sha256))
+    r = sh(on_box(a.box, "bash -s"), input=recheck_script(a.dcp, a.dcp_sha256))
     if r.returncode != 0:
         print("REFUSED: checkpoint digest changed or could not be re-checked")
         return 1
 
     # ---- phase 3: manifest + pull back ----
-    r = sh(["ssh", a.box,
-            f"cd {a.remote_dir} && sha256sum {' '.join(MANIFEST_FILES)} "
-            "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
-            "grep -c '^ERROR' vivado_extract.log || true"])
+    r = sh(on_box(a.box,
+                  f"cd {a.remote_dir} && sha256sum {' '.join(MANIFEST_FILES)} "
+                  "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
+                  "grep -c '^ERROR' vivado_extract.log || true"))
     if r.returncode != 0:
         print("REFUSED: manifest failed")
         return 1
 
     for f in MANIFEST_FILES + ("MANIFEST.sha256",):
-        r = sh(["scp", f"{a.box}:{a.remote_dir}/{f}", str(evidence / f)])
+        r = sh(from_box(a.box, f"{a.remote_dir}/{f}", evidence / f))
         if r.returncode != 0:
             print(f"REFUSED: could not pull {f}")
             return 1
