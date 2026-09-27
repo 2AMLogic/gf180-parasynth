@@ -91,7 +91,7 @@ def release_evidence() -> dict:
     when that verdict is BOUND. Qualification and review phrases are read
     from it, never typed."""
     if not RELEASE.is_file():
-        return {"verdict": "REFUSED", "detail": f"no {RELEASE.relative_to(ROOT)}"}
+        return {"verdict": "REFUSED", "detail": f"no release manifest at {RELEASE}"}
     sys.path.insert(0, str(ROOT / "fpga/release"))
     import r1_release as rr
     verdict, detail = rr.check(RELEASE)
