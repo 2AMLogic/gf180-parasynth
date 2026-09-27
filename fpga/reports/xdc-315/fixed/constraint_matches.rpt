@@ -1,0 +1,12 @@
+MATCH	41	cells	6	6	6	5fda6dc9729dc173
+MATCH	46	cells	2	2	2	71789020be86bc4b
+MATCH	47	pins	1	1	-	070590953c27a355
+MATCH	48	pins	1	1	-	03a157a020495dab
+MATCH	49	pins	1	1	-	ef71b7cbbe459ee2
+MATCH	50	pins	1	1	-	f1977611219c37db
+END	0
+CHECK	uart_stage1	1	stage1 u_synth/g_uart.u_uart/rx_q_reg[0]; uart_rxd drives u_synth/g_uart.u_uart/rx_q_reg[0]; stage2 u_synth/g_uart.u_uart/rx_q_reg[1]; async cells u_synth/g_uart.u_uart/rx_q_reg[0] u_synth/g_uart.u_uart/rx_q_reg[1]
+CHECK	uart_false	1	4 path(s): {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path}
+CHECK	uart_s1s2	1	1 path: slack 80.514 exception {}
+CHECK	uart_down	1	20 path(s), worst slack 77.901, none excepted
+ROUTE_END	0
