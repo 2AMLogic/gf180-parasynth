@@ -83,3 +83,40 @@ def test_the_build_stops_on_a_mismatch():
     script = ba.tcl_script(Path("/OUT"), [])
     assert script.index("synth_design") < script.index("constraint_matches.rpt") \
         < script.index("opt_design")
+
+
+# ---- the publisher (fpga/publish_arty.publish) ---------------------------------------
+def _publishable(tmp_path):
+    import publish_binding_cases as cases
+    return cases.make_artifact(tmp_path)
+
+
+def _rebind(art):
+    import json
+    import publish_binding_cases as cases
+    rec = json.loads((art / "report.json").read_text())
+    rec["artifact_sha256"][xb.REPORT] = cases.sha(art / xb.REPORT)
+    (art / "report.json").write_text(json.dumps(rec, indent=2) + "\n")
+
+
+def test_publisher_refuses_a_build_without_the_constraint_report(tmp_path):
+    import json
+    import publish_arty as publish
+    art = _publishable(tmp_path)
+    rec = json.loads((art / "report.json").read_text())
+    rec["artifact_sha256"].pop(xb.REPORT)
+    (art / "report.json").write_text(json.dumps(rec, indent=2) + "\n")
+    with pytest.raises(ValueError, match="constraints were never shown to bind"):
+        publish.publish(art, tmp_path / "out")
+
+
+def test_control_publisher_refuses_a_uart_constraint_that_bound_nothing(tmp_path):
+    """The R1 defect at publication: the UART lines matched 0 objects."""
+    import publish_arty as publish
+    import publish_binding_cases as cases
+    art = _publishable(tmp_path)
+    uart = [n for n, _k, rx, _e, _a in xb.object_queries(TEXT) if "u_uart" in rx]
+    cases.write_constraint_report(art, counts={n: 0 for n in uart})
+    _rebind(art)
+    with pytest.raises(ValueError, match="XDC constraints did not bind"):
+        publish.publish(art, tmp_path / "out")
