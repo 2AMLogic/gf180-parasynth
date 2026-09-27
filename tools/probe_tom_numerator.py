@@ -149,12 +149,46 @@ def explain(voice: str, kinds=(None, "BP")) -> dict:
     return out
 
 
+def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) -> dict:
+    """Known answer: one bank mode (the LT pole pair) against a float
+    recursion with the same integer coefficients, pinged at several levels.
+    An LTI resonator's decay cannot depend on level; where the fixed one
+    departs from the float by > 3 dB, and whether it then sits at exact zero,
+    locates the floor-rounding deadband in state LSB."""
+    import modal_fixed as mf
+    from scipy.signal import lfilter
+    a1, a2 = mf.pole_regs(f0, q)
+    out = {}
+    for lev in levels:
+        exc = np.zeros(n, dtype=np.int64)
+        exc[10] = lev
+        b = mf.ModalFx(modes=1, nums=1, headroom=0, out_bits=28)
+        y = np.asarray(b.process(exc, [(a1, a2, 65535)], num=[mf.RAW]), dtype=np.float64)
+        yf = lfilter([1.0], [1.0, -a1 / 2 ** 24, -a2 / 2 ** 24], exc.astype(np.float64)) * 65535 / 65536
+        blk = int(0.01 * dx.SR)
+        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk, blk)])
+        e, ef = pk(y), pk(yf)
+        bad = np.nonzero(np.abs(20 * np.log10(np.maximum(e, 1e-9) / np.maximum(ef, 1e-9))) > 3.0)[0]
+        i = int(bad[0]) if len(bad) else None
+        out[str(lev)] = {"departs_at_ms": None if i is None else i * 10,
+                         "float_level_there_lsb": None if i is None else round(float(ef[i]), 1),
+                         "ends_at_exact_zero": bool(np.all(y[-blk:] == 0)),
+                         "fixed_tail_peak_lsb": float(np.max(np.abs(y[-blk:])))}
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--explain", nargs="*", default=None, help="voices to explain decay for, then stop")
     a = ap.parse_args(argv)
+    if a.explain is not None and a.explain == ["deadband"]:
+        res = deadband()
+        print(json.dumps(res, indent=1))
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     if a.explain is not None:
         res = {v: explain(v) for v in (a.explain or ["LT", "MT", "MC", "HC"])}
         print(json.dumps(res, indent=1))
