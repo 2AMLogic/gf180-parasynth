@@ -494,6 +494,72 @@ def drive_sweep(notes=(72, 84, 96), drives=(0.05, 0.25, 0.5, 0.75, 1.0, 1.6),
     return {"rows": out}
 
 
+DEV_CONDITIONS = {(84, 20000, 0.0, 0.75), (96, 20000, 0.0, 0.75), (72, 20000, 0.0, 0.75)}
+STAGES = ("oscillator", "mixer", "ladder_in_96k", "ladder_out_96k", "ladder_out", "output")
+
+
+def summarize(paths) -> dict:
+    """Stage localization and the pulse2x-versus-R1 confirmation from sweep
+    records. Development conditions (the M5A/M5B notes at the preset filter)
+    are separated from the untouched ones; nothing is averaged across
+    properties -- each is counted on its own."""
+    rows = [r for pth in paths for r in json.loads(pathlib.Path(pth).read_text())["rows"]]
+    bad = [r for r in rows if r["verdict"] != "MEASURED"]
+    key = lambda r: (r["patch"]["waves"][0], r["note"], tuple(r["patch"]["cutoff"]),
+                     r["patch"]["q"], r["patch"]["drive"])
+    by = {(r["engine"],) + key(r): r for r in rows if r["verdict"] == "MEASURED"}
+    loc = []
+    for (eng, wave, note, cut, q, drv), r in sorted(by.items()):
+        if cut != (20000, 20000) or q != 0.0 or drv != 0.75:
+            continue
+        st = r["stages"]
+        loc.append({"engine": eng, "wave": wave, "note": note,
+                    "unwanted_inband_dbfs": {n: st[n].get("unwanted_inband_dbfs") for n in STAGES if n in st},
+                    "unwanted_outband_96k_dbfs": {n: st[n].get("unwanted_outband_dbfs")
+                                                  for n in ("ladder_in_96k", "ladder_out_96k") if n in st},
+                    "output_unwanted_rel_db": st["output"]["unwanted_rel_db"],
+                    "output_upper_wanted_rel_db": st["output"]["upper_wanted_rel_db"],
+                    "output_intended_dbfs": st["output"]["intended_dbfs"]})
+    pairs = []
+    for k, cand in by.items():
+        if k[0] != "pulse2x":
+            continue
+        base = by.get(("r1",) + k[1:])
+        if base is None:
+            continue
+        o_b, o_c = base["stages"]["output"], cand["stages"]["output"]
+        wave, note, cut, q, drv = k[1:]
+        pairs.append({"wave": wave, "note": note, "cutoff": cut[0], "q": q, "drive": drv,
+                      "dev": (note, cut[0], q, drv) in DEV_CONDITIONS and wave == "pulse29",
+                      "d_unwanted_dbfs": round(o_c["unwanted_dbfs"] - o_b["unwanted_dbfs"], 3),
+                      "d_unwanted_rel_db": round(o_c["unwanted_rel_db"] - o_b["unwanted_rel_db"], 3),
+                      "d_residual_dbfs": round(o_c["residual_dbfs"] - o_b["residual_dbfs"], 3),
+                      "d_intended_db": round(o_c["intended_dbfs"] - o_b["intended_dbfs"], 3),
+                      "d_upper_wanted_rel_db": (None if o_b["upper_wanted_rel_db"] is None else
+                                                round(o_c["upper_wanted_rel_db"] - o_b["upper_wanted_rel_db"], 3)),
+                      "base_rail": base["clip"]["output_rail_samples"],
+                      "cand_rail": cand["clip"]["output_rail_samples"],
+                      "base_dropout_db": base["dropout_depth_db"], "cand_dropout_db": cand["dropout_depth_db"]})
+
+    def tally(sel):
+        t = {"points": len(sel)}
+        for prop, better in (("d_unwanted_dbfs", -1), ("d_unwanted_rel_db", -1),
+                             ("d_upper_wanted_rel_db", +1)):
+            v = [p[prop] for p in sel if p[prop] is not None]
+            t[prop] = {"improved_gt_1db": sum(1 for x in v if x * better > MOVE_DB),
+                       "regressed_gt_1db": sum(1 for x in v if -x * better > MOVE_DB),
+                       "min": min(v) if v else None, "max": max(v) if v else None}
+        v = [p["d_intended_db"] for p in sel]
+        t["d_intended_db"] = {"min": min(v) if v else None, "max": max(v) if v else None}
+        t["new_rail_samples"] = sum(1 for p in sel if p["cand_rail"] > p["base_rail"])
+        t["new_dropouts"] = sum(1 for p in sel if p["cand_dropout_db"] < DROPOUT_DB <= p["base_dropout_db"])
+        return t
+    return {"refused": [{k: r.get(k) for k in ("engine", "note", "patch", "reason")} for r in bad],
+            "localization": loc, "pulse2x_vs_r1": pairs,
+            "confirmation": {"development": tally([p for p in pairs if p["dev"]]),
+                             "untouched": tally([p for p in pairs if not p["dev"]])}}
+
+
 def provenance() -> dict:
     srcs = ["tools/mono_artifact_probe.py", "model/voice_fx.py", "model/filter_rate_chain.py",
             "model/fixed.py"]
@@ -520,10 +586,12 @@ def main(argv=None) -> int:
     c.add_argument("--note", type=int, default=84)
     c.add_argument("--wave", default="saw")
     dv = sub.add_parser("drive")
+    sm = sub.add_parser("summarize")
+    sm.add_argument("records", nargs="+")
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
-    for p in (s, c, w, dv):
+    for p in (s, c, w, dv, sm):
         p.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
@@ -537,6 +605,10 @@ def main(argv=None) -> int:
             for inj, ok in res["caught"].items():
                 print(f"{inj:14s} {'CAUGHT' if ok else 'MISSED'}  expected {EXPECTED[inj]}")
             rc = 0 if res["all_caught"] else 1
+        elif a.cmd == "summarize":
+            res = summarize(a.records)
+            print(json.dumps(res["confirmation"], indent=1))
+            rc = 0
         elif a.cmd == "drive":
             res = drive_sweep()
             rc = 0
