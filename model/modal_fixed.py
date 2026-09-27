@@ -61,6 +61,11 @@ from dsp import SR, note_hz
 
 DEFAULT_MODES = ((1.0, 1.0, 1.0), (2.76, 0.6, 0.7), (5.40, 0.4, 0.5), (8.93, 0.25, 0.35))
 RAW, BP, HP = 0, 1, 2            # the numerator register `num` (contract 15.6)
+HP3 = 3                          # (1 - z^-1)^3: the high-pass numerator times one more
+                                 # difference -- a 2-pole high-pass followed by the
+                                 # TR-808 level stage's differentiator (reference 10,
+                                 # "a 6 dB/octave rising slope"), #369. Code 3 read as
+                                 # RAW before; no shipped kit writes it.
 EXC_BITS = 21                    # excitation word: 16 paths x 17 bits, exact (contract 15.5)
 OUT_BITS = 19                    # output word Q4.15 (DR 0005's width)
 
@@ -138,6 +143,7 @@ class ModalFx:
         self.y2 = [0] * self.M
         self.h1 = [0] * self.M          # excitation history, modes < nums (contract 15.6)
         self.h2 = [0] * self.M
+        self.h3 = [0] * self.M          # third tap, for HP3 only
 
     def coefficients(self, note: int, modes=DEFAULT_MODES) -> list[tuple[int, int, int]]:
         """(a1, a2, amp) integers per mode from physical.modal's float formulas:
@@ -169,7 +175,7 @@ class ModalFx:
         the output word, sat(mix >> (SQ - 15 + HR), out_bits). Integer only."""
         CF, SB, SQ = self.CF, self.SB, self.SQ
         osh = SQ - 15 + self.HR
-        y1, y2, h1, h2 = self.y1, self.y2, self.h1, self.h2
+        y1, y2, h1, h2, h3 = self.y1, self.y2, self.h1, self.h2, self.h3
         mix = 0
         for m in range(self.M):
             a1, a2, amp = coefs[m]
@@ -180,9 +186,11 @@ class ModalFx:
                     x = e - h2[m]
                 elif k == HP:
                     x = e - 2 * h1[m] + h2[m]
+                elif k == HP3:
+                    x = e - 3 * h1[m] + 3 * h2[m] - h3[m]
                 else:
                     x = e
-                h2[m], h1[m] = h1[m], e
+                h3[m], h2[m], h1[m] = h2[m], h1[m], e
             else:
                 x = e
             acc = a1 * y1[m] + a2 * y2[m] + self.RND  # exact, Q(SQ+CF)

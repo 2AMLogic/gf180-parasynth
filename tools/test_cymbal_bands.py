@@ -90,3 +90,13 @@ def test_skirt_leakage_alone_cannot_explain_the_low_band_tracking_decay():
     hi = cb.measure(strike(tau_l=0.10, tau_hd=1.09 / 2.303, a_hd=0.5), SR)
     grow = hi["Ln"]["edt10_ms"] / lo["Ln"]["edt10_ms"]
     assert grow < 1.25, (lo["Ln"]["edt10_ms"], hi["Ln"]["edt10_ms"])
+
+
+def test_hp3_numerator_is_the_third_difference():
+    """modal_fixed's new HP3 code: a mode with zero poles is its numerator, so an
+    impulse must come out as (1 - z^-1)^3 = 1, -3, 3, -1 (times the state scale)."""
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "model"))
+    import modal_fixed as mf
+    b = mf.ModalFx(modes=1, nums=1, headroom=0, out_bits=28)
+    y = [b.step([v], [(0, 0, 65535)], num=[mf.HP3]) for v in (1000, 0, 0, 0, 0)]
+    assert [round(v / y[0], 3) for v in y] == [1.0, -3.0, 3.0, -1.0, 0.0]
