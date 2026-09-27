@@ -91,6 +91,15 @@ is a broken instrument, and is reported as one rather than as a pass.
   --expect-fail   exit 0 only if the comparison gave 1
   --short         a third of the stimulus
   --frames N      override the run length
+  --ensemble CASE a scorecard Ensemble case (E1A, E1B, E2A): the case's bass
+                  line on the voice AND its 808 groove on the drum section for
+                  the whole phrase, which is the only stimulus here where both
+                  datapaths carry signal at once through the master mix.
+                  --ensemble-part selects which part of run_case's own
+                  decomposition this run is (mix / voice / drum-mix / body /
+                  stop:<NAME>) and --schedule-out records the pin-predicted
+                  register schedule its onsets are measured against.
+                  tools/score_ensemble_i2s.py drives every part and scores it.
 """
 from __future__ import annotations
 import argparse, json, math, os, re, subprocess, sys
@@ -749,6 +758,257 @@ def m5a_script(manifest_path: str, *, smoke: bool = False,
                      "smoke": smoke, "audio_duration_s": final_audio_s}
 
 
+# ===========================================================================
+# The ENSEMBLE stimulus (scorecard family Ensemble: E1A, E1B, E2A).
+#
+# This is the one stimulus on this bench where BOTH datapaths carry signal at
+# once for a whole musical phrase: the mono voice playing the case's bass line
+# while the 808 kit plays the case's groove, summed by the master mix, out of
+# the I2S pins. Every other stimulus here either plays the voice alone (M5A,
+# F1) or strikes drums under a held note for a few thousand frames.
+#
+# THE STIMULUS IS IMPORTED, NOT RE-DERIVED. `tools/run_case.py` already owns
+# the ensemble render -- which patch, which groove, the tempo, the bar count,
+# the bus gains -- and the whole point of an `integrated-rtl` anchor is that it
+# is the SAME case the `fixed-model` twin scored. A second copy of the
+# schedule here would be a bench measuring something adjacent to what ships,
+# which is exactly the failure docs/failure-modes.md names. So
+# `ensemble_script` imports ENSEMBLE_CASES, PATTERN_DENSE_EXTRA and
+# `_bass_line` from run_case and reads `patches.MONO` for the patch itself.
+#
+# PARTS. `run_case.render_ensemble` answers three questions from ONE render by
+# zeroing buses: the final mix, the three per-bus stems (voice / drum-mix /
+# body), and each drum stop's row alone. A chip cannot zero a bus, so each of
+# those is a SEPARATE RUN here, differing only in the three Q0.15 gain words
+# (A_VOL, A_DVOL, A_BVOL) and, for a per-stop part, in which hits are sent.
+# The mix and the three stems send a BYTE-IDENTICAL write stream apart from
+# those three words, so their writes land in the same frames and "is the
+# output the sum of the stems" is a question about the master mix's one rail
+# and nothing else -- the same claim run_case makes about `output_fx`.
+#
+# THE SCHEDULE THE ONSETS ARE MEASURED AGAINST is the frame each stop's
+# A_STOPS raise LANDED IN, as predicted from the CS_N pin (the same prediction
+# main() independently requires the chip to agree with), not the frame the
+# groove asked for. A host write takes about 1.45 frames on this link, so a
+# dense cluster of writes delivers a few hundred microseconds late; measuring
+# against the pin schedule asks "did the sound appear where the register write
+# landed", which is the same question the fixed-model twin asks, while the
+# host-to-sound latency is reported separately as a diagnostic rather than
+# folded into the metric. Neither number comes from inside the DUT.
+ENSEMBLE_BPM = 124.0                 # cases.csv: "Two bars at 124 BPM"
+ENSEMBLE_BARS = 2
+ENSEMBLE_SECONDS = 6.0               # run_case.render_ensemble's own default
+ENSEMBLE_START_S = 0.05
+ENSEMBLE_BUS_GAIN = 0.45             # DR 0005's reference drum gains
+ENSEMBLE_STEMS = ("mix", "voice", "drum-mix", "body")
+
+#: Frames one 48-bit SPI transaction occupies on this bench, MEASURED rather
+#: than assumed: over the 504 writes of `script()` the landing frame advances
+#: by 1 frame 277 times and by 2 frames 226 times (mean 1.449), 2026-09-26 on
+#: f464bff. Used ONLY to choose `wait_frames` so the groove is delivered near
+#: the frame it asks for. Nothing is measured against it: if this constant
+#: drifts the run reports a larger host-to-sound latency and, past
+#: ENSEMBLE_MAX_LATENCY_FRAMES, REFUSES.
+ENSEMBLE_WRITE_FRAMES = 1.449
+#: A stop raise delivered more than 5 ms from the frame the groove asked for
+#: is no longer this case's stimulus. 5 ms is half the case's own 10 ms event
+#: timing tolerance, so a stimulus that passes this check cannot on its own
+#: consume the tolerance the measurement needs.
+ENSEMBLE_MAX_LATENCY_FRAMES = 240
+
+
+def ensemble_part_gains(part: str) -> tuple[int, int, int]:
+    """(vol, dvol, bvol) for one part, as `run_case.render_ensemble` zeroes the
+    buses it is not asking about. `vol` is VOL_REF and not the patch's own
+    volume word because render_ensemble takes the voice's VCA output through
+    `output_fx(vca, vf.VOL_REF, ...)`."""
+    g = dx.accent_reg(ENSEMBLE_BUS_GAIN)
+    if part == "mix" or part.startswith("stop:"):
+        return (0 if part.startswith("stop:") else vf.VOL_REF, g, g)
+    if part == "voice":
+        return (vf.VOL_REF, 0, 0)
+    if part == "drum-mix":
+        return (0, g, 0)
+    if part == "body":
+        return (0, 0, g)
+    raise ValueError(f"unknown ensemble part {part!r}")
+
+
+def _ensemble_image(put, regs, vol: int, dvol: int, bvol: int):
+    """The voice page's boot-time image for an ensemble part. Every register
+    `SynthTopModel._regs` reads out of the image is written, so the chip and
+    the model start from the same picture and the three bus gains are the only
+    thing that distinguishes one part from another."""
+    for k, wave in enumerate(regs["waves"]):
+        put(0, 0, SEC_V, A.A_WAVE + k, WAVE_CODE[wave])
+    for k, weight in enumerate(regs["weights"]):          # 3 oscillators + the noise source
+        put(0, 0, SEC_V, A.A_W + k, weight)
+    for base, key in ((A.A_AMP, "amp"), (A.A_FILT, "fenv")):
+        for j, value in enumerate(regs[key]):
+            put(0, 0, SEC_V, base + j, value)
+    for name, key in (("A_CUT_LO", "cut_lo"), ("A_CUT_HI", "cut_hi"), ("A_K", "k"),
+                      ("A_GAIN", "gain"), ("A_OGAIN", "ogain"), ("A_GLIDE", "glide"),
+                      ("A_ROUTE", "route"), ("A_NSEL", "nsel"), ("A_MROUTE", "mroute"),
+                      ("A_MMIX", "mmix"), ("A_MWHEEL", "mwheel"), ("A_MPD", "mpd"),
+                      ("A_MFD", "mfd"), ("A_DRIFT", "drift")):
+        put(0, 0, SEC_V, getattr(A, name), regs.get(key, 0))
+    put(0, 0, SEC_V, A.A_VOL, vol)
+    put(0, 0, SEC_V, A.A_DVOL, dvol)
+    put(0, 0, SEC_V, A.A_BVOL, bvol)
+    # ROUTE is 0 for every ensemble part, so the drum filter's own registers
+    # never reach the audio. Written anyway, so the image is complete and a
+    # future part that engages DFILT does not inherit an undefined context.
+    put(0, 0, SEC_V, A.A_DCUT, 1800)
+    put(0, 0, SEC_V, A.A_DK, regs["k"])
+    put(0, 0, SEC_V, A.A_DGAIN, regs["gain"])
+    put(0, 0, SEC_V, A.A_DOGAIN, regs["ogain"])
+
+
+def ensemble_script(case_id: str, part: str):
+    """(sent, tail, info) for one ensemble part: the case's bass line and its
+    808 groove over the SPI pins, with the bus gains of `part`.
+
+    `sent` is (wait_frames, flag, sec, addr, data) in send order.  `info`
+    carries the intended schedule and, per hit, the INDEX of the A_STOPS write
+    that raises it, so main() can turn the bench's pin-predicted landing
+    frames into the register schedule the onsets are measured against."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import run_case as rc                       # the ONE definition of this case
+    import patches
+
+    if case_id not in rc.ENSEMBLE_CASES:
+        raise ValueError(f"{case_id} is not an ensemble case run_case knows")
+    if part not in ENSEMBLE_STEMS and not part.startswith("stop:"):
+        raise ValueError(f"unknown ensemble part {part!r}")
+    patch_name, dense = rc.ENSEMBLE_CASES[case_id]
+    name, seq, _ = next(p for p in patches.MONO if p[0].endswith(patch_name))
+    n = int(ENSEMBLE_SECONDS * dx.SR)
+
+    # ---- the voice: run_case's bass line, voice_fx's own reference host ------
+    kw = dict(seq[0][3])
+    notes = [ev[1] for ev in seq]
+    line = rc._bass_line(notes, ENSEMBLE_BPM, kw, start_s=ENSEMBLE_START_S)
+    kw0 = dict(line[0][3])
+    kw0.pop("blep", None)
+    glide_on = bool(kw0.pop("glide", False))
+    kw0.pop("gate", None)
+    regs = vf.VoiceFx.patch_regs(**kw0)
+    host = vf.KeyHost(glide="always" if glide_on else "off")
+    key_events = []
+    for start, note, dur, kwn in line:
+        gate = kwn.get("gate", None)
+        gate = dur * 0.8 if gate is None else gate
+        on = int(start * dx.SR)
+        off = min(n - 1, on + max(1, int(gate * dx.SR)))
+        if on < n:
+            key_events += [(on, "on", note), (off, "off", note)]
+    voice_ops = host.writes(key_events, regs)
+
+    # ---- the drums: the case's groove, run_case's own pattern ---------------
+    pattern = dict(dx.PATTERN_808)
+    if dense:
+        for k, row in rc.PATTERN_DENSE_EXTRA.items():
+            pattern[k] = row
+    hits = [h for h in dx.pattern_hits(pattern, bpm=ENSEMBLE_BPM, bars=ENSEMBLE_BARS,
+                                       start_s=ENSEMBLE_START_S) if h[0] < n - 2]
+    stop_filter = None
+    if part.startswith("stop:"):
+        stop_name = part.split(":", 1)[1]
+        if stop_name not in dx.STOP_NAMES:
+            raise ValueError(f"{stop_name} is not a stop of this chip")
+        stop_filter = dx.STOP_NAMES.index(stop_name)
+        hits = [h for h in hits if h[1] == stop_filter]
+        if not hits:
+            raise ValueError(f"{case_id}'s groove never strikes {stop_name}")
+    drum_writes = dx.hit_writes(hits, dx.kit_808())
+
+    # ---- one absolute-frame stream, voice image first ------------------------
+    vol, dvol, bvol = ensemble_part_gains(part)
+    image: list = []
+    _ensemble_image(lambda wait, flag, sec, addr, data: image.append((0, flag, sec, addr, data)),
+                    regs, vol, dvol, bvol)
+    absolute = list(image)
+    absolute += [(int(f), 0, SEC_D, int(addr), int(value)) for f, addr, value in drum_writes]
+    for op in voice_ops:
+        f, kind = int(op[0]), op[1]
+        if kind == "INC":
+            absolute.append((f, int(bool(op[4])), SEC_V, A.A_INC + int(op[2]), int(op[3])))
+        elif kind == "TRACK":
+            absolute.append((f, 0, SEC_V, A.A_TRACK, int(op[2])))
+        elif kind == "GATE":
+            absolute.append((f, 0, SEC_V, A.A_GATE_ON if op[2] else A.A_GATE_OFF, 0))
+        elif kind == "TRIG":
+            absolute.append((f, 0, SEC_V, A.A_TRIG, 0))
+        else:
+            raise ValueError(f"the reference host emitted an op this bench cannot send: {op!r}")
+    absolute.sort(key=lambda c: c[0])            # stable: accents stay ahead of their raise
+
+    # ---- which sent write raises which hit ----------------------------------
+    raises: dict[str, list[dict]] = {}
+    for frame, stop, accent in sorted(hits):
+        name_of = dx.STOP_NAMES[stop]
+        idx = next((i for i, c in enumerate(absolute)
+                    if c[0] == frame and c[2] == SEC_D and c[3] == dx.A_STOPS
+                    and (c[4] >> stop) & 1), None)
+        if idx is None:
+            raise ValueError(f"no A_STOPS raise was built for {name_of} at frame {frame}")
+        raises.setdefault(name_of, []).append(
+            {"intended_frame": frame, "accent": accent, "write_index": idx})
+
+    # ---- absolute frames -> wait_frames, tracking the link's own cost -------
+    sent, est = [], 0.0
+    for frame, flag, sec, addr, data in absolute:
+        wait = max(0, int(round(frame - est - ENSEMBLE_WRITE_FRAMES)))
+        sent.append((wait, flag, sec, addr, data))
+        est += ENSEMBLE_WRITE_FRAMES + wait
+    # Run to exactly ENSEMBLE_SECONDS, plus a small margin so the run cannot be
+    # SHORT of the case's length when the link's cost differs from the constant
+    # above by a frame or two. The scorer truncates to the case's own length.
+    tail = max(1, n - int(round(est)) + 8)
+    info = {"case_id": case_id, "part": part, "patch": name, "dense": bool(dense),
+            "bpm": ENSEMBLE_BPM, "bars": ENSEMBLE_BARS, "seconds": ENSEMBLE_SECONDS,
+            "case_frames": n, "bus_gain": ENSEMBLE_BUS_GAIN, "limiter": False,
+            "gains": {"vol": vol, "dvol": dvol, "bvol": bvol},
+            "stop_filter": stop_filter, "raises": raises,
+            "scheduled_hits": len(hits), "voice_notes": len(line),
+            "writes": len(sent)}
+    return sent, tail, info
+
+
+def ensemble_schedule(info: dict, wr) -> dict:
+    """The register schedule the onsets are measured against: for every hit,
+    the frame its A_STOPS raise LANDED in according to the CS_N pin, and the
+    period of the I2S stream that carries the first sample of that frame.
+
+    Contract 13 (D = 1): the sample strobed in frame f leaves in LRCLK period
+    f + 1, and the decoded WAV is indexed by period -- so a stop that fires in
+    the frame its raise landed in first appears in the WAV one period later.
+    That single frame (20.8 us) is put in here, at the point of use, rather
+    than left for a scorer to forget."""
+    out: dict[str, list[dict]] = {}
+    worst, worst_stop, worst_at = 0, "", -1
+    for stop, events in sorted(info["raises"].items()):
+        rows = []
+        for event in events:
+            row = wr[event["write_index"]]
+            landed = int(row[5])
+            latency = landed - event["intended_frame"]
+            if abs(latency) > abs(worst):
+                worst, worst_stop, worst_at = latency, stop, event["intended_frame"]
+            rows.append({"intended_frame": event["intended_frame"], "landed_frame": landed,
+                         "latency_frames": latency, "accent": event["accent"],
+                         "i2s_period": landed + 1})
+        out[stop] = rows
+    return {"case_id": info["case_id"], "part": info["part"], "patch": info["patch"],
+            "dense": info["dense"], "bpm": info["bpm"], "bars": info["bars"],
+            "seconds": info["seconds"], "case_frames": info["case_frames"],
+            "bus_gain": info["bus_gain"], "gains": info["gains"],
+            "scheduled_hits": info["scheduled_hits"], "voice_notes": info["voice_notes"],
+            "i2s_delay_periods": 1, "sample_rate_hz": 48000,
+            "worst_latency_frames": worst, "worst_latency_stop": worst_stop,
+            "worst_latency_intended_frame": worst_at, "stops": out}
+
+
 #: plan074 D. The F1 calibrated operating point through the SPI pins.
 F1CAL_CUTOFFS = (250, 1000, 4000)          # the F1A/F1B/F1C commanded cutoffs
 F1CAL_SEGMENT_S = 0.025
@@ -987,6 +1247,16 @@ def main(argv=None) -> int:
     ap.add_argument("--f1cal-fault", default=None, choices=F1CAL_FAULTS,
                     help="negative control: the image names the calibration, the pins "
                          "carry the legacy gain/ogain words; must fail (exit 1)")
+    ap.add_argument("--ensemble", default=None, metavar="CASE",
+                    help="play a scorecard Ensemble case (E1A, E1B, E2A) through SPI and I2S: "
+                         "the case's bass line on the voice AND its 808 groove on the drum "
+                         "section, summed by the master mix")
+    ap.add_argument("--ensemble-part", default="mix",
+                    help="which part of the ensemble render this run is: mix, voice, drum-mix, "
+                         "body, or stop:<NAME> for one drum row alone (run_case.render_ensemble's "
+                         "own decomposition, one run per part because a chip cannot zero a bus)")
+    ap.add_argument("--schedule-out", default=None,
+                    help="write the pin-predicted register schedule of an --ensemble run to JSON")
     ap.add_argument("--clap-phrase", action="store_true",
                     help="plan084: the L2 clap phrase (re-strikes around the final strike, CP<->MA "
                          "while sounding, RESET mid-train, every stop at accent 2 under the note) "
@@ -1005,10 +1275,15 @@ def main(argv=None) -> int:
                          "window that is not the case's full SOLO_SECONDS, so a short run "
                          "cannot be scored as the case")
     a = ap.parse_args(argv)
-    if a.drum_solo and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase):
+    if a.drum_solo and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase or a.ensemble):
         ap.error("--drum-solo is its own stimulus")
     if a.f1cal_fault and not a.f1cal_smoke:
         ap.error("--f1cal-fault requires --f1cal-smoke")
+    if a.schedule_out and not a.ensemble:
+        ap.error("--schedule-out requires --ensemble")
+    if a.ensemble and (a.m5a or a.m5a_smoke or a.f1cal_smoke or a.clap_phrase or a.drum_solo):
+        ap.error("--ensemble is a separate stimulus from --m5a, --f1cal-smoke, --clap-phrase "
+                 "and --drum-solo")
     if a.f1cal_smoke:
         if a.m5a or a.m5a_smoke:
             ap.error("--f1cal-smoke and --m5a are separate stimuli")
@@ -1063,12 +1338,20 @@ def main(argv=None) -> int:
             print(f"verify_synth_top: REFUSED -- drum solo stimulus: {exc}")
             return 2
         cover = {}
+    elif a.ensemble:
+        try:
+            cmds, tail, ens = ensemble_script(a.ensemble, a.ensemble_part)
+        except (OSError, ValueError, KeyError, StopIteration) as exc:
+            print(f"verify_synth_top: REFUSED -- ensemble stimulus: {exc}")
+            return 2
+        cover = {}
     else:
         cmds, tail, cover = script(a.short)
     # The stimulus must reach the cases this bench claims, or it is not the
     # bench it says it is. Checked BEFORE the simulation, so a stimulus edit
     # that quietly drops a circuit refuses instead of passing.
-    focused = a.m5a or bool(a.f1cal_smoke) or a.clap_phrase or bool(a.drum_solo)
+    focused = (a.m5a or bool(a.f1cal_smoke) or a.clap_phrase
+               or bool(a.drum_solo) or bool(a.ensemble))
     if not focused:
         missing = [dx.STOP_NAMES[i] for i in range(dx.N_STOPS) if i not in cover["stops"]]
         pairs = {b for _, b in dx.PAIRS}
@@ -1111,6 +1394,15 @@ def main(argv=None) -> int:
               f"(circuit {drum_spec['stop']} of {dx.N_STOPS}) at accent {drum_spec['accent']:.2f}, "
               f"{drum_spec['seconds']:.2f} s / {drum_spec['n_render']} frames, both drum buses 0.45, "
               f"the voice silent; ROUTE = 0")
+    elif a.ensemble:
+        print(f"verify_synth_top: ENSEMBLE {ens['case_id']} part {ens['part']}: patch "
+              f"{ens['patch']}, {'dense' if ens['dense'] else 'sparse'} groove, "
+              f"{ens['bpm']:.0f} BPM, {ens['bars']} bars, {ens['seconds']:.3f} s "
+              f"({ens['case_frames']} frames), no limiter")
+        print(f"verify_synth_top: {ens['case_id']} ensemble gains: vol={ens['gains']['vol']}, "
+              f"dvol={ens['gains']['dvol']}, bvol={ens['gains']['bvol']}; "
+              f"{ens['voice_notes']} voice notes and {ens['scheduled_hits']} drum hits over "
+              f"{len(ens['raises'])} stop(s): {', '.join(sorted(ens['raises']))}")
     elif a.clap_phrase:
         print(f"verify_synth_top: clap phrase: {clap['cp_hits']} CP strikes around the final-strike "
               f"boundary, CP<->MA while sounding, a drum RESET mid-train, every stop at accent 2 "
@@ -1208,6 +1500,31 @@ def main(argv=None) -> int:
         return 1
     # drive the model from the PREDICTION, not from what the chip reported
     model_writes = [(int(g[5]), int(g[1]), int(g[2]), int(g[3]), int(g[4])) for g in wr]
+    ens_schedule = None
+    if a.ensemble:
+        ens_schedule = ensemble_schedule(ens, wr)
+        LAST.update(ensemble=ens_schedule)
+        print(f"verify_synth_top: {ens['case_id']} ensemble part {ens['part']}: register schedule "
+              f"from the CS_N pin, {sum(len(v) for v in ens_schedule['stops'].values())} raises; "
+              f"worst host-to-register latency {ens_schedule['worst_latency_frames']:+d} frame(s) "
+              f"({1000.0 * ens_schedule['worst_latency_frames'] / 48000.0:+.3f} ms) on "
+              f"{ens_schedule['worst_latency_stop'] or '-'} at intended frame "
+              f"{ens_schedule['worst_latency_intended_frame']}")
+        if abs(ens_schedule["worst_latency_frames"]) > ENSEMBLE_MAX_LATENCY_FRAMES:
+            print(f"verify_synth_top: REFUSED -- the link delivered a stop raise "
+                  f"{ens_schedule['worst_latency_frames']} frame(s) from the frame the groove "
+                  f"asked for, past this bench's {ENSEMBLE_MAX_LATENCY_FRAMES}-frame budget: "
+                  f"that is no longer {ens['case_id']}'s stimulus")
+            return 2
+        if a.schedule_out:
+            path = os.path.abspath(a.schedule_out)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as fh:
+                json.dump(ens_schedule, fh, indent=1, sort_keys=True, default=int)
+            with open(path, "rb") as fh:
+                sched_sha = hashlib.sha256(fh.read()).hexdigest()
+            print(f"verify_synth_top: ensemble schedule written to {a.schedule_out}")
+            print(f"verify_synth_top: ensemble schedule sha256 {sched_sha}")
     f1cal_bad_words = 0
     if a.f1cal_smoke:
         # (1) the words that ARRIVED at the register port against the words the
@@ -1299,8 +1616,8 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: drum solo window sha256 {rep_d['window_sha256']}")
         wav_samples = window
     if a.wav_out:
-        if not (a.m5a or a.drum_solo):
-            print("verify_synth_top: REFUSED -- --wav-out requires --m5a or --drum-solo")
+        if not (a.m5a or a.drum_solo or a.ensemble):
+            print("verify_synth_top: REFUSED -- --wav-out requires --m5a, --drum-solo or --ensemble")
             return 2
         os.makedirs(os.path.dirname(os.path.abspath(a.wav_out)), exist_ok=True)
         wavfile.write(a.wav_out, 48000, wav_samples.astype(np.int16))
@@ -1369,6 +1686,9 @@ def main(argv=None) -> int:
         if a.drum_solo:
             print(f"verify_synth_top: {a.drum_solo} drum path verified from SPI pins through the "
                   f"production drum engine and I2S pins")
+        if a.ensemble:
+            print(f"verify_synth_top: {ens['case_id']} ensemble part {ens['part']} verified from "
+                  f"SPI pins through the COMBINED voice and drum paths to the I2S pins")
         if a.f1cal_smoke:
             print(f"verify_synth_top: F1 calibration {a.f1cal_smoke} words verified at the register "
                   f"port and its output verified from SPI pins to I2S pins")

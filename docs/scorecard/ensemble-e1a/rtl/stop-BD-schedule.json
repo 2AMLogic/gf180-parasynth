@@ -1,0 +1,97 @@
+{
+ "bars": 2,
+ "bpm": 124.0,
+ "bus_gain": 0.45,
+ "case_frames": 288000,
+ "case_id": "E1A",
+ "dense": false,
+ "gains": {
+  "bvol": 14746,
+  "dvol": 14746,
+  "vol": 0
+ },
+ "i2s_delay_periods": 1,
+ "part": "stop:BD",
+ "patch": "01-bass-classic",
+ "sample_rate_hz": 48000,
+ "scheduled_hits": 10,
+ "seconds": 6.0,
+ "stops": {
+  "BD": [
+   {
+    "accent": 1.4,
+    "i2s_period": 2425,
+    "intended_frame": 2400,
+    "landed_frame": 2424,
+    "latency_frames": 24
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 25656,
+    "intended_frame": 25626,
+    "landed_frame": 25655,
+    "latency_frames": 29
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 48882,
+    "intended_frame": 48852,
+    "landed_frame": 48881,
+    "latency_frames": 29
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 66295,
+    "intended_frame": 66271,
+    "landed_frame": 66294,
+    "latency_frames": 23
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 83713,
+    "intended_frame": 83690,
+    "landed_frame": 83712,
+    "latency_frames": 22
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 95326,
+    "intended_frame": 95303,
+    "landed_frame": 95325,
+    "latency_frames": 22
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 118552,
+    "intended_frame": 118529,
+    "landed_frame": 118551,
+    "latency_frames": 22
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 141777,
+    "intended_frame": 141755,
+    "landed_frame": 141776,
+    "latency_frames": 21
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 159196,
+    "intended_frame": 159174,
+    "landed_frame": 159195,
+    "latency_frames": 21
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 176616,
+    "intended_frame": 176594,
+    "landed_frame": 176615,
+    "latency_frames": 21
+   }
+  ]
+ },
+ "voice_notes": 8,
+ "worst_latency_frames": 29,
+ "worst_latency_intended_frame": 25626,
+ "worst_latency_stop": "BD"
+}

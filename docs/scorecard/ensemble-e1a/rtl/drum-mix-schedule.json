@@ -1,0 +1,335 @@
+{
+ "bars": 2,
+ "bpm": 124.0,
+ "bus_gain": 0.45,
+ "case_frames": 288000,
+ "case_id": "E1A",
+ "dense": false,
+ "gains": {
+  "bvol": 0,
+  "dvol": 14746,
+  "vol": 0
+ },
+ "i2s_delay_periods": 1,
+ "part": "drum-mix",
+ "patch": "01-bass-classic",
+ "sample_rate_hz": 48000,
+ "scheduled_hits": 42,
+ "seconds": 6.0,
+ "stops": {
+  "BD": [
+   {
+    "accent": 1.4,
+    "i2s_period": 2426,
+    "intended_frame": 2400,
+    "landed_frame": 2425,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 25661,
+    "intended_frame": 25626,
+    "landed_frame": 25660,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 48887,
+    "intended_frame": 48852,
+    "landed_frame": 48886,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 66301,
+    "intended_frame": 66271,
+    "landed_frame": 66300,
+    "latency_frames": 29
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 83722,
+    "intended_frame": 83690,
+    "landed_frame": 83721,
+    "latency_frames": 31
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 95331,
+    "intended_frame": 95303,
+    "landed_frame": 95330,
+    "latency_frames": 27
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 118560,
+    "intended_frame": 118529,
+    "landed_frame": 118559,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 141786,
+    "intended_frame": 141755,
+    "landed_frame": 141785,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 159206,
+    "intended_frame": 159174,
+    "landed_frame": 159205,
+    "latency_frames": 31
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 176629,
+    "intended_frame": 176594,
+    "landed_frame": 176628,
+    "latency_frames": 34
+   }
+  ],
+  "CB": [
+   {
+    "accent": 1.0,
+    "i2s_period": 48887,
+    "intended_frame": 48852,
+    "landed_frame": 48886,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 141786,
+    "intended_frame": 141755,
+    "landed_frame": 141785,
+    "latency_frames": 30
+   }
+  ],
+  "CH": [
+   {
+    "accent": 1.0,
+    "i2s_period": 2426,
+    "intended_frame": 2400,
+    "landed_frame": 2425,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 14044,
+    "intended_frame": 14013,
+    "landed_frame": 14043,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 25661,
+    "intended_frame": 25626,
+    "landed_frame": 25660,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 37267,
+    "intended_frame": 37239,
+    "landed_frame": 37266,
+    "latency_frames": 27
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 48887,
+    "intended_frame": 48852,
+    "landed_frame": 48886,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 60496,
+    "intended_frame": 60465,
+    "landed_frame": 60495,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 72103,
+    "intended_frame": 72077,
+    "landed_frame": 72102,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 83722,
+    "intended_frame": 83690,
+    "landed_frame": 83721,
+    "latency_frames": 31
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 95331,
+    "intended_frame": 95303,
+    "landed_frame": 95330,
+    "latency_frames": 27
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 106942,
+    "intended_frame": 106916,
+    "landed_frame": 106941,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 118560,
+    "intended_frame": 118529,
+    "landed_frame": 118559,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 130167,
+    "intended_frame": 130142,
+    "landed_frame": 130166,
+    "latency_frames": 24
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 141786,
+    "intended_frame": 141755,
+    "landed_frame": 141785,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 153394,
+    "intended_frame": 153368,
+    "landed_frame": 153393,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 165010,
+    "intended_frame": 164981,
+    "landed_frame": 165009,
+    "latency_frames": 28
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 176629,
+    "intended_frame": 176594,
+    "landed_frame": 176628,
+    "latency_frames": 34
+   }
+  ],
+  "CP": [
+   {
+    "accent": 1.4,
+    "i2s_period": 72103,
+    "intended_frame": 72077,
+    "landed_frame": 72102,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 165010,
+    "intended_frame": 164981,
+    "landed_frame": 165009,
+    "latency_frames": 28
+   }
+  ],
+  "HT": [
+   {
+    "accent": 1.0,
+    "i2s_period": 66301,
+    "intended_frame": 66271,
+    "landed_frame": 66300,
+    "latency_frames": 29
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 159206,
+    "intended_frame": 159174,
+    "landed_frame": 159205,
+    "latency_frames": 31
+   }
+  ],
+  "LT": [
+   {
+    "accent": 1.0,
+    "i2s_period": 83722,
+    "intended_frame": 83690,
+    "landed_frame": 83721,
+    "latency_frames": 31
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 176629,
+    "intended_frame": 176594,
+    "landed_frame": 176628,
+    "latency_frames": 34
+   }
+  ],
+  "OH": [
+   {
+    "accent": 1.0,
+    "i2s_period": 14044,
+    "intended_frame": 14013,
+    "landed_frame": 14043,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 60496,
+    "intended_frame": 60465,
+    "landed_frame": 60495,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 106942,
+    "intended_frame": 106916,
+    "landed_frame": 106941,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.0,
+    "i2s_period": 153394,
+    "intended_frame": 153368,
+    "landed_frame": 153393,
+    "latency_frames": 25
+   }
+  ],
+  "SD": [
+   {
+    "accent": 1.4,
+    "i2s_period": 25661,
+    "intended_frame": 25626,
+    "landed_frame": 25660,
+    "latency_frames": 34
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 72103,
+    "intended_frame": 72077,
+    "landed_frame": 72102,
+    "latency_frames": 25
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 118560,
+    "intended_frame": 118529,
+    "landed_frame": 118559,
+    "latency_frames": 30
+   },
+   {
+    "accent": 1.4,
+    "i2s_period": 165010,
+    "intended_frame": 164981,
+    "landed_frame": 165009,
+    "latency_frames": 28
+   }
+  ]
+ },
+ "voice_notes": 8,
+ "worst_latency_frames": 34,
+ "worst_latency_intended_frame": 25626,
+ "worst_latency_stop": "BD"
+}
