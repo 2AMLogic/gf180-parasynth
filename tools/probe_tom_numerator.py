@@ -105,11 +105,45 @@ def control_bit_identity() -> dict:
     return res
 
 
+def explain(voice: str, kinds=(None, "BP")) -> dict:
+    """Why a candidate moves `decay`: the ring's own decay (band-passed around
+    f0, 10 ms RMS, slope fitted 30-300 ms) against the scorer's T20, and the
+    T20 estimator's refusal reason if any."""
+    from scipy.signal import butter, sosfiltfilt
+    import audio_measure as am
+    out = {}
+    for kind in kinds:
+        x, sr = render(voice, kind)
+        y = rc.prepare(x, sr, side=voice)
+        f0 = dx.TOM_PRESET[voice][0]
+        sos = butter(2, [0.8 * f0, 1.25 * f0], btype="bandpass", fs=sr, output="sos")
+        yb = sosfiltfilt(sos, rc.window(y, sr, 0.0, None))
+        blk = int(0.01 * sr)
+        env = np.array([np.sqrt(np.mean(yb[i:i + blk] ** 2)) for i in range(0, len(yb) - blk, blk)])
+        t = np.arange(len(env)) * 0.01
+        sel = (t >= 0.03) & (t <= 0.30) & (env > 0)
+        slope = float(np.polyfit(t[sel], 20 * np.log10(env[sel]), 1)[0])
+        t20 = rc._t20_ms(0.005)(y, sr)
+        out[kind or "RAW"] = {"ring_slope_db_per_s": round(slope, 1),
+                              "ring_t20_ms": round(-20.0 / slope * 1e3, 1),
+                              "scorer_t20": (round(t20.value, 1) if t20.ok else None),
+                              "scorer_reason": t20.reason, "scorer_detail": {k: v for k, v in (t20.detail or {}).items()
+                                                                               if isinstance(v, (int, float, str))}}
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
+    ap.add_argument("--explain", nargs="*", default=None, help="voices to explain decay for, then stop")
     a = ap.parse_args(argv)
+    if a.explain is not None:
+        res = {v: explain(v) for v in (a.explain or ["LT", "MT", "MC", "HC"])}
+        print(json.dumps(res, indent=1))
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     refdir = pathlib.Path(a.refs)
     ctl = control_bit_identity()
     print("bit-identity control (nums=16, all RAW):", ctl)
@@ -121,7 +155,12 @@ def main(argv=None) -> int:
         label = kind or "RAW (shipped)"
         rows[label] = {}
         for v in VOICES:
-            x, sr = render(v, kind)
+            try:
+                x, sr = render(v, kind)
+            except rc.Refused as e:          # e.g. the compensated amp exceeds its register
+                rows[label] = {"refused": str(e)}
+                print(f"{label}: REFUSED -- {e}", flush=True)
+                break
             rows[label][v] = score(v, x, sr, refdir)
             s = rows[label][v]
             print(f"{label:14s} {v} ({VOICES[v]}): " + "; ".join(
@@ -145,6 +184,10 @@ def main(argv=None) -> int:
         return why
     sel = {}
     for kind in CANDIDATES:
+        if "refused" in rows[kind]:
+            sel[kind] = {"worst_dev_body_distance": None, "admissible": False,
+                         "reasons": [f"REFUSED: {rows[kind]['refused']}"]}
+            continue
         why = verdict(kind, DEV)
         worst = max(rows[kind][v]["body spectrum"]["distance"] for v in DEV)
         sel[kind] = {"worst_dev_body_distance": worst, "admissible": not why, "reasons": why}
