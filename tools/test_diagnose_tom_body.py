@@ -34,9 +34,12 @@ def _strike(h3=0.0, click=0.0, noise=0.0, seed=1):
     return y
 
 
-def test_pure_ring_has_no_above_split_energy():
+def test_pure_ring_has_no_late_above_split_energy():
+    # a ring switched on at t=0 has an onset transient (measured -40.9 dB,
+    # early); after 10 ms a pure decaying sine puts nothing above the split
     r = d.decompose(_strike(), SR, SPLIT, F0)
-    assert all(r[k] is None or r[k] < -60 for k in ("early_db", "harmonic_db", "other_db"))
+    assert r["early_db"] < -38
+    assert all(r[k] is None or r[k] < -70 for k in ("harmonic_db", "other_db"))
 
 
 def test_planted_harmonic_is_harmonic_at_its_level():
@@ -44,14 +47,14 @@ def test_planted_harmonic_is_harmonic_at_its_level():
     # (0.1)^2 of the ring's energy, times the late part's share of the window
     # (exp(-2 * 10 ms / 58 ms) = 0.71): -20 - 1.5 = -21.5 dB
     assert r["harmonic_db"] == pytest.approx(-21.5, abs=1.0)
-    assert r["harmonic_share"] > 0.8
+    assert r["harmonic_share"] > 0.95
 
 
 def test_planted_click_is_early_and_noise_is_other():
-    c = d.decompose(_strike(click=0.3), SR, SPLIT, F0)
-    assert c["early_share"] > 0.8
-    n = d.decompose(_strike(noise=0.05), SR, SPLIT, F0)
-    assert n["other_share"] > 0.7 and n["other_db"] > -50
+    c = d.decompose(_strike(click=3.0), SR, SPLIT, F0)
+    assert c["early_share"] > 0.95 and c["early_db"] > -25
+    n = d.decompose(_strike(noise=0.5), SR, SPLIT, F0)
+    assert n["other_share"] > 0.9 and n["other_db"] > -30
 
 
 def test_scaling_does_not_move_fractions():
