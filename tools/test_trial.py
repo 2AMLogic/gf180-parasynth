@@ -975,3 +975,95 @@ def test_held_note_partial_i2s_is_no_verdict_not_pass(repo):
     _, r = repo.run()
     assert r["verdict"] == trial.NO_VERDICT
     assert "2026 of 3820" in r["children"][0]["reasons"][0]
+
+
+# ---- #313: per-child RTL reuse in the receipt, validated by check-receipt ---------
+def _reusing_rolling(rtl_run):
+    rec = _r1_rolling({"sender": "tree", "target": "tree"})
+    if rtl_run is not None:
+        rec["rtl"]["demo"]["rtl_run"] = rtl_run
+    return rec
+
+
+SIM = {"iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd)",
+       "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd)"}
+
+
+def _reuse_child(repo, rtl_run):
+    repo.child({"rc": 0, "files": {"verification.json": _reusing_rolling(rtl_run)}},
+               interpret="rolling_record", fixtures=["demo"],
+               image={"sender": "tree", "target": "tree"})
+    repo.children[-1]["args"].append(trial.REUSE_FLAG)
+
+
+def test_the_receipt_lists_reuse_per_child_and_check_receipt_accepts_it(repo):
+    _reuse_child(repo, {"reused": True, "asked": "auto", "why": "identical run on disk", **SIM})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.PASS, rec["verdict_reasons"]
+    assert rec["rtl_reuse"] == {"c1": {"demo": {"reused": True, "why": "identical run on disk",
+                                                **SIM}}}
+    assert rec["children"][0]["interpreter"]["rtl_reuse"] == "report"
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems
+
+
+def test_a_reusing_child_that_does_not_report_reuse_is_no_verdict(repo):
+    _reuse_child(repo, None)                         # the record says nothing about reuse
+    _, rec = repo.run()
+    assert rec["verdict"] == trial.NO_VERDICT
+    assert any("does not report whether it was reused" in r for r in rec["children"][0]["reasons"])
+
+
+def test_a_reused_run_naming_no_simulator_is_no_verdict(repo):
+    _reuse_child(repo, {"reused": True, "asked": "auto", "why": "identical run on disk",
+                        "iverilog": "", "vvp": ""})
+    _, rec = repo.run()
+    assert rec["verdict"] == trial.NO_VERDICT
+    assert any("names no simulator" in r for r in rec["children"][0]["reasons"])
+
+
+@pytest.mark.parametrize("where", ["child", "summary"])
+def test_a_forged_reuse_status_is_rejected_even_when_resealed(repo, where):
+    """A re-simulated child claimed as reused (or the reverse) in the receipt,
+    re-sealed: its evidence re-derives the true status."""
+    _reuse_child(repo, {"reused": False, "asked": "auto",
+                        "why": "no identical run on disk: simulator", **SIM})
+    run_dir, rec = repo.run()
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    if where == "child":
+        forged["children"][0]["metrics"]["rtl_reuse"]["demo"]["reused"] = True
+    else:
+        forged["rtl_reuse"]["c1"]["demo"]["reused"] = True
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("reuse" in p for p in problems), problems
+
+
+def test_a_child_without_the_reuse_flag_carries_no_reuse_requirement(repo):
+    repo.child({"rc": 0, "files": {"verification.json": _reusing_rolling(None)}},
+               interpret="rolling_record", fixtures=["demo"],
+               image={"sender": "tree", "target": "tree"})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.PASS and rec["rtl_reuse"] == {}
+    assert trial.check_receipt(run_dir / "receipt.json")[0]
+
+
+def test_judge_forged_removal_of_the_reuse_requirement(repo):
+    """The Judge's reproduction on 5a88437: the child ran with
+    --reuse-rtl-if-identical and its evidence records a reuse; the forger drops
+    the interpreter's rtl_reuse key, the child's metrics.rtl_reuse and the
+    summary, and re-seals. Before the fix: VALID, problems []."""
+    _reuse_child(repo, {"reused": True, "asked": "auto", "why": "identical run on disk", **SIM})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    c = forged["children"][0]
+    c["interpreter"].pop("rtl_reuse", None)
+    (c.get("metrics") or {}).pop("rtl_reuse", None)
+    forged["rtl_reuse"] = {}
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+    assert any("reuse" in p for p in problems), problems
