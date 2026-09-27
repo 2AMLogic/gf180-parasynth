@@ -186,7 +186,7 @@ def ours(refs: pathlib.Path, seconds: float = 4.0) -> dict:
     exact render path: one strike at accent 1.0, both drum buses at 0.45."""
     import drums_fx as dx
     import test_discrimination as td
-    laws = td.fit_laws(str(refs))
+    laws = td.fit_laws(str(refs), all_sounds=True)
     out = {}
     n = int(seconds * dx.SR)
     for t in CODES:
