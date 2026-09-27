@@ -139,6 +139,42 @@ def classify(scns) -> list:
     return out
 
 
+def recon_audit(scns, osc2x, filter2x, pulse2x) -> dict:
+    """Frame by frame: does the model's 2x reconstruction leave the 17-bit
+    range of the RTL's ladder input port (rate_conv_2x.v clamps x_even/x_odd
+    to [-65536, 65535]; the model passes the raw int32)? Returns the first
+    such frame per scenario and the worst magnitude."""
+    import filter_rate_chain as frc
+    v = vf.VoiceFx(oversample_2x=osc2x, oversample_pulse_2x=pulse2x, rate_converted_ladder=filter2x,
+                   preserve_filter_headroom=filter2x, causal_filter=filter2x,
+                   pulse479_filter_candidate=filter2x)
+    v.reset()
+    seen = []
+    orig = frc.CausalRateConverter.reconstruct
+
+    def rec(self, x):
+        hi = orig(self, x)
+        seen.append(np.asarray(hi, dtype=np.int64).copy())
+        return hi
+    frc.CausalRateConverter.reconstruct = rec
+    out = []
+    try:
+        f0 = 0
+        for key, name, regs, writes, n in scns:
+            seen.clear()
+            v.play(regs, writes, n)
+            hi = np.concatenate(seen) if seen else np.zeros(0, dtype=np.int64)
+            over = np.nonzero((hi > 65535) | (hi < -65536))[0]
+            out.append({"scenario": name, "frames": [f0, f0 + n - 1],
+                        "max_abs": int(np.max(np.abs(hi))) if len(hi) else 0,
+                        "samples_outside_17bit": int(len(over)),
+                        "first_frame_outside": None if not len(over) else f0 + int(over[0]) // 2})
+            f0 += n
+    finally:
+        frc.CausalRateConverter.reconstruct = orig
+    return {"scenarios": out}
+
+
 def headroom(scns, osc2x, filter2x, pulse2x) -> dict:
     v = vf.VoiceFx(oversample_2x=osc2x, oversample_pulse_2x=pulse2x, rate_converted_ladder=filter2x,
                    preserve_filter_headroom=filter2x, causal_filter=filter2x,
@@ -166,6 +202,8 @@ def main(argv=None) -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--extremes-index", type=int)
     g.add_argument("--domain", action="store_true")
+    g.add_argument("--recon-audit", choices=("extremes0", "domain", "full"),
+                   help="report where the model's reconstruction leaves the RTL's 17-bit port, then stop")
     g.add_argument("--classify-full", action="store_true",
                    help="classify every scenario of the full set against the domain, then stop")
     ap.add_argument("--osc2x", action="store_true")
@@ -178,6 +216,17 @@ def main(argv=None) -> int:
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--json", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
+    if a.recon_audit:
+        scns = {"extremes0": lambda: extremes_only(0), "domain": domain_scenarios,
+                "full": lambda: list(vv.scenarios("full"))}[a.recon_audit]()
+        res = recon_audit(scns, a.osc2x, a.filter2x, a.pulse2x)
+        for r in res["scenarios"]:
+            if r["samples_outside_17bit"] or a.recon_audit != "full":
+                print(f"{r['scenario'][:70]:70s} max |x_hi| {r['max_abs']:7d}  outside 17-bit "
+                      f"{r['samples_outside_17bit']:5d}  first frame {r['first_frame_outside']}")
+        if a.json:
+            a.json.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     if a.classify_full:
         res = classify(list(vv.scenarios("full")))
         for r in res:
