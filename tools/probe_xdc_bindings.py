@@ -38,6 +38,7 @@ def sha(p) -> str:
 
 
 def run(vivado, dcp, xdc_text, d: Path) -> dict:
+    d = d.resolve()                     # Vivado runs with cwd=d: every path absolute
     d.mkdir(parents=True, exist_ok=True)
     rpt = d / xb.REPORT
     tcl = d / "probe.tcl"
