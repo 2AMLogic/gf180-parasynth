@@ -29,11 +29,11 @@ section 10 for where the chip sits against the wafer.space quarter slot.
 ### The board
 
 <!-- BOARD:BEGIN -->
-**18 of 100 acceptance cases have a valid measurement.** 9 pass · 9 fail · 8 no verdict · 74 not run.
+**19 of 100 acceptance cases have a valid measurement.** 9 pass · 10 fail · 7 no verdict · 74 not run.
 
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
-| Drums | 32 | 10 | 3 | 7 | 7 | 15 |
+| Drums | 32 | 11 | 3 | 8 | 6 | 15 |
 | Mono | 32 | 2 | 0 | 2 | 1 | 29 |
 | Filters | 24 | 3 | 3 | 0 | 0 | 21 |
 | Ensemble | 12 | 3 | 3 | 0 | 0 | 9 |

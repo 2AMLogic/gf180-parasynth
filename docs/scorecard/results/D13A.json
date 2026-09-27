@@ -2,30 +2,29 @@
   "engine": "fixed-model",
   "case_id": "D13A",
   "subject": "Cowbell / anchor",
-  "source_commit": "39e4e83",
-  "analysis_run": "run_case@2c561cde357a + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T12:34:49Z",
+  "source_commit": "be9b0c9",
+  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T15:32:01Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "39e4e83",
-      "described": "node/D-drums-bitexact-907-g39e4e83-dirty",
-      "branch": "feature/issue-109",
+      "commit": "be9b0c9",
+      "described": "node/D-drums-bitexact-930-gbe9b0c9-dirty",
+      "branch": "feature/issue-380",
       "dirty": true,
-      "uncommitted_sha256": "a035c1bd7c241b93",
-      "untracked_files": 1
+      "uncommitted_sha256": "64fda1732c82c61f",
+      "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "492a554b27fc",
-      "behind_commits": 3,
+      "origin_main": "ad8dca6eac4e",
+      "behind_commits": 0,
       "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {},
       "allow_stale": false,
-      "problems": [],
-      "note": "3 commit(s) behind origin/main, none of them touching an input this measurement depends on"
+      "problems": []
     },
     "command": "tools/run_case.py D10A D13A --no-audio",
     "config": {
@@ -38,13 +37,13 @@
       "level_matched": true
     },
     "python": "3.12.3",
-    "run_at": "2026-09-27T12:35:17Z",
+    "run_at": "2026-09-27T15:32:31Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:449cfefe39ada055",
+      "model/drums_fx.py": "sha256:c5ec26a962de475a",
       "model/voice_fx.py": "sha256:876b31f280fd3ef4",
       "model/audio_measure.py": "sha256:ff1ae641f70752d1",
       "model/reference_rigs.py": "sha256:c31aadac74845fc7",
-      "tools/run_case.py": "sha256:2c561cde357ab98f",
+      "tools/run_case.py": "sha256:dcac69f8b1d01bb2",
       "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
       "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
       "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
@@ -62,7 +61,7 @@
   },
   "reference_profile": "fischer-tr808-103852:cb8/CB.WAV (no knob)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@449cfefe39ad kit_with_sounds('CB') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 7 of 11",
+  "render_run": "drums_fx@c5ec26a962de kit_with_sounds('CB') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 7 of 11",
   "audio": "reference cb8/CB.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
