@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Per-band energy and decay of a TR-808 cymbal strike (#369), qualified before use.
+
+The 808 cymbal is three bands (docs/tr808-reference.md §10): a LOW band
+(3.45 kHz band-pass -> Hh1 2.5 kHz high-pass, medium fixed decay) and two
+HIGH bands that share the 7.1 kHz band-pass (one with the DECAY knob's RC,
+one short and fixed, through the ~10.5 kHz Hh3). A recording holds only
+their sum, so the bands are read two ways:
+
+  by FREQUENCY  L = 2-5 kHz (the low band), H = 6-14 kHz (both high bands)
+  by TIME       inside H, the short band dominates the first milliseconds
+                and the DECAY band the tail, so H is read twice: EDT10 (the
+                fall from the band's peak to -10 dB) and a LATE T20 (a line
+                fitted from -10 to -30 dB, scaled to 20 dB)
+
+Per band: energy share of the strike's first 1.0 s (dB re the whole signal
+in 200 Hz-20 kHz), EDT10, T20_late. Envelopes are 5 ms RMS of a zero-phase
+band-pass run from prepare()'s guaranteed lead (#101: never from mid-strike).
+
+REFUSES, per quantity, rather than answering:
+  * the band's envelope does not reach -30 dB before the record ends, or its
+    noise floor (last 100 ms) is within 10 dB of -30 dB below its peak;
+  * the late line's residual exceeds 1.5 dB (not one exponential there);
+  * the band holds less than 1e-6 of the energy.
+Known answers: tools/test_cymbal_bands.py (synthetic three-band strikes with
+planted shares and time constants; invariances; controls that must move).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import pathlib
+import sys
+
+import numpy as np
+from scipy.signal import butter, sosfiltfilt
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
+import run_case as rc  # noqa: E402
+
+BANDS = {"L": (2000.0, 5000.0), "H": (6000.0, 14000.0)}
+TOTAL = (200.0, 20000.0)
+ENERGY_S = 1.0
+BLOCK_S = 0.005
+LATE = (-10.0, -30.0)
+FLOOR_MARGIN_DB = 10.0
+MAX_RESID_DB = 1.5
+
+
+class Refused(RuntimeError):
+    pass
+
+
+def _bp(y, sr, lo, hi):
+    hi = min(hi, 0.45 * sr)
+    sos = butter(4, [lo, hi], btype="bandpass", fs=sr, output="sos")
+    o = rc.required_lead_samples(sr)
+    return sosfiltfilt(sos, y)[o:]              # t = 0 as the scorer defines it
+
+
+def _env_db(x, sr):
+    n = int(BLOCK_S * sr)
+    m = len(x) // n
+    r = np.sqrt(np.mean(x[:m * n].reshape(m, n) ** 2, axis=1))
+    return 20 * np.log10(np.maximum(r, 1e-12)), n
+
+
+def band_decay(x, sr) -> dict:
+    """EDT10 and late T20 of one band's envelope, or a refusal reason."""
+    e, n = _env_db(x, sr)
+    ip = int(np.argmax(e))
+    pk = e[ip]
+    t = (np.arange(len(e)) + 0.5) * n / sr
+    tail = e[-int(0.1 / BLOCK_S):] if len(e) > int(0.2 / BLOCK_S) else e[-4:]
+    floor = float(np.mean(tail))
+    out = {"peak_db": round(float(pk), 2), "floor_db_re_peak": round(floor - pk, 2)}
+    after = e[ip:] - pk
+    i10 = np.nonzero(after <= -10.0)[0]
+    out["edt10_ms"] = round(1e3 * (t[ip + i10[0]] - t[ip]), 2) if len(i10) else None
+    if floor - pk > LATE[1] - FLOOR_MARGIN_DB:
+        out["t20_late_ms"] = None
+        out["t20_refused"] = f"noise floor {floor - pk:.1f} dB re peak is within {FLOOR_MARGIN_DB} dB of {LATE[1]} dB"
+        return out
+    i30 = np.nonzero(after <= LATE[1])[0]
+    if not len(i10) or not len(i30):
+        out["t20_late_ms"] = None
+        out["t20_refused"] = "the envelope does not reach -30 dB before the record ends"
+        return out
+    a, b = ip + i10[0], ip + i30[0]
+    if b - a < 4:
+        out["t20_late_ms"] = None
+        out["t20_refused"] = "fewer than four envelope blocks between -10 and -30 dB"
+        return out
+    slope, icpt = np.polyfit(t[a:b + 1], e[a:b + 1], 1)
+    resid = float(np.max(np.abs(e[a:b + 1] - (slope * t[a:b + 1] + icpt))))
+    out["late_residual_db"] = round(resid, 2)
+    if resid > MAX_RESID_DB or slope >= 0:
+        out["t20_late_ms"] = None
+        out["t20_refused"] = f"late decay is not one exponential (residual {resid:.1f} dB)"
+        return out
+    out["t20_late_ms"] = round(-20.0 / slope * 1e3, 2)
+    return out
+
+
+def measure(y, sr) -> dict:
+    """`y` must come through run_case.prepare (the guaranteed lead)."""
+    y = np.asarray(y, dtype=np.float64)
+    o = rc.required_lead_samples(sr)
+    n_e = int(ENERGY_S * sr)
+    tot = _bp(y, sr, *TOTAL)
+    e_tot = float(np.sum(tot[:n_e] ** 2))
+    if e_tot <= 0:
+        raise Refused("silent")
+    res = {"sr": sr, "record_s": round((len(y) - o) / sr, 3)}
+    for name, (lo, hi) in BANDS.items():
+        xb = _bp(y, sr, lo, hi)
+        eb = float(np.sum(xb[:n_e] ** 2))
+        r = {"energy_share_db": round(10 * math.log10(eb / e_tot), 3) if eb > 1e-6 * e_tot else None}
+        r.update(band_decay(xb, sr))
+        res[name] = r
+    res["H_minus_L_db"] = (None if res["H"]["energy_share_db"] is None or res["L"]["energy_share_db"] is None
+                           else round(res["H"]["energy_share_db"] - res["L"]["energy_share_db"], 3))
+    return res
+
+
+def fischer(refs: pathlib.Path) -> dict:
+    """Every Fischer CY file: CY{TONE}{DECAY}.WAV (DR 0022's decode)."""
+    out = {}
+    for tone in ("00", "10", "25", "50", "75"):
+        for decay in ("00", "10", "25", "50", "75"):
+            p = refs / "cy8" / f"CY{tone}{decay}.WAV"
+            x, sr = _load(p)
+            out[f"CY{tone}{decay}"] = measure(rc.prepare(x, sr, side=p.name), sr)
+    return out
+
+
+def _load(p):
+    from scipy.io import wavfile
+    sr, x = wavfile.read(str(p))
+    x = np.asarray(x, dtype=np.float64)
+    if x.ndim > 1:
+        x = x.mean(axis=1)
+    return x / 32768.0, sr
+
+
+KNOB = {"00": 0.0, "10": 10.0, "25": 2.5, "50": 5.0, "75": 7.5}
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--refs", default=str(rc.configured_refs()))
+    ap.add_argument("--out", type=pathlib.Path, required=True)
+    a = ap.parse_args(argv)
+    res = fischer(pathlib.Path(a.refs))
+    print(f"{'file':8s} {'tone':>4s} {'decay':>5s} | {'L share':>7s} {'L EDT':>6s} {'L T20':>6s} | "
+          f"{'H share':>7s} {'H EDT':>6s} {'H T20':>6s} | H-L")
+    for k in sorted(res, key=lambda k: (KNOB[k[2:4]], KNOB[k[4:6]])):
+        r = res[k]
+        f = lambda v: "   REF" if v is None else f"{v:6.1f}"
+        print(f"{k:8s} {KNOB[k[2:4]]:4.1f} {KNOB[k[4:6]]:5.1f} | {r['L']['energy_share_db']:7.2f} "
+              f"{f(r['L']['edt10_ms'])} {f(r['L']['t20_late_ms'])} | {r['H']['energy_share_db']:7.2f} "
+              f"{f(r['H']['edt10_ms'])} {f(r['H']['t20_late_ms'])} | {r['H_minus_L_db']:6.2f}")
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(res, indent=1) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
