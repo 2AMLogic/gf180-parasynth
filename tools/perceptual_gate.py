@@ -648,7 +648,7 @@ WEAK_CENTS = 105.4
 WEAK_R = 2 ** (WEAK_CENTS / 1200)
 
 
-def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
+def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None, rel: str | None = None) -> dict:
     """The per-feature pass bar for one sound.
 
     The attack bar is floored at ATTACK_JND_MS, the pitch-offset bar at
@@ -669,7 +669,7 @@ def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     is chosen once, by the whole-hit spectrogram, not per feature.
 
     Single-take sounds: the WEAK calibration (WEAK_R, above)."""
-    rel = target_rel(sound)
+    rel = rel or target_rel(sound)
     T = T or Target(*load_wav(refs / rel), sound, rel)
     nbs = {}
     for nb in neighbours(sound, rel):
