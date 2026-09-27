@@ -61,7 +61,7 @@
  },
  "evidence": {
   "summary": "fpga/reports/r2-candidate/summary.json",
-  "sha256": "34b5381d6e640aac5a62a413c58bffdb8689aec6d4ba8ca47e4d5bf3e78d23e0",
+  "sha256": "1f16e9be130e9cf4cfe6f8007294c5bb7c04530dcfe86929234b0692c6dc1fbd",
   "state": "PARTIAL",
   "at": "c544436 (headroom c6c9440, UART c544436); first batch 78c9df1"
  },
