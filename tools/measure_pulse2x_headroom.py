@@ -71,7 +71,7 @@ def candidate(gain_q15: int | None, scope: str):
         vf._render_2x = orig
 
 
-def decimator_run(shape: str, note: int, gain_q15: int, n: int = 24_000) -> dict:
+def decimator_run(shape: str, note: float, gain_q15: int, n: int = 24_000) -> dict:
     """One held note straight through _render_2x; the unsaturated decimator
     output is recorded from its final sat16 call."""
     seen = []
@@ -126,6 +126,41 @@ def decimator_sweep(gains, shapes=SHAPES, notes=range(0, 128)) -> dict:
                   f"worst clip {s['worst_clip_db']} dB; peak {s['worst_peak']} @ MIDI {s['worst_peak_note']} "
                   f"({s['headroom_db']:+.2f} dB)", flush=True)
     return out
+
+
+# Rectangles a FILTER2X=1 PULSE2X=1 image can play: the pulse29 control is
+# 47.9 % under VOICE_FILTER_2X's DUTY_WIDE encoding, so a true 29 % pulse is
+# not reachable there (it is kept in the coarse sweep as a diagnostic).
+REACHABLE = ("square", "pulse479", "pulse25", "pulse15")
+MARGIN_DB = 0.1      # frozen before the fine sweep: worst peak must sit this far below the rail
+
+
+def fine_sweep(gains, lo=90.0, hi=127.0, step=0.125, n=48_000) -> dict:
+    """Every reachable rectangle on a 1/8-semitone grid over the top of the
+    range, which catches increments between notes (glides) that an integer
+    sweep misses. Selection rule, frozen: the largest gain with zero clipped
+    samples and worst peak <= rail - MARGIN_DB on every reachable shape."""
+    limit = 32767 * 10 ** (-MARGIN_DB / 20)
+    notes = list(np.arange(lo, hi + 1e-9, step))
+    out = {}
+    for g in sorted(gains, reverse=True):
+        per = {}
+        for shape in REACHABLE:
+            rows = [(nt, decimator_run(shape, nt, q15(g), n)) for nt in notes]
+            worst = max(rows, key=lambda r: r[1]["peak"])
+            per[shape] = {"worst_peak": worst[1]["peak"], "worst_note": round(float(worst[0]), 3),
+                          "clipped_samples": sum(r["clipped"] for _, r in rows),
+                          "notes_clipping": [round(float(nt), 3) for nt, r in rows if r["clipped"]]}
+        ok = all(v["clipped_samples"] == 0 and v["worst_peak"] <= limit for v in per.values())
+        out[f"{g:.3f}"] = {"gain": g, "gain_q15": q15(g), "passes_rule": ok, "shapes": per}
+        print(f"gain {g:.3f} (Q15 {q15(g)}): {'PASS' if ok else 'fail'} "
+              + "; ".join(f"{s} peak {v['worst_peak']}@{v['worst_note']} clip {v['clipped_samples']}"
+                          for s, v in per.items()), flush=True)
+    chosen = next((v for v in out.values() if v["passes_rule"]), None)
+    return {"rule": f"largest gain: zero clipped samples, worst peak <= rail - {MARGIN_DB} dB, "
+                    f"reachable rectangles, MIDI {lo}..{hi} step {step}",
+            "chosen": chosen and {"gain": chosen["gain"], "gain_q15": chosen["gain_q15"]},
+            "candidates": out}
 
 
 def mix_check(gains, scope="rect", notes=(24, 36, 48, 60, 72, 84, 96, 108, 120, 127)) -> dict:
@@ -186,13 +221,15 @@ def phrases(gains, scope="rect") -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("mode", choices=("decimator", "mix", "phrases"))
+    ap.add_argument("mode", choices=("decimator", "fine", "mix", "phrases"))
     ap.add_argument("--gains", type=float, nargs="+", default=[0.85, 0.84, 0.83, 0.82, 0.80])
     ap.add_argument("--scope", choices=("rect", "all"), default="rect")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     if a.mode == "decimator":
         res = decimator_sweep(a.gains)
+    elif a.mode == "fine":
+        res = fine_sweep(a.gains)
     elif a.mode == "mix":
         res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
     else:
