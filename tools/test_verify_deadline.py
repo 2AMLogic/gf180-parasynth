@@ -139,6 +139,11 @@ def test_every_mutant_anchor_occurs_exactly_once_in_the_current_voice(tmp_path):
     assert mutated.count("MUTANT late") == 3 and "9'd37" in mutated
     # the stall is in S_OUT2, after every wait, so it cannot overlap one and be absorbed
     assert "S_OUT2: if (late_cnt != 9'd37)" in mutated
+    # #333: the candidate skip and its negative control differ only in the predicate
+    cand = open(os.path.join(vd.make_mutant("skip2xwin", str(tmp_path)), "voice_dp.v")).read()
+    ctl = open(os.path.join(vd.make_mutant("skipallwin", str(tmp_path)), "voice_dp.v")).read()
+    assert "if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;" in cand
+    assert "if (1'b1) state <= S_MIX;" in ctl and "if (!blep) state <= S_MIX;" not in ctl
 
 
 # ---- analysis version 2: the reconciled cost model (plan080 Repair 1) --------------
