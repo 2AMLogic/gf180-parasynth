@@ -7,6 +7,10 @@
     # on hardware (Linux raw MIDI device; NOT YET EXERCISED on a board):
     .venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0
 
+    # macOS, a USB controller through CoreMIDI (fpga/coremidi_input.py, #322):
+    .venv/bin/python fpga/midi_session.py --list-midi-ports
+    .venv/bin/python fpga/midi_session.py --port sim --midi-in "coremidi:<source name>"
+
 THE IMAGE (#273). The drum kit in the known-state image is a property of the
 Arty image on the board, not of the tree this runs from (uart_host.image_kit).
 On a serial port the default is `--image release`: the published R0 image,
@@ -87,6 +91,7 @@ for _p in (HERE, os.path.join(HERE, "release"), os.path.join(ROOT, "model"),
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import coremidi_input as cmi                             # noqa: E402
 import live_midi_contract as C                           # noqa: E402
 import qualified_domain as qd                            # noqa: E402
 import uart_host as uh                                   # noqa: E402
@@ -117,6 +122,11 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 #   DROP_NOTE_OFF   the first voice note-off that would close the gate is lost
 #   WRONG_DRUM_MAP  GM 38 strikes the clap instead of the snare
 #   DELAYED_EVENT   the fourth scheduled event is placed 5 ms (240 frames) late
+# and the two overload repairs of timing contract 3, reinstated as they were
+# (fpga/test_measure_mac_midi_latency.py: a 1 s stall must then LOSE events):
+#   NO_STALE        a stale chunk is scheduled at its old receipt, notes included
+#   NO_REDATE       a late packet is sent with its stale due
+#   NO_ORDER_GUARD  a packet whose due is before the last one sent goes as it is
 DELAY_INJECT_FRAMES = 240
 
 
@@ -255,6 +265,7 @@ class Pkt:
     not_before: float
     finish: float = 0.0             # projected completion on the wire (host s)
     sent: bool = False
+    redated_from: int | None = None # the planned due, when overload re-dated it
 
     @property
     def key(self):
@@ -269,6 +280,7 @@ class GroupRec:
     r: int
     dues: list = field(default_factory=list)
     pushed: int = 0
+    receipt: float | None = None        # the true receipt, when scheduled as stale
 
 
 class MidiSession:
@@ -322,11 +334,15 @@ class MidiSession:
         self.sensing = False
         self.last_rx_t = None
         self.closed_at = None
+        self.input_lost = None              # why the MIDI input failed mid-session
+        self.last_sent_due = None           # the device drops a due before its last (#339)
+        self._stale_receipt = None          # set while handling a stale chunk (overload)
         self.voice_offs_closing = 0
         self.stats = {"host_queue_peak": 0, "device_queue_peak": 0, "deadline_misses": 0,
                       "pushed_events": 0, "reanchors": 0, "device_errors": [],
                       "boots": 0, "groups": {}, "refused": {}, "superseded": 0,
-                      "packets": 0, "drum_noteoffs": 0, "noops": 0}
+                      "packets": 0, "drum_noteoffs": 0, "noops": 0,
+                      "order_guarded": 0}
 
     # ---- output ---------------------------------------------------------------
     def _say(self, msg: str) -> None:
@@ -419,8 +435,43 @@ class MidiSession:
         blob = b""
         for i, p in enumerate(batch):
             fin = start + (i + 1) * 10 * BYTE_S
-            if self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES:
+            if self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES and "NO_REDATE" in self.inject:
+                self.stats["deadline_misses"] += 1   # the injected defect: stale due sent
+            elif self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES:
+                # OVERLOAD (timing contract 3): the packet is late. It is sent
+                # re-dated to the first frame the wire can still meet, never
+                # with its stale due: more than half a counter revolution
+                # (0.68 s) late, a stale due reads as the FUTURE on the
+                # device's 16-bit timeline, parks at the head of its FIFO and
+                # everything behind it is dropped as out of order (measured,
+                # #330). Dues stay non-decreasing, so FIFO order holds.
                 self.stats["deadline_misses"] += 1
+                if self.stats["deadline_misses"] == 1:
+                    self._say("midi_session: LATE -- a packet left the host after its "
+                              "deadline (host overload); it is re-dated to the next frame "
+                              "the wire can meet. Further late packets are counted, not "
+                              "printed")
+                p.redated_from = p.due
+                p.due = self.frame_of(fin) + uh.MIN_LEAD_FRAMES
+            if self.last_sent_due is not None and p.due < self.last_sent_due \
+                    and "NO_ORDER_GUARD" not in self.inject:
+                # #339 (policy P3): the device DROPS an event whose due is
+                # before the last one it queued. A note handed over a few ms
+                # after its receipt (host hold) is scheduled from the receipt,
+                # which can put its dues BEFORE an already-sent timed tail
+                # (the BD attack window, ~190 frames after its anchor): the
+                # device would drop the whole note. Hold it at the last sent
+                # due instead (at most the tail's offset later), and count it
+                self.stats["order_guarded"] += 1
+                if self.stats["order_guarded"] == 1:
+                    self._say("midi_session: ORDER -- a packet's due fell before the last "
+                              "one sent (a late hand-over behind a timed tail); it is sent "
+                              "at the last due so the device does not drop it (#339). "
+                              "Further cases are counted, not printed")
+                if p.redated_from is None:
+                    p.redated_from = p.due
+                p.due = self.last_sent_due
+            self.last_sent_due = p.due
             p.sent = True
             blob += uh.pkt_event(p.due & 0xFFFF, *p.write)
         self.stats["packets"] += k
@@ -574,7 +625,8 @@ class MidiSession:
             self.stats["pushed_events"] += 1
         if not deferred:
             self.cursor = anchor
-        rec = GroupRec(self.gid, kind, t, r, [p.due for p in new], push)
+        rec = GroupRec(self.gid, kind, t, r, [p.due for p in new], push,
+                       receipt=self._stale_receipt if self._stale_receipt is not None else t)
         self.groups.append(rec)
         self.gid += 1
         self.stats["groups"][kind] = self.stats["groups"].get(kind, 0) + 1
@@ -614,8 +666,19 @@ class MidiSession:
         if self.closed_at is not None:
             raise RuntimeError("feed after close")
         self.last_rx_t = t
-        for msg in self.parser.feed(data):
-            self._message(t, msg)
+        now = self.clock.monotonic()
+        # OVERLOAD (timing contract 3): a chunk the host reaches more than
+        # STALE_MS after its receipt -- the loop was stalled -- is handled as
+        # received NOW (so nothing is scheduled into the past), a note-on or
+        # drum hit in it is REFUSED as `stale`, and everything else (note-off,
+        # knob, panic) is still delivered: the device state must converge.
+        stale = now - t > C.STALE_MS / 1000.0 and "NO_STALE" not in self.inject
+        self._stale_receipt = t if stale else None
+        try:
+            for msg in self.parser.feed(data):
+                self._message(now if stale else t, msg)
+        finally:
+            self._stale_receipt = None
         self._send_due(self.clock.monotonic())
 
     def _message(self, t: float, m: bytes) -> None:
@@ -663,7 +726,15 @@ class MidiSession:
                 return self._refuse(t, m, cat, f"CC{m[1]} on the drum channel is not supported")
         return self._refuse(t, m, "system", f"status 0x{st:02x} not understood")
 
+    def _refuse_stale(self, t: float, m: bytes, what: str) -> None:
+        late_ms = (t - self._stale_receipt) * 1000.0
+        self._refuse(t, m, "stale", f"{what} reached the host {late_ms:.0f} ms after its "
+                     f"receipt (> {C.STALE_MS:.0f} ms: host overload); a late note is not "
+                     "played")
+
     def _voice_key(self, t: float, m: bytes, on: bool, note: int) -> None:
+        if on and self._stale_receipt is not None:
+            return self._refuse_stale(t, m, f"note {note}")
         if on:
             try:
                 qd.check_note(note, self.regs)
@@ -689,6 +760,8 @@ class MidiSession:
 
     def _hit(self, t: float, m: bytes, note: int, vel: int) -> None:
         import drums_fx as dx
+        if self._stale_receipt is not None:
+            return self._refuse_stale(t, m, f"drum note {note}")
         name = DRUM_MAP.get(note)
         if "WRONG_DRUM_MAP" in self.inject and note == 38:
             name = "CP"
@@ -776,11 +849,14 @@ class MidiSession:
         self._say(f"midi_session: closed ({why}): {self.stats['packets']} event packets, "
                   f"{sum(self.stats['refused'].values())} refused {self.stats['refused']}, "
                   f"{self.stats['superseded']} knob values superseded; device queue "
-                  f"{final.evq}, drops {final.drops}, errors {final.errs}")
+                  f"{final.evq}, drops {final.drops}, errors {final.errs}"
+                  + (f"; host overload: {self.stats['deadline_misses']} late packets re-dated, "
+                     f"{self.stats['order_guarded']} held in order"
+                     if self.stats["deadline_misses"] or self.stats["order_guarded"] else ""))
         return self.stats
 
 
-# ---- the real-port MIDI input (standard library only) ---------------------------
+# ---- the MIDI inputs: raw bytes (here) and CoreMIDI (coremidi_input.py) ----------
 class RawMidiInput:
     """A byte-stream MIDI input: a Linux raw MIDI device (/dev/snd/midiC*D*),
     a FIFO, or a pipe. Timestamps are the host's monotonic clock when the
@@ -824,22 +900,38 @@ def scripted_input(name: str, delay_s: float = 0.3) -> tuple:
     return RawMidiInput(rfd), th, len(events)
 
 
-def run_live(session: MidiSession, source: RawMidiInput, *, duration_s: float | None = None) -> str:
-    t_end = None if duration_s is None else time.monotonic() + duration_s
+def run_live(session: MidiSession, source, *, duration_s: float | None = None,
+             echo=None) -> str:
+    """Feed `source` (anything with read(timeout) -> (t, bytes), b"" on timeout,
+    None at end of input) into the session until it ends. A source that FAILS
+    mid-session -- a controller unplugged (coremidi_input.MidiInputLost), a
+    raw device that errors (OSError) -- ends the session like any other close,
+    with the panic, and sets `session.input_lost` so the caller exits with an
+    explicit error rather than a clean end of input."""
+    clock = session.clock
+    t_end = None if duration_s is None else clock.monotonic() + duration_s
     why = "end of input"
     try:
         while True:
-            now = time.monotonic()
+            now = clock.monotonic()
             if t_end is not None and now >= t_end:
                 why = "duration reached"
                 break
             wait = min(session.next_action(), now + 0.05) - now
-            t, data = source.read(wait)
+            try:
+                t, data = source.read(wait)
+            except (OSError, cmi.MidiInputLost) as exc:
+                why = f"MIDI input lost ({exc})"
+                session.input_lost = str(exc)
+                break
             if data is None:
                 break
             if data:
+                if echo is not None:
+                    print(f"midi_session: MIDI in t={t:.4f} {data.hex(' ')}", file=echo,
+                          flush=True)
                 session.feed(t, data)
-            session.service(time.monotonic())
+            session.service(clock.monotonic())
     except KeyboardInterrupt:
         why = "interrupted"
     session.close(why=why)
@@ -861,14 +953,38 @@ def resolve_image(port: str, image: str | None) -> str:
     return image or uh.DEFAULT_IMAGE
 
 
+def open_midi_input(spec: str, *, backend=None):
+    """--midi-in -> (source, feeder thread or None, what to print). REFUSES
+    (cmi.MidiPortRefused) when the input cannot be opened, before any device
+    is touched."""
+    if spec.startswith("scripted:"):
+        source, feeder, n = scripted_input(spec.split(":", 1)[1])
+        return source, feeder, f"scripted keyboard `{spec}` ({n} messages) through a pipe"
+    if spec.startswith("coremidi:"):
+        backend = backend or cmi.CoreMidiBackend()
+        source = cmi.PortMidiInput(backend, spec.split(":", 1)[1])
+        return source, None, f"CoreMIDI source '{source.port.name}' (all channels passed through)"
+    if spec == "-":
+        return RawMidiInput(sys.stdin.fileno()), None, "raw MIDI bytes from stdin"
+    try:
+        return RawMidiInput(spec), None, f"raw MIDI device {spec}"
+    except OSError as exc:
+        raise cmi.MidiPortRefused(f"cannot open MIDI input {spec}: {exc}") from exc
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n", 1)[1])
-    ap.add_argument("--port", required=True, help="serial port of the board, or `sim` for "
+    ap.add_argument("--port", help="serial port of the board, or `sim` for "
                     "the device contract behind a pty (fpga/uart_device_sim.py)")
-    ap.add_argument("--midi-in", required=True, help="raw MIDI byte device / FIFO path, "
+    ap.add_argument("--midi-in", help="coremidi:<source name> (macOS; see "
+                    "--list-midi-ports), a raw MIDI byte device / FIFO path, "
                     "`-` for stdin, or scripted:<scenario> (coverage, pressure, sustained)")
+    ap.add_argument("--list-midi-ports", action="store_true",
+                    help="list the CoreMIDI sources (macOS) and exit")
+    ap.add_argument("--echo-midi", action="store_true",
+                    help="print every chunk of MIDI bytes received, with its receipt time")
     ap.add_argument("--preset", default=None, help="selected_preset name (default patch if omitted)")
     ap.add_argument("--duration", type=float, default=None, help="stop after this many seconds")
     ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
@@ -877,11 +993,29 @@ def main(argv=None) -> int:
                          "DEFAULT on a serial port) or tree (built from this tree, "
                          "revision 14 -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
+    if a.list_midi_ports:
+        try:
+            ports = cmi.CoreMidiBackend().sources()
+        except cmi.MidiPortRefused as exc:
+            print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
+            return 2
+        print(f"midi_session: {len(ports)} CoreMIDI source(s)")
+        for p in ports:
+            print(f"  {p.name}" + ("   (offline)" if p.offline else ""))
+        return 0
+    if not a.port or not a.midi_in:
+        ap.error("--port and --midi-in are required (or --list-midi-ports)")
     try:
         image = resolve_image(a.port, a.image)
     except uh.Refused as exc:
         print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
         return 2
+    try:
+        source, feeder, what = open_midi_input(a.midi_in)
+    except cmi.MidiPortRefused as exc:
+        print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
+        return 2
+    print(f"midi_session: MIDI input: {what}")
     sim = None
     if a.port == "sim":
         import uart_device_sim as dev
@@ -896,19 +1030,6 @@ def main(argv=None) -> int:
     except (OSError, serial.SerialException) as exc:
         print(f"midi_session: REFUSED -- cannot open {port}: {exc}", file=sys.stderr)
         return 2
-    feeder = None
-    if a.midi_in.startswith("scripted:"):
-        source, feeder, n = scripted_input(a.midi_in.split(":", 1)[1])
-        print(f"midi_session: scripted keyboard `{a.midi_in}` ({n} messages) through a pipe")
-    elif a.midi_in == "-":
-        source = RawMidiInput(sys.stdin.fileno())
-    else:
-        try:
-            source = RawMidiInput(a.midi_in)
-        except OSError as exc:
-            print(f"midi_session: REFUSED -- cannot open MIDI input {a.midi_in}: {exc}",
-                  file=sys.stderr)
-            return 2
     session = MidiSession(ser, preset=a.preset, image=image, out=sys.stdout)
     try:
         session.start()
@@ -919,9 +1040,19 @@ def main(argv=None) -> int:
           f"{C.DRUM_CHANNEL + 1}, lookahead {C.LOOKAHEAD_MS:.0f} ms; Ctrl-C ends with a panic")
     if feeder:
         feeder.start()
-    run_live(session, source, duration_s=a.duration)
+    run_live(session, source, duration_s=a.duration, echo=sys.stdout if a.echo_midi else None)
+    if hasattr(source, "close") and not isinstance(source, RawMidiInput):
+        source.close()
     st = session.stats
+    print(f"midi_session: accepted events by kind {dict(sorted(st['groups'].items()))}")
     rc = 0
+    if session.input_lost:
+        print(f"midi_session: ERROR -- the MIDI input was lost mid-session "
+              f"({session.input_lost}); the session sent its panic (GATE_OFF, stops "
+              "clear) over the UART and closed. That silences the board only if the "
+              "UART link is still up: nothing here can mute a board it cannot reach",
+              file=sys.stderr)
+        rc = 1
     if st["device_errors"] or st["deadline_misses"] or st["final_status"]["drops"] \
             or st["boots"]:
         print(f"midi_session: FAIL -- device errors {st['device_errors'][:5]}, deadline "

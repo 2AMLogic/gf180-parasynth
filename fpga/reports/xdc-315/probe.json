@@ -1,0 +1,45 @@
+{
+ "dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+ "fixed": {
+  "rc": 0,
+  "refused": [],
+  "report": "MATCH\t41\tcells\t6\t6\t6\t5fda6dc9729dc173\nMATCH\t46\tcells\t2\t2\t2\t71789020be86bc4b\nMATCH\t47\tpins\t1\t1\t-\t070590953c27a355\nMATCH\t48\tpins\t1\t1\t-\t03a157a020495dab\nMATCH\t49\tpins\t1\t1\t-\tef71b7cbbe459ee2\nMATCH\t50\tpins\t1\t1\t-\tf1977611219c37db\nEND\t0\nCHECK\tuart_stage1\t1\tstage1 u_synth/g_uart.u_uart/rx_q_reg[0]; uart_rxd drives u_synth/g_uart.u_uart/rx_q_reg[0]; stage2 u_synth/g_uart.u_uart/rx_q_reg[1]; async cells u_synth/g_uart.u_uart/rx_q_reg[0] u_synth/g_uart.u_uart/rx_q_reg[1]\nCHECK\tuart_false\t1\t4 path(s): {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path}\nCHECK\tuart_s1s2\t1\t1 path: slack 80.514 exception {}\nCHECK\tuart_down\t1\t20 path(s), worst slack 77.901, none excepted\nROUTE_END\t0\n",
+  "check_report": [],
+  "exceptions": "Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n---------------------------------------------------------------------------------------------------------------------------------------------\n| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025\n| Date         : Sun Sep 27 06:39:11 2026\n| Host         : ip-172-31-72-198 running 64-bit Ubuntu 22.04.5 LTS\n| Command      : report_exceptions -file /home/ubuntu/work/xdc-315/build/xdc-probe/fixed/exceptions.rpt\n| Design       : arty_a7_top\n| Device       : 7a100t-csg324\n| Speed File   : -1  PRODUCTION 1.23 2018-06-13\n| Design State : Routed\n---------------------------------------------------------------------------------------------------------------------------------------------\n\nExceptions Report\n\nPosition  From                   Through         To                                                           Setup           Hold            Status           \n--------  ---------------------  --------------  -----------------------------------------------------------  --------------  --------------  -----------------\n2         [get_ports spi_sck]    *               [get_pins -hier -regexp {.*u_spi/sck_q_reg\\[0\\]/D}]          false           false           \n3         [get_ports spi_mosi]   *               [get_pins -hier -regexp {.*u_spi/mosi_q_reg\\[0\\]/D}]         false           false           \n4         [get_ports spi_cs_n]   *               [get_pins -hier -regexp {.*u_spi/csn_q_reg\\[0\\]/D}]          false           false           \n5         [get_ports btn_reset]  *               *                                                            false           false           \n17        [get_ports uart_rxd]   *               [get_pins -hier -regexp {.*g_uart\\.u_uart/rx_q_reg\\[0\\]/D}]  false           false           \n\n",
+  "check_route": []
+ },
+ "control_r1_xdc": {
+  "rc": 3,
+  "refused": [
+   "CONSTRAINT_MATCH_REFUSED line 42: cells query 965b747a367f05c8 matched 0, required 2 (ASYNC_REG 0)",
+   "CONSTRAINT_MATCH_REFUSED line 46: pins query d1e7f9feb51a2827 matched 0, required 1 (ASYNC_REG -)",
+   "CONSTRAINT_MATCH_REFUSED: 2 constraint(s) bound the wrong objects"
+  ],
+  "report": "MATCH\t41\tcells\t6\t6\t6\t5fda6dc9729dc173\nMATCH\t42\tcells\t0\t2\t0\t965b747a367f05c8\nMATCH\t43\tpins\t1\t1\t-\t070590953c27a355\nMATCH\t44\tpins\t1\t1\t-\t03a157a020495dab\nMATCH\t45\tpins\t1\t1\t-\tef71b7cbbe459ee2\nMATCH\t46\tpins\t0\t1\t-\td1e7f9feb51a2827\nEND\t2\n",
+  "check_report": [
+   "constraint_matches.rpt records 2 refused constraint(s)",
+   "XDC line 42: cells {.*g_uart/u_uart/rx_q_reg\\[[01]\\]} matched 0 object(s), required 2",
+   "XDC line 42: ASYNC_REG set on 0 of 2 cells",
+   "XDC line 46: pins {.*g_uart/u_uart/rx_q_reg\\[0\\]/D} matched 0 object(s), required 1"
+  ],
+  "exceptions": null,
+  "check_route": null
+ },
+ "control_r1_as_built": {
+  "rc": 3,
+  "refused": [
+   "CONSTRAINT_EFFECT_REFUSED uart_false: 4 path(s): {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:}",
+   "CONSTRAINT_EFFECT_REFUSED: 1 check(s) failed"
+  ],
+  "report": "MATCH\t41\tcells\t6\t6\t6\t5fda6dc9729dc173\nMATCH\t46\tcells\t2\t2\t2\t71789020be86bc4b\nMATCH\t47\tpins\t1\t1\t-\t070590953c27a355\nMATCH\t48\tpins\t1\t1\t-\t03a157a020495dab\nMATCH\t49\tpins\t1\t1\t-\tef71b7cbbe459ee2\nMATCH\t50\tpins\t1\t1\t-\tf1977611219c37db\nEND\t0\nCHECK\tuart_stage1\t1\tstage1 u_synth/g_uart.u_uart/rx_q_reg[0]; uart_rxd drives u_synth/g_uart.u_uart/rx_q_reg[0]; stage2 u_synth/g_uart.u_uart/rx_q_reg[1]; async cells u_synth/g_uart.u_uart/rx_q_reg[0] u_synth/g_uart.u_uart/rx_q_reg[1]\nCHECK\tuart_false\t0\t4 path(s): {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:}\nCHECK\tuart_s1s2\t1\t1 path: slack 80.514 exception {}\nCHECK\tuart_down\t1\t20 path(s), worst slack 77.901, none excepted\nROUTE_END\t1\n",
+  "check_report": [],
+  "exceptions": "Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n---------------------------------------------------------------------------------------------------------------------------------------------\n| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025\n| Date         : Sun Sep 27 06:40:07 2026\n| Host         : ip-172-31-72-198 running 64-bit Ubuntu 22.04.5 LTS\n| Command      : report_exceptions -file /home/ubuntu/work/xdc-315/build/xdc-probe/control-r1-as-built/exceptions.rpt\n| Design       : arty_a7_top\n| Device       : 7a100t-csg324\n| Speed File   : -1  PRODUCTION 1.23 2018-06-13\n| Design State : Routed\n---------------------------------------------------------------------------------------------------------------------------------------------\n\nExceptions Report\n\nPosition  From                   Through         To                                                    Setup           Hold            Status           \n--------  ---------------------  --------------  ----------------------------------------------------  --------------  --------------  -----------------\n2         [get_ports spi_sck]    *               [get_pins -hier -regexp {.*u_spi/sck_q_reg\\[0\\]/D}]   false           false           \n3         [get_ports spi_mosi]   *               [get_pins -hier -regexp {.*u_spi/mosi_q_reg\\[0\\]/D}]  false           false           \n4         [get_ports spi_cs_n]   *               [get_pins -hier -regexp {.*u_spi/csn_q_reg\\[0\\]/D}]   false           false           \n5         [get_ports btn_reset]  *               *                                                     false           false           \n\n",
+  "check_route": [
+   "after-route check uart_false failed: 4 path(s): {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:} {u_synth/g_uart.u_uart/rx_q_reg[0]/D:}",
+   "exceptions.rpt: the design's exceptions [('[get_ports btn_reset]', '*'), ('[get_ports spi_cs_n]', '[get_pins -hier -regexp {.*u_spi/csn_q_reg\\\\[0\\\\]/D}]'), ('[get_ports spi_mosi]', '[get_pins -hier -regexp {.*u_spi/mosi_q_reg\\\\[0\\\\]/D}]'), ('[get_ports spi_sck]', '[get_pins -hier -regexp {.*u_spi/sck_q_reg\\\\[0\\\\]/D}]')] are not exactly the XDC's set_false_path lines [('[get_ports btn_reset]', '*'), ('[get_ports spi_cs_n]', '[get_pins -hier -regexp {.*u_spi/csn_q_reg\\\\[0\\\\]/D}]'), ('[get_ports spi_mosi]', '[get_pins -hier -regexp {.*u_spi/mosi_q_reg\\\\[0\\\\]/D}]'), ('[get_ports spi_sck]', '[get_pins -hier -regexp {.*u_spi/sck_q_reg\\\\[0\\\\]/D}]'), ('[get_ports uart_rxd]', '[get_pins -hier -regexp {.*g_uart\\\\.u_uart/rx_q_reg\\\\[0\\\\]/D}]')]"
+  ]
+ },
+ "fixed_ok": true,
+ "control_caught": true,
+ "as_built_caught": true
+}

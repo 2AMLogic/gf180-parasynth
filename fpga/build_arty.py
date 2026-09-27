@@ -16,6 +16,7 @@ import subprocess
 import time
 
 import build_selected
+import xdc_bindings as xb
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
@@ -64,7 +65,14 @@ def tcl_script(directory, paths, constraints=XDC):
         + " -generic {SIM_NO_MMCM=0 POR_BITS=12} -flatten_hierarchy none"
         + " -verilog_define VOICE_OSC_2X -verilog_define VOICE_FILTER_2X",
         "write_checkpoint -force " + tcl_word(directory / "synthesized.dcp"),
+        # #315: every XDC object query must bind exactly its objects, or the
+        # build stops here (exit 3) instead of shipping a dropped constraint
+        xb.tcl_assertions(Path(constraints).read_text(),
+                          str(directory / xb.REPORT)),
         "opt_design", "place_design", "phys_opt_design", "route_design",
+        # #315 / plan099: on the ROUTED design, the UART synchroniser constraints
+        # hit the intended flops and arc, and nothing else is excepted
+        xb.tcl_route_checks(str(directory / xb.REPORT), str(directory / xb.EXCEPTIONS)),
         "report_utilization -file " + tcl_word(directory / "utilization.rpt"),
         "report_timing_summary -check_timing_verbose -file " + tcl_word(directory / "timing.rpt"),
         "report_clocks -file " + tcl_word(directory / "clocks.rpt"),
@@ -154,7 +162,8 @@ def main(argv=None):
         save()
         return 2
     outputs = [directory / name for name in
-               ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt", "routed.dcp")]
+               ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt", "routed.dcp",
+                xb.REPORT, xb.EXCEPTIONS)]
     for path in outputs:
         path.unlink(missing_ok=True)
     started = time.monotonic()

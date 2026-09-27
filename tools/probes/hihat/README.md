@@ -38,8 +38,27 @@ been thrown away: it is the record of a result that looked good and was wrong.
 
 ## Status
 
-These are **probes, not a harness**. They have overlapping helpers, they are
-numbered rather than named, and the general parts belong in a shared module
-alongside the conga tool's `validate_known_answer`, `floor_for_these_signals`
-and `windowed_alike`. That consolidation is **#104**. Committing them unpolished
-beats losing them polished.
+These are still **probes**, numbered rather than named, but the general
+methodology they share with the conga tool now lives in one tested module,
+`model/measure_harness.py` (#104), next to `model/audio_measure.py`:
+`validate_known_answer`, `floor_for_these_signals`, `windowed_alike`,
+`descent_test` and `assert_precondition`, each with an injected-bug control in
+`model/test_measure_harness.py`.
+
+What was folded, and what was deliberately not:
+
+- `hh_probe.py`'s three REFUSE-unless-it-agrees checks (reproducing
+  `CY_FIT['shares']`, the offline emulator against the fixed-point render, the
+  cached band-energy estimator against `audio_measure.band_energy`) and
+  `hh_probe2.py`'s per-voice emulator check now call
+  `measure_harness.assert_precondition`. The tolerances and the numbers they
+  guard are unchanged; that is the only change to either file since the rescue
+  described above.
+- `hh_probe3.py`, `hh_probe4.py`, `combo.py` and `patch_q.py` had no helpers of
+  their own that overlap the harness -- they import `hh_probe`'s -- so they are
+  untouched.
+- `hh_probe.py`'s renderer, filter derivations and `fast_band_energy` are
+  hi-hat/cymbal apparatus, not validation methodology, and stay here.
+- `hh_probe5.py` (added after #104 was filed) keeps its own `Refused`
+  exception: its refusals carry case-specific explanations the generic
+  message would lose. New probes should start from `measure_harness`.

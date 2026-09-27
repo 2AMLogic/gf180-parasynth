@@ -36,9 +36,19 @@ utilisation would come in *below* the ORFS route's 60.1 % and read the gap as ma
 It came in **above**. The prose was a prediction wearing the clothes of a result, and
 the fix was to compute the comparison rather than to correct it.
 
-**The run this page reports was still in detailed routing when the page was
-generated.** Two of the four conditions below are therefore *not measured* — which is
-a different outcome from failing, and the table keeps them apart.
+**Which of the questions this run has answered is the verdict table's job, not this
+paragraph's** — the page was first published while the route was still running, and a
+sentence describing that state went stale within the hour. A condition the run did not
+reach reads *not measured*, which is a different outcome from failing, and the table
+keeps them apart. `pnr/shuttle/evidence/halfslot-verdict.json` is the same verdict as
+data, and is what `docs/dag.json` node `S2` reads.
+
+**And the verdict is split in two on purpose.** "Does the joined chip fit one half
+slot" is #33's question; "is this layout clean" is a different question with a much
+longer condition list, nearly all of which (§5) this run did not run at all. Folding
+them together would let a route that finishes with a handful of router shorts report
+as *does not fit*, and send a decision about dies per wafer to a human on the strength
+of a routing artefact.
 
 ### Verdict
 
@@ -234,6 +244,26 @@ The flow's own count of sequential cells anywhere on the die is **12,275** (`des
 
 <!-- END measured:crosscheck -->
 
+### 4.5 The router's own violation count, from both places that hold it
+
+Where this page says "DRC" it means **this number** — the detailed router checking its
+own work — and nothing else. §5 lists the sign-off decks that did not run, and §6.4 a
+rule class the router skipped outright, which makes this count an *under*-count against
+sign-off by an unknown amount.
+
+<!-- BEGIN measured:router -->
+<!-- END measured:router -->
+
+### 4.6 What the router's iteration schedule cost
+
+The router's effort is bounded by an iteration *count*, and an iteration costs
+anywhere from seconds to over an hour. The two rows that matter most are the longest
+run at one violation count and whether the count improved **after** it — because a
+draft of §6.5 assumed it did not, and was wrong. Generated from the router's own log.
+
+<!-- BEGIN measured:iterations -->
+<!-- END measured:iterations -->
+
 ## 5. What this run does **not** show
 
 Stated positively so it cannot be read as a claim by omission.
@@ -400,14 +430,43 @@ args every iteration.
 
 ## 7. What has not been done, and by whom
 
-- **The run was not finished.** It was still in `OpenROAD.DetailedRouting` when this
-  page was generated. Re-run `pnr/shuttle/report_halfslot.py <run-dir>` against the
-  completed run and every table above updates; `--check` fails if the page is stale.
 - **The run was not on a sanctioned host.** It was started on a shared Loom dispatch
   worker by a sweep attempt that then died, leaving it running with no session behind
   it (filed as #310). `CLAUDE.md` places work of this size on the pinned build box.
   Nothing about the *numbers* is affected — but the eight-thread router was competing
   with other sweeps for eight cores, and the completing run belongs on the box.
+- **The run had to be carried forward across two sessions, and the mechanism is a
+  deliverable rather than a footnote.** `ERROR_ON_TR_DRC` defaults true, so a route
+  ending with even one router violation aborts the flow at `Checker.TrDRC` — *before*
+  `OpenROAD.RCX` and `OpenROAD.STAPostPNR`, the only two steps that produce post-route
+  parasitics and per-corner timing. A run that stops there has a DRC number and no
+  timing at all. `pnr/shuttle/run_librelane.py resume` carries the same run directory
+  forward from a named step; `pnr/shuttle/finish_halfslot.py finish` orders the whole
+  tail — wait for the router, resume, regenerate evidence and this page — on disk
+  rather than in an agent's context, and REFUSES rather than reporting if the route
+  recorded no state.
+  **So the DRC count in §4.5 is a route that would have aborted the flow, carried past
+  the abort by `-c ERROR_ON_TR_DRC=false` for that run only, not a route that passed a
+  checker.** The override is on the command line and not in the committed config, so a
+  future clean run still stops; a test asserts it stays out of `config.yaml`.
+- **Where the resume starts was wrong before it was right, and the wrong version would
+  have looked fine.** The obvious resume point is `OpenROAD.RCX` — the first step that
+  produces anything this page was missing. It is also nine steps too late. Between the
+  router and `RCX` the Chip flow runs `OpenROAD.CheckAntennas-1` (the **post-route**
+  antenna check, which #33 asks for by name), `Checker.DisconnectedPins`,
+  `Checker.WireLength` and **`OpenROAD.FillInsertion`**. Resuming at `RCX` would have
+  produced per-corner post-route timing for a die with no fillers and no post-route
+  antenna check, and the flow would have reported success — the same shape as
+  klayout-tools#2086, self-inflicted. The resume starts at
+  `Odb.RemoveRoutingObstructions`, the first step after the route, so everything runs.
+- **Where the run directory lives is not where LibreLane put it.** LibreLane writes
+  its run beside the design config, inside the worktree. This worktree was moved aside
+  and recreated while the container was routing; a bind mount follows the inode, so
+  the router kept writing into the moved copy while its state files still named the
+  original path. The run is intact and its absolute paths are still right, but a new
+  container started from the recreated tree would mount a tree with no run in it.
+  `finish_halfslot.py relocate` is that repair, and it refuses to do it under a live
+  container.
 - **The tool findings in §6 were filed, or declined with a reason, under #342:**
 
   | finding | outcome |
@@ -423,5 +482,8 @@ args every iteration.
   fallback was not needed. **Correcting a filing is a different story.** The token that
   created #11537 cannot comment on, edit or close it, so the access gap is real for
   follow-up, even though it is not for creation.
+- **Re-running the report.** `pnr/shuttle/report_halfslot.py <run-dir>` regenerates
+  every table above and rewrites `evidence/halfslot-verdict.json`; `--check` exits
+  non-zero if the page on disk is stale.
 
 <!-- generated-from: halfslot step 42-openroad-stamidpnr-3 by pnr/shuttle/report_halfslot.py -->

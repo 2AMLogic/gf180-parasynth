@@ -21,6 +21,7 @@ from scipy.signal import lfilter
 
 import audio_measure as am
 import drums_fx as dx
+import measure_harness as mh
 from dsp import SR
 from modal_fixed import RAW, BP, HP, pole_regs
 
@@ -183,10 +184,8 @@ def main():
     say(f"    machine   {fmt(HW_CY)}")
     say(f"    ours      {fmt(base)}")
     say(f"    RECORDED  {fmt(REC_CY)}   (drums_fx.CY_FIT['shares'])")
-    err = max(abs(a-b) for a, b in zip(base, REC_CY))
-    if err > 0.003:
-        raise SystemExit(f"REFUSED: cannot reproduce CY_FIT['shares'] "
-                         f"(worst band {err*100:.2f} points)")
+    err = mh.assert_precondition(base, REC_CY, 0.003,
+                                 what="cannot reproduce CY_FIT['shares']")
     say(f"  precondition OK: reproduces the recorded 2.0 s row to {err*100:.2f} points.")
     say("\n== START RED: the machine's split at +-4 points per band ==")
     gate(base, "baseline kit_808()")
@@ -243,16 +242,13 @@ def main():
     sh_re = am.band_energy(recon, CY_BANDS, SR)
     say(f"    fixed-point render {fmt(base)}")
     say(f"    offline emulator   {fmt(sh_re)}")
-    e2 = max(abs(a-b) for a, b in zip(sh_re, base))
-    if e2 > 0.010:
-        raise SystemExit(f"REFUSED: emulator off by {e2*100:.1f} points; "
-                         "the sweep below would not mean anything")
+    e2 = mh.assert_precondition(
+        sh_re, base, 0.010,
+        what="emulator off; the sweep below would not mean anything")
     say(f"  precondition OK: within {e2*100:.2f} points of the fixed-point render,")
     say("  so a sweep of post-filters run offline is trustworthy to ~0.5 points.")
     fb = fast_band_energy(recon, CY_BANDS)
-    e3 = float(np.max(np.abs(fb - sh_re)))
-    if e3 > 1e-9:
-        raise SystemExit(f"REFUSED: cached band_energy differs by {e3:.2e}")
+    e3 = mh.assert_precondition(fb, sh_re, 1e-9, what="cached band_energy differs")
     say(f"  precondition OK: the cached band-energy estimator is bit-identical "
         f"to audio_measure.band_energy ({e3:.1e}).")
 

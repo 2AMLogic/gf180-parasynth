@@ -44,12 +44,12 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **780 commits over 224 hours.**
+Measured from git, not remembered. **837 commits over 226 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 1555 | 6.9 |
-| injected controls | 188 | 0.8 |
+| tests | 1577 | 7.0 |
+| injected controls | 193 | 0.9 |
 | bit-exact verifiers | 8 | — |
 | lines of RTL | 9,923 | 44 |
 
@@ -130,20 +130,20 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 135 passed in 1.78s |
+| `F3` | Measurement ground truth | **GREEN** | 135 passed in 1.56s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 182.57s (0:03:02) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 200.29s (0:03:20) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
-| `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops -- but detailed routing has not completed, so no router DRC count and no post-route STA at any corner. docs/pnr-shuttle-halfslot.md |
+| `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348 |
 | `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared |
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>

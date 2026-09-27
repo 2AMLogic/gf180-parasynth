@@ -198,7 +198,8 @@ def test_a_moved_working_tree_leaves_r1_bound_with_a_note(monkeypatch):
         "rtl-sketch/voice_dp.v") else real(p))
     verdict, detail = r1c.check()
     assert verdict == "BOUND", detail
-    assert "NOTE the working tree has moved past R1 in ['rtl-sketch/voice_dp.v']" in detail
+    note = detail.split("NOTE the working tree has moved past R1 in ", 1)[1]
+    assert "'rtl-sketch/voice_dp.v'" in note          # (the tree may have moved elsewhere too)
 
 
 def test_control_a_tampered_frozen_source_hash_is_stale(tmp_path):

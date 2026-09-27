@@ -349,7 +349,7 @@
     },
     "candidate": {
       "record": "fpga/release/r1-candidate.json",
-      "sha256": "e2659bf6d079dfc72ed0938d30bfda48bea6c63a24a2a223e443bf29422cb56e",
+      "sha256": "1d66725c819f4801a55c58ad9d6a83faf7d06f880673a5d4ef15a0353de1894f",
       "evidence_dir": "fpga/reports/r1-candidate",
       "rtl_runs_bound": 12
     }
