@@ -99,20 +99,30 @@ import uart_host as uh                                   # noqa: E402
 SR = C.SR
 BYTE_S = uh.BITS_PER_BYTE / uh.DEFAULT_BAUD
 
-# the session's drum map: GM note -> 808 stop name (docs/live-midi.md)
+# the session's drum map: GM note -> one of the sixteen 808 SOUNDS
+# (docs/live-midi.md). Five circuits carry two sounds each (drums_fx.PAIRS:
+# LT/LC, MT/MC, HT/HC, RS/CL, CP/MA); a hit on the sound its circuit is not in
+# first sends that sound's position (drums_fx.preset_writes, for the image),
+# then strikes (#298). R0 (`--image release`) keeps its eleven stops.
 DRUM_MAP = {
     35: "BD", 36: "BD",                  # acoustic / electric bass drum
     38: "SD", 40: "SD",                  # snare, electric snare
     41: "LT", 43: "LT",                  # low floor tom, high floor tom
     45: "MT", 47: "MT",                  # low tom, low-mid tom
     48: "HT", 50: "HT",                  # hi-mid tom, high tom
+    64: "LC", 63: "MC", 62: "HC",        # low conga, open hi conga, mute hi conga
     42: "CH", 44: "CH",                  # closed hat, pedal hat
     46: "OH",                            # open hat
     39: "CP",                            # hand clap
+    70: "MA",                            # maracas
     56: "CB",                            # cowbell
+    37: "RS",                            # side stick (rim shot)
     75: "CL",                            # claves
     49: "CY", 57: "CY",                  # crash 1, crash 2
 }
+ALTERNATES = ("LC", "MC", "HC", "RS", "MA")       # sounds R0 does not expose
+# one instrument, one strike within SIMULTANEOUS_FRAMES: the hat pair (CH
+# chokes OH) and each shared circuit (the two sounds of a pair are one circuit)
 EXCLUSIVE = {"CH": ("CH", "OH"), "OH": ("CH", "OH")}
 CC_CUTOFF, CC_RESONANCE, CC_VOLUME, CC_MOD, CC_SUSTAIN = 74, 71, 7, 1, 64
 CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
@@ -122,6 +132,8 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 #   DROP_NOTE_OFF   the first voice note-off that would close the gate is lost
 #   WRONG_DRUM_MAP  GM 38 strikes the clap instead of the snare
 #   DELAYED_EVENT   the fourth scheduled event is placed 5 ms (240 frames) late
+#   WRONG_ALT       a switch to the other sound of a pair sends the OTHER
+#                   sound's position (e.g. a low-conga note re-sends the low tom)
 # and the two overload repairs of timing contract 3, reinstated as they were
 # (fpga/test_measure_mac_midi_latency.py: a 1 s stall must then LOSE events):
 #   NO_STALE        a stale chunk is scheduled at its old receipt, notes included
@@ -139,6 +151,24 @@ class Refusal:
 
 
 # ---- MIDI 1.0 byte stream -> messages ---------------------------------------
+def circuit_positions(image: dict, presets: dict) -> dict:
+    """{stop name: sound} for the five shared circuits: the sound whose
+    position the register image holds. Neither (or both) is refused: a host
+    that does not know its circuits' positions cannot switch them."""
+    import drums_fx as dx
+    out = {}
+    if not presets:
+        return out
+    for a, b in dx.PAIRS:
+        stop = dx.STOP_NAMES[dx.SOUND_STOP[a]]
+        hit = [s for s in (a, b) if all(image.get(ad) == v for ad, v in presets[s])]
+        if len(hit) != 1:
+            raise uh.Refused(f"the loaded kit puts the {stop} circuit in {hit or 'neither'} "
+                             f"of {a}/{b}")
+        out[stop] = hit[0]
+    return out
+
+
 class MidiParser:
     """Bytes in any chunking -> complete messages (raw bytes, running status
     expanded). Real-time bytes are delivered where they arrive, even inside
@@ -311,6 +341,10 @@ class MidiSession:
         # has drifted; never MusicHost's fallback to the tree's kit_808()
         self.image = image
         self.mh = sh.MusicHost(patch=dict(regs), kit=uh.image_kit(image))
+        # the sixteen sounds (#298): each shared circuit starts in the position
+        # the loaded kit puts it in, read from the kit, not assumed
+        self.presets = uh.image_sound_presets(image)
+        self.position = circuit_positions(self.mh.image, self.presets)
         self.keys = MonoKeys(regs)
         self.mod_routed = bool(int(regs["mroute"]) & (vf.MR_OSC | vf.MR_FILT))
         self.parser = MidiParser()
@@ -768,15 +802,29 @@ class MidiSession:
         if name is None:
             return self._refuse(t, m, "unmapped-drum", f"GM note {note} has no 808 voice "
                                 "in the loaded kit")
+        if name in ALTERNATES and not self.presets:
+            return self._refuse(t, m, "not-in-image", f"{name} (GM {note}): the "
+                                f"{self.image} image is qualified for its eleven stops; the "
+                                "five alternate sounds are exposed on r1 and tree (#298)")
+        stop_name = dx.STOP_NAMES[dx.SOUND_STOP[name]] if self.presets else name
         r = self.frame_of(t)
-        for other in EXCLUSIVE.get(name, (name,)):
+        for other in EXCLUSIVE.get(stop_name, (stop_name,)):
             if other in self.last_strike and r - self.last_strike[other] < C.SIMULTANEOUS_FRAMES:
                 return self._refuse(t, m, "simultaneous", f"{name} within 1 ms of {other}: "
                                     "one instrument, one strike")
-        stop = dx.STOP_NAMES.index(name)
+        stop = dx.STOP_NAMES.index(stop_name)
         accent = 0.6 + 0.8 * (vel - 1) / 126.0
         image = dict(self.mh.image)
+        position = dict(self.position)
         n0 = len(self.mh.w)
+        if self.presets and self.position.get(stop_name) not in (None, name):
+            # the circuit is in its other sound's position: select this one first
+            sel = name
+            if "WRONG_ALT" in self.inject:
+                sel = self.position[stop_name]         # the injected defect: re-send the other
+            for a, v in self.presets[sel]:
+                self.mh.drum(0, a, v, tag="select")
+            self.position[stop_name] = name
         self.mh.hits([(0, stop, accent)])
         new = self.mh.w[n0:]
         del self.mh.w[n0:]
@@ -785,9 +833,10 @@ class MidiSession:
         tail = [(w.frame, (w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF)) for w in new if w.frame]
         if self._schedule("hit", t, head, tail, conditional=True) is None:
             self.mh.image = image
+            self.position = position
             return self._refuse(t, m, "queue-pressure", f"{name}: the link cannot deliver "
                                 "it within the lookahead")
-        self.last_strike[name] = r
+        self.last_strike[stop_name] = r
 
     def _cc(self, t: float, m: bytes, cc: int, v: int) -> None:
         import synth_top_model as stm
