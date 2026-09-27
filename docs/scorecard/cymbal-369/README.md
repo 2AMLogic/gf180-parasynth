@@ -112,6 +112,10 @@ That map is **not** a measurement of the instrument. Its knob laws need their ow
 claim can be made. Wrong-then-right 2: I rendered through `kit_at` first and nearly reported a 10 dB band error that
 the shipped instrument does not have.
 
+> **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
+> `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by
+> `tools/werner_fig4.py`, and a second negative that eliminates the filter values as the cause).
+
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
 Restore §10's structure, as a set of discrete choices checked against the circuit, not Q hacks:

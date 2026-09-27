@@ -743,8 +743,8 @@ of the VCAs:
 
 | band | source | band-pass (bridged-T type, IC3) [values SN p.13; f0/Q inferred] | VCA | envelope | high-pass |
 |---|---|---|---|---|---|
-| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0033 µF) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp, resonant ≈10.5 kHz [verified: W14b §9] |
-| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** VR2 2 MΩ ‖ R93 470 kΩ × C41 1 µF: RC up to ≈0.38 s [verified: W14b §7; value inferred] | Hh2: 2nd-order non-unity-gain Sallen-Key (resonant) [verified: W14b] |
+| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0033 µF) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp. **2-pole 10.32 kHz Q 5.64 + 1-pole high-pass 5.20 kHz, pass band +8.86 dB** [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.008 dB rms] |
+| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** VR2 2 MΩ ‖ R93 470 kΩ × C41 1 µF: RC up to ≈0.38 s [verified: W14b §7; value inferred] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
 | low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0068 µF) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
 
 Werner states the band-pass centres as "around 3440 Hz" and "around 7100 Hz"
@@ -762,14 +762,24 @@ band's RC (chart: 350/800/1200 ms overall). TONE (VR4 20 kΩ) is a passive
 network that mainly attenuates the third (highest) band but also shifts the
 others ("weakly-separated, non-orthogonal controls… like guitar amplifier
 tone stacks"). LEVEL's buffer "also acts as a differentiator in the audio
-band — a 6 dB/octave rising slope" **[verified: W14b §11]**.
+band — a 6 dB/octave rising slope" **[verified: W14b §11]**. That slope has a
+corner: W14b Fig. 10's family is a **single-pole differentiator with its corner
+at 18.97 kHz** (0.02 dB rms over 21 Hz–19 kHz), which tilts **+16.6 dB across
+2–20 kHz**, not the +20 dB of an ideal 6 dB/octave. A discrete `(1 - z^-1)` at
+48 kHz tilts +17.4 dB over the same span. **[measured off W14b Fig. 10,
+`tools/werner_fig4.py`]**
 
 **What to implement (CY).** Six phase accumulators → 7-level staircase sum
 → two 2-pole band-passes (3.45 kHz Q 6; 7.1 kHz Q 6; the modal bank can host
 these if its input is pre-differenced, see §14) → three swing-VCA × envelope
 paths: (low band: τ ≈ 100 ms fixed), (high band: τ = decay knob, ≈40 ms …
-≈400 ms), (high band: τ ≈ 20 ms fixed) → high-passes (2.5 kHz Q 1 on the low
-band; ≈10 kHz resonant on the high bands) → tone mix → +6 dB/oct tilt. The
+≈400 ms), (high band: τ ≈ 20 ms fixed) → high-passes (2.5 kHz Q 0.97 unity-gain on the
+low band; 8.84 kHz Q 1.00 at +6.03 dB on the DECAY band; 10.32 kHz Q 5.64
+cascaded with a 1-pole high-pass at 5.20 kHz, at +8.86 dB, on the short band)
+→ tone mix → the level stage's rising slope, a 1-pole differentiator cornered
+at 18.97 kHz. The two band-passes' own peak gains are +22.95 dB (3.45 kHz) and
++24.10 dB (7.1 kHz), so the **filter chain alone** puts the DECAY band +7.2 dB
+and the short band +10.0 dB above the low band. The
 VCAs' asymmetric clipping is what makes the sum "sizzle"; a linear VCA gives a
 flat, chorus-like tone.
 
@@ -1100,9 +1110,29 @@ envelopes.
   set by trimmers/resistors; no measured figure.
 - **Which serial numbers have the changed snare capacitors** — the note gives
   values only.
-- **CY high-pass #2/#3 exact corners** — Werner gives the topology and a
-  ≈10.5 kHz resonance; I did not solve the 3rd-order network. **Partly closed
-  by measurement, and not in this section's favour.** A real machine's cymbal
+- **CY high-pass #2/#3 exact corners — CLOSED (2026-09-27, #369).** Werner
+  gives no component values for either, but **W14b Figure 4 plots both
+  responses**, and that figure is vector: the coordinates are in the PDF.
+  `tools/werner_fig4.py` reads them, gated on the three curves SN p.13 already
+  fixes (Hbp1 3450/Q6 read as 3437/6.02; Hbp2 7100/Q6 as 7095/6.07; Hh1
+  2500/Q0.97/unity as 2506/0.96/+0.00 dB) and on W14b §9's own "around
+  10500 Hz". **Hh2 is a 2-pole high-pass at 8.84 kHz, Q 1.00, pass band
+  +6.03 dB — not resonant. Hh3 is a 2-pole at 10.32 kHz Q 5.64 cascaded with a
+  1-pole high-pass at 5.20 kHz, pass band +8.86 dB**; a 2-pole model of that
+  curve leaves 0.717 dB rms against the 3-pole's 0.008, so the third pole is
+  located rather than assumed, and it sits at **half** the corner, not at it
+  (#102 and `docs/scorecard/cymbal-369/candidate/README.md` both assumed the
+  same corner). Evidence: `docs/scorecard/cymbal-369/werner-fig4.json`;
+  derivation `docs/scorecard/cymbal-369/candidate2/README.md`.
+
+  **The paragraph below inferred the opposite from a recording, and it was
+  wrong about the mechanism.** A high-pass at 10.3 kHz *can* make a 9–13 kHz
+  shoulder — at Q 5.64 it peaks 15 dB above its own asymptote and is still
+  11 dB down from that peak at 20 kHz, because under one octave of spectrum
+  remains above the corner. What the recording ruled out was a *low-Q* (2.5)
+  high-pass, not a high-pass. The rest of the paragraph stands:
+
+  A real machine's cymbal
   (Fischer s/n 103852, `cy8/CY5025.WAV`, TONE 5.0 and **DECAY 2.5** — this read
   "TONE and DECAY at 5.0" until #102, and the second filename code is DECAY,
   where `25` means 2.5) puts
@@ -1112,8 +1142,16 @@ envelopes.
   measures T20 1244 ms against 745 ms at 5–9 kHz); every band lengthens with
   the DECAY knob, not only the middle one; and the ≈10.5 kHz stage behaves like
   a **band-pass**, since the machine has a 9–13 kHz shoulder with only 6 % above
-  13 kHz and a high-pass at that corner cannot make that shape.
+  13 kHz and a low-Q high-pass at that corner cannot make that shape.
   `docs/drum-verification.md` §10 has the derivation.
+
+- **The tone stage is still open, and is now the cymbal's largest unmodelled
+  block.** W14b §10 gives three *fifth-order* transfer functions Ht1/Ht2/Ht3
+  from each band to the output, declines to print their coefficients, and
+  points at a companion site that returns 404 (re-checked 2026-09-27).
+  **W14b Figure 9 plots all three families** and is the same kind of vector
+  XObject in the same PDF, so `tools/werner_fig4.py` reaches it with one
+  extension (Fig. 9 is three sub-plots; `calibrate()` assumes one axes box).
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6
