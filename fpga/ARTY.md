@@ -6,6 +6,17 @@ cannot program this board; this is a separate Xilinx port.
 
 ## What is implemented and measured
 
+**R2 (pulse2x + the scheduling saving + the #354 ladder repair + #315) has its own
+image**, built once from the settled sources (`3182638`) and published beside R0 and R1:
+[r2-2025.1](reports/arty/r2-2025.1/publication.json), bitstream `167a6c7f...`, routed
+checkpoint `e8fd3431...`, Vivado 2025.1 SW Build 6140274. WNS +14.700 ns, WHS +0.020 ns,
+0 failing endpoints; external I/O qualified (`i2s_bclk` exception only; spi_miso readback
+to 1.4601 MHz); DPREG-4 13/13 dismissed; the #315 UART-RX constraints bind and take effect
+on this checkpoint; LUT 15,484, FF 13,490, DSP 124. Bound with the host's `--image r2`
+bytes (equal to R1's), presets, RTL evidence and R1 as rollback by
+[release/r2-2025.1.json](release/r2-2025.1.json) (T-RELEASE-BOUND-R2). pulse2x is in it by
+operator override, with known limitations: [release/R2.md](release/R2.md).
+
 **R1 (the player preview, contract revision 14) now has its own image**, built
 once from the frozen R1 sources and published beside R0, not over it:
 [r1-player-preview-2025.1](reports/arty/r1-player-preview-2025.1/publication.json),
@@ -405,6 +416,20 @@ Identity and evidence: [fpga/release/R1.md](release/R1.md).
 .venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r1
 .venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r1
 .venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1
+```
+
+**R2 (pulse2x, the scheduling saving, the #354 ladder repair and #315; image built,
+[r2-2025.1](reports/arty/r2-2025.1), `167a6c7f...`).** The same quick-start with
+`--image r2`: it sends exactly R1's bytes (R2 has no kit or preset change), to a board
+programmed with the R2 bitstream (`OSC2X=1 FILTER2X=1 PULSE2X=1`). pulse2x is in R2 by
+**operator override**: five extreme rectangle patches at drive 1.6 are 1.6-4.8 dB darker
+than R1, and R1 (`--image r1`) is the rollback. Identity, evidence and known limitations:
+[fpga/release/R2.md](release/R2.md).
+
+```text
+openFPGALoader -b arty_a7_100t fpga/reports/arty/r2-2025.1/arty.bit
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r2
+.venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r2
 ```
 
 **Release r1, which plan087 calls R0** ([fpga/release/RELEASE.md](release/RELEASE.md)) binds this image,
