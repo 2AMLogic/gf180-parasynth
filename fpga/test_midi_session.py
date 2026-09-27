@@ -263,7 +263,9 @@ def test_the_wrong_alternate_control_keeps_the_packet_count_and_the_leaving_soun
         sim = dev.UartDeviceSim(clock=clock)
         s = ms.MidiSession(dev.SimSerial(sim), clock=clock, image="tree", inject=inject)
         s.start()
-        play(s, clock, [(0x99, 70, 100)])            # MA on the circuit loaded as CP
+        # MA on the circuit loaded as CP, back to CP, and MA again: the count
+        # must stay paired across several switches, not just the first
+        play(s, clock, [(0x99, 70, 100), (0x99, 39, 100), (0x99, 70, 100)], dt=0.2)
         runs[inject] = (sim, strikes(sim, "CP")[0])
     (clean, _), (bad, edge) = runs.values()
     assert len(executed(clean)) == len(executed(bad))

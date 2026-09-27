@@ -850,6 +850,8 @@ class MidiSession:
                 if a in dirty or self.mh.image.get(a) != v:
                     self.mh.drum(0, a, other[a] if "WRONG_ALT" in self.inject else v,
                                  tag="select")
+                    self.mh.image[a] = v     # the control's bookkeeping stays right, so
+                                             # every later packet pairs with the schedule
             self.position[stop_name] = name
         self.mh.hits([(0, stop, accent)])
         new = self.mh.w[n0:]
