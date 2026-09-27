@@ -46,6 +46,46 @@ the host's block rate.
 
 This file is about how to work, not what to build.
 
+## Current milestone priority (read before choosing work)
+
+**Right now the product goal outranks the canary goal below.** The current
+milestone (#282, plan098) is a great-sounding mono Moog-like synth and a
+complete 808-style kit: find and repair measurable sound defects across the
+playing range, confirm each improvement on conditions not used to select it,
+then prove the hardware delivers it.
+
+- **Sound qualification and repair always has a continuous owner.** Release,
+  receipt and tooling work must not leave it unstaffed.
+- **Tooling work gets priority only when it unblocks a named sound or player
+  requirement.** Name that requirement in the issue or PR. Otherwise it waits.
+- **Still record tool defects and file them upstream**, as the section below
+  says. Filing a defect is quick; letting tool work displace the instrument is
+  the failure mode this section exists to prevent.
+- **Lead progress reports with sound:** what improved (before/after,
+  confirmed on untouched conditions), what still fails, and whether it reaches
+  the RTL and the image. Merged bookkeeping PRs are supporting work, not
+  progress on the goal.
+
+## Current milestone priority (read before choosing work)
+
+**Right now the product goal outranks the canary goal below.** The current
+milestone (#282, plan098) is a great-sounding mono Moog-like synth and a
+complete 808-style kit: find and repair measurable sound defects across the
+playing range, confirm each improvement on conditions not used to select it,
+then prove the hardware delivers it.
+
+- **Sound qualification and repair always has a continuous owner.** Release,
+  receipt and tooling work must not leave it unstaffed.
+- **Tooling work gets priority only when it unblocks a named sound or player
+  requirement.** Name that requirement in the issue or PR. Otherwise it waits.
+- **Still record tool defects and file them upstream**, as the section below
+  says. Filing a defect is quick; letting tool work displace the instrument is
+  the failure mode this section exists to prevent.
+- **Lead progress reports with sound:** what improved (before/after,
+  confirmed on untouched conditions), what still fails, and whether it reaches
+  the RTL and the image. Merged bookkeeping PRs are supporting work, not
+  progress on the goal.
+
 ## Why this block exists: it is a canary for the tools
 
 **The instrument is the payload. Exercising the toolchain is the point.**
