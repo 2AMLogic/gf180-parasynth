@@ -122,6 +122,10 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 #   DROP_NOTE_OFF   the first voice note-off that would close the gate is lost
 #   WRONG_DRUM_MAP  GM 38 strikes the clap instead of the snare
 #   DELAYED_EVENT   the fourth scheduled event is placed 5 ms (240 frames) late
+# and the two overload repairs of timing contract 3, reinstated as they were
+# (fpga/test_measure_mac_midi_latency.py: a 1 s stall must then LOSE events):
+#   NO_STALE        a stale chunk is scheduled at its old receipt, notes included
+#   NO_REDATE       a late packet is sent with its stale due
 DELAY_INJECT_FRAMES = 240
 
 
@@ -260,6 +264,7 @@ class Pkt:
     not_before: float
     finish: float = 0.0             # projected completion on the wire (host s)
     sent: bool = False
+    redated_from: int | None = None # the planned due, when overload re-dated it
 
     @property
     def key(self):
@@ -274,6 +279,7 @@ class GroupRec:
     r: int
     dues: list = field(default_factory=list)
     pushed: int = 0
+    receipt: float | None = None        # the true receipt, when scheduled as stale
 
 
 class MidiSession:
@@ -328,6 +334,7 @@ class MidiSession:
         self.last_rx_t = None
         self.closed_at = None
         self.input_lost = None              # why the MIDI input failed mid-session
+        self._stale_receipt = None          # set while handling a stale chunk (overload)
         self.voice_offs_closing = 0
         self.stats = {"host_queue_peak": 0, "device_queue_peak": 0, "deadline_misses": 0,
                       "pushed_events": 0, "reanchors": 0, "device_errors": [],
@@ -425,8 +432,24 @@ class MidiSession:
         blob = b""
         for i, p in enumerate(batch):
             fin = start + (i + 1) * 10 * BYTE_S
-            if self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES:
+            if self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES and "NO_REDATE" in self.inject:
+                self.stats["deadline_misses"] += 1   # the injected defect: stale due sent
+            elif self.frame_of(fin) > p.due - uh.MIN_LEAD_FRAMES:
+                # OVERLOAD (timing contract 3): the packet is late. It is sent
+                # re-dated to the first frame the wire can still meet, never
+                # with its stale due: more than half a counter revolution
+                # (0.68 s) late, a stale due reads as the FUTURE on the
+                # device's 16-bit timeline, parks at the head of its FIFO and
+                # everything behind it is dropped as out of order (measured,
+                # #330). Dues stay non-decreasing, so FIFO order holds.
                 self.stats["deadline_misses"] += 1
+                if self.stats["deadline_misses"] == 1:
+                    self._say("midi_session: LATE -- a packet left the host after its "
+                              "deadline (host overload); it is re-dated to the next frame "
+                              "the wire can meet. Further late packets are counted, not "
+                              "printed")
+                p.redated_from = p.due
+                p.due = self.frame_of(fin) + uh.MIN_LEAD_FRAMES
             p.sent = True
             blob += uh.pkt_event(p.due & 0xFFFF, *p.write)
         self.stats["packets"] += k
@@ -580,7 +603,8 @@ class MidiSession:
             self.stats["pushed_events"] += 1
         if not deferred:
             self.cursor = anchor
-        rec = GroupRec(self.gid, kind, t, r, [p.due for p in new], push)
+        rec = GroupRec(self.gid, kind, t, r, [p.due for p in new], push,
+                       receipt=self._stale_receipt if self._stale_receipt is not None else t)
         self.groups.append(rec)
         self.gid += 1
         self.stats["groups"][kind] = self.stats["groups"].get(kind, 0) + 1
@@ -620,8 +644,19 @@ class MidiSession:
         if self.closed_at is not None:
             raise RuntimeError("feed after close")
         self.last_rx_t = t
-        for msg in self.parser.feed(data):
-            self._message(t, msg)
+        now = self.clock.monotonic()
+        # OVERLOAD (timing contract 3): a chunk the host reaches more than
+        # STALE_MS after its receipt -- the loop was stalled -- is handled as
+        # received NOW (so nothing is scheduled into the past), a note-on or
+        # drum hit in it is REFUSED as `stale`, and everything else (note-off,
+        # knob, panic) is still delivered: the device state must converge.
+        stale = now - t > C.STALE_MS / 1000.0 and "NO_STALE" not in self.inject
+        self._stale_receipt = t if stale else None
+        try:
+            for msg in self.parser.feed(data):
+                self._message(now if stale else t, msg)
+        finally:
+            self._stale_receipt = None
         self._send_due(self.clock.monotonic())
 
     def _message(self, t: float, m: bytes) -> None:
@@ -669,7 +704,15 @@ class MidiSession:
                 return self._refuse(t, m, cat, f"CC{m[1]} on the drum channel is not supported")
         return self._refuse(t, m, "system", f"status 0x{st:02x} not understood")
 
+    def _refuse_stale(self, t: float, m: bytes, what: str) -> None:
+        late_ms = (t - self._stale_receipt) * 1000.0
+        self._refuse(t, m, "stale", f"{what} reached the host {late_ms:.0f} ms after its "
+                     f"receipt (> {C.STALE_MS:.0f} ms: host overload); a late note is not "
+                     "played")
+
     def _voice_key(self, t: float, m: bytes, on: bool, note: int) -> None:
+        if on and self._stale_receipt is not None:
+            return self._refuse_stale(t, m, f"note {note}")
         if on:
             try:
                 qd.check_note(note, self.regs)
@@ -695,6 +738,8 @@ class MidiSession:
 
     def _hit(self, t: float, m: bytes, note: int, vel: int) -> None:
         import drums_fx as dx
+        if self._stale_receipt is not None:
+            return self._refuse_stale(t, m, f"drum note {note}")
         name = DRUM_MAP.get(note)
         if "WRONG_DRUM_MAP" in self.inject and note == 38:
             name = "CP"

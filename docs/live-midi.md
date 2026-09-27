@@ -294,7 +294,7 @@ earlier session. That is 193 writes on the tree image (revision 14) and
 190 on the release image (revision 11, no `ENV_FRATE[8]`). It waits for every ACK and then
 anchors its time map with one STATUS. Nothing is reset per note.
 
-## Timing contract (`fpga/live_midi_contract.py`, timing contract 2)
+## Timing contract (`fpga/live_midi_contract.py`, timing contract 3)
 
 - **Fixed lookahead.** A message received at host time *t*, which the host's
   map puts in device frame *r*, has its first write's nominal frame at
@@ -317,6 +317,11 @@ anchors its time map with one STATUS. Nothing is reset per note.
   hits are refused. The device event queue is bounded at 60 of its 64 slots
   and is checked. On the declared load the measured peaks are 17 host packets
   and 18 device queue slots.
+
+- **Overload (contract 3, #330).** A late packet is sent re-dated to the
+  first frame the wire can meet, and counted. A chunk the host reaches more
+  than `STALE_MS` (100 ms) after its receipt is handled as received now, and
+  its note-ons and drum hits are refused `stale`. See "Host overload" below.
 
 ### Why 16 ms (a measured choice)
 
@@ -370,7 +375,7 @@ Outside the declared load:
 - **pressure:** max 17.6 ms for what was admitted. 193 note-ons and hits were
   refused. Superseded knob values reached the device within p95 18.0 ms.
 
-### Mac host scheduling (#322): measured on a LOADED laptop
+### Mac host scheduling (#322, #330): quiet-host run pending
 
 **Scope: the host scheduling endpoint only. This is NOT key-to-speaker
 latency.** The start is the moment the session's MIDI input hands a message
@@ -414,35 +419,95 @@ How the apparatus is checked:
 - **Load precondition.** The tool REFUSES when the 1-minute load average
   exceeds the CPU count, unless `--allow-loaded` labels the result.
 
-**No quiet-machine measurement exists yet.** Both runs below were on the
-development laptop (M-series, 10 CPUs, macOS 26.5.1) while other agents'
-jobs held it at a load average far above its CPU count, so they are
-**LOADED-host** results. The quiet-Mac run is step 4 of the smoke procedure.
+It also **accounts for every offered message** (#330). Each message the
+input handed over ends as exactly one of:
 
-| run (`fpga/reports/live-midi/`) | load (1 min) | lateness p50 / p95 / p99 / max | deadline misses | endpoint p50 / p95 / p99 / max | CoreMIDI delivery p50 / p99 / max |
-|---|---|---|---|---|---|
-| `mac-host-latency-run1.json` | 80 | 0.56 / 4.33 / **27.15** / 36.72 ms | 49 | 16.13 / **22.79** / **32.63** / 45.40 ms | 0.05 / 1.25 / 57.9 ms |
-| `mac-host-latency-run2.json` | 30 | 0.46 / 2.00 / 4.97 / 14.37 ms | 8 | 16.10 / 19.75 / 20.88 / 21.31 ms | 0.05 / 0.47 / 1.53 ms |
+- scheduled and delivered in its frame;
+- delivered **late**;
+- **lost** (no executed anchor);
+- superseded (a knob value carried by an earlier update);
+- refused by name;
+- a contract no-op.
 
-Against the frozen target (p95 ≤ 20 ms, p99 ≤ 30 ms):
+The target counts as met only when the accounting is complete and **nothing
+is lost**. Percentiles over the anchors that survived say nothing about the
+ones that did not, and are never reported without the lost count beside them.
 
-- **Run 1 fails** both percentiles.
-- **Run 2 meets** both percentiles, but `on_time` fails: 8 packets missed
-  their frame.
-- **Neither is a clean result, for two reasons:**
-  - A packet sent more than about 15 ms late misses its frame. On this
-    loaded laptop the p99 lateness reached 27 ms.
-  - The device **model** holds a late event for a full counter revolution
-    and drops what queues behind it (#329, model defect, RTL unverified).
-    The anchors after a miss (114 in run 2, 205 in run 1) have no executed
-    write and are excluded as `anchors_unpaired`, so the endpoint
-    percentiles cover the paired anchors only.
-- **The host-only numbers (lateness, hold, delivery) are the result.** The
-  endpoint numbers are context.
-- **The load bursts.** The in-process player also runs on the loaded
-  scheduler, so its sends bunch together. That defers knob updates behind
-  the 10 ms knob rate: knob max 21.3 ms in run 2, where the simulator's
-  whole distribution ended at 17.04 ms.
+**Pending a quiet host: NOT YET RUN.** The two runs below are **load samples
+on a heavily loaded laptop**, not evidence about a quiet one and not a proved
+worst case. They were also measured before two repairs: the device model's
+late-event stall (#329, repaired in #341) and the offered-message accounting
+above. Their endpoint percentiles excluded 114 and 205 lost anchors. On an
+available quiet Mac, run:
+
+```
+# quiet: the tool REFUSES if the 1-minute load average exceeds the CPU count
+.venv/bin/python fpga/measure_mac_midi_latency.py \
+    --json fpga/reports/live-midi/mac-host-latency-quiet.json
+# the specified controlled load: 4 CPU-bound busy processes during the run
+.venv/bin/python fpga/measure_mac_midi_latency.py --controlled-load 4 \
+    --json fpga/reports/live-midi/mac-host-latency-load4.json
+```
+
+Report each result's `offered`, `accounting`, `lost` and `late` alongside its
+percentiles.
+
+Historical load samples (development laptop, M-series, 10 CPUs, macOS 26.5.1;
+pre-#329 model; lost anchors excluded from the percentiles):
+
+| run (`fpga/reports/live-midi/`) | load (1 min) | lateness p50 / p95 / p99 / max | deadline misses | endpoint p50 / p95 / p99 / max (paired only) | lost anchors | CoreMIDI delivery p50 / p99 / max |
+|---|---|---|---|---|---|---|
+| `mac-host-latency-run1.json` | 80 | 0.56 / 4.33 / **27.15** / 36.72 ms | 49 | 16.13 / **22.79** / **32.63** / 45.40 ms | **205** | 0.05 / 1.25 / 57.9 ms |
+| `mac-host-latency-run2.json` | 30 | 0.46 / 2.00 / 4.97 / 14.37 ms | 8 | 16.10 / 19.75 / 20.88 / 21.31 ms | **114** | 0.05 / 0.47 / 1.53 ms |
+
+Neither run meets the target: both lost anchors. The host-only numbers
+(lateness, hold, delivery) are the usable part: under that load a packet left
+up to 27 ms (p99) after its planned release.
+
+### Host overload: defined, reported, recovered (#330, timing contract 3)
+
+The host is overloaded in two ways, and each has a defined response:
+
+- **Too much offered traffic for the link.** A note-on or drum hit is
+  admitted only if the wire can still deliver it; otherwise it is REFUSED
+  `queue-pressure`. That is unchanged, and the `pressure` scenario tests it.
+- **A stalled host loop** (scheduler, GC, a loaded Mac):
+  - **Late packets are re-dated.** A packet that leaves after its deadline is
+    sent with the first due the wire can still meet, never with its stale
+    one. It is counted as a deadline miss; the first is printed live
+    (`LATE -- ...`) and the CLI exits 1 at close.
+  - **Stale notes are refused.** A chunk the host reaches more than
+    `STALE_MS` (100 ms) after its receipt is handled as received now.
+    A note-on or drum hit in it is REFUSED `stale`, because a late note is
+    not played. Note-offs, knobs and panic in it are still delivered, because
+    the device state must converge.
+  - 100 ms is a chosen default, well past the frozen p99 target. It is a
+    product choice, and the operator can change it.
+
+Why re-dating matters: before it, a 1 s stall with receipts still
+timestamped **lost 57–69 of 233 scheduled messages**. A due more than half a
+counter revolution (0.68 s) old reads as the *future* on the device's 16-bit
+timeline, parks at the head of the FIFO, and everything behind it is dropped
+as out of order.
+
+Measured on simulated time with the repaired model: the Probe, `sustained`,
+8 s, one stall at 2 s (`fpga/test_measure_mac_midi_latency.py` holds this).
+
+| stall | lost | stale refused | device errors | received after the stall and over target |
+|---|---|---|---|---|
+| 25 ms | 0 | 0 | none | 0 |
+| 100 ms | 0 | 0 | none | 0 |
+| 250 ms | 0 | 4 | none | 0 |
+| 1 s | 0 | 14 | none | 0 |
+| 3 s | 0 | 44 | none | 0 |
+
+Recovery is immediate: no message received after a stall ends misses the
+target. No note or hit sounds more than `STALE_MS` plus the lookahead late.
+
+The controls are each repair removed (`inject` `NO_REDATE` / `NO_STALE`):
+
+- without re-dating, the same 1 s stall **loses** events again (54);
+- without the stale rule, notes sound up to a second late.
 
 ## Verification
 
@@ -595,6 +660,14 @@ Four more, all caught before publishing:
 All four were caught by a test, a control or an absurd number before
 anything was published.
 
+12. **The cause of the overload loss.** With the pre-#329 model, the 1 s-stall
+    loss showed up as device queue overflow (ERR 2), and it looked like the
+    model's revolution stall. After the model repair the loss remained, with
+    only ERR 3. The real cause is a stale due, more than 0.68 s old, read as
+    the future on the 16-bit timeline. The offered-message accounting caught
+    it. Before that accounting, the lost anchors were only an "unpaired"
+    count beside the percentiles.
+
 ## Known limits
 
 - **USB latency is not modelled.** The FTDI USB path adds delay that the
@@ -604,10 +677,10 @@ anything was published.
   millisecond generates a pitch return for each release. These are
   unconditional, so they are delivered late (up to 50 ms) rather than refused,
   and each move is counted. The declared load never does this.
-- **The device model mishandles late events (#329).** A late event waits a
-  full counter revolution in `uart_device_sim`. Any host stall long enough
-  to miss a frame therefore costs over a second of dropped events in
-  simulation. What the RTL does is unverified.
+- **Late events (#329, repaired in #341).** The RTL was tested against a
+  pre-stated late-event policy: a late event executes in the next frame,
+  with no stall. The device model had waited a whole counter revolution and
+  is repaired to match. One policy edge case is open in #339.
 - **The Launchkey itself is unverified.** The smoke procedure above is
   pending the operator, and the Mac latency has only been measured on a
   loaded host, for the host scheduling endpoint only.

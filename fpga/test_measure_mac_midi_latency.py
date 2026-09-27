@@ -23,7 +23,9 @@ def test_the_probe_reproduces_check_latency_on_simulated_time():
     assert mine["endpoint_ms"]["n"] == theirs["n"] > 200
     for k in ("min", "p50", "p95", "p99", "max"):
         assert abs(mine["endpoint_ms"][k] - theirs[k + "_ms"]) < 1e-9, k
-    assert mine["props"] == {"target": True, "on_time": True, "load_admitted": True}
+    assert mine["props"] == {"target": True, "all_delivered": True, "on_time": True,
+                             "load_admitted": True}
+    assert mine["accounting_complete"] and mine["lost"] == 0
     assert mine["anchors_unpaired"] == 0
     assert max(map(abs, mine["map_error_frames"].values())) <= 1   # check()'s own tolerance
 
@@ -33,3 +35,57 @@ def test_one_host_stall_moves_on_time_on_simulated_time():
     mine, _ref = mml.sim_reference(5.0, stall_ms=25.0)
     assert not mine["props"]["on_time"]
     assert mine["anchors_off_due"] or mine["device_errors"] or mine["deadline_misses"]
+
+
+# ---- host overload (timing contract 3): reported, rejected where defined, recovered --
+import pytest                                               # noqa: E402
+
+import live_midi_contract as C                              # noqa: E402
+
+
+@pytest.mark.parametrize("stall_ms", [25.0, 250.0, 1000.0])
+def test_a_host_stall_loses_nothing_and_recovers_at_once(stall_ms):
+    """Every offered message is accounted for and none is lost. Packets that
+    left late were re-dated and counted, so the device reports no error. Notes
+    reaching the host more than STALE_MS late are refused as `stale`; nothing
+    else is. No message received after the stall ends misses the target."""
+    r, _ = mml.sim_reference(8.0, stall_ms=stall_ms)
+    assert r["accounting_complete"] and r["lost"] == 0, r["accounting"]
+    assert r["deadline_misses"] >= 1 and r["device_errors"] == []
+    stale = r["accounting"].get("refused: stale", 0)
+    assert (stale > 0) == (stall_ms > C.STALE_MS)
+    assert r["stall"]["over_target_after_end"] == 0
+    # no note or drum hit sounds more than STALE_MS (plus the lookahead) late
+    worst = max(r["endpoint_by_kind_max_ms"].get(k, 0.0) for k in ("note-on", "hit"))
+    assert worst <= C.STALE_MS + C.LOOKAHEAD_MS + 1.0, r["endpoint_by_kind_max_ms"]
+
+
+def test_control_no_redate_a_long_stall_loses_events():
+    """Re-dating removed (a late packet sent with its stale due): the same 1 s
+    stall LOSES events -- the defect measured before the repair."""
+    r, _ = mml.sim_reference(8.0, stall_ms=1000.0, inject={"NO_REDATE"})
+    assert r["accounting_complete"] and r["lost"] > 0, r["accounting"]
+
+
+def test_control_no_stale_notes_sound_long_after_the_key():
+    """Stale refusal removed: notes and hits received during a 1 s stall are
+    played up to a second late instead of refused."""
+    r, _ = mml.sim_reference(8.0, stall_ms=1000.0, inject={"NO_STALE"})
+    worst = max(r["endpoint_by_kind_max_ms"].get(k, 0.0) for k in ("note-on", "hit"))
+    assert worst > C.STALE_MS + C.LOOKAHEAD_MS + 1.0, r["endpoint_by_kind_max_ms"]
+
+
+def test_a_stale_note_is_refused_but_its_note_off_and_a_knob_are_delivered():
+    import midi_session as ms
+    import uart_device_sim as dev
+    clock = dev.SimClock()
+    sim = dev.UartDeviceSim(clock=clock)
+    s = ms.MidiSession(dev.SimSerial(sim), clock=clock, image="tree")
+    s.start()
+    t_old = clock.t
+    clock.sleep(0.2)                                         # the loop stalled 200 ms
+    s.feed(t_old, bytes([0x90, 60, 100, 0xB0, 74, 64]))
+    assert [r.category for r in s.refusals] == ["stale"]
+    assert s.stats["groups"].get("knob") == 1 and "note-on" not in s.stats["groups"]
+    s.feed(clock.t, bytes([0x90, 62, 100]))                  # fresh: played
+    assert s.stats["groups"].get("note-on") == 1

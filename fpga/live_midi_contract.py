@@ -42,7 +42,18 @@ SR = 48_000
 # 545 of them knob registers, none in the refused clusters); batching strikes
 # would need a deliberate hold, i.e. more latency. Evidence:
 # fpga/reports/live-midi/sweep.json.
-TIMING_CONTRACT = 2
+#
+# TIMING CONTRACT 3 (#330; target, endpoints and declared load unchanged):
+# adds host OVERLOAD handling: STALE_MS below, and a late packet is sent
+# RE-DATED to the first frame the wire can meet (midi_session._send_due). Measured before it (the Mac
+# latency probe on simulated time, fpga/measure_mac_midi_latency.py): a 1 s
+# stall of the host loop, with receipts still timestamped during it, made the
+# session schedule every message received in the stall into the past, and a
+# cascade of knob deferrals parked writes 0.3 s ahead of the device; the
+# device queue overflowed and 69 of 233 scheduled messages were LOST. Nothing
+# in the declared load comes near it; it is the defined behaviour when the
+# host cannot keep up.
+TIMING_CONTRACT = 3
 LOOKAHEAD_MS = 16.0
 LOOKAHEAD_FRAMES = int(round(LOOKAHEAD_MS * 1e-3 * SR))          # 768
 
@@ -66,6 +77,13 @@ HOST_QUEUE_MAX_PACKETS = 256     # host-side pending packets; a note-on or hit
 DEVICE_QUEUE_BOUND = 60          # the device's 64-deep event queue, less margin
 STATUS_POLL_S = 0.5              # device frame counter re-read this often
 RESYNC_TOLERANCE_FRAMES = 2      # |host map - device| beyond this re-anchors
+STALE_MS = 100.0                 # a message the host reaches more than this long
+                                 # after its receipt (a stalled loop) is handled
+                                 # as received now; a note-on or drum hit in it
+                                 # is REFUSED `stale` (a late note is not
+                                 # played); note-offs, knobs and panic are still
+                                 # delivered. 100 ms is well past the frozen p99
+                                 # target (30 ms): only a real stall trips it
 ACTIVE_SENSING_TIMEOUT_S = 0.300 # MIDI 1.0: 300 ms without a byte after an
                                  # Active Sensing message is a lost connection
 

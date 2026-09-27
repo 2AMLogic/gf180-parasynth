@@ -151,6 +151,7 @@ class Probe:
 
     def __init__(self, s, ser, sim, *, stall_ms: float = 0.0, stall_at: float | None = None):
         self.s, self.ser, self.sim = s, ser, sim
+        self.stall_ms = stall_ms
         self.receipts, self.map_err, self.value_t, self.sent, self.stalled = [], [], {}, [], []
         self.parser = ms.MidiParser()
         feed, cc, send_due = s.feed, s._cc, s._send_due
@@ -178,11 +179,34 @@ class Probe:
             send_due(now)
             if len(ser.tx_log) > n_tx:
                 t_w = ser.tx_log[-1][0]
-                self.sent.extend({"gid": p.gid, "role": p.role, "due": p.due,
+                self.sent.extend({"gid": p.gid, "role": p.role,
+                                  "due": p.due if p.redated_from is None else p.redated_from,
                                   "key": (p.write[2], p.write[3] & 0xFFFFFFFF),
                                   "t_written": t_w, "planned": rel}
                                  for p, rel in before if p.sent)
-        s.feed, s._cc, s._send_due = w_feed, w_cc, w_send_due
+        # what became of every offered message: one outcome each, read from the
+        # session's own state before and after it handled that message
+        self.outcomes = []
+        message = s._message
+
+        def w_message(t, m):
+            g0, r0 = s.gid, len(s.refusals)
+            sup0, n0, d0 = s.stats["superseded"], s.stats["noops"], s.stats["drum_noteoffs"]
+            message(t, m)
+            if len(s.refusals) > r0:
+                out = ("refused", s.refusals[-1].category)
+            elif s.gid > g0:
+                out = ("scheduled", s.gid - 1)
+            elif s.stats["superseded"] > sup0:
+                out = ("superseded", s.knob_pending[m[1]][0].gid)
+            elif s.stats["noops"] > n0 or s.stats["drum_noteoffs"] > d0:
+                out = ("no-op", None)
+            elif m[:1] == b"\xfe":
+                out = ("active-sensing", None)
+            else:
+                out = ("unaccounted", None)
+            self.outcomes.append((t, bytes(m), out))
+        s.feed, s._cc, s._send_due, s._message = w_feed, w_cc, w_send_due, w_message
 
     def truth(self, t: float) -> int:
         """The device frame containing host instant t, on the device's own
@@ -200,7 +224,7 @@ class Probe:
             for k in range(blk.size):
                 pair[blk.a + k] = blk.b + k
         groups = {g.gid: g for g in s.groups}
-        lat, hold, off_due, unpaired, by_kind = [], [], 0, 0, {}
+        lat, hold, off_due, unpaired, by_kind, lat_at = [], [], 0, 0, {}, []
         for i, pk in enumerate(self.sent):
             g = groups[pk["gid"]]
             if pk["role"] != "anchor" or g.kind == "panic":
@@ -211,14 +235,49 @@ class Probe:
             near = self.truth(pk["t_written"])            # unwrap the 16-bit frame
             f16 = executed[pair[i]][0]
             f = f16 + 65536 * round((near - f16) / 65536)
-            t_v = self.value_t.get(g.gid, g.t)
+            t_v = self.value_t.get(g.gid, g.receipt if g.receipt is not None else g.t)
             x = (f - self.truth(t_v)) * 1000.0 / SR
             lat.append(x)
+            lat_at.append((t_v, x))
             by_kind[g.kind] = max(by_kind.get(g.kind, 0.0), x)
             hold.append((pk["t_written"] - t_v) * 1000.0)
             off_due += f != pk["due"]
+        # every OFFERED message, accounted: the percentiles above are over the
+        # paired anchors only, so they say nothing about the ones that were lost
+        anchor_of = {}
+        for i, pk in enumerate(self.sent):
+            if pk["role"] == "anchor":
+                anchor_of[pk["gid"]] = i
+        exec_ok = {}
+        for gid, i in anchor_of.items():
+            if i in pair:
+                near = self.truth(self.sent[i]["t_written"])
+                f16 = executed[pair[i]][0]
+                f = f16 + 65536 * round((near - f16) / 65536)
+                exec_ok[gid] = f == self.sent[i]["due"]
+        acct: dict = {}
+
+        def put(k):
+            acct[k] = acct.get(k, 0) + 1
+        for _t, _m, (what, x) in self.outcomes:
+            if what in ("scheduled", "superseded"):
+                state = ("delivered in its frame" if exec_ok.get(x) else
+                         "delivered LATE" if x in exec_ok else
+                         "NEVER SENT" if x not in anchor_of else "LOST (no executed anchor)")
+                put(f"{what}: {state}")
+            elif what == "refused":
+                put(f"refused: {x}")
+            else:
+                put(what)
+        offered = len(self.outcomes)
+        lost = sum(v for k, v in acct.items() if "LOST" in k or "NEVER" in k)
+        late = sum(v for k, v in acct.items() if "LATE" in k)
         tgt = C.LATENCY_TARGET
-        rec = {"endpoint_ms": dist(lat), "endpoint_histogram_ms": hist(lat),
+        rec = {"offered": offered, "accounting": dict(sorted(acct.items())),
+               "lost": lost, "late": late, "unaccounted": acct.get("unaccounted", 0),
+               "accounting_complete": offered == len(self.receipts)
+               and sum(acct.values()) == offered and not acct.get("unaccounted"),
+               "endpoint_ms": dist(lat), "endpoint_histogram_ms": hist(lat),
                "endpoint_by_kind_max_ms": by_kind, "host_hold_ms": dist(hold),
                "lateness_ms": dist([(p["t_written"] - p["planned"]) * 1000.0
                                     for p in self.sent]),
@@ -229,9 +288,22 @@ class Probe:
                "deadline_misses": s.stats["deadline_misses"],
                "device_errors": sorted({e[0] for e in sim.errors}),
                "reanchors": s.stats["reanchors"], "_lat": lat}
+        # RECOVERY after an injected stall: the last receipt whose latency
+        # still exceeds the frozen p99 target, measured from the stall's end
+        if self.stalled:
+            end = self.stalled[0] + self.stall_ms / 1000.0
+            over = [t for t, x in lat_at if x > tgt["p99_ms"]]
+            rec["stall"] = {"ms": self.stall_ms, "ended_at_s": end,
+                            "recovered_after_ms": max(((t - end) * 1000.0 for t in over),
+                                                      default=None),
+                            "over_target_after_end": sum(1 for t in over if t > end)}
         rec["props"] = {
-            "target": bool(lat) and rec["endpoint_ms"]["p95"] <= tgt["p95_ms"]
+            # the target is not met by percentiles over what survived: every
+            # offered message must be accounted and none lost
+            "target": bool(lat) and rec["accounting_complete"] and not lost
+            and rec["endpoint_ms"]["p95"] <= tgt["p95_ms"]
             and rec["endpoint_ms"]["p99"] <= tgt["p99_ms"],
+            "all_delivered": rec["accounting_complete"] and not lost,
             "on_time": bool(lat) and not off_due and not unpaired and not sim.errors
             and not s.stats["deadline_misses"],
             "load_admitted": not s.stats["refused"].get("queue-pressure")
@@ -240,7 +312,7 @@ class Probe:
         return rec
 
 
-def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0) -> tuple:
+def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0, inject=()) -> tuple:
     """The Probe on SIMULATED time, driven exactly as verify_live_midi.
     run_session drives the session: its endpoint distribution must equal
     check()'s, which pairs by the independent oracle (the apparatus's
@@ -249,7 +321,7 @@ def sim_reference(seconds: float = 5.0, *, stall_ms: float = 0.0) -> tuple:
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(clock=clock)
     ser = dev.SimSerial(sim)
-    s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE)
+    s = ms.MidiSession(ser, clock=clock, image=vlm.HARNESS_IMAGE, inject=set(inject))
     s.start()
     probe = Probe(s, ser, sim, stall_ms=stall_ms, stall_at=clock.t + 2.0)
     t0 = clock.t + 0.020
@@ -358,6 +430,10 @@ def main(argv=None) -> int:
     ap.add_argument("--allow-loaded", action="store_true",
                     help="measure even when the 1-minute load average exceeds the CPU "
                          "count (the result is then labelled a LOADED host)")
+    ap.add_argument("--controlled-load", type=int, default=0, metavar="N",
+                    help="after the quiet-host check, run N CPU-bound busy-loop processes "
+                         "for the whole measurement (a specified, repeatable load, not a "
+                         "worst case); recorded in the result")
     ap.add_argument("--json", type=Path, default=OUT)
     a = ap.parse_args(argv)
     if a.source == "coremidi" and sys.platform != "darwin":
@@ -376,16 +452,29 @@ def main(argv=None) -> int:
            "host": host, "host_loaded": loaded,
            "scope": "host only: UART and device are the modelled contract (SimSerial on "
                     "wall time); USB/FTDI/board are the hardware capture's"}
-    clean = measure(a.source, a.seconds)
-    ctl = measure(a.source, a.control_seconds, stall_ms=a.control_stall_ms)
+    burners = [subprocess.Popen([sys.executable, "-c", "while True: pass"])
+               for _ in range(max(0, a.controlled_load))]
+    rec["controlled_load"] = {"busy_processes": len(burners), "cpus": host["cpus"]}
+    try:
+        clean = measure(a.source, a.seconds)
+        ctl = measure(a.source, a.control_seconds, stall_ms=a.control_stall_ms)
+    finally:
+        for b in burners:
+            b.kill()
+            b.wait()
     rec["clean"], rec["control"] = clean, ctl
     print(f"mac-latency: {host['platform']}, {host['cpus']} CPUs, load {host['loadavg']}"
-          + (" -- LOADED HOST" if loaded else ""))
+          + (" -- LOADED HOST" if loaded else "")
+          + (f"; controlled load: {len(burners)} busy processes" if burners else ""))
     for label, r in (("clean", clean), (f"control stall {a.control_stall_ms:g} ms", ctl)):
         if r["preconditions"]:
             print(f"mac-latency[{label}]: REFUSED -- {'; '.join(r['preconditions'])}")
             continue
         print(f"mac-latency[{label}]: {r['props']}")
+        print(f"  offered {r['offered']} messages: {r['accounting']}"
+              + ("" if r["accounting_complete"] else "  -- ACCOUNTING INCOMPLETE"))
+        print(f"  lost {r['lost']}, delivered late {r['late']} (the percentiles below are "
+              f"over the {r['endpoint_ms']['n']} paired anchors only)")
         print(f"  endpoint (receipt -> applied): {fmt(r['endpoint_ms'])}")
         print(f"  host hold (receipt -> anchor written): {fmt(r['host_hold_ms'])}")
         print(f"  host lateness vs planned release, every packet: {fmt(r['lateness_ms'])}")
