@@ -1,0 +1,401 @@
++ ssh r1-self bash -s
+2576d7b0b539a1fd256610ab2229745824bdd3c63ba4fc3bf5d1c4350f877928  /home/ubuntu/work/r1-shim-replay/arty/drc.rpt
+PRECONDITIONS_OK
++ ssh r1-self cat /home/ubuntu/work/r1-shim-replay/arty/drc.rpt
+DPREG-4 flagged  : 13
+cells to dump    : 19 (flagged + siblings)
++ scp /home/ubuntu/work/r1-shim-replay/evidence/dsp_dpreg_extract.tcl r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/dsp_dpreg_extract.tcl
++ ssh r1-self bash -s
+
+****** Vivado v2025.1 (64-bit)
+  **** SW Build 6140274 on Wed May 21 22:58:25 MDT 2025
+  **** IP Build 6138677 on Thu May 22 03:10:11 MDT 2025
+  **** SharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025
+  **** Start of session at: Sun Sep 27 02:01:26 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source dsp_dpreg_extract.tcl
+# if {![string match "2025.1*" [version -short]]} {
+#     puts "REFUSED: expected Vivado 2025.1, got [version -short]"
+#     exit 42
+# }
+# set dcp "/home/ubuntu/work/r1-shim-replay/arty/routed.dcp"
+# set cells {
+#     u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0
+#     u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0
+#     u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0
+#     u_synth/u_voice/voice_rate_converter/p_1_out
+#     u_synth/u_voice/voice_rate_converter/p_1_out__0
+#     u_synth/u_voice/voice_rate_converter/p_1_out__1
+#     u_synth/u_voice/voice_rate_converter/p_1_out__2
+#     u_synth/u_voice/voice_rate_converter/p_1_out__3
+#     u_synth/u_voice/voice_rate_converter/p_1_out__4
+#     u_synth/u_voice/voice_rate_converter/p_1_out__5
+#     u_synth/u_voice/voice_rate_converter/p_1_out__6
+#     u_synth/u_voice/voice_rate_converter/p_1_out__7
+#     u_synth/u_voice/voice_rate_converter/p_1_out__8
+#     u_synth/u_voice/osc2_path/p0/pair/dec/prod0
+#     u_synth/u_voice/osc2_path/p0/pair/dec/acc0
+#     u_synth/u_voice/osc2_path/p1/pair/dec/prod0
+#     u_synth/u_voice/osc2_path/p1/pair/dec/acc0
+#     u_synth/u_voice/osc2_path/p2/pair/dec/prod0
+#     u_synth/u_voice/osc2_path/p2/pair/dec/acc0
+# }
+# open_checkpoint $dcp
+Command: open_checkpoint /home/ubuntu/work/r1-shim-replay/arty/routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.03 . Memory (MB): peak = 1470.723 ; gain = 0.000 ; free physical = 301 ; free virtual = 29328
+INFO: [Device 21-403] Loading part xc7a100tcsg324-1
+Netlist sorting complete. Time (s): cpu = 00:00:00.11 ; elapsed = 00:00:00.11 . Memory (MB): peak = 1805.707 ; gain = 0.000 ; free physical = 266 ; free virtual = 29007
+INFO: [Netlist 29-17] Analyzing 3266 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.1
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00.06 ; elapsed = 00:00:00.06 . Memory (MB): peak = 1897.582 ; gain = 5.250 ; free physical = 308 ; free virtual = 28912
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-5170] The checkpoint was created with non-default parameter values which do not match the current Vivado settings.  Mismatching parameters are:
+  general.maxThreads
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.03 . Memory (MB): peak = 2510.145 ; gain = 0.000 ; free physical = 297 ; free virtual = 28450
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2510.145 ; gain = 0.000 ; free physical = 297 ; free virtual = 28450
+Read PlaceDB: Time (s): cpu = 00:00:01 ; elapsed = 00:00:01 . Memory (MB): peak = 2535.215 ; gain = 25.070 ; free physical = 266 ; free virtual = 28419
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2535.215 ; gain = 0.000 ; free physical = 266 ; free virtual = 28419
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:00.84 ; elapsed = 00:00:00.24 . Memory (MB): peak = 2548.535 ; gain = 13.320 ; free physical = 250 ; free virtual = 28403
+Read Physdb Files: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2548.535 ; gain = 38.391 ; free physical = 250 ; free virtual = 28403
+Restored from archive | CPU: 2.300000 secs | Memory: 42.182381 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2548.535 ; gain = 38.391 ; free physical = 250 ; free virtual = 28403
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00 . Memory (MB): peak = 2548.535 ; gain = 0.000 ; free physical = 250 ; free virtual = 28403
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 34 instances were transformed.
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 12 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 2 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 19 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 1 instance 
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.1 (64-bit) build 6140274
+open_checkpoint: Time (s): cpu = 00:00:34 ; elapsed = 00:00:18 . Memory (MB): peak = 2556.570 ; gain = 1085.848 ; free physical = 249 ; free virtual = 28402
+# set out [open "/home/ubuntu/work/r1-shim-replay/dsp-review/dsp_cells_dump.txt" w]
+# proc emit {s} { global out; puts $out $s }
+# emit "VIVADO [version -short]"
+# emit "DCP $dcp"
+# set all_dsp [get_cells -hier -quiet -filter {REF_NAME == DSP48E1}]
+# emit "TOTAL_DSP48E1 [llength $all_dsp]"
+# emit "==== DSP SIBLINGS (osc2_path / voice_rate_converter) ===="
+# foreach d $all_dsp {
+#     set dn [get_property NAME $d]
+#     if {[string match "*osc2_path*" $dn] || [string match "*voice_rate_converter*" $dn]} {
+#         emit "DSP $dn"
+#     }
+# }
+# array unset ::seen
+# proc trace_cone {pins label} {
+#     array unset ::seen
+#     set work {}
+#     foreach p $pins {
+#         foreach n [get_nets -quiet -of_objects $p] { lappend work $n }
+#     }
+#     set count 0
+#     while {[llength $work] && $count < 3000} {
+#         set n [lindex $work 0]
+#         set work [lrange $work 1 end]
+#         incr count
+#         set nn [get_property NAME $n]
+#         if {[info exists ::seen($nn)]} { continue }
+#         set ::seen($nn) 1
+#         emit "CONE $label NET $nn type=[get_property TYPE $n]"
+#         set drvs [get_pins -quiet -leaf -of_objects $n -filter {DIRECTION == OUT}]
+#         if {![llength $drvs]} { emit "  driver NONE (constant or tied net)" }
+#         foreach d $drvs {
+#             set dc [get_cells -quiet -of_objects $d]
+#             if {![llength $dc]} { emit "  driver [get_property NAME $d] (no cell)"; continue }
+#             set cell [lindex $dc 0]
+#             set cn [get_property NAME $cell]
+#             set rt [get_property REF_NAME $cell]
+#             if {[info exists ::seen(cell:$cn)]} {
+#                 emit "  driver $cn REF=$rt (seen)"
+#                 continue
+#             }
+#             set ::seen(cell:$cn) 1
+#             emit "  driver $cn REF=$rt"
+#             if {[string match "LUT*" $rt]} {
+#                 if {[catch {set init [get_property INIT $cell]}] == 0} { emit "    INIT=$init" }
+#                 if {[catch {set eqn [get_property EQN $cell]}] == 0} { emit "    EQN=$eqn" }
+#                 foreach ip [get_pins -quiet -of_objects $cell -filter {DIRECTION == IN}] {
+#                     set ipn [get_property REF_PIN_NAME $ip]
+#                     foreach in [get_nets -quiet -of_objects $ip] {
+#                         emit "    in $ipn net [get_property NAME $in]"
+#                         lappend work $in
+#                     }
+#                 }
+#             } elseif {[string match "FD*" $rt] || [string match "LD*" $rt]} {
+#                 if {[catch {set init [get_property INIT $cell]}] == 0} { emit "    FF_INIT=$init" }
+#                 foreach ip [get_pins -quiet -of_objects $cell -filter {REF_PIN_NAME == D}] {
+#                     foreach in [get_nets -quiet -of_objects $ip] {
+#                         emit "    FF $cn D net [get_property NAME $in]"
+#                     }
+#                 }
+#             } elseif {[string match "BUFG*" $rt] || [string match "IBUF*" $rt] \
+#                       || [string match "PLLE2*" $rt] || [string match "MMCME2*" $rt] \
+#                       || [string match "BUFH*" $rt] || [string match "BUFR*" $rt]} {
+#                 emit "    (clock tree source, stop)"
+#             } else {
+#                 foreach ip [get_pins -quiet -of_objects $cell -filter {DIRECTION == IN}] {
+#                     set ipn [get_property REF_PIN_NAME $ip]
+#                     foreach in [get_nets -quiet -of_objects $ip] {
+#                         emit "    in $ipn net [get_property NAME $in]"
+#                         lappend work $in
+#                     }
+#                 }
+#             }
+#         }
+#     }
+#     if {[llength $work]} { emit "CONE $label TRUNCATED at 3000 nets" }
+#     emit "CONE $label END nets=$count"
+# }
+# set missing 0
+# foreach c $cells {
+#     set objs [get_cells -quiet $c]
+#     if {[llength $objs] != 1} {
+#         emit "MISSING $c count=[llength $objs]"
+#         incr missing
+#         continue
+#     }
+#     set cell [lindex $objs 0]
+#     emit "=================================================="
+#     emit "==== CELL $c ===="
+#     emit "---- properties ----"
+#     foreach p [lsort [list_property $cell]] {
+#         if {[catch {set v [get_property $p $cell]} err]} { set v "ERR:$err" }
+#         emit "$p = $v"
+#     }
+#     emit "---- pins ----"
+#     foreach pin [get_pins -quiet -of_objects $cell] {
+#         set pn [get_property REF_PIN_NAME $pin]
+#         set dir [get_property DIRECTION $pin]
+#         set netname "-"
+#         set drv "-"
+#         set nets [get_nets -quiet -of_objects $pin]
+#         if {[llength $nets]} {
+#             set n [lindex $nets 0]
+#             set netname [get_property NAME $n]
+#             set drvs [get_pins -quiet -leaf -of_objects $n -filter {DIRECTION == OUT}]
+#             if {[llength $drvs]} {
+#                 set d [lindex $drvs 0]
+#                 set dc [get_cells -quiet -of_objects $d]
+#                 set dref "-"
+#                 if {[llength $dc]} { set dref [get_property REF_NAME [lindex $dc 0]] }
+#                 set drv "[get_property NAME $d] ($dref)"
+#             } else {
+#                 set drv "NO-DRIVER (nettype=[get_property TYPE $n])"
+#             }
+#         }
+#         emit "PIN $pn dir=$dir net=$netname driver=$drv"
+#     }
+#     emit "---- P/PCOUT fanout ----"
+#     # Vivado -filter =~ is glob, not regex, and indexed bus pins defeat ==
+#     # matching; select by string match on the enumerated pin names instead.
+#     foreach p [get_pins -quiet -of_objects $cell] {
+#         set pn [get_property REF_PIN_NAME $p]
+#         if {![string match "P\\\[*" $pn] && ![string match "PCOUT\\\[*" $pn]} { continue }
+#         foreach n [get_nets -quiet -of_objects $p] {
+#             set loads [get_pins -quiet -leaf -of_objects $n -filter {DIRECTION == IN}]
+#             emit "FANOUT $pn net [get_property NAME $n] loads=[llength $loads]"
+#             foreach l [lrange $loads 0 7] {
+#                 set lc [get_cells -quiet -of_objects $l]
+#                 set lref "-"
+#                 if {[llength $lc]} { set lref [get_property REF_NAME [lindex $lc 0]] }
+#                 emit "  load [get_property NAME $l] ($lref)"
+#             }
+#         }
+#     }
+#     emit "---- control cones (OPMODE/ALUMODE/CARRYINSEL/CARRYIN/CE/RST) ----"
+#     set cone_pins {}
+#     foreach p [get_pins -quiet -of_objects $cell] {
+#         set pn [get_property REF_PIN_NAME $p]
+#         if {[string match "OPMODE\\\[*" $pn] || [string match "ALUMODE\\\[*" $pn] \
+#              || [string match "CARRYINSEL\\\[*" $pn] \
+#              || [lsearch -exact {CARRYIN CEA1 CEA2 CEB1 CEB2 CEC CED CEM CEP CECARRYIN CECTRL CEOPMODE RSTA RSTB RSTC RSTD RSTM RSTP RSTCARRYIN RSTCTRL RSTOPMODE} $pn] >= 0} {
+#             lappend cone_pins $p
+#         }
+#     }
+#     trace_cone $cone_pins $c
+#     emit "==== END CELL $c ===="
+# }
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p0/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p1/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/osc2_path/p2/pair/dec/prod0__0' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0__0' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__0' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__0' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__1' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__1' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__1' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__2' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__2' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__2' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.BANK' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.OFFSET' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.RESERVED_MEMORY.ROW' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.RUNTIME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.TILE.COLUMN' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.TILE.NAME' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__3' is not an AIE cell.  Property 'AIE.TILE.ROW' is only valid on AIE cell(s).
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__3' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__3' is not a hierarchical instance
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__4' is not an AIE cell.  Property 'AIE.COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__4' is not an AIE cell.  Property 'AIE.COLOCATED_NODES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__4' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_MEMORIES' is only valid on AIE cell(s).
+WARNING: [Vivado 12-8382] 'u_synth/u_voice/voice_rate_converter/p_1_out__4' is not an AIE cell.  Property 'AIE.NOT_COLOCATED_NODES' is only valid on AIE cell(s).
+INFO: [Common 17-14] Message 'Vivado 12-8382' appears 100 times and further instances of the messages will be disabled. Use the Tcl command set_msg_config to change the current settings.
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__4' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__4' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__5' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__5' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__6' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__6' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__7' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__7' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'p_1_out__8' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'p_1_out__8' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'prod0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.ISOLATED can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+WARNING: [Common 17-69] Command failed: HD.RECONFIGURABLE can only be set on hierarchical instances. 'acc0' is not a hierarchical instance
+# emit "MISSING_COUNT $missing"
+# close $out
+# if {$missing > 0} { puts "REFUSED: $missing of [llength $cells] cells not found"; exit 43 }
+# puts "EXTRACT_OK"
+EXTRACT_OK
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 27 02:02:10 2026...
++ ssh r1-self bash -s
+DCP_UNCHANGED 0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f
++ ssh r1-self cd /home/ubuntu/work/r1-shim-replay/dsp-review && sha256sum dsp_cells_dump.txt vivado_extract.log drc_dpreg_names.txt drc_rpt.sha256 routed_dcp.sha256 > MANIFEST.sha256 && cat MANIFEST.sha256 && grep -c '^ERROR' vivado_extract.log || true
+ba6c8906a6173ca1d9f3b1579303d5221fac1ac64a3af5a50dfbf5ca22e48ec4  dsp_cells_dump.txt
+4c5e961f5c309de38e06c10d0ac387a817e834f1e134d6280c5f9c21a9633d49  vivado_extract.log
+862a1a8c8af883db7bbe3d8ffdd2fcbd022210a4d4282e4f440f39a566ebaf57  drc_dpreg_names.txt
+eb2f68ca0991f90a6a4dd54dd95d40978c82346facaefea989ac12163a3c6807  drc_rpt.sha256
+99aea19cb0ecca613611a839b208bc8154d8de47ea135adb357d8806eae1a826  routed_dcp.sha256
+0
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/dsp_cells_dump.txt /home/ubuntu/work/r1-shim-replay/evidence/dsp_cells_dump.txt
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/vivado_extract.log /home/ubuntu/work/r1-shim-replay/evidence/vivado_extract.log
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/drc_dpreg_names.txt /home/ubuntu/work/r1-shim-replay/evidence/drc_dpreg_names.txt
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/drc_rpt.sha256 /home/ubuntu/work/r1-shim-replay/evidence/drc_rpt.sha256
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/routed_dcp.sha256 /home/ubuntu/work/r1-shim-replay/evidence/routed_dcp.sha256
++ scp r1-self:/home/ubuntu/work/r1-shim-replay/dsp-review/MANIFEST.sha256 /home/ubuntu/work/r1-shim-replay/evidence/MANIFEST.sha256
+OK dsp_cells_dump.txt ba6c8906a6173ca1d9f3b1579303d5221fac1ac64a3af5a50dfbf5ca22e48ec4
+OK vivado_extract.log 4c5e961f5c309de38e06c10d0ac387a817e834f1e134d6280c5f9c21a9633d49
+OK drc_dpreg_names.txt 862a1a8c8af883db7bbe3d8ffdd2fcbd022210a4d4282e4f440f39a566ebaf57
+OK drc_rpt.sha256 eb2f68ca0991f90a6a4dd54dd95d40978c82346facaefea989ac12163a3c6807
+OK routed_dcp.sha256 99aea19cb0ecca613611a839b208bc8154d8de47ea135adb357d8806eae1a826
+routed.dcp bound  : 0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f /home/ubuntu/work/r1-shim-replay/arty/routed.dcp
+cells dumped      : 19
+missing instances : 0
+extraction OK, evidence in /home/ubuntu/work/r1-shim-replay/evidence
