@@ -24,9 +24,21 @@ def test_policy_classification_at_the_window_edges():
 
 
 def test_policy_late_is_next_frame_and_queue_order_holds():
-    r = pol.expected([(100, 101), (100, 100), (100, 90), (100, 200), (101, 150)])
+    r = pol.expected([(100, 100), (100, 90), (100, 200), (101, 150)])
     assert [(o.verdict, o.executes) for o in r] == [
-        ("ack", 101), ("late", 101), ("late", 102), ("ack", 200), ("drop-order", None)]
+        ("late", 101), ("drop-order", None), ("ack", 200), ("drop-order", None)]
+    # a late event behind a queued event due later is dropped (P3, #339)
+    r = pol.expected([(100, 101), (100, 100)])
+    assert [o.verdict for o in r] == ["ack", "drop-order"]
+
+
+def test_policy_p3_judges_the_sent_due_against_the_tail():
+    """#339: a late event whose sent due is before a draining tail's due is
+    dropped (ERR 3), not re-dated behind the tail; one after it is accepted."""
+    burst = [(10 + i, 100) for i in range(10)]                 # 10 due in frame 100
+    r = pol.expected(burst + [(102, 95), (102, 101)])
+    assert (r[10].verdict, r[10].error, r[10].executes) == ("drop-order", 3, None)
+    assert (r[11].verdict, r[11].executes) == ("late", 105)
 
 
 def test_policy_overflow_drops_and_recovers():

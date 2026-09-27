@@ -147,7 +147,7 @@ def sc_backlog(frame0: int) -> list:
     for i in range(10):
         steps.append(("event", D + 100 + 48 * i, MID, D2 % 65536, f"burst2 {i} due D2"))
     steps.append(("event", D2 + 2, MID, (D2 - 5) % 65536,
-                  "mid-drain late, raw due D2-5 BEFORE the tail's D2 (effective D2+3)"))
+                  "mid-drain late, sent due D2-5 BEFORE the tail's D2: dropped (P3, #339)"))
     steps.append(("event", D2 + 60, MID, (D2 + 70) % 65536, "ordinary after it"))
     return steps
 
@@ -368,10 +368,10 @@ def _model_module(control: str | None):
 # decides it. A recorded divergence must occur exactly as recorded: if it
 # disappears, or any other appears, the verdict is FAIL (the record is stale,
 # or something new broke). Never a way to make a new disagreement green.
-KNOWN_DIVERGENCES = {
-    ("backlog", 32): ("#339: late with a sent due before a draining tail's; the RTL (and "
-                      "the model) drop it by sent-due order, policy P3 orders by "
-                      "effective due", "drop-order"),
+KNOWN_DIVERGENCES: dict = {
+    # empty. #339 (a late event with a sent due before a draining tail's) was
+    # recorded here until the operator amended policy P3 to the contract and
+    # the RTL; the case is now an ordinary expectation (backlog step 32).
 }
 
 

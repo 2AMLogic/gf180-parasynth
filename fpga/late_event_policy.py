@@ -31,11 +31,23 @@ than everything queued ahead of it.
      A + 1, the next frame: with nothing ahead of it, it executes in frame
      A + 1. It is never discarded for being late, and it never waits for the
      frame counter to come round to it.
-  P3 order. An event is IN ORDER when the queue is empty, or when its
-     effective due is not before the effective due of the last event queued
-     (wrap-safe, within the +-32768 window). An event that is NOT in order is
-     DROPPED and reported with ERR 3; the queue is unchanged. The comparison
-     uses effective dues, because that is what the queue will execute.
+  P3 order (AMENDED by the operator's decision on #339). An event is IN
+     ORDER when the queue is empty, or when its due AS SENT is not before the
+     effective due of the last event queued (wrap-safe, within the +-32768
+     window). An event that is NOT in order is DROPPED and reported with
+     ERR 3; the queue is unchanged. This is the numeric contract
+     ("an event whose due is out of order with the queue's last due is
+     dropped and reported") and what uart_bridge.v does. It covers a late
+     event too: a late event whose sent due is before a draining queue's last
+     due is dropped, counted as an error and reported -- not re-dated behind
+     the tail.
+
+     As first stated (committed at cd318c7, before any result), P3 compared
+     EFFECTIVE dues, so such a late event would have been accepted and
+     executed after the tail. The bench found the RTL disagreeing in exactly
+     that one case (#339); the operator chose the contract and the RTL, and
+     no RTL change. The original wording is kept here so the amendment is
+     visible, not silent.
   P4 overflow. An event that arrives while Q events are queued is DROPPED
      and reported with ERR 2. The drop counter increments and the overflow
      flag is set until the next STATUS reply. The queue's contents are
@@ -127,7 +139,8 @@ def expected(events: list, *, depth: int = QUEUE_DEPTH) -> list:
         run_until(accept)
         late = is_late(accept % WRAP, due16)
         eff = accept + 1 if late else accept + fwd(accept % WRAP, due16)
-        if queue and eff < queue[-1][0]:
+        # P3 (amended, #339): the SENT due against the last queued effective due
+        if queue and fwd(queue[-1][0] % WRAP, due16) >= HALF:
             out.append(Outcome(i, "drop-order", 3, None))
             continue
         if len(queue) >= depth:
