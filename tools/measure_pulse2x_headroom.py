@@ -221,12 +221,32 @@ def mix_check(gains, scope="rect", notes=(24, 36, 48, 60, 72, 84, 96, 108, 120, 
     return res
 
 
-def phrases(gains, scope="rect") -> dict:
+@contextlib.contextmanager
+def pulse_drive(mult):
+    """Pulse segments' ladder drive x mult (the #333 level repair for
+    rectangle-only presets); saw segments untouched."""
+    import mono_m5a_score as score
+    if mult is None:
+        yield
+        return
+    orig = score._patch_for_wave
+
+    def pfw(patch, wave, pulse_shape=score.M5A_PULSE_WAVE):
+        p = orig(patch, wave, pulse_shape)
+        return {**p, "drive": p["drive"] * mult} if wave == "pulse" else p
+    score._patch_for_wave = pfw
+    try:
+        yield
+    finally:
+        score._patch_for_wave = orig
+
+
+def phrases(gains, scope="rect", drive_comp=None) -> dict:
     import mono_m5a_score as score
     res = {}
     for case in ("M5A", "M5B"):
         for g in [None] + list(gains):
-            with candidate(None if g is None else q15(g), scope):
+            with candidate(None if g is None else q15(g), scope), pulse_drive(drive_comp if g is not None else None):
                 m = score.measure(case_id=case, voice_factory=lambda: vf.VoiceFx(
                     oversample_2x=True, rate_converted_ladder=True, preserve_filter_headroom=True,
                     causal_filter=True, pulse479_filter_candidate=True, oversample_pulse_2x=True,
@@ -248,6 +268,8 @@ def main(argv=None) -> int:
     ap.add_argument("mode", choices=("decimator", "fine", "mix", "phrases", "probe"))
     ap.add_argument("--gains", type=float, nargs="+", default=[0.85, 0.84, 0.83, 0.82, 0.80])
     ap.add_argument("--scope", choices=("rect", "all"), default="rect")
+    ap.add_argument("--pulse-drive-comp", type=float, default=None,
+                    help="phrases: pulse segments' drive x this for the candidate gains (not the baseline)")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     if a.mode == "decimator":
@@ -259,7 +281,7 @@ def main(argv=None) -> int:
     elif a.mode == "mix":
         res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
     else:
-        res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
+        res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope, a.pulse_drive_comp)
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/measure_pulse2x_headroom.py",
                             "model/voice_fx.py"], cwd=ROOT).returncode != 0

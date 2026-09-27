@@ -7,7 +7,7 @@ are R1's engine. The rows pair by (waveform, note, cutoff, q, drive).
 
 What differs between the two sides, and nothing else: the pulse2x engine's
 rectangles are rendered through the 2x chain at the record's rectangle gain
-(`pulse2x_rect_gain_q15`).
+(`pulse2x_rect_gain_q15`) and, when set, mixed at `pulse2x_rect_mix_comp`.
 Stimulus, reference-free analysis, filter/preset settings and every other
 engine option are identical (the saw is bit-identical between engines).
 
@@ -51,7 +51,7 @@ def _load(paths):
         with op(p, "rt") as fh:
             d = json.load(fh)
         rows += d["rows"]
-        for k in ("pulse2x_rect_gain_q15", "provenance"):
+        for k in ("pulse2x_rect_gain_q15", "pulse2x_rect_mix_comp", "pulse2x_rect_drive_comp", "provenance"):
             meta.setdefault(k, d.get(k))
     return rows, meta
 
@@ -66,6 +66,7 @@ def _key(r):
 
 
 def compare(rows, dev=mp.DEV_CONDITIONS):
+    # (the "fresh" schedule has no development points: none of its notes is 72/84/96)
     by = {(r["engine"],) + _key(r): r for r in rows}
     out, counts = [], {"measured": 0, "refused": 0, "not_run": 0}
     for k, cand in sorted(by.items()):
@@ -145,8 +146,10 @@ def main(argv=None):
     dev = [r for r in recs if r.get("development")]
     unt = [r for r in recs if not r.get("development")]
     res = {"configuration": {"candidate": "pulse2x", "rect_gain_q15": meta["pulse2x_rect_gain_q15"],
-                             "baseline": "r1",
-                             "differences": "rectangles through the 2x chain at rect_gain_q15; nothing else"},
+                             "rect_mix_comp": meta["pulse2x_rect_mix_comp"],
+                             "rect_drive_comp": meta.get("pulse2x_rect_drive_comp"), "baseline": "r1",
+                             "differences": "rectangles through the 2x chain at rect_gain_q15 (and ladder drive "
+                                            "x rect_drive_comp when set); nothing else"},
            "declared_rule": f"worse by > {BAND:.2f} dB on {[p for p, _ in PROPS]}, new output rail, new dropout",
            "counts": counts, "development": tally(dev), "untouched": tally(unt),
            "failing_points": [r for r in recs if r.get("verdict") == "FAIL"],

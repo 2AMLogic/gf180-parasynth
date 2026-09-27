@@ -1,0 +1,109 @@
+{
+ "mode": "phrases",
+ "scope": "rect",
+ "base_gain_q15": 27853,
+ "commit": "9a9ba64d47bbb5c08bd2119d311f89217b85a528",
+ "sources_dirty": false,
+ "results": {
+  "M5A/0.850 (pulse2x as built)": {
+   "errors": {
+    "Pitch": -0.14813,
+    "Harmonic shape": 7.56136,
+    "Foldback energy": 2.20593,
+    "Envelope attack": 5.27083,
+    "Envelope release": -8.9375,
+    "Gain": 1.42087,
+    "Clipping": 0.0
+   },
+   "pulse_gain_db": {
+    "pulse 84": {
+     "model": -13.6585,
+     "reference": -14.3201
+    },
+    "pulse 96": {
+     "model": -15.8755,
+     "reference": -14.6197
+    }
+   },
+   "pulse_foldback_excess_db": {
+    "pulse 84": 0.0,
+    "pulse 96": 0.0
+   }
+  },
+  "M5A/0.740": {
+   "errors": {
+    "Pitch": -0.14813,
+    "Harmonic shape": 7.56136,
+    "Foldback energy": 2.20593,
+    "Envelope attack": 5.27083,
+    "Envelope release": -8.9375,
+    "Gain": 1.42087,
+    "Clipping": 0.0
+   },
+   "pulse_gain_db": {
+    "pulse 84": {
+     "model": -13.327,
+     "reference": -14.3201
+    },
+    "pulse 96": {
+     "model": -15.6682,
+     "reference": -14.6197
+    }
+   },
+   "pulse_foldback_excess_db": {
+    "pulse 84": 0.0,
+    "pulse 96": 0.2083
+   }
+  },
+  "M5B/0.850 (pulse2x as built)": {
+   "errors": {
+    "Pitch": -0.14827,
+    "Harmonic shape": 5.96219,
+    "Foldback energy": 1.91296,
+    "Envelope attack": 6.125,
+    "Envelope release": -30.0,
+    "Gain": 2.09086,
+    "Clipping": 0.0
+   },
+   "pulse_gain_db": {
+    "pulse 72": {
+     "model": -12.2521,
+     "reference": -14.3429
+    },
+    "pulse 84": {
+     "model": -13.6586,
+     "reference": -14.3201
+    }
+   },
+   "pulse_foldback_excess_db": {
+    "pulse 72": 0.0,
+    "pulse 84": 0.0
+   }
+  },
+  "M5B/0.740": {
+   "errors": {
+    "Pitch": -0.14827,
+    "Harmonic shape": 5.96219,
+    "Foldback energy": 1.91296,
+    "Envelope attack": 6.14583,
+    "Envelope release": -30.0,
+    "Gain": 2.70639,
+    "Clipping": 0.0
+   },
+   "pulse_gain_db": {
+    "pulse 72": {
+     "model": -11.6365,
+     "reference": -14.3429
+    },
+    "pulse 84": {
+     "model": -13.3271,
+     "reference": -14.3201
+    }
+   },
+   "pulse_foldback_excess_db": {
+    "pulse 72": 0.0,
+    "pulse 84": 0.0
+   }
+  }
+ }
+}
