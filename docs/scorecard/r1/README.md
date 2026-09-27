@@ -59,7 +59,7 @@ None of these was measured on the R1 production path. Each row names its engine 
 | D07A | High tom / anchor | fail | Pitch drop 0.14; body spectrum 4.51; decay 0.04 | fixed-point model | `7dd6337` |
 | D08A | High conga / anchor | fail | Pitch 0.3; body spectrum 3.64; decay 0.01 | fixed-point model | `7dd6337` |
 | D09A | Claves / anchor | pass | Pitch 0.32; attack duration 0.14; tail decay 0.61 | fixed-point model | `7dd6337` |
-| D10A | Rimshot / anchor | fail | Partial balance 5.17; attack 0.39; tail decay 0.56 | fixed-point model | `be9b0c9` |
+| D10A | Rimshot / anchor | fail | Partial balance 2.85; attack 0.39; tail decay 0.18 | fixed-point model | `8e521d4` |
 | D11A | Maracas / anchor | fail | Rise time 1.68; band energy 1.43; decay 5.42 | fixed-point model | `7dd6337` |
 | D12A | Clap / anchor | no verdict | burst/tail ratio 0.28; decay 0.88 | fixed-point model | `d42ac140` |
 | D13A | Cowbell / anchor | fail | Partial balance 2.02; unwanted difference tone 0.0; decay 0.23 | fixed-point model | `be9b0c9` |

@@ -33,6 +33,8 @@ MANIFEST = ROOT / "fpga/release/baseline-2025.1.json"
 BURST = dx.A_ENV + dx.E_CPBURST * dx.ENV_STRIDE        # ENV_CTL[8]
 FRATE = BURST + 3                                     # ENV_FRATE[8], revision 14 only
 TAIL_RATE = dx.A_ENV + dx.E_CPTAIL * dx.ENV_STRIDE + 2  # ENV_RATE[9]
+RS1X = dx.A_PATH + dx.P_RS1X                          # PATH[15], revision 15 (#388)
+RSG_PEAK = dx.A_ENV + dx.E_RSG * dx.ENV_STRIDE + 1    # ENV_PEAK[14], revision 15
 
 
 def _sha(path: Path) -> str:
@@ -46,21 +48,50 @@ def _gt_sha(kit):
 
 def test_rev11_kit_is_revision_11s_pinned_image():
     """Independent of drums_fx's own pin: spec/reference's generator hash and
-    test_tables' REV11 literal (revisions 12 and 13 moved no table)."""
+    test_tables' REV11 literal (revisions 12 and 13 moved no table). The tree is
+    revision 15 since #388, so the tree's own hash is checked against REV15 and
+    revision 14's frozen kit against REV14 -- one pin per revision, so a failure
+    names which revision moved."""
     import test_tables as tt
     kit = dx.kit_808_rev11()
     assert _gt_sha(kit) == tt.REV11["KIT808"] == dx.KIT808_REV11_SHA256
-    assert _gt_sha(dx.kit_808()) == tt.REV14["KIT808"]
+    assert _gt_sha(dx.kit_808_rev14()) == tt.REV14["KIT808"] == dx.KIT808_REV14_SHA256
+    assert _gt_sha(dx.kit_808()) == tt.REV15["KIT808"]
     assert len(kit) == len(dx.kit_808()) - 1
     assert FRATE not in dict(kit) and FRATE in dict(dx.kit_808())
 
 
-def test_rev11_kit_differs_from_the_tree_only_on_the_clap():
-    old, new = dict(dx.kit_808_rev11()), dict(dx.kit_808())
+def test_rev11_kit_differs_from_revision_14_only_on_the_clap():
+    """Revision 11 against revision 14, not against the live tree: since #388
+    the live tree also carries revision 15's two rimshot writes, and comparing
+    across two revisions at once is how a later change hides inside an older
+    revision's expected set."""
+    old, new = dict(dx.kit_808_rev11()), dict(dx.kit_808_rev14())
     moved = sorted(a for a in set(old) | set(new) if old.get(a) != new.get(a))
     assert moved == sorted([BURST, FRATE, TAIL_RATE])
     assert old[BURST] == dx.env_ctl(dx.CP, 15, 0, 2, 480)
     assert old[TAIL_RATE] == dx.rate_reg(47e-3)
+
+
+def test_rev14_kit_differs_from_the_tree_only_on_the_rimshot():
+    """...and revision 14 against the live tree is revision 15's two writes
+    (#388) and nothing else: the drive into the 455 Hz body and the gate peak
+    that re-balanced the voice after it."""
+    old, new = dict(dx.kit_808_rev14()), dict(dx.kit_808())
+    moved = sorted(a for a in set(old) | set(new) if old.get(a) != new.get(a))
+    assert moved == sorted([RS1X, RSG_PEAK])
+    assert old[RS1X] == dx.path_word(dx.SRC_PULSE, dx.E_RSX, dest=dx.M_RS1)
+    assert old[RSG_PEAK] == dx.peak_reg(dx.PEAK_RSG_REV14)
+
+
+def test_control_rev14_kit_refuses_when_the_tree_kit_moves(monkeypatch):
+    """The same gate kit_808_rev11 carries, on revision 14's own pin: a change
+    to any OTHER write must refuse rather than be absorbed into revision 15."""
+    live = dx.kit_808()
+    a, v = live[0]
+    monkeypatch.setattr(dx, "kit_808", lambda: [(a, v ^ 1)] + live[1:])
+    with pytest.raises(dx.KitRefused):
+        dx.kit_808_rev14()
 
 
 def test_control_rev11_kit_refuses_when_the_tree_kit_moves(monkeypatch):
@@ -77,7 +108,7 @@ def test_control_rev11_kit_refuses_when_the_tree_kit_moves(monkeypatch):
 
 def test_default_image_is_the_release_and_unknown_images_refuse():
     assert uh.DEFAULT_IMAGE == "release"
-    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14}
+    assert uh.IMAGE_REVISION == {"release": 11, "tree": 15, "r1": 14}
     assert uh.image_kit() == dx.kit_808_rev11()
     assert uh.image_kit("tree") == dx.kit_808()
     assert uh.image_kit("r1") == uh.r1_kit()                  # frozen by value (#323)
