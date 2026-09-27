@@ -78,3 +78,15 @@ def test_truncated_record_refuses_rather_than_answers():
     cut = y[: cb.rc.required_lead_samples(SR) + int(0.25 * SR)]
     r = cb.measure(cut, SR)
     assert r["H"]["t20_late_ms"] is None and r["H"]["t20_refused"]
+
+
+def test_skirt_leakage_alone_cannot_explain_the_low_band_tracking_decay():
+    """The Judge's crosstalk control for the §10 contradiction. Hold the low
+    band's own decay FIXED and move only the high DECAY band's decay over the
+    808's range (late T20 ~250 -> ~1,090 ms): the narrow low band (Ln) must
+    barely move. On the recordings Ln's EDT moves ~400 -> ~1,280 ms, so a
+    change of that size cannot be the high band's skirt leaking into Ln."""
+    lo = cb.measure(strike(tau_l=0.10, tau_hd=0.25 / 2.303, a_hd=0.5), SR)
+    hi = cb.measure(strike(tau_l=0.10, tau_hd=1.09 / 2.303, a_hd=0.5), SR)
+    grow = hi["Ln"]["edt10_ms"] / lo["Ln"]["edt10_ms"]
+    assert grow < 1.25, (lo["Ln"]["edt10_ms"], hi["Ln"]["edt10_ms"])
