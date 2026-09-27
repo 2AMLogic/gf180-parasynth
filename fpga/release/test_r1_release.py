@@ -130,14 +130,16 @@ def test_dsp_evidence_from_another_checkpoint_is_refused(tmp_path, monkeypatch):
 
 def test_flipping_the_default_to_r1_is_visible_to_both_manifests(monkeypatch):
     """The one-line switch (DEFAULT_IMAGE = "tree") is not silent: this
-    manifest records host.default_image, and R0's manifest pins the bytes of
-    its commands WITHOUT --image, so both go STALE until re-bound."""
+    manifest records host.default_image (STALE), and R0's manifest pins the
+    bytes of its commands WITHOUT --image (REFUSED) until both are re-bound."""
     monkeypatch.setattr(uh, "DEFAULT_IMAGE", "tree")
     verdict, detail = rr.check()
     assert verdict == "STALE" and "host.default_image" in detail, detail
-    # uart_host.main reads its argparse default from the module constant at call time
+    # uart_host.main reads its argparse default from the module constant at call
+    # time, so R0's no-flag commands now emit R1 bytes: R0's manifest refuses,
+    # because its replayed evidence no longer matches what the CLI sends
     verdict, detail = rm.check()
-    assert verdict == "STALE" and "commands." in detail, detail
+    assert verdict == "REFUSED" and "not what the CLI emits now" in detail, detail
 
 
 def test_missing_manifest_is_refused(tmp_path):

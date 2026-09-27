@@ -47,7 +47,10 @@ def test_the_committed_r1_extraction_passes(tmp_path):
 
 
 def test_a_failing_port_fails(tmp_path):
-    text = _edit(PATHS.read_text(), "clean", "uart_txd", "min", "-0.100")
+    # a real failing port fails in both measurements of the session
+    text = PATHS.read_text()
+    for variant in ("clean", "IMPOSSIBLE_MISO"):
+        text = _edit(text, variant, "uart_txd", "min", "-0.100")
     rc, rec = _run(tmp_path, text)
     assert rc == 1 and rec["state"] == "FAIL" and rec["failing_ports"] == ["uart_txd"]
 

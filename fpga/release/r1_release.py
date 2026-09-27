@@ -98,12 +98,13 @@ def _git_blob_sha(commit: str, rel: str) -> str | None:
 
 
 # ---- the image ------------------------------------------------------------------
-def image_identity(pub_dir: Path = PUB_DIR) -> dict:
+def image_identity(pub_dir: Path | None = None) -> dict:
     import build_arty as ba
     import ext_io_timing as iot
     import publish_arty as pa
     import r1_candidate as rc
 
+    pub_dir = Path(pub_dir or PUB_DIR)      # read at call time (tests substitute it)
     pub = _json(pub_dir / "publication.json")
     rep = _json(pub_dir / "report.json")
     if pub.get("configuration") != ba.CONFIG or rep.get("configuration") != ba.CONFIG:
@@ -216,9 +217,9 @@ def image_identity(pub_dir: Path = PUB_DIR) -> dict:
     }
 
 
-def external_io(image: dict, pub_dir: Path = PUB_DIR) -> dict:
+def external_io(image: dict, pub_dir: Path | None = None) -> dict:
     """The per-port extraction of the SAME routed.dcp (fpga/ext_io_extract.py)."""
-    path = pub_dir / EXT_IO
+    path = Path(pub_dir or PUB_DIR) / EXT_IO
     rec = _json(path)
     if rec.get("dcp_sha256") != image["routed_dcp_sha256"]:
         raise Refused(f"{EXT_IO} measured routed.dcp {str(rec.get('dcp_sha256'))[:12]}, the "
@@ -329,10 +330,12 @@ DECLARED = {
         "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
         "consequences": "fpga/midi_session.py follows (resolve_image falls back to "
                         "uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands "
-                        "WITHOUT --image, so T-RELEASE-BOUND then reports R0 STALE at commands.* "
-                        "-- the gate doing its job: the same change must give R0's documented "
-                        "commands an explicit --image release. This manifest records "
-                        "host.default_image and goes STALE too, and is re-bound with --write.",
+                        "WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 ('held-note "
+                        "default: the replayed capture is not what the CLI emits now', measured "
+                        "by fpga/release/test_r1_release.py) -- the gate doing its job: the same "
+                        "change must give R0's documented commands and its manifest's captures an "
+                        "explicit --image release. This manifest records host.default_image and "
+                        "goes STALE, and is re-bound with --write.",
         "decided_by": "the operator (#280 keeps release as the default)",
     },
     "physical_capture": {"status": "NONE", "hardware_playback_tested": False,

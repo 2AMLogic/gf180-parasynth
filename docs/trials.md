@@ -123,6 +123,7 @@ Rules (amended after review, plan085 §3):
 | ID | Question | State today | Verifier (existing where possible) |
 |---|---|---|---|
 | T-RELEASE-BOUND | Do image, sources, host bytes, supported domain and evidence agree? | not yet run as a trial (#255 draft) | `fpga/release/release_manifest.py` + release tests |
+| T-RELEASE-BOUND-R1 | The same question for the R1 image (#280), with R0 pinned as the rollback | PASS (#280) | `fpga/release/r1_release.py` + `test_r1_release.py` |
 | T-PLAY-DIGITAL | Do the documented playback commands produce correct, non-silent audio through UART→RTL→I²S? | partial (held note was silent until #255) | release held-note + `verify_rolling_playback.py --rtl` |
 | T-DEADLINE | Does every supported configuration meet the frame deadline, with complete evidence? | PASS baseline; pulse2x excluded | `rtl-sketch/verify_deadline.py` |
 | T-PULSE2X-IMAGE | Is a PULSE2X=1 image qualified (fit, timing, deadline, I²S)? | FAIL | #205 |
