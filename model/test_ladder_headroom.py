@@ -263,7 +263,9 @@ def test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin():
 def test_the_drive_stage_saturation_point_is_in_the_references_range():
     """**Drive, referred to the input** -- the level at which the third harmonic
     reaches -40 dB. `docs/discrimination.md` section 8.3 has ours at
-    -6.6 dBFS, Arturia Mini V3 at -5.7 and Surge's RK model at -0.6, and reads
+    -6.2 dBFS (the shipped filter, re-measured 2026-09-26 for issue #239; it
+    read -6.6 pre-DR-0011), Arturia Mini V3 at -5.7 and Surge's RK model at
+    -0.6, and reads
     our agreement with the dedicated Minimoog emulation as the evidence that the
     gain staging is in trim. Re-measured on the shipped filter it is about
     -8 dBFS: still within a few dB of Mini V3, so there is no drive-mapping
