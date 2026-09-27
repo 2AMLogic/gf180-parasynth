@@ -481,8 +481,21 @@ def main(argv=None) -> int:
     ap.add_argument("--json", type=Path, default=ROOT / "build/late-events/verification.json")
     ap.add_argument("--workdir", type=Path, default=None)
     a = ap.parse_args(argv)
+    import hashlib
+
+    def _sha(p):
+        return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True,
+                          text=True).stdout.strip()
+    ivl = subprocess.run(["iverilog", "-V"], capture_output=True, text=True) \
+        if not a.model_only else None
     record = {"tool": "fpga/verify_late_events.py", "policy": "fpga/late_event_policy.py",
-              "control": a.control, "rtl": {}, "model": {}}
+              "control": a.control, "git_head": head,
+              "iverilog": ivl.stdout.splitlines()[0] if ivl and ivl.stdout else None,
+              "sources_sha256": {str(p.relative_to(ROOT)): _sha(p) for p in (
+                  BENCH, BRIDGE, SYNTH_TOP, ROOT / "fpga/uart_device_sim.py",
+                  ROOT / "fpga/late_event_policy.py", Path(__file__))},
+              "rtl": {}, "model": {}}
     verdicts = []
     work = a.workdir or Path(tempfile.mkdtemp(prefix="late-events-"))
     for name in a.scenario:
