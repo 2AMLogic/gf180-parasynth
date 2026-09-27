@@ -18,7 +18,7 @@ def _report(xdc_text, counts=None, ar=None, end=None):
         c = (counts or {}).get(n, exp)
         a = (ar or {}).get(n, exp) if async_reg else "-"
         bad += c != exp or (async_reg and a != exp)
-        rows.append(f"MATCH\t{n}\t{kind}\t{c}\t{exp}\t{a}\t{rx}")
+        rows.append(f"MATCH\t{n}\t{kind}\t{c}\t{exp}\t{a}\t{xb.query_id(rx)}")
     return "\n".join(rows + [f"END\t{bad if end is None else end}"]) + "\n"
 
 
@@ -57,7 +57,8 @@ def test_control_r1s_dead_uart_constraints_are_refused():
 @pytest.mark.parametrize("mutate,why", [
     (lambda r: r.replace("END\t0", ""), "no END line"),
     (lambda r: r.replace("END\t0", "END\t1"), "records 1 refused"),
-    (lambda r: "\n".join(ln for ln in r.splitlines() if "u_uart/rx_q_reg\\[0\\]/D" not in ln),
+    (lambda r: "\n".join(ln for ln in r.splitlines()
+                         if xb.query_id(r".*g_uart\.u_uart/rx_q_reg\[0\]/D") not in ln),
      "not in constraint_matches.rpt"),
 ])
 def test_an_incomplete_or_refused_report_is_refused(mutate, why):

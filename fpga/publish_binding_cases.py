@@ -112,7 +112,7 @@ def write_constraint_report(art, counts=None):
     for n, kind, rx, exp, ar in xb.object_queries(text):
         c = (counts or {}).get(n, exp)
         bad += c != exp
-        rows.append(f"MATCH\t{n}\t{kind}\t{c}\t{exp}\t{c if ar else '-'}\t{rx}")
+        rows.append(f"MATCH\t{n}\t{kind}\t{c}\t{exp}\t{c if ar else '-'}\t{xb.query_id(rx)}")
     (art / xb.REPORT).write_text("\n".join(rows + [f"END\t{bad}"]) + "\n")
 
 

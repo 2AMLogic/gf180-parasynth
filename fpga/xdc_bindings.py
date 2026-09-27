@@ -31,6 +31,7 @@ exactly the objects it is for":
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -53,6 +54,13 @@ _QUERY = re.compile(r"get_(cells|pins)\s+-hier\s+-regexp\s+\{([^}]*)\}")
 
 class Refused(ValueError):
     pass
+
+
+def query_id(rx: str) -> str:
+    """A report-safe identity of a query's pattern. Tcl substitutes backslashes
+    inside a double-quoted puts, so the pattern text itself cannot be written
+    to the report verbatim (measured: `\\[` came out as `[`)."""
+    return hashlib.sha256(rx.encode()).hexdigest()[:16]
 
 
 def object_queries(xdc_text: str) -> list:
@@ -84,10 +92,10 @@ def tcl_assertions(xdc_text: str, report_path: str) -> str:
                          "{ if {[get_property ASYNC_REG $c] == 1} { incr cm_ar } }")
         else:
             lines.append("set cm_ar -")
-        lines.append(f'puts $cm_fh "MATCH\\t{n}\\t{kind}\\t$cm_n\\t{want}\\t$cm_ar\\t{rx}"')
+        lines.append(f'puts $cm_fh "MATCH\\t{n}\\t{kind}\\t$cm_n\\t{want}\\t$cm_ar\\t{query_id(rx)}"')
         cond = f"$cm_n != {want}" + (f" || $cm_ar != {want}" if async_reg else "")
         lines.append(f"if {{{cond}}} {{ incr cm_bad; "
-                     f'puts "CONSTRAINT_MATCH_REFUSED line {n}: {kind} {{{rx}}} matched '
+                     f'puts "CONSTRAINT_MATCH_REFUSED line {n}: {kind} query {query_id(rx)} matched '
                      f'$cm_n, required {want} (ASYNC_REG $cm_ar)" }}')
     lines += ['puts $cm_fh "END\\t$cm_bad"', "close $cm_fh",
               'if {$cm_bad} { puts "CONSTRAINT_MATCH_REFUSED: $cm_bad constraint(s) bound '
@@ -99,7 +107,8 @@ def check_report(report_text: str, xdc_text: str) -> list:
     """Problems with a build's constraint_matches.rpt against the XDC it
     compiled (empty = every constraint bound exactly its objects)."""
     try:
-        want = {(n, kind, rx): (exp, ar) for n, kind, rx, exp, ar in object_queries(xdc_text)}
+        want = {(n, kind, query_id(rx)): (exp, ar, rx)
+                for n, kind, rx, exp, ar in object_queries(xdc_text)}
     except Refused as exc:
         return [str(exc)]
     got, end = {}, None
@@ -114,16 +123,16 @@ def check_report(report_text: str, xdc_text: str) -> list:
         problems.append(f"{REPORT} is incomplete (no END line)")
     elif end:
         problems.append(f"{REPORT} records {end} refused constraint(s)")
-    for key, (exp, async_reg) in want.items():
+    for key, (exp, async_reg, rx) in want.items():
         if key not in got:
-            problems.append(f"XDC line {key[0]}: {key[1]} {{{key[2]}}} not in {REPORT}")
+            problems.append(f"XDC line {key[0]}: {key[1]} {{{rx}}} not in {REPORT}")
             continue
         n, exp_rec, ar = got[key]
         if exp_rec != exp:
             problems.append(f"XDC line {key[0]}: the report required {exp_rec}, the XDC "
                             f"requires {exp}")
         if n != exp:
-            problems.append(f"XDC line {key[0]}: {key[1]} {{{key[2]}}} matched {n} "
+            problems.append(f"XDC line {key[0]}: {key[1]} {{{rx}}} matched {n} "
                             f"object(s), required {exp}")
         if async_reg and ar != str(exp):
             problems.append(f"XDC line {key[0]}: ASYNC_REG set on {ar} of {exp} cells")
