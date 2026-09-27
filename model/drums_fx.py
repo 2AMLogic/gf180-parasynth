@@ -62,7 +62,7 @@ import modal_fixed
 from modal_fixed import ModalFx, RAW, BP, HP, pole_regs
 
 # ---- sizes (contract 15.1) ----------------------------------------------------
-N_STOPS, N_ENV, N_PATH, N_MODES, N_NUMS, N_OSC = 11, 18, 23, 16, 11, 6
+N_STOPS, N_ENV, N_PATH, N_MODES, N_NUMS, N_OSC = 11, 20, 23, 16, 11, 6
 ENV_BITS, RATE_Q, ACCENT_BITS = 24, 16, 16
 HOLD_BITS, BURST_BITS, PERIOD_BITS, T_BITS = 8, 2, 9, 11
 T_MAX = (1 << T_BITS) - 1
@@ -92,7 +92,9 @@ FULL24 = (1 << ENV_BITS) - 1
 # ---- the register map (contract 15.1): 8-bit address, 32-bit value ----------
 # ENV grew to 18 entries (0x40..0x87) and MODE to 16 (64 bytes), so PATH moved
 # from 0x80 to 0x90 and MODE from 0xC0 to 0xB0: at 0xC0 the last mode's `num`
-# register would have been 0xFF, which is RESET.
+# register would have been 0xFF, which is RESET. Revision 15 (#107, DR 0023)
+# takes the last 8 bytes of the gap for the cowbell's low-partial pair: ENV is
+# 0x40..0x8F and now ENDS AT PATH -- a 21st envelope moves PATH.
 A_STOPS, A_ACCENT, A_OSC, A_ENV, A_PATH, A_MODE, A_RESET = 0x00, 0x10, 0x20, 0x40, 0x90, 0xB0, 0xFF
 ENV_STRIDE, MODE_STRIDE = 4, 4   # ENV: +0 ctl, +1 peak, +2 rate, +3 frate; MODE: +0 a1, +1 a2, +2 amp, +3 num
 REG_BITS = dict(stops=N_STOPS, accent=ACCENT_BITS, osc_inc=PHASE_BITS, env_ctl=27, peak=ENV_BITS,
@@ -528,8 +530,10 @@ PAIRS = (("LT", "LC"), ("MT", "MC"), ("HT", "HC"), ("RS", "CL"), ("CP", "MA"))
 M_HATBP, M_OHHP, M_CHHP, M_SDN, M_CPBP, M_CBBP, M_CYBP, M_CYHI, \
     M_BD, M_SDLO, M_SDHI, M_LT, M_MT, M_HT, M_RS1, M_RS2 = range(16)
 # Envelopes.
+# E_CBA/E_CBB are the cowbell's HIGH partial (800 Hz) since revision 15, and
+# E_CBLA/E_CBLB its LOW partial (540 Hz): appended, so no earlier index moves.
 E_BDX, E_BDCLICK, E_SDX, E_SDN, E_LTX, E_HTX, E_CH, E_OH, E_CPBURST, E_CPTAIL, \
-    E_CBA, E_CBB, E_MTX, E_RSX, E_RSG, E_CYS, E_CYD, E_CYL = range(18)
+    E_CBA, E_CBB, E_MTX, E_RSX, E_RSG, E_CYS, E_CYD, E_CYL, E_CBLA, E_CBLB = range(20)
 OSC_HZ = (205.3, 369.6, 304.4, 522.7, 800.0, 540.0)   # the HD14584 bank, reference 1.5
 FRAME = 1.0 / SR
 
@@ -558,6 +562,22 @@ PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
 # tail's tau at its one-record measured 80 ms (was the R348 x C138 estimate 47).
 CP_BURST_TAU, CP_BURSTS, CP_PERIOD = 4e-3, 3, 511
 CP_FINAL_TAU, CP_TAIL_TAU = 20e-3, 80e-3
+# ---- the cowbell's two partials, contract revision 15 (#107, DR 0023) --------
+# HARDWARE-MEASURED [cb8/CB.WAV; `tools/measure_partial_balance.py decay`, each
+# line's own trajectory fitted over 30-400 ms]: the machine's LOW line rings
+# tau 121.4 ms and its HIGH line 106.6 ms, so its partial balance falls from
+# 15.35 dB at 30 ms to 11.33 at 400. Revisions 6-14 drove both lines from one
+# pair (E_CBA/E_CBB, tau 100 ms from DR 0010's fit to the SUMMED tail) and
+# the balance was flat at 6.5 dB. Each line now has its own two-slope pair,
+# and each tail is programmed with that line's measured tau, not fitted to
+# the balance: rate_reg gives 13 and 11 (effective 105.0 and 124.1 ms -- Q0.16
+# at 48 kHz steps tau by ~8 % here, and these are the nearest steps; their
+# difference is also the nearest to the machine's of any pair of steps).
+CB_HI_TAU, CB_LO_TAU = 106.6e-3, 121.4e-3
+# The low line's level, both slopes: the ONE parameter set from the balance
+# table -- the mean over its six instants of the offset left once the two
+# taus are in (9.6 dB). Our low line was ~9 dB too loud and the high matched.
+PEAK_CB, PEAK_CBL = 0.5, 0.1652
 # The RS/CL exciter, by position. The RIMSHOT's is low on purpose: both taps
 # go through the swing VCA, and a tap that drives the tanh into its rail comes
 # out as a flat-topped burst whose decay is the GATE's 22 ms rather than the
@@ -947,9 +967,12 @@ def kit_808() -> list:
                                                              # (17.22). The amp is the SNAPPY knob's
                                                              # measured curve at 5.0.
     w += mode_writes(M_CPBP, 1071.0, 1.6, 0.0, BP)           # CP band-pass, reference 7; tapped only
-    w += mode_writes(M_CBBP, 1100.0, 2.8, 0.02176, BP)         # CB band-pass: MEASURED -- fitted to the
+    w += mode_writes(M_CBBP, 1100.0, 2.8, 0.02656, BP)         # CB band-pass: MEASURED -- fitted to the
                                                              # reference unit's 16 partials, closing
-                                                             # reference 9's open item (DR 0010)
+                                                             # reference 9's open item (DR 0010). amp
+                                                             # re-balanced x1.2205 (was 0.02176) by
+                                                             # --balance when revision 15 lowered the
+                                                             # 540 Hz line (DR 0023)
     w += mode_writes(M_BD, BD_HZ, bd_decay_q(5.0), 0.003309, RAW)   # BD at DECAY 5.0. f0 and Q are both
                                                              # VERIFIED IN A SOURCE (reference 2's
                                                              # component-value f0 and its own Q table),
@@ -998,13 +1021,15 @@ def kit_808() -> list:
     w += env_writes(E_CPBURST, CP, CP_BURST_TAU, 0.69, bursts=CP_BURSTS, period=CP_PERIOD,
                     final_tau=CP_FINAL_TAU)                  # L2: four strikes, the last at the fire level
     w += env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22)         # the tail, tau MEASURED (plan084)
-    w += env_writes(E_CBA, CB, 5e-3, 0.5)                    # two-slope envelope, reference 9
-    w += env_writes(E_CBB, CB, 100e-3, 0.5)                  # MEASURED: the reference tail is tau 98 ms
+    w += env_writes(E_CBA, CB, 5e-3, PEAK_CB)                # two-slope envelope, reference 9: HIGH line
+    w += env_writes(E_CBB, CB, CB_HI_TAU, PEAK_CB)           # MEASURED per line, revision 15 (was 100 ms)
     w += env_writes(E_RSX, CL, 0.1e-3, PEAK_RSX)             # the RS/CL exciter pulse
     w += env_writes(E_RSG, CL, RS_GATE_TAU, PEAK_RSG)        # Q74's ~22 ms gate, reference 5
     w += env_writes(E_CYS, CY, CY_TAU_SHORT, PEAK_CYS)       # CY high band, short fixed
     w += env_writes(E_CYD, CY, CY_TAU_DECAY, PEAK_CYD)       # CY high band, the DECAY knob
     w += env_writes(E_CYL, CY, CY_TAU_LOW, PEAK_CYL)         # CY low band; the knob moves it too
+    w += env_writes(E_CBLA, CB, 5e-3, PEAK_CBL)              # the LOW line's own pair, revision 15
+    w += env_writes(E_CBLB, CB, CB_LO_TAU, PEAK_CBL)         # MEASURED: it rings longer than the high
     # paths
     paths = [
         path_word(SRC_PULSE, E_BDX, dest=M_BD),
@@ -1022,9 +1047,11 @@ def kit_808() -> list:
         path_word(SRC_TAP + M_CPBP, E_CPBURST, E_CPTAIL, nl=NL_TANH, dest=DEST_MIX),
         # the cowbell's two oscillators are gated SEPARATELY (reference 9: each has its own
         # transistor gate) and summed after: nl(a) + nl(b), never nl(a + b), which would make
-        # the 260 Hz difference tone the machine has not got (15.5)
+        # the 260 Hz difference tone the machine has not got (15.5). Since
+        # revision 15 each is ALSO under its own envelope pair, because the
+        # machine's two lines decay at different rates (#107)
         path_word(SRC_SQ + SQPAIR[0], E_CBA, E_CBB, nl=NL_SWING, dest=M_CBBP),
-        path_word(SRC_SQ + SQPAIR[1], E_CBA, E_CBB, nl=NL_SWING, dest=M_CBBP),
+        path_word(SRC_SQ + SQPAIR[1], E_CBLA, E_CBLB, nl=NL_SWING, dest=M_CBBP),
         # RS / CL. Both resonators are excited by the same pulse and both taps
         # are summed on the MIX bus through the swing VCA, which is reference
         # 5's Q62 -- "the distortion is the sound; do not skip it". The two
@@ -1048,6 +1075,35 @@ def kit_808() -> list:
     for p, word in enumerate(paths):
         w.append((A_PATH + p, word))
     return w
+
+
+# ---- the kits images that predate revision 15 play ---------------------------
+# Revision 15 (#107) gave the cowbell's low partial its own envelope pair,
+# E_CBLA/E_CBLB, at indices 18 and 19. A revision-14 image has 18 envelopes:
+# it IGNORES writes to 0x88..0x8F and reads any path envelope index >= 18 as
+# ZERO, so revision 15's kit would play that image's cowbell with its 540 Hz
+# line silent. Same rule as revision 11's clap below: the kit is the image's.
+KIT808_REV14_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def kit_808_rev14() -> list:
+    """The reference kit a revision-14 image plays: `kit_808()` with revision
+    15's cowbell undone -- no E_CBLA/E_CBLB writes (the registers do not exist
+    there), the low partial's path back on E_CBA/E_CBB, and E_CBB's rate back
+    to DR 0010's 100 ms, and the band-pass's amp back to 0.02176. FROZEN BY HASH and REFUSES (KitRefused) if the result
+    is not revision 14's KIT808, as `kit_808_rev11` does."""
+    new = set(range(A_ENV + E_CBLA * ENV_STRIDE, A_ENV + (E_CBLB + 1) * ENV_STRIDE))
+    undo = {A_ENV + E_CBB * ENV_STRIDE + 2: rate_reg(100e-3),
+            A_MODE + M_CBBP * MODE_STRIDE + 2: amp_reg(0.02176),
+            A_PATH + P_CBB: path_word(SRC_SQ + SQPAIR[1], E_CBA, E_CBB, nl=NL_SWING, dest=M_CBBP)}
+    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a not in new]
+    got = _kit_sha256(kit)
+    if got != KIT808_REV14_SHA256:
+        raise KitRefused(f"kit_808_rev14() hashes to {got[:12]}, not revision 14's "
+                         f"KIT808 {KIT808_REV14_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-14 image was verified with; freeze the literal "
+                         "image or cut a new release")
+    return kit
 
 
 # ---- the kit an image that predates revision 14 plays --------------------------
@@ -1076,7 +1132,7 @@ def _kit_sha256(kit: list) -> str:
 
 
 def kit_808_rev11() -> list:
-    """The reference kit a revision-11 image plays: `kit_808()` with revision
+    """The reference kit a revision-11 image plays: `kit_808_rev14()` with revision
     13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
     480, no ENV_FRATE[8] write at all (the register does not exist there), and
     ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
@@ -1092,7 +1148,7 @@ def kit_808_rev11() -> list:
     tail = A_ENV + E_CPTAIL * ENV_STRIDE
     undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
             tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
-    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
+    kit = [(a, undo.get(a, v)) for a, v in kit_808_rev14() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
         raise KitRefused(f"kit_808_rev11() hashes to {got[:12]}, not revision 11's "
@@ -1104,7 +1160,7 @@ def kit_808_rev11() -> list:
 
 # The kit each supported image revision plays. A host names the image it
 # drives; it does not assume the tree's.
-KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808}
+KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808_rev14, 15: kit_808}
 
 
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:

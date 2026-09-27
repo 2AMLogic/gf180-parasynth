@@ -19,9 +19,10 @@ through revision-14 RTL and compared with a revision-11 expectation agrees
 perfectly and never plays the L2 clap. So this module owns the R1 target
 independently of any CLI flag:
 
-  * contract revision 14 and the drum kit's digest (KIT_R14_SHA256): the
-    tree's `drums_fx.kit_808()` must still hash to it or `frozen_kit()`
-    REFUSES -- a kit edit is a new candidate, never a silent change;
+  * contract revision 14 and the drum kit's digest (KIT_R14_SHA256): R1's
+    kit frozen by value (r1-kit.json, the tree's `kit_808()` until revision
+    15 moved it, #107) must still hash to it or `frozen_kit()` REFUSES -- a
+    kit edit is a new candidate, never a silent change;
   * the clap's final strike: ENV_FRATE[8] (address 0x63) must be written with
     the frozen NONZERO rate. "Some write to the new address" is not enough;
   * the known-state preamble every R1 session starts with (voice RESET 0x23,

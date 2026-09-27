@@ -45,7 +45,7 @@
 `default_nettype none
 module synth_top #(
     parameter GO_CYCLE = 8,
-    parameter ENVS  = 18,
+    parameter ENVS  = 20,
     parameter PATHS = 23,
     parameter MODES = 16,
     parameter NUMS  = 11,

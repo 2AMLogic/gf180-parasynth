@@ -314,6 +314,7 @@ controls:
 	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHORT --expect-fail --outdir build/drum-finalshort" \
 	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FINAL_SHIFT --expect-fail --outdir build/drum-finalshift" \
 	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_FCAP_STALE --expect-fail --outdir build/drum-fcapstale" \
+	  "$(PY) rtl-sketch/verify_drums.py --short --inject DRUM_ENVS_REV14 --expect-fail --outdir build/drum-envsrev14" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --clap-phrase --inject DRUM_FINAL_WEAK --expect-fail --outdir build/top-clap-finalweak" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-lfsrtap" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --drum-solo SD --drum-seconds 0.15 --inject DRUM_LFSR_TAP --expect-fail --outdir build/top-drum-solo-lfsrtap" \

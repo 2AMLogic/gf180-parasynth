@@ -8,7 +8,9 @@ TR-808 (DR 0009, DR 0010) and its hash moved. It moved again in revision 7
 not a refit: six more SOUNDS, 100 writes -> 147. Revision 11 records the
 tom level rebalance after the measured pitch correction. Revision 14 is the
 clap's final strike (plan084 "L2"): one new register write and two changed
-values, 147 writes -> 148. It is the first pinned table in
+values, 147 writes -> 148. Revision 15 is the cowbell's two partials on their
+own envelope pairs (DR 0023, #107): six new writes, two changed, 148 -> 154.
+It is the first pinned table in
 this contract's history to change, and the pair below is how that is visible
 rather than quiet: REV5 holds what rev 5 stated, REV6 what rev 6 states, and
 `test_the_only_hash_that_ever_moved_is_the_kits` asserts exactly which one.
@@ -71,6 +73,26 @@ REV11 = {
 REV14 = {
     "KIT808": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683",
 }
+# Revision 15 (DR 0023, #107): each cowbell partial on its own envelope pair.
+# KIT808 moves a SIXTH time, and only on the cowbell: envelopes 18 and 19 are
+# new (ENV_CTL/PEAK/RATE, six writes), E_CBB's rate 14 -> 13 (tau 100 -> 106.6
+# ms, the 800 Hz line's own measured tau), PATH[14] -- the 540 Hz line --
+# re-pointed from envelopes 10/11 to 18/19, and MODE_AMP[5] (the cowbell's
+# band-pass) re-balanced to the chart level the quieter 540 Hz line left.
+# 148 writes -> 154.
+REV15 = {
+    "KIT808": "31e6574a43411ead201dc2ba9caede2c18f9f29ef714c666268b9863ff3793e7",
+}
+# address -> (revision 14's value, None where the write did not exist; revision 15's)
+REV15_CB = {0x6E: (14, 13),                   # ENV_RATE[11]: the 800 Hz tail, 100 -> 106.6 ms
+            0x88: (None, 247),                # ENV_CTL[18]: stop CB
+            0x89: (None, 2771596),            # ENV_PEAK[18]: 0.1652
+            0x8A: (None, 272),                # ENV_RATE[18]: tau 5 ms
+            0x8C: (None, 247),                # ENV_CTL[19]: stop CB
+            0x8D: (None, 2771596),            # ENV_PEAK[19]: 0.1652
+            0x8E: (None, 11),                 # ENV_RATE[19]: the 540 Hz tail, tau 121.4 ms
+            0x9E: (5287242, 5295690),         # PATH[14]: SQ 5 on envelopes 10/11 -> 18/19
+            0xC6: (1426, 1741)}               # MODE_AMP[5]: 0.02176 -> 0.02656, re-balanced
 # the three clap writes revision 14 changed: address -> (revision 11's value,
 # None where the write did not exist; revision 14's value)
 REV14_CLAP = {0x60: (125960438, 134152438),   # ENV_CTL[8]: bursts 2 -> 3, period 480 -> 511
@@ -107,7 +129,7 @@ def test_rev3_hashes_are_unchanged_and_rev5_adds_two():
     got = {name: gt.sha(vals) for name, vals, _, _, _ in gt.tables()}
     assert {k: got[k] for k in REV3_STILL} == REV3_STILL
     assert {k: got[k] for k in REV5} == REV5
-    assert {k: got[k] for k in REV14} == REV14
+    assert {k: got[k] for k in REV15} == REV15
     assert {k: got[k] for k in REV9} == REV9
     assert {k: got[k] for k in REV9_NEW} == REV9_NEW
     assert set(got) == set(REV3) | set(REV5) | set(REV10) | set(REV9_NEW)
@@ -118,7 +140,8 @@ def test_exactly_three_pinned_tables_have_ever_moved():
     KIT808 moved five times: revisions 6 and 7 were fits to a real machine,
     revision 10 is six more SOUNDS (the kit went 100 -> 147 writes),
     revision 11 records the tom level rebalance, and revision 14 is the
-    clap's final strike (147 -> 148 writes). G_ROM128
+    clap's final strike (147 -> 148 writes), and revision 15 each cowbell
+    partial on its own envelopes (148 -> 154). G_ROM128
     and K_ROM32 moved once, together, in revision 9 (DR 0011's tuning
     polynomial -- K_ROM32 is derived from G_ROM128, so it could not not move).
     Every other table in the contract's history is still what revision 1 or 3
@@ -129,7 +152,7 @@ def test_exactly_three_pinned_tables_have_ever_moved():
     was = {**REV3, **REV5, "KIT808": KIT808_REV5}   # EXP_ROM65 did not exist then
     moved = sorted(k for k, v in was.items() if got[k] != v)
     assert moved == ["G_ROM128", "KIT808", "K_ROM32"], f"against revision 5's pins: {moved}"
-    assert got["KIT808"] == REV14["KIT808"]
+    assert got["KIT808"] == REV15["KIT808"]
     # The check that makes re-pinning honest rather than a rubber stamp: against
     # revision 9's pins -- the ones immediately before this change -- the kit
     # must be the ONLY thing that moved.
@@ -168,7 +191,7 @@ def test_spot_values_the_contract_quotes():
     nz = gt.noise64()
     assert len(nz) == 64 and nz[0] == 1 and all(-32768 <= v <= 32767 for v in nz)
     kit = gt.kit808()
-    assert len(kit) == 148 and all(0 <= a < 256 and 0 <= v < (1 << 32) for a, v in kit)
+    assert len(kit) == 154 and all(0 <= a < 256 and 0 <= v < (1 << 32) for a, v in kit)
     assert kit[0] == (0x20, 71758)                           # OSC_INC[0]: 205.3 Hz
     addrs = [a for a, _ in kit]
     assert len(set(addrs)) == len(addrs), "the kit writes an address twice"
@@ -184,10 +207,46 @@ def test_note_inc_is_the_siblings():
     assert gt.sha(gt.note_inc()) == "e771e6b7b39d3941c471b772bfb5cdca398b78ee7fa964c3c90388d2cc888ba4"
 
 
-def _kit_rev11():
-    """Revision 11's image, rebuilt from the live one by undoing exactly
-    revision 14's three clap writes (REV14_CLAP), in the live write order."""
+def _kit_rev14():
+    """Revision 14's image, rebuilt from the live one by undoing exactly
+    revision 15's cowbell writes (REV15_CB), in the live write order."""
     kit = gt.kit808()
+    for addr, (_, after) in REV15_CB.items():
+        assert dict(kit)[addr] == after, hex(addr)
+    return [(a, REV15_CB[a][0] if a in REV15_CB else v) for a, v in kit
+            if not (a in REV15_CB and REV15_CB[a][0] is None)]
+
+
+def test_revision_15_changes_only_the_cowbell_registers():
+    """Reconstruct revision 14's image independently of the new pin: undo the
+    nine documented cowbell writes and nothing else, and it must hash to
+    REV14 -- which is also what `drums_fx.kit_808_rev14()`, the kit a
+    revision-14 image is sent, must produce. The values are decoded with
+    drums_fx's own encoders, so the pin says what the contract says."""
+    import drums_fx as dx
+    old = _kit_rev14()
+    assert gt.sha([(a << 32) | v for a, v in old]) == REV14["KIT808"]
+    assert old == dx.kit_808_rev14()
+    lo_a, lo_b = (dx.A_ENV + e * dx.ENV_STRIDE for e in (dx.E_CBLA, dx.E_CBLB))
+    hi_rate = dx.A_ENV + dx.E_CBB * dx.ENV_STRIDE + 2
+    path = dx.A_PATH + dx.P_CBB
+    amp = dx.A_MODE + dx.M_CBBP * dx.MODE_STRIDE + 2
+    assert set(REV15_CB) == {hi_rate, path, amp} | {b + i for b in (lo_a, lo_b) for i in range(3)}
+    assert REV15_CB[amp] == (dx.amp_reg(0.02176), dx.amp_reg(0.02656))
+    assert REV15_CB[hi_rate] == (dx.rate_reg(100e-3), dx.rate_reg(106.6e-3))
+    assert REV15_CB[lo_a + 2][1] == dx.rate_reg(5e-3)
+    assert REV15_CB[lo_b + 2][1] == dx.rate_reg(121.4e-3)
+    assert REV15_CB[lo_a][1] == REV15_CB[lo_b][1] == dx.env_ctl(dx.CB)
+    assert REV15_CB[lo_a + 1][1] == REV15_CB[lo_b + 1][1] == dx.peak_reg(0.1652)
+    sq5 = dx.SRC_SQ + dx.SQPAIR[1]
+    assert REV15_CB[path] == (dx.path_word(sq5, dx.E_CBA, dx.E_CBB, nl=dx.NL_SWING, dest=dx.M_CBBP),
+                              dx.path_word(sq5, dx.E_CBLA, dx.E_CBLB, nl=dx.NL_SWING, dest=dx.M_CBBP))
+
+
+def _kit_rev11():
+    """Revision 11's image, rebuilt from revision 14's (`_kit_rev14`) by undoing
+    exactly revision 14's three clap writes (REV14_CLAP), in the live write order."""
+    kit = _kit_rev14()
     for addr, (_, after) in REV14_CLAP.items():
         assert dict(kit)[addr] == after, hex(addr)
     return [(a, REV14_CLAP[a][0] if a in REV14_CLAP else v) for a, v in kit

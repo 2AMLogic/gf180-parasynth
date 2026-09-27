@@ -18,7 +18,7 @@
 // image is cleared, as the model's write(A_RESET) does.
 `timescale 1ns/1ps
 module tb_drums;
-    parameter ENVS = 18, PATHS = 23, MODES = 16, NUMS = 11, STOPS = 11, MW = 4;
+    parameter ENVS = 20, PATHS = 23, MODES = 16, NUMS = 11, STOPS = 11, MW = 4;
     parameter MAXW = 1 << 16;
 
     reg clk = 0, rst_n = 0, frame_tick = 0;

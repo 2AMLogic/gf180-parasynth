@@ -135,14 +135,15 @@ def test_drum_section_rtl_is_bit_exact(tmp_path):
 @pytest.mark.parametrize("bug", ["DRUM_ENV_FLOOR", "DRUM_LEVEL_TRIG", "DRUM_LFSR_TAP", "DRUM_TAP_NOSAT",
                                  "DRUM_LAST_PATH", "DRUM_SQ_LONE", "MODAL_NUM_HOLD", "MODAL_EXC_NOCLEAR",
                                  "DRUM_FINAL_WEAK", "DRUM_FINAL_SHORT", "DRUM_FINAL_SHIFT",
-                                 "DRUM_FCAP_STALE"])
+                                 "DRUM_FCAP_STALE", "DRUM_ENVS_REV14"])
 def test_drum_negative_control_is_caught(bug, tmp_path):
     """Each defect -- the envelope without its max(1, .), level- instead of
     edge-triggered stops, a wrong LFSR tap, a wrapping tap, the strawman's
     dropped last drum, a lone-square source that returns the PAIR (rev 5's
     cowbell defect, the one that made a 260 Hz difference tone), a numerator
-    with no history, an excitation register that is not consumed -- must
-    produce a mismatch: status exactly 1."""
+    with no history, an excitation register that is not consumed, revision
+    14's 18-envelope decode under revision 15's kit (the cowbell's low partial
+    silent, #107) -- must produce a mismatch: status exactly 1."""
     assert verify_drums.main(["--short", "--inject", bug, "--outdir", str(tmp_path)]) == 1
 
 

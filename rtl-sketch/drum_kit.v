@@ -9,7 +9,7 @@
 // The bank's y_valid follows bank_start by 3*MODES + 2 clocks.
 `default_nettype none
 module drum_kit #(
-    parameter ENVS  = 18,
+    parameter ENVS  = 20,
     parameter PATHS = 23,
     parameter MODES = 16,
     parameter NUMS  = 11,
