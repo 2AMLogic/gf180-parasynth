@@ -169,20 +169,21 @@ def r1_kit() -> list:
 
 R1_PRESETS_SHA256 = "faca91bad851fbb2319de6e764a2608e442d0d2d7c6540d82d28ac75fa550146"
 # the images that expose the five alternate sounds (#298): R0 (`release`) is
-# qualified for its eleven stops only
-ALTERNATE_IMAGES = ("tree", "r1")
+# qualified for its eleven stops only; `r2` has R1's drum RTL and is sent R1's
+# frozen positions (fpga/release/R2.md)
+ALTERNATE_IMAGES = ("tree", "r1", "r2")
 
 
 def image_sound_presets(image: str) -> dict:
     """{sound: [(addr, value)]}: the writes that put each of the sixteen sounds'
-    circuit in that sound's position, for `image` (#298). `r1` reads R1's
-    table frozen by value (r1-kit.json, REFUSED unless it hashes to
-    R1_PRESETS_SHA256); `tree` is this tree's drums_fx.preset_writes; `release`
-    has none (R0 is eleven sounds)."""
+    circuit in that sound's position, for `image` (#298). `r1` and `r2` read
+    R1's table frozen by value (r1-kit.json, REFUSED unless it hashes to
+    R1_PRESETS_SHA256; R2 has R1's drum RTL); `tree` is this tree's
+    drums_fx.preset_writes; `release` has none (R0 is eleven sounds)."""
     import hashlib
     import json
     import drums_fx as dx
-    if image == "r1":
+    if image in R1_KIT_IMAGES:
         rec = json.loads(R1_KIT.read_text())
         table = rec.get("presets") or {}
         canon = json.dumps(table, sort_keys=True, separators=(",", ":"))

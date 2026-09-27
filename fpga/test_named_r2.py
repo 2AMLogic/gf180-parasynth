@@ -92,3 +92,21 @@ def test_midi_session_r2_known_state_equals_r1s():
         def flush(self): pass
     assert ms.MidiSession(_Nul(), image="r2").init_writes() == \
         ms.MidiSession(_Nul(), image="r1").init_writes()
+
+
+def test_r2_gets_r1s_frozen_sound_positions_for_the_five_pairs():
+    """#298: the alternates are exposed on r2, from R1's frozen table (R2's drum
+    RTL is R1's), never the tree's drums_fx positions."""
+    assert "r2" in uh.ALTERNATE_IMAGES
+    assert uh.image_sound_presets("r2") == uh.image_sound_presets("r1")
+    assert uh.image_sound_presets("r2")
+
+
+def test_midi_session_r2_plays_the_alternates_like_r1():
+    class _Nul:
+        timeout = 0
+        def write(self, b): return len(b)
+        def read(self, n=1): return b""
+        def flush(self): pass
+    assert ms.MidiSession(_Nul(), image="r2").presets == \
+        ms.MidiSession(_Nul(), image="r1").presets
