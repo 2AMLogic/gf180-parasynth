@@ -1,0 +1,23 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python -m pytest -q --no-header -p no:cacheprovider tools/test_mono_artifact_probe.py && /home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py controls --out build/probe/controls-r1-84-saw.json && /home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py controls --note 96 --wave pulse29 --out build/probe/controls-r1-96-pulse.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "..............                                                           [100%]\n14 passed in 19.67s\nALIAS_NOBLEP   CAUGHT  expected image_dbfs\nDARKEN_LP4K    CAUGHT  expected upper_wanted_rel_db\nSPUR_M70       CAUGHT  expected residual_dbfs\nCLIP_2XFS      CAUGHT  expected output_rail_samples\nDROPOUT_10MS   CAUGHT  expected dropout_depth_db\nSILENCE        CAUGHT  expected activity\nwrote build/probe/controls-r1-84-saw.json (exit 0)\nALIAS_NOBLEP   CAUGHT  expected image_dbfs\nDARKEN_LP4K    CAUGHT  expected upper_wanted_rel_db\nSPUR_M70       CAUGHT  expected residual_dbfs\nCLIP_2XFS      CAUGHT  expected output_rail_samples\nDROPOUT_10MS   CAUGHT  expected dropout_depth_db\nSILENCE        CAUGHT  expected activity\nwrote build/probe/controls-r1-96-pulse.json (exit 0)\n",
+    "secs": 48.430845975875854
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py sweep --part 0 --parts 2 --out build/probe/sweep-0.json > build/probe/sweep-0.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 226.87699031829834
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py sweep --part 1 --parts 2 --out build/probe/sweep-1.json > build/probe/sweep-1.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 225.60270977020264
+  }
+]
