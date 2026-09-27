@@ -619,9 +619,11 @@ BD_ATTACK_HZ, BD_ATTACK_Q, BD_ATTACK_MS = 130.0, 6.0, 4.0
 # BD_SIGH_VTRIG is the trigger height at accent 1.0. W14a 3 gives 4-14 V
 # (VR3, the accent level); it is SELECTED on the development settings from
 # {4, 8, 14} V (docs/scorecard/bd-sigh-379/) and 0.0 switches the sigh off.
-# Deviations, stated: Q is held (the foot moves f0 and Q together; the
-# reference treats it as an f0 effect, as the toms' law does); the retrigger
-# pulse and the op-amp clip are not in the simulation.
+# tau is held and Q scales with f0: the foot resistance moves f0 and Q together
+# and leaves tau = R2 C alone (checked on the simulation). Deviations, stated:
+# the retrigger pulse (C39/R161/D52) and the op-amp clip are not in the
+# simulation, and at W14a's largest drive (14 V) it starts the glide at ~55 Hz
+# where the Fischer takes start at ~58 Hz. That residual is reported, not fitted.
 BD_SIGH_VTRIG = 0.0
 BD_SIGH_AMP_V = (1.1323, 1.4268, 1.7979, 2.2655, 2.8548, 3.5973, 4.5329, 5.7118, 7.1973,
                  9.0693, 11.428, 14.4003)
@@ -896,8 +898,13 @@ def bd_sigh_writes(frame: int, restore: list, accent: float = 1.0, v_trig: float
     out = []
     for i in range(BD_SIGH_STEPS):
         a, b = edges[i], max(edges[i + 1], edges[i] + 1)
-        hz = f0 * (1.0 + float(np.mean(ex[a:b])))
-        out += [(frame + n0 + a, ad, v) for ad, v in mode_writes(M_BD, hz, q, 0.0)[:2]]
+        r = 1.0 + float(np.mean(ex[a:b]))
+        # tau held, not Q: the bridged-T's tau = Q/(pi f0) = R2 C does not
+        # involve the foot resistance, and the circuit simulation keeps tau
+        # within 1 % with the sigh on (144.8 vs 143.1-144.8 ms). Holding Q
+        # shortened the ring and worsened `decay` on 13 of 16 untouched
+        # settings (wrong-then-right, #379).
+        out += [(frame + n0 + a, ad, v) for ad, v in mode_writes(M_BD, f0 * r, q * r, 0.0)[:2]]
     out += [(frame + n0 + live, base + i, v) for i, v in enumerate(restore)]
     return out
 
