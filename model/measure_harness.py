@@ -6,8 +6,9 @@
 *methodology* that says whether one of those estimators, wired up for a
 particular measurement, can be trusted at all: known-answer controls,
 noise-floor characterization, windowing/apparatus-agreement checks, and
-cross-correlation "is this actually a second recording" checks. It calls into
-`audio_measure` for primitives; it never re-derives them.
+cross-correlation "is this actually a second recording" checks. It does not
+import `audio_measure` itself: callers wire those primitives into the closures
+they pass in, so nothing here re-derives them.
 
 Extracted from `tools/measure_conga_body_spread.py` (issue #104): that tool
 built `validate_known_answer`, `floor_for_these_signals`, `windowed_alike` and
@@ -78,11 +79,11 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
-# `measure_conga_body_spread.py` adds ROOT/model to sys.path before importing
-# this module (as it already does for audio_measure), so this stays a plain
-# top-level import rather than a package-relative one -- consistent with
-# every other module in this directory.
-import audio_measure as am  # noqa: F401  (re-exported for convenience / future use)
+# The best cross-correlation at or above which `descent_test` calls a
+# candidate a re-pressing. One constant so a caller that relabels the verdict
+# (as the conga tool does) derives its threshold from here rather than
+# hard-coding a second copy that can drift.
+MATCH_THRESHOLD = 0.95
 
 
 Measure = Callable[[np.ndarray, int], tuple[float | None, str]]
@@ -228,7 +229,7 @@ def descent_test(candidates: pathlib.Path,
                  measure_field: str = "measured_value",
                  min_ratio: float = 0.90, max_ratio: float = 1.1001,
                  ratio_step: float = 0.0025,
-                 match_threshold: float = 0.95) -> list[dict]:
+                 match_threshold: float = MATCH_THRESHOLD) -> list[dict]:
     """Is a candidate "recording" a RE-PRESSING of `classify`'s reference
     corpus, rather than an independent second source?
 

@@ -138,6 +138,37 @@ def test_floor_for_these_signals_control_catches_a_perturbation_that_never_pertu
     assert row["broken"] == 0.0
 
 
+def test_floor_for_these_signals_control_keeps_the_sign_of_a_downward_change():
+    """INJECTED-BUG CONTROL for the SIGN of the delta. Every other
+    perturbation in this file raises the reading, so an implementation that
+    reported `abs(v - base)` instead of the signed `v - base` would pass them
+    all. The conga tool publishes the DIRECTION of `lead_1ms_db` /
+    `lead_10ms_db`, so a sign flip is a user-visible defect. A perturbation
+    that LOWERS the reading must come back negative, and one that raises it
+    by the same amount must come back with the opposite sign.
+
+    Verified red: replacing `v - base` with `abs(v - base)` in
+    `floor_for_these_signals` fails this test (and only this test)."""
+    sr = 48000
+    x = np.full(100, 2.0)                # base reading 200.0
+
+    def measure(x, sr):
+        return float(x.sum()), ""
+
+    def lowers(x, sr):
+        return float((x * 0.5).sum())    # 100.0: the reading goes DOWN by 100
+
+    def raises(x, sr):
+        return float((x * 1.5).sum())    # 300.0: the reading goes UP by 100
+
+    row = mh.floor_for_these_signals(
+        [(dict(), x, sr, measure, dict(down=lowers, up=raises))])[0]
+    assert row["base_db"] == 200.0
+    assert row["down"] == -100.0
+    assert row["up"] == 100.0
+    assert row["down"] == -row["up"]
+
+
 # ---------------------------------------------------------------------------
 # 3. windowed_alike
 # ---------------------------------------------------------------------------
@@ -190,7 +221,7 @@ def _damped_tone(sr, n, rng):
             + 0.01 * rng.normal(size=n))
 
 
-def test_descent_test_flags_a_true_re_pressing():
+def test_descent_test_flags_a_true_re_pressing(tmp_path):
     rng = np.random.default_rng(0)
     sr = 48000
     ref_signal = _damped_tone(sr, 2000, rng)
@@ -207,7 +238,7 @@ def test_descent_test_flags_a_true_re_pressing():
     def read_candidate(path):
         return ref_signal * 0.7, sr   # same recording, just quieter: a re-pressing
 
-    rows = mh.descent_test(_make_candidate_files_dir(rng), classify, read_ref,
+    rows = mh.descent_test(_make_candidate_files(tmp_path, ["candidate.wav"]), classify, read_ref,
                            _prepare_noop, read_candidate=read_candidate,
                            window_s=2000 / sr)
     assert len(rows) == 1
@@ -215,7 +246,7 @@ def test_descent_test_flags_a_true_re_pressing():
     assert "re-pressing" in rows[0]["verdict"]
 
 
-def test_descent_test_control_does_not_call_an_unrelated_recording_a_match():
+def test_descent_test_control_does_not_call_an_unrelated_recording_a_match(tmp_path):
     """INJECTED CONTROL: an independent recording (uncorrelated noise, not a
     re-pressing of anything) must NOT be called a re-pressing. A check that
     always says yes has no discriminating power at all."""
@@ -236,20 +267,11 @@ def test_descent_test_control_does_not_call_an_unrelated_recording_a_match():
     def read_candidate(path):
         return unrelated, sr
 
-    rows = mh.descent_test(_make_candidate_files_dir(rng), classify, read_ref,
+    rows = mh.descent_test(_make_candidate_files(tmp_path, ["candidate.wav"]), classify, read_ref,
                            _prepare_noop, read_candidate=read_candidate,
                            window_s=4000 / sr)
     assert rows[0]["best_correlation"] < 0.95
     assert rows[0]["verdict"] == "no reference file matches it"
-
-
-def _make_candidate_files_dir(rng):
-    import pathlib
-    import tempfile
-    d = pathlib.Path(tempfile.mkdtemp()) / "candidates"
-    d.mkdir()
-    (d / "candidate.wav").write_bytes(b"")
-    return d
 
 
 def test_descent_test_reports_unreadable_files_without_crashing_the_sweep(tmp_path):
@@ -299,3 +321,23 @@ def test_assert_precondition_refuses_a_shape_mismatch():
 def test_assert_precondition_refuses_a_non_finite_difference():
     with pytest.raises(SystemExit, match="REFUSED"):
         mh.assert_precondition([float("inf")], [1.0], tol=100.0, what="test")
+
+
+@pytest.mark.parametrize("measured, reference", [
+    (float("nan"), 1.0),                          # scalar NaN
+    ([1.0, float("nan"), 3.0], [1.0, 2.0, 3.0]),  # one NaN in a sequence
+    ([1.0, 2.0, 3.0], [1.0, 2.0, float("nan")]),  # NaN on the reference side
+])
+def test_assert_precondition_control_refuses_a_nan_difference(measured, reference):
+    """INJECTED-BUG CONTROL for the `math.isfinite` guard. The `inf` case
+    above is refused by the ordinary tolerance comparison on its own
+    (`inf > tol` is True), so it never exercises the guard. NaN is the
+    dangerous case: `nan > tol` is False, so without the guard a NaN
+    difference passes silently and is returned as if it were a measurement --
+    the bug the hand-written `if err > 0.003` in `hh_probe.py` had. A huge
+    tolerance makes sure only the guard can refuse it.
+
+    Verified red: deleting `not math.isfinite(diff) or` from
+    `assert_precondition` fails every case here."""
+    with pytest.raises(SystemExit, match="REFUSED"):
+        mh.assert_precondition(measured, reference, tol=1e300, what="test")

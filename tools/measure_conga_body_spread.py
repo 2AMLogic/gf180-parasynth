@@ -451,11 +451,12 @@ def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
 
     rows = mh.descent_test(candidates, classify, read_wav, prepare,
                            read_candidate=read_candidate,
-                           measure=measure, measure_field="body_spectrum_db")
+                           measure=measure, measure_field="body_spectrum_db",
+                           match_threshold=mh.MATCH_THRESHOLD)
     for r in rows:
         if "best_match" in r:
             r["verdict"] = ("a re-pressing of the Fischer set -- not a second machine"
-                            if r["best_correlation"] >= 0.95 else
+                            if r["best_correlation"] >= mh.MATCH_THRESHOLD else
                             "no Fischer file matches it")
     return rows
 
