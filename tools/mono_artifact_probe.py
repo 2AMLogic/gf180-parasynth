@@ -459,6 +459,41 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
     return {"rows": rows}
 
 
+def drive_sweep(notes=(72, 84, 96), drives=(0.05, 0.25, 0.5, 0.75, 1.0, 1.6),
+                wave="saw", cutoff=20000) -> dict:
+    """Localize the M5 harmonic-shape deficit: the same held note at the M5A
+    preset's cutoff with only the ladder drive varied. If the deficit is the
+    ladder's linear response it is independent of drive; if it is the tanh
+    stages it vanishes as drive -> 0. Also reports the analytic small-signal
+    4-pole response at the programmed cutoff as the linear known answer."""
+    out = []
+    for note in notes:
+        for d in drives:
+            row = measure_point("r1", note, held_patch(waves=(wave,) * 3,
+                                                       cutoff=(cutoff, cutoff), drive=d))
+            f0 = row["f0_hz"]
+            lin = {f"h{k}": round(-20 * math.log10(1 + (k * f0 / cutoff) ** 2) * 2
+                                  + 20 * math.log10(1 + (f0 / cutoff) ** 2) * 2, 3)
+                   for k in range(2, 13) if k * f0 < SR / 2}
+            ideal = {f"h{k}": -20 * math.log10(k) for k in range(2, 13)}
+            def deficit(stage):
+                h = row["stages"][stage]["harmonics_rel_h1_db"]
+                return {k: round(v - ideal[k], 3) for k, v in h.items() if k in lin}
+            out.append({"note": note, "drive": d, "f0_hz": f0,
+                        "ladder_deficit_db": deficit("ladder_out"),
+                        "oscillator_deficit_db": deficit("oscillator"),
+                        "linear_4pole_db": lin,
+                        "output_unwanted_dbfs": row["stages"]["output"]["unwanted_dbfs"],
+                        "output_unwanted_rel_db": row["stages"]["output"]["unwanted_rel_db"],
+                        "output_intended_dbfs": row["stages"]["output"]["intended_dbfs"],
+                        "upper_wanted_rel_db": row["stages"]["output"]["upper_wanted_rel_db"]})
+            print(f"n{note} drive {d:4.2f}: ladder deficit h2..h6 "
+                  f"{[out[-1]['ladder_deficit_db'].get(f'h{k}') for k in range(2, 7)]} "
+                  f"(linear {[lin.get(f'h{k}') for k in range(2, 7)]}); unwanted "
+                  f"{out[-1]['output_unwanted_rel_db']} dB rel", flush=True)
+    return {"rows": out}
+
+
 def provenance() -> dict:
     srcs = ["tools/mono_artifact_probe.py", "model/voice_fx.py", "model/filter_rate_chain.py",
             "model/fixed.py"]
@@ -484,10 +519,11 @@ def main(argv=None) -> int:
     c.add_argument("--engine", default="r1", choices=tuple(ENGINES))
     c.add_argument("--note", type=int, default=84)
     c.add_argument("--wave", default="saw")
+    dv = sub.add_parser("drive")
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
-    for p in (s, c, w):
+    for p in (s, c, w, dv):
         p.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     try:
@@ -501,6 +537,9 @@ def main(argv=None) -> int:
             for inj, ok in res["caught"].items():
                 print(f"{inj:14s} {'CAUGHT' if ok else 'MISSED'}  expected {EXPECTED[inj]}")
             rc = 0 if res["all_caught"] else 1
+        elif a.cmd == "drive":
+            res = drive_sweep()
+            rc = 0
         else:
             res = run_sweep(a.out, a.part, a.parts)
             rc = 0
