@@ -254,6 +254,23 @@ def test_a_switch_writes_the_new_position_before_the_stop_edge():
     assert all(at.get(a) == v for a, v in presets["CL"])
 
 
+def test_the_wrong_alternate_control_keeps_the_packet_count_and_the_leaving_sound():
+    # the RTL replay pairs the control's bytes with the schedule write for write
+    presets = __import__("uart_host").image_sound_presets("tree")
+    runs = {}
+    for inject in (frozenset(), frozenset({"WRONG_ALT"})):
+        clock = dev.SimClock()
+        sim = dev.UartDeviceSim(clock=clock)
+        s = ms.MidiSession(dev.SimSerial(sim), clock=clock, image="tree", inject=inject)
+        s.start()
+        play(s, clock, [(0x99, 70, 100)])            # MA on the circuit loaded as CP
+        runs[inject] = (sim, strikes(sim, "CP")[0])
+    (clean, _), (bad, edge) = runs.values()
+    assert len(executed(clean)) == len(executed(bad))
+    at = drum_image(bad, edge)
+    assert all(at.get(a) == v for a, v in presets["CP"])     # it played the clap
+
+
 def test_the_release_image_refuses_the_alternates_by_name():
     s, sim, _, clock = session()
     s.presets, s.position = {}, {}               # the R0 image: 11 sounds, no positions

@@ -39,9 +39,12 @@ fpga/live_midi_contract.py):
     (0.6 .. 1.4). Exclusive pairs are respected: closed and open hat are one
     instrument (CH chokes OH in the kit) and two hat strikes within 1 ms are
     one strike -- the second is REFUSED, as is a second strike of one stop
-    within 1 ms (it could not re-strike). The toms' conga positions, the rim
-    shot and the maracas share circuits with the loaded tom/claves/clap
-    positions and are REFUSED as unmapped. Drum note-offs are accepted and do
+    within 1 ms (it could not re-strike). All sixteen sounds play under
+    `--image r1|tree` (#298): the five pairs LT/LC MT/MC HT/HC RS/CL CP/MA
+    are one circuit each, and a note for the position the circuit is not in
+    selects it in the strike's head (the registers that differ), cutting the
+    previous sound's unsent pitch drop. Under `--image release` the five
+    alternates are REFUSED (not-in-image). Drum note-offs are accepted and do
     nothing (one-shot voices).
   * controllers: CC74 cutoff (40 Hz..8 kHz, exponential), CC71 resonance
     (q 0..1), CC7 voice volume (0..0.9; 0.45 is the reference), CC1 modulation
