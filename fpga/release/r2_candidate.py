@@ -20,9 +20,10 @@ WHAT R2 IS (so far). The next image, grouping the confirmed sound repairs
 WHAT IT IS NOT YET. This record is a DRAFT: nothing is frozen and no image is
 built. Open before a freeze or a Vivado build:
 
-  * the 2x rectangle decimator's headroom. At MIDI >= 108 it reaches the rail
-    with 0.85. The sound owner is sizing it against a 0.80 challenger, and
-    the value may change RTL or model constants;
+  * (resolved: the rectangle decimator headroom is 24248/32768, 0.74, saw
+    unchanged at 0.85 -- recheck-333 item 5; in polyblep_saw_pair.v and
+    voice_fx._render_2x, with the INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM
+    control);
   * the #315 XDC constraint repair, if it is ready and reviewed;
   * the named image selector (#323). The host has no `--image r2` yet, so
     the domain admission cannot be used from the CLI.
@@ -55,11 +56,13 @@ NAME = "R2 candidate"
 IMAGE = "r2-candidate"                      # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
 DEFINES = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "VOICE_PULSE_2X"]
-STATUS = ("DRAFT -- not frozen, no image built. Open: the 2x rectangle decimator "
-          "headroom (sound owner, MIDI >= 108 at 0.85), the #315 XDC repair, the named "
-          "image selector (#323)")
+STATUS = ("DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, "
+          "inherited from R1), the #315 XDC repair, the named image selector (#323), "
+          "release checks for a second image (#356)")
 # the only compiled source R2 may differ in from R1's freeze, and why
-EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)"}
+EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)",
+                    "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 "
+                                                      "(#333, recheck-333 item 5)"}
 
 
 class Refused(RuntimeError):
@@ -97,6 +100,9 @@ def rtl() -> dict:
     src = (ROOT / "rtl-sketch/voice_dp.v").read_text()
     if src.count("if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;") != 1:
         raise Refused("voice_dp.v does not hold the skip2xwin S_WIN condition exactly once")
+    pair = (ROOT / "rtl-sketch/polyblep_saw_pair.v").read_text()
+    if pair.count("localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;") != 1:
+        raise Refused("polyblep_saw_pair.v does not hold the 24248 rectangle headroom exactly once")
     return {"configuration": CONFIG, "defines": DEFINES, "part": ba.PART,
             "sources": srcs, "roms": roms, "constraints": {_rel(ba.XDC): sha(ba.XDC)},
             "differs_from_r1_freeze": {k: EXPECTED_CHANGES[k] for k in sorted(changed)},
