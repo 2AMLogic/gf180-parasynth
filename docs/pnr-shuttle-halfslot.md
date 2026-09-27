@@ -444,9 +444,20 @@ args every iteration.
   tail — wait for the router, resume, regenerate evidence and this page — on disk
   rather than in an agent's context, and REFUSES rather than reporting if the route
   recorded no state.
-  **So the DRC count in §4.5 is a route that aborted the flow and was resumed past the
-  abort, not a route that passed a checker.** That is stated here rather than inferred
-  from step numbering.
+  **So the DRC count in §4.5 is a route that would have aborted the flow, carried past
+  the abort by `-c ERROR_ON_TR_DRC=false` for that run only, not a route that passed a
+  checker.** The override is on the command line and not in the committed config, so a
+  future clean run still stops; a test asserts it stays out of `config.yaml`.
+- **Where the resume starts was wrong before it was right, and the wrong version would
+  have looked fine.** The obvious resume point is `OpenROAD.RCX` — the first step that
+  produces anything this page was missing. It is also nine steps too late. Between the
+  router and `RCX` the Chip flow runs `OpenROAD.CheckAntennas-1` (the **post-route**
+  antenna check, which #33 asks for by name), `Checker.DisconnectedPins`,
+  `Checker.WireLength` and **`OpenROAD.FillInsertion`**. Resuming at `RCX` would have
+  produced per-corner post-route timing for a die with no fillers and no post-route
+  antenna check, and the flow would have reported success — the same shape as
+  klayout-tools#2086, self-inflicted. The resume starts at
+  `Odb.RemoveRoutingObstructions`, the first step after the route, so everything runs.
 - **Where the run directory lives is not where LibreLane put it.** LibreLane writes
   its run beside the design config, inside the worktree. This worktree was moved aside
   and recreated while the container was routing; a bind mount follows the inode, so

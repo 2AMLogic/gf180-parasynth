@@ -10,6 +10,7 @@ Run: pytest pnr/shuttle/test_finish_halfslot.py
 
 import json
 import os
+import pathlib
 import sys
 
 import pytest
@@ -220,3 +221,47 @@ def test_parse_drt_iterations_flat_tail_is_visible():
     flat = [r for r in got if r["violations"] == got[-1]["violations"]]
     assert len(flat) == 2
     assert sum(r["cpu_s"] for r in flat[1:]) > 0
+
+
+def test_resume_starts_at_the_first_step_after_the_route_not_at_rcx(tmp_path,
+                                                                   monkeypatch):
+    """Resuming at OpenROAD.RCX skips nine steps, two of which matter a lot.
+
+    It skips the POST-ROUTE antenna check (#33 asks for antenna violations by name)
+    and OpenROAD.FillInsertion (a die with no fillers is the shape of
+    klayout-tools#2086).  The result would be post-route timing for a layout missing
+    both, with the flow reporting success.
+    """
+    runs = tmp_path / "librelane" / "runs" / "halfslot"
+    _run(runs, "43-openroad-detailedrouting", log=DRT_LOG,
+         metrics={"route__drc_errors": 3})
+    monkeypatch.setattr(fh, "HERE", str(tmp_path))
+    monkeypatch.setattr(fh, "librelane_containers", lambda: [])
+    called: list[list[str]] = []
+    monkeypatch.setattr(fh, "run", lambda cmd, cwd=None: called.append(cmd) or 0)
+    fh.finish("halfslot", None, poll=0, timeout=0, dry_run=False)
+    resume = next(c for c in called if "resume" in c)
+    assert "OpenROAD.RCX" not in resume
+    assert resume[resume.index("--from") + 1] == "Odb.RemoveRoutingObstructions"
+
+
+def test_resume_makes_trdrc_non_fatal_on_the_command_line_only(tmp_path, monkeypatch):
+    """The override must not live in the committed config.
+
+    A config that says "do not stop on router DRC" changes what every future run
+    means; the override belongs where a reader of the command sees it.
+    """
+    runs = tmp_path / "librelane" / "runs" / "halfslot"
+    _run(runs, "43-openroad-detailedrouting", log=DRT_LOG,
+         metrics={"route__drc_errors": 3})
+    monkeypatch.setattr(fh, "HERE", str(tmp_path))
+    monkeypatch.setattr(fh, "librelane_containers", lambda: [])
+    called: list[list[str]] = []
+    monkeypatch.setattr(fh, "run", lambda cmd, cwd=None: called.append(cmd) or 0)
+    fh.finish("halfslot", None, poll=0, timeout=0, dry_run=False)
+    resume = next(c for c in called if "resume" in c)
+    assert "--override-config" in resume
+    assert resume[resume.index("--override-config") + 1] == "ERROR_ON_TR_DRC=false"
+    cfg = pathlib.Path(__file__).parent / "librelane" / "config.yaml"
+    assert "ERROR_ON_TR_DRC" not in cfg.read_text(), \
+        "the override must stay out of the committed config"

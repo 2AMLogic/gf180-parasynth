@@ -83,6 +83,35 @@ DRT_ITER = re.compile(r"^\[INFO DRT-0195\] Start (\d+)\w* (\w+)(?: tiles?)? iter
 POST_ROUTE_STA = "openroad-stapostpnr"
 DETAILED_ROUTING = "openroad-detailedrouting"
 
+# WHERE TO RESUME, AND WHY IT IS NOT ``OpenROAD.RCX``.  The Chip flow's steps after
+# detailed routing are, in order:
+#
+#     Odb.RemoveRoutingObstructions      <- resume here
+#     OpenROAD.CheckAntennas-1               the POST-ROUTE antenna check
+#     Checker.TrDRC                          aborts the flow if ERROR_ON_TR_DRC
+#     Odb.ReportDisconnectedPins / Checker.DisconnectedPins
+#     Odb.ReportWireLength / Checker.WireLength
+#     OpenROAD.FillInsertion                 the fillers
+#     Odb.CellFrequencyTables
+#     OpenROAD.RCX                           parasitics
+#     OpenROAD.STAPostPNR                    per-corner post-route timing
+#
+# Resuming at ``OpenROAD.RCX`` -- the obvious choice, and the one this script had
+# first -- silently skips NINE steps, including the post-route antenna check that
+# #33 asks for by name and the filler insertion whose *absence* is the shape of
+# klayout-tools#2086.  It would have produced post-route timing for a die with no
+# fillers and called the flow finished.  So resume at the FIRST step after the
+# route and let everything run.
+RESUME_FROM = "Odb.RemoveRoutingObstructions"
+
+# Checker.TrDRC is what ``--from RESUME_FROM`` runs into.  It is made non-fatal FOR
+# THIS RUN ONLY, on the command line, rather than by editing the committed config:
+# a repository whose config says "do not stop on router DRC" has changed what every
+# future run means, and the override belongs where a reader of the command sees it.
+# The count itself is NOT suppressed -- it is in `route__drc_errors`, in the router's
+# own log, printed by `drc` above, and in the report's own table from both sources.
+TR_DRC_OVERRIDE = "ERROR_ON_TR_DRC=false"
+
 
 class Refusal(Exception):
     """A precondition of the apparatus is not met.  Distinct from a tool failure."""
@@ -366,12 +395,14 @@ def finish(run_tag: str, stray_run: str | None, poll: int, timeout: int | None,
     print("[finish_halfslot] router DRC: " + json.dumps(d), flush=True)
 
     if not step_completed(dest, POST_ROUTE_STA):
-        # ERROR_ON_TR_DRC aborts at Checker.TrDRC, BEFORE the only two steps that
-        # produce post-route parasitics and per-corner timing.  Resuming past it does
-        # not silence the DRC count -- it is printed above and reported in the doc.
+        # ERROR_ON_TR_DRC aborts at Checker.TrDRC, BEFORE the steps that produce the
+        # post-route antenna check, the fillers, the parasitics and the per-corner
+        # timing.  Carrying on past it does not silence the DRC count -- see
+        # TR_DRC_OVERRIDE.
         rc = 0 if dry_run else run([
             os.path.join(HERE, "run_librelane.py"), "resume",
-            "--run-tag", run_tag, "--from", "OpenROAD.RCX",
+            "--run-tag", run_tag, "--from", RESUME_FROM,
+            "--override-config", TR_DRC_OVERRIDE,
         ])
         if rc != 0:
             print(f"[finish_halfslot] resume exited {rc}; continuing to report what "
