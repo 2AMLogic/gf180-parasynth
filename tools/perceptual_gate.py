@@ -16,6 +16,8 @@ per candidate:
   AC coupling a causal 2nd-order 20 Hz Butterworth high-pass on every signal
               (the audio path's coupling; the drum block has no DC blocking,
               #152, and DC is not audible).
+  bandwidth   a zero-phase 8th-order 20 kHz low-pass on every signal: the
+              audible band, and inside the recordings' own 22.05 kHz.
   alignment   t = 0 is 1 ms before the first sample above 2 % of the signal's
               own peak (run_case's ONSET_FRAC / TRIM_MS). No cross-correlation
               search: a search is a fit.
@@ -85,6 +87,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 SR = 48000
 HP_HZ = 20.0
+#: The common audible band. Our 48 kHz renders carry content up to 24 kHz
+#: (CH: 1.1 % of its power above 20 kHz) that a 44.1 kHz recording cannot
+#: hold, and the self-check never saw it because it upsampled an 808 take
+#: (wrong-then-right, #379). Aliases that fold BELOW 20 kHz are kept.
+LP_HZ = 20000.0
 ONSET_FRAC = 0.02
 TRIM_S = 0.001
 LEAD_S = 0.020              # silence kept before t = 0 so zero-phase filters meet it in silence
@@ -121,6 +128,11 @@ IMPULSE_HP = 2000.0
 IMPULSE_STRIKE_S = 0.010
 PITCH_DB = 30.0
 PITCH_WORST_FRAMES = 4      # 20 ms
+#: Hearing's floor on the pitch-offset bar: ~0.3 %, the mid-frequency pure-
+#: tone difference limen (the ear is WORSE than this at 50 Hz, so this is the
+#: strict end). BD's TONE neighbour moves its pitch by 0.1 cents, and a bar
+#: no ear could hear is an unsatisfiable gate (#379).
+PITCH_JND_CENTS = 5.0
 
 FEATURES = ("spec", "spec_peak", "centroid", "flatness", "impulse", "attack", "decay", "modulation",
             "pitch", "pitch_shape")
@@ -188,6 +200,7 @@ def condition(x, sr: int, *, side: str = "signal") -> np.ndarray:
     if not np.any(np.abs(y) > 1e-9):
         raise Refused(f"{side} is silent")
     y = sosfilt(butter(2, HP_HZ / (SR / 2), btype="highpass", output="sos"), y)
+    y = sosfiltfilt(butter(8, LP_HZ / (SR / 2), btype="lowpass", output="sos"), y)
     pk = float(np.abs(y).max())
     i = int(np.argmax(np.abs(y) > ONSET_FRAC * pk))
     if i == 0:
@@ -613,7 +626,8 @@ WEAK_R = 2 ** (WEAK_CENTS / 1200)
 def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     """The per-feature pass bar for one sound.
 
-    The attack bar is floored at ATTACK_JND_MS. Every bar is that distance PLUS the apparatus's own floor: the target
+    The attack bar is floored at ATTACK_JND_MS and the pitch-offset bar at
+    PITCH_JND_CENTS: perceptual limens, not fits. Every bar is that distance PLUS the apparatus's own floor: the target
     against itself through `candidate_path` (48 kHz, another lead and gain,
     16-bit). Without it the nearest neighbour sits exactly on its own bar and
     a resample's rounding fails it (wrong-then-right, #379).
@@ -647,6 +661,8 @@ def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     bar = {f: (None if base[f] is None else base[f] + (floor[f] or 0.0)) for f in base}
     if bar.get("attack") is not None:
         bar["attack"] = max(bar["attack"], ATTACK_JND_MS)
+    if bar.get("pitch") is not None:
+        bar["pitch"] = max(bar["pitch"], PITCH_JND_CENTS)
     return {"sound": sound, "target": rel, "kind": kind, "from": frm, "bar": bar,
             "base": base, "apparatus_floor": floor, "neighbours": nbs}
 
