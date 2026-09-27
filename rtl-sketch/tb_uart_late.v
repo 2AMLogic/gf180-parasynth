@@ -51,7 +51,14 @@ module tb_uart_late;
     wire [7:0] wr_addr;
     wire [31:0] wr_data;
     uart_bridge #(.CLK_HZ(12_288_000), .BAUD(BAUD), .EVQ_DEPTH(64), .WRQ_DEPTH(8)) u (
+`ifdef CTL_FRAME_LAG
+        // CONTROL (fpga/verify_late_events.py --control rtl-frame-lag): the
+        // bridge is shown a frame counter one frame behind synth_top's, so
+        // every write lands a frame late. The bench must see it.
+        .clk(clk), .rst_n(rst_n), .rx(rx), .tx(tx), .frame(frame - 16'd1), .grant(uart_grant),
+`else
         .clk(clk), .rst_n(rst_n), .rx(rx), .tx(tx), .frame(frame), .grant(uart_grant),
+`endif
         .wr_valid(wr_valid), .wr_flag(wr_flag), .wr_sec(wr_sec), .wr_addr(wr_addr),
         .wr_data(wr_data), .evq_count(), .wrq_count(), .evq_overflow(),
         .wrq_overflow(), .late_seen(), .resync_seen());

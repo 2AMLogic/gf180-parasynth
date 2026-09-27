@@ -42,8 +42,12 @@ CONTROLS (rule 2). Each implementation must be able to fail this bench:
                                queued at its acceptance frame; a head whose
                                frame midpoint is behind the cursor waits a
                                revolution): must FAIL on execution frames
-  (RTL) the tb's replica of synth_top's frame/grant is asserted against
-        synth_top.v's text; a drifted replica is REFUSED, not compared.
+  --control rtl-frame-lag      the bench shows the bridge a frame counter one
+                               frame behind synth_top's (CTL_FRAME_LAG in
+                               tb_uart_late.v; uart_bridge.v is untouched):
+                               the RTL comparison must FAIL on execution frames
+  The tb's replica of synth_top's frame/grant is asserted against
+  synth_top.v's text; a drifted replica is REFUSED, not compared.
 
 Exit 0 PASS, 1 FAIL (a disagreement with the policy, printed per event),
 2 REFUSED / NO VERDICT (apparatus precondition).
@@ -223,7 +227,7 @@ def check_replica() -> None:
             raise Refused(f"tb_uart_late.v does not copy `{rx}`")
 
 
-def run_rtl(name: str, workdir: Path) -> dict:
+def run_rtl(name: str, workdir: Path, *, control: str | None = None) -> dict:
     fn, frame0 = SCENARIOS[name]
     steps = fn(frame0)
     pk = packets(steps)
@@ -241,7 +245,8 @@ def run_rtl(name: str, workdir: Path) -> dict:
         prev_end = start + (EVENT_CYCLES if kind == "event" else STATUS_CYCLES)
         lines.append(f"S {start} " + " ".join(f"{b:02x}" for b in p))
     total = prev_end + CYC * 700
-    log = _sim(workdir / name, lines, frame0, total)
+    log = _sim(workdir / (name + (f"-{control}" if control else "")), lines, frame0, total,
+               defines=["CTL_FRAME_LAG"] if control == "rtl-frame-lag" else [])
     acc = [(int(f[1]), int(f[2]), int(f[3])) for f in log if f[0] == "ACC"]
     wr = [(int(f[1]), int(f[2]), int(f[6])) for f in log if f[0] == "W"]
     tx = [int(f[2]) for f in log if f[0] == "T"]
@@ -266,11 +271,12 @@ def run_rtl(name: str, workdir: Path) -> dict:
             "replies": parse_replies(tx), "latency_cycles": lat}
 
 
-def _sim(d: Path, lines: list, frame0: int, total: int) -> list:
+def _sim(d: Path, lines: list, frame0: int, total: int, defines=()) -> list:
     d.mkdir(parents=True, exist_ok=True)
     (d / "cmds.txt").write_text("\n".join(lines) + "\n")
     exe = d / "tb.vvp"
-    r = subprocess.run(["iverilog", "-g2012", "-o", str(exe), str(BENCH), str(BRIDGE)],
+    r = subprocess.run(["iverilog", "-g2012", "-o", str(exe), *[f"-D{x}" for x in defines],
+                        str(BENCH), str(BRIDGE)],
                        capture_output=True, text=True)
     if r.returncode:
         raise Refused(f"iverilog failed: {r.stdout}{r.stderr}")
@@ -476,7 +482,7 @@ def report(label: str, name: str, cmp: dict, probs: list) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--model-only", action="store_true")
-    ap.add_argument("--control", choices=("model-revolution",))
+    ap.add_argument("--control", choices=("model-revolution", "rtl-frame-lag"))
     ap.add_argument("--scenario", nargs="*", default=list(SCENARIOS))
     ap.add_argument("--json", type=Path, default=ROOT / "build/late-events/verification.json")
     ap.add_argument("--workdir", type=Path, default=None)
@@ -499,9 +505,9 @@ def main(argv=None) -> int:
     verdicts = []
     work = a.workdir or Path(tempfile.mkdtemp(prefix="late-events-"))
     for name in a.scenario:
-        if not a.model_only and not a.control:
+        if not a.model_only and a.control != "model-revolution":
             try:
-                rr = run_rtl(name, work)
+                rr = run_rtl(name, work, control=a.control)
                 c = judge(name, compare(rr))
                 p = status_checks(name, c)
                 c["latency_cycles"] = rr["latency_cycles"]
@@ -513,6 +519,8 @@ def main(argv=None) -> int:
             v = c["verdict"] if not p else "FAIL"
             record["rtl"][name] = dict(c, status_problems=p, verdict=v)
             verdicts.append(v)
+        if a.control == "rtl-frame-lag":
+            continue
         try:
             mm = run_model(name, control=a.control)
         except Refused as exc:
@@ -542,7 +550,8 @@ def main(argv=None) -> int:
     if a.control:
         # caught only for the intended reason: an event the policy and the
         # model agree to ACCEPT executes in the wrong frame, or never
-        wrong_frame = sum(1 for v in record["model"].values() for r in v["rows"]
+        side = record["rtl"] if a.control == "rtl-frame-lag" else record["model"]
+        wrong_frame = sum(1 for v in side.values() for r in v["rows"]
                           if "status" not in r and not r["ok"] and r["got"] == r["want"]
                           and r["got_exec"] != ([r["want_exec"]] if r["want_exec"] is not None
                                                 else []))
