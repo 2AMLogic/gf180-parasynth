@@ -211,13 +211,14 @@ def test_control_a_tampered_frozen_source_hash_is_stale(tmp_path):
     assert verdict == "STALE" and "rtl.sources.rtl-sketch/voice_dp.v" in detail
 
 
-def test_control_a_different_freeze_commit_is_stale(monkeypatch):
-    """Pointing R1 at R0's source commit (voice_dp.v before #252's drift):
-    the sources read from git are not the record's."""
+def test_control_a_different_freeze_commit_is_refused(monkeypatch):
+    """Pointing R1 at R0's source commit: the sources read from git are not the
+    ones R1's RTL evidence ran on, so the derivation REFUSES before any
+    comparison (and would be STALE at rtl.sources if it got that far)."""
     import release_manifest as rm
     monkeypatch.setattr(r1c, "RTL_FROZEN_AT", rm.IMAGE_SOURCE_COMMIT)
     verdict, detail = r1c.check()
-    assert verdict == "STALE" and "rtl-sketch/voice_dp.v" in detail, detail
+    assert verdict == "REFUSED" and "that run is not R1 evidence" in detail, detail
 
 
 def test_control_r0_run_identity_is_not_r1_evidence(tmp_path, monkeypatch):
