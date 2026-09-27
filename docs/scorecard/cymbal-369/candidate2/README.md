@@ -115,6 +115,12 @@ circuit tilts **+16.6 dB**, and a discrete `(1 − z⁻¹)` at 48 kHz tilts **+1
 steep over the whole cymbal band — it cannot account for a 15 dB error, and candidate 1's post-mortem was wrong to
 name it.
 
+> **Answered, in `../tone-stage/README.md` (step 4).** The hypothesis below is **confirmed in shape and in
+> size**: every tone-stage path is a 2-pole band-pass peaking at 274–972 Hz, so each costs its band about
+> −20 dB from 1 kHz to 20 kHz, against the LEVEL stage's +16.6 dB that this candidate applies alone. The
+> residual below climbs +24.0 dB over the same span. What Figure 9 does *not* give is the inter-band
+> balance — it plots Ht1 and Ht2 on 4 dB and 3 dB tall axes, so neither appears anywhere near 3.45 kHz.
+
 ## 4. The next question, and it is one question
 
 **The tone stage is the only block of §10 that this model does not have at all**, and it is now the only remaining

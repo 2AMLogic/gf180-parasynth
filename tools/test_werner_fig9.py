@@ -137,6 +137,34 @@ def test_extrapolation_bound_is_narrow_where_the_curve_is_fully_plotted():
     assert b["hi_db"] - b["lo_db"] < 0.5
 
 
+@pytest.mark.parametrize("p1,p2", [(400.0, 1500.0), (128.0, 590.0),
+                                   (610.0, 1550.0)])
+def test_bp2_poles_recovers_a_planted_real_pole_pair(p1, p2):
+    """Every curve in Figure 9 reads Q < 0.5, i.e. two REAL poles -- one RC
+    high-pass and one RC low-pass, which is what a passive network builds."""
+    f0 = math.sqrt(p1 * p2)
+    q = f0 / (p1 + p2)
+    got = w9.bp2_poles(f0, q)
+    assert abs(got[0] - p1) / p1 < 1e-9
+    assert abs(got[1] - p2) / p2 < 1e-9
+
+
+def test_the_three_window_fits_do_not_share_a_pole_pair(evidence):
+    """Three transfer functions of one network to one output node share a
+    denominator, so they share poles. The three window fits do not, which is
+    the proof that they are local shapes and not pole locations -- and the
+    reason Ht1's and Ht2's extrapolations carry a bound."""
+    rows = w9.shared_denominator_note(evidence[0])
+    pairs = [r[3] for r in rows]
+    for i in range(3):
+        for j in range(i + 1, 3):
+            worst = max(abs(math.log(a / b))
+                        for a, b in zip(pairs[i], pairs[j]))
+            assert worst > 0.05, (
+                f"{rows[i][0]} and {rows[j][0]} agree on a pole pair; if that "
+                "ever becomes true the bound below can be tightened")
+
+
 def test_name_families_follows_the_prose_over_a_wrong_legend():
     """The real figure's legend reads t3, t2, t3 -- `t3` twice and no `t1`.
     Naming must come out Ht3 / Ht2 / Ht1 and must SAY that it overrode a

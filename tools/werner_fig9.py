@@ -390,6 +390,39 @@ def fit_bp2(hz, db):
     return wf.fit_structure(np.asarray(hz), np.asarray(db), "bp2")
 
 
+def bp2_poles(f0, q):
+    """The two pole frequencies of a 2-pole band-pass, in Hz.
+
+    Every one of Figure 9's curves reads Q < 0.5, so both poles are real and
+    the section is one RC high-pass cascaded with one RC low-pass -- which is
+    what a passive RC network can build.
+    """
+    if q >= 0.5:
+        r = math.sqrt(1.0 / (4 * q * q) - 1 + 0j)
+        return (f0 * abs(1 / (2 * q) - r), f0 * abs(1 / (2 * q) + r))
+    r = math.sqrt(1.0 / (4 * q * q) - 1.0)
+    return (f0 * (1 / (2 * q) - r), f0 * (1 / (2 * q) + r))
+
+
+def shared_denominator_note(data):
+    """Three transfer functions of ONE network to ONE output node share a
+    denominator -- the network determinant -- so they have the SAME poles.
+    The three windows' 2-pole fits do not agree on a pole pair, so at most one
+    of them can be the network's in-band pair.
+
+    That is not a contradiction: a 2-pole fit over a 3 dB window is a local
+    shape, not a pole location. It IS the reason the Ht1 and Ht2 numbers must
+    be quoted with `extrapolation_bound`'s spread and never as circuit values.
+    """
+    rows = []
+    for name in ("Ht1", "Ht2", "Ht3"):
+        v = data[name]
+        hz, db = v["curves"][v["k1_index"]]
+        fit = fit_bp2(hz, db)
+        rows.append((name, fit["f0"], fit["q"], bp2_poles(fit["f0"], fit["q"])))
+    return rows
+
+
 def extrapolation_bound(hz, db, f_target, grid=None):
     """How much the value at `f_target` can move if the section is not a bp2.
 
@@ -671,6 +704,31 @@ def from_artifact(path: pathlib.Path = ARTIFACT):
 
 CY_BANDS_HZ = (3450.0, 7100.0)
 
+# `tools/cymbal_bands.py`'s 1/3-octave centres, which is where the CY5025
+# residual in docs/scorecard/cymbal-369/candidate2/README.md is reported.
+THIRD_OCTAVE_HZ = (1000.0, 1260.0, 1590.0, 2000.0, 2500.0, 3200.0, 4000.0,
+                   5000.0, 6300.0, 8000.0, 10000.0, 12700.0, 16000.0, 20000.0)
+
+
+def tilt_table(data, ref_hz=1000.0):
+    """Each band's tone-stage response relative to its own value at 1 kHz.
+
+    This is the part of the tone stage that does NOT depend on the inter-band
+    levels Figure 9 cannot pin down, so it is the part that can be carried
+    into a candidate: a shape, per band, normalised out of its own gain.
+    """
+    rows = {}
+    for name in ("Ht1", "Ht2", "Ht3"):
+        v = data[name]
+        hz, db = v["curves"][v["k1_index"]]
+        fit = fit_bp2(hz, db)
+        ref = float(bp2_db(ref_hz, fit["gain_db"], fit["f0"], fit["q"]))
+        rows[name] = [
+            (f, float(bp2_db(f, fit["gain_db"], fit["f0"], fit["q"])) - ref,
+             bool(hz.min() <= f <= hz.max()))
+            for f in THIRD_OCTAVE_HZ]
+    return rows
+
 
 def report(data) -> list[str]:
     lines = []
@@ -703,6 +761,32 @@ def report(data) -> list[str]:
     lines.append(
         "  The LEVEL buffer tilts +16.6 dB across the same span (W14b Fig. 10, "
         "tools/werner_fig4.py --level).")
+    lines.append("")
+    lines.append("One network, one denominator -- so one pole pair, not three:")
+    for name, f0, q, poles in shared_denominator_note(data):
+        lines.append(
+            f"  {name}  window fit f0 {f0:7.1f} Hz Q {q:.3f}  ->  real poles "
+            f"{poles[0]:7.1f} and {poles[1]:7.1f} Hz")
+    lines.append(
+        "  These three pairs differ, so at most one is the network's in-band "
+        "pair. A 2-pole fit over a 3 dB window is a local shape, not a pole "
+        "location -- which is why Ht1 and Ht2 are quoted with a bound above.")
+    lines.append("")
+    lines.append(
+        "Tone-stage tilt per band, dB relative to 1 kHz, on "
+        "tools/cymbal_bands.py's 1/3-octave centres:")
+    rows = tilt_table(data)
+    head = "  band  " + " ".join(f"{f / 1000:>6.2f}k" for f in THIRD_OCTAVE_HZ)
+    lines.append(head)
+    for name, cells in rows.items():
+        lines.append("  " + f"{name:5s} " +
+                     " ".join(f"{d:+7.1f}" for _f, d, _ in cells))
+    lines.append(
+        "  measured over: " +
+        ", ".join(f"{name} to {max(f for f, _d, ok in cells if ok) / 1000:.2f} kHz"
+                  if any(ok for _f, _d, ok in cells) else f"{name} nowhere here"
+                  for name, cells in rows.items()) +
+        "; the rest of each row is extrapolated.")
     return lines
 
 
