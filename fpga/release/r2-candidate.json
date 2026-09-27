@@ -1,7 +1,7 @@
 {
  "schema": "gf180-parasynth R2 candidate v0",
  "candidate": "R2 candidate",
- "status": "DRAFT -- not frozen, no image built. Open: the 2x rectangle decimator headroom (sound owner, MIDI >= 108 at 0.85), the #315 XDC repair, the named image selector (#323)",
+ "status": "DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, inherited from R1), the #315 XDC repair, the named image selector (#323), release checks for a second image (#356)",
  "rtl": {
   "configuration": {
    "OSC2X": 1,
@@ -28,7 +28,7 @@
    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
-   "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+   "rtl-sketch/polyblep_saw_pair.v": "cac599b32b23227827dbf3f3b7225a4d1fa8843e1d90d6877ad5916be6d3c886",
    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
@@ -46,6 +46,7 @@
    "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
   },
   "differs_from_r1_freeze": {
+   "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 (#333, recheck-333 item 5)",
    "rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)"
   },
   "r1_freeze": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db"
@@ -59,9 +60,9 @@
  },
  "evidence": {
   "summary": "fpga/reports/r2-candidate/summary.json",
-  "sha256": "3ff4156397148d5c0aec88e128568760d2748df387c815a367e5324e5323415c",
+  "sha256": "34b5381d6e640aac5a62a413c58bffdb8689aec6d4ba8ca47e4d5bf3e78d23e0",
   "state": "PARTIAL",
-  "at": "78c9df197398159c221cac082abd959097bbb5f4"
+  "at": "c544436 (headroom c6c9440, UART c544436); first batch 78c9df1"
  },
  "r1_untouched": [
   "fpga/release/r1-candidate.json",
