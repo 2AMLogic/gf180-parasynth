@@ -54,32 +54,36 @@ def decompose(y, sr, split, f0) -> dict:
     sos = butter(4, [split, TOP_HZ], btype="bandpass", fs=sr, output="sos")
     hb = sosfiltfilt(sos, np.concatenate([np.zeros(sr // 10), w]))[sr // 10:]
     ne = int(EARLY_S * sr)
-    e_early = float(np.sum(hb[:ne] ** 2))
+    e_early = float(np.sum(hb[:ne] ** 2)) / total
+    e_late_band = float(np.sum(hb[ne:] ** 2)) / total
+    # Which part of the late band energy sits on harmonics: a Blackman-Harris
+    # windowed spectrum of the late segment, so the fundamental's truncation
+    # leakage (a rectangular cut of a decaying 100-400 Hz ring spreads -27 dB
+    # across the band) does not read as "other". Only the SHARE comes from the
+    # spectrum; the energy comes from the same band-pass the scorer uses.
     late = w[ne:]
-    n = 1 << int(math.ceil(math.log2(len(late) * 8)))
-    spec = np.abs(np.fft.rfft(late, n)) ** 2
-    spec[1:] *= 2                                   # one-sided
-    # express every bin as a fraction of the WINDOW's energy: the late part's
-    # share of it, split across the spectrum by Parseval
-    spec *= (float(np.sum(late * late)) / total) / float(spec.sum())
-    total = 1.0
+    m = len(late)
+    t = 2 * np.pi * np.arange(m) / m
+    bh = 0.35875 - 0.48829 * np.cos(t) + 0.14128 * np.cos(2 * t) - 0.01168 * np.cos(3 * t)
+    n = 1 << int(math.ceil(math.log2(m * 8)))
+    spec = np.abs(np.fft.rfft(late * bh, n)) ** 2
     f = np.fft.rfftfreq(n, 1.0 / sr)
     band = (f >= split) & (f < TOP_HZ)
     harm = np.zeros_like(band)
     k = 2
     while k * f0 < TOP_HZ + 0.1 * f0:
-        tol = max(15.0, 0.06 * k * f0)
-        harm |= np.abs(f - k * f0) <= tol
+        harm |= np.abs(f - k * f0) <= max(15.0, 0.06 * k * f0)
         k += 1
-    e_h = float(spec[band & harm].sum())
-    e_o = float(spec[band & ~harm].sum())
-    e_early /= float(np.sum(w * w))
+    sb = float(spec[band].sum())
+    share_h = float(spec[band & harm].sum()) / sb if sb > 0 else 0.0
+    e_h, e_o = e_late_band * share_h, e_late_band * (1 - share_h)
+    lev = spec * ((float(np.sum(late * late)) / total) / float(spec.sum()))
     return {"early_db": _db(e_early), "harmonic_db": _db(e_h),
             "other_db": _db(e_o),
             "early_share": round(e_early / (e_early + e_h + e_o), 3),
             "harmonic_share": round(e_h / (e_early + e_h + e_o), 3),
             "other_share": round(e_o / (e_early + e_h + e_o), 3),
-            "harmonic_levels_db": _harmonic_levels(spec, f, f0, 1.0)}
+            "harmonic_levels_db": _harmonic_levels(lev, f, f0, 1.0)}
 
 
 def _harmonic_levels(spec, f, f0, total):

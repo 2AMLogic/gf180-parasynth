@@ -36,12 +36,14 @@ def _strike(h3=0.0, click=0.0, noise=0.0, seed=1):
 
 def test_pure_ring_has_no_above_split_energy():
     r = d.decompose(_strike(), SR, SPLIT, F0)
-    assert r["harmonic_db"] < -60 and r["other_db"] < -60
+    assert all(r[k] is None or r[k] < -60 for k in ("early_db", "harmonic_db", "other_db"))
 
 
 def test_planted_harmonic_is_harmonic_at_its_level():
     r = d.decompose(_strike(h3=0.1), SR, SPLIT, F0)
-    assert r["harmonic_db"] == pytest.approx(-20.0 - 0.0, abs=1.5)   # (0.1)^2 of the ring, late part
+    # (0.1)^2 of the ring's energy, times the late part's share of the window
+    # (exp(-2 * 10 ms / 58 ms) = 0.71): -20 - 1.5 = -21.5 dB
+    assert r["harmonic_db"] == pytest.approx(-21.5, abs=1.0)
     assert r["harmonic_share"] > 0.8
 
 
