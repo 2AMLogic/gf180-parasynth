@@ -21,7 +21,7 @@ push. **Do not edit by hand** -- it is a view of
 | **Drums** | fixed-model, integrated-rtl | `D02A` |
 | **Mono** | fixed-model, integrated-rtl | `M5A` |
 | **Filters** | fixed-model, integrated-rtl | `F1A` |
-| **Ensemble** | fixed-model | **no case** |
+| **Ensemble** | fixed-model, integrated-rtl | `E1A` |
 
 ## Every case
 

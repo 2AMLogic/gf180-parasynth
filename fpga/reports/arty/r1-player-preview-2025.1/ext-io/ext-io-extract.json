@@ -1,0 +1,169 @@
+{
+ "schema": "ext-io-extract v1",
+ "state": "PASS",
+ "dcp": "/home/ubuntu/work/r1-image-build/arty/routed.dcp",
+ "dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+ "instrument_sha256": "29b8e5e9f2cfaeaf174f860184da1cf4ba6a8279b5a109b91d75b2fccc5f423f",
+ "tcl_sha256": "22d6228866f0f3f6fd16935391a748d9c8e8d9d1cefc9b9b2d346391d2ae675c",
+ "vivado_rc": 0,
+ "tool": "Vivado v2025.1 SW Build 6140274",
+ "log_sha256": "7acb7ee024344c13887ac22a47fc32a99ca81276e14a75bcb82fbbbbdcfebcd3",
+ "paths_sha256": "2a1bde54cae7dba1b6d97dcbd999804701a4ea782b5a83f39269f0f088d0f092",
+ "verdict": "PASS",
+ "failing_ports": [],
+ "ports": {
+  "i2s_lrclk": {
+   "verdict": "PASS",
+   "setup_slack_ns": 71.926,
+   "hold_slack_ns": 153.621,
+   "capture_clock": "i2s_bclk_ext"
+  },
+  "i2s_sdata": {
+   "verdict": "PASS",
+   "setup_slack_ns": 72.352,
+   "hold_slack_ns": 152.912,
+   "capture_clock": "i2s_bclk_ext"
+  },
+  "spi_miso": {
+   "verdict": "PASS",
+   "setup_slack_ns": 15.445,
+   "hold_slack_ns": 3.42,
+   "capture_clock": "hardware_clock.clock_raw"
+  },
+  "led[1]": {
+   "verdict": "PASS",
+   "setup_slack_ns": 67.975,
+   "hold_slack_ns": 3.859,
+   "capture_clock": "hardware_clock.clock_raw"
+  },
+  "led[2]": {
+   "verdict": "PASS",
+   "setup_slack_ns": 70.344,
+   "hold_slack_ns": 3.402,
+   "capture_clock": "hardware_clock.clock_raw"
+  },
+  "led[3]": {
+   "verdict": "PASS",
+   "setup_slack_ns": 68.704,
+   "hold_slack_ns": 4.264,
+   "capture_clock": "hardware_clock.clock_raw"
+  },
+  "uart_txd": {
+   "verdict": "PASS",
+   "setup_slack_ns": 69.675,
+   "hold_slack_ns": 3.709,
+   "capture_clock": "hardware_clock.clock_raw"
+  }
+ },
+ "worst_setup_slack_ns": 15.445,
+ "worst_hold_slack_ns": 3.402,
+ "spi_miso": {
+  "output_delay_max_ns": 54.958,
+  "setup_slack_ns": 15.445,
+  "sta_co_bound_ns": 10.977,
+  "co_budget_ns": 26.422,
+  "max_guaranteed_readback_mhz": 1.4633,
+  "readback_qualified_mhz": 1.4,
+  "readback_qualified": true,
+  "write_ceiling_mhz": 2.0
+ },
+ "exceptions": {
+  "i2s_bclk": "forwarded clock (create_generated_clock); no output delay by design -- publish_arty PERMITTED_OUTPUT_DELAY_EXCEPTIONS"
+ },
+ "control": {
+  "id": "IMPOSSIBLE_MISO",
+  "caught": true,
+  "injected": "set_output_delay -max 80.000 on spi_miso (in memory, after the clean measurement)",
+  "spi_miso_setup_slack_ns": -9.597,
+  "verdicts": {
+   "i2s_lrclk": "PASS",
+   "i2s_sdata": "PASS",
+   "spi_miso": "FAIL",
+   "led[1]": "PASS",
+   "led[2]": "PASS",
+   "led[3]": "PASS",
+   "uart_txd": "PASS"
+  }
+ },
+ "inputs": {
+  "spi_sck": {
+   "slack_ns": null,
+   "endpoint": "u_synth/u_spi/sck_q_reg[0]/D"
+  },
+  "spi_mosi": {
+   "slack_ns": null,
+   "endpoint": "u_synth/u_spi/mosi_q_reg[0]/D"
+  },
+  "spi_cs_n": {
+   "slack_ns": null,
+   "endpoint": "u_synth/u_spi/csn_q_reg[0]/D"
+  },
+  "uart_rxd": {
+   "slack_ns": null,
+   "endpoint": "u_synth/g_uart.u_uart/rx_q_reg[0]/D"
+  },
+  "btn_reset": {
+   "slack_ns": null,
+   "endpoint": "por_count_reg[0]/CLR"
+  }
+ },
+ "synchronisers": {
+  "patterns": {
+   "xdc:spi_async_reg": {
+    "pattern": ".*u_spi/(sck_q|mosi_q|csn_q)_reg\\[[01]\\]",
+    "expected": 6,
+    "matched": 6,
+    "objects": [
+     "u_synth/u_spi/csn_q_reg[0]",
+     "u_synth/u_spi/csn_q_reg[1]",
+     "u_synth/u_spi/mosi_q_reg[0]",
+     "u_synth/u_spi/mosi_q_reg[1]",
+     "u_synth/u_spi/sck_q_reg[0]",
+     "u_synth/u_spi/sck_q_reg[1]"
+    ]
+   },
+   "xdc:spi_false_path_d": {
+    "pattern": ".*u_spi/(sck_q|mosi_q|csn_q)_reg\\[0\\]/D",
+    "expected": 3,
+    "matched": 3,
+    "objects": [
+     "u_synth/u_spi/csn_q_reg[0]/D",
+     "u_synth/u_spi/mosi_q_reg[0]/D",
+     "u_synth/u_spi/sck_q_reg[0]/D"
+    ]
+   },
+   "xdc:uart_async_reg": {
+    "pattern": ".*g_uart/u_uart/rx_q_reg\\[[01]\\]",
+    "expected": 2,
+    "matched": 0,
+    "objects": []
+   },
+   "xdc:uart_false_path_d": {
+    "pattern": ".*g_uart/u_uart/rx_q_reg\\[0\\]/D",
+    "expected": 1,
+    "matched": 0,
+    "objects": []
+   },
+   "netlist:uart_rx_q": {
+    "pattern": ".*u_uart/rx_q_reg\\[[01]\\]",
+    "expected": 2,
+    "matched": 2,
+    "objects": [
+     "u_synth/g_uart.u_uart/rx_q_reg[0]",
+     "u_synth/g_uart.u_uart/rx_q_reg[1]"
+    ]
+   }
+  },
+  "async_reg": {
+   "u_synth/g_uart.u_uart/rx_q_reg[0]": "1",
+   "u_synth/g_uart.u_uart/rx_q_reg[1]": "1",
+   "u_synth/u_spi/csn_q_reg[0]": "1",
+   "u_synth/u_spi/csn_q_reg[1]": "1",
+   "u_synth/u_spi/mosi_q_reg[0]": "1",
+   "u_synth/u_spi/mosi_q_reg[1]": "1",
+   "u_synth/u_spi/sck_q_reg[0]": "1",
+   "u_synth/u_spi/sck_q_reg[1]": "1"
+  }
+ },
+ "summary": "7 timed outputs, worst setup +15.445 ns, worst hold +3.402 ns; spi_miso CO <= 10.977 ns -> readback <= 1.4633 MHz; control caught"
+}

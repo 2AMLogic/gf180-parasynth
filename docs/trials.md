@@ -123,6 +123,7 @@ Rules (amended after review, plan085 §3):
 | ID | Question | State today | Verifier (existing where possible) |
 |---|---|---|---|
 | T-RELEASE-BOUND | Do image, sources, host bytes, supported domain and evidence agree? | not yet run as a trial (#255 draft) | `fpga/release/release_manifest.py` + release tests |
+| T-RELEASE-BOUND-R1 | The same question for the R1 image (#280), with R0 pinned as the rollback | PASS (#280) | `fpga/release/r1_release.py` + `test_r1_release.py` |
 | T-PLAY-DIGITAL | Do the documented playback commands produce correct, non-silent audio through UART→RTL→I²S? | partial (held note was silent until #255) | release held-note + `verify_rolling_playback.py --rtl` |
 | T-DEADLINE | Does every supported configuration meet the frame deadline, with complete evidence? | PASS baseline; pulse2x excluded | `rtl-sketch/verify_deadline.py` |
 | T-PULSE2X-IMAGE | Is a PULSE2X=1 image qualified (fit, timing, deadline, I²S)? | FAIL | #205 |
@@ -307,3 +308,15 @@ is **R0**; the "R1 release receipts" section above is about R0.
 
 `sim` mode of T-PLAY-DIGITAL (R0 bytes through the current RTL) was not re-run:
 it is a compatibility test and says nothing about either image's playback.
+
+### R1 image receipts, 2026-09-27 (#280; a snapshot, not maintained state)
+
+On the build box, after the one R1 build (bitstream `544499e2...`, routed
+checkpoint `0f81026e...`, Vivado 2025.1 SW Build 6140274):
+
+| trial | verdict | what it shows |
+|---|---|---|
+| T-RELEASE-BOUND-R1 | **PASS** | `r1-2025.1.json` BOUND: image, publication, shipped reports (re-parsed), DSP evidence (re-derived), per-port external I/O and routed.dcp agree; compiled inputs are the candidate's at `6864435`; `--image tree` bytes are the ones the candidate's RTL evidence replayed; R0 pinned |
+| T-RELEASE-BOUND-R1, `stale-r1-image` | caught | the R1 manifest naming R0's bitstream/checkpoint/publication is STALE at exactly those three fields |
+| T-RELEASE-BOUND-R1, `stale-r1-host` | caught | the R1 manifest naming R0's `run --fixture demo` bytes (508 packets, no preamble, revision-11 kit) is STALE at exactly `host.commands.demo.cmds_sha256`/`.packets` |
+| T-RELEASE-BOUND | **PASS** | R0 untouched: its manifest still BOUND, both of its stale controls caught |

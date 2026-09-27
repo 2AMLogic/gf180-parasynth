@@ -6,8 +6,10 @@ Naming (plan087/plan088): **R0** is the published Arty image, whose immutable
 release string is `arty-a7-100t baseline 2025.1, r1` (fpga/release/RELEASE.md,
 contract revision 11, bitstream a66c9349...). **R1** is this candidate: the
 revision-14 tree in the Arty configuration OSC2X=1 FILTER2X=1 PULSE2X=0, driven
-by the host with `--image tree`. It has no bitstream yet (#280). Neither
-identity's evidence stands in for the other's.
+by the host with `--image tree`. Its image is published and bound separately by
+fpga/release/r1_release.py (r1-2025.1.json, #280); this record stays the frozen
+source/host/evidence identity that manifest binds. Neither identity's evidence
+stands in for the other's.
 
 WHY THE TARGET IS FROZEN HERE, NOT READ FROM THE SENDER (plan088). A playback
 verifier that takes its expectation from the same image selector the sender
@@ -308,8 +310,8 @@ def domain() -> dict:
         "not assumed. Before sending, the host REFUSES if the device reports queued events or "
         "writes left from an earlier session.")
     d["physical_precondition"] = (
-        "the board is programmed with the R1 bitstream (#280, not yet built). The host cannot "
-        "read the image identity back, so this is declared, not verified.")
+        "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). "
+        "The host cannot read the image identity back, so this is declared, not verified.")
     d["open_defect"] = ("#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 "
                         "and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent")
     d["drift"] = ("DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player "
@@ -319,8 +321,9 @@ def domain() -> dict:
 
 
 DECLARED = {
-    "status": "CANDIDATE: digital (RTL-simulation) evidence only. No R1 bitstream exists yet "
-              "(#280); no physical programming, control or audio capture.",
+    "status": "CANDIDATE: digital (RTL-simulation) evidence. The R1 bitstream built from it is "
+              "published and bound in fpga/release/r1-2025.1.json (#280); no physical "
+              "programming, control or audio capture.",
     "r0": R0_ALIAS,
     "included": [
         "clap L2 final strike (#261/#273, contract revision 14: ENV_FRATE in the drum engine)",

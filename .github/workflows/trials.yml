@@ -18,6 +18,10 @@
 # apparatus was shown to fail on each counterexample. Before #278 it was
 # report-only: with no control it could only be NO VERDICT.
 #
+# Gated in the same job since #280: T-RELEASE-BOUND-R1, the R1 player-preview
+# image (fpga/release/r1_release.py, r1-2025.1.json) with two STALE controls:
+# the R1 manifest naming R0's image, and naming R0's host bytes.
+#
 # "Gated" means the job fails. It is not yet a REQUIRED status check: main
 # has no branch protection or ruleset at all (2026-09-26), and requiring a job
 # before it exists on main would block every open PR based on older main.
@@ -80,6 +84,8 @@ jobs:
         run: python -m pytest fpga/release -q
       - name: T-RELEASE-BOUND (blocking; two STALE controls must be caught)
         run: python tools/trial.py run T-RELEASE-BOUND
+      - name: T-RELEASE-BOUND-R1 (blocking; the R1 image's manifest, two STALE controls)
+        run: python tools/trial.py run T-RELEASE-BOUND-R1
       - name: every receipt is intact and matches its artifacts
         if: always()
         run: python tools/trial.py check-all build/trials
