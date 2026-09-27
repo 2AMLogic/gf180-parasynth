@@ -44,12 +44,12 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **712 commits over 219 hours.**
+Measured from git, not remembered. **715 commits over 219 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 1478 | 6.8 |
-| injected controls | 177 | 0.8 |
+| tests | 1500 | 6.8 |
+| injected controls | 188 | 0.9 |
 | bit-exact verifiers | 8 | — |
 | lines of RTL | 9,769 | 45 |
 
@@ -137,7 +137,7 @@ graph LR
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 184.84s (0:03:04) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 201.06s (0:03:21) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
