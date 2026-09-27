@@ -26,6 +26,7 @@ runner thinks it said:
 """
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -258,6 +259,10 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
 RS_TEST_OP = {k: v for k, v in rc.RS_BALANCE_OP.items()
               if k not in ("f_lo_range", "f_hi_range")}
 RS_TEST_RANGES = (rc.RS_BALANCE_OP["f_lo_range"], rc.RS_BALANCE_OP["f_hi_range"])
+# Also derived rather than copied: the floor margin is a DEFAULT of the estimator
+# rather than a member of the OP dict, so it has to be read off the signature.
+FLOOR_MARGIN_DB = inspect.signature(
+    rc.balance_trajectory_db).parameters["floor_margin_db"].default
 
 
 def _damped(f, tau, amp, n, sr, phase=0.0):
@@ -323,9 +328,36 @@ def test_balance_trajectory_db_a_flat_balance_reads_flat():
 
 def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     """#92's own pattern: a point measured to be inside the record's floor is
-    excluded, not integrated. A strong tone AT one of the guard frequencies
-    (neither partial) for the first 20 ms raises the floor there and nowhere
-    else; the earliest reported instant must move past it."""
+    excluded, not integrated. A tone AT one of the guard frequencies (neither
+    partial) for the first 20 ms raises the floor there and nowhere else; the
+    earliest reported instant must move past it.
+
+    THE FIXTURE NOW ASSERTS ITS OWN PREMISE, and the burst amplitude is 0.6
+    rather than the 5.0 it was written with (#389). "Raises the floor there and
+    nowhere else" was a claim this fixture made in prose and violated in fact: a
+    5x tone at 1000 Hz throws a 1/df skirt across the whole record, and at the
+    +-100 Hz offsets around the LOW partial that `line_is_resolved` reads, the
+    burst alone measured 13 to 21 dB BELOW that partial -- comparable to, and at
+    the outer offsets louder than, the partial's own skirt, which it scrambled by
+    up to 7 dB. #389's line-shape precondition saw that and refused the record,
+    correctly: the low partial's neighbourhood in the 5x fixture genuinely does
+    not look like an isolated mode, so there was nothing there to take a verdict
+    from.
+
+    So the premise is now a pair of assertions rather than a sentence, and the
+    amplitude was SWEPT rather than guessed (0.4, 0.5, 0.6, 0.75, 1.0, 5.0):
+
+        A      t1     spill onto 460 Hz   shape residual   headroom at 3 ms
+        0.4   3.0 ms        -36.5 dB        1.09 dB           +6.7 dB
+        0.6  21.0 ms        -33.0 dB        1.42 dB           +3.1 dB
+        1.0  21.5 ms        -28.6 dB        2.07 dB           -1.3 dB
+        5.0  REFUSED        -14.6 dB        4.15 dB          -15.3 dB
+
+    0.4 is too quiet to raise the floor past the estimator's own 6 dB gate at
+    all, so the fixture stops testing anything; 1.0 leaves the shape residual
+    within 6 % of the gate's 2.2 dB tolerance, which is a flake waiting to
+    happen. 0.6 is 2.9 dB inside the floor gate and 1.55x inside the shape gate.
+    5.0 bought nothing this test asserts and cost the premise it claims."""
     tau, a_lo, a_hi = 0.020, 1.0, 1.0
     x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
     clean = rc.balance_trajectory_db(x, SR, *RS_TEST_RANGES, **RS_TEST_OP)
@@ -333,9 +365,26 @@ def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     t = np.arange(len(x)) / SR
     burst_end_s = 0.020
     guard_hz = RS_TEST_OP["guards"][0]
-    dirty = x + 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    burst = 0.6 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    dirty = x + burst
+
+    # THE PREMISE, ASSERTED: the burst dominates the guard it is meant to raise,
+    # and is well under the floor margin at BOTH partials -- "there, and nowhere
+    # else". Without this the fixture can drift back to contaminating the very
+    # thing it claims to leave alone, which is how it spent its first life.
+    for f, tag in ((460.0, "low"), (1800.0, "high")):
+        partial = pt.project(x[: int(0.020 * SR)], f, SR)
+        spill = pt.project(burst[: int(0.020 * SR)], f, SR)
+        assert 20.0 * math.log10(spill / partial) < -FLOOR_MARGIN_DB, (
+            f"the burst spills onto the {tag} partial at {f} Hz to within "
+            f"{20*math.log10(spill/partial):.1f} dB of it: this fixture is then "
+            f"contaminating the partials, not only the guard")
+    at_guard = pt.project(burst[: int(0.020 * SR)], guard_hz, SR)
+    assert at_guard > pt.project(x[: int(0.020 * SR)], guard_hz, SR) * 10.0, \
+        "the burst must be what sets the floor at the guard, or this tests nothing"
+
     contaminated = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
-    assert contaminated.ok
+    assert contaminated.ok, contaminated.reason
     assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
     assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
 
@@ -470,6 +519,117 @@ def test_balance_trajectory_db_refuses_white_noise_at_both_operating_points():
             f"line-shape precondition; the rest went out through the floor gate, "
             f"which already refused them before #389. This test is then green for "
             f"the wrong reason.")
+
+
+def test_balance_trajectory_db_would_report_noise_again_with_the_gate_DISABLED():
+    """The injected-bug control for the test above (verification-rules.md rule 2).
+
+    A green refusal test proves nothing until something has been shown to turn
+    it red, and "white noise is refused" has a trivial wrong reason to be green:
+    the floor gate might be doing all the work, or the estimator might be
+    refusing for a reason that has nothing to do with #389. So RELAX the line
+    shape tolerance to infinity -- the one line of the fix, and nothing else --
+    and the old behaviour must come back."""
+    op = rc.RS_BALANCE_OP
+    kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+    real = pt.line_is_resolved
+    reported = 0
+    try:
+        pt.line_is_resolved = lambda *a, **k: real(*a, **{**k, "max_resid_db": math.inf})
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(0.25 * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            reported += e.ok
+    finally:
+        pt.line_is_resolved = real
+    assert reported > 0, (
+        "with the line-shape tolerance relaxed to infinity, NO noise seed was "
+        "reported -- so the refusals the test above observes are not this gate's "
+        "doing and that test is green for some other reason")
+
+
+def test_line_is_resolved_passes_a_damped_mode_at_every_tau():
+    """The gate must accept a damped sinusoid across the whole range of decays a
+    drum voice presents, from a hat-fast 0.5 ms to two thirds of the window.
+
+    This is the external grounding, and it is the case a shape gate is most
+    likely to get wrong: the statistic's closed form is tau-free, so every row
+    here has the same right answer for a reason that comes from the DTFT of a
+    damped sinusoid and not from anything measured in this repository. An earlier
+    draft of this gate (#389, `balance_line_shape.py` wrong-then-right item 3)
+    refused the rows below 2 ms, which is where the rimshot's HIGH mode lives."""
+    T = RS_TEST_OP["t_end"]
+    for tau_ms in (0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0):
+        for f in (452.0, 1795.0):
+            x = _damped(f, tau_ms * 1e-3, 1.0, int(0.25 * SR), SR, 0.3)
+            r = pt.line_is_resolved(x, SR, f, seconds=T)
+            assert r["ok"], (f"tau {tau_ms} ms at {f} Hz is a damped mode and the "
+                            f"gate refused it: {r['reason']}")
+            assert r["tau_ms"] == pytest.approx(tau_ms, rel=0.15), (
+                f"the shape fit recovered tau {r['tau_ms']:.2f} ms from a mode "
+                f"built with {tau_ms} ms -- the gate passed, but not because it "
+                f"measured the right thing")
+
+
+def test_line_is_resolved_refuses_white_noise():
+    """The other side of the same gate, at the unit rather than the estimator.
+
+    16 seeds at both operating points' windows, because a precondition that
+    holds on most records is not a precondition. The reason must name the
+    statistic and its tolerance, so a reader of a REFUSED verdict can tell
+    whether the record was nearly a partial or nowhere near one."""
+    for seconds in (RS_TEST_OP["t_end"], rc.CB_BALANCE_OP["t_end"]):
+        for seed in range(16):
+            x = 0.01 * np.random.default_rng(1000 + seed).standard_normal(
+                int(3.0 * seconds * SR))
+            f = pt.find_partial(x, SR, *RS_TEST_RANGES[0], seconds=seconds)
+            r = pt.line_is_resolved(x, SR, f, seconds=seconds)
+            assert not r["ok"], (
+                f"seed {seed} over {seconds*1e3:.0f} ms: the strongest line white "
+                f"noise happens to have at {f:.1f} Hz is not a partial, and the "
+                f"gate accepted it (residual {r['resid_db']:.2f} dB, fitted tau "
+                f"{r['tau_ms']:.1f} ms)")
+            assert "does not have the shape of one" in r["reason"]
+            assert "RMS" in r["reason"]
+
+
+def test_line_is_resolved_refuses_a_line_that_never_decays():
+    """A steady tone is a line, and a very clean one, but it is not a STRUCK
+    MODE -- so the second condition, that the fitted tau decays inside the
+    window, is what has to refuse it. The reason must say so by name rather than
+    blaming the shape, because those are different findings about the record."""
+    n = int(0.25 * SR)
+    x = np.sin(2 * math.pi * 452.0 * np.arange(n) / SR + 0.3)
+    r = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    assert not r["ok"]
+    assert "does not decay inside" in r["reason"], r["reason"]
+    assert r["tau_ms"] > RS_TEST_OP["t_end"] * 1e3
+
+
+def test_line_is_resolved_is_blind_to_the_lines_height():
+    """The whole reason this gate is on the SHAPE: `find_partial`'s upward bias
+    lives entirely in the line's height, so a statistic that moved with the
+    height would carry the bias it exists to defeat.
+
+    Scaling a record by 60 dB either way changes every projection and must
+    change neither the residual nor the fitted tau -- and must not change the
+    verdict on noise either, which is the direction that matters."""
+    x = _damped(452.0, 0.006, 1.0, int(0.25 * SR), SR, 0.3)
+    base = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    noise = 0.01 * np.random.default_rng(7).standard_normal(int(0.25 * SR))
+    f_n = pt.find_partial(noise, SR, *RS_TEST_RANGES[0], seconds=RS_TEST_OP["t_end"])
+    base_n = pt.line_is_resolved(noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+    assert base["ok"] and not base_n["ok"]
+    for g in (1e-3, 1e3):
+        s = pt.line_is_resolved(g * x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+        assert s["ok"]
+        assert s["resid_db"] == pytest.approx(base["resid_db"], abs=1e-9), (
+            f"scaling by {g} moved the residual from {base['resid_db']:.6f} to "
+            f"{s['resid_db']:.6f} dB: the statistic is reading the height")
+        assert s["tau_ms"] == pytest.approx(base["tau_ms"], rel=1e-9)
+        sn = pt.line_is_resolved(g * noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+        assert not sn["ok"]
+        assert sn["resid_db"] == pytest.approx(base_n["resid_db"], abs=1e-9)
 
 
 def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():
