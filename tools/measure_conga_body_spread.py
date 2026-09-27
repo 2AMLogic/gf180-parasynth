@@ -57,6 +57,7 @@ sys.path.insert(0, str(ROOT / "model"))
 
 import audio_measure as am           # noqa: E402
 import drum_verify as dv             # noqa: E402
+import measure_harness as mh         # noqa: E402
 
 BAND, SPLIT_HZ = dv.BAND, dv.SPLIT_HZ
 TOL_DB = 3.0
@@ -153,20 +154,27 @@ def _sine(hz, secs, sr, amp=1.0):
 def validate_known_answer(sr: int = 48000) -> list[dict]:
     """Two steady sines either side of the split: the answer is
     20*log10(a_hi/a_lo) by construction, known without reference to anything
-    in this repository."""
-    out = []
+    in this repository.
+
+    The methodology (compare a measurement against an analytically-known
+    value) is `measure_harness.validate_known_answer` (issue #104); only the
+    case construction below -- which two frequencies, which band split -- is
+    conga-specific."""
+    cases = []
     for voice, f_lo, f_hi in (("LC", 100.0, 1600.0), ("HC", 150.0, 1800.0)):
         for a_hi in (1.0, 0.5, 0.1, 0.0316):
             x = _sine(f_lo, 0.5, sr, 1.0) + _sine(f_hi, 0.5, sr, a_hi)
             lo, hi = BAND[voice]
-            got, why = band_ratio_db(x, sr, SPLIT_HZ[voice], lo, hi)
-            want = 20 * math.log10(a_hi)
-            out.append(dict(case=f"{voice} {f_lo:.0f}Hz vs {f_hi:.0f}Hz @ {a_hi:g}",
-                            expected_db=round(want, 4),
-                            measured_db=None if got is None else round(got, 4),
-                            error_db=None if got is None else round(got - want, 4),
-                            why=why))
-    return out
+            cases.append(dict(
+                case=f"{voice} {f_lo:.0f}Hz vs {f_hi:.0f}Hz @ {a_hi:g}",
+                signal=(x, sr),
+                expected=20 * math.log10(a_hi),
+                kwargs=dict(split_hz=SPLIT_HZ[voice], lo=lo, hi=hi)))
+
+    def measure(x, sr, split_hz, lo, hi):
+        return band_ratio_db(x, sr, split_hz, lo, hi)
+
+    return mh.validate_known_answer(cases, measure)
 
 
 def validate_reproduction(refdir: pathlib.Path) -> list[dict]:
@@ -209,48 +217,63 @@ def floor_for_these_signals(refdir: pathlib.Path) -> list[dict]:
     moves the number, and the effect saturates by 0.5 ms and is then flat out to
     10 ms, which is the signature of a fixed-length filter edge and not of any
     property of the sound.
+
+    The row/perturbation/delta bookkeeping is `measure_harness.
+    floor_for_these_signals` (issue #104); only which five perturbations to run,
+    and what each one does to a conga recording, is conga-specific.
     """
-    out = []
-    files = [("LC", f) for f in sorted((refdir / "lc8").glob("LC*.WAV"))]
-    files += [("HC", f) for f in sorted((refdir / "hc8").glob("HC*.WAV"))]
-    for voice, path in files:
-        x, sr = read_wav(path)
-        base, _ = body_spectrum(x, sr, voice)
-        if base is None:
-            continue
-        row = dict(voice=voice, file=path.name, base_db=round(base, 4))
+    def signals():
+        files = [("LC", f) for f in sorted((refdir / "lc8").glob("LC*.WAV"))]
+        files += [("HC", f) for f in sorted((refdir / "hc8").glob("HC*.WAV"))]
+        for voice, path in files:
+            x, sr = read_wav(path)
 
-        # 1. window start: give the reference the 1 ms lead our render has.
-        z = np.concatenate([np.zeros(int(1e-3 * sr)), x])
-        v, _ = body_spectrum(z, sr, voice)
-        row["lead_1ms_db"] = None if v is None else round(v - base, 4)
+            def measure(x, sr, voice=voice):
+                return body_spectrum(x, sr, voice)
 
-        # ... and check it saturates, so this is an edge and not the sound.
-        z = np.concatenate([np.zeros(int(1e-2 * sr)), x])
-        v, _ = body_spectrum(z, sr, voice)
-        row["lead_10ms_db"] = None if v is None else round(v - base, 4)
+            def lead_1ms(x, sr, voice=voice):
+                z = np.concatenate([np.zeros(int(1e-3 * sr)), x])
+                v, _ = body_spectrum(z, sr, voice)
+                return v
 
-        # 2. sample rate: the same recording at our render's rate.
-        y = resample_poly(x, 48000, sr)
-        v, _ = body_spectrum(y, 48000, voice)
-        row["sample_rate_44k_to_48k_db"] = None if v is None else round(v - base, 4)
+            def lead_10ms(x, sr, voice=voice):
+                z = np.concatenate([np.zeros(int(1e-2 * sr)), x])
+                v, _ = body_spectrum(z, sr, voice)
+                return v
 
-        # 3. 16-bit quantisation of a float signal at the same peak.
-        q = np.round(x * 32768.0) / 32768.0
-        v, _ = body_spectrum(q, sr, voice)
-        row["quantisation_16bit_db"] = None if v is None else round(v - base, 4)
+            def sample_rate_44k_to_48k(x, sr, voice=voice):
+                y = resample_poly(x, 48000, sr)
+                v, _ = body_spectrum(y, 48000, voice)
+                return v
 
-        # 4. the 150 ms window itself, +-10 ms.
-        d = []
-        for t1 in (0.140, 0.160):
-            seg = window(prepare(x, sr), sr, 0.0, t1)
-            lo, hi = BAND[voice]
-            v, _ = band_ratio_db(seg, sr, SPLIT_HZ[voice], lo, hi)
-            if v is not None:
-                d.append(v - base)
-        row["window_10ms_db"] = round(max(abs(t) for t in d), 4) if d else None
-        out.append(row)
-    return out
+            def quantisation_16bit(x, sr, voice=voice):
+                q = np.round(x * 32768.0) / 32768.0
+                v, _ = body_spectrum(q, sr, voice)
+                return v
+
+            def window_10ms(x, sr, voice=voice):
+                base, _ = body_spectrum(x, sr, voice)
+                if base is None:
+                    return None
+                d = []
+                for t1 in (0.140, 0.160):
+                    seg = window(prepare(x, sr), sr, 0.0, t1)
+                    lo, hi = BAND[voice]
+                    v, _ = band_ratio_db(seg, sr, SPLIT_HZ[voice], lo, hi)
+                    if v is not None:
+                        d.append(abs(v - base))
+                return base + max(d) if d else None
+
+            perturbations = {
+                "lead_1ms_db": lead_1ms,
+                "lead_10ms_db": lead_10ms,
+                "sample_rate_44k_to_48k_db": sample_rate_44k_to_48k,
+                "quantisation_16bit_db": quantisation_16bit,
+                "window_10ms_db": window_10ms,
+            }
+            yield dict(voice=voice, file=path.name), x, sr, measure, perturbations
+
+    return mh.floor_for_these_signals(signals())
 
 
 def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
@@ -259,9 +282,13 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
     Two geometries, because neither is obviously right and the answer should
     not depend on which is picked: `lead_1ms` gives the reference our render's
     1 ms of leading silence; `lead_0ms` takes our render's leading silence away
-    so its window opens at the strike, as the reference's does."""
+    so its window opens at the strike, as the reference's does.
+
+    The row/worst-score formatting is `measure_harness.windowed_alike` (issue
+    #104); only the render and the two alignment geometries are conga-specific.
+    """
     import drums_fx as dx
-    out = []
+    pairs = []
     for voice, p in PUBLISHED.items():
         path = refdir / p["ref_file"]
         if not path.exists():
@@ -275,28 +302,25 @@ def windowed_alike(refdir: pathlib.Path, ours: list[dict]) -> list[dict]:
         y = np.asarray(dx.output_fx(np.zeros(n), 0, dm, g, bd, g),
                        dtype=np.float64) / 32768.0
 
-        row = dict(voice=voice, published_worst=p["worst"])
-
         # as shipped: reference with no lead, ours with 1 ms.
         r0, _ = body_spectrum(x, sr, voice)
         o1, _ = body_spectrum(y, dx.SR, voice)
-        row["as_shipped"] = dict(ref_db=round(r0, 4), ours_db=round(o1, 4),
-                                 worst=round(abs(o1 - r0) / TOL_DB, 4))
 
         # both at 1 ms of lead.
         r1, _ = body_spectrum(np.concatenate([np.zeros(int(1e-3 * sr)), x]), sr, voice)
-        row["both_lead_1ms"] = dict(ref_db=round(r1, 4), ours_db=round(o1, 4),
-                                    worst=round(abs(o1 - r1) / TOL_DB, 4))
 
         # both opening at the strike: cut our render's lead to the reference's.
         pk = float(np.abs(y).max())
         i = int(np.argmax(np.abs(y) > 0.02 * pk))
         keep = int(round((7 / 44100) * dx.SR))       # the Fischer files' own lead
         o0, _ = body_spectrum(y[max(0, i - keep):], dx.SR, voice)
-        row["both_lead_0ms"] = dict(ref_db=round(r0, 4), ours_db=round(o0, 4),
-                                    worst=round(abs(o0 - r0) / TOL_DB, 4))
-        out.append(row)
-    return out
+
+        pairs.append(dict(
+            label=dict(voice=voice, published_worst=p["worst"]),
+            tol=TOL_DB,
+            as_shipped=(r0, o1),
+            variants=dict(both_lead_1ms=(r1, o1), both_lead_0ms=(r0, o0))))
+    return mh.windowed_alike(pairs)
 
 
 # --------------------------------------------------------------------------
@@ -386,55 +410,54 @@ def descent_test(refdir: pathlib.Path, candidates: pathlib.Path) -> list[dict]:
     because a re-pressing is usually pitch-shifted.  A best correlation near
     1.0 is the same recording and carries no independent information.
 
+    The cross-correlation/re-pressing check itself is `measure_harness.
+    descent_test` (issue #104) -- it is the check every future reference-corpus
+    claim should run, not something conga-specific; only voice classification
+    by filename and the sample-rate normalisation to 44.1 kHz stay here.
+
     Needs `soundfile` for non-WAV candidates; skips what it cannot read."""
-    from scipy.signal import correlate, resample, resample_poly
-    try:
-        import soundfile as sf
-    except ImportError:
-        return [dict(status="REFUSED", why="soundfile is not installed")]
 
-    def _n(v):
-        v = v - v.mean()
-        k = float(np.linalg.norm(v))
-        return v / k if k else v
-
-    out = []
-    for path in sorted(candidates.iterdir()):
+    def classify(path):
         voice = next((v for v in ("LC", "MC", "HC")
                       if any(t in path.name.lower() for t in
                              {"LC": ("low",), "MC": ("mid",), "HC": ("hi", "high")}[v])), None)
-        if voice is None or not any(t in path.name.lower() for t in ("conga",)):
-            continue
-        try:
-            x, sr = sf.read(str(path))
-        except Exception as e:
-            out.append(dict(file=path.name, status="unreadable", why=str(e)))
-            continue
+        if voice is None or "conga" not in path.name.lower():
+            return None
+        return dict(voice=voice,
+                    refs=sorted((refdir / f"{voice.lower()}8").glob("*.WAV")))
+
+    def measure(x, sr, info):
+        return body_spectrum(x, sr, info["voice"])
+
+    def read_candidate(path: pathlib.Path):
+        """soundfile, mixed to mono, resampled to 44.1 kHz -- the rate this
+        repo's `prepare`/`body_spectrum` definition is exercised at -- exactly
+        as the original conga-only implementation did."""
+        import soundfile as sf
+        x, sr = sf.read(str(path))
         if np.ndim(x) > 1:
             x = x.mean(axis=1)
+        x = np.asarray(x, dtype=float)
         if sr != 44100:
             from fractions import Fraction
             f = Fraction(44100, int(sr)).limit_denominator(1000)
             x, sr = resample_poly(x, f.numerator, f.denominator), 44100
-        a0 = prepare(np.asarray(x, float), sr)[:int(0.150 * sr)]
-        v, _ = body_spectrum(np.asarray(x, float), sr, voice)
-        best = (0.0, 1.0, "")
-        for q in sorted((refdir / f"{voice.lower()}8").glob("*.WAV")):
-            xr, s2 = read_wav(q)
-            b = _n(prepare(xr, s2)[:int(0.150 * s2)])
-            for ratio in np.arange(0.90, 1.1001, 0.0025):
-                aa = resample(a0, int(len(a0) * ratio))
-                n = min(len(aa), len(b))
-                c = float(np.abs(correlate(_n(aa[:n]), b[:n], mode="full")).max())
-                if c > best[0]:
-                    best = (c, float(ratio), q.name)
-        out.append(dict(file=path.name, voice=voice, sr_in=int(sr),
-                        body_spectrum_db=None if v is None else round(v, 4),
-                        best_match=best[2], best_correlation=round(best[0], 4),
-                        at_resample_ratio=round(best[1], 4),
-                        verdict=("a re-pressing of the Fischer set -- not a second machine"
-                                 if best[0] >= 0.95 else "no Fischer file matches it")))
-    return out
+        return x, sr
+
+    try:
+        import soundfile  # noqa: F401
+    except ImportError:
+        return [dict(status="REFUSED", why="soundfile is not installed")]
+
+    rows = mh.descent_test(candidates, classify, read_wav, prepare,
+                           read_candidate=read_candidate,
+                           measure=measure, measure_field="body_spectrum_db")
+    for r in rows:
+        if "best_match" in r:
+            r["verdict"] = ("a re-pressing of the Fischer set -- not a second machine"
+                            if r["best_correlation"] >= 0.95 else
+                            "no Fischer file matches it")
+    return rows
 
 
 def within_10pct_of_f0(corpus: list[dict]) -> list[dict]:

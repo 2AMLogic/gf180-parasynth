@@ -53,8 +53,9 @@ declare their domain and refuse outside it) has been open since 09-18. It was
 re-derived by hand three times this week.
 
 **R5. Lessons are written as essays, not mechanisms.** Six "Root cause" issues
-from 09-18 (#71, #104, #117, #123, #135, #155, #163) are still open; the same
-failure modes recurred. An RCA that does not become a gate or a check does not
+from 09-18 (#71, #117, #123, #135, #155, #163) are still open; the same
+failure modes recurred. (#104 has since closed the way this asks: as a tested
+module, `model/measure_harness.py`, not as more text.) An RCA that does not become a gate or a check does not
 change behaviour.
 
 **R6. The backlog does not describe the work.** 65 open issues; ~40 carry no
