@@ -16,7 +16,8 @@ RTL change. The bank's arithmetic is per mode and its mix is an exact integer
 sum, so that remap is bit-identical to running the bank with nums = 16; this
 experiment does the latter (asserted by the BD control below) and states it.
 
-Candidate budget, fixed first: BP, HP. (Two of three; the third is held back.)
+Candidate budget, fixed first: BP, HP, and a third held back until the first
+two were measured (it became BP+X4, see CANDIDATES).
 The mode's amp is scaled by 1 / |N(e^{jw0})| so the ring's level at f0 is
 unchanged -- a candidate may not win by getting louder or quieter.
 
@@ -47,7 +48,15 @@ import run_case as rc  # noqa: E402
 VOICES = {"LT": "D03A", "MT": "D05A", "HT": "D07A", "LC": "D04A", "MC": "D06A", "HC": "D08A"}
 DEV = ("LT", "MT", "HT")
 CIRCUIT = {"LT": dx.M_LT, "LC": dx.M_LT, "MT": dx.M_MT, "MC": dx.M_MT, "HT": dx.M_HT, "HC": dx.M_HT}
-CANDIDATES = {"BP": dx.BP if hasattr(dx, "BP") else 1, "HP": dx.HP if hasattr(dx, "HP") else 2}
+CANDIDATES = {"BP": dx.BP, "HP": dx.HP, "BP+X4": dx.BP}
+# The third candidate, held back until BP was measured: BP moved `decay` because
+# the numerator lowers the mode's STATE by |N(w0)| (-32 dB at LT) and the bank's
+# floor-rounded recursion has a deadband -- a ring below ~2^12 LSB of state
+# collapses (--explain, and the known-answer run in the README). Output amp
+# restores the level but not the state. BP+X4 raises the circuit's exciter peak
+# x4 (0.25 -> 1.0, the register's ceiling) and compensates the amp by the same.
+EXCITER = {dx.M_LT: dx.E_LTX, dx.M_MT: dx.E_MTX, dx.M_HT: dx.E_HTX}
+EXC_GAIN = {"BP+X4": 4}
 PLAN = {v: [m[0] for m in rc.DRUM_PLAN[v]] for v in VOICES}
 
 
@@ -67,7 +76,13 @@ def render(voice: str, kind: str | None, nums: int = dx.N_MODES) -> tuple:
         m = CIRCUIT[voice]
         base = dx.A_MODE + m * dx.MODE_STRIDE
         f0 = dx.TOM_PRESET[voice][0]
-        amp = kit[base + 2] / 65536.0 / num_gain(kind, f0)
+        g = EXC_GAIN.get(kind, 1)
+        amp = kit[base + 2] / 65536.0 / num_gain(kind.split("+")[0], f0) / g
+        if g != 1:
+            pa = dx.A_ENV + EXCITER[m] * dx.ENV_STRIDE + 1
+            if kit[pa] * g > dx.FULL24:
+                raise rc.Refused(f"{voice} {kind}: exciter peak x{g} exceeds the 24-bit register")
+            kit[pa] = kit[pa] * g
         if amp >= 1.0:
             raise rc.Refused(f"{voice} {kind}: compensated amp {amp:.3f} does not fit Q0.16")
         kit[base + 2] = dx.amp_reg(amp)
@@ -151,7 +166,7 @@ def main(argv=None) -> int:
         print("REFUSED: the nums=16 bank does not reproduce the shipped render")
         return 2
     rows = {}
-    for kind in (None, "BP", "HP"):
+    for kind in (None, "BP", "HP", "BP+X4"):
         label = kind or "RAW (shipped)"
         rows[label] = {}
         for v in VOICES:
