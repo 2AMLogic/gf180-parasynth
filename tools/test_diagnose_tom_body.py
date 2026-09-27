@@ -62,3 +62,16 @@ def test_scaling_does_not_move_fractions():
     b = d.decompose(0.25 * _strike(h3=0.1, noise=0.05), SR, SPLIT, F0)
     for k in ("early_db", "harmonic_db", "other_db"):
         assert a[k] == pytest.approx(b[k], abs=1e-6)
+
+
+def test_broadband_noise_at_high_k_is_not_called_harmonic():
+    # the regression that made conga noise read as "harmonic": with f0 185 Hz
+    # the uncapped 6 % masks overlapped from k = 8 up
+    t = np.arange(int(0.2 * SR)) / SR
+    env = np.exp(-t / 0.077)
+    from scipy.signal import butter, sosfilt
+    rng = np.random.default_rng(3)
+    y = np.sin(2 * math.pi * 185 * t) * env + 0.5 * env * sosfilt(
+        butter(4, [1200, 1900], btype="bandpass", fs=SR, output="sos"), rng.standard_normal(len(t)))
+    r = d.decompose(y, SR, 700.0, 185.0)
+    assert r["other_share"] > 0.5

@@ -45,6 +45,14 @@ def _db(x):
     return round(10 * math.log10(x), 3) if x > 0 else None
 
 
+def tol_hz(k: int, f0: float) -> float:
+    """Half-width of the k-th harmonic's mask: 6 % covers the onset pitch
+    drop's residue, but it is capped at 0.2 f0 so the masks never cover more
+    than 40 % of the spectrum. Uncapped, at k >= 8 the masks overlapped and
+    every broadband component in the band read as "harmonic"."""
+    return max(15.0, min(0.06 * k * f0, 0.2 * f0))
+
+
 def decompose(y, sr, split, f0) -> dict:
     """Energy fractions of a prepared strike's first 150 ms (the scorer's window)."""
     w = np.asarray(y[: int(WIN_S * sr)], dtype=np.float64)
@@ -72,7 +80,7 @@ def decompose(y, sr, split, f0) -> dict:
     harm = np.zeros_like(band)
     k = 2
     while k * f0 < TOP_HZ + 0.1 * f0:
-        harm |= np.abs(f - k * f0) <= max(15.0, 0.06 * k * f0)
+        harm |= np.abs(f - k * f0) <= tol_hz(k, f0)
         k += 1
     sb = float(spec[band].sum())
     share_h = float(spec[band & harm].sum()) / sb if sb > 0 else 0.0
@@ -89,7 +97,7 @@ def decompose(y, sr, split, f0) -> dict:
 def _harmonic_levels(spec, f, f0, total):
     out = {}
     for k in range(1, 6):
-        sel = np.abs(f - k * f0) <= max(15.0, 0.06 * k * f0)
+        sel = np.abs(f - k * f0) <= tol_hz(k, f0)
         out[f"h{k}"] = _db(float(spec[sel].sum()) / total)
     return out
 
