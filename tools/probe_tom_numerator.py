@@ -76,13 +76,15 @@ def render(voice: str, kind: str | None, nums: int = dx.N_MODES) -> tuple:
         m = CIRCUIT[voice]
         base = dx.A_MODE + m * dx.MODE_STRIDE
         f0 = dx.TOM_PRESET[voice][0]
-        g = EXC_GAIN.get(kind, 1)
-        amp = kit[base + 2] / 65536.0 / num_gain(kind.split("+")[0], f0) / g
-        if g != 1:
+        g = 1.0
+        if kind in EXC_GAIN:
+            # to the register's ceiling: 0.25 x 4 is 2^24, one past 2^24 - 1, so the
+            # stated "0.25 -> 1.0" is FULL24 and the gain is FULL24 / old exactly
             pa = dx.A_ENV + EXCITER[m] * dx.ENV_STRIDE + 1
-            if kit[pa] * g > dx.FULL24:
-                raise rc.Refused(f"{voice} {kind}: exciter peak x{g} exceeds the 24-bit register")
-            kit[pa] = kit[pa] * g
+            new = min(dx.FULL24, kit[pa] * EXC_GAIN[kind])
+            g = new / kit[pa]
+            kit[pa] = new
+        amp = kit[base + 2] / 65536.0 / num_gain(kind.split("+")[0], f0) / g
         if amp >= 1.0:
             raise rc.Refused(f"{voice} {kind}: compensated amp {amp:.3f} does not fit Q0.16")
         kit[base + 2] = dx.amp_reg(amp)
