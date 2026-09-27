@@ -66,6 +66,7 @@ def _key(r):
 
 
 def compare(rows, dev=mp.DEV_CONDITIONS):
+    # (the "fresh" schedule has no development points: none of its notes is 72/84/96)
     by = {(r["engine"],) + _key(r): r for r in rows}
     out, counts = [], {"measured": 0, "refused": 0, "not_run": 0}
     for k, cand in sorted(by.items()):
