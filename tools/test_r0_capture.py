@@ -708,3 +708,54 @@ def test_session_properties_say_where_they_were_not_evaluated(clean, tmp_path):
         assert v["verdict"] == "PASS", (p, v)
         assert {"held-1", "held-2", "tone-1", "pulse-1"} <= set(v["not_evaluated_on"]), (p, v)
         assert "held-1" not in v["evaluated_on"] and v["evaluated_on"], (p, v)
+
+
+@pytest.mark.parametrize("verdict", [rc.PASS, rc.FAIL])
+def test_an_io_error_at_the_final_record_write_is_an_execution_error(
+        tmp_path, monkeypatch, capsys, verdict):
+    """#340: if the FINAL atomic write of analysis.json fails (os.replace
+    raising OSError), the run is an EXECUTION ERROR -- exit 3, not the
+    exception escaping main() as exit 1 (this tool's FAIL code) -- the bundle
+    keeps this run's in-progress ERROR record, and no temporary file is left
+    behind. Parametrised over PASS and FAIL: neither measured verdict may be
+    reported when it never reached disk."""
+    d = tmp_path / "bundle"
+    d.mkdir()
+    monkeypatch.setattr(rc, "analyse", lambda *a, **k: {
+        "schema": rc.RECORD_SCHEMA, "verdict": verdict, "reasons": ["stub"]})
+    real_replace = rc.os.replace
+    calls = []
+
+    def replace(src, dst):
+        calls.append(dst)
+        if len(calls) >= 2:                          # the FINAL write
+            raise OSError(28, "No space left on device")
+        return real_replace(src, dst)
+    monkeypatch.setattr(rc.os, "replace", replace)
+    code = rc.main(["analyse", "--bundle", str(d)])
+    out = capsys.readouterr().out
+    assert len(calls) == 2, calls
+    assert code == 3, out
+    rec = json.loads((d / "analysis.json").read_text())
+    assert rec["verdict"] == rc.ERROR and "in progress" in rec["reasons"][0]
+    assert sorted(p.name for p in d.iterdir()) == ["analysis.json"]
+    assert "ERROR" in out and "OSError" in out
+
+
+def test_an_io_error_at_the_in_progress_write_is_an_execution_error(
+        tmp_path, monkeypatch, capsys):
+    """#340 companion: the FIRST write failing is also exit 3 with no tmp
+    left, and the analysis is not run (there is nowhere to record it)."""
+    d = tmp_path / "bundle"
+    d.mkdir()
+    ran = []
+    monkeypatch.setattr(rc, "analyse", lambda *a, **k: ran.append(1))
+
+    def replace(src, dst):
+        raise OSError(13, "Permission denied")
+    monkeypatch.setattr(rc.os, "replace", replace)
+    code = rc.main(["analyse", "--bundle", str(d)])
+    out = capsys.readouterr().out
+    assert code == 3, out
+    assert not ran
+    assert list(d.iterdir()) == []
