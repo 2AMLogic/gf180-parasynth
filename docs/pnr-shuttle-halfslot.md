@@ -270,8 +270,11 @@ lives only in a script is a finding nobody else can use (`CLAUDE.md`).
 
 **LibreLane 3.1.0.dev2.** LibreLane's metrics are cumulative: every step's
 `state_out.json` carries forward every key any earlier step set. The mid-PnR STA
-steps (`OpenROAD.STAMidPNR*`) update the un-suffixed `timing__setup__ws` but **not**
-the `timing__setup__ws__corner:*` keys. So on this run,
+steps (`OpenROAD.STAMidPNR*`) analyse the default corner only: they update the
+un-suffixed `timing__setup__ws` and 16 of the 17 `nom_tt_025C_5v00` corner keys (the
+17th, `timing__hold_r2r_vio__count__corner:nom_tt_025C_5v00`, is still the value
+`12-openroad-staprepnr` wrote), but **none** of the other corners'
+`timing__*__corner:*` keys. So on this run,
 `timing__setup__ws__corner:nom_ss_125C_4v50 = -178.5 ns` is present, byte-identical,
 in all thirty steps after the one that wrote it — `12-openroad-staprepnr`, an
 unplaced, unrouted netlist with an ideal clock.
@@ -286,8 +289,14 @@ fossil; it took diffing the metrics step by step to see it.
   `report_halfslot.worst_setup()` returns "not measured" rather than falling back to
   the nominal-corner key.
 - *Upstream shape*: a step that re-computes a metric family should clear or rewrite
-  the whole family, or the payload should carry the writing step per key. **Not yet
-  filed** — see §7.
+  the whole family, or the payload should carry the writing step per key. **Filed as
+  [librelane/librelane#1040](https://github.com/librelane/librelane/issues/1040).**
+- *Wrong before it was right, while filing*: the first draft of this finding (and of
+  #342) said the mid-PnR steps rewrite **no** per-corner key. The committed evidence
+  (`pnr/shuttle/evidence/halfslot-metrics.json`) shows most `…__corner:nom_tt_025C_5v00`
+  keys rewritten by `42-openroad-stamidpnr-3`; the stale keys are the corners the
+  mid-PnR STA does not analyse, plus one `nom_tt` hold-violation count. The upstream
+  report states the corrected form.
 
 ### 6.2 `--skip Checker.X` does not remove X from the flow's advertised claims
 
@@ -296,6 +305,11 @@ one's `Checker.*`. The flow then completes with no indication in its own summary
 the skipped checks never ran — the distinction lives only in the invocation. §5 of
 this page exists to carry it, which is the same workaround shape `CLAUDE.md` records
 for `klt` placing no PDN without saying so.
+
+- **Not filed — declined as a reporting preference, not a defect.** The skip is an
+  explicit instruction on the command line, and the flow does what it was told. What
+  is missing is a line in the summary, which is a request, not a bug, and this page
+  already carries the equivalent in §5. Recorded under #342.
 
 ### 6.3 gf180mcu's default `ciel` library set omits the pad library
 
@@ -306,6 +320,12 @@ minutes in with an opaque Tcl `no files matched glob pattern` from
 asserts the pad library's presence up front and REFUSES; `bootstrap-pdk` installs with
 `-l all`. The same glob also swallows a pad library predating `*__blackbox_pp.v`.
 
+- **Not filed — declined as configuration/documentation, not a defect.** `ciel enable`
+  installing only the standard cells by default is a documented choice, and the fix
+  on our side (`-l all`, plus the up-front REFUSE) is complete. The opaque glob error
+  is a usability gap in the PDK's `libs.tech/librelane/config.tcl`, not a wrong
+  result. Recorded under #342.
+
 ### 6.4 `DRT-0349`: `LEF58_ENCLOSURE with no CUTCLASS is not supported`
 
 **OpenROAD 2026-02-17, gf180mcuD tech LEF.** The detailed router prints this for
@@ -313,6 +333,68 @@ asserts the pad library's presence up front and REFUSES; `bootstrap-pdk` install
 run proceeds. A skipped enclosure rule is a rule the router is not honouring, so the
 router's own violation count is an *under*-count against sign-off by an unknown
 amount — which is a further reason §5's "no sign-off DRC" caveat is not a formality.
+
+- **Not re-filed — already reported upstream.** The same warning for the same via
+  layers (on sky130) is
+  [librelane/librelane#550](https://github.com/librelane/librelane/issues/550) (open,
+  migrated from efabless/openlane2#550, 2024). The maintainers' position there is that
+  the PDK is correct and OpenROAD does not support the rule form, and it was taken to
+  [OpenROAD discussion #5839](https://github.com/The-OpenROAD-Project/OpenROAD/discussions/5839).
+  A duplicate would add nothing.
+
+### 6.5 `DRT_OPT_ITERS` is a count, not a budget, and the cost per iteration spans 24×
+
+**OpenROAD 2026-02-17 via LibreLane 3.1.0.dev2, `DRT_OPT_ITERS = 64`.** The
+per-iteration measurement is §4.6 on `feature/issue-33` (PR #348), generated from the
+router's log by `report_halfslot.plateaus()`. The figures below are the ones that
+branch's commit `f5a92b1` records, and §4.6 supersedes them when it lands.
+
+**This finding was wrong before it was right, twice.** The first draft said *"the
+detailed router spends hours on iterations that improve nothing"*. It proposed
+stopping when the violation count has not improved for K iterations. That draft was
+written off a copy of the router's log that was **ninety minutes stale**. The run's
+`openroad-detailedrouting.log` is block-buffered, and `docker logs` on the same
+container was further along. On the live run the count sat at 3 for iterations 35 to
+52, a 16-iteration plateau that cost about 4.8 CPU-hours, and **then went 3 → 1 at
+iteration 53**. The proposed stop would have truncated the run before its last
+improvement. K would have had to exceed 16, most of the 64-iteration cap, which makes
+the rule nearly inert. **An early-stop heuristic keyed on no-improvement is the wrong
+fix.** `feature/issue-33` withdrew it in `f5a92b1`. This PR then filed the withdrawn
+version upstream an hour later anyway, because it took the "plateau at iteration 35"
+from #342's text rather than from that branch or the log. That is the second time
+through the same lagging-source failure as §6.1.
+
+What survives is narrower. `DRT_OPT_ITERS` bounds the router's effort by an
+**iteration count**, but the cost of an iteration on this design varies enormously.
+`guides tiles` iterations take seconds. `stubborn tiles` iterations take 2.9 to 71.4
+minutes of wall clock, a 24× spread. So an iteration count is not a usable proxy for
+effort: the same cap means minutes on one design and most of a day on another. There
+is no way to say "spend at most N hours", and no way to see the schedule (including a
+plateau and its later recovery) without parsing the log by hand. `FlexDR::main()`
+exits only on zero markers or the iteration cap (checked against OpenROAD `master`
+`80c6be93c2`). Its `SKIP` flow state never engages, because `strategy()` changes the
+args every iteration.
+
+- *Shape of the fix*: a wall-clock or CPU budget alongside the iteration cap. Also, the
+  per-iteration history (kind, elapsed, violations) in the step's own metrics, so the
+  plateau and any later recovery are visible without re-deriving them from the log.
+- **Filed as
+  [The-OpenROAD-Project/OpenROAD#11537](https://github.com/The-OpenROAD-Project/OpenROAD/issues/11537),
+  in its withdrawn form, and not yet corrected there.** As filed, #11537 says the count
+  "reached its final value at iteration 35 of 64" and asks for an opt-in stop after K
+  stagnant iterations. Both are wrong, as shown above. The correction is to retract the
+  plateau claim, withdraw the K-iteration stop, and restate the issue as
+  "iteration cap is not an effort budget, and expose per-iteration history as metrics".
+  It **could not be posted by this fleet's integration token**. Creating the issue
+  worked, but commenting, editing and closing all return `Resource not accessible by
+  integration` (GraphQL `addComment` / `closeIssue`, REST 403 on
+  `POST …/issues/11537/comments` and `PATCH …/issues/11537`). This is the
+  create/comment asymmetry #342 describes. **A human with OpenROAD issue access has to
+  post the correction.** The exact text is in PR #349's Doctor comment and on #342.
+  Until then, the upstream issue and this section disagree, and this section is the
+  correct one.
+- The LibreLane half (surfacing the history in the `OpenROAD.DetailedRouting` step's
+  metrics) waits on whatever OpenROAD exposes, and is not filed separately.
 
 <!-- END tool-findings -->
 
@@ -326,7 +408,20 @@ amount — which is a further reason §5's "no sign-off DRC" caveat is not a for
   it (filed as #310). `CLAUDE.md` places work of this size on the pinned build box.
   Nothing about the *numbers* is affected — but the eight-thread router was competing
   with other sweeps for eight cores, and the completing run belongs on the box.
-- **The tool findings in §6 are not filed upstream yet.** §6.1 is the one worth
-  filing; it is a defect shape rather than a configuration mistake.
+- **The tool findings in §6 were filed, or declined with a reason, under #342:**
+
+  | finding | outcome |
+  |---|---|
+  | §6.1 stale per-corner slack | filed, [librelane/librelane#1040](https://github.com/librelane/librelane/issues/1040) |
+  | §6.2 `--skip` absent from summary | declined: reporting preference, not a defect |
+  | §6.3 `ciel` default omits pad library | declined: configuration/documentation |
+  | §6.4 `DRT-0349` | already reported: [librelane/librelane#550](https://github.com/librelane/librelane/issues/550), [OpenROAD discussion #5839](https://github.com/The-OpenROAD-Project/OpenROAD/discussions/5839) |
+  | §6.5 iteration cap is not an effort budget; no per-iteration history in metrics | filed as [The-OpenROAD-Project/OpenROAD#11537](https://github.com/The-OpenROAD-Project/OpenROAD/issues/11537), **but in the withdrawn "no improvement after iteration 35, stop after K" form. Correction pending: a human must post it (§6.5)** |
+
+  Both direct upstream filings went through `./.loom/scripts/create-issue.sh --repo
+  <owner/repo>` on the first attempt. The `2AMLogic/klayout-tools` canary-sink
+  fallback was not needed. **Correcting a filing is a different story.** The token that
+  created #11537 cannot comment on, edit or close it, so the access gap is real for
+  follow-up, even though it is not for creation.
 
 <!-- generated-from: halfslot step 42-openroad-stamidpnr-3 by pnr/shuttle/report_halfslot.py -->
