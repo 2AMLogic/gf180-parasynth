@@ -1,7 +1,7 @@
 {
  "schema": "gf180-parasynth R2 candidate v0",
  "candidate": "R2 candidate",
- "status": "DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, inherited from R1), the #315 XDC repair, the named image selector (#323), release checks for a second image (#356)",
+ "status": "DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, inherited from R1), the named image selector (#323); #356 and #315 (#358) must merge first; the build must produce constraint_matches.rpt and exceptions.rpt",
  "rtl": {
   "configuration": {
    "OSC2X": 1,
@@ -43,9 +43,10 @@
    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11"
   },
   "constraints": {
-   "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
+   "fpga/boards/arty-a7-100.xdc": "b594cc1545a73cdfd7753f578f03de51758ee962fff723273bece33ec3e48715"
   },
   "differs_from_r1_freeze": {
+   "fpga/boards/arty-a7-100.xdc": "UART-RX sync constraints bind g_uart.u_uart (#315); build and publisher assert binding and effect (fpga/xdc_bindings.py)",
    "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 (#333, recheck-333 item 5)",
    "rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)"
   },
