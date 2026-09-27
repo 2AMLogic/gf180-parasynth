@@ -217,8 +217,79 @@ def image_identity(pub_dir: Path | None = None) -> dict:
     }
 
 
+# The fields of ext-io-extract.json that only the Vivado run itself records;
+# each is checked separately below. Every OTHER field is a value
+# fpga/ext_io_extract.evaluate() computes from ext_io_paths.txt, and is
+# re-derived from the shipped paths and compared, field for field (#319).
+EXT_IO_EXTRACTION_ONLY = ("schema", "state", "dcp", "dcp_sha256", "instrument_sha256",
+                          "tcl_sha256", "log_sha256", "tool", "vivado_rc", "paths_sha256",
+                          "summary")
+
+
+def rederive_ext_io(path: Path) -> dict:
+    """The per-port record's derived values, recomputed from the SHIPPED
+    ext_io_paths.txt by the extractor's own parser and evaluator (the
+    `--parse-only` path); REFUSED unless the record holds exactly these
+    values and exactly these fields plus the extraction-only ones."""
+    import ext_io_extract as eie
+    rec = _json(path)
+    paths = _need(path.parent / "ext_io_paths.txt")
+    try:
+        derived = json.loads(json.dumps(eie.evaluate(eie.parse(paths.read_text()))))
+    except eie.Refused as exc:
+        raise Refused(f"{EXT_IO}: the shipped ext_io_paths.txt does not evaluate: {exc}") from None
+    unknown = sorted(set(rec) - set(derived) - set(EXT_IO_EXTRACTION_ONLY))
+    missing = sorted((set(derived) | set(EXT_IO_EXTRACTION_ONLY)) - set(rec))
+    if unknown or missing:
+        raise Refused(f"{EXT_IO}: fields not produced by the extractor {unknown}, "
+                      f"missing fields {missing}")
+    diffs = _diff({k: rec[k] for k in derived}, derived)
+    if diffs:
+        raise Refused(f"{EXT_IO}: does not re-derive from ext_io_paths.txt at {diffs[:10]}")
+    return derived
+
+
+def _ext_io_extraction_fields(path: Path, rec: dict, derived: dict) -> None:
+    """The extraction-only fields, each against what the shipped run left."""
+    import re
+    import ext_io_extract as eie
+    ext = path.parent
+    if rec["schema"] != "ext-io-extract v1":
+        raise Refused(f"{EXT_IO}: schema {rec['schema']!r}")
+    if rec["state"] != derived["verdict"]:
+        raise Refused(f"{EXT_IO}: state {rec['state']} but the paths evaluate to "
+                      f"{derived['verdict']}")
+    if rec["vivado_rc"] != 0:
+        raise Refused(f"{EXT_IO}: Vivado exited {rec['vivado_rc']}")
+    script = _need(ext / "ext_io_extract.tcl")
+    if sha(script) != rec["tcl_sha256"]:
+        raise Refused(f"{EXT_IO}: ext_io_extract.tcl does not hash to the record's tcl_sha256")
+    # the shipped Tcl is exactly what the instrument renders for this record's
+    # checkpoint path (and the output directory it names)
+    m = re.search(r"open \{(.*)/ext_io_paths\.txt\} w", script.read_text())
+    if not m or eie.tcl(rec["dcp"], m[1]) != script.read_text():
+        raise Refused(f"{EXT_IO}: ext_io_extract.tcl is not the instrument's script for "
+                      f"checkpoint {rec['dcp']}")
+    log = _need(ext / "vivado_ext_io.log")
+    if sha(log) != rec["log_sha256"]:
+        raise Refused(f"{EXT_IO}: vivado_ext_io.log does not hash to the record's log_sha256")
+    ver = re.search(r"Vivado v(\S+) \(64-bit\).*?SW Build (\d+)", log.read_text(), re.S)
+    tool = f"Vivado v{ver[1]} SW Build {ver[2]}" if ver else None
+    if tool != rec["tool"]:
+        raise Refused(f"{EXT_IO}: tool {rec['tool']!r}, the shipped log says {tool!r}")
+    sm = derived["spi_miso"]
+    summary = (f"{len(eie.TIMED_OUTPUTS)} timed outputs, worst setup "
+               f"{derived['worst_setup_slack_ns']:+.3f} ns, worst hold "
+               f"{derived['worst_hold_slack_ns']:+.3f} ns; spi_miso CO <= "
+               f"{sm['sta_co_bound_ns']} ns -> readback <= "
+               f"{sm['max_guaranteed_readback_mhz']} MHz; control caught")
+    if rec["summary"] != summary:
+        raise Refused(f"{EXT_IO}: summary is not what the derived values say")
+
+
 def external_io(image: dict, pub_dir: Path | None = None) -> dict:
-    """The per-port extraction of the SAME routed.dcp (fpga/ext_io_extract.py)."""
+    """The per-port extraction of the SAME routed.dcp (fpga/ext_io_extract.py),
+    re-derived from its shipped raw paths (#319) -- never trusted as written."""
     path = Path(pub_dir or PUB_DIR) / EXT_IO
     rec = _json(path)
     if rec.get("dcp_sha256") != image["routed_dcp_sha256"]:
@@ -229,6 +300,8 @@ def external_io(image: dict, pub_dir: Path | None = None) -> dict:
     for name in ("ext_io_paths.txt",):
         if sha(_need(path.parent / name)) != rec.get("paths_sha256"):
             raise Refused(f"{EXT_IO}: {name} does not hash to the record's paths_sha256")
+    derived = rederive_ext_io(path)
+    _ext_io_extraction_fields(path, rec, derived)
     if rec.get("state") != "PASS" or not rec.get("control", {}).get("caught"):
         raise Refused(f"{EXT_IO}: state {rec.get('state')}, control caught "
                       f"{rec.get('control', {}).get('caught')}")
