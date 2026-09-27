@@ -1,0 +1,322 @@
+[
+ {
+  "scenario": "default patch (saw, saw, square), note 45 from reset",
+  "in_domain": true,
+  "excluded_by": []
+ },
+ {
+  "scenario": "pulse25 / tri / sine, res 1.05, drive 3, glide from 62",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] pulse25 / tri / sine, res 1.05, drive 3, glide from 62: waveform set ('pulse25', '",
+   "res 1.05 outside CC71's 0..1",
+   "drive 3.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "paraphonic multi-trigger phrase, KeyHost (last, multi, legato glide, para)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] paraphonic multi-trigger phrase, KeyHost (last, multi, legato glide, para): wavefo",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "waveforms ('square', 'pulse25', 'tri') at note 100",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] waveforms ('square', 'pulse25', 'tri') at note 100: waveform set ('square', 'pulse",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "waveforms ('sine', 'saw', 'pulse25') at note 24 (shapes and weights changed mid-note)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] waveforms ('sine', 'saw', 'pulse25') at note 24 (shapes and weights changed mid-no",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "waveforms ('tri', 'sine', 'square') at note 108 (shapes and weights changed mid-note)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] waveforms ('tri', 'sine', 'square') at note 108 (shapes and weights changed mid-no",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "waveforms ('saw', 'square', 'sine') at note 115 (shapes and weights changed mid-note)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] waveforms ('saw', 'square', 'sine') at note 115 (shapes and weights changed mid-no",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "waveforms ('pulse25', 'tri', 'saw') at note 60 (shapes and weights changed mid-note)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] waveforms ('pulse25', 'tri', 'saw') at note 60 (shapes and weights changed mid-not",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "shark / revsaw / wide / narrow ('shark', 'revsaw', 'pulse29') at note 33",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] shark / revsaw / wide / narrow ('shark', 'revsaw', 'pulse29') at note 33: waveform",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "shark / revsaw / wide / narrow ('pulse15', 'shark', 'revsaw') at note 96",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] shark / revsaw / wide / narrow ('pulse15', 'shark', 'revsaw') at note 96: waveform",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "shark / revsaw / wide / narrow ('revsaw', 'pulse29', 'pulse15') at note 69",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] shark / revsaw / wide / narrow ('revsaw', 'pulse29', 'pulse15') at note 69: wavefo",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "shark / revsaw / wide / narrow ('pulse29', 'pulse15', 'shark') at note 21",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] shark / revsaw / wide / narrow ('pulse29', 'pulse15', 'shark') at note 21: wavefor",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "shark / revsaw / wide / narrow ('shark', 'shark', 'shark') at note 108",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] shark / revsaw / wide / narrow ('shark', 'shark', 'shark') at note 108: waveform s",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "white noise alone at mixer weight 1.0, swept filter",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] white noise alone at mixer weight 1.0, swept filter: waveform set (None, None, Non",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "pink noise alone at mixer weight 1.0, swept filter",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] pink noise alone at mixer weight 1.0, swept filter: waveform set (None, None, None",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "three oscillators AND pink noise, res 1.02: the mixer's four sources",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] three oscillators AND pink noise, res 1.02: the mixer's four sources: waveform set",
+   "res 1.02 outside CC71's 0..1",
+   "drive 2.4 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "white noise at weight 65535 into a 30 Hz filter: the mixer saturates",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] white noise at weight 65535 into a 30 Hz filter: the mixer saturates: waveform set",
+   "drive 0.5 is no release preset's ([0.75, 1.6])",
+   "mixer weight 65535 > 1.0"
+  ]
+ },
+ {
+  "scenario": "vibrato: osc 3 triangle at 4 Hz to pitch, wheel full, OSC-3 CONTROL off",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] vibrato: osc 3 triangle at 4 Hz to pitch, wheel full, OSC-3 CONTROL off: waveform ",
+   "INC_RANGE: inc 1398 on osc 2",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "filter sweep: osc 3 reverse saw at 2 Hz to the cutoff, wheel full",
+  "in_domain": false,
+  "excluded_by": [
+   "INC_RANGE: inc 699 on osc 2",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "wheel swept 0 -> full with BOTH destinations on and OSC-3 CONTROL on (oscillator 3 modulating its own pitch, M9)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] wheel swept 0 -> full with BOTH destinations on and OSC-3 CONTROL on (oscillator 3",
+   "drive 2.2 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "both depths at 65535 (the octave word saturates at +-4), mmix past its top, wheel at 65535 then 0",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] both depths at 65535 (the octave word saturates at +-4), mmix past its top, wheel ",
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "DRIFT 17543 (1.500 cents rms) at note 33",
+  "in_domain": false,
+  "excluded_by": [
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "DRIFT 65535 (5.604 cents rms) at note 45 with the shared mod bus at full wheel",
+  "in_domain": false,
+  "excluded_by": [
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "DRIFT 65535 (5.604 cents rms) at note 127 at the increment clamp",
+  "in_domain": false,
+  "excluded_by": [
+   "INC_RANGE: inc 16777215 on osc 0",
+   "drive 1.8 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "across a walk update: 1536 frames spanning a DRIFT_DIV (1024-frame) boundary",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] across a walk update: 1536 frames spanning a DRIFT_DIV (1024-frame) boundary: wave",
+   "drive 1.2 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "every NOTE_INC entry 0..127, detune (0, +0.07, -12), 3 shapes with PolyBLEP",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] every NOTE_INC entry 0..127, detune (0, +0.07, -12), 3 shapes with PolyBLEP: wavef",
+   "INC_RANGE: inc 1429 on osc 2",
+   "drive 1.5 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "increments at 5.5's clamp, 1..3, powers of two, >= 2^23, 0 (stalled), and a slew through 0",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] increments at 5.5's clamp, 1..3, powers of two, >= 2^23, 0 (stalled), and a slew t",
+   "INC_RANGE: inc 16777215 on osc 0",
+   "drive 1.5 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "glide: +2 oct, -3 oct at 4320 frames/oct, max rate, glide = 1, GLIDE <- 0 mid-glide, jump",
+  "in_domain": true,
+  "excluded_by": []
+ },
+ {
+  "scenario": "GATE_ON, TRIG in attack / decay / sustain, GATE_OFF in attack, GATE_ON in release, adjacent, TRIG off, legato",
+  "in_domain": false,
+  "excluded_by": [
+   "drive 2.0 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "note 40 at res 0.9, drive 2.5, vol 0.9; gate 4800 frames then a release of 16800 frames to level 0",
+  "in_domain": false,
+  "excluded_by": [
+   "drive 2.5 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "self-oscillating whistle (res 1.06): the VCA closes while the ladder still sings",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] self-oscillating whistle (res 1.06): the VCA closes while the ladder still sings: ",
+   "res 1.06 outside CC71's 0..1",
+   "drive 0.5 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "the all-maximum control image (weights, envelopes, cutoff, k, gain, ogain, vol, glide, inc)",
+  "in_domain": false,
+  "excluded_by": [
+   "INC_RANGE: inc 16777215 on osc 0",
+   "k/gain/ogain 131071/1048575/1048575 are not the host conversion of res 0.62 at drive 1.6",
+   "vol 65535 > CC7's 0.9",
+   "mixer weight 65535 > 1.0"
+  ]
+ },
+ {
+  "scenario": "the all-zero image: silent (14)",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] the all-zero image: silent (14): waveform set (None, None, None) is not one of the",
+   "INC_RANGE: inc 0 on osc 0",
+   "k/gain/ogain 0/0/0 are not the host conversion of res 0.62 at drive 1.6"
+  ]
+ },
+ {
+  "scenario": "negative span, track 65535, saturating weights, k / ogain / vol at maximum",
+  "in_domain": false,
+  "excluded_by": [
+   "k/gain/ogain 131071/340787/1048575 are not the host conversion of res 0.6 at drive 2.0",
+   "drive 2.0 is no release preset's ([0.75, 1.6])",
+   "vol 65535 > CC7's 0.9"
+  ]
+ },
+ {
+  "scenario": "rate = 0 (release at one LSB per frame)",
+  "in_domain": true,
+  "excluded_by": []
+ },
+ {
+  "scenario": "d_dec = 0 with sus = 0 (DECAY holds at FULL) and sus = FULL (SUSTAIN at once)",
+  "in_domain": true,
+  "excluded_by": []
+ },
+ {
+  "scenario": "a_inc = 0 (the attack holds the current level)",
+  "in_domain": true,
+  "excluded_by": []
+ },
+ {
+  "scenario": "k = gain = ogain = 0",
+  "in_domain": false,
+  "excluded_by": [
+   "k/gain/ogain 0/0/0 are not the host conversion of res 0.62 at drive 1.6"
+  ]
+ },
+ {
+  "scenario": "reference sequence 04-lead-glide through KeyHost, first 0.8 s",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] reference sequence 04-lead-glide through KeyHost, first 0.8 s: waveform set ('saw'",
+   "drive 1.5 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "reference sequence 07-growl-bass through KeyHost, first 0.8 s",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] reference sequence 07-growl-bass through KeyHost, first 0.8 s: waveform set ('saw'",
+   "drive 3.6 is no release preset's ([0.75, 1.6])"
+  ]
+ },
+ {
+  "scenario": "reference sequence 08-self-osc-whistle through KeyHost, first 0.8 s",
+  "in_domain": false,
+  "excluded_by": [
+   "WAVES: [WAVES] reference sequence 08-self-osc-whistle through KeyHost, first 0.8 s: waveform set ",
+   "res 1.06 outside CC71's 0..1",
+   "drive 0.5 is no release preset's ([0.75, 1.6])"
+  ]
+ }
+]
