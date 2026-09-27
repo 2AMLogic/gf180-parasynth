@@ -226,13 +226,65 @@ EXT_IO_EXTRACTION_ONLY = ("schema", "state", "dcp", "dcp_sha256", "instrument_sh
                           "summary")
 
 
+# The per-port instrument R1's ext-I/O record was produced with, pinned by
+# VERSION (as #356 pins R1's sources): the extractor and the budget module it
+# imports are read from git at this commit, and the extractor's bytes must hash
+# to the record's instrument_sha256. The working tree's fpga/ext_io_extract.py
+# may then move on (R2 carries the #315 UART patterns) without changing what
+# R1's record is checked against.
+EXT_IO_INSTRUMENT_COMMIT = "e0dd32902dffa7005967954aa8f16cef01f655f9"
+_PINNED: dict = {}
+
+
+def ext_io_instrument(instrument_sha256: str):
+    """fpga/ext_io_extract.py as of EXT_IO_INSTRUMENT_COMMIT, with its own
+    ext_io_timing; REFUSED unless it is the instrument the record names."""
+    import importlib.util
+    import tempfile
+    if instrument_sha256 in _PINNED:
+        return _PINNED[instrument_sha256]
+
+    def blob(rel):
+        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{EXT_IO_INSTRUMENT_COMMIT}:{rel}"],
+                           capture_output=True)
+        if r.returncode:
+            raise Refused(f"cannot read {rel} at {EXT_IO_INSTRUMENT_COMMIT[:12]} (a shallow "
+                          "clone cannot verify the pinned ext-I/O instrument)")
+        return r.stdout
+    src = blob("fpga/ext_io_extract.py")
+    if hashlib.sha256(src).hexdigest() != instrument_sha256:
+        raise Refused(f"{EXT_IO} was produced by an fpga/ext_io_extract.py other than the one "
+                      f"pinned at {EXT_IO_INSTRUMENT_COMMIT[:12]}")
+    d = Path(tempfile.mkdtemp(prefix="ext-io-pinned-"))
+    (d / "ext_io_timing.py").write_bytes(blob("fpga/ext_io_timing.py"))
+    (d / "ext_io_extract.py").write_bytes(src)
+    saved = {k: sys.modules.get(k) for k in ("ext_io_timing",)}
+    try:
+        spec = importlib.util.spec_from_file_location("ext_io_timing", d / "ext_io_timing.py")
+        iot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(iot)
+        sys.modules["ext_io_timing"] = iot            # what the pinned extractor imports
+        spec = importlib.util.spec_from_file_location("ext_io_extract_pinned",
+                                                      d / "ext_io_extract.py")
+        eie = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(eie)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    _PINNED[instrument_sha256] = eie
+    return eie
+
+
 def rederive_ext_io(path: Path) -> dict:
     """The per-port record's derived values, recomputed from the SHIPPED
     ext_io_paths.txt by the extractor's own parser and evaluator (the
     `--parse-only` path); REFUSED unless the record holds exactly these
     values and exactly these fields plus the extraction-only ones."""
-    import ext_io_extract as eie
     rec = _json(path)
+    eie = ext_io_instrument(rec.get("instrument_sha256"))
     paths = _need(path.parent / "ext_io_paths.txt")
     try:
         derived = json.loads(json.dumps(eie.evaluate(eie.parse(paths.read_text()))))
@@ -252,7 +304,7 @@ def rederive_ext_io(path: Path) -> dict:
 def _ext_io_extraction_fields(path: Path, rec: dict, derived: dict) -> None:
     """The extraction-only fields, each against what the shipped run left."""
     import re
-    import ext_io_extract as eie
+    eie = ext_io_instrument(rec.get("instrument_sha256"))
     ext = path.parent
     if rec["schema"] != "ext-io-extract v1":
         raise Refused(f"{EXT_IO}: schema {rec['schema']!r}")
@@ -295,8 +347,7 @@ def external_io(image: dict, pub_dir: Path | None = None) -> dict:
     if rec.get("dcp_sha256") != image["routed_dcp_sha256"]:
         raise Refused(f"{EXT_IO} measured routed.dcp {str(rec.get('dcp_sha256'))[:12]}, the "
                       f"image's is {image['routed_dcp_sha256'][:12]}")
-    if rec.get("instrument_sha256") != sha(ROOT / "fpga/ext_io_extract.py"):
-        raise Refused(f"{EXT_IO} was produced by a different fpga/ext_io_extract.py")
+    ext_io_instrument(rec.get("instrument_sha256"))     # pinned by version, not the tree
     for name in ("ext_io_paths.txt",):
         if sha(_need(path.parent / name)) != rec.get("paths_sha256"):
             raise Refused(f"{EXT_IO}: {name} does not hash to the record's paths_sha256")
