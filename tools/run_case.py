@@ -1254,24 +1254,20 @@ def _early_late_db(t_split: float, t_end: float):
     return f
 
 
-def _line_ratio(hz_num: float, hz_den: float, t1: float = 0.100):
-    def f(y, sr):
-        return tone_ratio_db(window(y, sr, 0.0, t1), sr, hz_num, hz_den)
-    return f
-
-
 def _difference_tone(hz_hi: float, hz_lo: float, t1: float = 0.100):
     def f(y, sr):
         return difference_tone_db(window(y, sr, 0.0, t1), sr, hz_hi, hz_lo)
     return f
 
 
-def _band_pair(band_a, band_b, t1: float | None = None):
-    def f(y, sr):
-        return band_pair_db(_energy_window(y, sr, 0.0, t1), sr, band_a, band_b)
-    return f
-
-
+# `_line_ratio`/`_band_pair`, the fixed-window wrappers around
+# `tone_ratio_db`/`band_pair_db` that D10A/D13A's "Partial balance" used
+# before #109, are gone: nothing in `DRUM_PLAN` calls them any more (checked
+# by grep, not assumed -- both were exactly zero call sites once RS and CB
+# moved to `_balance_trajectory` below). `tone_ratio_db`/`band_pair_db`
+# themselves stay -- `_difference_tone` above still uses `difference_tone_db`,
+# and both remain ground-truthed and available should a future case want a
+# fixed-window ratio again.
 def _balance_trajectory(f_lo_range, f_hi_range, *, win_ms: float, hop_ms: float,
                         t_end: float, guards, min_gap_ms: float):
     """Wraps `balance_trajectory_db` (#109) on the FULL prepared record -- it
@@ -1324,6 +1320,21 @@ RS_BALANCE_OP = dict(f_lo_range=(380, 620), f_hi_range=(1450, 2150),
 CB_BALANCE_OP = dict(f_lo_range=(460, 700), f_hi_range=(700, 1000),
                      win_ms=20.0, hop_ms=2.0, t_end=0.600,
                      guards=(300.0, 350.0, 1150.0, 1300.0), min_gap_ms=20.0)
+
+# #109 item 4 ("do not compare `worst` across cases that use different
+# estimators -- D10A and D13A share a name, a tolerance, and nothing else")
+# is resolved for THIS pair as a side effect of the trajectory fix, not as a
+# separate change: before #109, D10A's "Partial balance" was `_band_pair`
+# (a fixed-window filtered-energy ratio) and D13A's was `_line_ratio` (a
+# fixed-window coherent-projection ratio) -- two different functions with
+# different arithmetic. Both now call the SAME function, `_balance_trajectory`
+# / `balance_trajectory_db`, parameterised per voice by the OP dicts above.
+# `scorecard.py`'s `worst` for these two rows is therefore now a ratio of the
+# same estimator's error to the same estimator's own tolerance, which is the
+# comparability item 4 asks for. The GENERAL board-level rule -- grouping
+# `worst` comparability by estimator family for every case, not just this
+# pair -- is #116/#143's scope (both open, unclaimed, as of 2026-09-27) and is
+# deliberately not duplicated here; see this issue's PR description.
 
 
 # name -> (units, estimator, tolerance rule). Names match cases.csv exactly,

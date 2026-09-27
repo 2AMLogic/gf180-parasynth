@@ -2,30 +2,30 @@
   "engine": "fixed-model",
   "case_id": "D10A",
   "subject": "Rimshot / anchor",
-  "source_commit": "1977a70",
-  "analysis_run": "run_case@68cf7461bfb5 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T11:50:14Z",
+  "source_commit": "39e4e83",
+  "analysis_run": "run_case@2c561cde357a + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T12:34:41Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "1977a70",
-      "described": "node/D-drums-bitexact-904-g1977a70-dirty",
+      "commit": "39e4e83",
+      "described": "node/D-drums-bitexact-907-g39e4e83-dirty",
       "branch": "feature/issue-109",
       "dirty": true,
-      "uncommitted_sha256": "32cff3af5dad1bf5",
-      "untracked_files": 0
+      "uncommitted_sha256": "7ab68db7a96c04ad",
+      "untracked_files": 1
     },
     "base_check": {
       "checked": true,
-      "origin_main": "2c4ec4aa705d",
-      "behind_commits": 2,
-      "ahead_commits": 0,
+      "origin_main": "492a554b27fc",
+      "behind_commits": 3,
+      "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {},
       "allow_stale": false,
       "problems": [],
-      "note": "2 commit(s) behind origin/main, none of them touching an input this measurement depends on"
+      "note": "3 commit(s) behind origin/main, none of them touching an input this measurement depends on"
     },
     "command": "tools/run_case.py D10A D13A --no-audio",
     "config": {
@@ -38,13 +38,13 @@
       "level_matched": true
     },
     "python": "3.12.3",
-    "run_at": "2026-09-27T11:50:22Z",
+    "run_at": "2026-09-27T12:34:49Z",
     "inputs": {
       "model/drums_fx.py": "sha256:449cfefe39ada055",
       "model/voice_fx.py": "sha256:876b31f280fd3ef4",
       "model/audio_measure.py": "sha256:ff1ae641f70752d1",
       "model/reference_rigs.py": "sha256:c31aadac74845fc7",
-      "tools/run_case.py": "sha256:68cf7461bfb53d92",
+      "tools/run_case.py": "sha256:2c561cde357ab98f",
       "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
       "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
       "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
