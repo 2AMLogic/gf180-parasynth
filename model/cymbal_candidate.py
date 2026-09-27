@@ -11,18 +11,29 @@ circuit -- no continuous fitting):
               -> Hh1: 2-pole HIGH-pass 2.5 kHz Q 0.97 [reference 10, inferred from
               W14b eq. 16 + values]. Was: straight to the mix bus (Hh1 omitted).
   high DECAY  7.1 kHz band-pass (shared with the hats) -> swing VCA x E_CYD
-              -> Hh2: 2-pole HIGH-pass. Its corner is NOT resolved by the
-              reference ("2nd-order non-unity-gain Sallen-Key (resonant)"); the
-              kit's existing 10.5 kHz Q 2.5 is carried over and stated as a
-              carried choice. Was: a 10.5 kHz BAND-pass.
-  high short  7.1 kHz band-pass -> swing VCA x E_CYS -> Hh3: THIRD order, a 2-pole
-              high-pass cascaded with a 1-pole high-pass at the SAME ~10.5 kHz
-              corner [#102; reference 10 "resonant ~10.5 kHz"; Q carried at 2.5].
-              Was: the CLOSED HAT's 11.7 kHz 2-pole high-pass, borrowed.
-  level stage the +6 dB/octave differentiator of the LEVEL buffer [reference 10,
-              W14b §11], applied to all three bands at their last stage as one
-              more (1 - z^-1) in the numerator: Hh1 and Hh2 use HP3 = (1-z^-1)^3,
-              Hh3's 1-pole stage uses HP = (1-z^-1)^2 (its own zero plus the tilt).
+              -> Hh2: 2-pole HIGH-pass, 8839 Hz Q 1.00 [W14b Fig. 4, read by
+              tools/werner_fig4.py at 0.007 dB rms]. REVISION 2: the first
+              candidate carried the kit's 10.5 kHz Q 2.5 here because the
+              reference left the corner unresolved. Fig. 4 resolves it, and it
+              is wrong on both axes.
+  high short  7.1 kHz band-pass -> swing VCA x E_CYS -> Hh3: THIRD order, a
+              2-pole high-pass 10323 Hz Q 5.64 cascaded with a 1-pole
+              high-pass at 5195 Hz [same source, 0.008 dB rms; a 2-pole model
+              of that curve leaves 0.717 dB]. REVISION 2: #102 and the first
+              candidate put the third pole at the SAME corner as the 2-pole.
+              It sits at half of it, and the 2-pole's Q is 5.64, not 2.5.
+              Was, before either candidate: the CLOSED HAT's 11.7 kHz 2-pole.
+  level stage the rising slope of the LEVEL buffer [reference 10, W14b §11],
+              applied to all three bands at their last stage as one more
+              (1 - z^-1) in the numerator: Hh1 and Hh2 use HP3 = (1-z^-1)^3,
+              Hh3's 1-pole stage uses HP = (1-z^-1)^2 (its own zero plus the
+              tilt). Unchanged in revision 2, and now with a number behind it:
+              W14b Fig. 10's family is a single-pole differentiator with its
+              corner at 18972 Hz (0.02 dB rms), which tilts +16.6 dB across
+              2-20 kHz. A discrete (1 - z^-1) at 48 kHz tilts +17.4 dB over
+              the same span, so the digital stand-in is 0.8 dB steep, not the
+              "pure differentiator up to Nyquist" the first candidate's
+              post-mortem suspected.
 
 Mode layout (numerator modes must sit below N_NUMS = 11, tapped modes below 16):
   0 HATBP 1 OHHP 2 CHHP 3 SDN 4 CPBP 5 CBBP 6 CYBP 7 CYHI(Hh2)
@@ -35,6 +46,14 @@ output is matched to the SHIPPED kit's same band, in the 1/3 octave at the
 band's centre (3.15 kHz for the low band, 10 kHz for the two high bands), over
 the first second of a CY strike. The rule is fixed here; it references the
 shipped kit, never a recording.
+
+UNCHANGED IN REVISION 2, deliberately. Figure 4 also gives the circuit's own
+inter-band gains -- band-pass peaks +22.95 and +24.10 dB, high-pass pass bands
+0, +6.03 and +8.86 dB, so the filter chain alone puts the decay band +7.2 dB
+and the short band +10.0 dB above the low band. Adopting those is a SECOND
+question, and changing the levels in the same step as the filter shapes would
+make neither answerable. They are recorded here (HH2_PASS_DB, HH3_PASS_DB,
+BP_PEAK_DB) and not applied.
 """
 from __future__ import annotations
 
@@ -104,8 +123,16 @@ M_CYH1, M_CYH3, M_CYH3B = 8, 9, 10
 NEW_M = {"BD": 16, "SDLO": 17, "SDHI": 18}
 OLD_TO_NEW = {dx.M_BD: 16, dx.M_SDLO: 17, dx.M_SDHI: 18}     # every other mode keeps its index
 N_MODES, N_PATH, N_NUMS = 19, 24, 11
+# Every value below is from W14b Figures 4 and 10, read by tools/werner_fig4.py
+# and committed as docs/scorecard/cymbal-369/werner-fig4.json. Hh1's own
+# 2500 Hz / Q 0.97 comes from SN p.13 component values and is what validates
+# the reading: the digitiser recovers it as 2497.5 Hz / Q 0.97.
 HH1_HZ, HH1_Q = 2500.0, 0.97
-HH3_HZ, HH3_Q = dx.CY_HI_HZ, dx.CY_HI_Q                       # carried: 10.5 kHz, Q 2.5
+HH2_HZ, HH2_Q = 8839.0, 1.00
+HH3_HZ, HH3_Q = 10323.0, 5.64
+HH3_P1_HZ = 5195.0                       # Hh3's third pole, NOT at its corner
+HH1_PASS_DB, HH2_PASS_DB, HH3_PASS_DB = 0.0, 6.03, 8.86     # recorded, not applied
+BP_PEAK_DB = {"low": 22.95, "high": 24.10}                  # recorded, not applied
 P_CYS, P_CYD, P_CYL = 20, 21, 22                             # indices in kit_808's path list
 P_CYH3 = 23
 
@@ -158,12 +185,12 @@ def candidate_kit(amps: dict | None = None, kit=None):
     for calibration renders."""
     img = remap_kit(kit if kit is not None else dx.kit_808())
     amps = amps or {}
-    for m, f0, q, num in ((M_CYH1, HH1_HZ, HH1_Q, HP3), (dx.M_CYHI, HH3_HZ, HH3_Q, HP3),
+    for m, f0, q, num in ((M_CYH1, HH1_HZ, HH1_Q, HP3), (dx.M_CYHI, HH2_HZ, HH2_Q, HP3),
                           (M_CYH3, HH3_HZ, HH3_Q, HP)):
         for a, v in dx.mode_writes(m, f0, q, amps.get(m, 0.0 if m == M_CYH3 else 1.0), num):
             img[a] = v
     # Hh3's 1-pole stage: a1 = r, a2 = 0, with r the 1-pole high-pass pole at the corner
-    r = math.exp(-2 * math.pi * HH3_HZ / dx.SR)
+    r = math.exp(-2 * math.pi * HH3_P1_HZ / dx.SR)
     base = dx.A_MODE + M_CYH3B * dx.MODE_STRIDE
     img[base] = int(round(r * (1 << 24))) & ((1 << 26) - 1)
     img[base + 1] = 0
