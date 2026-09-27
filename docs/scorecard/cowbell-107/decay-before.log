@@ -1,0 +1,9 @@
+/Users/rwalters/GitHub/gf180-parasynth/.loom/worktrees/issue-107/tools/measure_partial_balance.py:93: WavFileWarning: Reached EOF prematurely; finished at 132346 bytes, expected 132347 bytes from header.
+  sr, x = wavfile.read(str(path))
+KNOWN CASES FIRST -- two damped partials of chosen tau.
+    worst tau error over 3 cases x 2 partials: 0.01 %
+
+               low line    tau lo  high line    tau hi  lo / hi
+  reference    558.35Hz   121.4ms   823.70Hz   106.6ms    1.139
+  ours         540.05Hz    97.8ms   800.00Hz    97.8ms    1.000
+python3 tools/measure_partial_balance.py decay  99.90s user 3.96s system 42% cpu 4:06.45 total

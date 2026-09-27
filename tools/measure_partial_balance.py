@@ -20,6 +20,7 @@ convention"), and `worst` on the board is |error| / tolerance.
     python tools/measure_partial_balance.py validate    # start red, then the known cases
     python tools/measure_partial_balance.py measure     # the recordings, floor-gated
     python tools/measure_partial_balance.py apparatus   # is the failure the window, not the voice?
+    python tools/measure_partial_balance.py decay       # CB: each partial's own tau (issue #107)
 
 Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $TR808_REFS or
 /tmp/tr808-ref. REFUSES rather than reports when it is absent.
@@ -98,12 +99,15 @@ def load_reference(voice):
     return prepare(x / 32768.0, sr), sr, REF_MAIN[voice], sha(path)
 
 
-def render_ours(voice, seconds=2.2, accent=1.0):
+def render_ours(voice, seconds=2.2, accent=1.0, kit=None):
+    """One hit of `voice` through the reference host (`hit_writes`) and the
+    output stage -- the path a player's image takes. `kit` replaces the
+    shipped image (for controls); None is `kit_with_sounds(voice)`."""
     import drums_fx as dx
     n = int(seconds * dx.SR)
     d = dx.DrumsFx()
     dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), dx.SOUND_STOP[voice], accent)],
-                                  dx.kit_with_sounds(voice)), n)
+                                  kit if kit is not None else dx.kit_with_sounds(voice)), n)
     g = dx.accent_reg(0.45)
     out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
     return prepare(np.asarray(out, dtype=np.float64) / 32768.0, dx.SR), dx.SR
@@ -249,6 +253,78 @@ def cmd_measure():
     return 0
 
 
+def balance_at(x, sr, voice, times):
+    """The partial balance (dB, high over low) at each of `times`, by the
+    trajectory estimator at `voice`'s operating point -- the numbers `measure`
+    prints, as a function, so a test reads them through the same code."""
+    op = OP[voice]
+    f_lo = PT.find_partial(x, sr, *op["lo"], seconds=op["t_end"])
+    f_hi = PT.find_partial(x, sr, *op["hi"], seconds=op["t_end"])
+    tl, a_l, th, a_h = balance_traj(x, sr, f_lo, f_hi, op)
+    out = {}
+    for t in times:
+        i = int(np.argmin(np.abs(tl - t))); j = int(np.argmin(np.abs(th - t)))
+        out[t] = 20 * math.log10(a_h[j] / a_l[i])
+    return out
+
+
+# Guard frequencies for the per-partial floor (no line of either record there;
+# the Fischer unit's lines are 558/824 Hz, ours 540/800).
+CB_GUARDS = {"lo": [412.0, 468.0, 631.0, 702.0], "hi": [702.0, 740.0, 900.0, 960.0]}
+CB_DECAY_SPAN = (0.030, 0.400)     # the balance table's own span: past the 5 ms slope
+
+
+def partial_decay(x, sr, voice="CB", span=CB_DECAY_SPAN):
+    """Each partial's own tau, fitted over `span` of its trajectory with the
+    record's floor measured at guard lines. Returns {"lo": fit, "hi": fit}
+    (partial_trajectory.fit_decay dicts, plus the line frequency)."""
+    op = OP[voice]
+    out = {}
+    for tag in ("lo", "hi"):
+        f = PT.find_partial(x, sr, *op[tag], seconds=op["t_end"])
+        ts, a = PT.trajectory(x, sr, f, win_ms=op["win_ms"], hop_ms=op["hop_ms"], t_end=op["t_end"])
+        fl = PT.floor_at(x, sr, f, CB_GUARDS[tag], win_ms=op["win_ms"], hop_ms=op["hop_ms"],
+                         t_end=op["t_end"])
+        keep = (ts >= span[0]) & (ts <= span[1])
+        fit = PT.fit_decay(ts[keep], a[keep], floor=fl[keep], floor_margin_db=FLOOR_MARGIN_DB,
+                           sr=sr, win_ms=op["win_ms"])
+        fit["f"] = f
+        out[tag] = fit
+    return out
+
+
+def cmd_decay():
+    """Issue #107: does each cowbell partial decay at its own rate? tau per
+    partial, both sides, over the balance table's 30-400 ms. REFUSES a side
+    whose fit refuses rather than printing a number for it."""
+    print("KNOWN CASES FIRST -- two damped partials of chosen tau.")
+    SR = 44100
+    worst = 0.0
+    for tl_, th_ in ((0.120, 0.100), (0.100, 0.100), (0.180, 0.060)):
+        x = two_partial(540, tl_, 1.0, 800, th_, 3.0, OP["CB"]["t_end"], SR)
+        got = partial_decay(x, SR)
+        for tag, truth in (("lo", tl_), ("hi", th_)):
+            if not got[tag]["ok"]:
+                raise Refused(f"known case {tag} tau {truth*1e3:.0f} ms refused: {got[tag]['reason']}")
+            worst = max(worst, abs(got[tag]["tau_ms"] / (truth * 1e3) - 1))
+    print(f"    worst tau error over 3 cases x 2 partials: {100*worst:.2f} %")
+    if worst > 0.03:
+        raise Refused(f"the tau fit is off by {100*worst:.1f} % on known signals")
+    rows = {}
+    for side in ("reference", "ours"):
+        x, sr = (load_reference("CB")[:2] if side == "reference" else render_ours("CB", seconds=0.8))
+        rows[side] = partial_decay(x, sr)
+    print(f"\n  {'':10s} {'low line':>10s} {'tau lo':>9s} {'high line':>10s} {'tau hi':>9s} "
+          f"{'lo / hi':>8s}")
+    for side, r in rows.items():
+        if not (r["lo"]["ok"] and r["hi"]["ok"]):
+            print(f"  {side:10s} REFUSED  lo: {r['lo'].get('reason')}  hi: {r['hi'].get('reason')}")
+            continue
+        print(f"  {side:10s} {r['lo']['f']:8.2f}Hz {r['lo']['tau_ms']:7.1f}ms {r['hi']['f']:8.2f}Hz "
+              f"{r['hi']['tau_ms']:7.1f}ms {r['lo']['tau_ms']/r['hi']['tau_ms']:8.3f}")
+    return 0
+
+
 def cmd_apparatus():
     """Two unrelated circuits failing one check is what a shared apparatus term
     looks like, so it is tested rather than assumed.
@@ -299,7 +375,7 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "validate"
     try:
         sys.exit({"validate": cmd_validate, "measure": cmd_measure,
-                  "apparatus": cmd_apparatus}[cmd]())
+                  "apparatus": cmd_apparatus, "decay": cmd_decay}[cmd]())
     except Refused as e:
         print(f"REFUSED  {e}")
         sys.exit(2)
