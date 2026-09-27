@@ -211,6 +211,7 @@ def main(argv=None) -> int:
     ap.add_argument("--pulse2x", action="store_true")
     ap.add_argument("--rtl", default=None)
     ap.add_argument("--inject", default=None)
+    ap.add_argument("--define", action="append", default=[], help="extra Verilog define (a component control)")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--headroom-only", action="store_true")
     ap.add_argument("--outdir", required=True)
@@ -251,6 +252,8 @@ def main(argv=None) -> int:
         argv2 += ["--rtl", a.rtl]
     if a.inject:
         argv2 += ["--inject", a.inject]
+    for d in a.define:
+        argv2 += ["--define", d]
     if a.expect_fail:
         argv2.append("--expect-fail")
     rc = vv.main(argv2)
