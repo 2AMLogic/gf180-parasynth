@@ -127,6 +127,7 @@ import drum_verify as dv                                             # noqa: E40
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
+import partial_trajectory as PT                                      # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -287,6 +288,93 @@ def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0) -> am.E
         return am.Estimate(None, False, "band ratio past the stated floor",
                            dict(ratio_db=r, floor_db=floor_db))
     return am.Estimate(r, True, "", dict(e_a=e_a, e_b=e_b))
+
+
+def _joint_headroom(al, ah, floor_lo, floor_hi):
+    """How far ABOVE both partials' own measured floors a single instant sits,
+    the SMALLER of the two headrooms -- the instant is only trustworthy when
+    NEITHER partial is buried. Returns (headroom_db array, headroom_lo, headroom_hi)."""
+    la = 20.0 * np.log10(np.clip(al, 1e-300, None) / np.clip(floor_lo, 1e-300, None))
+    lh = 20.0 * np.log10(np.clip(ah, 1e-300, None) / np.clip(floor_hi, 1e-300, None))
+    return np.minimum(la, lh), la, lh
+
+
+def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
+                          hop_ms: float, t_end: float, guards, min_gap_ms: float,
+                          floor_margin_db: float = 6.0) -> am.Estimate:
+    """The two partials' amplitude ratio at the EARLIEST instant the record can
+    support measuring it, not `band_pair_db`/`tone_ratio_db`'s single window
+    integrated over a fixed span (#109).
+
+    `band_pair_db` over a fixed window is A^2*tau, not A^2: a filtered band's
+    energy over a span includes how long the band rings, so it silently
+    carries the same information a separate `tail decay`/`decay` row already
+    scores. This is a raw amplitude ratio at ONE INSTANT -- decay-invariant by
+    construction, because an instant has no duration to fold in.
+
+    A single instant still cannot show a trajectory that MOVES (the rimshot's
+    high mode leads for ~5 ms and then falls behind; the cowbell's balance
+    falls all the way through the note) -- see `test_run_case.py`'s ground
+    truth for a sign-changing-balance signal a one-point read cannot resolve
+    on its own. So this reports the EARLIEST and LATEST instants the record
+    supports (`t1`/`balance1` scored; `t2`/`balance2`/`slope_db_per_ms` carried
+    as evidence, not scored, because two points is a trajectory and a third
+    scored number two windows wide is the disease this function exists to
+    cure), rather than reducing the whole trajectory to one integral.
+
+    THE WINDOW IS THE RECORD'S OWN, not a quoted span (#92): `f_lo`/`f_hi` are
+    the real lines (`partial_trajectory.find_partial`, not a nominal chart
+    value), and every instant is checked against a FLOOR measured on the same
+    record at `guards` -- frequencies known to hold neither partial
+    (`partial_trajectory.floor_at`). An instant where either partial is within
+    `floor_margin_db` of that floor is not evidence and is excluded, exactly
+    as #92 asks; `t_end` is a generous outer bound on the search, not the
+    thing being integrated, so a reference swap to a shorter or longer take
+    does not change how much floor gets averaged in -- there is no averaging.
+
+    REFUSES when no instant in [0, t_end] clears the floor on BOTH partials at
+    once, with the best margin actually found, rather than reporting a
+    contaminated ratio.
+
+    Ground truth: test_balance_trajectory_db_reports_two_points_not_one,
+    test_balance_trajectory_db_a_flat_balance_reads_flat,
+    test_balance_trajectory_db_excludes_a_point_below_the_floor,
+    test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor."""
+    f_lo = PT.find_partial(x, sr, *f_lo_range, seconds=t_end)
+    f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
+    if f_lo is None or f_hi is None:
+        return am.Estimate(None, False, "no line found for one of the two partials",
+                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range))
+    ts, al = PT.trajectory(x, sr, f_lo, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    _, ah = PT.trajectory(x, sr, f_hi, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    fl_lo = PT.floor_at(x, sr, f_lo, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    fl_hi = PT.floor_at(x, sr, f_hi, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    headroom, hlo, hhi = _joint_headroom(al, ah, fl_lo, fl_hi)
+    ok = (headroom >= floor_margin_db) & (al > 0) & (ah > 0)
+    idxs = np.nonzero(ok)[0]
+    if len(idxs) == 0:
+        i = int(np.argmax(headroom))
+        return am.Estimate(None, False,
+                           f"no instant in [0, {t_end*1e3:.0f}] ms clears the record's own "
+                           f"floor by {floor_margin_db:.0f} dB on both partials at once "
+                           f"(best joint headroom {headroom[i]:.1f} dB at t={ts[i]*1e3:.1f} ms: "
+                           f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
+                           dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
+                                best_headroom_db=float(headroom[i])))
+    i1 = int(idxs[0])
+    balance1 = 20.0 * math.log10(ah[i1] / al[i1])
+    detail = dict(f_lo=f_lo, f_hi=f_hi, t1_ms=float(ts[i1] * 1e3),
+                 balance1_db=balance1, headroom1_db=float(headroom[i1]),
+                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)))
+    later = idxs[ts[idxs] > ts[i1] + min_gap_ms * 1e-3]
+    if len(later):
+        i2 = int(later[-1])
+        balance2 = 20.0 * math.log10(ah[i2] / al[i2])
+        dt_ms = float((ts[i2] - ts[i1]) * 1e3)
+        detail.update(t2_ms=float(ts[i2] * 1e3), balance2_db=balance2,
+                     headroom2_db=float(headroom[i2]),
+                     slope_db_per_ms=(balance2 - balance1) / dt_ms)
+    return am.Estimate(balance1, True, "", detail)
 
 
 def pitch_drop_hz(x, sr: int, band, *, early=(0.004, 0.018), late=(0.060, 0.150),
@@ -1184,6 +1272,19 @@ def _band_pair(band_a, band_b, t1: float | None = None):
     return f
 
 
+def _balance_trajectory(f_lo_range, f_hi_range, *, win_ms: float, hop_ms: float,
+                        t_end: float, guards, min_gap_ms: float):
+    """Wraps `balance_trajectory_db` (#109) on the FULL prepared record -- it
+    searches its own window internally (`t_end` bounds the search, it is not a
+    span to integrate), so this passes `y` unsliced rather than through
+    `window()`/`_energy_window()`."""
+    def f(y, sr):
+        return balance_trajectory_db(y, sr, f_lo_range, f_hi_range, win_ms=win_ms,
+                                     hop_ms=hop_ms, t_end=t_end, guards=guards,
+                                     min_gap_ms=min_gap_ms)
+    return f
+
+
 # The sixteen sounds, and the drum case that anchors each.
 DRUM_CASE_VOICE = {
     "D01A": "BD", "D02A": "SD", "D03A": "LT", "D04A": "LC", "D05A": "MT",
@@ -1201,6 +1302,28 @@ def _tom_plan(sound: str, drop: bool):
     return [first,
             ("body spectrum", "dB", _split_db(sound, 0.0, 0.150), tol_db),
             ("decay", "ms", _t20_ms(0.005), tol_time)]
+
+
+# RS/CB "Partial balance" operating points for `balance_trajectory_db` (#109).
+# `win_ms`/`hop_ms`/`t_end` match the validated diagnostic in
+# measure_partial_balance.py's OP table (its own cmd_validate proves a worst
+# balance error of 2.4 dB for RS and 1.1 dB for CB against known two-partial
+# signals at these settings). `guards` are frequencies MEASURED to hold
+# neither partial, chosen in the gap between the two search ranges rather than
+# below or above them -- both references and both of our own renders were
+# checked against candidate guard sets before this pair was picked; a guard
+# below the low partial picked up broadband attack-transient leakage large
+# enough to swamp the floor on our own render (tools/measure_partial_balance.py
+# `apparatus`-style check, run by hand during #109's investigation).
+# `min_gap_ms` is how far apart the reported t1/t2 must be for a slope to be
+# worth reporting at all -- a few hops, not a fraction of a fast rimshot's own
+# decay.
+RS_BALANCE_OP = dict(f_lo_range=(380, 620), f_hi_range=(1450, 2150),
+                     win_ms=6.0, hop_ms=0.25, t_end=0.060,
+                     guards=(900.0, 1100.0), min_gap_ms=2.0)
+CB_BALANCE_OP = dict(f_lo_range=(460, 700), f_hi_range=(700, 1000),
+                     win_ms=20.0, hop_ms=2.0, t_end=0.600,
+                     guards=(300.0, 350.0, 1150.0, 1300.0), min_gap_ms=20.0)
 
 
 # name -> (units, estimator, tolerance rule). Names match cases.csv exactly,
@@ -1237,9 +1360,12 @@ DRUM_PLAN = {
     ],
     "RS": [
         # Two bridged-T networks on one circuit: reference section 5 gives the
-        # low mode at 455 Hz Q 6.7 and the high at 1786 Hz Q 13.5, so the
-        # balance is asked as the energy in a band around each.
-        ("Partial balance", "dB", _band_pair((1500, 2100), (380, 560), 0.060), tol_db),
+        # low mode at 455 Hz Q 6.7 and the high at 1786 Hz Q 13.5. #109: the
+        # balance is the two REAL lines' amplitude ratio at the earliest
+        # floor-clearing instant, not a fixed window's filtered energy ratio
+        # (which is A^2*tau and double-charges the decay already scored by
+        # "tail decay" below).
+        ("Partial balance", "dB", _balance_trajectory(**RS_BALANCE_OP), tol_db),
         ("attack", "ms", _attack("RS", 0.060), tol_time),
         ("tail decay", "ms", _t20_ms(0.002), tol_time),
     ],
@@ -1257,8 +1383,12 @@ DRUM_PLAN = {
         # Nominal frequencies, used as SEARCH CENTRES and not as probe points
         # (#108). This machine's lines are 558.35 and 823.70 Hz; the difference
         # tone is at their measured difference, not at the 260 Hz the chart
-        # implies.
-        ("Partial balance", "dB", _line_ratio(800.0, 540.0), tol_db),
+        # implies. #109: the balance is the two lines' amplitude ratio at the
+        # earliest floor-clearing instant, not a fixed 0-100 ms window's
+        # coherent-projection ratio, which cannot show that the machine's
+        # balance falls through the whole note while a single window can only
+        # match it at one accidental instant.
+        ("Partial balance", "dB", _balance_trajectory(**CB_BALANCE_OP), tol_db),
         ("unwanted difference tone", "dB", _difference_tone(800.0, 540.0), tol_db),
         ("decay", "ms", _t20_ms(0.005), tol_time),
     ],

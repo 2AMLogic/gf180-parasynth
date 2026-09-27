@@ -241,6 +241,123 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
 
 
 # ===========================================================================
+# Ground truth: balance_trajectory_db (#109)
+#
+# The disease this replaces: `band_pair_db`/`tone_ratio_db` integrated over a
+# SINGLE fixed window, which cannot tell a balance that is falling fast (the
+# rimshot's two bridged-T modes decay at very different rates) from one that
+# is flat (equal-amplitude partials at the same tau) -- both can average to
+# the same one number. Every case here uses a signal whose balance AT ANY
+# INSTANT is known in closed form (`ah_true`), independent of the estimator,
+# so this is a validated instrument and not one calibrated on itself.
+# ===========================================================================
+RS_TEST_OP = dict(win_ms=6.0, hop_ms=0.25, t_end=0.060, guards=(900.0, 1100.0),
+                  min_gap_ms=2.0)
+
+
+def _damped(f, tau, amp, n, sr, phase=0.0):
+    t = np.arange(n) / sr
+    return amp * np.exp(-t / tau) * np.sin(2 * math.pi * f * t + phase)
+
+
+def _two_partial(f_lo, tau_lo, a_lo, f_hi, tau_hi, a_hi, seconds, sr):
+    n = int(seconds * sr)
+    return (_damped(f_lo, tau_lo, a_lo, n, sr, 0.3)
+            + _damped(f_hi, tau_hi, a_hi, n, sr, 1.9))
+
+
+def _true_balance_db(t_s, tau_lo, a_lo, tau_hi, a_hi):
+    return 20.0 * math.log10((a_hi * math.exp(-t_s / tau_hi))
+                             / (a_lo * math.exp(-t_s / tau_lo)))
+
+
+def test_balance_trajectory_db_reports_two_points_not_one():
+    """A rimshot-shaped signal: the high partial starts louder AND decays
+    about 4x faster than the low one, so the true balance falls by tens of dB
+    within a few ms -- the shape a single integrated window averages away
+    (#109's own worked example). `t1`/`balance1` is the metric SCORED;
+    `t2`/`balance2`/`slope_db_per_ms` are the SAME record's later instant,
+    carried as evidence that this is a trajectory and not a second window."""
+    tau_lo, a_lo, tau_hi, a_hi = 0.006, 1.0, 0.0015, 3.0
+    x = _two_partial(460.0, tau_lo, a_lo, 1800.0, tau_hi, a_hi, 0.060, SR)
+    e = rc.balance_trajectory_db(x, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert e.ok, e.reason
+    assert "t1_ms" in e.detail and "t2_ms" in e.detail, \
+        "a trajectory needs at least two named instants, not one integrated number"
+    t1_s, t2_s = e.detail["t1_ms"] / 1e3, e.detail["t2_ms"] / 1e3
+    assert t2_s > t1_s
+    truth1 = _true_balance_db(t1_s, tau_lo, a_lo, tau_hi, a_hi)
+    truth2 = _true_balance_db(t2_s, tau_lo, a_lo, tau_hi, a_hi)
+    assert e.value == pytest.approx(truth1, abs=3.0)
+    assert e.detail["balance2_db"] == pytest.approx(truth2, abs=3.0)
+    # The whole point: the two instants disagree by far more than the 3 dB
+    # tolerance a single window is scored against -- a one-number metric
+    # necessarily picks a value between them and is wrong about both ends.
+    assert abs(e.detail["balance2_db"] - e.value) > 10.0
+    assert e.detail["slope_db_per_ms"] < -1.0            # falling, and fast
+
+
+def test_balance_trajectory_db_a_flat_balance_reads_flat():
+    """Equal decay rates: the true balance is CONSTANT over time. This is the
+    cowbell's opposite failure mode from the rimshot's -- a flat trajectory
+    must read as flat, not merely as *some* single number."""
+    tau, a_lo, a_hi = 0.020, 1.0, 2.0
+    x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
+    e = rc.balance_trajectory_db(x, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert e.ok, e.reason
+    truth = 20.0 * math.log10(a_hi / a_lo)
+    assert e.value == pytest.approx(truth, abs=1.0)
+    assert e.detail["balance2_db"] == pytest.approx(truth, abs=1.0)
+    assert abs(e.detail["slope_db_per_ms"]) < 0.05
+    # And the two signals are told apart, which a single window could not do:
+    diverging = _two_partial(460.0, 0.006, 1.0, 1800.0, 0.0015, 3.0, 0.060, SR)
+    e_div = rc.balance_trajectory_db(diverging, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert e_div.ok
+    assert abs(e_div.detail["slope_db_per_ms"]) > 20 * abs(e.detail["slope_db_per_ms"])
+
+
+def test_balance_trajectory_db_excludes_a_point_below_the_floor():
+    """#92's own pattern: a point measured to be inside the record's floor is
+    excluded, not integrated. A strong tone at one of the GUARD frequencies
+    (900 Hz -- neither partial) for the first 20 ms raises the floor there and
+    nowhere else; the earliest reported instant must move past it."""
+    tau, a_lo, a_hi = 0.020, 1.0, 1.0
+    x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
+    clean = rc.balance_trajectory_db(x, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert clean.ok
+    t = np.arange(len(x)) / SR
+    burst_end_s = 0.020
+    dirty = x + 5.0 * np.sin(2 * math.pi * 900.0 * t) * (t < burst_end_s)
+    contaminated = rc.balance_trajectory_db(dirty, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert contaminated.ok
+    assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
+    assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
+
+
+def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():
+    """Digital silence: no instant anywhere is even 6 dB above its own floor,
+    on either partial. REFUSED, not a zero or a coincidental number, and the
+    reason names the best margin actually found rather than just 'no'."""
+    x = np.zeros(int(0.060 * SR))
+    e = rc.balance_trajectory_db(x, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    assert not e.ok and e.value is None
+    assert "clears the record's own floor" in e.reason
+    assert "best joint headroom" in e.reason
+
+
+def test_balance_trajectory_is_what_drum_plan_actually_scores():
+    """Check the thing tested is the thing that ships: DRUM_PLAN["RS"]'s own
+    "Partial balance" entry, not a hand-called copy of the estimator, must
+    itself return the trajectory shape."""
+    # DRUM_PLAN stores (name, units, est, tol_rule) tuples, not a mapping.
+    est = next(e for (name, _u, e, _t) in rc.DRUM_PLAN["RS"] if name == "Partial balance")
+    x = _two_partial(460.0, 0.006, 1.0, 1800.0, 0.0015, 3.0, 0.060, SR)
+    e = est(x, SR)
+    assert e.ok, e.reason
+    assert {"t1_ms", "t2_ms", "balance1_db", "balance2_db", "slope_db_per_ms"} <= e.detail.keys()
+
+
+# ===========================================================================
 # Ground truth: pitch_drop_hz
 # ===========================================================================
 def test_pitch_drop_hz_on_a_known_exponential_glide():
