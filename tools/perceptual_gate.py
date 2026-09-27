@@ -126,6 +126,11 @@ PITCH_SEARCH_S = 0.150
 PITCH_HOP_S = 0.005
 IMPULSE_HP = 2000.0
 IMPULSE_STRIKE_S = 0.010
+#: The impulse feature is a worst-SAMPLE statistic; over a noise voice it
+#: wobbles by ~1 dB under a 3 % resample (MA failed its half-step check).
+#: A crest within 3 dB of the body's own worst sample is not a distinct
+#: click; the declared click seed reads > 6 dB (#379).
+IMPULSE_FLOOR_DB = 3.0
 PITCH_DB = 30.0
 PITCH_WORST_FRAMES = 4      # 20 ms
 #: Hearing's floor on the pitch-offset bar: ~0.3 %, the mid-frequency pure-
@@ -158,12 +163,32 @@ class Refused(RuntimeError):
 # conditioning: rate, AC coupling, alignment, level (frozen, see module doc)
 # ---------------------------------------------------------------------------
 def load_wav(path) -> tuple:
+    if str(path).lower().endswith((".aif", ".aiff")):
+        return _load_aiff(path)
     sr, raw = wavfile.read(str(path))
     x = np.asarray(raw, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
     if np.issubdtype(raw.dtype, np.integer):
         x = x / float(np.iinfo(raw.dtype).max + 1)
+    return x, int(sr)
+
+
+def _load_aiff(path) -> tuple:
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import aifc
+    with aifc.open(str(path), "rb") as f:
+        n, ch, w, sr = f.getnframes(), f.getnchannels(), f.getsampwidth(), f.getframerate()
+        b = f.readframes(n)
+    if w == 3:
+        a = np.frombuffer(b, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        v = (a[:, 0] << 24 | a[:, 1] << 16 | a[:, 2] << 8) >> 8
+        x = v.astype(np.float64) / 2 ** 23
+    else:
+        x = np.frombuffer(b, dtype={2: ">i2", 4: ">i4"}[w]).astype(np.float64) / 2 ** (8 * w - 1)
+    x = x.reshape(-1, ch).mean(axis=1)
     return x, int(sr)
 
 
@@ -626,8 +651,9 @@ WEAK_R = 2 ** (WEAK_CENTS / 1200)
 def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
     """The per-feature pass bar for one sound.
 
-    The attack bar is floored at ATTACK_JND_MS and the pitch-offset bar at
-    PITCH_JND_CENTS: perceptual limens, not fits. Every bar is that distance PLUS the apparatus's own floor: the target
+    The attack bar is floored at ATTACK_JND_MS, the pitch-offset bar at
+    PITCH_JND_CENTS (perceptual limens) and the impulse bar at
+    IMPULSE_FLOOR_DB (the statistic's own spread); none is a fit. Every bar is that distance PLUS the apparatus's own floor: the target
     against itself through `candidate_path` (48 kHz, another lead and gain,
     16-bit). Without it the nearest neighbour sits exactly on its own bar and
     a resample's rounding fails it (wrong-then-right, #379).
@@ -663,6 +689,8 @@ def bar_for(sound: str, refs: pathlib.Path, T: "Target" = None) -> dict:
         bar["attack"] = max(bar["attack"], ATTACK_JND_MS)
     if bar.get("pitch") is not None:
         bar["pitch"] = max(bar["pitch"], PITCH_JND_CENTS)
+    if bar.get("impulse") is not None:
+        bar["impulse"] = max(bar["impulse"], IMPULSE_FLOOR_DB)
     return {"sound": sound, "target": rel, "kind": kind, "from": frm, "bar": bar,
             "base": base, "apparatus_floor": floor, "neighbours": nbs}
 
@@ -869,6 +897,40 @@ def prove(refs: pathlib.Path, fixtures: pathlib.Path | None) -> dict:
     return out
 
 
+#: Another real TR-808 (Apple Logic "Boutique 808", GB_Tasty808_*.aif): a
+#: PRIVATE cross-check only, never committed or redistributed, provenance and
+#: knob settings undocumented (docs/drum-verification.md 1). Used for one
+#: question: can a sound that is not this exact Fischer unit pass the gate?
+FAMILY = {"BD": ("BD",), "SD": ("SD",), "LT": ("Tom",), "MT": ("Tom",), "HT": ("Tom",),
+          "LC": ("Conga",), "MC": ("Conga",), "HC": ("Conga",), "RS": ("Rim",), "CL": ("Clave",),
+          "CP": ("Clap",), "MA": ("Maracas",), "CB": ("Cow",), "CY": ("Cym",), "OH": ("HHo",),
+          "CH": ("HH1", "HH2", "HH3")}
+
+
+def crosscheck(refs: pathlib.Path, other: pathlib.Path) -> dict:
+    rows = {}
+    for s in SOUNDS16:
+        rel = target_rel(s)
+        T = Target(*load_wav(refs / rel), s, rel)
+        b = bar_for(s, refs, T)
+        cands = sorted(q for q in other.iterdir() if q.suffix.lower() in (".aif", ".aiff", ".wav")
+                       and any(q.stem.split("_")[-1].startswith(f) for f in FAMILY[s])
+                       and not q.stem.endswith("_st"))
+        res = {}
+        for q in cands:
+            try:
+                res[q.name] = verdict(T.distance(*load_wav(q), q.name), b["bar"])
+            except Refused as e:
+                res[q.name] = {"verdict": "REFUSED", "why": str(e), "worst_ratio": math.inf, "failing": []}
+        best = min(res, key=lambda k: res[k]["worst_ratio"]) if res else None
+        rows[s] = {"best": best, "best_verdict": res[best] if best else None,
+                   "all": {k: (v["verdict"], v["worst_ratio"], v.get("worst_feature")) for k, v in res.items()}}
+        if best:
+            print(s, best, res[best]["verdict"], round(res[best]["worst_ratio"], 2),
+                  res[best].get("worst_feature"), res[best]["failing"], flush=True)
+    return rows
+
+
 def rank(refs: pathlib.Path, wavdir: pathlib.Path | None) -> dict:
     rows = {}
     for s in SOUNDS16:
@@ -923,6 +985,10 @@ def main(argv=None) -> int:
     rk.add_argument("--refs", type=pathlib.Path, required=True)
     rk.add_argument("--wavs", type=pathlib.Path, default=None)
     rk.add_argument("--out", type=pathlib.Path, required=True)
+    cc = sub.add_parser("crosscheck", help="another real 808's samples against the Fischer bars")
+    cc.add_argument("--refs", type=pathlib.Path, required=True)
+    cc.add_argument("--other", type=pathlib.Path, required=True)
+    cc.add_argument("--out", type=pathlib.Path, required=True)
     pr = sub.add_parser("pair", help="distances of files from one target")
     pr.add_argument("sound")
     pr.add_argument("target")
@@ -934,8 +1000,9 @@ def main(argv=None) -> int:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
         return 0
-    if a.cmd in ("prove", "rank"):
-        res = prove(a.refs, a.fixtures) if a.cmd == "prove" else rank(a.refs, a.wavs)
+    if a.cmd in ("prove", "rank", "crosscheck"):
+        res = (prove(a.refs, a.fixtures) if a.cmd == "prove" else
+               rank(a.refs, a.wavs) if a.cmd == "rank" else crosscheck(a.refs, a.other))
         res["provenance"] = provenance(a)
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(_r(res), indent=1) + "\n")
