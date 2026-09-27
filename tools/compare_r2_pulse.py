@@ -51,7 +51,7 @@ def _load(paths):
         with op(p, "rt") as fh:
             d = json.load(fh)
         rows += d["rows"]
-        for k in ("pulse2x_rect_gain_q15", "pulse2x_rect_mix_comp", "provenance"):
+        for k in ("pulse2x_rect_gain_q15", "pulse2x_rect_mix_comp", "pulse2x_rect_drive_comp", "provenance"):
             meta.setdefault(k, d.get(k))
     return rows, meta
 
@@ -141,9 +141,10 @@ def main(argv=None):
     dev = [r for r in recs if r.get("development")]
     unt = [r for r in recs if not r.get("development")]
     res = {"configuration": {"candidate": "pulse2x", "rect_gain_q15": meta["pulse2x_rect_gain_q15"],
-                             "rect_mix_comp": meta["pulse2x_rect_mix_comp"], "baseline": "r1",
-                             "differences": "rectangles through the 2x chain at rect_gain_q15 (and mixer "
-                                            "weight rect_mix_comp when set); nothing else"},
+                             "rect_mix_comp": meta["pulse2x_rect_mix_comp"],
+                             "rect_drive_comp": meta.get("pulse2x_rect_drive_comp"), "baseline": "r1",
+                             "differences": "rectangles through the 2x chain at rect_gain_q15 (and ladder drive "
+                                            "x rect_drive_comp when set); nothing else"},
            "declared_rule": f"worse by > {BAND:.2f} dB on {[p for p, _ in PROPS]}, new output rail, new dropout",
            "counts": counts, "development": tally(dev), "untouched": tally(unt),
            "failing_points": [r for r in recs if r.get("verdict") == "FAIL"],

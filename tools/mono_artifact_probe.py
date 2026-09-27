@@ -452,7 +452,12 @@ def schedule() -> list:
 
 
 RECT_GAIN_Q15 = None      # None: the model's own; else the pulse2x engine's rectangle gain (R2: 24248)
-RECT_MIX_COMP = None      # None: unchanged; else the pulse2x rectangles' mixer weight (a preset-level repair)
+RECT_MIX_COMP = None      # None: unchanged; else the pulse2x rectangles' mixer weight. NOTE: the host's
+                          # mix_weights normalises a single oscillator back to 1.0, so this is a
+                          # no-op through patch_regs (measured: identical records) -- kept only
+                          # so that record stays reproducible
+RECT_DRIVE_COMP = None    # None: unchanged; else the pulse2x rectangles' ladder drive multiplier:
+                          # restores R1's level INTO the ladder (rectangles at 0.74 in the 2x chain)
 
 
 def _rect_ctx(engine):
@@ -471,6 +476,8 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1) -> dict:
         patch = held_patch(**over)
         if RECT_MIX_COMP is not None and engine == "pulse2x" and over["waves"][0] in vf.TWO_EDGE:
             patch = {**patch, "mix": (RECT_MIX_COMP, 0.0, 0.0)}
+        if RECT_DRIVE_COMP is not None and engine == "pulse2x" and over["waves"][0] in vf.TWO_EDGE:
+            patch = {**patch, "drive": patch["drive"] * RECT_DRIVE_COMP}
         try:
             with _rect_ctx(engine):
                 row = measure_point(engine, note, patch)
@@ -619,6 +626,8 @@ def main(argv=None) -> int:
     w = sub.add_parser("sweep")
     w.add_argument("--part", type=int, default=0)
     w.add_argument("--parts", type=int, default=1)
+    w.add_argument("--rect-drive-comp", type=float, default=None,
+                   help="pulse2x rectangles' ladder drive multiplier (the bounded level repair)")
     w.add_argument("--rect-mix-comp", type=float, default=None,
                    help="pulse2x rectangles' mixer weight (the bounded level repair); r1 rows unaffected")
     w.add_argument("--rect-gain-q15", type=int, default=None,
@@ -645,12 +654,14 @@ def main(argv=None) -> int:
             res = drive_sweep()
             rc = 0
         else:
-            global RECT_GAIN_Q15, RECT_MIX_COMP
+            global RECT_GAIN_Q15, RECT_MIX_COMP, RECT_DRIVE_COMP
             RECT_GAIN_Q15 = a.rect_gain_q15
             RECT_MIX_COMP = a.rect_mix_comp
+            RECT_DRIVE_COMP = a.rect_drive_comp
             res = run_sweep(a.out, a.part, a.parts)
             res["pulse2x_rect_gain_q15"] = RECT_GAIN_Q15
             res["pulse2x_rect_mix_comp"] = RECT_MIX_COMP
+            res["pulse2x_rect_drive_comp"] = RECT_DRIVE_COMP
             rc = 0
     except Refused as e:
         print(f"REFUSED: {e}")
