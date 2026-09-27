@@ -218,6 +218,20 @@ def test_pulse2x_rejected():
     assert rule_of(qd.check_patch, DEFAULT, pulse2x=True) == "PULSE2X"
 
 
+@pytest.mark.parametrize("image", ["release", "tree", "r1", "r2"])
+def test_pulse2x_rejected_on_every_pulse2x_0_image(image):
+    """R0 and R1 are built PULSE2X=0: only an image named in PULSE2X_IMAGES
+    admits it (an unknown name is not a loophole)."""
+    assert rule_of(qd.check_patch, DEFAULT, pulse2x=True, image=image) == "PULSE2X"
+
+
+def test_pulse2x_admitted_on_the_r2_candidate_only():
+    """#333: the R2 candidate is built PULSE2X=1 (fpga/release/R2.md)."""
+    assert qd.PULSE2X_IMAGES == {"r2-candidate"}
+    s = qd.check_patch(DEFAULT, pulse2x=True, image="r2-candidate")
+    assert s == qd.check_patch(DEFAULT)          # every other rule is unchanged
+
+
 # ---- the shipped CLI path ------------------------------------------------------------------
 def cli(*argv):
     import uart_host as uh

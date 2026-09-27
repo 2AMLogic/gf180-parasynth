@@ -780,7 +780,11 @@ module voice_dp #(
                 end
                 // ---- 2. oscillators ----
                 S_WIN: begin
-                    if (!blep) state <= S_MIX;
+                    // R2 candidate (#333, docs/deadline/recheck-333): an oscillator
+                    // whose output comes from the 2x bank skips the scalar PolyBLEP
+                    // window loop -- its c_pp/c_ps/b_pp/b_ps feed only the scalar
+                    // path that oscillator does not use (7-17 cycles of slack)
+                    if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;
                     else if (is_shark && !m3_valid) begin
                         // one multiply per shark oscillator: the triangle's |slope|/3
                         ma <= {1'b0, inc}; mb <= BLAMP_THIRD; state <= S_SKM;

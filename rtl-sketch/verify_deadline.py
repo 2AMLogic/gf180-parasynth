@@ -99,16 +99,16 @@ MUTANTS = {
              ("                S_IDLE: if (go) begin\n",
               "                    late_cnt <= 9'd0;                                  // MUTANT late\n"),
              ("                S_OUT2: begin\n", None)],
-    # the CANDIDATE correction (docs/deadline/README.md): an oscillator whose
-    # output comes from the 2x bank skips the scalar PolyBLEP window loop,
-    # whose c_pp/c_ps only feed the scalar path it does not use
-    "skip2xwin": [("                    if (!blep) state <= S_MIX;",
+    # R2 (#333): the skip2xwin correction is now IN voice_dp.v. `full2xwin`
+    # reinstates R1's behaviour (every oscillator runs the window loop), the
+    # reference the saving is measured against
+    "full2xwin": [("                    if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;",
                    None)],
-    # NEGATIVE CONTROL for skip2xwin (#333): skip the window loop for EVERY
-    # oscillator. A base-rate PolyBLEP oscillator (R1's square) then loses its
-    # edge correction, so the I2S comparison must fail; if it did not, the
-    # skip2xwin equivalence result could not have seen a needed computation
-    "skipallwin": [("                    if (!blep) state <= S_MIX;",
+    # NEGATIVE CONTROL (#333), re-anchored on the R2 line: skip the window loop
+    # for EVERY oscillator. A base-rate PolyBLEP oscillator then loses its edge
+    # correction, so the I2S comparison must fail; if it did not, the skip's
+    # equivalence result could not have seen a needed computation
+    "skipallwin": [("                    if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;",
                     None)],
 }
 
@@ -125,9 +125,8 @@ def make_mutant(spec: str, outdir: str) -> str:
         if kind == "late" and anchor.strip() == "S_OUT2: begin":
             src = src.replace(anchor, f"                S_OUT2: if (late_cnt != 9'd{int(arg)}) "
                                       f"late_cnt <= late_cnt + 9'd1; else begin   // MUTANT late\n")
-        elif kind == "skip2xwin":
-            src = src.replace(anchor, "                    if (!blep || (use_osc2x && shape_osc2x)) "
-                                      "state <= S_MIX;   // MUTANT skip2xwin")
+        elif kind == "full2xwin":
+            src = src.replace(anchor, "                    if (!blep) state <= S_MIX;   // MUTANT full2xwin")
         elif kind == "skipallwin":
             src = src.replace(anchor, "                    if (1'b1) state <= S_MIX;   // MUTANT skipallwin")
         elif anchor.endswith("\n"):
@@ -864,8 +863,10 @@ def main(argv=None) -> int:
     ap.add_argument("--pulse2x", action="store_true")
     ap.add_argument("--inject", default=None, help="compile with -DINJECT_BUG_<NAME>")
     ap.add_argument("--mutant", default=None,
-                    help="late:N (the late-completion control: N stall cycles) or skip2xwin "
-                         "(the candidate correction); generated from voice_dp.v at run time")
+                    help="late:N (the late-completion control: N stall cycles), full2xwin "
+                         "(R1's window loop for 2x oscillators, the pre-#333 reference) or "
+                         "skipallwin (the negative control); generated from voice_dp.v at "
+                         "run time")
     ap.add_argument("--write-mutant", default=None, metavar="SPEC",
                     help="only write the mutant voice_dp.v under --outdir and print its path")
     ap.add_argument("--analyse-capture", default=None, metavar="DIR",
