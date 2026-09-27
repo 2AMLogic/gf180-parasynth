@@ -55,15 +55,54 @@ question, and changing the levels in the same step as the filter shapes would
 make neither answerable. They are recorded here (HH2_PASS_DB, HH3_PASS_DB,
 BP_PEAK_DB) and not applied.
 
-STILL MISSING, AND NOW MEASURED: THE TONE STAGE. Revision 2 has no tone stage
-at all, and `docs/scorecard/cymbal-369/tone-stage/` shows that is why it
-overcorrects. W14b Figure 9 puts every band's path to the output at about
--20 dB of tilt from 1 kHz to 20 kHz, which very nearly cancels the LEVEL
-stage's +16.6 dB -- and this module applies that +16.6 with nothing against it.
-Candidate 2's residual at CY5025 climbs +24.0 dB across the same span. The
-values are recorded below as TONE_K1 and are NOT applied: the tilt is measured,
-the inter-band balance is not, and moving both at once would again make neither
-answerable.
+REVISION 3 APPLIES THE TONE STAGE'S MEASURED TILT (#396). Revision 2 had no
+tone stage at all, and `docs/scorecard/cymbal-369/tone-stage/` showed that is
+why it overcorrects: W14b Figure 9 puts every band's path to the output at
+about -20 dB of tilt from 1 kHz to 20 kHz, and revision 2 applied the LEVEL
+stage's +16.6 dB with nothing against it. Revision 2's residual at CY5025
+climbs +24.0 dB across the same span.
+
+What revision 3 changes, fixed here before any render, and why each is a
+DISCRETE structural choice rather than a fitted one (see
+`tools/cymbal_tone_realisation.py`, which computes every number below from
+the two digitised artifacts and REFUSES outside its bound):
+
+  * Each band's tone path is, from Figure 9, one RC high-pass (pole at 127.7 /
+    609.9 / 406.0 Hz) cascaded with one RC low-pass (pole at 589.5 / 1549.1 /
+    1511.2 Hz), and the LEVEL stage is a single-pole differentiator cornered at
+    18972 Hz (Figure 10). BOTH are now in the model, and the arithmetic of
+    putting them in is what removes structure rather than adding it:
+
+  * LOW and DECAY bands: the tone low-pass pole and the LEVEL differentiator
+    CANCEL over the cymbal's band -- both are in their asymptotic regions there
+    (-6 and +6 dB/octave), and the tone high-pass pole sits two decades below
+    it. Over each band's own active range the exact analog cascade is flat to
+    within 0.45 dB (low) and 1.41 dB (decay). So Hh1's and Hh2's numerators go
+    back from HP3 = (1 - z^-1)^3 to HP = (1 - z^-1)^2: the differentiator's
+    zero is REMOVED and no tone section is added. This is not "no tilt" -- it
+    is the measured net of two stages, with its deviation stated per 1/3
+    octave in docs/scorecard/cymbal-369/candidate3/.
+  * SHORT band: exactly, and for free. Hh3's 1-pole stage (M_CYH3B) has an
+    unused second pole slot, so its a2 now carries the tone low-pass pole at
+    1511.2 Hz while its numerator keeps HP = (its own zero)(the LEVEL zero).
+    Shape error over its active range 1.35 dB, against revision 2's 4.87 dB.
+  * The BANK IS UNCHANGED from revision 2 in size: 19 modes, 24 paths,
+    N_NUMS 11. No mode of revision 3 carries numerator code 3, so the shared
+    `modal_fixed` decode does NOT need HP3 and neither does modal_dp.v -- the
+    RTL change revisions 1 and 2 would have required is no longer required.
+  * NOT APPLIED, exactly as in revision 2: the inter-band balance. TONE_K1's
+    `peak_db` (9-18 dB uncertain, #396) and the filter chain's own
+    HH2_PASS_DB / HH3_PASS_DB / BP_PEAK_DB stay recorded and unused; the
+    levels stay on the shipped-kit 1/3-octave rule. One question at a time.
+  * NOT APPLIED: the TONE knob law. Figure 9 identifies only k = 1.0.
+
+Prediction, stated before the render (docs/scorecard/cymbal-369/candidate3/):
+removing the differentiator's zero tilts the low band's response, relative to
+revision 2 and to its own level at its 3.175 kHz calibration centre, by
++10.0 dB at 1 kHz and -13.4 dB at 20 kHz (decay band, at its 10 kHz centre:
++19.4 and -4.0 dB), so revision 2's +24.0 dB residual climb should mostly close. The cymbal's VCAs
+clip and the bands are re-levelled, so this is arithmetic on transfer functions
+and has to be confirmed by the render, not assumed.
 """
 from __future__ import annotations
 
@@ -147,19 +186,20 @@ BP_PEAK_DB = {"low": 22.95, "high": 24.10}                  # recorded, not appl
 # The TONE stage at k = 1.0, from W14b Figure 9 via tools/werner_fig9.py
 # (docs/scorecard/cymbal-369/tone-stage/). Each band's path to the output is a
 # 2-pole band-pass whose poles are both REAL, so each is one RC high-pass
-# cascaded with one RC low-pass. RECORDED, NOT APPLIED -- revision 3's job.
+# cascaded with one RC low-pass.
 #
 # Read the two columns separately, because the evidence for them is not the
 # same strength:
 #   * (f0, q) is a SHAPE and is what costs each band about -20 dB from 1 kHz to
 #     20 kHz. That tilt is the measured headline: it nearly cancels the LEVEL
-#     stage's +16.6 dB, which this module applies and the machine does not
-#     apply alone.
+#     stage's +16.6 dB, and revision 2 applied that +16.6 alone. REVISION 3
+#     APPLIES THIS COLUMN, through `poles_hz` -- see the docstring, and
+#     tools/cymbal_tone_realisation.py for the realisation and its error.
 #   * `peak_db` is the inter-band BALANCE and is NOT resolved. Figure 9 plots
 #     Ht1 on a 4 dB axis and Ht2 on a 3 dB axis, so neither is plotted in the
 #     cymbal's band; their 7.1 kHz values carry an 18 dB and a 9 dB bound.
 #     Applying these three peak levels as if they were circuit values is the
-#     mistake this comment exists to prevent.
+#     mistake this comment exists to prevent. STILL NOT APPLIED.
 TONE_K1 = {
     "low":   {"f0": 274.4, "q": 0.383, "peak_db": -26.44,
               "poles_hz": (127.7, 589.5), "plotted_hz": (121.0, 563.8)},
@@ -171,8 +211,52 @@ TONE_K1 = {
 # Ht3 is the one path plotted across the whole axis; this is its own measured
 # tilt over 2-20 kHz, against the LEVEL stage's +16.6 dB from Figure 10.
 TONE_TILT_2K_20K_DB = -17.7
+# The LEVEL buffer's differentiator corner, W14b Figure 10 via
+# tools/werner_fig4.py (docs/scorecard/cymbal-369/werner-fig4.json,
+# level_stage.one_pole_corner_hz). Revision 3 needs it as a NUMBER, not as a
+# slope, because the cancellation below is between two real stages.
+LEVEL_CORNER_HZ = 18972.0
+# Revision 3's realisation of (tone stage x LEVEL stage), band by band. The
+# first two are the empty cascade -- the two stages cancel over the band and
+# BOTH are dropped, which is why Hh1's and Hh2's numerators lose a zero. The
+# third is exact and costs nothing. `shape_err_db` is the deviation from the
+# measured analog cascade over the band's own active range (within 20 dB of the
+# band's peak), from tools/cymbal_tone_realisation.py; revision 2's figures are
+# 7.32 / 6.11 / 4.87 dB against the same bound of 3.0 dB.
+TONE_REALISATION = {
+    "low":   {"extra_pole_hz": None,   "num": HP, "shape_err_db": 0.45},
+    "decay": {"extra_pole_hz": None,   "num": HP, "shape_err_db": 1.41},
+    "short": {"extra_pole_hz": 1511.2, "num": HP, "shape_err_db": 1.35},
+}
 P_CYS, P_CYD, P_CYL = 20, 21, 22                             # indices in kit_808's path list
 P_CYH3 = 23
+
+
+COEF_MASK = (1 << 26) - 1
+COEF_LO, COEF_HI = -(2 << 24), (2 << 24) - 1
+
+
+def real_pole_regs(hz):
+    """(a1, a2) in Q2.24 for a cascade of one or two REAL poles, in Hz.
+
+    y = ((a1 y1 + a2 y2) >> 24) + x realises 1 / (1 - a1 z^-1 - a2 z^-2), so a
+    pole pair (p1, p2) is a1 = p1 + p2, a2 = -p1 p2 with p = exp(-2 pi f / SR).
+    `pole_regs` cannot be used: it maps (f0, Q) to a COMPLEX pair, and every
+    curve in W14b Figure 9 reads Q < 0.5. Raises rather than clipping -- a
+    silently clamped coefficient is a different filter.
+    """
+    p = [math.exp(-2 * math.pi * float(f) / dx.SR) for f in hz]
+    if len(p) == 1:
+        a1, a2 = p[0], 0.0
+    elif len(p) == 2:
+        a1, a2 = p[0] + p[1], -p[0] * p[1]
+    else:
+        raise ValueError(f"a mode has two poles, got {len(p)}")
+    r1, r2 = int(round(a1 * (1 << 24))), int(round(a2 * (1 << 24)))
+    for r in (r1, r2):
+        if not COEF_LO <= r <= COEF_HI:
+            raise ValueError(f"coefficient {r / (1 << 24):.6f} outside the Q2.24 register")
+    return r1, r2
 
 
 def _remap_mode(m):
@@ -223,17 +307,21 @@ def candidate_kit(amps: dict | None = None, kit=None):
     for calibration renders."""
     img = remap_kit(kit if kit is not None else dx.kit_808())
     amps = amps or {}
-    for m, f0, q, num in ((M_CYH1, HH1_HZ, HH1_Q, HP3), (dx.M_CYHI, HH2_HZ, HH2_Q, HP3),
+    for m, f0, q, num in ((M_CYH1, HH1_HZ, HH1_Q, TONE_REALISATION["low"]["num"]),
+                          (dx.M_CYHI, HH2_HZ, HH2_Q, TONE_REALISATION["decay"]["num"]),
                           (M_CYH3, HH3_HZ, HH3_Q, HP)):
         for a, v in dx.mode_writes(m, f0, q, amps.get(m, 0.0 if m == M_CYH3 else 1.0), num):
             img[a] = v
-    # Hh3's 1-pole stage: a1 = r, a2 = 0, with r the 1-pole high-pass pole at the corner
-    r = math.exp(-2 * math.pi * HH3_P1_HZ / dx.SR)
+    # Hh3's 1-pole stage, plus revision 3's one exactly-realisable tone pole:
+    # two REAL poles in the one section, its numerator HP = (Hh3's own zero) x
+    # (the LEVEL differentiator's zero).
+    poles = [HH3_P1_HZ] + [f for f in (TONE_REALISATION["short"]["extra_pole_hz"],) if f]
+    a1, a2 = real_pole_regs(poles)
     base = dx.A_MODE + M_CYH3B * dx.MODE_STRIDE
-    img[base] = int(round(r * (1 << 24))) & ((1 << 26) - 1)
-    img[base + 1] = 0
+    img[base] = a1 & COEF_MASK
+    img[base + 1] = a2 & COEF_MASK
     img[base + 2] = dx.amp_reg(amps.get(M_CYH3B, 1.0))
-    img[base + 3] = HP
+    img[base + 3] = TONE_REALISATION["short"]["num"]
     img[dx.A_PATH + P_CYS] = dx.path_word(dx.SRC_TAP + dx.M_HATBP, dx.E_CYS, nl=dx.NL_SWING,
                                           att=dx.CY_ATT, dest=M_CYH3)
     img[dx.A_PATH + P_CYD] = dx.path_word(dx.SRC_TAP + dx.M_HATBP, dx.E_CYD, nl=dx.NL_SWING,
