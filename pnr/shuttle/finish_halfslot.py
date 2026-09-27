@@ -298,6 +298,31 @@ def librelane_containers() -> list[str]:
     return out
 
 
+def container_progress(cid: str, tail: int = 400) -> str | None:
+    """The live router iteration/violation count from the container's own stdout.
+
+    `docker logs` is the only source that is not behind: the run's log FILE is
+    block-buffered and was observed ninety minutes stale on this run.
+    """
+    p = subprocess.run(["docker", "logs", "--tail", str(tail), cid],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        return None
+    text = p.stdout + p.stderr
+    its = parse_drt_iterations(text)
+    if not its:
+        return None
+    last = its[-1]
+    # A `Completing NN% with V violations.` line is newer than the iteration's own
+    # final count, so prefer it when the iteration has not finished.
+    partial = re.findall(r"Completing\s+(\d+)% with (\d+) violations", text)
+    if last["violations"] is None and partial:
+        return (f"iteration {last['iteration']} ({last['kind']}), "
+                f"{partial[-1][0]}% done, {partial[-1][1]} violations")
+    return (f"iteration {last['iteration']} ({last['kind']}), "
+            f"{last['violations']} violations")
+
+
 def wait_for_exit(poll: int = 60, timeout: int | None = None,
                   run_dir: str | None = None) -> dict:
     """Block until no LibreLane container is running.
@@ -312,11 +337,18 @@ def wait_for_exit(poll: int = 60, timeout: int | None = None,
         live = librelane_containers()
         if not live:
             return {"waited_s": round(time.time() - t0), "exited": True}
-        note = ""
-        if run_dir:
+        # Progress comes from the CONTAINER'S stdout, not the run's log file.  The
+        # file is block-buffered by whatever is writing it: at one point during this
+        # run it was NINETY MINUTES behind, still showing iteration 46 with 3
+        # violations while `docker logs` showed iteration 55 with 1.  A finding about
+        # the router "improving nothing" was drafted off the stale copy and was
+        # wrong.  Reading the lagging source is worse than reading none, because it
+        # looks current.
+        note = container_progress(live[0]) or ""
+        if not note and run_dir:
             try:
                 d = drc_verdict(run_dir)
-                note = (f"iteration {d['log_iteration']}, "
+                note = (f"[from the LAGGING log file] iteration {d['log_iteration']}, "
                         f"{d['log_violations']} violations")
             except Refusal:
                 note = "no router log yet"

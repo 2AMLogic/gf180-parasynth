@@ -265,3 +265,23 @@ def test_resume_makes_trdrc_non_fatal_on_the_command_line_only(tmp_path, monkeyp
     cfg = pathlib.Path(__file__).parent / "librelane" / "config.yaml"
     assert "ERROR_ON_TR_DRC" not in cfg.read_text(), \
         "the override must stay out of the committed config"
+
+
+def test_container_progress_prefers_the_partial_line_of_a_live_iteration(monkeypatch):
+    """Mid-iteration, the `Completing NN%` line is newer than any DRT-0199."""
+    text = ("[INFO DRT-0195] Start 55th stubborn tiles iteration.\n"
+            "    Completing 10% with 1 violations.\n"
+            "    Completing 30% with 1 violations.\n")
+
+    class P:
+        returncode, stdout, stderr = 0, text, ""
+    monkeypatch.setattr(fh.subprocess, "run", lambda *a, **k: P())
+    got = fh.container_progress("abc")
+    assert "iteration 55" in got and "30% done" in got and "1 violations" in got
+
+
+def test_container_progress_returns_none_when_docker_cannot_answer(monkeypatch):
+    class P:
+        returncode, stdout, stderr = 1, "", "no such container"
+    monkeypatch.setattr(fh.subprocess, "run", lambda *a, **k: P())
+    assert fh.container_progress("abc") is None
