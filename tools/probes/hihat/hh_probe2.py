@@ -18,6 +18,7 @@ import numpy as np
 from scipy.signal import lfilter
 import audio_measure as am
 import drums_fx as dx
+import measure_harness as mh
 from dsp import SR
 from modal_fixed import RAW, BP, HP, pole_regs
 from hh_probe import (say, provenance, sallen_key_hp, render, biquad, response,
@@ -130,9 +131,11 @@ def main():
         true_sh = fast_band_energy(trim_onset(xt), HAT_BANDS)
         re_sh = fast_band_energy(trim_onset(recon), HAT_BANDS)
         say(f"\n  {name}: emulator check  true {fmt(true_sh)} | offline {fmt(re_sh)}")
-        e = float(np.max(np.abs(np.array(true_sh) - np.array(re_sh))))
-        if e > 0.015:
-            say(f"    REFUSED for {name}: emulator off by {e*100:.1f} points")
+        try:
+            e = mh.assert_precondition(true_sh, re_sh, 0.015,
+                                       what=f"{name} emulator")
+        except SystemExit as exc:
+            say(f"    {exc}")
             continue
         say(f"    precondition OK ({e*100:.2f} points)")
         say(f"    the VCA output the post-filter receives: "
