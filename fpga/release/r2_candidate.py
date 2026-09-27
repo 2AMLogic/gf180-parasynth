@@ -57,12 +57,15 @@ IMAGE = "r2-candidate"                      # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
 DEFINES = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "VOICE_PULSE_2X"]
 STATUS = ("DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, "
-          "inherited from R1), the #315 XDC repair, the named image selector (#323), "
-          "release checks for a second image (#356)")
+          "inherited from R1), the named image selector (#323); #356 and #315 (#358) must "
+          "merge first; the build must produce constraint_matches.rpt and exceptions.rpt")
 # the only compiled source R2 may differ in from R1's freeze, and why
 EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)",
                     "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 "
-                                                      "(#333, recheck-333 item 5)"}
+                                                      "(#333, recheck-333 item 5)",
+                    "fpga/boards/arty-a7-100.xdc": "UART-RX sync constraints bind g_uart.u_uart "
+                                                   "(#315); build and publisher assert binding "
+                                                   "and effect (fpga/xdc_bindings.py)"}
 
 
 class Refused(RuntimeError):
@@ -82,8 +85,9 @@ def rtl() -> dict:
     import r1_candidate as r1c
     srcs = {_rel(p): sha(p) for p in ba.sources()}
     roms = {_rel(p): sha(p) for p in ba.roms()}
+    xdc = {_rel(ba.XDC): sha(ba.XDC)}
     changed = []
-    for rel, h in {**srcs, **roms}.items():
+    for rel, h in {**srcs, **roms, **xdc}.items():
         r = subprocess.run(["git", "-C", str(ROOT), "show", f"{r1c.RTL_FROZEN_AT}:{rel}"],
                            capture_output=True)
         if r.returncode:
@@ -103,8 +107,15 @@ def rtl() -> dict:
     pair = (ROOT / "rtl-sketch/polyblep_saw_pair.v").read_text()
     if pair.count("localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;") != 1:
         raise Refused("polyblep_saw_pair.v does not hold the 24248 rectangle headroom exactly once")
+    import xdc_bindings as xb
+    try:
+        xb.object_queries(ba.XDC.read_text())
+    except xb.Refused as exc:
+        raise Refused(f"the XDC has a query without a required match count: {exc}")
+    if "g_uart\\.u_uart" not in ba.XDC.read_text():
+        raise Refused("the XDC does not hold the #315 UART-RX sync fix")
     return {"configuration": CONFIG, "defines": DEFINES, "part": ba.PART,
-            "sources": srcs, "roms": roms, "constraints": {_rel(ba.XDC): sha(ba.XDC)},
+            "sources": srcs, "roms": roms, "constraints": xdc,
             "differs_from_r1_freeze": {k: EXPECTED_CHANGES[k] for k in sorted(changed)},
             "r1_freeze": r1c.RTL_FROZEN_AT}
 

@@ -17,7 +17,8 @@ def test_the_committed_r2_record_is_bound():
 
 def test_r2_differs_from_r1s_freeze_only_in_its_two_stated_changes():
     rec = json.loads(r2.RECORD.read_text())
-    assert list(rec["rtl"]["differs_from_r1_freeze"]) == ["rtl-sketch/polyblep_saw_pair.v",
+    assert list(rec["rtl"]["differs_from_r1_freeze"]) == ["fpga/boards/arty-a7-100.xdc",
+                                                          "rtl-sketch/polyblep_saw_pair.v",
                                                           "rtl-sketch/voice_dp.v"]
     assert rec["rtl"]["configuration"] == {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
     assert rec["status"].startswith("DRAFT")
