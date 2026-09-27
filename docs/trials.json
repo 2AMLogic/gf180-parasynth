@@ -493,7 +493,7 @@
   },
   "T-LIVE-MIDI": {
    "question": "Does a live MIDI stream, through the real host session and its bytes, drive the instrument with the documented note, drum and controller behaviour, explicit refusals, bounded queues, no stuck note, and receipt-to-update latency p95 <= 20 ms / p99 <= 30 ms under the declared load?",
-   "criterion_version": "live-midi/1 (fpga/live_midi_contract.py: target, endpoints and declared load frozen before measurement; timing contract 2)",
+   "criterion_version": "live-midi/1 (fpga/live_midi_contract.py: target, endpoints and declared load frozen before measurement; timing contract 3)",
    "scope": {
     "configuration": {
      "OSC2X": 1,
