@@ -540,3 +540,84 @@ def test_run_tag_is_read_from_the_forwarded_args(rest, want):
 
 def test_from_step_accepts_librelane_s_short_spelling():
     assert rl.passthrough_opt(["-F", "OpenROAD.RCX"], "--from", "-F") == "OpenROAD.RCX"
+
+
+# --------------------------------------------------------------------------- #
+# verify(): the gate itself, with injected defects
+# --------------------------------------------------------------------------- #
+#
+# Everything above tests a PART of the collapse gate.  These four run `verify` end
+# to end, because the gate's only failure mode that matters is a false green and a
+# gate has to be shown going red against the current state before it is worth
+# anything (CLAUDE.md: "Run a gate against the current state before committing it").
+#
+# The injected defects are the three shapes this project has actually hit or
+# recorded: a netlist that collapsed (drum_regs short of its declared bits -- the
+# "1,917-cell all-X ladder_dp" shape), a die with no padframe (docs/dag.json S2's
+# own blocking condition, "routed die has padcells: 0"), and a missing mandatory
+# wafer.space IP macro.
+
+CENSUS_3520 = {"flops_declared_per_module": {"drum_regs": 3520}}
+
+
+def _synthetic_run(tmp_path, *, dregs_flops, pads=754, ws_ip=5):
+    """A minimal LibreLane run directory whose DEF has a known flop census.
+
+    The net names come from the REAL rtl-sketch/synth_top.v, because verify() reads
+    that file rather than taking a net set as an argument -- so a port rename breaks
+    these controls too, which is the point.
+    """
+    nets = sorted(cr.dregs_output_nets(os.path.join(cr.REPO, "rtl-sketch",
+                                                    "synth_top.v")))
+    run = tmp_path / "runs" / "halfslot"
+    step = run / "43-openroad-detailedrouting"
+    step.mkdir(parents=True)
+
+    comps, netlines, n = [], [], 0
+    for i in range(dregs_flops):
+        inst = f"_{i:06d}_"
+        comps.append(f"    - {inst} gf180mcu_fd_sc_mcu7t5v0__dffq_1 "
+                     f"+ PLACED ( 0 0 ) N ;")
+        net = nets[i % len(nets)]
+        netlines.append(f"    - i_chip_core.u_synth.{net}\\[{i}\\] "
+                        f"( {inst} Q ) + USE SIGNAL ;")
+        n += 1
+    for i in range(pads):
+        comps.append(f"    - pad_{i} gf180mcu_fd_io__bi_t + PLACED ( 0 0 ) N ;")
+    for i in range(ws_ip):
+        comps.append(f"    - ws_{i} gf180mcu_ws_ip__qrcode_id + PLACED ( 0 0 ) N ;")
+
+    (step / "chip_top.def").write_text(
+        "COMPONENTS %d ;\n%s\nEND COMPONENTS\nNETS %d ;\n%s\nEND NETS\n"
+        % (len(comps), "\n".join(comps), n, "\n".join(netlines)))
+    (step / "state_out.json").write_text('{"metrics": {"route__drc_errors": 3}}')
+    return str(run)
+
+
+def test_verify_passes_a_healthy_synthetic_layout(tmp_path, capsys):
+    """The green case, so the three reds below are known not to be red for free."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 0
+    assert "VERDICT: the layout places the flops the RTL declares" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_collapsed_drum_regs(tmp_path, capsys):
+    """ONE flop short must fail. A collapsed netlist is smaller AND cleaner."""
+    run = _synthetic_run(tmp_path, dregs_flops=3519)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    out = capsys.readouterr().out
+    assert "VERDICT: MISMATCH" in out
+    assert "collapse signature" in out
+
+
+def test_verify_goes_red_on_a_die_with_no_padframe(tmp_path, capsys):
+    """docs/dag.json S2's own blocking condition was 'routed die has padcells: 0'."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520, pads=0)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "not a chip on" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_missing_wafer_space_ip_macro(tmp_path, capsys):
+    run = _synthetic_run(tmp_path, dregs_flops=3520, ws_ip=4)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "mandatory" in capsys.readouterr().out
