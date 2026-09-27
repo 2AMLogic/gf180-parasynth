@@ -99,7 +99,10 @@ def rtl_reuse_report(spec: dict, rtl: dict, names) -> tuple:
     for name in names:
         rr = (rtl or {}).get(name)
         if rr is None:
-            continue                                  # absent replays are gaps elsewhere
+            # absent: the rolling interpreter gaps a missing fixture ("no RTL
+            # replay recorded for ..."); the live-MIDI one passes only the
+            # replays the record holds, and gaps a missing fixture ("RTL replay {sc} missing")
+            continue
         r = rr.get("rtl_run")
         if not isinstance(r, dict) or not isinstance(r.get("reused"), bool):
             gaps.append(f"RTL replay {name} does not report whether it was reused")
@@ -928,13 +931,32 @@ def run_trial(tid: str, *, mode: str | None = None, as_candidate: str | None = N
 
 
 # ---- checking a receipt later -----------------------------------------------
+def asked_for_reuse(entry: dict) -> bool:
+    """Whether the child's recorded command line asked for RTL reuse (#313).
+    The command, not the editable interpreter spec, decides whether the child
+    must report reuse: a forger can drop `rtl_reuse` from the spec, but not the
+    flag from the command without also changing what was run."""
+    cmd = entry.get("command")
+    if not isinstance(cmd, str):
+        return False
+    try:
+        return REUSE_FLAG in shlex.split(cmd)
+    except ValueError:
+        return REUSE_FLAG in cmd
+
+
 def _rederive(entry: dict, run_dir: pathlib.Path, cancelled: bool) -> tuple[dict | None, str | None]:
     """Judge a recorded child again, from its recorded interpreter spec, its
-    recorded execution and its (already hash-checked) evidence on disk."""
+    recorded execution and its (already hash-checked) evidence on disk. The
+    reuse requirement is set from the recorded command, never trusted from the
+    spec (the Judge's forgery on 5a88437)."""
     role = entry.get("role")
     spec = entry.get("interpreter")
     if not isinstance(spec, dict) or spec.get("interpret") not in INTERPRETERS:
         return None, "no known interpreter recorded, so its verdict cannot be re-derived"
+    spec = dict(spec)
+    if asked_for_reuse(entry):
+        spec["rtl_reuse"] = "report"
     ex = entry.get("execution") or {}
     nv_caught = False if role == "control" else None
     if ex.get("state") == "NOT-RUN":
@@ -950,7 +972,7 @@ def _rederive(entry: dict, run_dir: pathlib.Path, cancelled: bool) -> tuple[dict
     run = {"state": ex.get("state"), "rc": ex.get("rc"), "secs": ex.get("secs") or 0.0,
            "out": out_text}
     try:
-        return judge_child(dict(spec), run, child_dir, role, cancelled=cancelled), None
+        return judge_child(spec, run, child_dir, role, cancelled=cancelled), None
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         return None, f"its recorded execution cannot be re-judged: {exc!r}"
 
@@ -960,7 +982,8 @@ def rtl_reuse_summary(receipt: dict) -> dict:
     asked for reuse (#313): the per-child reuse status, readable in one place."""
     return {c["id"]: (c.get("metrics") or {}).get("rtl_reuse", {})
             for c in receipt.get("children", []) + receipt.get("controls", [])
-            if (c.get("interpreter") or {}).get("rtl_reuse") == "report"}
+            if (c.get("interpreter") or {}).get("rtl_reuse") == "report"
+            or asked_for_reuse(c)}
 
 
 def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
@@ -997,7 +1020,13 @@ def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
         if p.is_file() and str(p.relative_to(run_dir)) not in listed:
             problems.append(f"unlisted file in the run directory: {p.relative_to(run_dir)}")
     status = (rec.get("execution") or {}).get("status")
-    if any((c.get("interpreter") or {}).get("rtl_reuse") == "report"
+    for c in rec.get("children", []) + rec.get("controls", []):
+        says = (c.get("interpreter") or {}).get("rtl_reuse") == "report"
+        if says != asked_for_reuse(c):
+            problems.append(f"{c.get('id')}: its command {'does not ask' if says else 'asks'} "
+                            f"for RTL reuse ({REUSE_FLAG}) but its interpreter "
+                            f"{'reports' if says else 'does not report'} it")
+    if any((c.get("interpreter") or {}).get("rtl_reuse") == "report" or asked_for_reuse(c)
            for c in rec.get("children", []) + rec.get("controls", [])):
         if rec.get("rtl_reuse") != rtl_reuse_summary(rec):
             problems.append("rtl_reuse does not list, per child, the reuse status its "

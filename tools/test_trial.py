@@ -1048,3 +1048,22 @@ def test_a_child_without_the_reuse_flag_carries_no_reuse_requirement(repo):
     run_dir, rec = repo.run()
     assert rec["verdict"] == trial.PASS and rec["rtl_reuse"] == {}
     assert trial.check_receipt(run_dir / "receipt.json")[0]
+
+
+def test_judge_forged_removal_of_the_reuse_requirement(repo):
+    """The Judge's reproduction on 5a88437: the child ran with
+    --reuse-rtl-if-identical and its evidence records a reuse; the forger drops
+    the interpreter's rtl_reuse key, the child's metrics.rtl_reuse and the
+    summary, and re-seals. Before the fix: VALID, problems []."""
+    _reuse_child(repo, {"reused": True, "asked": "auto", "why": "identical run on disk", **SIM})
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    c = forged["children"][0]
+    c["interpreter"].pop("rtl_reuse", None)
+    (c.get("metrics") or {}).pop("rtl_reuse", None)
+    forged["rtl_reuse"] = {}
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+    assert any("reuse" in p for p in problems), problems
