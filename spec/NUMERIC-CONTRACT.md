@@ -1793,9 +1793,10 @@ in the reference host (`drums_fx.hit_writes`, `bd_attack_writes`,
                                 · exp(G · (f0/f0_nominal − 1))
   ```
 
-  with `TOM_DROP_RATIO = 1.060` the measured onset ratio at a **stated**
+  with `TOM_DROP_RATIO = 1.060` the fitted law evaluated at a **stated**
   reference setting — accent 1.0, the TUNING pot at its centre, the TOM
-  position of the circuit. Three terms because the measurement found three
+  position of the circuit — against that setting's own measured median of
+  ×1.054. Three terms because the measurement found three
   separate faults in the inferred law: the magnitude; the accent **clamp**,
   which gave an unaccented hit the *full* sweep where the machine gives it
   ×1.06 (germanium diodes do not conduct below a drive, so a soft hit does not
