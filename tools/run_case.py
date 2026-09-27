@@ -1314,9 +1314,52 @@ def _tom_plan(sound: str, drop: bool):
 # `min_gap_ms` is how far apart the reported t1/t2 must be for a slope to be
 # worth reporting at all -- a few hops, not a fraction of a fast rimshot's own
 # decay.
+#
+# RS's LOWER guard moved 900 -> 1000 Hz (#380), because at 900 Hz it was still
+# reading THE STRIKE rather than the record's floor -- the same
+# attack-transient-leakage failure mode the paragraph above says the gap was
+# chosen to escape, just not escaped on the gap's low side.
+#
+# Measured on a struck synthetic carrying ONLY the low partial, so it has zero
+# steady energy at any guard and every reading there is leakage: 900 Hz reads
+# -17.5 dB re the low partial, 1000 Hz -19.9, 1100 Hz -21.5, falling
+# monotonically with distance from the partial across the whole gap. It is the
+# onset STEP's broadband splash and not the window's stationary sidelobes -- the
+# same partial with no onset step reads -35.2 dB at 900 Hz, 18 dB lower. Since
+# `floor_at` takes the MAX over guards, the lowest member sets the floor for the
+# whole set, so 900 Hz was putting it 2.4 dB above what the rest of the gap
+# warranted.
+#
+# On our own RS render that 2.4 dB was the whole difference between a verdict and
+# a refusal, because our high mode is nearly buried to begin with: it sits
+# -12.1 dB re our low mode where the machine's sits +6.6 dB, leaving it 0.5 dB
+# above the 900 Hz floor and 5.4 dB above the 1100 Hz one -- under the 6 dB gate
+# either way, so D10A could not report the 15.6 dB balance error it exists to
+# score.
+#
+# This is NOT the gate loosened to manufacture a pass, and the two measurements
+# that establish that are in `tools/probes/rs_guard_band.py`:
+#   - CONTAMINATION SENSITIVITY IS UNCHANGED. Injecting a real mid-band
+#     component into a clean two-partial signal, (1000, 1100) refuses at exactly
+#     the same level as (900, 1100) for every injection frequency across the
+#     gap: -15 dB re the low partial at 900 Hz, -18 dB at 1000 and 1100 Hz,
+#     -15 dB at 1200 Hz. The 900 Hz guard was buying no sensitivity it did not
+#     already have from 1000/1100.
+#   - THE SCORED NUMBER IS A PROPERTY OF THE VOICE, NOT OF THE GUARD. Every
+#     in-gap candidate that clears at all reports the same `balance1`: the
+#     reference +3.85 dB and our render -11.7 dB, for (1000,1100), (1050,1150),
+#     (1100,1150) and (1100,) alike. D10A therefore now reports a large FAIL
+#     (error -15.5 dB against a 3.0 dB tolerance, worst 5.17), not a pass.
+#   - Accuracy on signals of CHOSEN balance is 2.37 dB worst over true balances
+#     0 to -24 dB, inside the +-2.4 dB this operating point declares. Moving the
+#     guard further up (1100, 1150) costs 2.85 dB and leaves that envelope,
+#     which is why the smallest move that clears the sidelobe was taken.
+# #380 also refuted the hypothesis it was filed on: our render's 900-1100 Hz
+# content is 4.9 dB QUIETER than the machine's relative to each record's own low
+# partial, so the refusal was never excess mid-band in our model.
 RS_BALANCE_OP = dict(f_lo_range=(380, 620), f_hi_range=(1450, 2150),
                      win_ms=6.0, hop_ms=0.25, t_end=0.060,
-                     guards=(900.0, 1100.0), min_gap_ms=2.0)
+                     guards=(1000.0, 1100.0), min_gap_ms=2.0)
 CB_BALANCE_OP = dict(f_lo_range=(460, 700), f_hi_range=(700, 1000),
                      win_ms=20.0, hop_ms=2.0, t_end=0.600,
                      guards=(300.0, 350.0, 1150.0, 1300.0), min_gap_ms=20.0)

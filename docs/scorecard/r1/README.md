@@ -11,7 +11,7 @@ Evidence produced at `14e12bc02808, ccf7ed49515b` (origin/main `86838760ccce`) o
 | trust | are the results trustworthy? | **PASS** | receipts re-checked; every declared control caught |
 | implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, BOUND, T-RELEASE-BOUND-R1) |
 | playability | is it an instrument? | **PASS** (digital, 11 of 16 sounds mapped) | live-MIDI session against the device contract and the RTL; no hardware latency |
-| sound properties | does it meet its references? | **property vector** (below): 9 pass, 9 fail, 8 no verdict, 74 not run of 100 | mostly fixed-point model |
+| sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 7 no verdict, 74 not run of 100 | mostly fixed-point model |
 | physical | did the device produce it? | **BLOCKED** | R1 image `544499e2c970` published, not yet programmed on a board, no capture (#208); simulation cannot satisfy this gate |
 
 ## Implementation
@@ -59,10 +59,10 @@ None of these was measured on the R1 production path. Each row names its engine 
 | D07A | High tom / anchor | fail | Pitch drop 0.14; body spectrum 4.51; decay 0.04 | fixed-point model | `7dd6337` |
 | D08A | High conga / anchor | fail | Pitch 0.3; body spectrum 3.64; decay 0.01 | fixed-point model | `7dd6337` |
 | D09A | Claves / anchor | pass | Pitch 0.32; attack duration 0.14; tail decay 0.61 | fixed-point model | `7dd6337` |
-| D10A | Rimshot / anchor | no verdict | attack 0.39; tail decay 0.56 | fixed-point model | `39e4e83` |
+| D10A | Rimshot / anchor | fail | Partial balance 5.17; attack 0.39; tail decay 0.56 | fixed-point model | `be9b0c9` |
 | D11A | Maracas / anchor | fail | Rise time 1.68; band energy 1.43; decay 5.42 | fixed-point model | `7dd6337` |
 | D12A | Clap / anchor | no verdict | burst/tail ratio 0.28; decay 0.88 | fixed-point model | `d42ac140` |
-| D13A | Cowbell / anchor | fail | Partial balance 2.02; unwanted difference tone 0.0; decay 0.23 | fixed-point model | `39e4e83` |
+| D13A | Cowbell / anchor | fail | Partial balance 2.02; unwanted difference tone 0.0; decay 0.23 | fixed-point model | `be9b0c9` |
 | D14A | Cymbal / anchor | no verdict | Band energy 0.5; band decay 0.25 | fixed-point model | `32e824d` |
 | D14B | Cymbal / variation | no verdict | Band energy 3.57 | fixed-point model | `32e824dc` |
 | D15A | Open hat / anchor | no verdict | Band energy 0.81; attack 1.6 | fixed-point model | `7dd6337` |

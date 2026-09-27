@@ -134,10 +134,9 @@ claimed until they do. Paste the terminal output and the log into #322. The
 missing hardware run does not block landing the adapter: the adapter's
 evidence is the tests and the virtual-source dry run below.
 
-The live player maps **11 of the 16 808 sounds** (BD, SD, LT, MT, HT, CH, OH,
-CP, CB, CL, CY). Pads that send conga, rimshot or maraca notes (for example GM
-37, the side stick) are refused as `unmapped-drum`. That is expected, and
-#298 tracks it.
+The live player maps **all 16 808 sounds** under `--image r1` and `--image
+tree` (#298; the map is below). Under the release image (R0) the congas,
+rimshot and maracas are refused as `not-in-image`: R0 has no sound positions.
 
 Run this on a quiet Mac. The `--port sim` board is a real-time simulation in
 the same process. At a load average around 100 on this laptop, one CoreMIDI
@@ -231,27 +230,60 @@ so velocity does not change it; that is part of this contract, not an ignored
 control. This is `model/voice_fx.KeyHost`'s default policy (contract 5.6),
 stepped one event at a time, and the unit tests hold it equal to KeyHost.
 
-**Drum map** (GM note → 808 stop). Velocity sets the accent over 0.6 .. 1.4.
+**Drum map** (GM note → 808 sound). Velocity sets the accent over 0.6 .. 1.4.
 
-**The live player maps 11 of the 16 808 sounds:** BD, SD, LT, MT, HT, CH, OH,
-CP, CB, CL and CY. The three congas, the rimshot and the maracas are refused
-as unmapped; #298 tracks exposing them. It is not yet the full 16-sound
-instrument.
+**The live player plays all 16 808 sounds** (#298) on the eleven circuits:
 
-| GM | stop | GM | stop | GM | stop |
+| GM | sound | GM | sound | GM | sound |
 |---|---|---|---|---|---|
-| 35, 36 | BD | 41, 43 | LT | 42, 44 | CH |
-| 38, 40 | SD | 45, 47 | MT | 46 | OH |
-| 39 | CP | 48, 50 | HT | 49, 57 | CY |
-| 56 | CB | 75 | CL | | |
+| 35, 36 | BD | 41, 43 | LT | 64 | LC (low conga) |
+| 38, 40 | SD | 45, 47 | MT | 63 | MC (mid conga) |
+| 39 | CP | 48, 50 | HT | 62 | HC (high conga) |
+| 70 | MA (maracas) | 37 | RS (rim shot) | 75 | CL (claves) |
+| 42, 44 | CH | 46 | OH | 56 | CB |
+| 49, 57 | CY | | | | |
+
+The five exclusive pairs (LT/LC, MT/MC, HT/HC, RS/CL, CP/MA) are one circuit
+each, in one of two **positions** (`drums_fx.preset_writes`). The kit loads
+LT, MT, HT, RS and CP. Note that the loaded position on the RS/CL circuit is
+the rim shot: before #298, note 75 ("claves") played the rim shot. A note for
+the sound the circuit is not in first **selects** it: the registers where the
+two positions differ (3 for a tom/conga pair, 7 for RS/CL, 10 for CP/MA) are
+written in the strike's head, landing in the frames just before the stop
+bit's rising edge. A whole position is up to 18 packets, 750 frames of wire
+at 115200 baud, and does not fit the 16 ms lookahead with the admission
+reserve, so it is not sent. The positions are read from the selected image:
+R1's are frozen by value in `fpga/release/r1-kit.json` (`presets`, hashed).
+
+**Switching while a tail sounds.** A tom or conga strike carries its 60 ms
+pitch drop as timed writes. If the circuit is switched while that drop is
+pending, its unsent writes are **cut**: left in the queue they would retune
+the new sound mid-note, and their last write would put the old tuning back.
+Writes already sent land before the switch (one FIFO). A register a cut
+sequence left mid-way is re-written by the select. The session counts cuts
+(`tails_cut`). The previous sound's decay is not otherwise stopped; the new
+strike re-excites the one circuit, as on the 808.
 
 The map respects exclusive pairs. Closed and open hat are one instrument: the
 kit's CH chokes OH. Two hat strikes within 1 ms are one strike, and the
-second is **refused**, as is a second strike of the same stop within 1 ms
-(it could not re-strike). The loaded image selects the tom, claves and clap
-positions of their shared circuits, so the congas, rim shot and maracas are
-unmapped and **refused**. Drum note-offs are accepted and do nothing, because
-the drum voices are one-shot.
+second is **refused**, as is a second strike of the same circuit within 1 ms
+(it could not re-strike): a conga and its tom within 1 ms are one strike. Under
+the release image (R0) the five alternates are **refused** as `not-in-image`.
+Drum note-offs are accepted and do nothing, because the drum voices are
+one-shot.
+
+**Evidence** (T-LIVE-MIDI, `fpga/verify_live_midi.py`, #298). The oracle
+builds each strike's expected writes from the scenario and the selected
+image's kit and positions, not from the session. The `alternates` scenario
+plays every pair in both directions, switches each tom pair 30 ms into its
+pitch drop, switches RS/CL and CP → MA → CP, strikes both sounds of a pair
+inside 1 ms, and keeps a mono line and a knob running. The `drum_sounds`
+property checks, at every strike of a shared circuit, that the registers AS
+EXECUTED hold that sound's position (the tom pole pair excepted: the pitch
+drop retunes it at the strike by design). The number of strikes cannot show
+which sound played. Two controls must turn it red: `WRONG_ALT` (the switch
+writes the leaving sound's values) and `NO_TAIL_CUT` (the old drop stays
+queued). The run passes under `--image r1` and `--image tree`.
 
 **Controllers** (voice channel):
 
@@ -539,8 +571,9 @@ mechanism, not re-measured, and the quiet-host re-run will show it.
 make trial T=T-LIVE-MIDI ARGS="--mode sim"                 # the trial: receipt under build/trials/
 make trial T=T-LIVE-MIDI ARGS="--mode rtl"                 # + UART RTL and I2S (build box, ~1 h)
 .venv/bin/python fpga/verify_live_midi.py                  # seconds: sim + controls
-.venv/bin/python fpga/verify_live_midi.py --rtl coverage pressure sustained \
-      --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT             # the UART RTL + I2S (box)
+.venv/bin/python fpga/verify_live_midi.py --image tree     # the same against the tree's kit
+.venv/bin/python fpga/verify_live_midi.py --rtl coverage alternates pressure sustained \
+      --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT WRONG_ALT   # the UART RTL + I2S (box)
 .venv/bin/python fpga/verify_live_midi.py --start-red      # against the stub
 ```
 
@@ -573,12 +606,19 @@ Scenarios:
 - **pressure** offers a tom roll at 500 hits/s, a trill at 200 notes/s and
   three knobs at 1 kHz each, then a panic.
 - **sustained** is the declared load.
+- **alternates** (#298) plays all five exclusive pairs in both directions,
+  switches each tom pair 30 ms into its pitch drop, RS -> CL -> RS and
+  CP -> MA -> CP (the maracas turn the clap's final strike off; the clap
+  must turn it back on), both sounds of a pair inside 1 ms (refused), with a
+  mono line and a cutoff sweep running underneath.
 
 | control | property that must move | reason |
 |---|---|---|
 | DROP_NOTE_OFF | voice_gate, stuck_notes | the lost note-off leaves the gate open past its release |
 | WRONG_DRUM_MAP | drum_strikes | GM 38 strikes the clap, not the snare |
 | DELAYED_EVENT | timing | one event's writes land 5 ms after their frame |
+| WRONG_ALT | drum_sounds | a pair switch writes the values of the sound it leaves |
+| NO_TAIL_CUT | drum_coeffs | a switch leaves the old tom's pitch drop queued; it retunes the new sound |
 
 Each control prints the full MOVED/BLIND matrix (rule 4).
 
@@ -587,10 +627,10 @@ Each control prints the full MOVED/BLIND matrix (rule 4).
 - **RTL replay.** `--rtl` replays the session's transmitted bytes through the
   Arty UART wrapper (`fpga/verify_uart_bridge.py`) and compares the decoded
   I2S with the model driven by the oracle's schedule.
-- **RTL controls.** WRONG_DRUM_MAP and DELAYED_EVENT are replayed too, and their
-  I2S must mismatch. DROP_NOTE_OFF changes the packet count, so its bytes cannot
-  be paired write-for-write with the schedule; it is caught at the device
-  contract.
+- **RTL controls.** WRONG_DRUM_MAP, DELAYED_EVENT and WRONG_ALT are replayed
+  too, and their I2S must mismatch. DROP_NOTE_OFF and NO_TAIL_CUT change the
+  packet count, so their bytes cannot be paired write-for-write with the
+  schedule; they are caught at the device contract.
 
 **RTL results on the R1 candidate (revision 14, #279).** `make trial
 T=T-LIVE-MIDI ARGS="--mode rtl"` on the build box at `ccf7ed4` (RTL frozen at

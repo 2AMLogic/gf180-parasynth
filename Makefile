@@ -144,7 +144,7 @@ verify-full:
 	  "$(PY) rtl-sketch/verify_drums.py" \
 	  "$(PY) tools/verify_m5a_filter2x_i2s.py" \
 	  "$(PY) rtl-sketch/verify_synth_top.py --simulator verilator --m5a-smoke --filter2x --inject VOICE_FILTER2X_OFF --expect-fail --outdir build/top-filter2x-verilator-control" \
-	  "$(PY) fpga/verify_live_midi.py --rtl coverage pressure sustained --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT --outdir build/live-midi-full"
+	  "$(PY) fpga/verify_live_midi.py --rtl coverage alternates pressure sustained --rtl-inject WRONG_DRUM_MAP DELAYED_EVENT WRONG_ALT --outdir build/live-midi-full"
 
 ## Every injected control that must turn something red, together.
 ## A run where these do not fire is a broken run, not a quiet one.

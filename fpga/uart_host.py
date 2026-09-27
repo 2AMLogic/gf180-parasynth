@@ -167,6 +167,35 @@ def r1_kit() -> list:
     return kit
 
 
+R1_PRESETS_SHA256 = "faca91bad851fbb2319de6e764a2608e442d0d2d7c6540d82d28ac75fa550146"
+# the images that expose the five alternate sounds (#298): R0 (`release`) is
+# qualified for its eleven stops only
+ALTERNATE_IMAGES = ("tree", "r1")
+
+
+def image_sound_presets(image: str) -> dict:
+    """{sound: [(addr, value)]}: the writes that put each of the sixteen sounds'
+    circuit in that sound's position, for `image` (#298). `r1` reads R1's
+    table frozen by value (r1-kit.json, REFUSED unless it hashes to
+    R1_PRESETS_SHA256); `tree` is this tree's drums_fx.preset_writes; `release`
+    has none (R0 is eleven sounds)."""
+    import hashlib
+    import json
+    import drums_fx as dx
+    if image == "r1":
+        rec = json.loads(R1_KIT.read_text())
+        table = rec.get("presets") or {}
+        canon = json.dumps(table, sort_keys=True, separators=(",", ":"))
+        got = hashlib.sha256(canon.encode()).hexdigest()
+        if got != R1_PRESETS_SHA256:
+            raise dx.KitRefused(f"{R1_KIT.name} presets hash to {got[:12]}, not R1's frozen "
+                                f"sound presets {R1_PRESETS_SHA256[:12]}")
+        return {k: [(int(a), int(v)) for a, v in w] for k, w in table.items()}
+    if image == "tree":
+        return {k: [(int(a), int(v)) for a, v in dx.preset_writes(k)] for k in dx.SOUND_NAMES}
+    return {}
+
+
 def image_kit(image: str = DEFAULT_IMAGE) -> list:
     """The drum kit `image` plays. The frozen revision-11 kit (R0) and R1's
     frozen kit REFUSE (drums_fx.KitRefused) if they no longer hash to the image

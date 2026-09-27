@@ -797,11 +797,37 @@
         "{out}"
        ],
        "interpret": "live_midi_record"
+      },
+      {
+       "id": "wrong-alternate",
+       "intended_reason": "a pair switch that writes the leaving sound's values is caught by drum_sounds",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "WRONG_ALT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "no-tail-cut",
+       "intended_reason": "a switch that leaves the old tom's pitch drop queued is caught by drum_coeffs",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "NO_TAIL_CUT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
       }
      ]
     },
     "rtl": {
-     "description": "adds the session's own bytes replayed through the Arty UART wrapper, I2S compared with the model on the expected schedule, and two I2S controls",
+     "description": "adds the session's own bytes replayed through the Arty UART wrapper, I2S compared with the model on the expected schedule, and three I2S controls",
      "timeout_s": 14400,
      "tools": [
       "iverilog",
@@ -814,23 +840,26 @@
      "required": [
       {
        "id": "session-rtl",
-       "property": "as sim, and the RTL wire I2S equals the model on the expected schedule for coverage, pressure and 3 s of the declared load",
+       "property": "as sim, and the RTL wire I2S equals the model on the expected schedule for coverage, the sixteen-sound alternates (#298), pressure and 3 s of the declared load",
        "checker": "fpga/verify_live_midi.py",
        "args": [
         "--outdir",
         "{out}",
         "--rtl",
         "coverage",
+        "alternates",
         "pressure",
         "sustained",
         "--rtl-inject",
         "WRONG_DRUM_MAP",
         "DELAYED_EVENT",
+        "WRONG_ALT",
         "--reuse-rtl-if-identical"
        ],
        "interpret": "live_midi_record",
        "fixtures": [
         "coverage",
+        "alternates",
         "pressure",
         "sustained"
        ]
@@ -870,6 +899,32 @@
        "args": [
         "--control",
         "DELAYED_EVENT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "wrong-alternate",
+       "intended_reason": "a pair switch that writes the leaving sound's values is caught by drum_sounds",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "WRONG_ALT",
+        "--expect-fail",
+        "--outdir",
+        "{out}"
+       ],
+       "interpret": "live_midi_record"
+      },
+      {
+       "id": "no-tail-cut",
+       "intended_reason": "a switch that leaves the old tom's pitch drop queued is caught by drum_coeffs",
+       "checker": "fpga/verify_live_midi.py",
+       "args": [
+        "--control",
+        "NO_TAIL_CUT",
         "--expect-fail",
         "--outdir",
         "{out}"
