@@ -1,0 +1,15 @@
+verify_modal: model ModalFx(coef Q2.24, state 28-bit/15 fraction, headroom 10, 19-bit word, 4 modes, 2 with numerators, floor)
+  segment: note 28, strike 1.0: 14400 samples, a1_0=33553167 a2_0=-16776439
+  segment: note 52, strike 0.5, while ringing: 9600 samples, a1_0=33545847 a2_0=-16776439
+  segment: note 88, strike 1.0: 7200 samples, a1_0=33055143 a2_0=-16776439
+  segment: note 100: top mode above 0.45 fs, zero coefficients: 4800 samples, a1_0=31574420 a2_0=-16776439
+  segment: note 40, full-scale square AT f0: drives the state to the rail: 4800 samples, a1_0=33551703 a2_0=-16776439
+  segment: note 40, silence: ring-down from the rail: 7200 samples, a1_0=33551703 a2_0=-16776439
+  segment: noise 0.5: mode 0 band-pass, mode 1 high-pass, 2-3 the bar: 4800 samples, a1_0=18521379 a2_0=-14364400
+  segment: DC 0.25 into the same: the numerators reject it, the bar does not: 2400 samples, a1_0=18521379 a2_0=-14364400
+  segment: coefficient extremes: unstable modes rail, num = 3 reads as RAW: 2400 samples, a1_0=33554431 a2_0=-33554432
+  57600 samples; model corners reached: state saturated 6913x, output saturated 405x, zero-coefficient mode on 4800 mode-samples
+verify_modal: simulating modal_dp.v
+  sim: tb_modal_fx: 57600 samples driven, 57600 outputs, 0 mismatches, worst |error| 0 LSB
+  sim: tb_modal_fx: PASS
+verify_modal: PASS -- 57600 samples, RTL identical to model
