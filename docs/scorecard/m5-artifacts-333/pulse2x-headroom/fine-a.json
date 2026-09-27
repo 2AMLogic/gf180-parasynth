@@ -1,0 +1,208 @@
+{
+ "mode": "fine",
+ "scope": "rect",
+ "base_gain_q15": 27853,
+ "commit": "97a707817e51ea34026dc13d72198cd64cfb8df7",
+ "sources_dirty": false,
+ "results": {
+  "rule": "largest gain: zero clipped samples, worst peak <= rail - 0.1 dB, reachable rectangles, MIDI 90.0..127.0 step 0.125",
+  "chosen": null,
+  "candidates": {
+   "0.800": {
+    "gain": 0.8,
+    "gain_q15": 26214,
+    "passes_rule": false,
+    "shapes": {
+     "square": {
+      "worst_peak": 32435,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 33104,
+      "worst_note": 120.75,
+      "clipped_samples": 23214,
+      "notes_clipping": [
+       119.875,
+       120.0,
+       120.125,
+       120.25,
+       120.375,
+       120.5,
+       120.625,
+       120.75,
+       120.875,
+       121.0,
+       121.125,
+       121.25,
+       121.375,
+       121.5,
+       121.625,
+       121.75
+      ]
+     },
+     "pulse25": {
+      "worst_peak": 34891,
+      "worst_note": 127.0,
+      "clipped_samples": 81508,
+      "notes_clipping": [
+       109.625,
+       109.75,
+       109.875,
+       110.0,
+       110.125,
+       110.25,
+       110.375,
+       110.5,
+       110.625,
+       110.75,
+       110.875,
+       111.0,
+       111.125,
+       111.25,
+       111.375,
+       111.5,
+       111.625,
+       111.75,
+       111.875,
+       112.0,
+       112.125,
+       112.25,
+       112.375,
+       112.5,
+       112.625,
+       112.75,
+       112.875,
+       113.0,
+       113.125,
+       113.25,
+       113.375,
+       113.5,
+       113.625,
+       126.0,
+       126.125,
+       126.25,
+       126.375,
+       126.5,
+       126.625,
+       126.75,
+       126.875,
+       127.0
+      ]
+     },
+     "pulse15": {
+      "worst_peak": 33227,
+      "worst_note": 102.5,
+      "clipped_samples": 18687,
+      "notes_clipping": [
+       100.875,
+       101.0,
+       101.125,
+       101.25,
+       101.375,
+       101.5,
+       101.625,
+       101.75,
+       101.875,
+       102.0,
+       102.125,
+       102.25,
+       102.375,
+       102.5,
+       102.625,
+       102.75,
+       102.875,
+       103.0,
+       103.125,
+       103.25,
+       103.375,
+       103.5,
+       103.625,
+       103.75,
+       103.875,
+       104.0,
+       104.125,
+       104.25,
+       104.375,
+       104.5
+      ]
+     }
+    }
+   },
+   "0.780": {
+    "gain": 0.78,
+    "gain_q15": 25559,
+    "passes_rule": false,
+    "shapes": {
+     "square": {
+      "worst_peak": 31625,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 32277,
+      "worst_note": 120.75,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse25": {
+      "worst_peak": 34019,
+      "worst_note": 127.0,
+      "clipped_samples": 22520,
+      "notes_clipping": [
+       126.375,
+       126.5,
+       126.625,
+       126.75,
+       126.875,
+       127.0
+      ]
+     },
+     "pulse15": {
+      "worst_peak": 32397,
+      "worst_note": 102.5,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     }
+    }
+   },
+   "0.760": {
+    "gain": 0.76,
+    "gain_q15": 24904,
+    "passes_rule": false,
+    "shapes": {
+     "square": {
+      "worst_peak": 30814,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 31450,
+      "worst_note": 120.75,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse25": {
+      "worst_peak": 33147,
+      "worst_note": 127.0,
+      "clipped_samples": 5046,
+      "notes_clipping": [
+       126.75,
+       126.875,
+       127.0
+      ]
+     },
+     "pulse15": {
+      "worst_peak": 31566,
+      "worst_note": 102.5,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     }
+    }
+   }
+  }
+ }
+}

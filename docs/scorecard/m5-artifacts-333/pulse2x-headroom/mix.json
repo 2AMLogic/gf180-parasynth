@@ -1,0 +1,369 @@
+{
+ "mode": "mix",
+ "scope": "rect",
+ "base_gain_q15": 27853,
+ "commit": "a4e2f0a8f21635202764f8e897e443e98d2d9099",
+ "sources_dirty": false,
+ "results": {
+  "base/default/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.843
+  },
+  "base/default/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -18.675
+  },
+  "base/default/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.018
+  },
+  "base/default/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.391
+  },
+  "base/default/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.226
+  },
+  "base/default/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.683
+  },
+  "base/default/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.594
+  },
+  "base/default/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.311
+  },
+  "base/default/120": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.208
+  },
+  "base/default/127": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.938
+  },
+  "base/three-rect/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -12.854
+  },
+  "base/three-rect/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -13.542
+  },
+  "base/three-rect/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.676
+  },
+  "base/three-rect/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.716
+  },
+  "base/three-rect/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.532
+  },
+  "base/three-rect/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -16.26
+  },
+  "base/three-rect/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.348
+  },
+  "base/three-rect/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -18.856
+  },
+  "base/three-rect/120": {
+   "osc_rail": 14965,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.087
+  },
+  "base/three-rect/127": {
+   "osc_rail": 16000,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -22.863
+  },
+  "0.830/default/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.888
+  },
+  "0.830/default/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -18.729
+  },
+  "0.830/default/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.087
+  },
+  "0.830/default/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.447
+  },
+  "0.830/default/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.272
+  },
+  "0.830/default/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.728
+  },
+  "0.830/default/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.631
+  },
+  "0.830/default/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.343
+  },
+  "0.830/default/120": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.247
+  },
+  "0.830/default/127": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.973
+  },
+  "0.830/three-rect/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -13.058
+  },
+  "0.830/three-rect/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -13.743
+  },
+  "0.830/three-rect/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.865
+  },
+  "0.830/three-rect/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.89
+  },
+  "0.830/three-rect/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.683
+  },
+  "0.830/three-rect/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -16.383
+  },
+  "0.830/three-rect/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.458
+  },
+  "0.830/three-rect/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -18.953
+  },
+  "0.830/three-rect/120": {
+   "osc_rail": 8560,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.184
+  },
+  "0.830/three-rect/127": {
+   "osc_rail": 5327,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -22.941
+  },
+  "0.800/default/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.955
+  },
+  "0.800/default/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -18.809
+  },
+  "0.800/default/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.189
+  },
+  "0.800/default/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.529
+  },
+  "0.800/default/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.34
+  },
+  "0.800/default/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.794
+  },
+  "0.800/default/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.686
+  },
+  "0.800/default/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -20.392
+  },
+  "0.800/default/120": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.304
+  },
+  "0.800/default/127": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.026
+  },
+  "0.800/three-rect/24": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -13.374
+  },
+  "0.800/three-rect/36": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -14.052
+  },
+  "0.800/three-rect/48": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -16.155
+  },
+  "0.800/three-rect/60": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -16.154
+  },
+  "0.800/three-rect/72": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -15.909
+  },
+  "0.800/three-rect/84": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -16.571
+  },
+  "0.800/three-rect/96": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -17.63
+  },
+  "0.800/three-rect/108": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -19.106
+  },
+  "0.800/three-rect/120": {
+   "osc_rail": 1189,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -21.335
+  },
+  "0.800/three-rect/127": {
+   "osc_rail": 0,
+   "mixer_rail": 0,
+   "output_rail": 0,
+   "output_rms_dbfs": -23.085
+  }
+ }
+}

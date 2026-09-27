@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_operating_level.py --drives 0.75 --out build/oplevel/p2x-d0.75.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "drive 0.75: vol x1.0000; M5A {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 2.20593, 'Envelope attack': 5.27083, 'Envelope release': -8.9375, 'Gain': -1.54373, 'Clipping': 0.0}; M5B {'Pitch': -0.14828, 'Harmonic shape': 5.96219, 'Foldback energy': 1.91296, 'Envelope attack': 6.125, 'Envelope release': -30.0, 'Gain': 2.04851, 'Clipping': 0.0}\nwrote build/oplevel/p2x-d0.75.json\n",
+    "secs": 123.98326086997986
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_operating_level.py --drives 0.5 --out build/oplevel/p2x-d0.5.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "drive 0.5: vol x1.3894; M5A {'Pitch': -0.14813, 'Harmonic shape': 6.61104, 'Foldback energy': 2.31297, 'Envelope attack': 5.4375, 'Envelope release': -7.95833, 'Gain': 1.42043, 'Clipping': 0.0}; M5B {'Pitch': -0.14827, 'Harmonic shape': 5.7515, 'Foldback energy': 2.31222, 'Envelope attack': 6.08333, 'Envelope release': -33.91667, 'Gain': 1.84497, 'Clipping': 0.0}\nwrote build/oplevel/p2x-d0.5.json\n",
+    "secs": 97.31641173362732
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_operating_level.py --drives 0.35 --out build/oplevel/p2x-d0.35.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "drive 0.35: vol x1.9231; M5A {'Pitch': -0.14813, 'Harmonic shape': 7.96004, 'Foldback energy': 0.31556, 'Envelope attack': 5.4375, 'Envelope release': -7.02083, 'Gain': 1.42058, 'Clipping': 0.0}; M5B {'Pitch': -0.14827, 'Harmonic shape': 5.65011, 'Foldback energy': 0.3165, 'Envelope attack': 6.20833, 'Envelope release': -35.85417, 'Gain': 1.72804, 'Clipping': 0.0}\nwrote build/oplevel/p2x-d0.35.json\n",
+    "secs": 134.66592860221863
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_operating_level.py --drives 0.25 --out build/oplevel/p2x-d0.25.json",
+    "state": "FAIL",
+    "rc": 1,
+    "out": "Traceback (most recent call last):\n  File \"/home/ubuntu/work/sound-1/tools/measure_m5_operating_level.py\", line 200, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/home/ubuntu/work/sound-1/tools/measure_m5_operating_level.py\", line 184, in main\n    \"M5A\": phrase(a.engine, \"M5A\", d, f), \"M5B\": phrase(a.engine, \"M5B\", d, f),\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/work/sound-1/tools/measure_m5_operating_level.py\", line 105, in phrase\n    m = score.measure(case_id=case, voice_factory=lambda: voice(engine),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ubuntu/work/sound-1/tools/mono_m5a_score.py\", line 321, in measure\n    raise Refused(\"saw volume correction would leave the supported 0..1 range\")\nmono_m5a_score.Refused: saw volume correction would leave the supported 0..1 range\n",
+    "secs": 10.245836019515991
+  }
+]

@@ -31,6 +31,15 @@ worst, which is dimensionless and passes at ≤ 1.
 **Coverage is reported separately and always** — *"20 passing, 4 failing, 6
 without verdicts"*, never *"83 % passing"*, which conceals what was not checked.
 
+**Known coverage gap: time-varying mono behaviour has no artifact measurement.**
+The stage-by-stage artifact probe (`tools/mono_artifact_probe.py`, #333) is
+qualified only for held, stationary notes, where everything that is not a
+harmonic of the programmed pitch is unwanted. **Transitions, glides, filter and
+pitch modulation, drift and noise are not covered.** The probe refuses those
+stimuli, and no case measures clicks, zippering or aliasing during them. They
+need a validated time-varying oracle, which does not exist yet. Until one does,
+a clean held-note sweep says nothing about those behaviours.
+
 **Every result names the engine that produced it:** `float-model`,
 `fixed-model`, `integrated-rtl`, `board-digital`, `board-analog`. These are not
 interchangeable, and the tool says so out loud when no case has been measured on

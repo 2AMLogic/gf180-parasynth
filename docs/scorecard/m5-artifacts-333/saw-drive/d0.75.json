@@ -1,0 +1,325 @@
+{
+ "engine": "pulse2x",
+ "rows": {
+  "0.75": {
+   "drive": 0.75,
+   "vol_factor": 1.0,
+   "saw_vol": 0.42707,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 7.56136,
+     "Foldback energy": 2.20593,
+     "Envelope attack": 5.27083,
+     "Envelope release": -8.9375,
+     "Gain": -1.54373,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -1.7681,
+       "h3": -5.1166,
+       "h4": -5.5636,
+       "h5": -4.6617,
+       "h6": -5.6897,
+       "h7": -5.9621,
+       "h8": -5.1495,
+       "h9": -5.3112,
+       "h10": -5.1394,
+       "h11": -4.3443,
+       "h12": -3.2533
+      },
+      "foldback_excess_db": 1.9173,
+      "gain_dbfs": {
+       "model": -17.7663,
+       "reference": -19.1871
+      },
+      "envelope_ms": {
+       "attack_model": 8.7292,
+       "attack_reference": 7.3333,
+       "release_model": 1234.2917,
+       "release_reference": 1243.2292
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -4.26,
+       "h3": -7.5614,
+       "h4": -4.6031,
+       "h5": -5.2717,
+       "h6": -3.5746,
+       "h7": -2.1439,
+       "h8": -2.7394,
+       "h9": -2.7023,
+       "h10": -2.8007,
+       "h11": 1.8192
+      },
+      "foldback_excess_db": 2.2059,
+      "gain_dbfs": {
+       "model": -18.9138,
+       "reference": -19.5125
+      },
+      "envelope_ms": {
+       "attack_model": 8.5625,
+       "attack_reference": 3.4167,
+       "release_model": 1240.125,
+       "release_reference": 1243.0208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7585,
+       "h3": -2.1375,
+       "h4": -2.6396,
+       "h5": -3.3451,
+       "h6": -3.6394,
+       "h7": -4.5542,
+       "h8": -4.0659,
+       "h9": -4.9574,
+       "h10": -3.8044,
+       "h11": -4.1999,
+       "h12": -3.2832
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1464,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.5833,
+       "attack_reference": 7.4583,
+       "release_model": 1242.5625,
+       "release_reference": 1247.5208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.4059,
+       "h3": -3.3433,
+       "h4": -2.981,
+       "h5": -3.6755,
+       "h6": -2.2447,
+       "h7": -3.0747,
+       "h8": -2.7257,
+       "h9": -5.2968,
+       "h10": -4.6909,
+       "h11": -3.1714
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -16.1635,
+       "reference": -14.6197
+      },
+      "envelope_ms": {
+       "attack_model": 8.6042,
+       "attack_reference": 3.3333,
+       "release_model": 1246.6667,
+       "release_reference": 1247.4792
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14828,
+     "Harmonic shape": 5.96219,
+     "Foldback energy": 1.91296,
+     "Envelope attack": 6.125,
+     "Envelope release": -30.0,
+     "Gain": 2.04851,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.9155,
+       "h3": -2.482,
+       "h4": -3.8055,
+       "h5": -4.1228,
+       "h6": -4.1611,
+       "h7": -4.553,
+       "h8": -5.0291,
+       "h9": -5.3356,
+       "h10": -5.5103,
+       "h11": -5.2955,
+       "h12": -5.3608
+      },
+      "foldback_excess_db": 1.4469,
+      "gain_dbfs": {
+       "model": -17.0756,
+       "reference": -19.1241
+      },
+      "envelope_ms": {
+       "attack_model": 9.7917,
+       "attack_reference": 7.7083,
+       "release_model": 1196.125,
+       "release_reference": 1222.3542
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -1.7681,
+       "h3": -5.1167,
+       "h4": -5.5636,
+       "h5": -4.6616,
+       "h6": -5.6898,
+       "h7": -5.9622,
+       "h8": -5.1497,
+       "h9": -5.3113,
+       "h10": -5.1392,
+       "h11": -4.345,
+       "h12": -3.2535
+      },
+      "foldback_excess_db": 1.913,
+      "gain_dbfs": {
+       "model": -17.7665,
+       "reference": -19.1876
+      },
+      "envelope_ms": {
+       "attack_model": 8.875,
+       "attack_reference": 3.2083,
+       "release_model": 1213.25,
+       "release_reference": 1243.25
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.7403,
+       "h3": -1.9033,
+       "h4": -1.8059,
+       "h5": -2.6379,
+       "h6": -2.7744,
+       "h7": -3.8623,
+       "h8": -3.7226,
+       "h9": -4.3652,
+       "h10": -3.9493,
+       "h11": -4.9073,
+       "h12": -4.7635
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.0134,
+       "reference": -14.3429
+      },
+      "envelope_ms": {
+       "attack_model": 9.0625,
+       "attack_reference": 7.8542,
+       "release_model": 1218.625,
+       "release_reference": 1245.6667
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7586,
+       "h3": -2.1375,
+       "h4": -2.6398,
+       "h5": -3.3452,
+       "h6": -3.6395,
+       "h7": -4.5545,
+       "h8": -4.066,
+       "h9": -4.9573,
+       "h10": -3.804,
+       "h11": -4.1997,
+       "h12": -3.2836
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1465,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.9792,
+       "attack_reference": 2.8542,
+       "release_model": 1221.5208,
+       "release_reference": 1247.5208
+      }
+     }
+    ]
+   },
+   "probe": {
+    "84": {
+     "unwanted_rel_db": -48.2033,
+     "unwanted_dbfs": -65.9704,
+     "upper_wanted_rel_db": -15.5259,
+     "intended_dbfs": -17.7671,
+     "output_rail": 0
+    },
+    "96": {
+     "unwanted_rel_db": -47.18,
+     "unwanted_dbfs": -66.0937,
+     "upper_wanted_rel_db": -13.9572,
+     "intended_dbfs": -18.9136,
+     "output_rail": 0
+    },
+    "36": {
+     "unwanted_rel_db": -69.5714,
+     "unwanted_dbfs": -85.8077,
+     "upper_wanted_rel_db": -28.1452,
+     "intended_dbfs": -16.2363,
+     "output_rail": 0
+    },
+    "48": {
+     "unwanted_rel_db": -64.5044,
+     "unwanted_dbfs": -80.8826,
+     "upper_wanted_rel_db": -25.2839,
+     "intended_dbfs": -16.3782,
+     "output_rail": 0
+    },
+    "60": {
+     "unwanted_rel_db": -56.0951,
+     "unwanted_dbfs": -72.7224,
+     "upper_wanted_rel_db": -22.3688,
+     "intended_dbfs": -16.6273,
+     "output_rail": 0
+    },
+    "72": {
+     "unwanted_rel_db": -52.3748,
+     "unwanted_dbfs": -69.4468,
+     "upper_wanted_rel_db": -19.2653,
+     "intended_dbfs": -17.0719,
+     "output_rail": 0
+    },
+    "108": {
+     "unwanted_rel_db": -40.9916,
+     "unwanted_dbfs": -61.777,
+     "upper_wanted_rel_db": -12.5647,
+     "intended_dbfs": -20.7854,
+     "output_rail": 0
+    },
+    "120": {
+     "unwanted_rel_db": -34.9929,
+     "unwanted_dbfs": -59.2429,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -24.2499,
+     "output_rail": 0
+    }
+   },
+   "r1_binding": {
+    "pinned": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "current_tree": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "candidate": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "tree_matches_pin": true,
+    "candidate_changes_r1_bytes": false
+   }
+  }
+ },
+ "commit": "69523c3d11711a8d23c8ed3a79635bfad5f9ca2b",
+ "sources_dirty": false
+}

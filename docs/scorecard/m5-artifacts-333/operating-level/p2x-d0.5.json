@@ -1,0 +1,341 @@
+{
+ "engine": "pulse2x",
+ "rows": {
+  "0.5": {
+   "drive": 0.5,
+   "vol_factor": 1.38938,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 6.61104,
+     "Foldback energy": 2.31297,
+     "Envelope attack": 5.4375,
+     "Envelope release": -7.95833,
+     "Gain": 1.42043,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.5819,
+       "h3": -1.8848,
+       "h4": -3.4099,
+       "h5": -3.9167,
+       "h6": -4.5268,
+       "h7": -4.2175,
+       "h8": -3.376,
+       "h9": -4.1174,
+       "h10": -4.0649,
+       "h11": -2.7427,
+       "h12": -2.04
+      },
+      "foldback_excess_db": 2.313,
+      "gain_dbfs": {
+       "model": -17.7667,
+       "reference": -19.1871
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -2.1665,
+       "h3": -4.6363,
+       "h4": -4.5511,
+       "h5": -3.8311,
+       "h6": -3.0069,
+       "h7": -1.7581,
+       "h8": -0.2809,
+       "h9": -1.9828,
+       "h10": -2.8963,
+       "h11": 3.5093
+      },
+      "foldback_excess_db": 1.8121,
+      "gain_dbfs": {
+       "model": -18.654,
+       "reference": -19.5125
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.5441,
+       "h3": -2.2112,
+       "h4": -2.8886,
+       "h5": -3.7464,
+       "h6": -4.1697,
+       "h7": -5.0254,
+       "h8": -4.7172,
+       "h9": -5.7514,
+       "h10": -4.885,
+       "h11": -5.2528,
+       "h12": -4.4284
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.7222,
+       "reference": -14.3201
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.9881,
+       "h3": -3.708,
+       "h4": -3.8473,
+       "h5": -4.5042,
+       "h6": -3.5472,
+       "h7": -3.654,
+       "h8": -3.7628,
+       "h9": -6.1671,
+       "h10": -6.611,
+       "h11": -4.54
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.9895,
+       "reference": -14.6197
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14827,
+     "Harmonic shape": 5.7515,
+     "Foldback energy": 2.31222,
+     "Envelope attack": 6.08333,
+     "Envelope release": -33.91667,
+     "Gain": 1.84497,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.3687,
+       "h3": -0.7999,
+       "h4": -1.1982,
+       "h5": -1.6848,
+       "h6": -2.2937,
+       "h7": -2.7923,
+       "h8": -3.0835,
+       "h9": -3.4462,
+       "h10": -3.9756,
+       "h11": -4.3265,
+       "h12": -4.4335
+      },
+      "foldback_excess_db": 1.8403,
+      "gain_dbfs": {
+       "model": -17.2791,
+       "reference": -19.1241
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.5819,
+       "h3": -1.885,
+       "h4": -3.4098,
+       "h5": -3.9168,
+       "h6": -4.5269,
+       "h7": -4.2175,
+       "h8": -3.3759,
+       "h9": -4.1176,
+       "h10": -4.0646,
+       "h11": -2.7427,
+       "h12": -2.04
+      },
+      "foldback_excess_db": 2.3122,
+      "gain_dbfs": {
+       "model": -17.7671,
+       "reference": -19.1876
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.077,
+       "h3": -1.0328,
+       "h4": -1.058,
+       "h5": -2.0503,
+       "h6": -2.2964,
+       "h7": -3.4692,
+       "h8": -3.4219,
+       "h9": -4.1649,
+       "h10": -3.8409,
+       "h11": -4.8591,
+       "h12": -4.7429
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.1902,
+       "reference": -14.3429
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.544,
+       "h3": -2.2112,
+       "h4": -2.889,
+       "h5": -3.7464,
+       "h6": -4.1698,
+       "h7": -5.0255,
+       "h8": -4.717,
+       "h9": -5.7515,
+       "h10": -4.8843,
+       "h11": -5.253,
+       "h12": -4.4284
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.7222,
+       "reference": -14.3201
+      }
+     }
+    ]
+   },
+   "probe": {
+    "saw/36": {
+     "unwanted_dbfs": -85.8431,
+     "unwanted_rel_db": -69.485,
+     "upper_wanted_rel_db": -27.417,
+     "intended_dbfs": -16.3582,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/48": {
+     "unwanted_dbfs": -79.9293,
+     "unwanted_rel_db": -63.4985,
+     "upper_wanted_rel_db": -24.4813,
+     "intended_dbfs": -16.4308,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/60": {
+     "unwanted_dbfs": -71.9377,
+     "unwanted_rel_db": -55.3698,
+     "upper_wanted_rel_db": -21.6115,
+     "intended_dbfs": -16.568,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/72": {
+     "unwanted_dbfs": -68.7666,
+     "unwanted_rel_db": -51.9459,
+     "upper_wanted_rel_db": -18.4238,
+     "intended_dbfs": -16.8206,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/84": {
+     "unwanted_dbfs": -65.1217,
+     "unwanted_rel_db": -47.8093,
+     "upper_wanted_rel_db": -14.7255,
+     "intended_dbfs": -17.3124,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/96": {
+     "unwanted_dbfs": -65.7718,
+     "unwanted_rel_db": -47.5727,
+     "upper_wanted_rel_db": -12.5811,
+     "intended_dbfs": -18.199,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/108": {
+     "unwanted_dbfs": -62.4028,
+     "unwanted_rel_db": -42.6509,
+     "upper_wanted_rel_db": -10.5377,
+     "intended_dbfs": -19.7519,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "saw/120": {
+     "unwanted_dbfs": -62.1364,
+     "unwanted_rel_db": -39.289,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -22.8474,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/36": {
+     "unwanted_dbfs": -85.6432,
+     "unwanted_rel_db": -72.8785,
+     "upper_wanted_rel_db": -28.9325,
+     "intended_dbfs": -12.7647,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/48": {
+     "unwanted_dbfs": -78.6998,
+     "unwanted_rel_db": -65.894,
+     "upper_wanted_rel_db": -25.8529,
+     "intended_dbfs": -12.8059,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/60": {
+     "unwanted_dbfs": -70.6909,
+     "unwanted_rel_db": -57.8015,
+     "upper_wanted_rel_db": -22.7255,
+     "intended_dbfs": -12.8895,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/72": {
+     "unwanted_dbfs": -67.8593,
+     "unwanted_rel_db": -54.7976,
+     "upper_wanted_rel_db": -19.6522,
+     "intended_dbfs": -13.0617,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/84": {
+     "unwanted_dbfs": -65.5387,
+     "unwanted_rel_db": -52.1107,
+     "upper_wanted_rel_db": -15.0061,
+     "intended_dbfs": -13.4281,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/96": {
+     "unwanted_dbfs": -62.5273,
+     "unwanted_rel_db": -48.2632,
+     "upper_wanted_rel_db": -11.6064,
+     "intended_dbfs": -14.2641,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/108": {
+     "unwanted_dbfs": -61.4298,
+     "unwanted_rel_db": -45.2616,
+     "upper_wanted_rel_db": -14.2395,
+     "intended_dbfs": -16.1682,
+     "output_rail": 0,
+     "osc_rail": 0
+    },
+    "pulse29/120": {
+     "unwanted_dbfs": -51.4987,
+     "unwanted_rel_db": -31.6098,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -19.8889,
+     "output_rail": 0,
+     "osc_rail": 0
+    }
+   }
+  }
+ },
+ "commit": "6d8bf4d6343c4ca703357f54f059b110749c0d67",
+ "sources_dirty": false
+}

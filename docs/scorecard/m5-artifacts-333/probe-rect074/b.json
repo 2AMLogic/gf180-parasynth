@@ -1,0 +1,23 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py sweep --part 0 --parts 2 --rect-gain-q15 24248 --out build/probe074/sweep-0.json > build/probe074/s0.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 230.86640882492065
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py sweep --part 1 --parts 2 --rect-gain-q15 24248 --out build/probe074/sweep-1.json > build/probe074/s1.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 227.4978542327881
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python -m pytest -q --no-header -p no:cacheprovider tools/test_mono_artifact_probe.py tools/test_confirm_m5_saw_drive.py tools/test_measure_mono_pulse_2x.py tools/test_measure_pulse2x_headroom.py tools/test_check_workflows.py && /home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py controls --out build/probe074/controls-84-saw.json && /home/ubuntu/work/venv/bin/python tools/mono_artifact_probe.py controls --note 96 --wave pulse29 --out build/probe074/controls-96-pulse.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "........................................                                 [100%]\n40 passed in 23.40s\nALIAS_NOBLEP   CAUGHT  expected image_dbfs\nDARKEN_LP4K    CAUGHT  expected upper_wanted_rel_db\nSPUR_M70       CAUGHT  expected residual_dbfs\nCLIP_2XFS      CAUGHT  expected output_rail_samples\nDROPOUT_10MS   CAUGHT  expected dropout_depth_db\nSILENCE        CAUGHT  expected activity\nwrote build/probe074/controls-84-saw.json (exit 0)\nALIAS_NOBLEP   CAUGHT  expected image_dbfs\nDARKEN_LP4K    CAUGHT  expected upper_wanted_rel_db\nSPUR_M70       CAUGHT  expected residual_dbfs\nCLIP_2XFS      CAUGHT  expected output_rail_samples\nDROPOUT_10MS   CAUGHT  expected dropout_depth_db\nSILENCE        CAUGHT  expected activity\nwrote build/probe074/controls-96-pulse.json (exit 0)\n",
+    "secs": 48.56499528884888
+  }
+]

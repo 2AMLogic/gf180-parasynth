@@ -104,6 +104,12 @@ MUTANTS = {
     # whose c_pp/c_ps only feed the scalar path it does not use
     "skip2xwin": [("                    if (!blep) state <= S_MIX;",
                    None)],
+    # NEGATIVE CONTROL for skip2xwin (#333): skip the window loop for EVERY
+    # oscillator. A base-rate PolyBLEP oscillator (R1's square) then loses its
+    # edge correction, so the I2S comparison must fail; if it did not, the
+    # skip2xwin equivalence result could not have seen a needed computation
+    "skipallwin": [("                    if (!blep) state <= S_MIX;",
+                    None)],
 }
 
 
@@ -122,6 +128,8 @@ def make_mutant(spec: str, outdir: str) -> str:
         elif kind == "skip2xwin":
             src = src.replace(anchor, "                    if (!blep || (use_osc2x && shape_osc2x)) "
                                       "state <= S_MIX;   // MUTANT skip2xwin")
+        elif kind == "skipallwin":
+            src = src.replace(anchor, "                    if (1'b1) state <= S_MIX;   // MUTANT skipallwin")
         elif anchor.endswith("\n"):
             src = src.replace(anchor, anchor + insert.replace("{N}", str(int(arg))))
         else:
