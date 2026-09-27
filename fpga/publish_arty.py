@@ -26,6 +26,7 @@ import re
 import shutil
 import build_arty as build
 import ext_io_timing as iotime
+import xdc_bindings as xb
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -318,9 +319,11 @@ def publish(artifact, output):
                                         build.sources() + build.roms())
     if proof != record.get("verification"):
         raise ValueError("digital verification binding differs")
-    required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp"}
+    required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp",
+                xb.REPORT}
     if set(record.get("artifact_sha256", {})) != required:
-        raise ValueError("build artifact set incomplete")
+        raise ValueError("build artifact set incomplete (a build before #315 has no "
+                         f"{xb.REPORT}: its constraints were never shown to bind)")
     for name, digest in record["artifact_sha256"].items():
         path = artifact / name
         if not path.is_file() or not path.stat().st_size or build.sha(path) != digest:
@@ -340,6 +343,11 @@ def publish(artifact, output):
         drift += iotime.uart_gate_drift(xdc_snap.read_text())
         if drift:
             raise ValueError("external-I/O constraint drift: " + "; ".join(drift))
+        # #315: present in the text is not bound in the design. The build's own
+        # query counts must show every object query bound exactly its objects
+        bound = xb.check_report((artifact / xb.REPORT).read_text(), xdc_snap.read_text())
+        if bound:
+            raise ValueError("XDC constraints did not bind: " + "; ".join(bound))
     remaining = ["physical programming, control and audio capture"]
     dsp = dsp_disposition(artifact, record)
     if summary["external_io_timing_qualified"]:
