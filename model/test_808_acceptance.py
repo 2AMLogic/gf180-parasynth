@@ -218,7 +218,11 @@ NOT_ASSERTED = {
 #       130 Hz / Q 6 window for 4 ms and back. They had also been asserting
 #       the chart's 56 Hz as the steady frequency; DR 0009 makes that 49.4.
 #   test_tom_pitch_falls_during_the_ring -- closed: 15.7.1 sweeps the tom's
-#       f0 from x1.7 over 60 ms, scaled by accent (reference 4).
+#       f0 over 60 ms, scaled by accent (reference 4). The magnitude recorded
+#       here when the entry was closed -- x1.7 -- was INFERRED and is refuted:
+#       #110 measured x1.06 / x1.14 / x1.24 by accent and #154 shipped it
+#       (docs/drum-verification.md 12). The closure is unaffected because
+#       these tests assert that the pitch falls, not by how much.
 #   test_sd_noise_balance_matches_a_real_machine -- closed: the level is set
 #       to the SNAPPY knob's measured curve at 5.0. Its MEASUREMENT was also
 #       withdrawn; see the test.

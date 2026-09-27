@@ -122,7 +122,7 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 
 # ---- the image this CLI drives, and so the drum kit it sends ------------------
 # The kit is a property of the IMAGE on the board, not of the tree the CLI runs
-# from. The published R1 image (fpga/release, integrated-baseline-2025.1) is
+# from. The published R0 image (fpga/release, integrated-baseline-2025.1) is
 # contract revision 11 RTL: no ENV_FRATE, no final strike. Revision 14's
 # `kit_808()` programs a clap that image cannot play, so the default -- the
 # image a player actually has -- sends revision 11's frozen kit, and a board
@@ -138,6 +138,9 @@ def image_kit(image: str = DEFAULT_IMAGE) -> list:
     import drums_fx as dx
     if image not in IMAGE_REVISION:
         raise ValueError(f"image {image!r} is not one of {sorted(IMAGE_REVISION)}")
+    if "WRONG_KIT" in INJECT_BUGS and image == "tree":
+        # the control (#279, plan088): the release kit under `--image tree`
+        return dx.KITS_BY_REVISION[IMAGE_REVISION["release"]]()
     return dx.KITS_BY_REVISION[IMAGE_REVISION[image]]()
 BITS_PER_BYTE = 10
 
@@ -511,7 +514,7 @@ def apply_order(commands: list) -> list:
 
 
 def qualify(commands: list, *, preset: str | None, note: int | None,
-            image_sent: bool) -> dict:
+            image_sent: bool, image: str = DEFAULT_IMAGE) -> dict:
     """The player-facing release domain (fpga/release/RELEASE.md), enforced
     on the final register writes. Raises qualified_domain.Rejected."""
     sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
@@ -526,8 +529,16 @@ def qualify(commands: list, *, preset: str | None, note: int | None,
     # stream does not write is unknown, except the modulation registers the
     # player path never writes on a fixture run (declared precondition)
     out["stream"] = qd.check_stream(apply_order(commands), initial="unknown",
-                                    mod_initial="reset")
+                                    mod_initial="reset", image=image)
     return out
+
+
+def known_state_preamble() -> list:
+    """R1's session start: voice RESET (0x23), drum RESET (0xFF), as
+    (flag, sec, addr, data). Owned by fpga/release/r1_candidate.py."""
+    sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+    import r1_candidate
+    return [tuple(w) for w in r1_candidate.PREAMBLE]
 
 
 def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
@@ -730,6 +741,10 @@ class Bridge:
         self.acks_seen = 0
         self._run_ack_base = 0
         self._run_acks_expected = 0
+        # R1 (#279): refuse to start over events or writes an earlier session
+        # left queued -- they would fire into this one after its known state
+        self.require_idle = False
+        self._idle_checked = False
 
     def _take(self, kinds: set, deadline: float) -> DevicePacket | None:
         """Read bytes until one complete packet of `kinds` parses. The buffer
@@ -815,6 +830,16 @@ class Bridge:
               "bitstream, wiring (A9/D10) and baud", file=sys.stderr)
         raise SystemExit(2)
 
+    def assert_idle(self) -> None:
+        """One STATUS before anything is sent: both device queues must be
+        empty, or the session start is not a known state. REFUSES."""
+        st = self.status()
+        self._idle_checked = True
+        if st.evq or st.wrq:
+            raise Refused(f"the device holds {st.evq} queued events and {st.wrq} queued "
+                          "writes from an earlier session; they would play into this one. "
+                          "Run `uart_host.py --port ... abort` (or press BTN0) and retry")
+
     def run(self, commands: list, *, dry_run: bool = False, baud: int = DEFAULT_BAUD,
             quiet: bool = False, hold_frames: int = 0) -> list:
         """Origin FIRST, then the plan: the schedule is anchored to the
@@ -828,6 +853,8 @@ class Bridge:
         STATUS must still leave slack before the first event's due, or the
         plan is re-anchored -- a plan whose dues died during planning is
         re-planned, never sent late."""
+        if self.require_idle and not self._idle_checked:
+            self.assert_idle()
         markers = [c for c in commands if c[0] == "gate-off"]
         if markers:
             return self._run_with_hold(commands, baud=baud, quiet=quiet,
@@ -1663,7 +1690,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "preflight REFUSES it: over queue and wire budget)")
     ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit a "
-                         "fixture sends: release (the published R1 image, contract "
+                         "fixture sends: release (the published R0 image, contract "
                          "revision 11, no final strike -- the DEFAULT) or tree (an "
                          "image built from this tree, revision 14)")
     ap.add_argument("--dry-run", action="store_true",
@@ -1731,6 +1758,15 @@ def main(argv=None, *, bridge_factory=None) -> int:
               "the fixture loads its own patch over the preset", file=sys.stderr)
         return 2
     image_sent = a.cmd in ("load", "run") or a.cmd is None
+    if image_sent and a.image == "tree":
+        # R1's known-state session start (#279): voice RESET and drum RESET
+        # zero every register and state of both sections BEFORE the image,
+        # so routing, modulation, drift and any drum register the image does
+        # not write are known -- not assumed from an earlier (engineering)
+        # session. The frozen target lives in fpga/release/r1_candidate.py.
+        # The release image's byte streams are unchanged (its manifest pins them).
+        for flag, sec, addr, data in known_state_preamble():
+            commands.append(("write", flag, sec, addr, data))
     if image_sent:
         for flag, sec, addr, data in voice_image_writes(a.preset):
             commands.append(("write", flag, sec, addr, data))
@@ -1777,7 +1813,8 @@ def main(argv=None, *, bridge_factory=None) -> int:
         sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
         import qualified_domain as qd
         try:
-            q = qualify(commands, preset=a.preset, note=played_note, image_sent=image_sent)
+            q = qualify(commands, preset=a.preset, note=played_note, image_sent=image_sent,
+                        image=a.image)
         except qd.Rejected as exc:
             print(f"uart_host: REFUSED -- outside the qualified release domain: {exc}",
                   file=sys.stderr)
@@ -1832,6 +1869,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
         return 2
     try:
         bridge = open_bridge(a.port, a.baud)
+        # only a command that establishes R1's known state asserts it: a
+        # standalone note-off must never be refused for a busy queue
+        bridge.require_idle = a.image == "tree" and image_sent
         rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
     except Refused as exc:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)

@@ -1,71 +1,15 @@
 {
-  "engine": "fixed-model",
+  "engine": "integrated-rtl",
   "case_id": "D02A",
   "subject": "Snare / anchor",
-  "source_commit": "7dd6337",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:27:11Z",
-  "provenance": {
-    "engine": "fixed-model",
-    "worktree": {
-      "commit": "7dd6337",
-      "described": "node/D-drums-bitexact-83-g7dd6337",
-      "branch": "fix-decay-and-corner",
-      "dirty": true,
-      "uncommitted_sha256": "f7c8641bd3f74c94",
-      "untracked_files": 1
-    },
-    "base_check": {
-      "checked": true,
-      "origin_main": "398bc543d7b9",
-      "behind_commits": 0,
-      "ahead_commits": 5,
-      "n_stops_here": 11,
-      "n_stops_origin_main": 11,
-      "stale_dependencies": {},
-      "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
-        }
-      },
-      "allow_stale": false,
-      "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
-    },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
-    "config": {
-      "voice": "SD",
-      "refs": "/tmp/tr808-ref",
-      "inject": null,
-      "render_seconds": 2.2,
-      "accent": 1.0,
-      "bus_gain": 0.45,
-      "level_matched": true
-    },
-    "python": "3.14.7",
-    "run_at": "2026-09-19T01:27:17Z",
-    "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
-      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
-      "reference:sd8/SD5050.WAV": "sha256:6dcbf8acd5cee6d6"
-    },
-    "artefacts": {
-      "ours": "not written (--no-audio)",
-      "reference": "/tmp/tr808-ref/sd8/SD5050.WAV"
-    },
-    "outcome_code": 0,
-    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
-  },
+  "source_commit": "99637db",
+  "source_dirty": true,
+  "analysis_version": "drum-i2s-score-v1",
+  "analysis_run": "run_case@af0f6c0f7282 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-26T22:57:11Z",
   "reference_profile": "fischer-tr808-103852:sd8/SD5050.WAV (TONE 5.0, SNAPPY 5.0)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('SD') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 1 of 11",
-  "audio": "reference sd8/SD5050.WAV; ours not written",
+  "render_run": "synth_top.v 99637db-dirty under verilator: one hit of SD from the shipped kit, solo, at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 1 of 11; every register write sent over the SPI PINS and every sample decoded from the I2S pins (BCLK/LRCLK/SDATA), never read out of the model",
+  "audio": "reference sd8/SD5050.WAV; ours docs/scorecard/drum-d02a-i2s/sd-solo-i2s.wav",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -111,40 +55,144 @@
   },
   "metrics": {
     "Body/noise balance": {
-      "value": -5.0021,
+      "value": -5.2127,
       "units": "dB",
       "reference": -3.2591,
-      "error": -1.743,
+      "error": -1.9536,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "attack": {
-      "value": 4.2292,
+      "value": 4.2917,
       "units": "ms",
       "reference": 4.3311,
-      "error": -0.1019,
+      "error": -0.0394,
       "tolerance": 2.1655,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     },
     "noise decay": {
-      "value": 71.1033,
+      "value": 70.7201,
       "units": "ms",
       "reference": 69.4585,
-      "error": 1.6448,
+      "error": 1.2616,
       "tolerance": 34.7293,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     }
   },
   "diagnostics": {
-    "ours_peak_fs": 0.207916,
-    "ours_rms_fs": 0.006508,
+    "ours_peak_fs": 0.209015,
+    "ours_rms_fs": 0.006488,
     "reference_peak_fs": 0.631775,
     "reference_rate_hz": 44100,
     "ours_rate_hz": 48000,
     "level_matched": true,
-    "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. Original-gain peak and RMS are recorded above."
-  }
+    "decoded_i2s_sha256": "b5c5cad8e7f5422736585d0dc325b8a7e10b7174bef613d290e446859276e5f9",
+    "spi_i2s_report_sha256": "5d9b842c45a2dac86da80797bc02565be230b475ea4a9697e114dee79d618490",
+    "integration": {
+      "simulator": "verilator",
+      "rtl_build": "99637db-dirty",
+      "compile_defines": "(none)",
+      "strike_frame": 782,
+      "accent_register_at_strike": 32768,
+      "wire_lag_periods": 1,
+      "decoded_periods": 107409,
+      "window": [
+        303,
+        105903
+      ],
+      "fixed_model_at_realised_strike": {
+        "differing_samples": 0,
+        "max_abs_difference": 0,
+        "identical": true
+      },
+      "fixed_model_scorecard_render": {
+        "strike_frame": 480,
+        "differing_samples": 11411,
+        "max_abs_difference": 4522,
+        "identical": false
+      }
+    },
+    "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. The decoded window is bit-exact against the fixed model struck in the SAME frame; it is NOT the same waveform as run_case.render_drum_solo, whose strike is in frame 480, because the drum noise LFSR free-runs. That phase difference is reported above and is the reason a metric here can differ from the fixed-model twin without either engine being wrong."
+  },
+  "provenance": {
+    "engine": "integrated-rtl",
+    "worktree": {
+      "commit": "99637db",
+      "described": "node/D-drums-bitexact-619-g99637db-dirty",
+      "branch": "feature/issue-290",
+      "dirty": true,
+      "uncommitted_sha256": "0943bb61f4ba790f",
+      "untracked_files": 6
+    },
+    "base_check": {},
+    "command": "tools/score_drum_i2s.py --case D02A --wav /tmp/d02a-i2s.wav --verification docs/scorecard/drum-d02a-i2s/verify-drum-solo-sd.log",
+    "config": {
+      "voice": "SD",
+      "refs": "/tmp/tr808-ref",
+      "inject": null,
+      "render_seconds": 2.2,
+      "accent": 1.0,
+      "bus_gain": 0.45,
+      "level_matched": true,
+      "simulator": "verilator",
+      "rtl_build": "99637db-dirty",
+      "compile_defines": "(none)",
+      "strike_frame": 782,
+      "wire_lag_periods": 1,
+      "scored_window": [
+        303,
+        105903
+      ],
+      "measurement_source_sha256": {
+        "tools/score_drum_i2s.py": "a412fa51a262b98ddc8e97ef54f3e43c8a0fe813ab2322c4ebb332ff3208aa6f",
+        "tools/run_case.py": "af0f6c0f7282bea85ff7e19b1005731dccd4136fd016b1773b2bb545dc3bf6af",
+        "tools/scorecard.py": "801a4d48c1347c43a58c7989e35374c2a2ad29a3d93405bdce3ec99d56ce45d0",
+        "model/drums_fx.py": "9c4eebbd42eeb591a22c2a617d47e26734b978f686713ca91c9b78c2c3b27d1d",
+        "model/modal_fixed.py": "d5f642012774db57b3f2bb9b53c242984fdcdd007d2236068f28095d7e818670",
+        "model/audio_measure.py": "ff1ae641f70752d181dfb2dc2fbcbedc713dcaf456150a38fc3064c1f6bb91db",
+        "model/synth_top_model.py": "144ac659b899e243a1cfcf0c5ee091b096052acc18c2e5ca7246cd7678e049f4",
+        "rtl-sketch/verify_synth_top.py": "60d835b4157168127ba831a18de3a57b359b71adbd3d1b564168974886e77eab",
+        "rtl-sketch/tb_top_bx.v": "dc2c177a0ec06d522837c730138dfc06aaf5d75b54eba80f5baa58e63bf0175f",
+        "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+        "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+        "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+        "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+        "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+        "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+        "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202"
+      }
+    },
+    "python": "3.14.7",
+    "run_at": "2026-09-26T22:57:11Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:9c4eebbd42eeb591",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:78de333e7ecb2d6f",
+      "tools/run_case.py": "sha256:af0f6c0f7282bea8",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:801a4d48c1347c43",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
+      "reference:sd8/SD5050.WAV": "sha256:6dcbf8acd5cee6d6",
+      "decoded:I2S": "sha256:b5c5cad8e7f5422736585d0dc325b8a7e10b7174bef613d290e446859276e5f9",
+      "verification:SPI-I2S": "sha256:5d9b842c45a2dac86da80797bc02565be230b475ea4a9697e114dee79d618490"
+    },
+    "artefacts": {
+      "ours": "docs/scorecard/drum-d02a-i2s/sd-solo-i2s.wav",
+      "reference": "/tmp/tr808-ref/sd8/SD5050.WAV"
+    },
+    "outcome_code": 0,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "scorecard_state": "pass",
+  "scorecard_reason": ""
 }

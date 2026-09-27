@@ -1,0 +1,899 @@
+{
+ "provenance": {
+  "commit": "12f51c55edc30410f4a2f9907ec75084114a1a64",
+  "branch": "feature/issue-61",
+  "dirty": false,
+  "command": "tools/measure_saw_alias_after_2x.py --out docs/saw-alias-2x-results.json",
+  "utc": "2026-09-26T22:16:59Z",
+  "python": "3.12.3",
+  "numpy": "2.5.2",
+  "seconds": 0.5,
+  "warmup_frames": 256,
+  "sr": 48000
+ },
+ "preconditions": [
+  {
+   "name": "stale_results_json_refused",
+   "ok": true,
+   "path": "docs/reference-voice-results.json",
+   "last_written_by": "0929159",
+   "report_written_by": "74ce6a0",
+   "reason": "predates #87's corrected Surge waveform mapping; its surge rows are the withdrawn flat -60 dB harness artefact"
+  },
+  {
+   "name": "shipped_path_is_the_measured_path",
+   "ok": true,
+   "note": 76,
+   "worst_lsb": 0,
+   "off_vs_on_max_lsb": 58204
+  },
+  {
+   "name": "frozen_table_instrument_reproduces_its_own_rows",
+   "ok": true,
+   "commit": "74ce6a03333cc6dbd2a783d8bacc7f8ba7e34ba4",
+   "worst_delta_db": 0.049,
+   "rows": [
+    {
+     "device": "ours",
+     "note": 33,
+     "frozen": -44.1,
+     "reproduced": -44.114,
+     "delta_db": -0.014
+    },
+    {
+     "device": "ours",
+     "note": 45,
+     "frozen": -41.7,
+     "reproduced": -41.669,
+     "delta_db": 0.031
+    },
+    {
+     "device": "ours",
+     "note": 57,
+     "frozen": -38.7,
+     "reproduced": -38.697,
+     "delta_db": 0.003
+    },
+    {
+     "device": "ours",
+     "note": 69,
+     "frozen": -35.5,
+     "reproduced": -35.5,
+     "delta_db": 0.0
+    },
+    {
+     "device": "ours",
+     "note": 81,
+     "frozen": -32.7,
+     "reproduced": -32.651,
+     "delta_db": 0.049
+    },
+    {
+     "device": "ours",
+     "note": 93,
+     "frozen": -28.9,
+     "reproduced": -28.905,
+     "delta_db": -0.005
+    },
+    {
+     "device": "ideal",
+     "note": 33,
+     "frozen": -53.4,
+     "reproduced": -53.398,
+     "delta_db": 0.002
+    },
+    {
+     "device": "ideal",
+     "note": 45,
+     "frozen": -112.9,
+     "reproduced": -112.924,
+     "delta_db": -0.024
+    },
+    {
+     "device": "ideal",
+     "note": 57,
+     "frozen": -113.2,
+     "reproduced": -113.154,
+     "delta_db": 0.046
+    },
+    {
+     "device": "ideal",
+     "note": 69,
+     "frozen": -113.2,
+     "reproduced": -113.215,
+     "delta_db": -0.015
+    },
+    {
+     "device": "ideal",
+     "note": 81,
+     "frozen": -113.2,
+     "reproduced": -113.231,
+     "delta_db": -0.031
+    },
+    {
+     "device": "ideal",
+     "note": 93,
+     "frozen": -113.2,
+     "reproduced": -113.234,
+     "delta_db": -0.034
+    }
+   ]
+  }
+ ],
+ "reference_source": {
+  "path": "docs/reference-voice-report.txt",
+  "commit": "74ce6a03333cc6dbd2a783d8bacc7f8ba7e34ba4",
+  "date": "2026-09-18",
+  "estimator": "hann, as at 74ce6a0",
+  "refused": [
+   "docs/reference-voice-results.json"
+  ]
+ },
+ "alias_curve": [
+  {
+   "note": 40,
+   "f0_hz": 82.41,
+   "before": {
+    "what": "base rate",
+    "value": -42.94,
+    "floor_db": -90.18,
+    "headroom_db": 47.24,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -61.9,
+    "floor_db": -90.18,
+    "headroom_db": 28.29,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -34.3,
+    "floor_db": -90.18,
+    "headroom_db": 55.88,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 18.96
+  },
+  {
+   "note": 52,
+   "f0_hz": 164.81,
+   "before": {
+    "what": "base rate",
+    "value": -39.83,
+    "floor_db": -88.54,
+    "headroom_db": 48.7,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -57.48,
+    "floor_db": -88.54,
+    "headroom_db": 31.06,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -30.02,
+    "floor_db": -88.54,
+    "headroom_db": 58.52,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 17.65
+  },
+  {
+   "note": 64,
+   "f0_hz": 329.63,
+   "before": {
+    "what": "base rate",
+    "value": -36.68,
+    "floor_db": -90.52,
+    "headroom_db": 53.83,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -53.99,
+    "floor_db": -90.51,
+    "headroom_db": 36.53,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -26.96,
+    "floor_db": -90.51,
+    "headroom_db": 63.55,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 17.31
+  },
+  {
+   "note": 76,
+   "f0_hz": 659.25,
+   "before": {
+    "what": "base rate",
+    "value": -33.79,
+    "floor_db": -88.63,
+    "headroom_db": 54.84,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -52.11,
+    "floor_db": -88.65,
+    "headroom_db": 36.54,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -23.99,
+    "floor_db": -88.65,
+    "headroom_db": 64.66,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 18.32
+  },
+  {
+   "note": 88,
+   "f0_hz": 1318.51,
+   "before": {
+    "what": "base rate",
+    "value": -31.03,
+    "floor_db": -89.52,
+    "headroom_db": 58.5,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -51.59,
+    "floor_db": -89.54,
+    "headroom_db": 37.95,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -21.07,
+    "floor_db": -89.54,
+    "headroom_db": 68.47,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 20.56
+  },
+  {
+   "note": 100,
+   "f0_hz": 2637.02,
+   "before": {
+    "what": "base rate",
+    "value": -28.55,
+    "floor_db": -88.23,
+    "headroom_db": 59.68,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "after": {
+    "what": "2x + FIR decimation",
+    "value": -52.41,
+    "floor_db": -88.3,
+    "headroom_db": 35.89,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "control_drop": {
+    "what": "2x + drop decimation (control)",
+    "value": -18.23,
+    "floor_db": -88.31,
+    "headroom_db": 70.08,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "improvement_db": 23.86
+  }
+ ],
+ "reference": [
+  {
+   "note": 33,
+   "f0_hz": 55.0,
+   "ours_2x_report_db": -52.89,
+   "ours_base_report_db": -44.11,
+   "ideal_report_db": -53.4,
+   "ours_2x_headroom_over_ideal_db": 0.51,
+   "ours_2x_floor_limited": true,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -62.42,
+    "floor_db": -88.55,
+    "headroom_db": 26.13,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -44.66,
+    "floor_db": -88.55,
+    "headroom_db": 43.89,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -53.4,
+     "reference_at_floor": true,
+     "margin_db": 0.51,
+     "kind": "lower bound (a side of this margin is at the estimator's floor)"
+    },
+    "miniv3": {
+     "reference_db": -53.3,
+     "reference_at_floor": true,
+     "margin_db": 0.41,
+     "kind": "lower bound (a side of this margin is at the estimator's floor)"
+    }
+   }
+  },
+  {
+   "note": 45,
+   "f0_hz": 110.0,
+   "ours_2x_report_db": -59.63,
+   "ours_base_report_db": -41.67,
+   "ideal_report_db": -112.92,
+   "ours_2x_headroom_over_ideal_db": 53.29,
+   "ours_2x_floor_limited": false,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -59.63,
+    "floor_db": -126.88,
+    "headroom_db": 67.25,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -41.67,
+    "floor_db": -127.7,
+    "headroom_db": 86.03,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -69.5,
+     "reference_at_floor": false,
+     "margin_db": 9.87,
+     "kind": "value"
+    },
+    "miniv3": {
+     "reference_db": -61.4,
+     "reference_at_floor": false,
+     "margin_db": 1.77,
+     "kind": "lower bound (Mini V3's filter cannot be bypassed and can only remove aliases)"
+    }
+   }
+  },
+  {
+   "note": 57,
+   "f0_hz": 220.0,
+   "ours_2x_report_db": -56.97,
+   "ours_base_report_db": -38.7,
+   "ideal_report_db": -113.15,
+   "ours_2x_headroom_over_ideal_db": 56.19,
+   "ours_2x_floor_limited": false,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -56.97,
+    "floor_db": -124.17,
+    "headroom_db": 67.2,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -38.7,
+    "floor_db": -124.98,
+    "headroom_db": 86.28,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -80.1,
+     "reference_at_floor": false,
+     "margin_db": 23.13,
+     "kind": "value"
+    },
+    "miniv3": {
+     "reference_db": -57.4,
+     "reference_at_floor": false,
+     "margin_db": 0.43,
+     "kind": "lower bound (Mini V3's filter cannot be bypassed and can only remove aliases)"
+    }
+   }
+  },
+  {
+   "note": 69,
+   "f0_hz": 440.0,
+   "ours_2x_report_db": -53.27,
+   "ours_base_report_db": -35.5,
+   "ideal_report_db": -113.21,
+   "ours_2x_headroom_over_ideal_db": 59.94,
+   "ours_2x_floor_limited": false,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -53.28,
+    "floor_db": -136.55,
+    "headroom_db": 83.27,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -35.5,
+    "floor_db": -137.35,
+    "headroom_db": 101.85,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -74.3,
+     "reference_at_floor": false,
+     "margin_db": 21.03,
+     "kind": "value"
+    },
+    "miniv3": {
+     "reference_db": -54.3,
+     "reference_at_floor": false,
+     "margin_db": 1.03,
+     "kind": "lower bound (Mini V3's filter cannot be bypassed and can only remove aliases)"
+    }
+   }
+  },
+  {
+   "note": 81,
+   "f0_hz": 880.0,
+   "ours_2x_report_db": -51.84,
+   "ours_base_report_db": -32.65,
+   "ideal_report_db": -113.23,
+   "ours_2x_headroom_over_ideal_db": 61.39,
+   "ours_2x_floor_limited": false,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -51.84,
+    "floor_db": -133.54,
+    "headroom_db": 81.71,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -32.65,
+    "floor_db": -134.31,
+    "headroom_db": 101.66,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -79.3,
+     "reference_at_floor": false,
+     "margin_db": 27.46,
+     "kind": "value"
+    },
+    "miniv3": {
+     "reference_db": -51.5,
+     "reference_at_floor": false,
+     "margin_db": -0.34,
+     "kind": "lower bound (Mini V3's filter cannot be bypassed and can only remove aliases)"
+    }
+   }
+  },
+  {
+   "note": 93,
+   "f0_hz": 1760.0,
+   "ours_2x_report_db": -46.75,
+   "ours_base_report_db": -28.9,
+   "ideal_report_db": -113.23,
+   "ours_2x_headroom_over_ideal_db": 66.48,
+   "ours_2x_floor_limited": false,
+   "ours_2x_today": {
+    "what": "2x + FIR decimation (blackman-harris)",
+    "value": -46.76,
+    "floor_db": -133.53,
+    "headroom_db": 86.77,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "ours_base_today": {
+    "what": "base rate (blackman-harris)",
+    "value": -28.9,
+    "floor_db": -134.27,
+    "headroom_db": 105.37,
+    "floor_limited": false,
+    "window": "blackman-harris-4",
+    "refused": null
+   },
+   "margins": {
+    "surge": {
+     "reference_db": -88.6,
+     "reference_at_floor": false,
+     "margin_db": 41.85,
+     "kind": "value"
+    },
+    "miniv3": {
+     "reference_db": null,
+     "margin_db": null,
+     "kind": "no qualified reference row"
+    }
+   }
+  }
+ ],
+ "shape_ranking": [
+  {
+   "wave": "saw",
+   "path": "base rate",
+   "worst": {
+    "surge": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 59.7,
+     "ours_db": -28.9,
+     "reference_db": -88.6
+    },
+    "miniv3": {
+     "note": 45,
+     "f0_hz": 110.0,
+     "margin_db": 19.73,
+     "ours_db": -41.67,
+     "reference_db": -61.4
+    },
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 84.33,
+     "ours_db": -28.9,
+     "reference_db": -113.23
+    }
+   },
+   "reproduces_frozen_ours_row": true,
+   "reproduction": [
+    {
+     "note": 45,
+     "frozen": -41.7,
+     "reproduced": -41.67,
+     "delta_db": 0.03
+    },
+    {
+     "note": 57,
+     "frozen": -38.7,
+     "reproduced": -38.7,
+     "delta_db": 0.0
+    },
+    {
+     "note": 69,
+     "frozen": -35.5,
+     "reproduced": -35.5,
+     "delta_db": 0.0
+    },
+    {
+     "note": 81,
+     "frozen": -32.7,
+     "reproduced": -32.65,
+     "delta_db": 0.05
+    },
+    {
+     "note": 93,
+     "frozen": -28.9,
+     "reproduced": -28.9,
+     "delta_db": -0.0
+    }
+   ]
+  },
+  {
+   "wave": "square",
+   "path": "base rate",
+   "worst": {
+    "surge": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 60.59,
+     "ours_db": -32.01,
+     "reference_db": -92.6
+    },
+    "miniv3": {
+     "note": 45,
+     "f0_hz": 110.0,
+     "margin_db": 19.93,
+     "ours_db": -43.37,
+     "reference_db": -63.3
+    },
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 81.22,
+     "ours_db": -32.01,
+     "reference_db": -113.24
+    }
+   },
+   "reproduces_frozen_ours_row": true,
+   "reproduction": [
+    {
+     "note": 45,
+     "frozen": -43.4,
+     "reproduced": -43.37,
+     "delta_db": 0.03
+    },
+    {
+     "note": 57,
+     "frozen": -40.6,
+     "reproduced": -40.61,
+     "delta_db": -0.01
+    },
+    {
+     "note": 69,
+     "frozen": -37.0,
+     "reproduced": -37.04,
+     "delta_db": -0.04
+    },
+    {
+     "note": 81,
+     "frozen": -35.1,
+     "reproduced": -35.06,
+     "delta_db": 0.04
+    },
+    {
+     "note": 93,
+     "frozen": -32.0,
+     "reproduced": -32.01,
+     "delta_db": -0.01
+    }
+   ]
+  },
+  {
+   "wave": "pulse25",
+   "path": "base rate",
+   "worst": {
+    "surge": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 56.85,
+     "ours_db": -30.45,
+     "reference_db": -87.3
+    },
+    "miniv3": null,
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 82.78,
+     "ours_db": -30.45,
+     "reference_db": -113.23
+    }
+   },
+   "reproduces_frozen_ours_row": true,
+   "reproduction": [
+    {
+     "note": 45,
+     "frozen": -44.2,
+     "reproduced": -44.18,
+     "delta_db": 0.02
+    },
+    {
+     "note": 57,
+     "frozen": -41.0,
+     "reproduced": -41.02,
+     "delta_db": -0.02
+    },
+    {
+     "note": 69,
+     "frozen": -38.2,
+     "reproduced": -38.24,
+     "delta_db": -0.04
+    },
+    {
+     "note": 81,
+     "frozen": -35.8,
+     "reproduced": -35.81,
+     "delta_db": -0.01
+    },
+    {
+     "note": 93,
+     "frozen": -30.5,
+     "reproduced": -30.45,
+     "delta_db": 0.05
+    }
+   ]
+  },
+  {
+   "wave": "tri",
+   "path": "base rate",
+   "worst": {
+    "surge": null,
+    "miniv3": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 8.02,
+     "ours_db": -42.18,
+     "reference_db": -50.2
+    },
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 71.06,
+     "ours_db": -42.18,
+     "reference_db": -113.24
+    }
+   },
+   "reproduces_frozen_ours_row": true,
+   "reproduction": [
+    {
+     "note": 45,
+     "frozen": -78.0,
+     "reproduced": -78.01,
+     "delta_db": -0.01
+    },
+    {
+     "note": 57,
+     "frozen": -69.1,
+     "reproduced": -69.09,
+     "delta_db": 0.01
+    },
+    {
+     "note": 69,
+     "frozen": -59.8,
+     "reproduced": -59.76,
+     "delta_db": 0.04
+    },
+    {
+     "note": 81,
+     "frozen": -51.2,
+     "reproduced": -51.21,
+     "delta_db": -0.01
+    },
+    {
+     "note": 93,
+     "frozen": -42.2,
+     "reproduced": -42.18,
+     "delta_db": 0.02
+    }
+   ]
+  },
+  {
+   "wave": "sine",
+   "path": "base rate",
+   "worst": {
+    "surge": null,
+    "miniv3": null,
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 58.2,
+     "ours_db": -55.03,
+     "reference_db": -113.24
+    }
+   },
+   "reproduces_frozen_ours_row": true,
+   "reproduction": [
+    {
+     "note": 45,
+     "frozen": -55.1,
+     "reproduced": -55.15,
+     "delta_db": -0.05
+    },
+    {
+     "note": 57,
+     "frozen": -55.1,
+     "reproduced": -55.13,
+     "delta_db": -0.03
+    },
+    {
+     "note": 69,
+     "frozen": -55.1,
+     "reproduced": -55.09,
+     "delta_db": 0.01
+    },
+    {
+     "note": 81,
+     "frozen": -55.0,
+     "reproduced": -55.04,
+     "delta_db": -0.04
+    },
+    {
+     "note": 93,
+     "frozen": -55.0,
+     "reproduced": -55.03,
+     "delta_db": -0.03
+    }
+   ]
+  },
+  {
+   "wave": "saw",
+   "path": "2x + FIR decimation (OSC2X=1, selected)",
+   "worst": {
+    "surge": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 41.85,
+     "ours_db": -46.75,
+     "reference_db": -88.6
+    },
+    "miniv3": {
+     "note": 45,
+     "f0_hz": 110.0,
+     "margin_db": 1.77,
+     "ours_db": -59.63,
+     "reference_db": -61.4
+    },
+    "ideal": {
+     "note": 93,
+     "f0_hz": 1760.0,
+     "margin_db": 66.48,
+     "ours_db": -46.75,
+     "reference_db": -113.23
+    }
+   },
+   "reproduces_frozen_ours_row": null,
+   "reproduction": []
+  }
+ ],
+ "verdict": {
+  "before_slope_db_per_octave": 2.88,
+  "after_slope_db_per_octave": 1.9,
+  "improvement_db": {
+   "best": 23.86,
+   "worst": 17.31
+  },
+  "floor_limited_rows": [
+   33
+  ],
+  "gap_to_surge_db": {
+   "min": 9.87,
+   "max": 41.85
+  },
+  "gap_to_miniv3_db": {
+   "min": -0.34,
+   "max": 1.77
+  }
+ }
+}

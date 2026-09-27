@@ -172,6 +172,21 @@ jobs:
       - name: documented claims match the evidence
         run: python tools/check_doc_claims.py
 
+      # Same argument, one file over: the oscillator-1 Shape/Width table in
+      # model/reference_rigs.py is a hand transcription of
+      # docs/surge-waveform-mapping.txt, and that comment now says outright that
+      # the two "cannot drift silently again". It could not say that while the
+      # checker ran only under `make verify` (build box) and `make controls`
+      # (not what nightly.yml's controls job invokes) -- a comment asserting an
+      # enforcement no CI job performs is issue #271's own defect, one level up.
+      # Controls first, for the reason above: an unexercised checker measures
+      # the checker. Measured 0.72s + <0.1s, so the 40-minute cap and the
+      # variance note at the top of this job are untouched.
+      - name: the Shape/Width transcription checker's controls
+        run: python -m pytest tools/test_check_surge_waveform_comment.py -q
+      - name: the oscillator-1 comment still transcribes the sweep
+        run: python tools/check_surge_waveform_comment.py
+
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
       # renamed a parameter into `def rms(_unused=None, x)`, which is a syntax

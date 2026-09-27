@@ -253,9 +253,23 @@ def interpret_rolling_record(spec, run, out, role):
     `state` folds a missed CONTROL into FAIL; this separates a failing candidate
     (FAIL) from an apparatus that did not show it can fail (NO VERDICT)."""
     rec, err = _load_json(out / "verification.json")
+    nv_caught = False if role == "control" else None
     if rec is None:
-        return _result(NO_VERDICT, [err])
+        return _result(NO_VERDICT, [err], caught=nv_caught)
     state = rec.get("state")
+    want = spec.get("image")          # {"sender": ..., "target": ...}, declared per child
+    got = rec.get("image") or {"sender": "release", "target": "release"}
+    if want and {k: got.get(k) for k in want} != want:
+        return _result(NO_VERDICT, [f"the record ran sender/target {got}, this child declares "
+                                    f"{want}"], caught=nv_caught)
+    if role == "control":
+        ef = rec.get("expect_fail") or {}
+        caught = bool(ef.get("caught")) and run["rc"] == 0 and state == "FAIL"
+        return _result(FAIL if state == "FAIL" else NO_VERDICT,
+                       [f"sender {got.get('sender')} vs target {got.get('target')}: "
+                        + ("caught at the init bytes" if caught else
+                           f"NOT caught (state {state}, exit {run['rc']})")],
+                       metrics={"init_check": ef.get("init_check")}, caught=caught)
     if run["rc"] != {"PASS": 0, "FAIL": 1}.get(state):
         return _result(NO_VERDICT, [f"exit status {run['rc']} disagrees with the record's "
                                     f"state {state!r}"])
@@ -270,7 +284,7 @@ def interpret_rolling_record(spec, run, out, role):
         if not c.get("caught"):
             missed.append(f"host control {name} not caught")
     metrics = {}
-    periods = {}
+    periods, required_p = {}, {}
     for fx in spec.get("fixtures", []):
         rr = (rec.get("rtl") or {}).get(fx)
         if rr is None:
@@ -278,7 +292,17 @@ def interpret_rolling_record(spec, run, out, role):
             continue
         comp = rr.get("comparison") or {}
         periods[fx] = comp.get("periods")
-        metrics[fx] = {k: comp.get(k) for k in ("periods", "writes_sent", "writes_seen",
+        required_p[fx] = comp.get("periods_required")
+        # #300 review: the required count is derived from the stimulus by the
+        # comparison itself; anything but exactly that many is incomplete
+        if not isinstance(comp.get("periods_required"), int) or not comp["periods_required"]:
+            gaps.append(f"RTL replay {fx} states no stimulus-derived required period count")
+        elif comp.get("periods") != comp["periods_required"]:
+            gaps.append(f"RTL replay {fx} I2S coverage {comp.get('periods')} of "
+                        f"{comp['periods_required']} required periods")
+        if not (rr.get("truncation_control") or {}).get("caught"):
+            missed.append(f"RTL truncation control for {fx} not caught")
+        metrics[fx] = {k: comp.get(k) for k in ("periods", "periods_required", "writes_sent", "writes_seen",
                                                 "frame_pred_bad", "wire_mismatch", "overrun",
                                                 "worst_strobe_cycle")}
         if rr.get("state") == "REFUSED":
@@ -298,7 +322,7 @@ def interpret_rolling_record(spec, run, out, role):
             fails.append(f"RTL replay {fx}: {bad}")
         if not (rr.get("control") or {}).get("caught"):
             missed.append(f"RTL control due+1 for {fx} not caught")
-    cov = dict(expected={"rtl_fixtures": spec.get("fixtures", []), "i2s_periods": ">0"},
+    cov = dict(expected={"rtl_fixtures": spec.get("fixtures", []), "i2s_periods": required_p},
                observed={"i2s_periods": periods, "clean_host_cases": len(clean)})
     if fails and not gaps:
         return _result(FAIL, fails + missed, metrics=metrics, **cov)
@@ -318,7 +342,8 @@ def interpret_held_note_record(spec, run, out, role):
     rec, err = _load_json(out / "held_note_audible.json")
     if rec is None:
         return _result(NO_VERDICT, [err], caught=False if role == "control" else None)
-    name = rec.get("preset", "?") + ("-legacy" if rec.get("legacy_image") else "")
+    name = rec.get("name") or (rec.get("preset", "?") + ("-legacy" if rec.get("legacy_image")
+                                                           else ""))
     i2s = out / name / "uart_i2s.txt"
     samples = 0
     try:
@@ -346,7 +371,26 @@ def interpret_held_note_record(spec, run, out, role):
     if rec.get("verdict") not in ("PASS", "FAIL") or peak is None or floor is None:
         return _result(NO_VERDICT, ["record lacks verdict/peak/floor"], metrics=metrics,
                        caught=nv_caught, **cov)
+    want_image = spec.get("image")
+    if want_image and rec.get("image", "release") != want_image:
+        return _result(NO_VERDICT, [f"the record ran image {rec.get('image', 'release')!r}, "
+                                    f"this child declares {want_image!r}"], metrics=metrics,
+                       caught=nv_caught, **cov)
+    req = rec.get("periods_required")
+    cov = dict(expected={"i2s_periods": req}, observed={"i2s_periods": rec.get("periods"),
+                                                        "decoded_i2s_samples": samples})
+    metrics.update(periods=rec.get("periods"), periods_required=req)
+    if not isinstance(req, int) or not req or rec.get("periods") != req:
+        return _result(NO_VERDICT, [f"I2S coverage {rec.get('periods')} of {req!r} required "
+                                    "periods: incomplete evidence"], metrics=metrics,
+                       caught=nv_caught, **cov)
+    if not (rec.get("truncation_control") or {}).get("caught"):
+        return _result(NO_VERDICT, ["the truncation control was not caught: the replay's "
+                                    "completeness check was not shown able to fail"],
+                       metrics=metrics, caught=nv_caught, **cov)
     reasons = []
+    if rec.get("init_problems"):
+        reasons.append("init bytes are not the frozen target: " + "; ".join(rec["init_problems"]))
     if rec["replay_status"] == 1:
         reasons.append("the UART replay is not bit-exact against the model")
     if peak < floor:
@@ -412,7 +456,7 @@ def interpret_live_midi_record(spec, run, out, role):
         missed.append("the record holds no controls")
     metrics = {"latency_sustained": {k: lat.get(k) for k in ("n", "p50_ms", "p95_ms",
                                                             "p99_ms", "max_ms")}}
-    periods = {}
+    periods, required_p = {}, {}
     for sc in spec.get("fixtures", []):
         rr = (rec.get("rtl") or {}).get(sc)
         if rr is None:
@@ -420,6 +464,12 @@ def interpret_live_midi_record(spec, run, out, role):
             continue
         comp = rr.get("comparison") or {}
         periods[sc] = comp.get("periods")
+        required_p[sc] = comp.get("periods_required")
+        if comp.get("periods") and comp.get("periods") != comp.get("periods_required"):
+            gaps.append(f"RTL replay {sc} I2S coverage {comp.get('periods')} of "
+                        f"{comp.get('periods_required')!r} required periods")
+        if not (rr.get("truncation_control") or {}).get("caught"):
+            missed.append(f"RTL truncation control for {sc} not caught")
         if not comp.get("periods"):
             gaps.append(f"RTL replay {sc} compared {comp.get('periods')!r} I2S periods")
         elif rr.get("state") == "FAIL":
@@ -430,7 +480,7 @@ def interpret_live_midi_record(spec, run, out, role):
         if name.startswith("control-") and not rr.get("caught_by_i2s"):
             missed.append(f"RTL {name} not caught by the I2S comparison")
     cov = dict(expected={"scenarios": ["coverage", "pressure", "sustained"],
-                         "rtl": spec.get("fixtures", [])},
+                         "rtl": spec.get("fixtures", []), "i2s_periods": required_p},
                observed={"scenarios": sorted(clean), "i2s_periods": periods})
     if fails and not gaps:
         return _result(FAIL, fails + missed, metrics=metrics, **cov)

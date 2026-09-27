@@ -38,8 +38,12 @@ CONGAS = [("LC", "06. Low Conga", "Conga Low"), ("MC", "07. Mid Conga", "Conga M
           ("HC", "08. Hi Conga", "Conga Hi")]
 ACCENTS = ["A", "B", "C"]
 
-# What the contract ships (spec/NUMERIC-CONTRACT.md 15.7.1, drums_fx
-# TOM_DROP_RATIO/MS/STEPS at the commit recorded in the provenance block).
+# What the contract shipped WHEN THIS MEASUREMENT WAS TAKEN
+# (spec/NUMERIC-CONTRACT.md 15.7.1, drums_fx TOM_DROP_RATIO/MS/STEPS at the
+# commit recorded in the provenance block). Frozen on purpose: this module's
+# output is the record of the disagreement it found, so the baseline it was
+# compared against must not move underneath it. 15.7.1 now ships 1.060 (#154);
+# `model/tom_drop_docs.py` is what checks the CURRENT constant against prose.
 SHIPPED_RATIO, SHIPPED_MS, SHIPPED_K = 1.7, 60.0, 3.0
 
 

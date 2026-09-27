@@ -596,24 +596,77 @@ class SurgeRig(_Plugin):
     # Width, and Shape mixes between one saw and the pair. Shape is BIPOLAR.
     # `--stage shape` sweeps it and identifies each result by
     # `audio_measure.waveform_id` -- time domain first, duty measured, nulls
-    # checked against that measured duty -- and the whole sweep is in
-    # docs/surge-shape-sweep.txt. What it measured, at A2 = 110 Hz:
+    # checked against that measured duty.
     #
-    #   Shape  reads       Width 50 %                  Width 25 %
-    #   0.00   -100.00 %   pulse, duty 50.0 %          pulse, duty 25.0 %
-    #   0.125   -75.00 %   pulse, duty 50.0 %          pulse, duty 25.0 %
-    #   0.25    -50.00 %   rectangle + a partial saw   pulse, duty 25.1 %
-    #   0.50      0.00 %   SAW  (Width has no effect)  SAW, the same waveform
-    #   0.75    +50.00 %   8 midpoint crossings        6 midpoint crossings
-    #   1.00   +100.00 %   a saw at 2*f0: the          6 midpoint crossings
-    #                      fundamental is cancelled
+    # THE TABLE BELOW IS A TRANSCRIPTION of that sweep, which is committed as
+    # docs/surge-waveform-mapping.txt -- the stage's own output, and the only
+    # authority for these cells. Nothing here is re-derived or paraphrased:
+    # `tools/check_surge_waveform_comment.py` parses the table back out of this
+    # file and REFUSES unless every cell reproduces that file character for
+    # character, and the `python` job of .github/workflows/rungs.yml runs it
+    # (and its controls) on every pull request -- so the two cannot drift
+    # silently again. A comment claiming that guarantee while the checker ran
+    # only on the build box would be the same defect one level up. They had:
+    # six cells
+    # disagreed with the sweep and the citation named a file that has never
+    # existed in this repository (issue #271).
+    #
+    # At A2 = 110 Hz, filter OFF, unison asserted at 1 voice, every FX slot
+    # off. UNQUALIFIED is `waveform_id` REFUSING to name a waveform for that
+    # run -- an outcome, not a waveform; the reasons are quoted below.
+    #
+    #   Shape    reads      Width     identified as
+    #   0.000  -100.00 %   50.00 %    pulse:50.0%
+    #   0.125   -75.00 %   50.00 %    pulse:50.1%
+    #   0.250   -50.00 %   50.00 %    UNQUALIFIED
+    #   0.375   -25.00 %   50.00 %    UNQUALIFIED
+    #   0.500     0.00 %   50.00 %    saw
+    #   0.625    25.00 %   50.00 %    UNQUALIFIED
+    #   0.750    50.00 %   50.00 %    UNQUALIFIED
+    #   0.875    75.00 %   50.00 %    UNQUALIFIED
+    #   1.000   100.00 %   50.00 %    UNQUALIFIED
+    #   0.000  -100.00 %   25.00 %    pulse:25.0%
+    #   0.125   -75.00 %   25.00 %    pulse:25.0%
+    #   0.250   -50.00 %   25.00 %    UNQUALIFIED
+    #   0.375   -25.00 %   25.00 %    saw
+    #   0.500     0.00 %   25.00 %    saw
+    #   0.625    25.00 %   25.00 %    saw
+    #   0.750    50.00 %   25.00 %    UNQUALIFIED
+    #   0.875    75.00 %   25.00 %    UNQUALIFIED
+    #   1.000   100.00 %   25.00 %    UNQUALIFIED
+    #
+    # Why each refusal fired, quoted from that file:
+    # (this list is the block's VERBATIM section -- every double-quoted run in
+    # it is checked against the sweep. Quotes elsewhere in this comment are
+    # labels, not measurements, and are NOT checked, so a measured string put
+    # outside this list would go unverified. Put it here.)
+    #   0.250        "6 discontinuities in one period -- neither a ramp nor a
+    #                rectangle" at Width 50 %, and "3 discontinuities in one
+    #                period" at 25 %
+    #   0.375, 0.625 "one discontinuity per period but not a saw" -- h2 reads
+    #                -10.2 and -1.4 dB where a saw needs -6.0, at Width 50 %
+    #                only. At 25 % both of those ARE saws, so Shape 0.500 is
+    #                the centre of a WIDE saw region there and of a narrow one
+    #                at 50 %; it is the only value that is a saw at both.
+    #   0.750        "harmonics above the fundamental at [2]" at Width 50 %,
+    #                and the h2 refusal again at 25 %, at -12.8 dB
+    #   0.875, 1.000 "4 midpoint crossings in one period -- the record holds 2
+    #                cycles of something, not one waveform" -- both widths at
+    #                0.875, and at Width 25 % for 1.000 as well
+    #   1.000 / 50 % "no component within 50 cents of the commanded 110.00 Hz
+    #                (the strongest nearby is 79.98 Hz, -551.7 cents)" -- the
+    #                DUAL SAW. Note what the sweep does NOT report here: no
+    #                waveform and no valid fundamental. This cell is why an
+    #                earlier version of this comment was wrong to call it a saw
+    #                at 2*f0 -- the measurement identifies nothing.
     #
     # The mapping that shipped had saw at 0.00 and square at 1.00: it asked for
-    # a 50 % PULSE and called it a saw, and for the DUAL SAW and called it a
-    # square. Every Surge oscillator row of docs/reference-voice-report.txt
-    # before this change is of a different waveform from the one it is
-    # labelled with. There is no triangle on this oscillator, so Surge has no
-    # counterpart for ours -- a finding about the comparison, not an error.
+    # a 50 % PULSE and called it a saw, and for the DUAL SAW -- the run the
+    # sweep could not qualify at all -- and called it a square. Every Surge
+    # oscillator row of docs/reference-voice-report.txt before this change is of
+    # a different waveform from the one it is labelled with. There is no
+    # triangle on this oscillator, so Surge has no counterpart for ours -- a
+    # finding about the comparison, not an error.
     #
     # The SINE is a separate oscillator type and it needs pinning just as hard:
     # 259 is a wave SELECTOR there (28 shapes) and 260 is Feedback, and the

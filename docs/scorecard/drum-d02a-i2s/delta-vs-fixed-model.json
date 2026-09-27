@@ -1,0 +1,97 @@
+{
+  "schema": "drum-integrated-rtl-vs-fixed-model-v1",
+  "case_id": "D02A",
+  "subject": "Snare / anchor",
+  "reference_profile": "fischer-tr808-103852:sd8/SD5050.WAV (TONE 5.0, SNAPPY 5.0)",
+  "baseline": {
+    "engine": "fixed-model",
+    "source_commit": "7dd6337",
+    "scorecard_state": "pass",
+    "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('SD') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 1 of 11"
+  },
+  "candidate": {
+    "engine": "integrated-rtl",
+    "source_commit": "99637db",
+    "scorecard_state": "pass",
+    "render_run": "synth_top.v 99637db-dirty under verilator: one hit of SD from the shipped kit, solo, at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 1 of 11; every register write sent over the SPI PINS and every sample decoded from the I2S pins (BCLK/LRCLK/SDATA), never read out of the model",
+    "simulator": "verilator",
+    "rtl_build": "99637db-dirty",
+    "decoded_i2s_sha256": "b5c5cad8e7f5422736585d0dc325b8a7e10b7174bef613d290e446859276e5f9"
+  },
+  "properties": [
+    {
+      "property": "Body/noise balance",
+      "units": "dB",
+      "tolerance": 3.0,
+      "baseline_value": -5.0021,
+      "candidate_value": -5.2127,
+      "difference": -0.21059999999999945,
+      "difference_in_tolerances": -0.07019999999999982,
+      "baseline_worst": 0.5810000000000001,
+      "candidate_worst": 0.6512,
+      "baseline_within_tolerance": true,
+      "candidate_within_tolerance": true,
+      "verdict_agrees": true
+    },
+    {
+      "property": "attack",
+      "units": "ms",
+      "tolerance": 2.1655,
+      "baseline_value": 4.2292,
+      "candidate_value": 4.2917,
+      "difference": 0.0625,
+      "difference_in_tolerances": 0.02886169475871623,
+      "baseline_worst": 0.04705610713461094,
+      "candidate_worst": 0.01819441237589471,
+      "baseline_within_tolerance": true,
+      "candidate_within_tolerance": true,
+      "verdict_agrees": true
+    },
+    {
+      "property": "noise decay",
+      "units": "ms",
+      "tolerance": 34.7293,
+      "baseline_value": 71.1033,
+      "candidate_value": 70.7201,
+      "difference": -0.3832000000000022,
+      "difference_in_tolerances": -0.011033910847612885,
+      "baseline_worst": 0.04736058601814606,
+      "candidate_worst": 0.036326675170533236,
+      "baseline_within_tolerance": true,
+      "candidate_within_tolerance": true,
+      "verdict_agrees": true
+    }
+  ],
+  "case_verdicts_agree": true,
+  "properties_that_differ": [
+    "Body/noise balance",
+    "attack",
+    "noise decay"
+  ],
+  "properties_whose_verdict_flips": [],
+  "worst": {
+    "baseline": 0.5810000000000001,
+    "candidate": 0.6512
+  },
+  "attribution": {
+    "engines_bit_identical_on_the_same_stimulus": true,
+    "stimulus_identical": false,
+    "attributable_to": "the stimulus",
+    "why": "THE STIMULUS, not the engine. The decoded window is bit-exact against the fixed model struck in the frame the SPI link put the strike in, and differs from the board's own render (11411 samples, max 4522 LSB) only because that render strikes in frame 480 and the drum noise LFSR free-runs. The chip and the model are the same engine on the same input."
+  },
+  "provenance": {
+    "source_commit": "99637db23c9da25f797e79a76d6e427673c182a0",
+    "source_dirty": true,
+    "input_sha256": {
+      "baseline_record": "cc8f8b8f9d94dadaa21fa1f6ac1408d0dabe55c2aec5bf4aa96d8ea2cbf49445",
+      "candidate_record": "b64f77deec894e43ad6235643049b2f1acaef12dae7a8ec6f93c5921ced958c8"
+    },
+    "source_sha256": {
+      "tools/compare_drum_i2s_candidate.py": "7c5ad7931647edb6ffda63cf819ad0f77953771abd52ca8bf7f7b1e9cc06831a",
+      "tools/score_drum_i2s.py": "a412fa51a262b98ddc8e97ef54f3e43c8a0fe813ab2322c4ebb332ff3208aa6f",
+      "tools/run_case.py": "af0f6c0f7282bea85ff7e19b1005731dccd4136fd016b1773b2bb545dc3bf6af",
+      "tools/scorecard.py": "801a4d48c1347c43a58c7989e35374c2a2ad29a3d93405bdce3ec99d56ce45d0"
+    },
+    "run_at_utc": "2026-09-26T22:57:13.201925+00:00"
+  }
+}

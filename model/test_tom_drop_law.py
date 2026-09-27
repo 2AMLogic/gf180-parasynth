@@ -18,6 +18,7 @@ sys.path.insert(0, str(HERE.parent / "audition"))
 import drums_fx as dx
 import tom_drop_fit as F
 import tom_drop_compare as C
+import tom_drop_docs as D
 
 REPO = HERE.parent
 LAW = json.loads((REPO / "docs" / "tom-pitch-drop-law.json").read_text(encoding="utf-8"))
@@ -210,3 +211,143 @@ def test_each_step_holds_the_intervals_mean_of_the_law():
         assert got == pytest.approx(f0 * (1.0 + e * shape), rel=2e-3), i
     assert w[0][0] == 0
     assert w[-1][0] == int(round(dx.TOM_DROP_MS * 1e-3 * dx.SR))
+
+
+# ------------------------------------------ the prose against the tree (#95) ----
+
+def test_the_reference_documents_carry_the_measured_magnitude():
+    """`tr808-reference.md` 4 and `drum-verification.md` 12 must state the
+    magnitude, the accent threshold and the tuning slope that `drums_fx`
+    actually ships -- and the per-accent table must be #110's own medians.
+
+    THIS IS ISSUE #95's residual. #110 measured the drop and #154 shipped the
+    correction, and for a week afterwards both reference documents still said
+    x1.7: `tr808-reference.md` in the paragraph that ORIGINATED the inference,
+    `drum-verification.md` 8.4 in a table that had upgraded it from *magnitude
+    inferred* to *verified in a source*. Nothing caught that, because nothing
+    was checking. This is the check."""
+    ref = D.REFERENCE.read_text(encoding="utf-8")
+    ver = D.VERIFICATION.read_text(encoding="utf-8")
+    assert D.prose_disagreements(ref, ver) == []
+    # and the refuted figure is still named as refuted, not quietly deleted:
+    # a reader who arrives with x1.7 in hand has to be able to find out why.
+    assert "REFUTED" in ver
+    assert "x1.7" in ver.replace("×1.7", "x1.7")
+
+
+def test_the_prose_check_refuses_a_document_with_no_law_in_it(monkeypatch):
+    """The pre-#154 documents, verbatim. A document that does not state the law
+    cannot agree with it, and REFUSED is the only honest verdict -- reporting
+    OK for an absent claim is how a claim outlives its evidence.
+
+    Run against the real files as they stood on `origin/main`, not a mock, so
+    this test also demonstrates that the gate was RED before the change."""
+    import subprocess
+    try:
+        old = subprocess.run(["git", "-C", str(REPO), "show",
+                              "origin/main:docs/tr808-reference.md"],
+                             capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pytest.skip("no origin/main in this checkout")
+    if "1.063" in old:
+        pytest.skip("origin/main already carries the correction")
+    with pytest.raises(D.Refused):
+        D.stated_law(old)
+
+
+def test_the_prose_check_goes_STALE_if_the_inferred_magnitude_is_restored():
+    """The injected defect: put x1.7 back in the reference document's table and
+    leave everything else alone. STALE, not REFUSED -- the evidence was found
+    and it contradicts the prose."""
+    ref = D.REFERENCE.read_text(encoding="utf-8")
+    ver = D.VERIFICATION.read_text(encoding="utf-8")
+    hurt = ref.replace("**×1.063**", "**×1.700**")
+    assert hurt != ref, "the amendment table moved; this control no longer injects anything"
+    bad = D.prose_disagreements(hurt, ver)
+    assert any("x1.7" in b for b in bad), bad
+
+
+def test_the_prose_check_goes_STALE_if_the_shipped_constant_moves(monkeypatch):
+    """The other direction, which is the one that will actually happen: the code
+    changes and the prose does not. A future refit must turn this red."""
+    monkeypatch.setattr(dx, "TOM_DROP_RATIO", 1.200)
+    monkeypatch.setattr(dx, "TOM_DROP_ACCENT_0", 0.400)
+    bad = D.prose_disagreements(D.REFERENCE.read_text(encoding="utf-8"),
+                                D.VERIFICATION.read_text(encoding="utf-8"))
+    assert any("TOM_DROP_RATIO" in b for b in bad), bad
+    assert any("A0 (tom)" in b for b in bad), bad
+
+
+# --------------------------------------------- the congas re-examined (#95) ----
+
+def test_the_congas_carry_neither_the_clamp_nor_the_missing_tuning_term():
+    """#95's last question: the congas share the toms' circuit at about half the
+    drop, so do they share the two defects the toms had?
+
+    They do not. Against #110's 63 conga files, each placed on the MODEL's pot
+    (chart f0 scaled by that row's own u -- centre to centre, see
+    `tom_drop_docs`), the shipped law is within 0.0055 of excess on every cell's
+    median and 0.0226 at worst. 0.005 of excess is under 1 Hz at LC and under
+    2 Hz at HC, which is the board's own `pitch_drop_hz` floor.
+
+    The *No Accent* cells read shipped 0 against a measured 0.003-0.005 -- the
+    conga threshold A0 = 1.064 sits above an unaccented hit, and the machine's
+    unaccented congas sit at the measurement floor. That agreement is the
+    threshold working, and it is exactly what the old clamp destroyed."""
+    r = D.conga_verdict()
+    assert r["verdict"] == "PASS", r["failing_cells"]
+    assert set(r["cells"]) == {"LC A", "LC B", "MC A", "MC B", "HC A", "HC B"}
+    assert r["max_abs_median"] < D.CONGA_MEDIAN_MAX
+    assert r["worst"] < D.CONGA_WORST_MAX
+
+
+def test_the_conga_check_fires_when_the_accent_clamp_is_restored():
+    """Injected defect 1: the pre-#154 clamp, at the CORRECTED magnitude, so
+    this isolates the clamp from the constant. An unaccented conga then gets
+    the full 0.060 where the machine does 0.004, and the No Accent cells' median
+    error goes to +0.055 -- five times the bound."""
+    def clamped(mode, f0_hz, accent):
+        if dx.tom_position(mode, f0_hz) is None:
+            return 0.0
+        return (dx.TOM_DROP_RATIO - 1.0) * min(max(accent, 0.0), 1.0)
+
+    r = D.conga_verdict(clamped)
+    assert r["verdict"] == "FAIL"
+    assert r["max_abs_median"] > 5 * D.CONGA_MEDIAN_MAX, r["max_abs_median"]
+    assert {"LC A", "MC A", "HC A"} <= set(r["failing_cells"]), r["failing_cells"]
+
+
+def test_the_conga_check_fires_when_the_conga_is_given_the_toms_tuning_slope():
+    """Injected defect 2: G pooled across both positions, i.e. the conga run on
+    the tom's 3.58 instead of its own 7.46.
+
+    NOTE WHICH BOUND CATCHES IT, because it is a design point and not an
+    accident. At the pot CENTRE the two slopes agree exactly -- exp(G*0) = 1 for
+    any G -- so a tuning fault is invisible to a centre-only comparison and
+    invisible to the median. It shows only at the pot's ends, which is why this
+    check reads every file at its own u and bounds the WORST row as well as the
+    median. A centre-only version of this test would have been a false green."""
+    def pooled_g(mode, f0_hz, accent):
+        name = dx.tom_position(mode, f0_hz)
+        if name is None:
+            return 0.0
+        conga = name in D.CONGAS
+        a0 = dx.TOM_DROP_ACCENT_0_CONGA if conga else dx.TOM_DROP_ACCENT_0
+        drive = max(0.0, accent - a0) / (1.0 - dx.TOM_DROP_ACCENT_0)
+        if drive <= 0.0:
+            return 0.0
+        u = f0_hz / dx.TOM_PRESET[name][0] - 1.0
+        u = min(max(u, -dx.TOM_DROP_TUNING_SPAN), dx.TOM_DROP_TUNING_SPAN)
+        return (dx.TOM_DROP_RATIO - 1.0) * drive * math.exp(dx.TOM_DROP_TUNING_G * u)
+
+    clean = D.conga_verdict()
+    hurt = D.conga_verdict(pooled_g)
+    assert hurt["verdict"] == "FAIL", hurt
+    assert hurt["worst"] > 2 * clean["worst"], (clean["worst"], hurt["worst"])
+    # the medians barely move: that is the blind spot this control documents
+    assert hurt["max_abs_median"] == pytest.approx(clean["max_abs_median"], abs=2e-3)
+
+
+def test_the_conga_re_examination_refuses_a_voice_it_has_no_files_for():
+    with pytest.raises(D.Refused):
+        D.conga_cell_errors(voices=("XX",))

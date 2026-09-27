@@ -208,7 +208,8 @@ class _Osc:
     hi: int = 0
 
 
-def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = None) -> dict:
+def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = None,
+                 image: str = "release") -> dict:
     """Validate register writes in the order they APPLY: (flag, sec, addr,
     data). `initial` is "reset" (the device's reset image: incs 0, glide 0,
     waves saw, weights 0, mroute/mwheel/mpd 0) or "unknown" (the device was
@@ -259,6 +260,10 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
             glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
             continue
         if addr == A_DRIFT:
+            if data & 0xFFFF and image == "tree":
+                raise Rejected("NOT_IN_IMAGE", "DRIFT (0x2D) is compiled into the R1 (tree) "
+                               "image but is not in its qualified player domain (#279); use "
+                               "the engineering interface", i)
             if data & 0xFFFF:
                 raise Rejected("NOT_IN_IMAGE", "DRIFT (0x2D) was added to voice_dp.v by #252 after "
                                "the released image was built; this image ignores it, so a "

@@ -42,6 +42,46 @@ the integrated RTL:
 **That is the failure this column exists to prevent** — optimising eighty cases
 against a model the built instrument does not reproduce.
 
+### The two anchors that exist, and what each one drives
+
+An `integrated-rtl` row is not one thing. What the label promises is that the
+audio scored came out of synthesizable RTL; *which* RTL, and how the stimulus
+reached it, differs by family and has to be read off the record:
+
+| case | route | driven by | scored by |
+|---|---|---|---|
+| `M5A` | SPI pins → `synth_top` → I2S pins, decoded | `rtl-sketch/verify_synth_top.py` | `tools/score_m5a_i2s.py` |
+| `F1A` | stepped tone → `rate_conv_2x` → `ladder_dp_n` → `rate_conv_2x` | `rtl-sketch/tb_f1_chain.v` | `tools/score_f1_rtl.py` |
+
+**`M5A`'s route does not generalise to a filter case**, and the reason is worth
+stating rather than discovering: `synth_top` has no audio input. Its filter is
+fed by the oscillator mixer, and an F1 case is a transfer function — it needs a
+stepped tone to enter the *filter*. So `F1A` drives the two production filter
+modules directly, composed by `rtl-sketch/tb_f1_chain.v` in the order and with
+the sequencing `voice_dp.v` uses under `VOICE_FILTER_2X`. That is a smaller
+claim than `M5A`'s: it covers the filter path, not the pin-to-pin chip.
+`tools/check_f1_rtl_record.py` binds the record to the bytes of the bench and
+both modules, so the claim cannot outlive the RTL it was made about.
+
+**The RTL reading and its `fixed-model` twin come from the same scorer.**
+`run_case.run_filter_case` takes the filter path as an argument, so both engines
+meet the same estimators, the same frozen Surge clips and the same tolerance
+policy; a second scoring path would have left a difference between engines
+indistinguishable from a difference between scorers. Both readings stay on the
+record under `engine_comparison`, because a disagreement is the finding, not a
+thing to overwrite.
+
+**What the F1 stimulus does not exercise, measured rather than assumed.** F1A–F1C
+command resonance 0, so `k_eff` is 0 and the ladder's feedback term is multiplied
+by zero; the probe sits at −12 dBFS, so nothing saturates and the interpolated
+word never passes ±32767. Of the arithmetic-corner controls in `ladder_dp_n.v`
+and `rate_conv_2x.v`, **none can turn an F1 curve red** — checked, not assumed
+(`f1_rtl_filter_path.INJECTS_NOT_EXERCISED`). The two controls that do fire are
+composition defects in the bench (bypass the interpolator; drop the decimator),
+and they are in `make controls`. A Filters row is therefore evidence about the
+filter's *linear* response on the instrument and says nothing about its
+nonlinear corners.
+
 ## Two scores for one change: bass compensation
 
 A ladder loses bass as its resonance rises — `H(0) = 1/(1 + k)` in the
