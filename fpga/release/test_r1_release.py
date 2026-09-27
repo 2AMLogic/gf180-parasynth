@@ -241,3 +241,42 @@ def test_write_on_the_clean_evidence_reproduces_the_committed_manifest(tmp_path)
     out = tmp_path / "manifest.json"
     assert rr.main(["--write", "--manifest", str(out)]) == 0
     assert out.read_bytes() == rr.MANIFEST.read_bytes()
+
+
+# ---- the ext-I/O instrument is pinned by version, not read from the tree -------------
+@pytest.fixture
+def no_pinned_cache():
+    rr._PINNED.clear()
+    yield
+    rr._PINNED.clear()
+
+
+def test_the_tree_extractor_is_not_what_r1_is_checked_against(monkeypatch, no_pinned_cache):
+    """R2 changes fpga/ext_io_extract.py (the #315 UART patterns). R1's record is
+    checked with the instrument pinned at EXT_IO_INSTRUMENT_COMMIT: a broken
+    tree module changes nothing."""
+    import types
+    broken = types.ModuleType("ext_io_extract")
+    broken.evaluate = broken.parse = broken.tcl = lambda *a, **k: 1 / 0
+    monkeypatch.setitem(sys.modules, "ext_io_extract", broken)
+    verdict, detail = rr.check()
+    assert verdict == "BOUND", detail
+
+
+def test_control_a_record_from_another_instrument_is_refused(tmp_path, monkeypatch,
+                                                             no_pinned_cache):
+    _tamper_ext_io(tmp_path, monkeypatch, _set(("instrument_sha256",), "0" * 64))
+    verdict, detail = rr.check()
+    assert verdict == "REFUSED" and "other than the one pinned" in detail, detail
+
+
+def test_control_a_wrong_pin_is_refused(monkeypatch, no_pinned_cache):
+    """Pinned at the commit BEFORE the instrument's last change: its bytes are
+    not the record's instrument."""
+    import subprocess
+    parent = subprocess.run(["git", "-C", str(ROOT), "rev-parse",
+                             rr.EXT_IO_INSTRUMENT_COMMIT + "^"],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    monkeypatch.setattr(rr, "EXT_IO_INSTRUMENT_COMMIT", parent)
+    verdict, detail = rr.check()
+    assert verdict == "REFUSED" and "other than the one pinned" in detail, detail
