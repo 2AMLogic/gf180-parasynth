@@ -14,13 +14,14 @@ their sum, so the bands are read two ways:
                 fitted from -10 to -30 dB, scaled to 20 dB)
 
 Per band: energy share of the strike's first 1.0 s (dB re the whole signal
-in 200 Hz-20 kHz), EDT10, T20_late. Envelopes are 5 ms RMS of a zero-phase
-band-pass run from prepare()'s guaranteed lead (#101: never from mid-strike).
+in 200 Hz-20 kHz), EDT10 and T20_late off the band's floor-subtracted
+Schroeder curve. Every band-pass is zero-phase and run from prepare()'s
+guaranteed lead (#101: never from mid-strike).
 
 REFUSES, per quantity, rather than answering:
-  * the band's envelope does not reach -30 dB before the record ends, or its
-    noise floor (last 100 ms) is within 10 dB of -30 dB below its peak;
-  * the late line's residual exceeds 1.5 dB (not one exponential there);
+  * the band's floor-subtracted Schroeder curve does not reach -30 dB, or the
+    record ends less than 15 dB (of envelope) after the -30 dB point;
+  * the late line's residual on the Schroeder curve exceeds 1.5 dB;
   * the band holds less than 1e-6 of the energy.
 Known answers: tools/test_cymbal_bands.py (synthetic three-band strikes with
 planted shares and time constants; invariances; controls that must move).
@@ -47,6 +48,7 @@ BLOCK_S = 0.005
 LATE = (-10.0, -30.0)
 FLOOR_MARGIN_DB = 10.0
 MAX_RESID_DB = 1.5
+TRUNC_MARGIN_DB = 15.0
 
 
 class Refused(RuntimeError):
@@ -68,37 +70,56 @@ def _env_db(x, sr):
 
 
 def band_decay(x, sr) -> dict:
-    """EDT10 and late T20 of one band's envelope, or a refusal reason."""
-    e, n = _env_db(x, sr)
-    ip = int(np.argmax(e))
-    pk = e[ip]
-    t = (np.arange(len(e)) + 0.5) * n / sr
-    tail = e[-int(0.1 / BLOCK_S):] if len(e) > int(0.2 / BLOCK_S) else e[-4:]
-    floor = float(np.mean(tail))
-    out = {"peak_db": round(float(pk), 2), "floor_db_re_peak": round(floor - pk, 2)}
-    after = e[ip:] - pk
-    i10 = np.nonzero(after <= -10.0)[0]
-    out["edt10_ms"] = round(1e3 * (t[ip + i10[0]] - t[ip]), 2) if len(i10) else None
-    if floor - pk > LATE[1] - FLOOR_MARGIN_DB:
-        out["t20_late_ms"] = None
-        out["t20_refused"] = f"noise floor {floor - pk:.1f} dB re peak is within {FLOOR_MARGIN_DB} dB of {LATE[1]} dB"
-        return out
-    i30 = np.nonzero(after <= LATE[1])[0]
+    """EDT10 and late T20 of one band, off its backward-integrated (Schroeder)
+    energy curve with the record's noise floor subtracted.
+
+    The first version fitted the 5 ms RMS envelope directly and refused every
+    808 file: six beating squares make that envelope wander 2-4 dB about its
+    trend, so a 1.5 dB residual bound read the beating as "not exponential".
+    The Schroeder curve is monotone by construction and averages the beating
+    out; the floor (mean power of the last 100 ms) is subtracted first so a
+    constant floor does not flatten the tail.
+    Truncation guard: the band's 50 ms envelope at the record's end must be at
+    least TRUNC_MARGIN_DB below its level where the curve crosses -30 dB, which
+    bounds the missing-tail bias at that point to about 0.14 dB."""
+    x = np.asarray(x, dtype=np.float64)
+    p = x * x
+    nf = max(4, int(0.1 * sr))
+    floor = float(np.mean(p[-nf:]))
+    sm = int(0.05 * sr)
+    env = np.convolve(p, np.ones(sm) / sm, mode="same")
+    pk = float(np.max(env))
+    out = {"floor_db_re_peak": round(10 * math.log10(max(floor, 1e-30) / pk), 2)}
+    q = np.maximum(p - floor, 0.0)
+    sch = np.cumsum(q[::-1])[::-1]
+    if sch[0] <= 0:
+        raise Refused("band holds no energy above its floor")
+    c = 10 * np.log10(np.maximum(sch / sch[0], 1e-30))
+    t = np.arange(len(c)) / sr
+    i10 = np.nonzero(c <= -10.0)[0]
+    out["edt10_ms"] = round(1e3 * t[i10[0]], 2) if len(i10) else None
+    i30 = np.nonzero(c <= LATE[1])[0]
     if not len(i10) or not len(i30):
         out["t20_late_ms"] = None
-        out["t20_refused"] = "the envelope does not reach -30 dB before the record ends"
+        out["t20_refused"] = "the energy curve does not reach -30 dB"
         return out
-    a, b = ip + i10[0], ip + i30[0]
-    if b - a < 4:
+    a, b = i10[0], i30[0]
+    lvl30 = 10 * math.log10(max(env[b], 1e-30) / pk)
+    lvl_end = 10 * math.log10(max(float(np.mean(env[-sm:])), 1e-30) / pk)
+    out["end_margin_db"] = round(lvl30 - lvl_end, 2)
+    if lvl30 - lvl_end < TRUNC_MARGIN_DB:
         out["t20_late_ms"] = None
-        out["t20_refused"] = "fewer than four envelope blocks between -10 and -30 dB"
+        out["t20_refused"] = (f"record too short: the envelope at the end is only {lvl30 - lvl_end:.1f} dB "
+                              f"below its level at the -30 dB point (need {TRUNC_MARGIN_DB})")
         return out
-    slope, icpt = np.polyfit(t[a:b + 1], e[a:b + 1], 1)
-    resid = float(np.max(np.abs(e[a:b + 1] - (slope * t[a:b + 1] + icpt))))
+    step = max(1, (b - a) // 400)
+    tt, cc = t[a:b + 1:step], c[a:b + 1:step]
+    slope, icpt = np.polyfit(tt, cc, 1)
+    resid = float(np.max(np.abs(cc - (slope * tt + icpt))))
     out["late_residual_db"] = round(resid, 2)
     if resid > MAX_RESID_DB or slope >= 0:
         out["t20_late_ms"] = None
-        out["t20_refused"] = f"late decay is not one exponential (residual {resid:.1f} dB)"
+        out["t20_refused"] = f"late decay is not one exponential (Schroeder residual {resid:.1f} dB)"
         return out
     out["t20_late_ms"] = round(-20.0 / slope * 1e3, 2)
     return out
