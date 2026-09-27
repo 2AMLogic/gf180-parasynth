@@ -166,3 +166,78 @@ def test_the_trial_passes_with_both_controls_caught(tmp_path):
 def test_each_stale_control_as_the_candidate_is_fail(tmp_path, control):
     run_dir, rec = trial.run_trial("T-RELEASE-BOUND-R1", as_candidate=control, out_base=tmp_path)
     assert rec["verdict"] == trial.FAIL, rec["verdict_reasons"]
+
+
+# ---- #319: the ext-I/O record is RE-DERIVED from its raw paths, not trusted ----------
+def _tamper_ext_io(tmp_path, monkeypatch, edit):
+    dst = _copy_pub(tmp_path)
+    p = dst / rr.EXT_IO
+    rec = json.loads(p.read_text())
+    edit(rec)
+    p.write_text(json.dumps(rec, indent=1) + "\n")
+    monkeypatch.setattr(rr, "PUB_DIR", dst)
+    return dst
+
+
+def _set(path, value):
+    def edit(rec):
+        d = rec
+        for k in path[:-1]:
+            d = d[k]
+        assert path[-1] in d, path
+        d[path[-1]] = value
+    return edit
+
+
+DERIVED_TAMPERS = {
+    # the Judge's #319 repro: a fabricated slack became BOUND under --write
+    "spi_miso setup slack": (("ports", "spi_miso", "setup_slack_ns"), 25.0),
+    "uart_txd hold slack": (("ports", "uart_txd", "hold_slack_ns"), 9.0),
+    "worst setup slack": (("worst_setup_slack_ns",), 16.0),
+    "readback MHz": (("spi_miso", "max_guaranteed_readback_mhz"), 2.0),
+    "CO bound": (("spi_miso", "sta_co_bound_ns"), 9.5),
+    "control slack": (("control", "spi_miso_setup_slack_ns"), -1.0),
+    "control verdicts": (("control", "verdicts", "led[1]"), "FAIL"),
+    "uart synchroniser match": (("synchronisers", "patterns", "xdc:uart_async_reg", "matched"), 2),
+    "an input slack": (("inputs", "spi_sck", "slack_ns"), 1.0),
+}
+EXTRACTION_TAMPERS = {
+    "tcl digest": (("tcl_sha256",), "0" * 64),
+    "log digest": (("log_sha256",), "0" * 64),
+    "tool": (("tool",), "Vivado v2024.2 SW Build 1"),
+    "vivado rc": (("vivado_rc",), 1),
+    "state": (("state",), "FAIL"),
+    "summary": (("summary",), "7 timed outputs, all fine"),
+    "dcp path": (("dcp",), "/elsewhere/routed.dcp"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(DERIVED_TAMPERS) + sorted(EXTRACTION_TAMPERS))
+def test_a_tampered_ext_io_field_is_refused_even_under_write(tmp_path, monkeypatch, capsys, name):
+    path, value = {**DERIVED_TAMPERS, **EXTRACTION_TAMPERS}[name]
+    _tamper_ext_io(tmp_path, monkeypatch, _set(path, value))
+    out = tmp_path / "manifest.json"
+    assert rr.main(["--write", "--manifest", str(out)]) == 2
+    assert not out.exists()                          # nothing was bound
+    assert "REFUSED" in capsys.readouterr().out
+    verdict, detail = rr.check()
+    assert verdict == "REFUSED" and rr.EXT_IO in detail, detail
+
+
+def test_an_unknown_or_missing_ext_io_field_is_refused(tmp_path, monkeypatch):
+    _tamper_ext_io(tmp_path, monkeypatch, lambda rec: rec.pop("failing_ports"))
+    verdict, detail = rr.check()
+    assert verdict == "REFUSED" and "failing_ports" in detail, detail
+
+
+def test_the_clean_ext_io_record_re_derives_field_for_field():
+    rec = json.loads((rr.PUB_DIR / rr.EXT_IO).read_text())
+    derived = rr.rederive_ext_io(rr.PUB_DIR / rr.EXT_IO)
+    assert set(derived) == set(rec) - set(rr.EXT_IO_EXTRACTION_ONLY)
+    assert all(derived[k] == rec[k] for k in derived)
+
+
+def test_write_on_the_clean_evidence_reproduces_the_committed_manifest(tmp_path):
+    out = tmp_path / "manifest.json"
+    assert rr.main(["--write", "--manifest", str(out)]) == 0
+    assert out.read_bytes() == rr.MANIFEST.read_bytes()
