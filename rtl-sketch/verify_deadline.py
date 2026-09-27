@@ -713,13 +713,18 @@ def arty_items():
     return items, regs
 
 
-def run_arty(*, inject, outdir, rtl_dir=None):
+def run_arty(*, inject, outdir, rtl_dir=None, pulse2x=False):
     import verify_uart_bridge as vub
+    if pulse2x:
+        # R2 (#333): the Arty wrapper in the PULSE2X=1 configuration -- the
+        # bench's defines and its model both follow vub.CONFIG
+        with vub.with_config(PULSE2X=1):
+            return run_arty(inject=inject, outdir=outdir, rtl_dir=rtl_dir)
     items, regs = arty_items()
     vub.SCENARIOS["deadline-arty"] = lambda: (items, {"tail": 200})
     print(f"verify_deadline: arty-uart: {sum(1 for i in items if i[0] == 'write')} live writes, "
           f"{sum(1 for i in items if i[0] == 'event')} device-scheduled events over the UART pin; "
-          f"wrapper fpga/rtl/arty_a7_top.v, published configuration {vub.CONFIG}")
+          f"wrapper fpga/rtl/arty_a7_top.v, configuration {vub.CONFIG}")
     cwd = os.getcwd()
     os.chdir(HERE)                    # the monitor's `include resolves from rtl-sketch
     try:
@@ -903,11 +908,11 @@ def main(argv=None) -> int:
         if res is None:
             return _exit(2, a)
     elif a.scenario == "arty-uart":
-        if a.pulse2x or a.no_osc2x or a.no_filter2x:
-            print("verify_deadline: REFUSED -- arty-uart runs the published Arty configuration "
-                  "(OSC2X=1 FILTER2X=1 PULSE2X=0) only"); return 2
+        if a.no_osc2x or a.no_filter2x:
+            print("verify_deadline: REFUSED -- arty-uart runs OSC2X=1 FILTER2X=1 (the Arty "
+                  "images), with PULSE2X=0 (R1) or --pulse2x (the R2 candidate)"); return 2
         rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
-        res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir)
+        res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir, pulse2x=a.pulse2x)
     else:
         rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
         res = run_spi(a.scenario, osc2x=osc2x, filter2x=filter2x, pulse2x=a.pulse2x,
@@ -992,10 +997,12 @@ def analyse_capture(d, record, a):
     def sha(f):
         return hashlib.sha256(open(f, "rb").read()).hexdigest()
     if a.scenario == "arty-uart":
+        import verify_uart_bridge as vub
         run, regs = arty_run_from_capture(d, a.inject)
         if run is None:
             print(f"verify_deadline: REFUSED -- {d}/uart_cmds.txt is not this scenario's plan"); return None
-        res = evaluate_arty(run, regs)
+        with vub.with_config(PULSE2X=int(a.pulse2x)):     # the capture's own configuration
+            res = evaluate_arty(run, regs)
         names = ["uart_cmds.txt", "transcript.txt", "uart_i2s.txt", "uart_wrs.txt", "uart_wrs.txt.sched",
                  "uart_txd.txt", "uart_samp.txt"]
     else:

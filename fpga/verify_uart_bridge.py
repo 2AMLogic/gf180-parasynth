@@ -84,6 +84,37 @@ STUB = ROOT / "fpga/stubs/arty_a7_uart_stub.v"
 BRIDGE = ROOT / "rtl-sketch/uart_bridge.v"
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
 
+
+def config_defines() -> list:
+    """The voice defines of CONFIG: the published R1 configuration by default;
+    rtl-sketch/verify_deadline.py sets PULSE2X for the R2 candidate's UART
+    run (with_config below). The model is built from the same CONFIG."""
+    return (["VOICE_OSC_2X"] if CONFIG["OSC2X"] else []) \
+        + (["VOICE_FILTER_2X"] if CONFIG["FILTER2X"] else []) \
+        + (["VOICE_PULSE_2X"] if CONFIG["PULSE2X"] else [])
+
+
+def config_model(stm_mod):
+    return stm_mod.SynthTopModel(oversample_2x=bool(CONFIG["OSC2X"]),
+                                 filter_2x=bool(CONFIG["FILTER2X"]),
+                                 pulse_2x=bool(CONFIG["PULSE2X"]))
+
+
+class with_config:
+    """Temporarily run this bench in another voice configuration."""
+
+    def __init__(self, **cfg):
+        self.cfg = cfg
+
+    def __enter__(self):
+        global CONFIG
+        self.old, CONFIG = CONFIG, dict(CONFIG, **self.cfg)
+        return CONFIG
+
+    def __exit__(self, *exc):
+        global CONFIG
+        CONFIG = self.old
+
 RE_SEG = re.compile(r"SEG (\d+) origin_tcc (\d+) periods (\d+) strobes (\d+)")
 RE_RAN = re.compile(r"ran (\d+) frames in (\d+) segments; (\d+) I2S periods decoded")
 RE_WRT = re.compile(r"writes drained (\d+), spi\+uart slot collisions (\d+)")
@@ -443,7 +474,7 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
     srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
         + [str(BRIDGE), str(WRAPPER)]
-    defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "UART_HIER"]
+    defines = config_defines() + ["UART_HIER"]
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
     identity = replay_identity(srcs, defines, cmd_path, tail_frames)
@@ -545,7 +576,7 @@ def simulate(scenario, inject, outdir, *, rtl_wrapper=WRAPPER, uart_hier=True):
     # would duplicate the compile unit
     srcs = [str(BENCH)] + [p for _, p in resolved if p != str(BRIDGE)] \
         + [str(BRIDGE), str(rtl_wrapper)]
-    defines = ["VOICE_OSC_2X", "VOICE_FILTER_2X"]
+    defines = config_defines()
     if inject:
         defines.append(f"INJECT_BUG_{inject}")
     if uart_hier:
@@ -790,8 +821,7 @@ def analyze(run):
         if s + 1 < len(origins):
             # a segment ends where the next one's audio begins (the reset)
             n = min(n, origins[s + 1] - origin)
-        m = stm.SynthTopModel(oversample_2x=True, filter_2x=True, pulse_2x=False
-                              ).run(model_writes, n)
+        m = config_model(stm).run(model_writes, n)
         exp_i2s, exp_s = m["i2s"], m["sample"]
         p0 = segs[s][2]                                   # periods at segment origin
         periods = [r for r in i2s if _int_or_none(r[0]) is not None and p0 <= int(r[0]) < p0 + n]
@@ -864,8 +894,7 @@ def analyze(run):
         origin = origins[0]
         model_writes = [(e[0] - origin, e[1], e[2], e[3], e[4]) for e in exp_all]
         n = max(f for f, *_ in model_writes) + 500
-        m = stm2.SynthTopModel(oversample_2x=True, filter_2x=True,
-                               pulse_2x=False).run(model_writes, n)
+        m = config_model(stm2).run(model_writes, n)
         tail_peak = int(np.abs(m["sample"][-400:]).max())
         comp["release_tail_peak"] = tail_peak
         if tail_peak > 1024:
