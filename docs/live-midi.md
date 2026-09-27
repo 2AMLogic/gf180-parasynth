@@ -481,8 +481,25 @@ The host is overloaded in two ways, and each has a defined response:
     A note-on or drum hit in it is REFUSED `stale`, because a late note is
     not played. Note-offs, knobs and panic in it are still delivered, because
     the device state must converge.
-  - 100 ms is a chosen default, well past the frozen p99 target. It is a
-    product choice, and the operator can change it.
+  - **100 ms is a product choice, decided by the operator** (#330). It sits
+    well past the frozen p99 target, so only a real stall trips it. The
+    alternative, playing late notes, was considered and rejected: a note
+    that sounds a quarter-second after the key is worse than no note.
+  - **Sent dues never decrease** (#339). The device drops an event whose due
+    is before the last one it queued. This is the numeric contract and
+    `uart_bridge.v`'s behaviour, and the operator adopted it as policy P3.
+    The host avoids creating that case:
+    - A note handed over a few milliseconds after its receipt can be
+      scheduled before a kick's already-sent timed tail (the BD attack
+      window, about 190 frames after its anchor).
+    - Without a guard, the device dropped **every packet of that note**
+      (measured: ERR 3 on all five).
+    - The host now sends such a packet at the last sent due instead, at most
+      the tail's offset later (about 4 ms). It prints the first case live
+      (`ORDER -- ...`) and counts each one (`order_guarded`, in the closing
+      line).
+    - A drop the device still reports arrives as `DEVICE ERR ... due in the
+      past or out of order`, and the CLI exits 1.
 
 Why re-dating matters: before it, a 1 s stall with receipts still
 timestamped **lost 57–69 of 233 scheduled messages**. A due more than half a
@@ -507,7 +524,14 @@ target. No note or hit sounds more than `STALE_MS` plus the lookahead late.
 The controls are each repair removed (`inject` `NO_REDATE` / `NO_STALE`):
 
 - without re-dating, the same 1 s stall **loses** events again (54);
-- without the stale rule, notes sound up to a second late.
+- without the stale rule, notes sound up to a second late;
+- without the order guard (`NO_ORDER_GUARD`), the device drops the note that
+  was handed over late behind a kick's tail.
+
+The late-hand-over case is a likely cause of the lost anchors in the loaded
+laptop runs above. There, host hold reached tens of milliseconds, and the
+declared load has a kick on most beats. That is an inference from the
+mechanism, not re-measured, and the quiet-host re-run will show it.
 
 ## Verification
 

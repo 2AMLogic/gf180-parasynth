@@ -126,6 +126,7 @@ CC_ALL_SOUND_OFF, CC_ALL_NOTES_OFF = 120, 123
 # (fpga/test_measure_mac_midi_latency.py: a 1 s stall must then LOSE events):
 #   NO_STALE        a stale chunk is scheduled at its old receipt, notes included
 #   NO_REDATE       a late packet is sent with its stale due
+#   NO_ORDER_GUARD  a packet whose due is before the last one sent goes as it is
 DELAY_INJECT_FRAMES = 240
 
 
@@ -334,12 +335,14 @@ class MidiSession:
         self.last_rx_t = None
         self.closed_at = None
         self.input_lost = None              # why the MIDI input failed mid-session
+        self.last_sent_due = None           # the device drops a due before its last (#339)
         self._stale_receipt = None          # set while handling a stale chunk (overload)
         self.voice_offs_closing = 0
         self.stats = {"host_queue_peak": 0, "device_queue_peak": 0, "deadline_misses": 0,
                       "pushed_events": 0, "reanchors": 0, "device_errors": [],
                       "boots": 0, "groups": {}, "refused": {}, "superseded": 0,
-                      "packets": 0, "drum_noteoffs": 0, "noops": 0}
+                      "packets": 0, "drum_noteoffs": 0, "noops": 0,
+                      "order_guarded": 0}
 
     # ---- output ---------------------------------------------------------------
     def _say(self, msg: str) -> None:
@@ -450,6 +453,25 @@ class MidiSession:
                               "printed")
                 p.redated_from = p.due
                 p.due = self.frame_of(fin) + uh.MIN_LEAD_FRAMES
+            if self.last_sent_due is not None and p.due < self.last_sent_due \
+                    and "NO_ORDER_GUARD" not in self.inject:
+                # #339 (policy P3): the device DROPS an event whose due is
+                # before the last one it queued. A note handed over a few ms
+                # after its receipt (host hold) is scheduled from the receipt,
+                # which can put its dues BEFORE an already-sent timed tail
+                # (the BD attack window, ~190 frames after its anchor): the
+                # device would drop the whole note. Hold it at the last sent
+                # due instead (at most the tail's offset later), and count it
+                self.stats["order_guarded"] += 1
+                if self.stats["order_guarded"] == 1:
+                    self._say("midi_session: ORDER -- a packet's due fell before the last "
+                              "one sent (a late hand-over behind a timed tail); it is sent "
+                              "at the last due so the device does not drop it (#339). "
+                              "Further cases are counted, not printed")
+                if p.redated_from is None:
+                    p.redated_from = p.due
+                p.due = self.last_sent_due
+            self.last_sent_due = p.due
             p.sent = True
             blob += uh.pkt_event(p.due & 0xFFFF, *p.write)
         self.stats["packets"] += k
@@ -827,7 +849,10 @@ class MidiSession:
         self._say(f"midi_session: closed ({why}): {self.stats['packets']} event packets, "
                   f"{sum(self.stats['refused'].values())} refused {self.stats['refused']}, "
                   f"{self.stats['superseded']} knob values superseded; device queue "
-                  f"{final.evq}, drops {final.drops}, errors {final.errs}")
+                  f"{final.evq}, drops {final.drops}, errors {final.errs}"
+                  + (f"; host overload: {self.stats['deadline_misses']} late packets re-dated, "
+                     f"{self.stats['order_guarded']} held in order"
+                     if self.stats["deadline_misses"] or self.stats["order_guarded"] else ""))
         return self.stats
 
 

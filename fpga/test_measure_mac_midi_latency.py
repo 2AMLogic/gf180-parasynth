@@ -89,3 +89,37 @@ def test_a_stale_note_is_refused_but_its_note_off_and_a_knob_are_delivered():
     assert s.stats["groups"].get("knob") == 1 and "note-on" not in s.stats["groups"]
     s.feed(clock.t, bytes([0x90, 62, 100]))                  # fresh: played
     assert s.stats["groups"].get("note-on") == 1
+
+
+def test_a_note_handed_over_late_after_a_kick_is_not_dropped():
+    """#339: the device DROPS an event whose due is before the last one it
+    queued. A kick's timed tail (the BD attack window) is sent with a due
+    ~190 frames after its anchor. A note received 1 ms after the kick but
+    handed over 11 ms later (host hold; not late, not stale) is scheduled
+    from its receipt -- BEFORE that already-sent tail. The host holds it at
+    the last sent due and counts it; the device drops nothing. Control
+    NO_ORDER_GUARD: the device drops every packet of the note (ERR 3)."""
+    import midi_session as ms
+    import synth_top_model as stm
+    import uart_device_sim as dev
+
+    def run(inject):
+        clock = dev.SimClock()
+        sim = dev.UartDeviceSim(clock=clock)
+        s = ms.MidiSession(dev.SimSerial(sim), clock=clock, image="tree", inject=inject)
+        s.start()
+        t = clock.t + 0.01
+        s.service(t)
+        s.feed(t, bytes([0x99, 36, 100]))               # the kick, tail included
+        s.service(t + 0.012)
+        s.feed(t + 0.001, bytes([0x90, 60, 100]))       # received t+1 ms, handed over t+12 ms
+        s.service(clock.t + 0.1)
+        s.close()
+        on = [w for w in sim.writes if w[5] == "event" and w[3] == stm.A_GATE_ON]
+        return s, sim, on
+    s, sim, on = run(set())
+    assert s.stats["order_guarded"] >= 1 and s.stats["deadline_misses"] == 0
+    assert not sim.errors and sim.drops == 0 and len(on) == 1
+    s, sim, on = run({"NO_ORDER_GUARD"})
+    assert s.stats["order_guarded"] == 0 and not on
+    assert [e for e in sim.errors if e[0] == 3]
