@@ -978,8 +978,10 @@ def main(argv=None) -> int:
     rc = 0
     if session.input_lost:
         print(f"midi_session: ERROR -- the MIDI input was lost mid-session "
-              f"({session.input_lost}); the session panicked (GATE_OFF, stops clear) "
-              "and closed", file=sys.stderr)
+              f"({session.input_lost}); the session sent its panic (GATE_OFF, stops "
+              "clear) over the UART and closed. That silences the board only if the "
+              "UART link is still up: nothing here can mute a board it cannot reach",
+              file=sys.stderr)
         rc = 1
     if st["device_errors"] or st["deadline_misses"] or st["final_status"]["drops"] \
             or st["boots"]:

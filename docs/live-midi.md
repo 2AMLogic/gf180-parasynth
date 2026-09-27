@@ -80,10 +80,17 @@ session's, and T-LIVE-MIDI is still their source of truth.
 
   The MIDI input is opened before any serial port or simulated device, so a
   missing controller refuses before anything is sent.
-- **Unplugging mid-session:** everything received before the loss is still
-  played. Then the session closes with its PANIC (GATE_OFF, stops cleared),
-  prints `ERROR -- the MIDI input was lost mid-session (...)` on stderr and
-  exits 1. The adapter detects the loss from CoreMIDI's setup notifications
+- **Unplugging the controller mid-session:** everything received before the
+  loss is still played. Then the session closes and sends its PANIC
+  (GATE_OFF, stops cleared) **over the UART**. It prints `ERROR -- the MIDI
+  input was lost mid-session (...)` on stderr and exits 1.
+  - The panic silences the board **only if the UART link is still up**. A
+    lost MIDI input with a live UART is the case tested here.
+  - If the UART itself is lost (USB cable pulled, board reset), the host
+    cannot reach the board. Nothing in this session can guarantee a
+    hardware mute, and none is claimed.
+  - A board reset is seen as BOOT on the wire; a dead serial port surfaces
+    as the serial library's error. The adapter detects the loss from CoreMIDI's setup notifications
   and a 100 ms re-check of the endpoint (removed, or `offline`). A raw device
   whose read fails (`OSError`) is handled the same way. Before #322 that
   escaped `run_live` with no panic.
@@ -103,7 +110,9 @@ Tests (`fpga/test_coremidi_input.py`):
   - the refusals;
   - a missing port refusing before any device opens;
   - all 16 channels reaching the session byte for byte (1 and 10 routed,
-    the other 14 refused as `channel`);
+    the other 14 refused as `channel`), each with its note-off: the voice
+    note-off closes the gate, the drum note-off is the documented no-op, and
+    the other channels' note-offs are refused like their note-ons;
   - a disconnect mid-session (played, then panic, then error);
   - a raw device's `OSError`;
   - the CLI's exit 1.
@@ -118,10 +127,12 @@ Tests (`fpga/test_coremidi_input.py`):
   uncaught loss. Against `origin/main`, the missing-port test fails because
   a device was opened first.
 
-### Operator smoke procedure (Launchkey 37): NOT YET RUN
+### Operator smoke procedure (Launchkey 37): PENDING OPERATOR (not yet run)
 
 A person runs this on the Mac with the controller plugged in. It is not
-claimed until they do. Paste the terminal output and the log into #322.
+claimed until they do. Paste the terminal output and the log into #322. The
+missing hardware run does not block landing the adapter: the adapter's
+evidence is the tests and the virtual-source dry run below.
 
 The live player maps **11 of the 16 808 sounds** (BD, SD, LT, MT, HT, CH, OH,
 CP, CB, CL, CY). Pads that send conga, rimshot or maraca notes (for example GM
@@ -361,6 +372,17 @@ Outside the declared load:
 
 ### Mac host scheduling (#322): measured on a LOADED laptop
 
+**Scope: the host scheduling endpoint only. This is NOT key-to-speaker
+latency.** The start is the moment the session's MIDI input hands a message
+over. Each boundary on either side of the host is separate and none is
+measured here:
+
+- controller scan and USB ingress, before the receipt;
+- the real UART/FTDI link and the device, modelled here;
+- the DAC;
+- the audio interface and capture.
+
+
 `fpga/measure_mac_midi_latency.py` separates the host from UART and device
 timing:
 
@@ -586,7 +608,10 @@ anything was published.
   full counter revolution in `uart_device_sim`. Any host stall long enough
   to miss a frame therefore costs over a second of dropped events in
   simulation. What the RTL does is unverified.
-- **The Launchkey itself is unverified.** The smoke procedure above is NOT
-  YET RUN, and the Mac latency has only been measured on a loaded host.
+- **The Launchkey itself is unverified.** The smoke procedure above is
+  pending the operator, and the Mac latency has only been measured on a
+  loaded host, for the host scheduling endpoint only.
+- **A lost UART cannot be muted from the host.** The panic on a lost MIDI
+  input travels over the UART.
 - **The mod wheel is untested on the release image.** CC1 is refused on the
   default patch; a routed patch is exercised only by a unit test.

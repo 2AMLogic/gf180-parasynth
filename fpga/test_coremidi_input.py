@@ -169,7 +169,10 @@ def test_every_channel_reaches_the_session_which_routes_1_and_10_and_refuses_the
     refused = [(r.category, r.raw[0] & 0x0F) for r in s.refusals]
     assert refused == [("channel", ch) for ch in range(16) if ch not in (0, 9)
                        for _ in (0, 1)]                  # its note-on and its note-off
-    assert (0, stm.A_GATE_ON, 0) in executed(sim)
+    ex = executed(sim)
+    # channel 1's note-off closes the gate before the closing panic's GATE_OFF
+    on = ex.index((0, stm.A_GATE_ON, 0))
+    assert ex[on:].count((0, stm.A_GATE_OFF, 0)) == 2
 
 
 def test_a_disconnect_mid_session_plays_what_arrived_then_panics_with_an_explicit_error():
