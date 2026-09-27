@@ -3,8 +3,10 @@
 > **Naming (plan087/plan088).** This release, whose immutable identifier is
 > `arty-a7-100t baseline 2025.1, r1`, is **R0** in all new prose: the published
 > revision-11 image and the rollback. **R1** is the revision-14 player preview,
-> frozen in [`R1.md`](R1.md) / [`r1-candidate.json`](r1-candidate.json), which has
-> no bitstream yet (#280). Neither identity's evidence stands in for the other's.
+> frozen in [`R1.md`](R1.md) / [`r1-candidate.json`](r1-candidate.json), whose image
+> is published separately and bound by [`r1-2025.1.json`](r1-2025.1.json) (#280).
+> Neither identity's evidence stands in for the other's; this release is R1's
+> named rollback.
 
 **Status: CANDIDATE — digital evidence only. No physical programming, control
 or audio capture has been performed on this image.**

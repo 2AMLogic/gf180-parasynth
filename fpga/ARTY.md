@@ -6,6 +6,19 @@ cannot program this board; this is a separate Xilinx port.
 
 ## What is implemented and measured
 
+**R1 (the player preview, contract revision 14) now has its own image**, built
+once from the frozen R1 sources and published beside R0, not over it:
+[r1-player-preview-2025.1](reports/arty/r1-player-preview-2025.1/publication.json),
+bitstream `544499e2...`, routed checkpoint `0f81026e...`, Vivado 2025.1 SW Build
+6140274. WNS +15.445 ns, WHS +0.036 ns, 0 failing endpoints; external I/O
+qualified (`i2s_bclk` exception only); DPREG-4 13/13 dismissed on this
+checkpoint; LUT 14,006, FF 13,485, DSP 100. Bound with the host's `--image tree`
+bytes, presets and domain by [release/r1-2025.1.json](release/r1-2025.1.json)
+(T-RELEASE-BOUND-R1); identity, per-port I/O timing and the default-image
+switch in [release/R1.md](release/R1.md#the-r1-image-280-plan087-milestone-c).
+The rest of this section describes **R0**, the integrated baseline, which
+remains the published default and the named rollback.
+
 **Vivado 2025.1 produced a routed bitstream and passing internal timing.**
 The head of the bring-up state is the integrated baseline
 ([published build](reports/arty/integrated-baseline-2025.1/publication.json)):
@@ -375,7 +388,8 @@ phrase:
 .venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a
 ```
 
-**R1 player preview (the revision-14 tree, no bitstream yet, #280).** Its
+**R1 player preview (the revision-14 tree; image published, #280:
+[r1-player-preview-2025.1](reports/arty/r1-player-preview-2025.1), `544499e2...`).** Its
 supported quick-start is the same commands with `--image tree`, and without
 `play --fixture m5a` (it sends no patch image, so what it plays depends on the
 device's prior state; `run --note 45 --fixture m5a` plays the same phrase from

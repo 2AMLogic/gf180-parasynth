@@ -9,10 +9,10 @@ Evidence produced at `14e12bc02808, ccf7ed49515b` (origin/main `86838760ccce`) o
 | gate | question | verdict | evidence level |
 |---|---|---|---|
 | trust | are the results trustworthy? | **PASS** | receipts re-checked; every declared control caught |
-| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path, no image) |
+| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, T-RELEASE-BOUND-R1) |
 | playability | is it an instrument? | **PASS** (digital, 11 of 16 sounds mapped) | live-MIDI session against the device contract and the RTL; no hardware latency |
 | sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 6 no verdict, 75 not run of 100 | mostly fixed-point model |
-| physical | did the device produce it? | **BLOCKED** | no R1 bitstream (#280), no capture (#208); simulation cannot satisfy this gate |
+| physical | did the device produce it? | **BLOCKED** | R1 image `544499e2c970` published, not yet programmed on a board, no capture (#208); simulation cannot satisfy this gate |
 
 ## Implementation
 

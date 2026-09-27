@@ -1,7 +1,7 @@
 {
   "schema": "gf180-parasynth R1 candidate v1",
   "candidate": "R1 player preview",
-  "status": "CANDIDATE: digital (RTL-simulation) evidence only. No R1 bitstream exists yet (#280); no physical programming, control or audio capture.",
+  "status": "CANDIDATE: digital (RTL-simulation) evidence. The R1 bitstream built from it is published and bound in fpga/release/r1-2025.1.json (#280); no physical programming, control or audio capture.",
   "r0_is": "arty-a7-100t baseline 2025.1, r1 (plan087 R0; contract revision 11; image a66c9349...)",
   "contract_revision": 14,
   "host_image_selector": "--image tree",
@@ -147,7 +147,7 @@
       "fpga/midi_session.py": "e8111ec8e6a517499c6b002d40469a233b1832c7a1479fc81375869be5cfce24",
       "fpga/live_midi_contract.py": "314c45fd0de8ebb3b3169840a56f473b511867bdf1059e02cf8c38a9d8b50ccb",
       "fpga/release/qualified_domain.py": "b554ba57f0b988b98db8cd9b1dddd5607abaf7eaa2f76aebf3c17e9e2008d7fe",
-      "fpga/release/r1_candidate.py": "764a6d9b268857c48ef0ebc2c5fe009bb0eb0d776ad89fc324f6aadc70a4e735",
+      "fpga/release/r1_candidate.py": "4f19709b98e3a69150e660c2c6f34989ff03918ed06b18ef4e0344b048e6682c",
       "fpga/spi_host.py": "c3dabc9bcb09af0db7d71bf262bcd6eba327917060e58135cb3361a1668cdaa6",
       "fpga/fixtures.py": "681a999cba70ce79996fbbbd333b594531af48e9e38def34d83fce5269064a38",
       "fpga/selected_preset.py": "22a9c04087492333d540627a14a9865d3618cb614bc3aa27be7fe499f2899ad1",
@@ -258,7 +258,7 @@
       ]
     },
     "session_start": "every R1 image-loading command (uart_host run/load --image tree, midi_session --image tree) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
-    "physical_precondition": "the board is programmed with the R1 bitstream (#280, not yet built). The host cannot read the image identity back, so this is declared, not verified.",
+    "physical_precondition": "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). The host cannot read the image identity back, so this is declared, not verified.",
     "open_defect": "#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent",
     "drift": "DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player domain: a nonzero write is refused (NOT_IN_IMAGE rule, R1 wording)"
   },

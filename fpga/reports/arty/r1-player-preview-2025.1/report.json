@@ -1,0 +1,67 @@
+{
+  "state": "BUILT_REQUIRES_TIMING_REVIEW",
+  "part": "xc7a100tcsg324-1",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "hardware_playback_tested": false,
+  "external_io_timing_qualified": false,
+  "source_sha256": {
+    "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
+    "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+    "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+    "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+    "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+    "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
+  },
+  "verification": {
+    "record_sha256": "ccc7ba037ba4f9afcdb7c17cadbac59f2c59d7a2f578a20b4fa5750ce82e72ed",
+    "transcript_sha256": "4fbbbb8744d064143b366a86664bfcb9ece9b94d2598df026fadeadb0c96734b",
+    "periods": 6734,
+    "scope": "Arty wrapper UART-bridge digital check: device-scheduled events and live writes through the reserved UART pins vs the device contract and the integer model; MMCM bypassed; no physical timing claim"
+  },
+  "script_sha256": "a7275e9c8558c35ceb4b639cd5b48dace63d976b15791813f74c828949461e18",
+  "vivado_version": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
+  "command": [
+    "/tools/Xilinx/2025.1/Vivado/bin/vivado",
+    "-mode",
+    "batch",
+    "-source",
+    "/home/ubuntu/work/r1-image-build/arty/build.tcl",
+    "-log",
+    "/home/ubuntu/work/r1-image-build/arty/vivado.log",
+    "-journal",
+    "/home/ubuntu/work/r1-image-build/arty/vivado.jou"
+  ],
+  "exit_code": 0,
+  "seconds": 510.54,
+  "artifact_sha256": {
+    "arty.bit": "544499e2c97061957004f999caf21d5caaf520f6b2682f84c6e6773e7d291d21",
+    "utilization.rpt": "0473407c7bf6e2d6af0c22b4987b1ac21bb86f2b666c9d093338a1b612459b7f",
+    "timing.rpt": "2fc0e1250c0bcc894773df842602d039fe5be41013cbbeb321c37f6eae5ee059",
+    "clocks.rpt": "945d852ca2b8e5e9ec893433323d49350dffbca24bd51099e87fd689c5bea6f6",
+    "drc.rpt": "b134bf3032a00715f48b427acc0fc928d188781aaa5728997eb008134587f151",
+    "routed.dcp": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f"
+  }
+}

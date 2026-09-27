@@ -724,9 +724,10 @@ def test_registry_refuses_copied_commands_and_unknown_dag_nodes(repo):
 
 def test_the_committed_registry_loads_and_names_the_three_pilot_trials():
     reg = trial.load_registry()
-    # the three pilot trials, and T-LIVE-MIDI (#281) registered after them
+    # the three pilot trials, T-LIVE-MIDI (#281) and T-RELEASE-BOUND-R1 (#280)
+    # registered after them
     assert set(reg["trials"]) == {"T-RELEASE-BOUND", "T-DEADLINE", "T-PLAY-DIGITAL",
-                                  "T-LIVE-MIDI"}
+                                  "T-LIVE-MIDI", "T-RELEASE-BOUND-R1"}
     for tid, t in reg["trials"].items():
         for mode in t["modes"].values():
             for c in mode["required"] + mode.get("controls", []):
