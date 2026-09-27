@@ -74,13 +74,6 @@ EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/rec
                     "rtl-sketch/ladder_dp_n.v": "(x * gain) >> 11 held in 26 bits, not 25: the "
                                                 "first wrong operation behind #354 (PR #364); "
                                                 "control INJECT_BUG_LADDER_XG25"}
-# Sources whose BYTES differ from R1's freeze but whose Verilog TOKENS do not:
-# a comment-only edit merged to main after the freeze. It cannot change the
-# netlist, so it is not an R2 change, but it is not silent either: rtl()
-# re-proves "comments only" on every derivation and refuses otherwise.
-COMMENT_ONLY = {"rtl-sketch/modal_dp_rom.v": "header comment corrected to describe the ROM "
-                                             "design (#368, PR #378); Verilog tokens identical "
-                                             "to R1's freeze"}
 
 
 class Refused(RuntimeError):
@@ -93,32 +86,6 @@ def sha(p) -> str:
 
 def _rel(p) -> str:
     return str(Path(p).resolve().relative_to(ROOT))
-
-
-def verilog_tokens(text: str) -> list:
-    """`text` with // and /* */ comments removed, split into whitespace-separated
-    tokens. Two sources with equal token lists compile to the same netlist."""
-    out, i, n = [], 0, len(text)
-    while i < n:
-        if text.startswith("//", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-        elif text.startswith("/*", i):
-            j = text.find("*/", i + 2)
-            if j < 0:
-                raise Refused("unterminated /* comment")
-            i = j + 2
-            out.append(" ")
-        elif text[i] == '"':
-            j = text.find('"', i + 1)
-            if j < 0:
-                raise Refused("unterminated string")
-            out.append(text[i:j + 1])
-            i = j + 1
-        else:
-            out.append(text[i])
-            i += 1
-    return "".join(out).split()
 
 
 def rtl() -> dict:
@@ -135,15 +102,6 @@ def rtl() -> dict:
             raise Refused(f"cannot read {rel} at R1's freeze {r1c.RTL_FROZEN_AT[:12]}")
         if hashlib.sha256(r.stdout).hexdigest() != h:
             changed.append(rel)
-    comment_only = []
-    for rel in sorted(set(changed) & set(COMMENT_ONLY)):
-        frozen = subprocess.run(["git", "-C", str(ROOT), "show", f"{r1c.RTL_FROZEN_AT}:{rel}"],
-                                capture_output=True, check=True).stdout.decode()
-        if verilog_tokens(frozen) != verilog_tokens((ROOT / rel).read_text()):
-            raise Refused(f"{rel} is listed as comment-only but its Verilog tokens differ "
-                          f"from R1's freeze")
-        comment_only.append(rel)
-    changed = [c for c in changed if c not in comment_only]
     unexpected = sorted(set(changed) - set(EXPECTED_CHANGES))
     if unexpected:
         raise Refused(f"compiled sources differ from R1's freeze beyond R2's stated changes: "
@@ -170,7 +128,6 @@ def rtl() -> dict:
     return {"configuration": CONFIG, "defines": DEFINES, "part": ba.PART,
             "sources": srcs, "roms": roms, "constraints": xdc,
             "differs_from_r1_freeze": {k: EXPECTED_CHANGES[k] for k in sorted(changed)},
-            "comment_only_vs_r1_freeze": {k: COMMENT_ONLY[k] for k in comment_only},
             "r1_freeze": r1c.RTL_FROZEN_AT}
 
 
