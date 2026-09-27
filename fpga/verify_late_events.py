@@ -37,11 +37,11 @@ names the frame boundary:
                   STATUS again
 
 CONTROLS (rule 2). Each implementation must be able to fail this bench:
-  --control model-revolution   the model as shipped before #329 (a late event
-                               queued at its acceptance frame and scheduled
-                               for the frame's midpoint, one revolution late
-                               once that is behind the cursor): must FAIL on
-                               execution frames
+  --control model-revolution   the model exactly as shipped before #329, read
+                               from git at PRE_329_MODEL_COMMIT (a late event
+                               queued at its acceptance frame; a head whose
+                               frame midpoint is behind the cursor waits a
+                               revolution): must FAIL on execution frames
   (RTL) the tb's replica of synth_top's frame/grant is asserted against
         synth_top.v's text; a drifted replica is REFUSED, not compared.
 
@@ -301,15 +301,13 @@ def _calibrate(workdir: Path) -> int:
 def run_model(name: str, *, control: str | None = None) -> dict:
     """The same packets, accepted by uart_device_sim at the same (audio frame,
     cyc) instants the RTL run was aimed at (and, on the box, confirmed)."""
-    import uart_device_sim as dev
+    dev = _model_module(control)
     fn, frame0 = SCENARIOS[name]
     steps = fn(frame0)
     pk = packets(steps)
     clock = dev.SimClock()
     sim = dev.UartDeviceSim(epoch_frame=frame0 % 65536, clock=clock)
     ser = dev.SimSerial(sim, boot=True)             # t0 = 0; model frame = audio frame
-    if control == "model-revolution":
-        _revert_model_fix(sim)
     accepted = {}
 
     def t_of(A, cyc):
@@ -334,21 +332,43 @@ def run_model(name: str, *, control: str | None = None) -> dict:
             "replies": parse_replies(list(bs)), "latency_cycles": None}
 
 
-def _revert_model_fix(sim) -> None:
-    """The CONTROL: reinstate the pre-#329 model behaviour on this instance,
-    exactly as it shipped: a late event queued with due = its acceptance frame,
-    and the fire time taken at the frame midpoint, pushed a revolution
-    forward whenever that midpoint is behind the cursor."""
-    import types
+PRE_329_MODEL_COMMIT = "f92918e09a5e1042e4e7aa942471bb14bc119788"
+
+
+def _model_module(control: str | None):
+    """The device model under test: this tree's, or -- the CONTROL -- the
+    model exactly as it shipped before #329, read from git (rule 5: the bug
+    as it shipped, not a re-imagining of it)."""
+    import importlib.util
     import uart_device_sim as dev
-    sim._late_due_offset = 0
-    sim._fire_past_heads_now = False
-    if not hasattr(dev.UartDeviceSim, "_late_due_offset"):
-        raise Refused("the model has no #329 switch to revert (is the fix present?)")
-    _ = types
+    if control != "model-revolution":
+        return dev
+    src = subprocess.run(["git", "-C", str(ROOT), "show",
+                          f"{PRE_329_MODEL_COMMIT}:fpga/uart_device_sim.py"],
+                         capture_output=True, text=True)
+    if src.returncode:
+        raise Refused(f"cannot read the pre-#329 model from git: {src.stderr.strip()}")
+    d = Path(tempfile.mkdtemp(prefix="pre329-"))
+    (d / "uart_device_sim_pre329.py").write_text(src.stdout)
+    spec = importlib.util.spec_from_file_location("uart_device_sim_pre329",
+                                                  d / "uart_device_sim_pre329.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # ---- the comparison --------------------------------------------------------------------
+# Disagreements with the policy that are RECORDED, each under the issue that
+# decides it. A recorded divergence must occur exactly as recorded: if it
+# disappears, or any other appears, the verdict is FAIL (the record is stale,
+# or something new broke). Never a way to make a new disagreement green.
+KNOWN_DIVERGENCES = {
+    ("backlog", 32): ("#339: late with a sent due before a draining tail's; the RTL (and "
+                      "the model) drop it by sent-due order, policy P3 orders by "
+                      "effective due", "drop-order"),
+}
+
+
 def compare(run: dict) -> dict:
     steps = run["steps"]
     ev = [(i, s) for i, s in enumerate(steps) if s[0] == "event"]
@@ -381,8 +401,41 @@ def compare(run: dict) -> dict:
         rows.append({"step": i, "tag": steps[i][4], "status": st})
     worst = max((r["beyond_effective_due"] for r in rows
                  if r.get("beyond_effective_due") is not None), default=0)
-    return {"verdict": "PASS" if not bad else "FAIL", "disagreements": bad, "rows": rows,
-            "worst_frames_beyond_effective_due": worst}
+    return {"disagreements": bad, "rows": rows, "worst_frames_beyond_effective_due": worst}
+
+
+def judge(name: str, cmp: dict) -> dict:
+    """PASS iff the disagreements are exactly the recorded ones, as recorded."""
+    if cmp.get("verdict") == "NO VERDICT":
+        return cmp
+    seen = {(name, r["step"]): r for r in cmp["rows"] if "status" not in r and not r["ok"]}
+    known = {k: v for k, v in KNOWN_DIVERGENCES.items() if k[0] == name}
+    unexpected = [r for k, r in seen.items() if k not in known]
+    stale = [k for k in known if k not in seen or seen[k]["got"] != known[k][1]]
+    for k, r in seen.items():
+        if k in known:
+            r["recorded"] = known[k][0]
+    cmp["unexpected"] = len(unexpected)
+    cmp["stale_records"] = [f"{k}: {known[k][0]}" for k in stale]
+    cmp["verdict"] = "FAIL" if (unexpected or stale) else "PASS"
+    return cmp
+
+
+def same_behaviour(rtl: dict, model: dict) -> list:
+    """RTL vs model, event by event and STATUS by STATUS: any difference."""
+    out = []
+    for a, b in zip(rtl["rows"], model["rows"]):
+        if "status" in a:
+            ka = {k: a["status"][k] for k in ("evq", "wrq", "drops", "flags")}
+            kb = {k: b["status"][k] for k in ("evq", "wrq", "drops", "flags")}
+            if ka != kb:
+                out.append(f"step {a['step']} STATUS: RTL {ka}, model {kb}")
+        elif (a["got"], a["got_exec"], a["accept"]) != (b["got"], b["got_exec"], b["accept"]):
+            out.append(f"step {a['step']} {a['tag']}: RTL {a['got']} @ {a['got_exec']}, "
+                       f"model {b['got']} @ {b['got_exec']}")
+    if len(rtl["rows"]) != len(model["rows"]):
+        out.append(f"{len(rtl['rows'])} RTL rows, {len(model['rows'])} model rows")
+    return out
 
 
 def status_checks(name: str, cmp: dict) -> list:
@@ -402,7 +455,8 @@ def status_checks(name: str, cmp: dict) -> list:
 
 def report(label: str, name: str, cmp: dict, probs: list) -> str:
     lines = [f"{label}[{name}]: {cmp['verdict'] if not probs else 'FAIL'}"
-             f" -- {cmp.get('disagreements', '?')} disagreements with the policy; worst "
+             f" -- {cmp.get('disagreements', '?')} disagreements with the policy "
+             f"({cmp.get('unexpected', '?')} unexpected); worst "
              f"{cmp.get('worst_frames_beyond_effective_due')} frames beyond the effective due"]
     for r in cmp["rows"]:
         if "status" in r:
@@ -410,7 +464,11 @@ def report(label: str, name: str, cmp: dict, probs: list) -> str:
         if not r["ok"]:
             lines.append(f"  step {r['step']:>2} {r['tag']}: accepted {r['accept']} due16 "
                          f"{r['due16']}: policy {r['want']} @ {r['want_exec']}, got {r['got']} "
-                         f"@ {r['got_exec']}")
+                         f"@ {r['got_exec']}"
+                         + (f"  [RECORDED DIVERGENCE {r['recorded']}]" if r.get("recorded")
+                            else "  [UNEXPECTED]"))
+    lines += [f"  STALE RECORD (the divergence no longer occurs as recorded): {x}"
+              for x in cmp.get("stale_records", [])]
     lines += [f"  {p}" for p in probs]
     return "\n".join(lines)
 
@@ -431,7 +489,7 @@ def main(argv=None) -> int:
         if not a.model_only and not a.control:
             try:
                 rr = run_rtl(name, work)
-                c = compare(rr)
+                c = judge(name, compare(rr))
                 p = status_checks(name, c)
                 c["latency_cycles"] = rr["latency_cycles"]
             except Refused as exc:
@@ -442,9 +500,23 @@ def main(argv=None) -> int:
             v = c["verdict"] if not p else "FAIL"
             record["rtl"][name] = dict(c, status_problems=p, verdict=v)
             verdicts.append(v)
-        mm = run_model(name, control=a.control)
-        c = compare(mm)
+        try:
+            mm = run_model(name, control=a.control)
+        except Refused as exc:
+            print(f"late-events model[{name}]: NO VERDICT -- {exc}")
+            record["model"][name] = {"verdict": "NO VERDICT", "why": str(exc), "rows": []}
+            verdicts.append("NO VERDICT")
+            continue
+        c = judge(name, compare(mm))
         p = status_checks(name, c)
+        if name in record["rtl"] and record["rtl"][name].get("rows"):
+            diff = same_behaviour(record["rtl"][name], c)
+            record.setdefault("rtl_vs_model", {})[name] = diff
+            print(f"late-events RTL vs model[{name}]: "
+                  + ("identical, event by event and STATUS by STATUS" if not diff else
+                     f"{len(diff)} DIFFERENCES: " + "; ".join(diff[:5])))
+            if diff:
+                p = p + [f"RTL and model differ: {d}" for d in diff]
         print(report("late-events model" + (f" (control {a.control})" if a.control else ""),
                      name, c, p))
         v = c["verdict"] if not p else "FAIL"
@@ -455,8 +527,16 @@ def main(argv=None) -> int:
     else:
         verdict = "PASS" if all(v == "PASS" for v in verdicts) else "FAIL"
     if a.control:
-        # a control is caught only when the clean model passes and this one fails
-        verdict = "CAUGHT" if verdict == "FAIL" else "MISSED"
+        # caught only for the intended reason: an event the policy and the
+        # model agree to ACCEPT executes in the wrong frame, or never
+        wrong_frame = sum(1 for v in record["model"].values() for r in v["rows"]
+                          if "status" not in r and not r["ok"] and r["got"] == r["want"]
+                          and r["got_exec"] != ([r["want_exec"]] if r["want_exec"] is not None
+                                                else []))
+        record["control_wrong_execution_frames"] = wrong_frame
+        verdict = "CAUGHT" if (verdict == "FAIL" and wrong_frame) else "MISSED"
+        print(f"late-events control {a.control}: {wrong_frame} accepted events executed in "
+              "the wrong frame or never")
     record["verdict"] = verdict
     a.json.parent.mkdir(parents=True, exist_ok=True)
     a.json.write_text(json.dumps(record, indent=1, default=str) + "\n")
