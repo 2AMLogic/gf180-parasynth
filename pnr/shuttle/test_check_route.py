@@ -450,3 +450,93 @@ def test_flops_by_block_counts_each_flop_once_and_spans_wrapped_nets(tmp_path):
     # reported rather than dropped, so the total reconciles with the flow's own count
     assert got["placed but Q drives no net"] == 1
     assert sum(got.values()) == 4
+
+
+# --------------------------------------------------------------------------- #
+# resume: the mode that exists because ERROR_ON_TR_DRC aborts before STAPostPNR
+# --------------------------------------------------------------------------- #
+#
+# The failure being guarded is quiet rather than loud.  `librelane --run-tag X
+# --from OpenROAD.RCX` pointed at a path that is NOT an existing run does not
+# error: it creates the directory and starts the flow at that step with an empty
+# initial state.  A post-route STA on an empty state produces a report, and the
+# report is of nothing.  So the resumable state is asserted on the host, before a
+# container is started, and REFUSED (exit 3) is the outcome when it is absent.
+
+def _fake_ll_run(tmp_path, steps):
+    """steps = [(dirname, has_state)] -- a minimal LibreLane run directory."""
+    run = tmp_path / "runs" / "halfslot"
+    run.mkdir(parents=True)
+    for name, has_state in steps:
+        d = run / name
+        d.mkdir()
+        if has_state:
+            (d / "state_out.json").write_text("{}")
+    return str(run)
+
+
+def test_resume_refuses_when_the_run_directory_does_not_exist(tmp_path):
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(str(tmp_path / "runs" / "nope"), "OpenROAD.RCX")
+    assert "nothing to resume" in str(e.value)
+
+
+def test_resume_refuses_a_run_directory_with_no_state(tmp_path):
+    """A directory full of step folders that never got as far as writing a state is
+    not resumable, and resuming it would run STA on an empty design."""
+    run = _fake_ll_run(tmp_path, [("01-verilator-lint", False)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, "OpenROAD.RCX")
+    assert "state_out.json" in str(e.value)
+
+
+def test_resume_refuses_without_a_from_step(tmp_path):
+    """Without --from, LibreLane restarts the flow from step 1 in the same run
+    directory -- overwriting the very layout being resumed."""
+    run = _fake_ll_run(tmp_path, [("43-openroad-detailedrouting", True)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, None)
+    assert "--from" in str(e.value)
+
+
+def test_resume_reports_the_last_step_that_holds_a_state(tmp_path):
+    run = _fake_ll_run(tmp_path, [
+        ("09-checker-netlistassignstatements", True),
+        ("43-openroad-detailedrouting", True),
+        ("44-checker-trdrc", False),          # aborted before writing a state
+    ])
+    assert rl.check_resume(run, "OpenROAD.RCX") == "43-openroad-detailedrouting"
+
+
+def test_resume_carries_full_s_skip_list_exactly():
+    """--from resolves against the CONFIGURED step list. Resuming with a different
+    skip set resumes into a different flow; that does not error, it runs the wrong
+    steps."""
+    assert rl.stage_args("resume", "/runs") == rl.stage_args("full", "/runs")
+
+
+def test_resume_does_not_skip_the_router_s_own_drc_checker():
+    """`full` skips the sign-off decks and names them. Checker.TrDRC is not one of
+    them: silencing the router's own violation count in the wrapper would remove
+    the only DRC number this flow produces."""
+    assert "Checker.TrDRC" not in rl.SIGNOFF_SKIPS
+    assert "Checker.TrDRC" not in rl.stage_args("resume", "/runs")
+
+
+@pytest.mark.parametrize("rest,want", [
+    (["--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag=halfslot"], "halfslot"),
+    (["-c", "ERROR_ON_TR_DRC=false", "--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag"], None),                       # dangling: no value to read
+    ([], None),
+])
+def test_run_tag_is_read_from_the_forwarded_args(rest, want):
+    """`rest` is an argparse.REMAINDER, so every flag after the mode goes to
+    librelane. Declaring --run-tag on the wrapper too would create a second
+    spelling that reaches the precondition check but not the tool (or vice
+    versa); the check reads what the tool is actually given."""
+    assert rl.passthrough_opt(rest, "--run-tag") == want
+
+
+def test_from_step_accepts_librelane_s_short_spelling():
+    assert rl.passthrough_opt(["-F", "OpenROAD.RCX"], "--from", "-F") == "OpenROAD.RCX"
