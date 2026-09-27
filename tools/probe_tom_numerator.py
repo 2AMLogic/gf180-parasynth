@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""#334 candidate: a numerator on the three tom/conga resonators (one mechanism).
+
+tools/diagnose_tom_body.py localized the shared cause: in all six positions
+98-100 % of the reference's above-split energy (the `body spectrum` numerator)
+is the strike transient -- the first 10 ms after onset -- and ours is short
+there by the same 11-18 dB the metric reports. Our tom is an ALL-POLE 2-pole
+mode pinged by a 0.1 ms pulse, so above f0 it falls at 12 dB/octave. A
+resonator with a numerator zero -- the modal bank's BP (1 - z^-2) or HP
+((1 - z^-1)^2) -- falls 6 or 0 dB/octave less, which is the size of the gap.
+
+The bank already implements numerators on its first N_NUMS = 11 modes; the tom
+circuits sit on modes 11-13. BD/SDLO/SDHI (modes 8-10) are numerator-capable
+but RAW, so a kit that swaps the two groups gives the toms numerators with no
+RTL change. The bank's arithmetic is per mode and its mix is an exact integer
+sum, so that remap is bit-identical to running the bank with nums = 16; this
+experiment does the latter (asserted by the BD control below) and states it.
+
+Candidate budget, fixed first: BP, HP, and a third held back until the first
+two were measured (it became BP+X4, see CANDIDATES).
+The mode's amp is scaled by 1 / |N(e^{jw0})| so the ring's level at f0 is
+unchanged -- a candidate may not win by getting louder or quieter.
+
+Selection rule (frozen): on the TOMS (D03A LT, D05A MT, D07A HT) the candidate
+with the lowest worst body-spectrum distance, admissible only if every pitch /
+pitch-drop and decay distance stays <= 1 and does not grow by > 0.10, and the
+strike's bus peak stays within 1 dB of the baseline. Confirmation: the CONGAS
+(D04A, D06A, D08A), untouched by selection: body spectrum must improve on all
+three with pitch and decay preserved by the same rule.
+"""
+from __future__ import annotations
+
+import argparse
+import cmath
+import json
+import math
+import pathlib
+import subprocess
+import sys
+
+import numpy as np
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
+import drums_fx as dx  # noqa: E402
+import run_case as rc  # noqa: E402
+
+VOICES = {"LT": "D03A", "MT": "D05A", "HT": "D07A", "LC": "D04A", "MC": "D06A", "HC": "D08A"}
+DEV = ("LT", "MT", "HT")
+CIRCUIT = {"LT": dx.M_LT, "LC": dx.M_LT, "MT": dx.M_MT, "MC": dx.M_MT, "HT": dx.M_HT, "HC": dx.M_HT}
+CANDIDATES = {"BP": dx.BP, "HP": dx.HP, "BP+X4": dx.BP}
+# The third candidate, held back until BP was measured: BP moved `decay` because
+# the numerator lowers the mode's STATE by |N(w0)| (-32 dB at LT) and the bank's
+# floor-rounded recursion has a deadband -- a ring below ~2^12 LSB of state
+# collapses (--explain, and the known-answer run in the README). Output amp
+# restores the level but not the state. BP+X4 raises the circuit's exciter peak
+# x4 (0.25 -> 1.0, the register's ceiling) and compensates the amp by the same.
+EXCITER = {dx.M_LT: dx.E_LTX, dx.M_MT: dx.E_MTX, dx.M_HT: dx.E_HTX}
+EXC_GAIN = {"BP+X4": 4}
+PLAN = {v: [m[0] for m in rc.DRUM_PLAN[v]] for v in VOICES}
+
+
+def num_gain(kind: str, f0: float) -> float:
+    z = cmath.exp(-1j * 2 * math.pi * f0 / dx.SR)
+    return abs(1 - z * z) if kind == "BP" else abs((1 - z) ** 2)
+
+
+def render(voice: str, kind: str | None, nums: int = dx.N_MODES) -> tuple:
+    """render_drum_solo's exact render, with an optional numerator on the
+    voice's circuit and its amp compensated at the sound's f0."""
+    stop = dx.SOUND_STOP[voice]
+    n = int(rc.SOLO_SECONDS.get(voice, 2.2) * dx.SR)
+    d = dx.DrumsFx(nums=nums)
+    kit = dict(dx.kit_with_sounds(voice))
+    if kind is not None:
+        m = CIRCUIT[voice]
+        base = dx.A_MODE + m * dx.MODE_STRIDE
+        f0 = dx.TOM_PRESET[voice][0]
+        g = 1.0
+        if kind in EXC_GAIN:
+            # to the register's ceiling: 0.25 x 4 is 2^24, one past 2^24 - 1, so the
+            # stated "0.25 -> 1.0" is FULL24 and the gain is FULL24 / old exactly
+            pa = dx.A_ENV + EXCITER[m] * dx.ENV_STRIDE + 1
+            new = min(dx.FULL24, kit[pa] * EXC_GAIN[kind])
+            g = new / kit[pa]
+            kit[pa] = new
+        amp = kit[base + 2] / 65536.0 / num_gain(kind.split("+")[0], f0) / g
+        if amp >= 1.0:
+            raise rc.Refused(f"{voice} {kind}: compensated amp {amp:.3f} does not fit Q0.16")
+        kit[base + 2] = dx.amp_reg(amp)
+        kit[base + 3] = CANDIDATES[kind]
+    kit = sorted(kit.items())
+    dm, bd = d.play(dx.hit_writes([(rc.DRUM_SOLO_HIT_FRAME, stop, 1.0)], kit), n)
+    g = dx.accent_reg(0.45)
+    out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
+    return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
+
+
+def score(voice: str, x, sr, refdir) -> dict:
+    ref_x, ref_sr, rel, _ = rc.load_reference(voice, refdir)
+    req = PLAN[voice]
+    metrics, _ = rc.drum_measurements(voice, x, sr, ref_x, ref_sr, rel, req)
+    out = {}
+    for k, m in metrics.items():
+        if not m.get("valid"):
+            out[k] = {"valid": False}
+            continue
+        out[k] = {"value": m["value"], "reference": m["reference"], "error": m["error"],
+                  "distance": round(abs(m["error"]) / m["tolerance"], 3)}
+    out["_peak_fs"] = round(float(np.max(np.abs(x))), 5)
+    return out
+
+
+def control_bit_identity() -> dict:
+    """nums = 16 with every numerator still RAW must reproduce the shipped
+    render exactly -- for a tom and for a sound that never touches the change."""
+    res = {}
+    for v in ("LT", "BD", "SD"):
+        a, _ = rc.render_drum_solo(v)
+        b, _ = render(v, None, nums=dx.N_MODES)
+        res[v] = bool(np.array_equal(a, b))
+    return res
+
+
+def explain(voice: str, kinds=(None, "BP")) -> dict:
+    """Why a candidate moves `decay`: the ring's own decay (band-passed around
+    f0, 10 ms RMS, slope fitted 30-300 ms) against the scorer's T20, and the
+    T20 estimator's refusal reason if any."""
+    from scipy.signal import butter, sosfiltfilt
+    import audio_measure as am
+    out = {}
+    for kind in kinds:
+        x, sr = render(voice, kind)
+        y = rc.prepare(x, sr, side=voice)
+        f0 = dx.TOM_PRESET[voice][0]
+        sos = butter(2, [0.8 * f0, 1.25 * f0], btype="bandpass", fs=sr, output="sos")
+        yb = sosfiltfilt(sos, rc.window(y, sr, 0.0, None))
+        blk = int(0.01 * sr)
+        env = np.array([np.sqrt(np.mean(yb[i:i + blk] ** 2)) for i in range(0, len(yb) - blk, blk)])
+        t = np.arange(len(env)) * 0.01
+        sel = (t >= 0.03) & (t <= 0.30) & (env > 0)
+        slope = float(np.polyfit(t[sel], 20 * np.log10(env[sel]), 1)[0])
+        t20 = rc._t20_ms(0.005)(y, sr)
+        out[kind or "RAW"] = {"ring_slope_db_per_s": round(slope, 1),
+                              "ring_t20_ms": round(-20.0 / slope * 1e3, 1),
+                              "scorer_t20": (round(t20.value, 1) if t20.ok else None),
+                              "scorer_reason": t20.reason, "scorer_detail": {k: v for k, v in (t20.detail or {}).items()
+                                                                               if isinstance(v, (int, float, str))}}
+    return out
+
+
+def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) -> dict:
+    """Known answer: one bank mode (the LT pole pair) against a float
+    recursion with the same integer coefficients, pinged at several levels.
+    An LTI resonator's decay cannot depend on level; where the fixed one
+    departs from the float by > 3 dB, and whether it then sits at exact zero,
+    locates the floor-rounding deadband in state LSB."""
+    import modal_fixed as mf
+    from scipy.signal import lfilter
+    a1, a2 = mf.pole_regs(f0, q)
+    out = {}
+    for lev in levels:
+        exc = np.zeros(n, dtype=np.int64)
+        exc[10] = lev
+        b = mf.ModalFx(modes=1, nums=1, headroom=0, out_bits=28)
+        y = np.asarray(b.process(exc, [(a1, a2, 65535)], num=[mf.RAW]), dtype=np.float64)
+        yf = lfilter([1.0], [1.0, -a1 / 2 ** 24, -a2 / 2 ** 24], exc.astype(np.float64)) * 65535 / 65536
+        blk = int(0.01 * dx.SR)
+        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk, blk)])
+        e, ef = pk(y), pk(yf)
+        bad = np.nonzero(np.abs(20 * np.log10(np.maximum(e, 1e-9) / np.maximum(ef, 1e-9))) > 3.0)[0]
+        i = int(bad[0]) if len(bad) else None
+        out[str(lev)] = {"departs_at_ms": None if i is None else i * 10,
+                         "float_level_there_lsb": None if i is None else round(float(ef[i]), 1),
+                         "ends_at_exact_zero": bool(np.all(y[-blk:] == 0)),
+                         "fixed_tail_peak_lsb": float(np.max(np.abs(y[-blk:])))}
+    return out
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--refs", default=str(rc.configured_refs()))
+    ap.add_argument("--out", type=pathlib.Path, required=True)
+    ap.add_argument("--explain", nargs="*", default=None, help="voices to explain decay for, then stop")
+    a = ap.parse_args(argv)
+    if a.explain is not None and a.explain == ["deadband"]:
+        res = deadband()
+        print(json.dumps(res, indent=1))
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
+    if a.explain is not None:
+        res = {v: explain(v) for v in (a.explain or ["LT", "MT", "MC", "HC"])}
+        print(json.dumps(res, indent=1))
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
+    refdir = pathlib.Path(a.refs)
+    ctl = control_bit_identity()
+    print("bit-identity control (nums=16, all RAW):", ctl)
+    if not all(ctl.values()):
+        print("REFUSED: the nums=16 bank does not reproduce the shipped render")
+        return 2
+    rows = {}
+    for kind in (None, "BP", "HP", "BP+X4"):
+        label = kind or "RAW (shipped)"
+        rows[label] = {}
+        for v in VOICES:
+            try:
+                x, sr = render(v, kind)
+            except rc.Refused as e:          # e.g. the compensated amp exceeds its register
+                rows[label] = {"refused": str(e)}
+                print(f"{label}: REFUSED -- {e}", flush=True)
+                break
+            rows[label][v] = score(v, x, sr, refdir)
+            s = rows[label][v]
+            print(f"{label:14s} {v} ({VOICES[v]}): " + "; ".join(
+                f"{k} {s[k].get('value')} vs {s[k].get('reference')} (d {s[k].get('distance')})"
+                for k in PLAN[v]) + f"; peak {s['_peak_fs']}", flush=True)
+    base = rows["RAW (shipped)"]
+
+    def verdict(kind, voices):
+        why = []
+        for v in voices:
+            c, b = rows[kind][v], base[v]
+            for k in PLAN[v]:
+                if k == "body spectrum" or "distance" not in b[k]:
+                    continue                  # the target, or already invalid at baseline
+                if "distance" not in c[k]:
+                    why.append(f"{v} {k} became invalid")
+                elif c[k]["distance"] > 1 or c[k]["distance"] - b[k]["distance"] > 0.10:
+                    why.append(f"{v} {k} {b[k]['distance']} -> {c[k]['distance']}")
+            if abs(20 * math.log10(c["_peak_fs"] / b["_peak_fs"])) > 1.0:
+                why.append(f"{v} bus peak {b['_peak_fs']} -> {c['_peak_fs']}")
+        return why
+    sel = {}
+    for kind in CANDIDATES:
+        if "refused" in rows[kind]:
+            sel[kind] = {"worst_dev_body_distance": None, "admissible": False,
+                         "reasons": [f"REFUSED: {rows[kind]['refused']}"]}
+            continue
+        why = verdict(kind, DEV)
+        worst = max(rows[kind][v]["body spectrum"]["distance"] for v in DEV)
+        sel[kind] = {"worst_dev_body_distance": worst, "admissible": not why, "reasons": why}
+    base_worst = max(base[v]["body spectrum"]["distance"] for v in DEV)
+    ok = sorted((s["worst_dev_body_distance"], k) for k, s in sel.items() if s["admissible"])
+    chosen = ok[0][1] if ok and ok[0][0] < base_worst else None
+    conf = None
+    if chosen:
+        why = verdict(chosen, ("LC", "MC", "HC"))
+        improved = {v: (base[v]["body spectrum"]["distance"], rows[chosen][v]["body spectrum"]["distance"])
+                    for v in ("LC", "MC", "HC")}
+        conf = {"reasons": why, "body_spectrum_distance": improved,
+                "passes": not why and all(b > c for b, c in improved.values())}
+    res = {"control_bit_identity": ctl, "rows": rows, "selection": sel,
+           "baseline_worst_dev_body_distance": base_worst, "chosen": chosen, "confirmation": conf,
+           "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                                    text=True).stdout.strip(),
+           "sources_dirty": subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/probe_tom_numerator.py",
+                                            "model/drums_fx.py", "model/modal_fixed.py", "tools/run_case.py"],
+                                           cwd=ROOT).returncode != 0}
+    print(json.dumps({k: res[k] for k in ("selection", "chosen", "confirmation")}, indent=1))
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(res, indent=1) + "\n")
+    print(f"wrote {a.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
