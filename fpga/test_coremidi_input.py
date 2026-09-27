@@ -204,7 +204,10 @@ def test_a_raw_device_that_errors_mid_session_is_a_lost_input_too():
 
 
 def test_the_cli_exits_1_with_an_explicit_error_when_the_input_is_lost(monkeypatch, capsys):
-    """The whole CLI, on the real-time simulated board (a pty, as `--port sim`)."""
+    """The whole CLI, on the real-time simulated board (a pty, as `--port sim`).
+    The CLI opens the pty through pyserial, which the m5a-fast CI job does not
+    install (it REFUSED there, exit 2, on the first run of this test)."""
+    pytest.importorskip("serial", reason="the CLI's serial port needs pyserial")
     class OneNoteThenUnplug:
         port = cmi.PortInfo("fake", 1)
         n = 0
