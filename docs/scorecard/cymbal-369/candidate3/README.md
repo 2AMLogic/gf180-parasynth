@@ -191,7 +191,7 @@ TONE/DECAY settings are not in the pack because they cannot be rendered — see 
 ## 8. The next question, and it is one question
 
 **What gives the 808's 1–2.5 kHz a component that survives 5–11 dB longer than ours, and what does our model not
-have that produces it?** Filed as the follow-up to this step. It needs two things in order:
+have that produces it?** Filed as **#400**. It needs two things in order:
 
 1. **A qualified decay measurement covering 1–2.5 kHz** — an extension to `cymbal_bands.py` with its own
    known-answer tests and controls, reviewed as a rubric change, so §6's indication becomes evidence or is refuted.
@@ -200,7 +200,8 @@ have that produces it?** Filed as the follow-up to this step. It needs two thing
    contradicts §10 on which band DECAY moves), the six-square source's low partials, and the AC coupling of #165/#152.
 
 Still open from earlier steps and **not** on the path to the tail defect, per §6: the inter-band balance (#396's
-deferred half, 9–18 dB bounded) and the TONE knob law. Still blocking any knob claim: **#371**.
+deferred half, 9–18 dB bounded) and the TONE knob law. §6 **reprioritises #396** rather than blocking it — resolving
+the balance would not fix the tail. Still blocking any knob claim, and therefore acceptance item 3 entirely: **#371**.
 
 ## Files
 
