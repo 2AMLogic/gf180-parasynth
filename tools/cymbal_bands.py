@@ -41,7 +41,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import run_case as rc  # noqa: E402
 
-BANDS = {"L": (2000.0, 5000.0), "H": (6000.0, 14000.0)}
+BANDS = {"L": (2000.0, 5000.0), "Ln": (2900.0, 4100.0), "H": (6000.0, 14000.0)}
+# Ln: the low band's 3.45 kHz peak only. At its edges the shared 7.1 kHz Q 6
+# band-pass is ~17 dB down (at 5 kHz only ~13 dB), so Ln is where the low
+# band's own decay can be separated from the DECAY band's lower skirt.
 TOTAL = (200.0, 20000.0)
 ENERGY_S = 1.0
 BLOCK_S = 0.005
@@ -181,7 +184,8 @@ def main(argv=None) -> int:
         r = res[k]
         f = lambda v: "   REF" if v is None else f"{v:6.1f}"
         print(f"{k:8s} {KNOB[k[2:4]]:4.1f} {KNOB[k[4:6]]:5.1f} | {r['L']['energy_share_db']:7.2f} "
-              f"{f(r['L']['edt10_ms'])} {f(r['L']['t20_late_ms'])} | {r['H']['energy_share_db']:7.2f} "
+              f"{f(r['L']['edt10_ms'])} {f(r['L']['t20_late_ms'])} | Ln {f(r['Ln']['edt10_ms'])} "
+              f"{f(r['Ln']['t20_late_ms'])} | {r['H']['energy_share_db']:7.2f} "
               f"{f(r['H']['edt10_ms'])} {f(r['H']['t20_late_ms'])} | {r['H_minus_L_db']:6.2f}")
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
