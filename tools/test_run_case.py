@@ -41,6 +41,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "model"))
 
 import audio_measure as am                                          # noqa: E402
+import partial_trajectory as pt                                     # noqa: E402
 import run_case as rc                                               # noqa: E402
 import scorecard as sb                                              # noqa: E402
 
@@ -251,8 +252,12 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
 # INSTANT is known in closed form (`ah_true`), independent of the estimator,
 # so this is a validated instrument and not one calibrated on itself.
 # ===========================================================================
-RS_TEST_OP = dict(win_ms=6.0, hop_ms=0.25, t_end=0.060, guards=(900.0, 1100.0),
-                  min_gap_ms=2.0)
+# DERIVED from the operating point that SHIPS, not a second copy of it (#380):
+# the guard set is the thing these tests are about, and a hand-copied literal
+# here let RS_BALANCE_OP's guards change without a single test noticing.
+RS_TEST_OP = {k: v for k, v in rc.RS_BALANCE_OP.items()
+              if k not in ("f_lo_range", "f_hi_range")}
+RS_TEST_RANGES = (rc.RS_BALANCE_OP["f_lo_range"], rc.RS_BALANCE_OP["f_hi_range"])
 
 
 def _damped(f, tau, amp, n, sr, phase=0.0):
@@ -318,20 +323,105 @@ def test_balance_trajectory_db_a_flat_balance_reads_flat():
 
 def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     """#92's own pattern: a point measured to be inside the record's floor is
-    excluded, not integrated. A strong tone at one of the GUARD frequencies
-    (900 Hz -- neither partial) for the first 20 ms raises the floor there and
-    nowhere else; the earliest reported instant must move past it."""
+    excluded, not integrated. A strong tone AT one of the guard frequencies
+    (neither partial) for the first 20 ms raises the floor there and nowhere
+    else; the earliest reported instant must move past it."""
     tau, a_lo, a_hi = 0.020, 1.0, 1.0
     x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
-    clean = rc.balance_trajectory_db(x, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    clean = rc.balance_trajectory_db(x, SR, *RS_TEST_RANGES, **RS_TEST_OP)
     assert clean.ok
     t = np.arange(len(x)) / SR
     burst_end_s = 0.020
-    dirty = x + 5.0 * np.sin(2 * math.pi * 900.0 * t) * (t < burst_end_s)
-    contaminated = rc.balance_trajectory_db(dirty, SR, (380, 620), (1450, 2150), **RS_TEST_OP)
+    guard_hz = RS_TEST_OP["guards"][0]
+    dirty = x + 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    contaminated = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
     assert contaminated.ok
     assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
     assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
+
+
+def test_rs_guards_sit_clear_of_the_strikes_own_broadband_splash():
+    """#380: the guard must read the RECORD's floor, not the STRIKE's own splash.
+
+    The control is a struck sound carrying ONLY the low partial -- an onset step
+    into one damped sinusoid -- so it has exactly ZERO steady energy at any guard
+    frequency and whatever `floor_at` returns there is leakage and nothing else.
+    That leakage is not a Hann sidelobe (the same signal STARTED at t=0, with no
+    onset step, reads 18 dB lower at 900 Hz): it is the step's broadband splash,
+    which falls monotonically with distance from the partial right across the
+    900-1200 Hz gap. So the LOWEST guard in the gap always reads the loudest,
+    and because `floor_at` takes the MAX over guards, that one member sets the
+    floor for the whole set.
+
+    That is what made D10A unmeasurable. #109 chose the gap to avoid exactly
+    this failure mode ("a guard below the low partial picked up broadband
+    attack-transient leakage") -- the finding here is that at 900 Hz it is still
+    inside it, 2.4 dB above where the rest of the gap reads."""
+    n = int(0.060 * SR)
+    on = int(0.010 * SR)                     # a STRIKE, not a signal already ringing
+    x = np.zeros(n)
+    x[on:] = _damped(452.0, 0.006, 1.0, n - on, SR, 0.3)
+    kw = dict(win_ms=RS_TEST_OP["win_ms"], hop_ms=RS_TEST_OP["hop_ms"],
+              t_end=RS_TEST_OP["t_end"])
+    _, a_lo = pt.trajectory(x, SR, 452.0, **kw)
+    peak = float(a_lo.max())
+    at_900 = float(pt.floor_at(x, SR, 452.0, (900.0,), **kw).max())
+    shipping = float(pt.floor_at(x, SR, 452.0, RS_TEST_OP["guards"], **kw).max())
+    at_900_db = 20.0 * math.log10(at_900 / peak)
+    shipping_db = 20.0 * math.log10(shipping / peak)
+    assert 900.0 not in RS_TEST_OP["guards"], (
+        "a 900 Hz guard reads the strike's splash rather than the record's "
+        "floor; #380 moved RS's lower guard off it")
+    assert shipping_db <= at_900_db - 2.0, (
+        f"the shipping guards {RS_TEST_OP['guards']} read a leakage-only floor "
+        f"of {shipping_db:.1f} dB re the low partial, not the >=2 dB below the "
+        f"900 Hz reading ({at_900_db:.1f} dB) that #380 measured. A guard this "
+        "close to the partial reads the strike, not the floor.")
+    # And the splash is the mechanism, not the window's stationary sidelobes:
+    # the same partial with no onset step reads far lower at the same frequency.
+    ringing = _damped(452.0, 0.006, 1.0, n, SR, 0.3)
+    _, a_ring = pt.trajectory(ringing, SR, 452.0, **kw)
+    ring_900_db = 20.0 * math.log10(
+        float(pt.floor_at(ringing, SR, 452.0, (900.0,), **kw).max())
+        / float(a_ring.max()))
+    assert ring_900_db < at_900_db - 10.0, (
+        "removing the onset step was expected to drop the 900 Hz reading by "
+        f">10 dB (splash, not sidelobe); it moved from {at_900_db:.1f} to "
+        f"{ring_900_db:.1f} dB")
+
+
+def test_rs_guards_still_refuse_mid_band_contamination_a_900hz_guard_caught():
+    """#380's other half: the retune must not have bought D10A's verdict by
+    going blind. A real mid-band component injected into a clean two-partial
+    signal at the levels the OLD (900, 1100) guards refused must still be
+    refused by the shipping set -- for injection frequencies right across the
+    gap, including 900 Hz itself, which no longer has a guard on it.
+
+    Without this, 'the metric reports again' and 'the metric stopped noticing'
+    look identical from the scorecard."""
+    caught_at_db = {900.0: -15.0, 1000.0: -18.0, 1100.0: -18.0, 1200.0: -15.0}
+    tau_lo, tau_hi, a_lo = 0.006, 0.004, 0.5
+    a_hi = a_lo * 10.0 ** (-12.0 / 20.0)          # our own render's balance
+    n = int(0.060 * SR)
+    base = (_damped(452.0, tau_lo, a_lo, n, SR, 0.3)
+            + _damped(1795.0, tau_hi, a_hi, n, SR, 1.9))
+    clean = rc.balance_trajectory_db(base, SR, *RS_TEST_RANGES, **RS_TEST_OP)
+    assert clean.ok, f"the uncontaminated control must report: {clean.reason}"
+    for hz, level_db in caught_at_db.items():
+        dirty = base + _damped(hz, tau_lo, a_lo * 10.0 ** (level_db / 20.0),
+                               n, SR, 0.7)
+        old = rc.balance_trajectory_db(
+            dirty, SR, *RS_TEST_RANGES,
+            **{**RS_TEST_OP, "guards": (900.0, 1100.0)})
+        new = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
+        assert not old.ok, (
+            f"the control is not a control: (900, 1100) was supposed to refuse "
+            f"{level_db:.0f} dB of contamination at {hz:.0f} Hz and did not")
+        assert not new.ok, (
+            f"the shipping guards {RS_TEST_OP['guards']} REPORTED "
+            f"{new.value:+.2f} dB on a record contaminated at {hz:.0f} Hz by "
+            f"{level_db:.0f} dB re the low partial, which (900, 1100) refused "
+            "-- the retune traded contamination sensitivity for a verdict")
 
 
 def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():
