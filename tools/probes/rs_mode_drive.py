@@ -34,26 +34,47 @@ THE ANSWER (2026-09-27).
    neither of them is our model. That is what makes this a correction rather
    than a tuning.
 
-3. Q MOVES THE DECAY AND NOT THE BALANCE, which `sweep` shows directly: over
-   RS_HI_Q 13.5 -> 54 the scored balance moves under 3 dB while `tail decay`
-   runs away, because the all-pole peak 1/sin(w0) does not contain Q. A Q large
-   enough to close an 18 dB gap would have to be ~8x, i.e. tau 19 ms on a mode
-   the reference measures at 2.4 ms. Q is the wrong knob; it was worth one
-   sweep to say so with a number instead of an argument.
+3. Q IS THE WRONG KNOB, AND `sweep` SECTION A SAYS SO WITH A NUMBER. Over
+   RS_HI_Q 13.5 -> 54 -- four times the Q, tau 2.4 -> 9.6 ms -- the scored
+   balance moves 1.17 dB (-11.66 -> -10.49) and the high mode's peak re the low
+   2.66 dB, while `tail decay` goes 9.29 -> 10.86 ms. 1.17 dB of an 18 dB gap
+   for 4x the ring, because the all-pole peak 1/sin(w0) does not contain Q at
+   all; what little moves is the window catching a longer mode, not a louder
+   one. There is no Q that closes this and keeps reference 5's 2.4 ms.
 
 4. THE SHELF IS OUR OWN STRIKE SPLASH, not a low-Q mode. `sweep`'s band-shape
    column is the depth of the 1450 Hz level below the peak near 1700-1800 Hz.
-   At the shipping drive it is ~2.7 dB (a shelf) and it DEEPENS to ~9 dB purely
+   At the shipping drive it is 2.8 dB (a shelf); at att 3 it is 6.3 dB, purely
    by lifting the mode -- no Q change -- because the splash is at a fixed level
-   re the low mode and the mode climbs out of it. The machine reads ~8.4 dB.
+   re the low mode and the mode climbs out of it. The machine reads 8.5 dB.
    So the shelf was never evidence of a broad resonance; it was evidence of a
-   resonance buried in a floor.
+   resonance buried in a floor. It stops deepening around 6.5 dB (att 2-4),
+   which is the remaining gap to the machine and is NOT a drive problem.
 
-WRONG BEFORE IT WAS RIGHT (1, caught by the rev-11 kit's own hash gate):
+5. att 4 SCORES BETTER AND IS NOT TAKEN. Section B reads bal1 -1.79 dB at att 4
+   against -4.69 at att 3, and the reference is +3.85 -- so the better-scoring
+   step is the one the closed form does NOT pick (17.60 dB is 0.47 dB from att
+   3 and 6.49 dB from att 4). Taking att 4 would be tuning our own estimator,
+   which is the failure mode this probe's order exists to avoid. Recorded here
+   because it is exactly the number a later reader will want to argue with.
+
+6. IT COSTS 7.05 dB OF THE VOICE'S LEVEL, AND THAT IS A SEPARATE REPAIR. The
+   455 Hz mode was setting the rimshot's peak, so attenuating its drive takes
+   the whole voice down with it: `drums_fx_render.py --balance` reads RS at
+   0.190 FS against its 0.4286 share of Roland's chart. PEAK_RSG (the gate, and
+   the LAST stage in the path) carries the x2.2532 back. The balance estimator
+   level-matches, so it would have scored a rimshot 7 dB too quiet as fixed --
+   the kit-level test is what caught it, not the score.
+
+WRONG BEFORE IT WAS RIGHT (2, both caught by a gate rather than by reading):
   1. The first version of the fix changed `kit_808()` and nothing else, which
      silently moved `kit_808_rev11()` -- the register image the PUBLISHED Arty
      release was verified with. `KitRefused` fired on the frozen hash, which is
      exactly what that gate is for. The rev-11 kit now undoes the write.
+  2. The second version left PEAK_RSG alone, so the rimshot's balance was right
+     and the rimshot was 7.05 dB too quiet -- invisible to D10A, which
+     level-matches, and caught by `test_kit_voices_sit_at_the_chart_levels`
+     (RS 0.190 FS against a 0.4286 target). Finding 6 is that bug's record.
 
 Needs the Fischer corpus at $GF180_TR808_REFS / $TR808_REFS / /tmp/tr808-ref
 for `confirm`, and REFUSES rather than reporting without it. `derive` and
@@ -233,7 +254,7 @@ def cmd_sweep() -> int:
     print("a range of settings. `bal1` is D10A's scored instant; `peak re lo` is")
     print("the high mode's trajectory peak re the low mode's; `shelf` is how far")
     print(f"the {SHELF_REF_HZ:.0f} Hz level sits BELOW the peak near 1700-1800 Hz --")
-    print("small = a flat shelf, large = a resonance. The machine reads ~8.4 dB.")
+    print("small = a flat shelf, large = a resonance. The machine reads 8.5 dB.")
     print("`attack` and `decay` are D10A's other two rows, in ms.\n")
 
     _header("A. Q, AT THE SHIPPING DRIVE (RS_LO_X_ATT = 0). tau = Q / (pi f0);")

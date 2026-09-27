@@ -550,7 +550,18 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # chart's proportions on 0.56-0.62 x the exciter. Nothing but the six tom/conga
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
-PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
+# RE-BALANCED for #388's RS_LO_X_ATT, by `drums_fx_render.py --balance`
+# unchanged -- again the procedure did not move, its input did. Attenuating the
+# excitation into the 455 Hz network takes 7.05 dB off the whole rimshot,
+# because that mode was setting the voice's peak; the gate peak puts it back.
+# PEAK_RSG is the LAST thing in the RS path (`frame`: nonlinearity, then
+# envelope, then att), so this is a pure gain and moves neither the distortion
+# nor the two modes' ratio. `--balance` reports x2.2532 for RS and x1.00 +- 0.08
+# for the other fifteen, i.e. nothing else moved.
+PEAK_RSG, PEAK_CLG, PEAK_MA = 0.7728, 0.5, 0.5395
+# The gate peak the PUBLISHED revision-11 image was verified with, kept so
+# `kit_808_rev11()` can undo the re-balance above (see its `undo`).
+PEAK_RSG_REV11 = 0.343
 # ---- the clap, contract revision 14 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
@@ -755,6 +766,18 @@ CL_HZ, CL_Q = 2500.0, 200.0
 # scale (0.06 x 1/sin(w_lo) = 1.008), so the 8x has to come off the loud mode
 # or the tap saturates. CL disconnects P_RS1X entirely, so this reaches the
 # rimshot and nothing else.
+#
+# IT MOVES THE VOICE'S LEVEL, AND THAT IS REPAIRED SEPARATELY. The 455 Hz mode
+# was setting the rimshot's peak, so attenuating it takes 7.05 dB off the whole
+# voice: `drums_fx_render.py --balance` reports RS at 0.190 FS against its
+# 0.4286 share of Roland's chart. PEAK_RSG carries the x2.2532 back (see it);
+# separating the two is the point, because the balance estimator level-matches
+# and would have scored a rimshot 7 dB too quiet as fixed.
+#
+# 18.06 dB OF DRIVE BUYS 10.1 dB OF BALANCE, not 18: both taps go through the
+# swing VCA's tanh, and the low tap was sitting in its compression, so a 18 dB
+# smaller tap comes out only ~8 dB smaller. Measured, not argued -- `confirm`
+# reads the high mode at -12.14 dB re the low at att 0 and -2.04 dB at att 3.
 RS_LO_X_ATT = 3
 # VERIFIED IN A SOURCE [SN "this switching is provided to eliminate noise
 # leaking from IC20"]: both voices are gated by JFET Q74 through C112 0.022 uF
@@ -1018,6 +1041,24 @@ _PROVENANCE_TABLE = (
         holdout=HOLDOUT_NONE, date="2026-09-18",
         notes="one file and one knob: the level was chosen against the same recording "
               "that defines the target, so nothing checks it out of sample"),),
+    (("RS_LO_X_ATT",), Provenance(
+        status=PROV_DERIVED, prose_tag="HARDWARE-MEASURED",
+        source="the two impulse responses' closed forms at RS_LO_HZ/Q and "
+               "RS_HI_HZ/Q -- bank 1/sin(w0) against circuit H0 w0/Q -- derived and "
+               "swept by tools/probes/rs_mode_drive.py",
+        justification="18.06 dB (att 3) on the pulse into the 455 Hz network, the "
+                      "nearest of the path word's 6.02 dB steps to the +17.60 dB the "
+                      "closed forms require; without it an equal pulse into both "
+                      "bridged-T bodies puts our high mode 11.80 dB below the low "
+                      "where the circuit's sits 5.79 dB above",
+        docs=("docs/scorecard/results/D10A.json",),
+        notes="DERIVED, and the comment above it carries HARDWARE-MEASURED: the +5.79 "
+              "dB the circuit's own transfer functions predict is CONFIRMED by the "
+              "Fischer s/n 103852 recording's +6.6 dB (rs8/RS.WAV), two independent "
+              "routes agreeing to 0.7 dB -- but the recording is the check, not the "
+              "source, and no value was fitted to it. Corrects a DISCRETISATION error, "
+              "not a rimshot parameter: 1/sin(w0) is carried by every all-pole mode and "
+              "only becomes audible where one voice sums two modes 1.5 octaves apart"),),
     (("PEAK_CLX",), Provenance(
         status=PROV_FITTED,
         source="model/drums_fx_render.py --balance against CHART_VPP (reference 1.6)",
@@ -1714,7 +1755,12 @@ def kit_808_rev11() -> list:
             # accepted -- which is exactly why it has to be undone here rather
             # than left to work by accident: the released image's rimshot is the
             # one it was measured with, and a host driving it gets that one.
-            A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1)}
+            A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+            # ...and with it the gate peak that re-balanced the voice after it.
+            # The two go together: RS_LO_X_ATT without PEAK_RSG's x2.25 is a
+            # rimshot 7 dB below its share of Roland's chart, so undoing one and
+            # not the other would give revision 11 a kit neither release had.
+            A_ENV + E_RSG * ENV_STRIDE + 1: peak_reg(PEAK_RSG_REV11)}
     kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
