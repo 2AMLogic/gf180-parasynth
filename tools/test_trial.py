@@ -998,6 +998,7 @@ def _reuse_child(repo, rtl_run):
 
 def test_the_receipt_lists_reuse_per_child_and_check_receipt_accepts_it(repo):
     _reuse_child(repo, {"reused": True, "asked": "auto", "why": "identical run on disk", **SIM})
+    repo.child(late_control(), role="control")
     run_dir, rec = repo.run()
     assert rec["verdict"] == trial.PASS, rec["verdict_reasons"]
     assert rec["rtl_reuse"] == {"c1": {"demo": {"reused": True, "why": "identical run on disk",
@@ -1043,6 +1044,7 @@ def test_a_child_without_the_reuse_flag_carries_no_reuse_requirement(repo):
     repo.child({"rc": 0, "files": {"verification.json": _reusing_rolling(None)}},
                interpret="rolling_record", fixtures=["demo"],
                image={"sender": "tree", "target": "tree"})
+    repo.child(late_control(), role="control")
     run_dir, rec = repo.run()
     assert rec["verdict"] == trial.PASS and rec["rtl_reuse"] == {}
     assert trial.check_receipt(run_dir / "receipt.json")[0]
