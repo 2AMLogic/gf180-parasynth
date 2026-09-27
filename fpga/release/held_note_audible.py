@@ -84,7 +84,7 @@ def main(argv=None) -> int:
     ap.add_argument("--legacy-image", action="store_true")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--outdir", default=None)
-    ap.add_argument("--image", default="release", choices=("release", "tree"))
+    ap.add_argument("--image", default="release", choices=("release", "tree", "r1"))
     ap.add_argument("--fixture", default="none", choices=("none", "m5a"))
     a = ap.parse_args(argv)
     if a.fixture != "none" and a.preset != "default":
@@ -100,7 +100,7 @@ def main(argv=None) -> int:
         print(f"held_note_audible: REFUSED -- the CLI refused the capture (exit {rc})")
         return 2
     init_problems = []
-    if a.image == "tree":
+    if a.image in ("tree", "r1"):
         import r1_candidate as r1c
         plan = json.load(open(prefix + ".plan.json"))
         setup = [(r["expect"]["flag"], r["expect"]["sec"], r["expect"]["addr"],

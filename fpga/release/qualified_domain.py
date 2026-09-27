@@ -260,7 +260,7 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
             glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
             continue
         if addr == A_DRIFT:
-            if data & 0xFFFF and image == "tree":
+            if data & 0xFFFF and image in ("tree", "r1"):
                 raise Rejected("NOT_IN_IMAGE", "DRIFT (0x2D) is compiled into the R1 (tree) "
                                "image but is not in its qualified player domain (#279); use "
                                "the engineering interface", i)

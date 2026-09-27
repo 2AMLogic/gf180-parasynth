@@ -6,7 +6,8 @@ Naming (plan087/plan088): **R0** is the published Arty image, whose immutable
 release string is `arty-a7-100t baseline 2025.1, r1` (fpga/release/RELEASE.md,
 contract revision 11, bitstream a66c9349...). **R1** is this candidate: the
 revision-14 tree in the Arty configuration OSC2X=1 FILTER2X=1 PULSE2X=0, driven
-by the host with `--image tree`. Its image is published and bound separately by
+by the host with the NAMED, frozen selection `--image r1` (#323; `tree` stays a
+development selector). Its image is published and bound separately by
 fpga/release/r1_release.py (r1-2025.1.json, #280); this record stays the frozen
 source/host/evidence identity that manifest binds. Neither identity's evidence
 stands in for the other's.
@@ -37,7 +38,7 @@ THE RECORD. `fpga/release/r1-candidate.json` is derived from the tree:
 
     python fpga/release/r1_candidate.py            # BOUND (0) / STALE (1) / REFUSED (2)
     python fpga/release/r1_candidate.py --write    # re-derive deliberately
-    python fpga/release/r1_candidate.py init-check --fixture demo --image tree
+    python fpga/release/r1_candidate.py init-check --fixture demo --image r1
 
 BOUND means the committed record equals a fresh derivation: the compiled RTL
 and ROM bytes (also verified byte-identical at RTL_FROZEN_AT), the compile
@@ -69,7 +70,7 @@ EVIDENCE_DIR = ROOT / "fpga/reports/r1-candidate"
 NAME = "R1 player preview"
 R0_ALIAS = "arty-a7-100t baseline 2025.1, r1 (plan087 R0; contract revision 11; image a66c9349...)"
 CONTRACT_REVISION = 14
-HOST_IMAGE = "tree"                 # uart_host / midi_session `--image` for this candidate
+HOST_IMAGE = "r1"                   # uart_host / midi_session `--image` for this release (#323)
 # main at the freeze; the compiled RTL/ROM set last changed at 36e1f83 (#273's
 # merge of polyBLAMP #244 and clap L2). Every source is verified at this commit.
 RTL_FROZEN_AT = "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db"
@@ -81,7 +82,7 @@ A_VOICE_RESET, A_DRUM_RESET = 0x23, 0xFF
 #: every R1 session's first two writes, before its image
 PREAMBLE = ((0, SEC_VOICE, A_VOICE_RESET, 0), (0, SEC_DRUM, A_DRUM_RESET, 0))
 
-# The supported R1 quick-start (the R0 set with `--image tree`, minus
+# The supported R1 quick-start (the R0 set with `--image r1`, minus
 # `play --fixture m5a`: it sends no image, so what it plays depends on
 # whatever the device held -- `run --note 45 --fixture m5a` plays the same
 # phrase from the known state).
@@ -120,14 +121,20 @@ def _rel(p) -> str:
 
 # ---- the frozen target -------------------------------------------------------
 def frozen_kit() -> list:
-    """kit_808() as revision 14 froze it, or REFUSED."""
+    """R1's kit as frozen BY VALUE (fpga/release/r1-kit.json, read through
+    uart_host.r1_kit, which REFUSES unless it hashes to R1's digest). Not the
+    tree's kit_808(): later sound work may change that without touching R1."""
     import drums_fx as dx
-    kit = dx.kit_808()
-    got = dx._kit_sha256(kit)
-    if got != KIT_R14_SHA256 or len(kit) != KIT_R14_WRITES:
-        raise Refused(f"drums_fx.kit_808() hashes to {got[:12]} ({len(kit)} writes), not the "
-                      f"frozen R1 kit {KIT_R14_SHA256[:12]} ({KIT_R14_WRITES}): a kit change is a "
-                      "new candidate -- re-freeze deliberately")
+    import uart_host as uh
+    if uh.R1_KIT_SHA256 != KIT_R14_SHA256:
+        raise Refused(f"uart_host.R1_KIT_SHA256 {uh.R1_KIT_SHA256[:12]} is not R1's "
+                      f"frozen kit {KIT_R14_SHA256[:12]}")
+    try:
+        kit = uh.r1_kit()
+    except dx.KitRefused as exc:
+        raise Refused(str(exc)) from None
+    if len(kit) != KIT_R14_WRITES:
+        raise Refused(f"R1's frozen kit has {len(kit)} writes, not {KIT_R14_WRITES}")
     return [(int(a), int(v)) for a, v in kit]
 
 
@@ -239,8 +246,14 @@ def kit_identity() -> dict:
     if uh.IMAGE_REVISION.get(HOST_IMAGE) != CONTRACT_REVISION:
         raise Refused(f"uart_host.IMAGE_REVISION[{HOST_IMAGE!r}] is "
                       f"{uh.IMAGE_REVISION.get(HOST_IMAGE)}, not R1's {CONTRACT_REVISION}")
-    if uh.image_kit(HOST_IMAGE) != dx.kit_808():
-        raise Refused("uart_host.image_kit('tree') is not drums_fx.kit_808()")
+    try:
+        # a tampered r1-kit.json: the host refuses it (KitRefused); the check
+        # REFUSES with that reason, never a traceback (Judge on 74ec7d5)
+        hosted = uh.image_kit(HOST_IMAGE)
+    except dx.KitRefused as exc:
+        raise Refused(f"the host refuses R1's kit: {exc}") from None
+    if hosted != frozen_kit():
+        raise Refused(f"uart_host.image_kit({HOST_IMAGE!r}) is not R1's frozen kit")
     addr, val = clap_final_strike()
     return {"revision": CONTRACT_REVISION, "sha256": KIT_R14_SHA256, "writes": KIT_R14_WRITES,
             "clap_final_strike": {"register": "ENV_FRATE[8]", "address": addr, "value": val},
@@ -249,6 +262,7 @@ def kit_identity() -> dict:
 
 
 def commands() -> dict:
+    import drums_fx as dx
     import release_manifest as rm
     out = {}
     with tempfile.TemporaryDirectory() as d:
@@ -256,8 +270,11 @@ def commands() -> dict:
             sub = Path(d) / name
             sub.mkdir()
             full = [*argv, "--image", HOST_IMAGE]
-            cap = rm._capture(full, sub)
-            setup, kit = emitted_setup(full)
+            try:
+                cap = rm._capture(full, sub)
+                setup, kit = emitted_setup(full)
+            except dx.KitRefused as exc:          # the CLI refused R1's kit: say why
+                raise Refused(f"the host refuses R1's kit: {exc}") from None
             probs = check_init(setup, kit_expected=kit)
             if probs:
                 raise Refused(f"{name}: emitted setup is not the frozen R1 target: {probs}")
@@ -265,7 +282,7 @@ def commands() -> dict:
                                    "/dev/cu.usbserial-XXXX " + " ".join(full),
                          **cap, "setup_writes": len(setup), "loads_kit": kit}
     out["live-midi"] = {"command": ".venv/bin/python fpga/midi_session.py --port "
-                                   "/dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image tree",
+                                   "/dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1",
                         "sim_start": ".venv/bin/python fpga/midi_session.py --port sim "
                                      "--midi-in scripted:coverage",
                         "init_writes": len(live_midi_init())}
@@ -316,8 +333,8 @@ def domain() -> dict:
     d = rm.domain()
     d.pop("precondition_not_verified", None)
     d["session_start"] = (
-        "every R1 image-loading command (uart_host run/load --image tree, midi_session "
-        "--image tree) sends the known-state preamble first -- voice RESET (0x23) and drum "
+        "every R1 image-loading command (uart_host run/load --image r1, midi_session "
+        "--image r1) sends the known-state preamble first -- voice RESET (0x23) and drum "
         "RESET (0xFF), which zero every register and state of both sections -- then its whole "
         "image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), "
         "not assumed. Before sending, the host REFUSES if the device reports queued events or "
@@ -373,8 +390,14 @@ def build() -> dict:
         "kit": kit_identity(),
         "known_state_preamble": [list(w) for w in PREAMBLE],
         "presets": rm.presets(),
+        # image-aware host binding (#323): the host serves several images, so R1
+        # binds what it EMITS for R1 -- every supported command's exact bytes
+        # (commands), R1's frozen kit (kit) and the presets' image bytes
+        # (presets) -- not the bytes of files other images also change.
         "host": {"version": DECLARED["host_version"],
-                 "files": {f: sha(ROOT / f) for f in HOST_FILES}},
+                 "binding": "the exact bytes every supported command emits under "
+                            f"--image {HOST_IMAGE} (commands), R1's frozen kit (kit) and the "
+                            "presets' image bytes (presets); host files are not bound"},
         "commands": commands(),
         "removed_from_quickstart": REMOVED_FROM_QUICKSTART,
         "domain": domain(),

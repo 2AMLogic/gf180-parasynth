@@ -49,10 +49,21 @@ def test_frozen_kit_is_revision_14_with_a_nonzero_final_strike():
     assert FRATE not in dict(dx.kit_808_rev11())
 
 
-def test_control_frozen_kit_refuses_a_moved_kit(monkeypatch):
+def test_frozen_kit_is_by_value_and_a_tampered_copy_refuses(monkeypatch, tmp_path):
+    """#323: R1's kit is frozen BY VALUE (fpga/release/r1-kit.json). A later
+    change to the tree's kit_808() does not move it; a tampered frozen copy
+    is refused."""
+    import uart_host as uh
+    before = r1c.frozen_kit()
     moved = [(a, v + 1 if a == FRATE else v) for a, v in dx.kit_808()]
     monkeypatch.setattr(dx, "kit_808", lambda: moved)
-    with pytest.raises(r1c.Refused, match="new candidate"):
+    assert r1c.frozen_kit() == before
+    rec = json.loads(uh.R1_KIT.read_text())
+    rec["writes"] = [[a, v + 1 if a == FRATE else v] for a, v in rec["writes"]]
+    p = tmp_path / "r1-kit.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(uh, "R1_KIT", p)
+    with pytest.raises(r1c.Refused, match="not R1's frozen kit"):
         r1c.frozen_kit()
 
 
@@ -103,11 +114,11 @@ def test_rolling_verifier_refuses_a_sender_without_a_stated_target(tmp_path):
 
 def test_rolling_r1_run_and_its_wrong_kit_controls(tmp_path):
     with contextlib.redirect_stdout(io.StringIO()):
-        rc = vrp.main(["--image", "tree", "--expect-image", "tree", "--outdir", str(tmp_path),
+        rc = vrp.main(["--image", "r1", "--expect-image", "r1", "--outdir", str(tmp_path),
                        "--epochs", "0"])
     rec = json.loads((tmp_path / "verification.json").read_text())
     assert rc == 0 and rec["state"] == "PASS"
-    assert rec["image"] == {"sender": "tree", "target": "tree", "target_contract_revision": 14,
+    assert rec["image"] == {"sender": "r1", "target": "r1", "target_contract_revision": 14,
                             "target_kit_sha256": r1c.KIT_R14_SHA256}
     for fx in ("demo", "bar808-full"):
         c = rec["controls"][f"WRONG_KIT:{fx}"]
@@ -116,7 +127,7 @@ def test_rolling_r1_run_and_its_wrong_kit_controls(tmp_path):
 
 def test_control_rolling_release_sender_against_r1_target_is_caught(tmp_path):
     with contextlib.redirect_stdout(io.StringIO()):
-        rc = vrp.main(["--image", "release", "--expect-image", "tree", "--expect-fail",
+        rc = vrp.main(["--image", "release", "--expect-image", "r1", "--expect-fail",
                        "--outdir", str(tmp_path), "--epochs", "0"])
     rec = json.loads((tmp_path / "verification.json").read_text())
     assert rc == 0 and rec["state"] == "FAIL" and rec["expect_fail"]["caught"]

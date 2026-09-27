@@ -103,6 +103,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from fractions import Fraction
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -127,20 +128,47 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 # `kit_808()` programs a clap that image cannot play, so the default -- the
 # image a player actually has -- sends revision 11's frozen kit, and a board
 # built from this tree is named explicitly (`--image tree`).
-IMAGE_REVISION = {"release": 11, "tree": 14}
+#
+# `r1` (#323, plan092 section 2) is the NAMED, FROZEN R1 player release: the
+# published R1 image (fpga/release/r1-2025.1.json). It sends R1's kit frozen by
+# value (fpga/release/r1-kit.json, checked against its digest), so later work
+# on the tree's kit cannot change what an R1 board is sent. `tree` stays the
+# development selector: whatever this tree builds. `release` and no --image
+# stay R0 (plan092: the public default does not flip).
+IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14}
 DEFAULT_IMAGE = "release"
+# the images whose sessions start from the known state (voice + drum RESET)
+KNOWN_STATE_IMAGES = ("tree", "r1")
+R1_KIT = Path(__file__).resolve().parent / "release/r1-kit.json"
+R1_KIT_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def r1_kit() -> list:
+    """R1's kit as frozen by value; REFUSES (KitRefused) unless it hashes to
+    R1_KIT_SHA256."""
+    import json
+    import drums_fx as dx
+    rec = json.loads(R1_KIT.read_text())
+    kit = [(int(a), int(v)) for a, v in rec["writes"]]
+    got = dx._kit_sha256(kit)
+    if got != R1_KIT_SHA256 or rec.get("sha256") != R1_KIT_SHA256:
+        raise dx.KitRefused(f"{R1_KIT.name} hashes to {got[:12]}, not R1's frozen kit "
+                            f"{R1_KIT_SHA256[:12]}")
+    return kit
 
 
 def image_kit(image: str = DEFAULT_IMAGE) -> list:
-    """The drum kit `image` plays (drums_fx.KITS_BY_REVISION). The frozen
-    revision-11 kit REFUSES (drums_fx.KitRefused) if it no longer hashes to the
-    image it was verified with."""
+    """The drum kit `image` plays. The frozen revision-11 kit (R0) and R1's
+    frozen kit REFUSE (drums_fx.KitRefused) if they no longer hash to the image
+    they were verified with; `tree` is this tree's kit_808()."""
     import drums_fx as dx
     if image not in IMAGE_REVISION:
         raise ValueError(f"image {image!r} is not one of {sorted(IMAGE_REVISION)}")
-    if "WRONG_KIT" in INJECT_BUGS and image == "tree":
-        # the control (#279, plan088): the release kit under `--image tree`
+    if "WRONG_KIT" in INJECT_BUGS and image in KNOWN_STATE_IMAGES:
+        # the control (#279, plan088): the release kit under `--image tree|r1`
         return dx.KITS_BY_REVISION[IMAGE_REVISION["release"]]()
+    if image == "r1":
+        return r1_kit()
     return dx.KITS_BY_REVISION[IMAGE_REVISION[image]]()
 BITS_PER_BYTE = 10
 
@@ -1691,8 +1719,10 @@ def main(argv=None, *, bridge_factory=None) -> int:
     ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
                     help="the Arty image on the board, which decides the drum kit a "
                          "fixture sends: release (the published R0 image, contract "
-                         "revision 11, no final strike -- the DEFAULT) or tree (an "
-                         "image built from this tree, revision 14)")
+                         "revision 11, no final strike -- the DEFAULT), r1 (the "
+                         "published R1 player release, its frozen kit and known-state "
+                         "start) or tree (an image built from this tree, revision 14; "
+                         "development)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
     ap.add_argument("--engineering", action="store_true",
@@ -1758,7 +1788,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
               "the fixture loads its own patch over the preset", file=sys.stderr)
         return 2
     image_sent = a.cmd in ("load", "run") or a.cmd is None
-    if image_sent and a.image == "tree":
+    if image_sent and a.image in KNOWN_STATE_IMAGES:
         # R1's known-state session start (#279): voice RESET and drum RESET
         # zero every register and state of both sections BEFORE the image,
         # so routing, modulation, drift and any drum register the image does
@@ -1871,7 +1901,7 @@ def main(argv=None, *, bridge_factory=None) -> int:
         bridge = open_bridge(a.port, a.baud)
         # only a command that establishes R1's known state asserts it: a
         # standalone note-off must never be refused for a busy queue
-        bridge.require_idle = a.image == "tree" and image_sent
+        bridge.require_idle = a.image in KNOWN_STATE_IMAGES and image_sent
         rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
     except Refused as exc:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
