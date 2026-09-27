@@ -1570,11 +1570,17 @@ def main(argv=None) -> int:
     if dest is not None:
         # the current run's record exists from the start: a crash leaves
         # THIS run's in-progress ERROR, never an older run's PASS or FAIL
-        out.mkdir(parents=True, exist_ok=True)
-        _write_atomic(dest, {"schema": RECORD_SCHEMA, "verdict": ERROR,
-                             "reasons": ["in progress: the analysis did not finish"],
-                             "started_at": datetime.datetime.now(
-                                 datetime.timezone.utc).isoformat()})
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+            _write_atomic(dest, {"schema": RECORD_SCHEMA, "verdict": ERROR,
+                                 "reasons": ["in progress: the analysis did not finish"],
+                                 "started_at": datetime.datetime.now(
+                                     datetime.timezone.utc).isoformat()})
+        except OSError as exc:
+            # nowhere to record a verdict: do not measure one (#340)
+            print(f"r0_capture: ERROR (execution error, NO VERDICT) -- cannot write "
+                  f"{dest}: {type(exc).__name__}: {exc}")
+            return 3
     try:
         rec = analyse(a.bundle, a.references)
     except BaseException as exc:                     # noqa: BLE001 -- see ERROR
@@ -1584,7 +1590,15 @@ def main(argv=None) -> int:
                "traceback": traceback.format_exc().splitlines()[-20:]}
     rec["analysed_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     if dest is not None:
-        _write_atomic(dest, rec)
+        try:
+            _write_atomic(dest, rec)
+        except OSError as exc:
+            # #340: the record on disk is still this run's in-progress ERROR;
+            # the exit status must agree with it, not escape as 1 (FAIL)
+            print(f"r0_capture: ERROR (execution error, NO VERDICT) -- the "
+                  f"{rec['verdict']} record was not written to {dest}: "
+                  f"{type(exc).__name__}: {exc}")
+            return 3
     for r in rec["reasons"][:12]:
         print(f"  {r}")
     for prop, v in (rec.get("properties") or {}).items():
@@ -1602,8 +1616,12 @@ def main(argv=None) -> int:
 
 def _write_atomic(path: pathlib.Path, rec: dict) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(rec, indent=1, default=str) + "\n")
-    os.replace(tmp, path)
+    try:
+        tmp.write_text(json.dumps(rec, indent=1, default=str) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)                  # never leave the tmp behind (#340)
+        raise
 
 
 if __name__ == "__main__":
