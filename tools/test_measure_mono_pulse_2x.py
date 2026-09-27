@@ -44,3 +44,30 @@ def test_gain_control_does_not_select_pulse_oversampling():
     for obj in (control, candidate):
         assert obj.oversample_2x and obj.rate_converted_ladder
         assert obj.pulse479_filter_candidate and obj.causal_filter
+
+
+def test_gain_only_control_uses_the_candidates_rectangle_gain():
+    """#333: the control must apply the level change the candidate makes. With
+    the rectangle headroom at 0.74 the control scales by 24248, not the saw's
+    27853; and the candidate itself renders at that gain."""
+    import numpy as np
+    saved = experiment.RECT_GAIN_Q15
+    try:
+        experiment.set_rect_gain(24248)
+        ctl = experiment.factory("gain_only")
+        cand = experiment.factory("pulse2x")
+        a = ctl.note(96, 0.1, waves=("pulse29",) * 3, mix=(1.0, 0.0, 0.0))
+        experiment.set_rect_gain(experiment.vf._OS2_SUBSTEP_GAIN_Q15)
+        b = experiment.factory("gain_only").note(96, 0.1, waves=("pulse29",) * 3, mix=(1.0, 0.0, 0.0))
+        assert not np.array_equal(a, b)
+        experiment.set_rect_gain(24248)
+        c1 = cand.note(96, 0.1, waves=("pulse29",) * 3, mix=(1.0, 0.0, 0.0))
+        experiment.set_rect_gain(experiment.vf._OS2_SUBSTEP_GAIN_Q15)
+        c2 = experiment.factory("pulse2x").note(96, 0.1, waves=("pulse29",) * 3, mix=(1.0, 0.0, 0.0))
+        assert not np.array_equal(c1, c2)
+        saw = experiment.factory("pulse2x").note(84, 0.1, waves=("saw",) * 3, mix=(1.0, 0.0, 0.0))
+        experiment.set_rect_gain(24248)
+        saw2 = experiment.factory("pulse2x").note(84, 0.1, waves=("saw",) * 3, mix=(1.0, 0.0, 0.0))
+        assert np.array_equal(saw, saw2)                 # the saw keeps 0.85
+    finally:
+        experiment.set_rect_gain(saved)
