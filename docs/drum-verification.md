@@ -1035,8 +1035,14 @@ with a known answer before anything was quoted (`test_audio_measure`):
   questions. They agree exactly on a stationary two-tone signal, which is how
   each was checked.
 
-Measured on `cy8/CY5025.WAV` — TONE 5.0, DECAY 5.0, Roland's own chart
-condition — against a render of exactly the same length (2.00 s, which matters:
+Measured on `cy8/CY5025.WAV` — TONE 5.0, **DECAY 2.5**. This paragraph read
+"DECAY 5.0, Roland's own chart condition" until #102; it is not that
+condition. The Fischer filename's second code is DECAY and `25` means 2.5, so
+the chart's mid-DECAY cymbal is `CY5050` (`tools/probe_new_voice_knobs.py`
+findings 2 and 4). Nothing measured here moves — every CY figure in this
+document was taken on this file and is still a figure about this file — but
+what the file *is* moves, and with it what a fit to it generalises to.
+Measured against a render of exactly the same length (2.00 s, which matters:
 the energy integral runs to the end of the array, so an unmatched window moves
 the answer by 7 %):
 

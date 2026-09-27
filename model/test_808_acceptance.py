@@ -1587,9 +1587,12 @@ HW = {
 # still support (see MA below for one that cannot).
 HW_T20 = {"RS": 0.0090, "CL": 0.0226, "MT": 0.1282, "MC": 0.0877,
           "LC": 0.1731, "HC": 0.0768}
-# The cymbal, from cy8/CY5025.WAV -- TONE 5.0 and DECAY 5.0, which is Roland's
-# own chart condition. Schroeder T20, and the band-energy split over the five
-# bands below.
+# The cymbal, from cy8/CY5025.WAV -- TONE 5.0 and DECAY 2.5. This comment said
+# "DECAY 5.0, which is Roland's own chart condition" until #102; it is not that
+# condition. The Fischer filename's second code is DECAY and "25" means 2.5, so
+# the chart's mid-DECAY cymbal is CY5050 (`tools/probe_new_voice_knobs.py`
+# findings 2 and 4). Every number below was measured on this file and still is.
+# Schroeder T20, and the band-energy split over the five bands below.
 CY_BANDS = ((20.0, 2000.0), (2000.0, 5000.0), (5000.0, 9000.0),
             (9000.0, 13000.0), (13000.0, 19000.0))
 HW_CY_SECONDS = 2.0      # the length of cy8/CY5025.WAV after its onset
@@ -1953,8 +1956,9 @@ def test_maracas_and_clap_cannot_sound_at_once():
 
 
 def test_cymbal_decay_matches_a_real_machine():
-    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 5.0, Roland's own
-    chart condition -- Schroeder T20 798 ms] The cymbal is the voice every
+    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 2.5 (see HW_CY_T20;
+    the "chart condition" label this said until #102 was wrong) -- Schroeder
+    T20 798 ms] The cymbal is the voice every
     independent source calls the hard one, so its headline number is the
     machine's and not the chart's: Roland's chart says 800 ms at DECAY mid and
     the machine measures 798, which is the one place the two agree closely.
@@ -1991,7 +1995,8 @@ def test_cymbal_decay_matches_a_real_machine():
 
 
 def test_cymbal_is_not_a_long_closed_hat():
-    """[hardware-measured: cy8/CY5025.WAV against ch8/CH.WAV] The failure mode
+    """[hardware-measured: cy8/CY5025.WAV (TONE 5.0, DECAY 2.5) against
+    ch8/CH.WAV] The failure mode
     this voice invites: take the hats' 7.1 kHz band, give it a long envelope,
     call it a cymbal. The machine says no -- its cymbal's strongest line is at
     3153 Hz, from the SECOND band-pass at 3.45 kHz that the hats do not use,
@@ -2020,26 +2025,59 @@ def test_cymbal_is_not_a_long_closed_hat():
 
 
 def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
-    """[hardware-measured: cy8/CY5025.WAV, `band_energy` over five bands]
+    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 2.5 -- `band_energy`
+    over five bands]
     THE HONEST ROW. The machine puts 1.1 / 10.3 / 53.2 / 23.3 / 6.0 % of its
-    energy in <2k / 2-5k / 5-9k / 9-13k / >13k. The model reaches 1.7 / 6.5 /
-    57.4 / 15.6 / 6.4: the long 3.4 kHz ring, the total decay and the top
-    octave are there, and the 9-13 kHz shoulder is about a third short with
-    the missing energy sitting in 5-9 kHz instead.
+    energy in <2k / 2-5k / 5-9k / 9-13k / >13k. The model reaches 1.3 / 6.3 /
+    58.4 / 15.3 / 6.7 over this window: the long 3.4 kHz ring, the total decay
+    and the top octave are there, and the 9-13 kHz shoulder is about a third
+    short with the missing energy sitting in 5-9 kHz instead.
 
     WHY, precisely: that shoulder wants a resonant filter near 10.5 kHz that
     falls again above it. THE MODEL ALREADY HAS ONE -- `M_CYHI`, at
-    CY_HI_HZ = 10500. It is MISTUNED, NOT MISSING. Measured: Q 2.5 -> 4.0 on
-    that single filter takes the five-band cost from 18.1 to 6.0 -- two thirds
-    of the error -- with no new mode, no new path and no new numerator, and all
-    102 acceptance tests still pass. Adding a second 2-pole instead reaches only
-    10.3, so MORE FILTERING IS NOT THE LEVER.
+    CY_HI_HZ = 10500. It is MISTUNED, NOT MISSING. Adding a second 2-pole at a
+    different corner reaches only five-band cost 10.3, so MORE FILTERING IS NOT
+    THE LEVER.
 
-    (That Q 4.0 is a FIT: a grid search on one reference file with nothing held
-    out, and +60 % is outside reference 1.7's +-50 % unit-to-unit normal. It is
-    probably standing in for the third-order pole reference 10 specifies and the
-    model realises as a single 2-pole. Treat it as a fit until it is checked
-    against a held-out case.)
+    #102 IS NOW SETTLED, AND THIS DOCSTRING USED TO STATE IT AS OPEN.
+    Reference 10 calls Hh3 3rd-order and the model realises it as this single
+    2-pole. A genuine third pole -- the 2-pole cascaded with ONE real pole at
+    the same corner, in both orientations -- was built, rendered through the
+    fixed-point block and judged by the scorecard (DR 0015, DR 0022,
+    `tools/probes/hihat/hh_probe5.py`). **It lost, on the development case and
+    on a held-out recording.** Each structure got its own (Q, gain) fit against
+    D14A only; the two-pole reaches `Band energy` 0.098 against 0.258 and 0.163
+    for the two 3-pole arms. `scorecard.compare` itself returns INCOMPARABLE on
+    every pairing -- `total decay` is required and is invalid on the reference
+    side of D14A and our side of D14B, so neither case has a verdict -- and the
+    same rule read over the properties that DO have distances REJECTS both arms
+    on both cases. That read is INDICATIVE and DR 0022 labels it so.
+    Three reasons it loses, all measured:
+      * at 48 kHz a 1-pole at 10.5 kHz has r = 0.253 and only 1.19 octaves above
+        it, so the low-pass orientation delivers 2.0 dB/octave, not 6;
+      * a cascade costs 1.25 points of band share and -2.75 dB of peak BEFORE it
+        filters anything, because the tap is read before the bank steps and the
+        three cymbal bands then interfere one sample apart;
+      * `TAP_SHIFT = 3` throws away 18.1 dB that `amp` (Q0.16, ceiling 1.0)
+        cannot recover, and `PATH.src`'s 5 bits mean mode 16 cannot be tapped.
+    So reference 10's third pole joins Hh1 as a DOCUMENTED OMISSION.
+
+    THE HOLDOUT SEPARATES NOTHING, AND THAT IS ITS MOST USEFUL RESULT.
+    docs/scorecard/results/D14B.json is the cymbal's first held-out recording
+    (cy8/CY2500.WAV, TONE 2.5 DECAY 0.0, read by no fit in this repository).
+    All four arms land at `Band energy` 3.566 / 3.767 / 3.794 / 3.812 -- a
+    spread of 0.25 tolerances inside a 3.5-tolerance error, with the SHIPPED
+    2-pole the best of the four. What dominates there is not the high band's
+    order but the CY DECAY law: at knob 0.0 we render T20 ~830 ms against the
+    recording's 456 ms. A decision taken on D14A alone could not have seen that.
+
+    AND THE Q 2.5 -> 4.0 RETUNE IS NOT THE ANSWER EITHER. It takes the
+    five-band cost from 18.1 to 6.0 -- and takes the scorecard's `Band energy`
+    distance from 0.501 to 0.726, i.e. the acceptance authority gets WORSE while
+    the measure DR 0015 rejects by name improves threefold. On this voice the
+    lever on that property is the high band's LEVEL, not its Q (Q 4.0 at gain
+    0.80 reads 0.098), and that is a refit of an already-fitted parameter
+    resting on one development case, so it is filed and not shipped.
 
     DO NOT READ THIS AS "the model drops Hh1". Hh1 is a LOW-band filter at
     2.5 kHz Q 0.97 (docs/tr808-reference.md, the IC3 pin 1 row). Restoring it
@@ -2049,7 +2087,9 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
     agent to go and restore a filter that was never the cause.
 
     The bounds below are the machine's value with the residual this paragraph
-    admits -- they are NOT a claim that the cymbal matches.
+    admits -- they are NOT a claim that the cymbal matches. They are UNCHANGED
+    by #102: the shipped structure is unchanged, so a moved bound here would be
+    a bound moved to fit nothing.
 
     Ground truth: test_audio_measure.test_band_energy_splits_a_two_tone_signal,
     test_audio_measure.test_band_energy_disagrees_with_a_windowed_fft_on_a_decaying_signal

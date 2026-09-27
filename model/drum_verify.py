@@ -80,7 +80,12 @@ REF_MAIN = {
     "RS": ("rs8/RS.WAV", "no knob"),
     "CL": ("cl8/CL.WAV", "no knob"),
     "MA": ("ma8/MA.WAV", "no knob"),
-    "CY": ("cy8/CY5025.WAV", "TONE 5.0, DECAY 5.0"),
+    # TONE 5.0, DECAY 2.5 -- NOT "DECAY 5.0" as this said until #102. The
+    # Fischer filename's second code is DECAY and "25" means 2.5, so Roland's
+    # chart condition (both knobs mid) is CY5050. Found by
+    # `tools/probe_new_voice_knobs.py` findings 2 and 4; the recording every
+    # CY number in this repository was taken on does not move, only its name.
+    "CY": ("cy8/CY5025.WAV", "TONE 5.0, DECAY 2.5"),
 }
 # Knob sweeps, for the laws rather than the single points.
 REF_SWEEPS = {
@@ -185,7 +190,8 @@ SPEC = {
                note="NOT the machine's tau: ma8/MA.WAV RISES for 18.2 ms and then falls with "
                     "tau 2.65 ms, and this envelope generator has no attack ramp. Both are "
                     "~28 ms events; only the shape differs"),
-    "CY": dict(f0=3453.0, tau_ms=256.4, chart_ms=800.0, source="hardware cy8/CY5025.WAV",
+    "CY": dict(f0=3453.0, tau_ms=256.4, chart_ms=800.0,
+               source="hardware cy8/CY5025.WAV (TONE 5.0, DECAY 2.5)",
                note="T20 798 ms is the honest figure; a single tau fits it only at R^2 0.955"),
 }
 

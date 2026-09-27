@@ -152,7 +152,7 @@
       "fpga/fixtures.py": "681a999cba70ce79996fbbbd333b594531af48e9e38def34d83fce5269064a38",
       "fpga/selected_preset.py": "22a9c04087492333d540627a14a9865d3618cb614bc3aa27be7fe499f2899ad1",
       "model/voice_fx.py": "876b31f280fd3ef453228c2bb74384325a09b4d7ecb8261eca7cf2d6cec2e46c",
-      "model/drums_fx.py": "9c4eebbd42eeb591a22c2a617d47e26734b978f686713ca91c9b78c2c3b27d1d"
+      "model/drums_fx.py": "449cfefe39ada055daba1ff2d965ebad2cae6f17fd0f9a515f4803929ec1b9d5"
     }
   },
   "commands": {

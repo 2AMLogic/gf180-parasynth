@@ -730,8 +730,16 @@ CY_HI_HZ, CY_HI_Q = 10500.0, 2.5
 # chart's 350 / 800 / 1200 ms decays are T20-like, so the chart's mid 800 ms is
 # tau 347 ms -- which the RC at the knob's midpoint (1 M || 470 k = 320 k, i.e.
 # 320 ms) corroborates to 8 %.
-# HARDWARE-MEASURED [Fischer s/n 103852, cy8/CY5025.WAV -- TONE 5.0, DECAY 5.0,
-# i.e. Roland's own chart condition]. Schroeder T20 (validated to 0.01 % against
+# HARDWARE-MEASURED [Fischer s/n 103852, cy8/CY5025.WAV -- TONE 5.0, DECAY 2.5.
+# THIS LABEL WAS WRONG HERE FOR MONTHS and said "DECAY 5.0, i.e. Roland's own
+# chart condition". It is not that condition: the Fischer filename's second code
+# is DECAY and "25" means 2.5, so the chart's mid-DECAY cymbal is CY5050. Found
+# and recorded by `tools/probe_new_voice_knobs.py` findings 2 and 4 and never
+# carried back here; corrected under #102, which needed to know which recording
+# its development case actually is. NOTHING MEASURED MOVES -- every number below
+# was taken on this file and is still a number about this file. What moves is
+# what the file is, and therefore what the fit below generalises to.]
+# Schroeder T20 (validated to 0.01 % against
 # a closed-form damped sinusoid in test_audio_measure) and the band-energy split
 # from a zero-phase 8th-order Butterworth bank, both estimators checked against
 # a two-tone signal of known split before anything here was quoted:
@@ -764,13 +772,28 @@ CY_HI_HZ, CY_HI_Q = 10500.0, 2.5
 # voice's audible decay 46 % long (tau 374 ms against 256); the values below
 # give tau 243 / t-20 318 / T20 903 against the machine's 256 / 308 / 798.
 CY_TAU_SHORT, CY_TAU_DECAY, CY_TAU_LOW = 12e-3, 140e-3, 500e-3
-# The DECAY knob, from the same five files (CY50dd, dd = 00/10/25/50/75):
-# T20 435 / --- / 798 / 1281 / 1674 ms at knob 0 / 2.5 / 5 / 7.5 / 10. The knob
-# scales E_CYD and E_CYL together, which is what the per-band measurement shows
-# and not what reference 10 says. (The knob-2.5 file measures 1888 ms, out of
-# order with its neighbours on both sides; it is the one file of the five whose
-# length is shorter than its own decay, so it is excluded rather than modelled.)
-CY_DECAY_T20 = {0.0: 0.435, 5.0: 0.798, 7.5: 1.281, 10.0: 1.674}
+# The DECAY knob, from the same five files. RE-LABELLED under #102 and nothing
+# re-measured: the five T20s are 435 / 798 / 1281 / 1674 / 1888 ms, and the
+# question was only which knob each belongs to. The filename codes sort
+# 00 < 10 < 25 < 50 < 75 lexically while the knobs they mean are 0 < 2.5 < 5 <
+# 7.5 < 10, so reading the directory listing in order puts "10" (knob 10.0,
+# the LONGEST decay) in the knob-2.5 slot. That is the whole defect, and it
+# manufactured the exclusion this comment used to carry: with the codes decoded,
+# the five are MONOTONIC in the knob and nothing is out of order. The recordist's
+# own file lengths confirm the decode independently -- 1.50 / 2.00 / 2.50 / 3.50 /
+# 4.00 s for codes 00 / 25 / 50 / 75 / 10, i.e. he gave the longer settings more
+# room (`tools/probe_new_voice_knobs.py` finding 2). The knob scales E_CYD and
+# E_CYL together, which is what the per-band measurement shows and not what
+# reference 10 says.
+#
+# The 1888 ms file IS still truncation-affected (#118: a backward integral over a
+# record that ends before the decay does reports the cut), and so, it turns out,
+# are its neighbours -- `docs/scorecard/results/D14A.json` records `total decay`
+# as INVALID on the reference side of CY5025 for exactly that reason. These T20s
+# are kept as the record of what was measured, not as a law to fit: the fitted
+# CY DECAY law lives in `test_discrimination.fit_laws` ("CY.decay_tau") and uses
+# `measure_tau`, which needs only 27 dB of record.
+CY_DECAY_T20 = {0.0: 0.435, 2.5: 0.798, 5.0: 1.281, 7.5: 1.674, 10.0: 1.888}
 # What the fit above achieved, recorded so a regression can see it move:
 #   ours: T20 824 ms, energy 1.7 / 6.5 / 57.4 / 15.6 / 6.4 %
 # What the fit achieved, on a render the same length as the reference file
