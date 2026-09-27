@@ -37,21 +37,29 @@ def sha(p) -> str:
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
-def run(vivado, dcp, xdc_text, d: Path) -> dict:
+def run(vivado, dcp, xdc_text, d: Path, apply: str = "") -> dict:
     d = d.resolve()                     # Vivado runs with cwd=d: every path absolute
     d.mkdir(parents=True, exist_ok=True)
     rpt = d / xb.REPORT
+    exc = d / xb.EXCEPTIONS
     tcl = d / "probe.tcl"
-    tcl.write_text(f"open_checkpoint {{{dcp}}}\n" + xb.tcl_assertions(xdc_text, str(rpt))
-                   + "\nexit 0\n")
+    # count assertions (they exit 3 on a mismatch, as in the build), then --
+    # only when they pass -- the after-route effect checks on the same netlist
+    tcl.write_text(f"open_checkpoint {{{dcp}}}\n" + apply + "\n"
+                   + xb.tcl_assertions(xdc_text, str(rpt)) + "\n"
+                   + xb.tcl_route_checks(str(rpt), str(exc)) + "\nexit 0\n")
     r = subprocess.run([vivado, "-mode", "batch", "-nojournal", "-source", str(tcl),
                         "-log", str(d / "vivado.log")], cwd=d, capture_output=True, text=True,
                        timeout=3600)
     (d / "stdout.txt").write_text(r.stdout + r.stderr)
-    refused = [ln for ln in r.stdout.splitlines() if ln.startswith("CONSTRAINT_MATCH_REFUSED")]
-    return {"rc": r.returncode, "refused": refused,
-            "report": rpt.read_text() if rpt.exists() else None,
-            "check_report": xb.check_report(rpt.read_text(), xdc_text) if rpt.exists() else None}
+    refused = [ln for ln in r.stdout.splitlines() if ln.startswith("CONSTRAINT_")]
+    out = {"rc": r.returncode, "refused": refused,
+           "report": rpt.read_text() if rpt.exists() else None,
+           "check_report": xb.check_report(rpt.read_text(), xdc_text) if rpt.exists() else None,
+           "exceptions": exc.read_text() if exc.exists() else None}
+    out["check_route"] = (xb.check_route(rpt.read_text(), exc.read_text(), xb.XDC.read_text())
+                          if rpt.exists() and exc.exists() else None)
+    return out
 
 
 def main(argv=None) -> int:
@@ -68,23 +76,39 @@ def main(argv=None) -> int:
     r1_xdc = subprocess.run(["git", "-C", str(ROOT), "show",
                              f"{R1_FREEZE}:fpga/boards/arty-a7-100.xdc"],
                             capture_output=True, text=True, check=True).stdout
-    fixed = run(vivado, a.dcp.resolve(), xb.XDC.read_text(), a.out / "fixed")
+    # "fixed": R1's netlist with THIS tree's two UART lines applied in memory
+    # (every other constraint is already in the checkpoint, from the same XDC)
+    uart_lines = "\n".join(ln for ln in xb.XDC.read_text().splitlines()
+                           if "g_uart" in ln and not ln.lstrip().startswith("#"))
+    fixed = run(vivado, a.dcp.resolve(), xb.XDC.read_text(), a.out / "fixed", apply=uart_lines)
     control = run(vivado, a.dcp.resolve(), r1_xdc, a.out / "control-r1-xdc")
+    # the after-route control: R1 as built (its UART lines dropped), judged
+    # against this tree's XDC -- the checks must see the missing false path
+    asbuilt = run(vivado, a.dcp.resolve(), xb.XDC.read_text(), a.out / "control-r1-as-built")
     if sha(a.dcp) != a.dcp_sha256:
         print("probe_xdc_bindings: REFUSED -- the checkpoint changed during the probe")
         return 2
-    ok_fixed = fixed["rc"] == 0 and fixed["check_report"] == [] and not fixed["refused"]
+    ok_fixed = (fixed["rc"] == 0 and fixed["check_report"] == [] and not fixed["refused"]
+                and fixed["check_route"] == [])
+    ok_asbuilt = bool(asbuilt["check_route"]) and any(
+        "uart_false failed" in p for p in asbuilt["check_route"]) and any(
+        "not exactly the XDC" in p for p in asbuilt["check_route"])
     ok_ctl = control["rc"] == 3 and any("line 42" in x for x in control["refused"]) \
         and any("line 46" in x for x in control["refused"])
     rec = {"dcp_sha256": a.dcp_sha256, "fixed": fixed, "control_r1_xdc": control,
-           "fixed_ok": ok_fixed, "control_caught": ok_ctl}
+           "control_r1_as_built": asbuilt, "fixed_ok": ok_fixed, "control_caught": ok_ctl,
+           "as_built_caught": ok_asbuilt}
     (a.out / "probe.json").write_text(json.dumps(rec, indent=1) + "\n")
-    print(f"probe_xdc_bindings[fixed]: exit {fixed['rc']}, problems {fixed['check_report']}")
+    print(f"probe_xdc_bindings[fixed]: exit {fixed['rc']}, count problems "
+          f"{fixed['check_report']}, after-route problems {fixed['check_route']}")
     print("  " + (fixed["report"] or "").replace("\n", "\n  "))
     print(f"probe_xdc_bindings[control R1 XDC]: exit {control['rc']}")
     print("  " + "\n  ".join(control["refused"]))
-    print("probe_xdc_bindings: " + ("PASS" if ok_fixed and ok_ctl else "FAIL"))
-    return 0 if ok_fixed and ok_ctl else 1
+    print(f"probe_xdc_bindings[control R1 as built]: exit {asbuilt['rc']}")
+    print("  " + "\n  ".join(asbuilt["check_route"] or ["(no after-route result)"]))
+    ok = ok_fixed and ok_ctl and ok_asbuilt
+    print("probe_xdc_bindings: " + ("PASS" if ok else "FAIL"))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

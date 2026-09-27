@@ -320,7 +320,7 @@ def publish(artifact, output):
     if proof != record.get("verification"):
         raise ValueError("digital verification binding differs")
     required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp",
-                xb.REPORT}
+                xb.REPORT, xb.EXCEPTIONS}
     if set(record.get("artifact_sha256", {})) != required:
         raise ValueError("build artifact set incomplete (a build before #315 has no "
                          f"{xb.REPORT}: its constraints were never shown to bind)")
@@ -346,6 +346,8 @@ def publish(artifact, output):
         # #315: present in the text is not bound in the design. The build's own
         # query counts must show every object query bound exactly its objects
         bound = xb.check_report((artifact / xb.REPORT).read_text(), xdc_snap.read_text())
+        bound += xb.check_route((artifact / xb.REPORT).read_text(),
+                                (artifact / xb.EXCEPTIONS).read_text(), xdc_snap.read_text())
         if bound:
             raise ValueError("XDC constraints did not bind: " + "; ".join(bound))
     remaining = ["physical programming, control and audio capture"]

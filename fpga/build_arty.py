@@ -70,6 +70,9 @@ def tcl_script(directory, paths, constraints=XDC):
         xb.tcl_assertions(Path(constraints).read_text(),
                           str(directory / xb.REPORT)),
         "opt_design", "place_design", "phys_opt_design", "route_design",
+        # #315 / plan099: on the ROUTED design, the UART synchroniser constraints
+        # hit the intended flops and arc, and nothing else is excepted
+        xb.tcl_route_checks(str(directory / xb.REPORT), str(directory / xb.EXCEPTIONS)),
         "report_utilization -file " + tcl_word(directory / "utilization.rpt"),
         "report_timing_summary -check_timing_verbose -file " + tcl_word(directory / "timing.rpt"),
         "report_clocks -file " + tcl_word(directory / "clocks.rpt"),
@@ -160,7 +163,7 @@ def main(argv=None):
         return 2
     outputs = [directory / name for name in
                ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt", "routed.dcp",
-                xb.REPORT)]
+                xb.REPORT, xb.EXCEPTIONS)]
     for path in outputs:
         path.unlink(missing_ok=True)
     started = time.monotonic()

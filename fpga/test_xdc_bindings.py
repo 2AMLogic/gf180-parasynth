@@ -97,6 +97,7 @@ def _rebind(art):
     import publish_binding_cases as cases
     rec = json.loads((art / "report.json").read_text())
     rec["artifact_sha256"][xb.REPORT] = cases.sha(art / xb.REPORT)
+    rec["artifact_sha256"][xb.EXCEPTIONS] = cases.sha(art / xb.EXCEPTIONS)
     (art / "report.json").write_text(json.dumps(rec, indent=2) + "\n")
 
 
@@ -121,3 +122,55 @@ def test_control_publisher_refuses_a_uart_constraint_that_bound_nothing(tmp_path
     _rebind(art)
     with pytest.raises(ValueError, match="XDC constraints did not bind"):
         publish.publish(art, tmp_path / "out")
+
+
+# ---- plan099: after route, the constraints do what they are for ----------------------
+def test_the_xdc_false_paths_are_the_expected_exceptions():
+    assert xb.expected_exceptions(TEXT) == [
+        ("[get_ports spi_sck]", r"[get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]"),
+        ("[get_ports spi_mosi]", r"[get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]"),
+        ("[get_ports spi_cs_n]", r"[get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]"),
+        ("[get_ports uart_rxd]", r"[get_pins -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[0\]/D}]"),
+        ("[get_ports btn_reset]", "*")]
+
+
+def test_the_route_tcl_checks_identity_exception_and_analysed_paths():
+    tcl = xb.tcl_route_checks("/x/r.rpt", "/x/e.rpt")
+    for name in xb.ROUTE_CHECKS:
+        assert f"rc_put $rc_fh {name}" in tcl
+    assert "all_fanout -from [get_ports uart_rxd]" in tcl and "report_exceptions" in tcl
+    import build_arty as ba
+    script = ba.tcl_script(Path("/OUT"), [])
+    assert script.index("route_design") < script.index("uart_stage1") \
+        < script.index("report_utilization")
+
+
+@pytest.mark.parametrize("failed", [["uart_stage1"], ["uart_false"], ["uart_s1s2"], ["uart_down"]])
+def test_control_publisher_refuses_a_failed_after_route_check(tmp_path, failed):
+    import publish_arty as publish
+    import publish_binding_cases as cases
+    art = _publishable(tmp_path)
+    cases.write_constraint_report(art, failed=failed)
+    _rebind(art)
+    with pytest.raises(ValueError, match=f"after-route check {failed[0]} failed"):
+        publish.publish(art, tmp_path / "out")
+
+
+def test_control_publisher_refuses_an_unintended_exception(tmp_path):
+    import publish_arty as publish
+    import publish_binding_cases as cases
+    art = _publishable(tmp_path)
+    cases.write_constraint_report(art, extra_exceptions=[("[get_ports spi_miso]", "*")])
+    _rebind(art)
+    with pytest.raises(ValueError, match="not exactly the XDC's set_false_path lines"):
+        publish.publish(art, tmp_path / "out")
+
+
+def test_control_r1s_exception_list_lacks_the_uart_false_path():
+    """R1 as built: report_exceptions has 4 rows, no uart_rxd (measured on
+    R1's routed checkpoint, fpga/reports/xdc-315/). Refused against the fix."""
+    rows = [(f, t) for f, t in xb.expected_exceptions(TEXT) if "uart_rxd" not in f]
+    rep = "--------\n" + "".join(f"{i}  {f}  *  {t}  false  false\n"
+                                   for i, (f, t) in enumerate(rows, 2))
+    ok = "".join(f"CHECK\t{c}\t1\tx\n" for c in xb.ROUTE_CHECKS) + "ROUTE_END\t0\n"
+    assert any("not exactly the XDC" in p for p in xb.check_route(ok, rep, TEXT))
