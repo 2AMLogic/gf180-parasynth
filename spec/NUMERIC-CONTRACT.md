@@ -2382,6 +2382,125 @@ record that extends this document; none may be resolved by picking a reading.
     frame of the 256; `verify_ctl` and `verify_synth_top` re-run green, the
     latter also at its pins with the new image.
 
+- **Rev 9 (2026-09-18)** — **a complete Minimoog voice, and the cutoff tuning
+  that had been left out** (6.4, 6.9, 6.10, 7, 11.5, 17.12, 17.14; DR 0011, DR
+  0012). Two decisions in one change, in that order because the tuning moves
+  every measurement made on top of it. No width, clamp or formula of the
+  ladder, the envelopes, the control frame or the drum section changes.
+
+  **Two pinned tables move and one is added — the second and third ever to
+  move, and the first to move for a reason other than a fit to a recording.**
+  `G_ROM128` `c5ee86ef…` → `7d03fb29…` and `K_ROM32` `514d0ba2…` → `19da7579…`
+  (Appendices D and E). DR 0011 bakes `CUT_TRIM · fcr(f)` — Huovilainen's
+  tuning polynomial, DAFx-04 §5, times a fitted constant 1.030 — into
+  `make_g_rom` at build time: one multiply per ROM entry and **no datapath
+  change at all**, the ROM keeping its 129 × Q0.16 shape with `g_from_cut` and
+  `voice_dp.v` untouched. `K_ROM32` is derived from the cutoff ROM
+  (`make_k_rom` → `k_onset` → `g_from_cut`), so it could not not move, and DR
+  0006's property — `res = 1` is the onset at every cutoff — is preserved by
+  construction rather than refitted. Worst self-oscillation error over
+  30 Hz .. 10 kHz at `res = 1.05`: **6.85 % → 0.90 %** (115 cents → 15 cents),
+  spread 9.84 → 1.33 percentage points. That narrows 17.12 rather than closing
+  it: one table cannot make both the zero-resonance corner and the
+  self-oscillation frequency exact, the trim was fitted at one resonance, and
+  17.14 records that the ROM's first bin is still flat against its own target.
+  `test_the_tuning_polynomial_is_the_only_thing_that_moved_the_cutoff_rom`
+  requires `make_g_rom(tune=False)` to still reproduce revision 3's image
+  exactly, so the whole difference between the two pins is this polynomial and
+  this constant and nothing crept in with them. **Appendix H (`EXP_ROM65`,
+  `6a1cbbf8…`) is added** for the modulation path's 2^x read (DR 0012); adding
+  is not moving, and no revision has ever pinned a different one. Every other
+  hash is byte-identical and **KIT808 stays at revision 7's `7ea9a2e3…`** —
+  even though the drum filter reads these same two ROMs and is retuned by the
+  same amount, which DR 0011 records as a consequence of one decision and not
+  a second one.
+
+  **A third table nearly moved and deliberately did not.** DR 0013's tanh guard
+  word (32767 → `tanh(4)·32767` = 32745) was implemented and measured — the top
+  bin twelve times more accurate, and no movement at all in the harmonic
+  fingerprint at self-oscillation, because the 16-entry table's own worst error
+  is nine times larger — and then backed out: `rtl-sketch/drum_dp.v` reads the
+  same image with its own hardcoded clamp, so moving the word without moving
+  that literal would break the drum section's bit-exactness silently. What was
+  kept is behaviour-identical (`fixed.TANH_GUARD` as one named constant, the
+  ladders clamping to `rom[2^n]`, and `gen_tables.py` now *writing*
+  `rtl-sketch/tanh16.hex` rather than only checking it). `TANH16_ROM` keeps its
+  revision-3 hash and `test_exactly_three_pinned_tables_have_ever_moved`
+  asserts that by name.
+
+  - **The noise source** (6.10): one 31-bit LFSR, `x^31+x^15+x^13+x^11+1` — the
+    drum section's polynomial, 16 steps per frame, reset `0x7F215FF7`, which is
+    the drums' state advanced 1 060 921 steps so the two noises are independent
+    and sum at +3 dB rather than +6. Pink is drawing 1431's own
+    −3 dB/octave R-C network as its bilinear transform, red one more pole at
+    106 Hz, all three colours level-matched because the drawing labels all three
+    outputs −4 dBm, and all three divided by `NOISE_SHIFT = 2` because pink's
+    crest factor of 4.6 would otherwise peak past the rail. `NSEL` selects the
+    pair: clear puts white in the mixer and pink on the modulation bus, set puts
+    pink in the mixer and red on the bus. The mixer of 7 gains a **fourth term,
+    `noise · WN`** — the Model D's mixer has five sources and this chip has
+    four, the external input being the one it cannot have (no audio input pin).
+  - **Oscillator 3 as a modulation source** (6.9): `mod_sig` is computed at the
+    end of a frame and read at the start of the next, and that one register is
+    what breaks the feedback path when `MROUTE.OSC3` makes oscillator 3 its own
+    destination — 20.8 µs, four orders of magnitude below the fastest rate the
+    instrument reaches, identical in the model and the RTL, with
+    `INJECT_BUG_VOICE_MOD_NODELAY` as the control that says so. `MMIX` is a
+    **pan, not two levels** (SM 2.4), its two weights summing to exactly 32768.
+    Two destinations, two depth registers (`MPD`, `MFD`) because the service
+    manual pins them at different values (13–23 semitones on the oscillators,
+    SM 5.37; 440 Hz → 2.4 kHz on the cutoff, SM 5.19), and **one** `EXP_ROM65`
+    read plus a 12..19-place shift serves both. The tap is oscillator 3's
+    **naive** waveform, before PolyBLEP, because the modulation path is a
+    control voltage and is never summed into the mixer. `MWHEEL = 0` gives
+    `(m, s) = (32768, 15)` and `(v · 32768) >> 15 = v` exactly, so the whole
+    modulation path is bit-identical to its own absence.
+  - **The waveform set** (6.4): `wave[k]` gains a fourth bit and codes 5–8 —
+    the shark-tooth (5749/32768 saw + 27019/32768 triangle, drawing 1448's
+    R030/R031 divider, mixed on the **already-corrected** saw so its step at
+    the wrap needs no second correction), the reverse sawtooth for oscillator
+    3's second position, and the 29 % and 15 % rectangles. Six of the nine
+    codes are now the Model D's waveform switch.
+
+  **The first primary-source reference the voice was built to.** Every property
+  before this revision checked the voice against our own decision records, and
+  the one external comparison it had (`docs/discrimination.md` §8.3–8.4, which
+  DR 0011's motivating figure comes from) is against software emulations.
+  `docs/minimoog-reference.md` is added with every claim tagged [verified]
+  against the Model 204D service manual or an R. A. Moog drawing, [inferred]
+  with the arithmetic shown, or [ours] — and the additions are built to it
+  including where it disagrees with us: 17.16 (the shark-tooth's saw share,
+  which an emulation puts at 0.25–0.30 against drawing 1448's 10/57 and which
+  is therefore NOT changed on an emulation's evidence), 17.17 (raw white is
+  uniform, not Gaussian) and 17.18 (per-unit drift, whose mechanism half
+  revision 12 later closed) are all open items this comparison opened rather
+  than closed.
+
+  Every bit-exact expectation for the voice moves with the g ROM, so
+  `verify_voice.py`, `verify_synth_top.py` and every rendered `.wav` are
+  regenerated. As this revision landed, `verify_voice.py --set full` is
+  **383 460 frames over 37 scenario segments with 12 injected defects**, four
+  of them new (`INJECT_BUG_VOICE_LFSR_TAP`, `INJECT_BUG_VOICE_NOISE_SEL`,
+  `INJECT_BUG_VOICE_MOD_NODELAY`, `INJECT_BUG_VOICE_SHARK_MIX`) and each
+  demonstrated to turn the bench red; `verify_synth_top.py` passes at the chip's
+  pins; `model/test_moog_acceptance.py` gains 21 properties citing the reference
+  document and 7 more injected defects; eight new renders in
+  `voice_fx_render.py` so the additions can be heard. Not ratified.
+
+  **This paragraph was written retroactively (#301).** Revision 9 landed its
+  header, its sections and Appendix H but never got a revision-history entry, so
+  section 18 carried a gap at 9 through five later revisions while the Rev 10
+  entry above and `spec/reference/test_tables.py` both went on citing "revision
+  9's pins" — a gap a reader cannot distinguish from a renumber that dropped a
+  change on the floor, which is what
+  `test_revision_9_is_the_only_revision_with_no_entry` now guards in both
+  directions. **5.1 and 5.2 are still stale for this revision**: they omit
+  `WN` (0x0B), `NSEL` (0x1B), `MROUTE` (0x1F) and `MMIX`/`MWHEEL`/`MPD`/`MFD`
+  (0x24–0x27), and still specify `wave[k]` as three bits with five shapes where
+  6.4 above defines nine codes and the model masks the write with four bits.
+  Filed as #321; not fixed here, because correcting normative register text is
+  its own revision.
+
 - **Rev 8 (2026-09-18)** — **the control frame, because it could not carry
   the register image this contract specifies.** No pinned table moves, no
   width, bus, clamp or formula of the audio path changes, and every rev-7

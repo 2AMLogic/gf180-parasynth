@@ -49,13 +49,14 @@ _HEADER = re.compile(r"^\*\*Revision (\d+) [—-] (\d{4}-\d{2}-\d{2}) [—-] sta
 # been published must not silently lose its entry, and a RENUMBER of an
 # existing one (which is what #293 had to do) must be a deliberate edit here
 # rather than something the suite absorbs quietly.
-HISTORICAL = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14}
-# Revision 9 (DR 0011's tuning polynomial, DR 0012's EXP_ROM65) is referred to
-# by the contract and by `test_tables.py` -- "against revision 9's pins" -- but
-# never got its own section-18 paragraph. Recorded as a known gap rather than
-# quietly tolerated; filed as #301, out of #293's scope. Writing that entry
-# means emptying this set.
-KNOWN_MISSING = {9}
+HISTORICAL = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+# Revision 9 (DR 0011's tuning polynomial, DR 0012's EXP_ROM65) was referred to
+# by the contract and by `test_tables.py` -- "against revision 9's pins" --
+# through five later revisions without ever getting its own section-18
+# paragraph. #301 wrote that paragraph from the evidence in those two places,
+# so 9 joins HISTORICAL above and this set is now EMPTY: any gap at all in
+# 1..max is a renumber that dropped a change on the floor.
+KNOWN_MISSING = set()
 
 
 class Refused(Exception):
