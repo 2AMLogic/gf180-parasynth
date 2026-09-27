@@ -87,6 +87,42 @@ def domain_scenarios() -> list:
     return S
 
 
+def classify(scns) -> list:
+    """Each scenario against R1's qualified domain, as the release host would
+    judge it: the patch (check_patch), every programmed increment (check_inc,
+    which covers glide targets and jumps alike), and the register words the
+    host's own conversions can produce (k, gain, ogain from ladder_regs over
+    the CC71 range at the patch's drive; the mixer weights of mix_weights;
+    volume up to CC7's 0.9)."""
+    out = []
+    for key, name, regs, writes, n in scns:
+        why = []
+        try:
+            qd.check_patch(dict(regs), name=name)
+        except qd.Rejected as e:
+            why.append(f"{e.rule}: {e.args[0][:90]}")
+        for w in writes:
+            if w[1] == "INC":
+                try:
+                    qd.check_inc(int(w[3]), osc=w[2])
+                except qd.Rejected as e:
+                    why.append(f"{e.rule}: inc {w[3]} on osc {w[2]}")
+                    break
+        k_max = max(vf.ladder_regs(r / 127.0, regs.get("drive", 1.0))[0] for r in range(128))
+        if int(regs["k"]) > k_max:
+            why.append(f"k {regs['k']} > {k_max}, the most CC71 can program")
+        for word, i in (("gain", 1), ("ogain", 2)):
+            reach = {vf.ladder_regs(r / 127.0, regs.get("drive", 1.0))[i] for r in range(128)}
+            if int(regs[word]) not in reach:
+                why.append(f"{word} {regs[word]} is not a word the host conversion produces at drive {regs.get('drive')}")
+        if int(regs["vol"]) > int(round(0.9 * 32768)):
+            why.append(f"vol {regs['vol']} > CC7's 0.9")
+        if max(int(x) for x in regs["weights"]) > (1 << 15):
+            why.append(f"mixer weight {max(regs['weights'])} > 1.0")
+        out.append({"scenario": name, "in_domain": not why, "excluded_by": why})
+    return out
+
+
 def headroom(scns, osc2x, filter2x, pulse2x) -> dict:
     v = vf.VoiceFx(oversample_2x=osc2x, oversample_pulse_2x=pulse2x, rate_converted_ladder=filter2x,
                    preserve_filter_headroom=filter2x, causal_filter=filter2x,
@@ -114,6 +150,8 @@ def main(argv=None) -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--extremes-index", type=int)
     g.add_argument("--domain", action="store_true")
+    g.add_argument("--classify-full", action="store_true",
+                   help="classify every scenario of the full set against the domain, then stop")
     ap.add_argument("--osc2x", action="store_true")
     ap.add_argument("--filter2x", action="store_true")
     ap.add_argument("--pulse2x", action="store_true")
@@ -124,6 +162,14 @@ def main(argv=None) -> int:
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--json", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
+    if a.classify_full:
+        res = classify(list(vv.scenarios("full")))
+        for r in res:
+            print(("IN     " if r["in_domain"] else "OUT    ") + r["scenario"][:80]
+                  + ("" if r["in_domain"] else "  <- " + "; ".join(r["excluded_by"])[:200]))
+        if a.json:
+            a.json.write_text(json.dumps(res, indent=1) + "\n")
+        return 0
     scns = domain_scenarios() if a.domain else extremes_only(a.extremes_index)
     hr = headroom(scns, a.osc2x, a.filter2x, a.pulse2x)
     print("headroom (model):", json.dumps(hr["worst"]))
