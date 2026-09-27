@@ -20,6 +20,18 @@ import xdc_bindings as xb
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}
+# The images this builder can build, by configuration. R1 is the default and
+# every existing path (R1's records, the publisher's R1 checks) uses it
+# unchanged; the R2 candidate adds PULSE2X=1 (#333, fpga/release/R2.md).
+IMAGE_CONFIGS = {"r1": CONFIG, "r2-candidate": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}}
+IMAGE_VERIFICATION = {"r1": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
+                      "r2-candidate": ROOT / "fpga/reports/arty/r2-candidate-clean/verification.json"}
+
+
+def config_defines(config) -> list:
+    return (["VOICE_OSC_2X"] if config["OSC2X"] else []) \
+        + (["VOICE_FILTER_2X"] if config["FILTER2X"] else []) \
+        + (["VOICE_PULSE_2X"] if config["PULSE2X"] else [])
 PART = "xc7a100tcsg324-1"
 XDC = ROOT / "fpga/boards/arty-a7-100.xdc"
 
@@ -55,7 +67,7 @@ def tcl_word(value):
     return "{" + value + "}"
 
 
-def tcl_script(directory, paths, constraints=XDC):
+def tcl_script(directory, paths, constraints=XDC, config=CONFIG):
     return "\n".join([
         "set_param general.maxThreads 4",
         "read_verilog [list "
@@ -63,7 +75,7 @@ def tcl_script(directory, paths, constraints=XDC):
         "read_xdc " + tcl_word(constraints),
         "synth_design -top arty_a7_top -part " + PART
         + " -generic {SIM_NO_MMCM=0 POR_BITS=12} -flatten_hierarchy none"
-        + " -verilog_define VOICE_OSC_2X -verilog_define VOICE_FILTER_2X",
+        + "".join(" -verilog_define " + d for d in config_defines(config)),
         "write_checkpoint -force " + tcl_word(directory / "synthesized.dcp"),
         # #315: every XDC object query must bind exactly its objects, or the
         # build stops here (exit 3) instead of shipping a dropped constraint
@@ -81,13 +93,13 @@ def tcl_script(directory, paths, constraints=XDC):
         "write_bitstream -force " + tcl_word(directory / "arty.bit"), "exit", ""])
 
 
-def validate_verification(path, paths):
+def validate_verification(path, paths, config=CONFIG):
     try:
         record = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
         raise ValueError("missing or unreadable Arty verification") from exc
     if (record.get("state") != "PASS" or record.get("exit_code") != 0
-            or record.get("inject") is not None or record.get("configuration") != CONFIG):
+            or record.get("inject") is not None or record.get("configuration") != config):
         raise ValueError("verification must be a clean pass of the selected configuration")
     comparison = record.get("comparison", {})
     zero_fields = ("wire_mismatch", "swap", "width", "core_bad", "writes_bad",
@@ -116,11 +128,14 @@ def main(argv=None):
                         default=ROOT / "build/arty-controls/clean/verification.json")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--vivado", default="vivado")
+    parser.add_argument("--image", choices=sorted(IMAGE_CONFIGS), default="r1",
+                        help="which image's configuration to build (default r1)")
     args = parser.parse_args(argv)
+    config = IMAGE_CONFIGS[args.image]
     directory = args.out.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     files = sources() + roms()
-    report = {"state": "REFUSED", "part": PART, "configuration": CONFIG,
+    report = {"state": "REFUSED", "part": PART, "configuration": config, "image": args.image,
               "hardware_playback_tested": False, "external_io_timing_qualified": False,
               "source_sha256": {str(p.relative_to(ROOT)): sha(p) for p in files + [XDC]}}
     report_path = directory / "report.json"
@@ -130,7 +145,7 @@ def main(argv=None):
         print(report["state"], report.get("reason", report_path), flush=True)
 
     try:
-        report["verification"] = validate_verification(args.verification, files)
+        report["verification"] = validate_verification(args.verification, files, config)
         snapshots = []
         for path in sources() + [XDC]:
             dest = directory / "inputs" / path.relative_to(ROOT)
@@ -147,7 +162,7 @@ def main(argv=None):
             if sha(copied) != report["source_sha256"][str(original.relative_to(ROOT))]:
                 raise ValueError("source changed during snapshot: " + str(original))
         script = directory / "build.tcl"
-        script.write_text(tcl_script(directory, snapshots[:-1], snapshots[-1]))
+        script.write_text(tcl_script(directory, snapshots[:-1], snapshots[-1], config))
         report["script_sha256"] = sha(script)
         if args.prepare_only:
             report["state"] = "PREPARED"

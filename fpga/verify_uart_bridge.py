@@ -987,7 +987,17 @@ def main(argv=None) -> int:
     ap.add_argument("--rtl", type=Path, default=None,
                     help="wrapper file to compile (default: fpga/rtl/arty_a7_top.v)")
     ap.add_argument("--jobs", type=int, default=3)
+    ap.add_argument("--pulse2x", action="store_true",
+                    help="the R2 candidate's configuration (PULSE2X=1): defines, model and "
+                         "the record's configuration all follow")
     a = ap.parse_args(argv)
+    if a.pulse2x:
+        with with_config(PULSE2X=1):
+            return _main(a)
+    return _main(a)
+
+
+def _main(a) -> int:
     outdir = a.outdir.resolve()
     outdir.mkdir(parents=True, exist_ok=True)
 
