@@ -216,6 +216,10 @@ def main(argv=None) -> int:
     kit = kit_identity()
     print(f"kit: current {kit['current'][:12]} vs R1 pin {kit['pinned_r1'][:12]} -> "
           f"{'MATCH' if kit['matches'] else 'DIFFERENT'}")
+    if not kit["matches"]:
+        print("REFUSED: current kit does not match the R1 pin "
+              f"(current {kit['current'][:12]}, pinned {kit['pinned_r1'][:12]})")
+        return 2
     try:
         rows = diagnose(pathlib.Path(a.refs))
     except rc.Refused as e:

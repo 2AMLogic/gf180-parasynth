@@ -70,6 +70,16 @@ def test_scaling_does_not_move_fractions():
         assert a[k] == pytest.approx(b[k], abs=1e-6)
 
 
+def test_main_refuses_on_kit_mismatch(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(d, "kit_identity", lambda: {
+        "pinned_r1": "aaaa", "current": "bbbb", "matches": False})
+    out = tmp_path / "result.json"
+    rc_code = d.main(["--out", str(out)])
+    assert rc_code == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert not out.exists()
+
+
 def test_broadband_noise_at_high_k_is_not_called_harmonic():
     # the regression that made conga noise read as "harmonic": with f0 185 Hz
     # the uncapped 6 % masks overlapped from k = 8 up
