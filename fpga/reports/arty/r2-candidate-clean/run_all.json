@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --pulse2x --scenario phrase --outdir build/uart-r2",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge[phrase]: PASS -- writes 87/87, timing bad 0, corrupt 0, I2S mismatch 0 over 6734 periods, errs 0 {}\n{\"state\": \"PASS\", \"runs\": {\"phrase\": \"PASS\"}}\n",
+    "secs": 54.384331941604614
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --pulse2x --start-red --outdir build/uart-r2-startred",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_uart_bridge: START RED against /home/ubuntu/work/r2-uart/fpga/stubs/arty_a7_uart_stub.v\n    0 writes drained, 26 expected\nverify_uart_bridge: start-red run state FAIL (writes_seen 0 of 26, wire_mismatch 0, periods 3418)\nverify_uart_bridge: start red confirmed -- the bench fails against a behaviour-free stub, as it must\n",
+    "secs": 19.35012674331665
+  }
+]
