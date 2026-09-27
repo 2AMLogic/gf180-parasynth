@@ -101,7 +101,8 @@ def rtl_reuse_report(spec: dict, rtl: dict, names) -> tuple:
         if rr is None:
             # absent: the rolling interpreter gaps a missing fixture ("no RTL
             # replay recorded for ..."); the live-MIDI one passes only the
-            # replays the record holds, and gaps a missing fixture the same way (trial.py, interpret live_midi_record)
+            # replays the record holds, and live_midi_record gaps a missing
+            # fixture the same way
             continue
         r = rr.get("rtl_run")
         if not isinstance(r, dict) or not isinstance(r.get("reused"), bool):
