@@ -22,6 +22,7 @@ import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_surge_waveform_comment as ck                           # noqa: E402
+import check_workflows as cw                                        # noqa: E402
 
 REPO = ck.REPO
 RIGS = ck.RIGS
@@ -85,17 +86,21 @@ def test_this_checker_is_invoked_by_a_ci_job_and_not_only_by_make():
     import yaml
 
     workflow = yaml.safe_load((REPO / ".github/workflows/rungs.yml").read_text())
-    runs = [str(step.get("run", "")) for step in workflow["jobs"]["python"]["steps"]]
 
-    assert any("tools/check_surge_waveform_comment.py" in r
-               and "pytest" not in r for r in runs), (
-        "rungs.yml's `python` job no longer runs tools/check_surge_waveform_comment.py "
-        "-- the reference_rigs.py comment's drift guarantee has no CI apparatus, and "
-        "`make verify` is invoked by no workflow")
-    assert any("pytest" in r and "tools/test_check_surge_waveform_comment.py" in r
-               for r in runs), (
-        "rungs.yml's `python` job no longer runs these controls -- an unexercised "
-        "checker measures the checker, not the comment")
+    blocks, reason = cw.step_would_block_pull_request(
+        workflow, "python", "python tools/check_surge_waveform_comment.py")
+    assert blocks, (
+        "rungs.yml's `python` job no longer runs "
+        "tools/check_surge_waveform_comment.py in a way that can block a pull "
+        f"request -- the reference_rigs.py comment's drift guarantee has no "
+        f"CI apparatus, and `make verify` is invoked by no workflow: {reason}")
+
+    blocks, reason = cw.step_would_block_pull_request(
+        workflow, "python", "pytest tools/test_check_surge_waveform_comment.py")
+    assert blocks, (
+        "rungs.yml's `python` job no longer runs these controls in a way that "
+        f"can block a pull request -- an unexercised checker measures the "
+        f"checker, not the comment: {reason}")
 
 
 # ---------------------------------------------------------------------------

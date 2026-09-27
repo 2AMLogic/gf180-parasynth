@@ -30,6 +30,7 @@ import numpy as np
 import pytest
 import yaml
 
+import check_workflows as cw
 import manifest as mf
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -75,10 +76,11 @@ def test_this_suite_is_enumerated_in_a_target_a_ci_job_actually_runs():
         "the injected-defect controls have the same problem as the suite did if "
         "they live only in `make controls`, which no workflow invokes either")
     workflow = yaml.safe_load((ROOT / ".github/workflows/rungs.yml").read_text())
-    runs = [str(step.get("run", "")) for step in workflow["jobs"]["m5a-fast"]["steps"]]
-    assert any("verify-fast" in r for r in runs), (
-        "rungs.yml's m5a-fast job no longer runs `make verify-fast` -- this "
-        "suite's only CI path is gone")
+    blocks, reason = cw.step_would_block_pull_request(workflow, "m5a-fast", "verify-fast")
+    assert blocks, (
+        "rungs.yml's m5a-fast job no longer runs `make verify-fast` in a way "
+        f"that can block a pull request -- this suite's only CI path is "
+        f"gone or neutered: {reason}")
 
 
 def test_every_permanent_injected_defect_still_has_something_to_inject_into():
