@@ -284,6 +284,29 @@ So **the 12-vs-8 mode question is the wrong question.** The choices this RTL
 actually offers are **8, 16 or 32**. Twelve is simply a point inside the
 sixteen-mode bracket that the design is already paying for.
 
+#### The 17th mode is not the whole price of a 17th mode
+
+The +189,046 µm² above is what `MODES 16 → 17` costs *the bank*. Anything that
+actually wants a 17th mode is likely to want more than the bank, and a caller
+citing this row alone will under-price its change. #102 proposed a 17th mode to
+give the cymbal's Hh3 a third pole; `tools/probes/hihat/hh_probe5.py` found that
+the mode was the smaller half of the bill:
+
+- **a 24th `PATH`** (`N_PATH` 23 → 24), because a cascade needs its own path
+  word. Not priced in this table at all;
+- **18.1 dB of level**, thrown away by `TAP_SHIFT = 3`, which the destination
+  mode's `amp` register **cannot** recover — `amp` is Q0.16 and saturates at
+  1.0. A cascaded mode therefore also spends the path word's second envelope
+  slot, and possibly the drive envelope's peak, on getting back to unity;
+- **a forced cascade order**: `PATH.src` is 5 bits, so `SRC_TAP + m` reaches
+  only `m ≤ 15`. **A 17th mode cannot be tapped.** Making it tappable is a
+  contract change (`path` 25 → 26 bits), not a synthesis result.
+
+**These rows were NOT re-measured for that work** — the structure lost on
+fidelity first (DR 0022), so nothing was re-synthesised and the figures above
+are still the 2026-09-18 measurement they always were. Re-verify them against
+the tree you are pricing before quoting them for a change that does go ahead.
+
 ### Configuration storage — linear, and it does not exist
 
 `drum_kit.v` takes `a1_bus`, `a2_bus`, `amp_bus`, `num_bus`, `env_ctl_bus`,

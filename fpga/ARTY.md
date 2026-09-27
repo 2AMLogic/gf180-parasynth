@@ -91,7 +91,7 @@ this baseline build does not establish its Artix fit.
 | Final setup / hold slack | +16.190 ns / +0.024 ns; zero failing endpoints |
 | Internal timing coverage | zero unclocked or unconstrained internal endpoints |
 | External timing | QUALIFIED at publication: every output budgeted except the forwarded i2s_bclk clock, recorded as `output_delay_exceptions: ["i2s_bclk"]` |
-| DRC | 268 warnings (64 DPIP-1, 97 DPOP-1, 94 DPOP-2, 13 DPREG-4), zero errors or critical warnings; the 13 DPREG-4 re-extracted and dismissed on THIS image (below) |
+| DRC | DRC report (`drc.rpt`): 268 warnings (64 DPIP-1, 97 DPOP-1, 94 DPOP-2, 13 DPREG-4), zero errors or critical violations (the build log has two CRITICAL WARNINGs for the dropped UART-RX constraints, #315); the 13 DPREG-4 re-extracted and dismissed on THIS image (below) |
 
 The [bitstream](reports/arty/integrated-baseline-2025.1/arty.bit) is
 3,825,912 bytes, SHA-256

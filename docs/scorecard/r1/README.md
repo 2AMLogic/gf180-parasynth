@@ -9,9 +9,9 @@ Evidence produced at `14e12bc02808, ccf7ed49515b` (origin/main `86838760ccce`) o
 | gate | question | verdict | evidence level |
 |---|---|---|---|
 | trust | are the results trustworthy? | **PASS** | receipts re-checked; every declared control caught |
-| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, T-RELEASE-BOUND-R1) |
+| implementation | does this implementation work? | **PASS** | RTL simulation of the Arty wrapper at its pins (digital production path); routed image `544499e2c970`: WNS +15.445 / WHS +0.036 ns, external I/O qualified, DSP review complete (`fpga/release/r1-2025.1.json`, BOUND, T-RELEASE-BOUND-R1) |
 | playability | is it an instrument? | **PASS** (digital, 11 of 16 sounds mapped) | live-MIDI session against the device contract and the RTL; no hardware latency |
-| sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 6 no verdict, 75 not run of 100 | mostly fixed-point model |
+| sound properties | does it meet its references? | **property vector** (below): 9 pass, 10 fail, 7 no verdict, 74 not run of 100 | mostly fixed-point model |
 | physical | did the device produce it? | **BLOCKED** | R1 image `544499e2c970` published, not yet programmed on a board, no capture (#208); simulation cannot satisfy this gate |
 
 ## Implementation
@@ -63,7 +63,8 @@ None of these was measured on the R1 production path. Each row names its engine 
 | D11A | Maracas / anchor | fail | Rise time 1.68; band energy 1.43; decay 5.42 | fixed-point model | `7dd6337` |
 | D12A | Clap / anchor | no verdict | burst/tail ratio 0.28; decay 0.88 | fixed-point model | `d42ac140` |
 | D13A | Cowbell / anchor | fail | Partial balance 2.82; unwanted difference tone 0.0; decay 0.23 | fixed-point model | `ad8f4d4` |
-| D14A | Cymbal / anchor | no verdict | Band energy 0.5; band decay 0.25 | fixed-point model | `7dd6337` |
+| D14A | Cymbal / anchor | no verdict | Band energy 0.5; band decay 0.25 | fixed-point model | `32e824d` |
+| D14B | Cymbal / variation | no verdict | Band energy 3.57 | fixed-point model | `32e824dc` |
 | D15A | Open hat / anchor | no verdict | Band energy 0.81; attack 1.6 | fixed-point model | `7dd6337` |
 | D16A | Closed hat / anchor | pass | Band energy 0.96; attack 0.57; decay 0.73 | fixed-point model | `7dd6337` |
 | M1A | Round bass / anchor | no verdict | Fundamental/harmonics 19.82; bass level 0.35 | fixed-point model | `cea5525` |

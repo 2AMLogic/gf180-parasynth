@@ -349,7 +349,7 @@
     },
     "candidate": {
       "record": "fpga/release/r1-candidate.json",
-      "sha256": "558d09b77d3447eda47dadda264659165c58e650151827ec7579959fd5ea4a9c",
+      "sha256": "e2659bf6d079dfc72ed0938d30bfda48bea6c63a24a2a223e443bf29422cb56e",
       "evidence_dir": "fpga/reports/r1-candidate",
       "rtl_runs_bound": 12
     }
@@ -371,7 +371,7 @@
   "default_switch": {
     "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image targets R0; R1 is selected with --image tree",
     "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
-    "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 ('held-note default: the replayed capture is not what the CLI emits now', measured by fpga/release/test_r1_release.py) -- the gate doing its job: the same change must give R0's documented commands and its manifest's captures an explicit --image release. This manifest records host.default_image and goes STALE, and is re-bound with --write.",
+    "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 (measured by fpga/release/test_r1_release.py; only the verdict is quoted, because the first reason printed depends on how the default is flipped, #319) -- the gate doing its job: the same change must give R0's documented commands and its manifest's captures an explicit --image release. This manifest records host.default_image and goes STALE, and is re-bound with --write.",
     "decided_by": "the operator (#280 keeps release as the default)"
   },
   "physical_capture": {

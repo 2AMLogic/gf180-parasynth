@@ -1,0 +1,76 @@
+{
+ "status": "RECONSTRUCTED -- NOT the original shim files, command line, or exit status, none of which was preserved (#316, #319)",
+ "what_this_is": "A reconstruction of how tools/dsp_dpreg_extract.py was run ON the build box for the R1 image (#280), through a local-exec shim, so the invocation can be replayed and nobody mistakes it for the ordinary off-box tool path. The evidence it produced is ../dsp-dpreg-evidence/ (bound by publication.json); nothing here is bound by the release manifest.",
+ "shim_files": {
+  "ssh": {
+   "sha256": "a1ae706d21e9b7f21d047aba9343a67bba8a46f4da4a6be1192704f75f4b04f9",
+   "source": "the one-line body quoted in issue #316 ('[ \"$1\" = \"r1-self\" ] || exit 97; shift; exec bash -c \"$*\"'); the shebang and comment lines are added by the reconstruction"
+  },
+  "scp": {
+   "sha256": "4af22792fc6d9a477db21c0d613ed7dcdb9449d2d5e3d0fa81b32ccf57a72a94",
+   "source": "the one-line body quoted in issue #316 ('s=\"${1#r1-self:}\"; d=\"${2#r1-self:}\"; exec cp \"$s\" \"$d\"'); the shebang and comment lines are added by the reconstruction"
+  },
+  "usage": "a directory holding both, first on PATH"
+ },
+ "original_invocation_reconstructed": {
+  "argv": [
+   "python",
+   "tools/dsp_dpreg_extract.py",
+   "--box",
+   "r1-self",
+   "--dcp",
+   "/home/ubuntu/work/r1-image-build/arty/routed.dcp",
+   "--dcp-sha256",
+   "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+   "--drc-rpt",
+   "/home/ubuntu/work/r1-image-build/arty/drc.rpt",
+   "--remote-dir",
+   "/home/ubuntu/work/r1-image-build/dsp-review",
+   "--evidence",
+   null
+  ],
+  "provenance": {
+   "--box r1-self": "issue #316 and R1.md",
+   "--dcp, --dcp-sha256": "../dsp-dpreg-evidence/routed_dcp.sha256",
+   "--drc-rpt": "../dsp-dpreg-evidence/drc_rpt.sha256 (digest b134bf30..., the box's drc.rpt; the shipped ../drc.rpt is a different byte copy, 2576d7b0...)",
+   "--remote-dir": "../dsp-dpreg-evidence/vivado_extract.log 'Current directory' and dsp_dpreg_extract.tcl",
+   "--evidence": "NOT RECORDED anywhere; unknown",
+   "python": "the interpreter is not recorded"
+  },
+  "exit_status": null,
+  "exit_status_note": "not preserved. The tool returns nonzero and prints REFUSED on any failed phase, and a complete evidence set exists whose checks re-derive (publish_arty.dsp_disposition), which is consistent with exit 0 but is not a record of it"
+ },
+ "replay": {
+  "date": "2026-09-27",
+  "host": "the build box (ip-172-31-72-198), Vivado 2025.1",
+  "tool_commit": "50ae8713d2d9102c4ab6bcc7d6ff5a3b49b99b94",
+  "argv": [
+   "python",
+   "tools/dsp_dpreg_extract.py",
+   "--box",
+   "r1-self",
+   "--dcp",
+   "/home/ubuntu/work/r1-shim-replay/arty/routed.dcp",
+   "--dcp-sha256",
+   "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+   "--drc-rpt",
+   "/home/ubuntu/work/r1-shim-replay/arty/drc.rpt",
+   "--remote-dir",
+   "/home/ubuntu/work/r1-shim-replay/dsp-review",
+   "--evidence",
+   "/home/ubuntu/work/r1-shim-replay/evidence"
+  ],
+  "inputs": {
+   "routed.dcp": "the archived R1 checkpoint (~/work/r1-image-archive/r1-routed-0f81026e.dcp, sha256 0f81026e... asserted by the tool)",
+   "drc.rpt": "the SHIPPED ../drc.rpt (the box's original drc.rpt is gone)"
+  },
+  "shim": "the two reconstructed files in this directory, first on PATH",
+  "exit_status": 0,
+  "log": {
+   "file": "replay-2026-09-27-run.log",
+   "sha256": "b51156c1b3ce0977463ff29470131d4d05b2e80df7d9602c955cdd5cf4f904ef"
+  },
+  "result": "dsp_cells_dump.txt and dsp_dpreg_extract.tcl are byte-identical to ../dsp-dpreg-evidence/ after replacing the replay's run directory (/home/ubuntu/work/r1-shim-replay) with the original's (/home/ubuntu/work/r1-image-build) -- the only difference, one path line in the dump and two in the Tcl; drc_dpreg_names.txt is byte-identical as run; 19 cells dumped, 0 missing instances",
+  "not_replayed": "the original run itself; this shows the reconstruction reproduces the shipped evidence, not that it is the command that was typed"
+ }
+}
