@@ -125,7 +125,7 @@ W14b §10 describes it as "a highly-interconnected passive network of resistors 
 companion site that was to hold their coefficients **returns 404** (confirmed again on 2026-09-27; the reference's
 §0 already records this). But **W14b Figure 9 plots all three families**, and it is in the same PDF, as the same
 kind of vector XObject (`obj 39`), so the same instrument reaches it. It needs one extension — Figure 9 is three
-sub-plots in one figure, and `calibrate()` assumes a single axes box.
+sub-plots in one figure, and `calibrate()` assumes a single axes box. **Filed as #390.**
 
 The physical argument for looking there: the tone stage is a *passive RC* network, so its paths are low-pass in
 character, and a low-pass path from the low band to the output would partially cancel the LEVEL buffer's rising
