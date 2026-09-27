@@ -424,6 +424,54 @@ def test_rs_guards_still_refuse_mid_band_contamination_a_900hz_guard_caught():
             "-- the retune traded contamination sensitivity for a verdict")
 
 
+def test_balance_trajectory_db_refuses_white_noise_at_both_operating_points():
+    """#389: a record made of NOISE has no partials, so it has no balance --
+    and the estimator must say so rather than report one.
+
+    THE BUG THIS PINS, as it shipped (verification-rules.md rule 5 -- the
+    control is the exact broken behaviour, not an imagined one). The 6 dB
+    joint-headroom gate compared two quantities measured in different ways:
+    the partials came from `find_partial`, the STRONGEST line over ~4800 and
+    ~14000 grid points -- on noise an upward-biased pick -- while the floor
+    came from `floor_at` at FIXED guard frequencies, an unbiased read of the
+    same noise. The headroom between them was therefore a selection artifact,
+    and on noise it cleared 6 dB at some instant out of the 240 the trajectory
+    visits. Every seed below REPORTED a balance at `RS_BALANCE_OP` before this
+    test existed -- seed 0 at +4.14 dB, seed 3 at -16.23 dB, seed 7 at
+    +5.74 dB -- and seeds 2, 5, 6 and 7 did at `CB_BALANCE_OP`.
+
+    BOTH shipping operating points, because the gate is shared: D10A scores
+    `RS_BALANCE_OP` and D13A scores `CB_BALANCE_OP`, and a fix that only knows
+    about the rimshot's window is not a fix to the gate.
+
+    The seeds that clear the floor gate must be refused by the NEW precondition
+    by name -- otherwise this test could go green on the old code's own floor
+    refusals (5 of 8 RS seeds and 4 of 8 CB seeds already refused that way) and
+    prove nothing about the hole it is here to close."""
+    for label, op, seconds, min_by_line_shape in (
+            ("RS_BALANCE_OP", rc.RS_BALANCE_OP, 0.25, 8),
+            ("CB_BALANCE_OP", rc.CB_BALANCE_OP, 0.75, 4)):
+        kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+        by_line_shape = 0
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(seconds * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            assert not e.ok and e.value is None, (
+                f"{label} seed {seed}: white noise has no partials, so it has no "
+                f"balance -- REPORTED {e.value} dB at t1 "
+                f"{e.detail.get('t1_ms')} ms instead of refusing")
+            assert ("is not a resolved line" in e.reason
+                    or "clears the record's own floor" in e.reason), (
+                f"{label} seed {seed}: a refusal must name the precondition that "
+                f"failed; got {e.reason!r}")
+            by_line_shape += "is not a resolved line" in e.reason
+        assert by_line_shape >= min_by_line_shape, (
+            f"{label}: only {by_line_shape} of 8 noise seeds were refused by the "
+            f"line-shape precondition; the rest went out through the floor gate, "
+            f"which already refused them before #389. This test is then green for "
+            f"the wrong reason.")
+
+
 def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():
     """Digital silence: no instant anywhere is even 6 dB above its own floor,
     on either partial. REFUSED, not a zero or a coincidental number, and the
