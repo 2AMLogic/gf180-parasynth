@@ -118,30 +118,30 @@ def sc_boundary(frame0: int) -> list:
         steps.append(("event", A, cyc, due, tag))
     ev(0, 0, +1, "due A+1, accepted in the LAST cycle of A (on time)")
     ev(60, 1, 0, "due A, accepted in the FIRST cycle of A (late, d == 0)")
-    ev(62, MID, +3, "ordinary after a late event")
-    ev(120, MID, 0, "due == A mid-frame (late)")
-    ev(180, MID, -100, "due 100 behind (late)")
-    ev(182, MID, +2, "ordinary after a late event")
-    ev(240, MID, +32768, "due 32768 ahead (late: outside the window)")
-    ev(300, MID, +32767 - 32767 + 400, "a future event, due A+400")
-    ev(360, MID, -3, "late behind a queued future event (order)")
-    ev(420, MID, +300, "ordinary, after the future one")
+    ev(110, MID, +3, "ordinary, the next packet after a late event")
+    ev(160, MID, 0, "due == A mid-frame (late)")
+    ev(210, MID, -100, "due 100 behind (late)")
+    ev(260, MID, +2, "ordinary, the next packet after a late event")
+    ev(310, MID, +32768, "due 32768 ahead (late: outside the window)")
+    ev(360, MID, +400, "a future event, due A+400")
+    ev(410, MID, -3, "late behind a queued future event (order)")
+    ev(460, MID, +400, "ordinary, after the future one")
     return steps
 
 
 def sc_backlog(frame0: int) -> list:
     a = frame0 + 60
     steps = []
-    D = a + 20 * 45 + 60                      # every burst event queued before D
+    D = a + 20 * 48 + 60                      # every burst event queued before D
     for i in range(20):
-        steps.append(("event", a + 45 * i, MID, D % 65536, f"burst {i} due D"))
+        steps.append(("event", a + 48 * i, MID, D % 65536, f"burst {i} due D"))
     steps.append(("event", D + 3, MID, (D + 1) % 65536,
                   "mid-drain late, raw due D+1 >= the tail's D"))
     steps.append(("event", D + 50, MID, (D + 60) % 65536, "ordinary after the backlog"))
     # a second burst, then a late event whose RAW due is BEFORE the tail's
-    D2 = D + 50 + 10 * 45 + 60
+    D2 = D + 100 + 10 * 48 + 60
     for i in range(10):
-        steps.append(("event", D + 95 + 45 * i, MID, D2 % 65536, f"burst2 {i} due D2"))
+        steps.append(("event", D + 100 + 48 * i, MID, D2 % 65536, f"burst2 {i} due D2"))
     steps.append(("event", D2 + 2, MID, (D2 - 5) % 65536,
                   "mid-drain late, raw due D2-5 BEFORE the tail's D2 (effective D2+3)"))
     steps.append(("event", D2 + 60, MID, (D2 + 70) % 65536, "ordinary after it"))
@@ -151,11 +151,11 @@ def sc_backlog(frame0: int) -> list:
 def sc_overflow(frame0: int) -> list:
     a = frame0 + 60
     steps = []
-    D = a + 67 * 45 + 100
+    D = a + 67 * 48 + 100
     for i in range(67):
-        steps.append(("event", a + 45 * i, MID, D % 65536,
+        steps.append(("event", a + 48 * i, MID, D % 65536,
                       f"fill {i}" + (" (the queue is full: dropped)" if i >= 64 else "")))
-    steps.append(("status", a + 67 * 45, MID, None, "STATUS: drops 3, overflow flag"))
+    steps.append(("status", a + 67 * 48, MID, None, "STATUS: drops 3, overflow flag"))
     steps.append(("event", D + 40, MID, (D + 45) % 65536, "recovery: on time"))
     steps.append(("event", D + 90, MID, (D + 80) % 65536, "recovery: late"))
     steps.append(("event", D + 140, MID, (D + 150) % 65536, "recovery: on time"))
