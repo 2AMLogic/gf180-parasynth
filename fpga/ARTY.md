@@ -390,7 +390,7 @@ phrase:
 
 **R1 player preview (the revision-14 tree; image published, #280:
 [r1-player-preview-2025.1](reports/arty/r1-player-preview-2025.1), `544499e2...`).** Its
-supported quick-start is the same commands with `--image tree`, and without
+supported quick-start is the same commands with the named selection `--image r1` (#323), and without
 `play --fixture m5a` (it sends no patch image, so what it plays depends on the
 device's prior state; `run --note 45 --fixture m5a` plays the same phrase from
 the known state). Every R1 image-loading command starts with voice RESET and
@@ -398,13 +398,13 @@ drum RESET, and refuses to start over queued events from an earlier session.
 Identity and evidence: [fpga/release/R1.md](release/R1.md).
 
 ```text
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image tree
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image tree
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image tree
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image tree
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image tree
-.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image tree
-.venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image tree
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image r1
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image r1
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image r1
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image r1
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r1
+.venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r1
+.venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1
 ```
 
 **Release r1, which plan087 calls R0** ([fpga/release/RELEASE.md](release/RELEASE.md)) binds this image,

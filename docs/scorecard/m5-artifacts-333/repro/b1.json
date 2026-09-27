@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/run_case.py M5A M5B --results build/repro/results",
+    "state": "FAIL",
+    "rc": 1,
+    "out": "reference corpus: /home/ubuntu/dev/refs\nresults into:     build/repro/results\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nM5A    fail           7.56  worst: Harmonic shape\nM5B    fail           5.96  worst: Harmonic shape\n------------------------------------------------------------------------------------------------\nfail: 2\nexit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)\n",
+    "secs": 118.5437524318695
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_mono_pulse_2x.py --case M5A --out build/repro/pulse2x",
+    "state": "PASS",
+    "rc": 0,
+    "out": "M5A baseline {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 10.27447, 'Envelope attack': 5.3125, 'Envelope release': -8.9375, 'Gain': 1.42087, 'Clipping': 0.0}\nM5A pulse2x {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 2.20593, 'Envelope attack': 5.27083, 'Envelope release': -8.9375, 'Gain': 1.42087, 'Clipping': 0.0}\nM5A gain_only {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 9.4128, 'Envelope attack': 5.29167, 'Envelope release': -8.9375, 'Gain': 1.42087, 'Clipping': 0.0}\nM5A disabled_control {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 10.27447, 'Envelope attack': 5.3125, 'Envelope release': -8.9375, 'Gain': 1.42087, 'Clipping': 0.0}\nM5A: incremental acceptance=False; report=build/repro/pulse2x/M5A.json\n",
+    "secs": 144.08350801467896
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_mono_pulse_2x.py --case M5B --out build/repro/pulse2x",
+    "state": "PASS",
+    "rc": 0,
+    "out": "M5B baseline {'Pitch': -0.14825, 'Harmonic shape': 5.96219, 'Foldback energy': 8.84954, 'Envelope attack': 6.0625, 'Envelope release': -30.0, 'Gain': 2.70905, 'Clipping': 0.0}\nM5B pulse2x {'Pitch': -0.14827, 'Harmonic shape': 5.96219, 'Foldback energy': 1.91296, 'Envelope attack': 6.125, 'Envelope release': -30.0, 'Gain': 2.09086, 'Clipping': 0.0}\nM5B gain_only {'Pitch': -0.14825, 'Harmonic shape': 5.96219, 'Foldback energy': 8.01867, 'Envelope attack': 6.0625, 'Envelope release': -30.0, 'Gain': 2.09348, 'Clipping': 0.0}\nM5B disabled_control {'Pitch': -0.14825, 'Harmonic shape': 5.96219, 'Foldback energy': 8.84954, 'Envelope attack': 6.0625, 'Envelope release': -30.0, 'Gain': 2.70905, 'Clipping': 0.0}\nM5B: incremental acceptance=False; report=build/repro/pulse2x/M5B.json\n",
+    "secs": 94.29893040657043
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --m5a --filter2x --m5a-pulse-shape pulse29 --m5a-saw-cutoff-hz 20000 --m5a-saw-volume-correction-db -0.45428 --simulator verilator --outdir build/repro/rtl-M5A --wav-out build/repro/rtl-M5A/M5A-i2s.wav > build/repro/rtl-M5A.txt 2>&1 && /home/ubuntu/work/venv/bin/python tools/score_m5a_i2s.py --case M5A --wav build/repro/rtl-M5A/M5A-i2s.wav --verification build/repro/rtl-M5A.txt --pulse-shape pulse29 --saw-cutoff-hz 20000 --saw-volume-correction-db -0.45428 --out build/repro/rtl-M5A.json --audio build/repro/rtl-M5A-scored.wav",
+    "state": "PASS",
+    "rc": 0,
+    "out": "score_m5a_i2s: valid fail M5A comparison; seven properties measured from decoded I2S\nscore_m5a_i2s: report build/repro/rtl-M5A.json\n",
+    "secs": 671.2801787853241
+  }
+]

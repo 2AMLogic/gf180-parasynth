@@ -82,10 +82,11 @@ BT = uh.BITS_PER_BYTE / uh.DEFAULT_BAUD            # one byte on the wire, secon
 EVENT_PKT_S = 10 * BT
 REPORT_DIR = ROOT / "fpga/reports/live-midi"
 # The image this harness drives: the device contract (sim) and the RTL replay
-# (arty_a7_top from this tree) are contract revision 14, so the session and the
-# oracle both send the tree's kit -- named, never MusicHost's silent fallback.
-# The live CLI's default on a serial port is the release image (#273).
-HARNESS_IMAGE = "tree"
+# (arty_a7_top from this tree) are contract revision 14, so the session sends
+# the named R1 release (`r1`, #323: its frozen kit) and the oracle holds the
+# frozen R1 target -- named, never MusicHost's silent fallback. The live CLI's
+# default on a serial port is the release image (#273).
+HARNESS_IMAGE = "r1"
 RTL_TAIL_S = 0.3
 
 # ---- the oracle's OWN maps (docs/live-midi.md; written here, not imported) ---
@@ -981,6 +982,7 @@ def rtl_replay(res: dict, outdir: Path, *, reuse: bool = False, timeout_s: int =
              else "PASS" if ok else "FAIL")
     return {"state": state, "capture": cap, "comparison": comp, "truncation_control": trunc,
             "detail": detail[:10], "reused_rtl_run": bool(rr.get("reused")),
+            "rtl_run": vub.rtl_run_report(rr),
             "run_receipt": {"path": published.name,
                             "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
 

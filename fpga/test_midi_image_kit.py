@@ -111,11 +111,12 @@ def test_cli_refuses_sim_with_the_release_image(capsys):
 
 
 def test_harness_drives_the_tree_image():
-    """verify_live_midi's sim and RTL replay are this tree (revision 14): the
-    session and its oracle both name it, so the oracle's known state has
-    ENV_FRATE[8] and matches the tree session's write for write."""
+    """verify_live_midi's sim and RTL replay are revision 14: the session
+    sends the named R1 release (`r1`, #323) and the oracle holds the frozen R1
+    target, so the oracle's known state has ENV_FRATE[8] and matches the
+    session's write for write."""
     import verify_live_midi as vlm
-    assert vlm.HARNESS_IMAGE == "tree"
+    assert vlm.HARNESS_IMAGE == "r1"
     oracle = vlm.Oracle(lambda t: 0)
     assert FRATE in _drums(oracle.static)
     assert oracle.static == _session(image=vlm.HARNESS_IMAGE).init_writes()

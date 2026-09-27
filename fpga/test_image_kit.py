@@ -77,9 +77,10 @@ def test_control_rev11_kit_refuses_when_the_tree_kit_moves(monkeypatch):
 
 def test_default_image_is_the_release_and_unknown_images_refuse():
     assert uh.DEFAULT_IMAGE == "release"
-    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14}
+    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14}
     assert uh.image_kit() == dx.kit_808_rev11()
     assert uh.image_kit("tree") == dx.kit_808()
+    assert uh.image_kit("r1") == uh.r1_kit()                  # frozen by value (#323)
     with pytest.raises(ValueError):
         uh.image_kit("r13")
 

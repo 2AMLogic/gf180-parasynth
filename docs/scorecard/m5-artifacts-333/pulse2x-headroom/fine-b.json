@@ -1,0 +1,109 @@
+{
+ "mode": "fine",
+ "scope": "rect",
+ "base_gain_q15": 27853,
+ "commit": "97a707817e51ea34026dc13d72198cd64cfb8df7",
+ "sources_dirty": false,
+ "results": {
+  "rule": "largest gain: zero clipped samples, worst peak <= rail - 0.1 dB, reachable rectangles, MIDI 90.0..127.0 step 0.125",
+  "chosen": {
+   "gain": 0.74,
+   "gain_q15": 24248
+  },
+  "candidates": {
+   "0.750": {
+    "gain": 0.75,
+    "gain_q15": 24576,
+    "passes_rule": false,
+    "shapes": {
+     "square": {
+      "worst_peak": 30408,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 31035,
+      "worst_note": 120.75,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse25": {
+      "worst_peak": 32711,
+      "worst_note": 127.0,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse15": {
+      "worst_peak": 31151,
+      "worst_note": 102.625,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     }
+    }
+   },
+   "0.740": {
+    "gain": 0.74,
+    "gain_q15": 24248,
+    "passes_rule": true,
+    "shapes": {
+     "square": {
+      "worst_peak": 30003,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 30621,
+      "worst_note": 120.75,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse25": {
+      "worst_peak": 32274,
+      "worst_note": 127.0,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse15": {
+      "worst_peak": 30735,
+      "worst_note": 102.5,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     }
+    }
+   },
+   "0.730": {
+    "gain": 0.73,
+    "gain_q15": 23921,
+    "passes_rule": true,
+    "shapes": {
+     "square": {
+      "worst_peak": 29598,
+      "worst_note": 120.875,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse479": {
+      "worst_peak": 30208,
+      "worst_note": 120.75,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse25": {
+      "worst_peak": 31839,
+      "worst_note": 127.0,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     },
+     "pulse15": {
+      "worst_peak": 30320,
+      "worst_note": 102.5,
+      "clipped_samples": 0,
+      "notes_clipping": []
+     }
+    }
+   }
+  }
+ }
+}

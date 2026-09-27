@@ -4,7 +4,7 @@
   "status": "CANDIDATE: digital (RTL-simulation) evidence. The R1 bitstream built from it is published and bound in fpga/release/r1-2025.1.json (#280); no physical programming, control or audio capture.",
   "r0_is": "arty-a7-100t baseline 2025.1, r1 (plan087 R0; contract revision 11; image a66c9349...)",
   "contract_revision": 14,
-  "host_image_selector": "--image tree",
+  "host_image_selector": "--image r1",
   "rtl": {
     "frozen_at": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
     "configuration": {
@@ -141,22 +141,11 @@
   },
   "host": {
     "version": "no numeric protocol version exists; the host is pinned by the sha256 of its files (host.files) and the exact bytes of every supported command (commands.*.cmds_sha256)",
-    "files": {
-      "fpga/uart_host.py": "e36ece62cd01eb8d1384d7428eb698bcc8b08a0247388e285687d47f65d85917",
-      "fpga/midi_session.py": "e8111ec8e6a517499c6b002d40469a233b1832c7a1479fc81375869be5cfce24",
-      "fpga/live_midi_contract.py": "314c45fd0de8ebb3b3169840a56f473b511867bdf1059e02cf8c38a9d8b50ccb",
-      "fpga/release/qualified_domain.py": "b554ba57f0b988b98db8cd9b1dddd5607abaf7eaa2f76aebf3c17e9e2008d7fe",
-      "fpga/release/r1_candidate.py": "ca8c597c83f2ece84284c3ea5719aaea082acdbe55392bc9847cc7b491076212",
-      "fpga/spi_host.py": "c3dabc9bcb09af0db7d71bf262bcd6eba327917060e58135cb3361a1668cdaa6",
-      "fpga/fixtures.py": "681a999cba70ce79996fbbbd333b594531af48e9e38def34d83fce5269064a38",
-      "fpga/selected_preset.py": "22a9c04087492333d540627a14a9865d3618cb614bc3aa27be7fe499f2899ad1",
-      "model/voice_fx.py": "876b31f280fd3ef453228c2bb74384325a09b4d7ecb8261eca7cf2d6cec2e46c",
-      "model/drums_fx.py": "449cfefe39ada055daba1ff2d965ebad2cae6f17fd0f9a515f4803929ec1b9d5"
-    }
+    "binding": "the exact bytes every supported command emits under --image r1 (commands), R1's frozen kit (kit) and the presets' image bytes (presets); host files are not bound"
   },
   "commands": {
     "held-default": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image r1",
       "cmds_sha256": "b467f217e6dd8e082f4cfcc18df0a73979770eb24f68707c87935c3ea3ad3695",
       "packets": 38,
       "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -164,7 +153,7 @@
       "loads_kit": false
     },
     "held-m5a-saw": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image r1",
       "cmds_sha256": "8b8b6cc2dd852cea74a7bd95aa7a6f4dcaf534f815cea7007346ba1b3a04024e",
       "packets": 38,
       "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -172,7 +161,7 @@
       "loads_kit": false
     },
     "held-m5a-pulse": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image r1",
       "cmds_sha256": "67fa0afe046f1d73bad3e30455613116d604296201b6a5d0c7095f68c818df36",
       "packets": 38,
       "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -180,7 +169,7 @@
       "loads_kit": false
     },
     "run-m5a": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image r1",
       "cmds_sha256": "5480209251f1fe9dc71ab3ce9a37a3b1916b2d81bc07806900f86049043b23da",
       "packets": 105,
       "validator": "uart_host: release domain OK -- 15 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -188,7 +177,7 @@
       "loads_kit": false
     },
     "demo": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r1",
       "cmds_sha256": "bc8cb37d29efe14f6cd53b57be72d26dcd2d2cc207a1c9bee72d8da84792a2de",
       "packets": 511,
       "validator": "uart_host: release domain OK -- 48 increment writes, 45 glide transitions, all in [2858, 4384395]",
@@ -196,7 +185,7 @@
       "loads_kit": true
     },
     "bar808-full": {
-      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image tree",
+      "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r1",
       "cmds_sha256": "a3c3dd548d589e5c43d790fe425e5a8233e2a372e18cf11f646c5711123c6c28",
       "packets": 397,
       "validator": "uart_host: release domain OK -- 6 increment writes, 3 glide transitions, all in [2858, 4384395]",
@@ -204,7 +193,7 @@
       "loads_kit": true
     },
     "live-midi": {
-      "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image tree",
+      "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1",
       "sim_start": ".venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage",
       "init_writes": 193
     }
@@ -256,7 +245,7 @@
         127
       ]
     },
-    "session_start": "every R1 image-loading command (uart_host run/load --image tree, midi_session --image tree) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
+    "session_start": "every R1 image-loading command (uart_host run/load --image r1, midi_session --image r1) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
     "physical_precondition": "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). The host cannot read the image identity back, so this is declared, not verified.",
     "open_defect": "#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent",
     "drift": "DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player domain: a nonzero write is refused (NOT_IN_IMAGE rule, R1 wording)"

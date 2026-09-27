@@ -1,0 +1,56 @@
+{
+ "runs": [
+  {
+   "label": "1-fresh",
+   "rc": 0,
+   "secs": 983.3,
+   "state": "PASS",
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the run on disk differs in ['simulator'] (simulator: on disk 'Icarus Verilog version 12.0 (stable) (FAKED by tools/probe_reuse_identity.py)', now 'Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)')",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   }
+  },
+  {
+   "label": "2-identical",
+   "rc": 0,
+   "secs": 25.6,
+   "state": "PASS",
+   "rtl_run": {
+    "reused": true,
+    "asked": "auto",
+    "why": "identical run on disk",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   }
+  },
+  {
+   "label": "3-control",
+   "rc": 0,
+   "secs": 995.9,
+   "state": "PASS",
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the run on disk differs in ['simulator'] (simulator: on disk 'Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)', now 'Icarus Verilog version 12.0 (stable) (FAKED by tools/probe_reuse_identity.py)')",
+    "iverilog": "Icarus Verilog version 12.0 (stable) (FAKED by tools/probe_reuse_identity.py)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   }
+  }
+ ],
+ "problems": []
+}

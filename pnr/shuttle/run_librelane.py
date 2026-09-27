@@ -7,6 +7,19 @@ template (half-height 1x0.5 slot) with LibreLane, inside a pinned container.
     ./run_librelane.py signoff            # whole Chip flow including DRC/LVS/XOR/IR-drop
     ./run_librelane.py check              # preconditions only; runs no tool
     ./run_librelane.py full --run-tag foo # extra args after the mode go to librelane
+    ./run_librelane.py resume --run-tag halfslot --from OpenROAD.RCX
+                                          # carry an existing run forward from a step
+
+WHY THERE IS A ``resume`` MODE.  ``ERROR_ON_TR_DRC`` defaults to true, so a route
+that ends with even one detailed-router violation makes ``Checker.TrDRC`` abort the
+flow -- **before** ``OpenROAD.RCX`` and ``OpenROAD.STAPostPNR``, which are the only
+steps that produce post-route parasitics and post-route per-corner timing.  A run
+that stops there has a DRC number and no timing at all, and re-running the whole
+flow to get the timing would re-route for hours to reproduce a layout that already
+exists on disk.  ``resume`` restarts the SAME run directory from a named step, with
+the SAME skip list (the step list must match or LibreLane's --from resolves against
+a different flow), and REFUSES rather than silently starting a fresh run if the run
+directory it was pointed at does not already hold a resumable state.
 
 WHY THIS IS PYTHON AND NOT A SHELL SCRIPT.  It replaces ``run-librelane.sh``
 (recovered in PR #176) under CLAUDE.md's "Write Python, not bash" rule.  The
@@ -53,6 +66,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -133,12 +147,76 @@ def stage_args(mode: str, runs_dir: str) -> list[str]:
         # for them would write an empty directory that looks like a finished run.
         return ["--to", "OpenROAD.Floorplan"]
     args: list[str] = []
-    if mode == "full":
+    # `resume` carries `full`'s skip list deliberately.  LibreLane resolves --from
+    # against the step list the flow is CONFIGURED with, so resuming with a
+    # different skip set resumes into a different flow -- which does not error, it
+    # just runs the wrong steps.
+    if mode in ("full", "resume"):
         for step in SIGNOFF_SKIPS:
             args += ["--skip", step]
         args += ["--skip", "OpenROAD.IRDropReport"]
     args += ["--save-views-to", os.path.join(runs_dir, "final")]
     return args
+
+
+# LibreLane writes one directory per executed step, named `<NN>-<step id lowercased,
+# dots removed>`.  A resumable run has at least one of them carrying a state_out.json.
+STEP_DIR = re.compile(r"^(\d+)-(.+)$")
+
+
+def resumable_state(run_dir: str) -> str:
+    """The name of the last step in `run_dir` that recorded a state, or REFUSE.
+
+    The failure this guards is specific and quiet: `librelane --run-tag X --from S`
+    against a path that is not an existing run does not complain -- it creates the
+    run directory and starts the flow at S with no initial state, which for a
+    post-route step means STA on nothing.  So the state has to be asserted to exist
+    before the container is started, not hoped for.
+    """
+    if not os.path.isdir(run_dir):
+        raise Refusal(
+            f"no run directory at {run_dir} -- there is nothing to resume.\n"
+            f"  `resume` never starts a fresh flow; use `full` for that."
+        )
+    steps = sorted(n for n in os.listdir(run_dir)
+                   if STEP_DIR.match(n)
+                   and os.path.exists(os.path.join(run_dir, n, "state_out.json")))
+    if not steps:
+        raise Refusal(
+            f"{run_dir} has no step directory carrying a state_out.json.\n"
+            f"  LibreLane would resume from an EMPTY initial state, which for a\n"
+            f"  post-route step is a measurement of nothing."
+        )
+    return steps[-1]
+
+
+def passthrough_opt(rest: list[str], *names: str) -> str | None:
+    """The value of `--opt V` / `--opt=V` in the args being forwarded to librelane.
+
+    Read out of the FORWARDED list rather than declared as an option of this
+    wrapper, deliberately.  `rest` is an ``argparse.REMAINDER``, so every flag after
+    the mode goes to librelane and a same-named option declared here would only be
+    honoured when written *before* the mode -- giving two spellings, one of which
+    silently does not reach the precondition check.  Asserting on what the tool is
+    actually given is the whole point of the check.
+    """
+    for i, tok in enumerate(rest):
+        for n in names:
+            if tok == n and i + 1 < len(rest):
+                return rest[i + 1]
+            if tok.startswith(n + "="):
+                return tok.split("=", 1)[1]
+    return None
+
+
+def check_resume(run_dir: str, from_step: str | None) -> str:
+    if not from_step:
+        raise Refusal(
+            "`resume` needs --from <step id> (e.g. --from OpenROAD.RCX).\n"
+            "  Without it LibreLane re-runs the flow from the beginning in the same\n"
+            "  run directory, which overwrites the layout being resumed."
+        )
+    return resumable_state(run_dir)
 
 
 def verilog_files(here: str) -> list[str]:
@@ -274,7 +352,8 @@ def docker_argv(image: str, mounts: list[str], workdir: str, inner: list[str]) -
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=["check", "bootstrap-pdk", "floorplan", "full", "signoff"])
+    ap.add_argument("mode", choices=["check", "bootstrap-pdk", "floorplan", "full",
+                                     "signoff", "resume"])
     ap.add_argument("--image", default=os.environ.get("LL_IMAGE") or default_image())
     ap.add_argument("--scratch", default=os.environ.get("LL_SCRATCH", "/tmp/gf180-shuttle"))
     ap.add_argument("--pdk-root", default=os.environ.get("PDK_ROOT"))
@@ -295,9 +374,24 @@ def main(argv: list[str] | None = None) -> int:
     if a.mode == "bootstrap-pdk":
         return bootstrap_pdk(pdk_root)
 
+    # LibreLane writes its run directory beside the design's config, not into
+    # --runs-dir (which only receives the copied final views), so the path a resume
+    # has to assert on is this one.
+    run_tag = passthrough_opt(a.rest, "--run-tag")
+    from_step = passthrough_opt(a.rest, "--from", "-F")
+    ll_run_dir = os.path.join(HERE, "librelane", "runs", run_tag or "")
+
+    resume_from_state = None
     try:
         check_rtl(HERE, REPO)
         check_pdk(pdk_root, a.pdk, a.scl, a.pad)
+        if a.mode == "resume":
+            if not run_tag:
+                raise Refusal(
+                    "`resume` needs --run-tag <tag>: the run to carry forward.\n"
+                    "  Without it LibreLane invents a fresh timestamped run directory\n"
+                    "  and --from resolves against an empty initial state.")
+            resume_from_state = check_resume(ll_run_dir, from_step)
         if a.mode != "check":
             check_docker(a.image, a.pull)
     except Refusal as e:
@@ -325,6 +419,9 @@ def main(argv: list[str] | None = None) -> int:
         "--pdk", a.pdk, "--pdk-root", pdk_root, "--manual-pdk",
         "--scl", a.scl, "--pad", a.pad,
     ] + stage_args(a.mode, runs_dir)
+    if a.mode == "resume":
+        print(f"[run_librelane] resuming {ll_run_dir} from {from_step}; "
+              f"the last step holding a state is {resume_from_state}", flush=True)
     extra = [x for x in a.rest if x != "--"]
     inner += extra
 

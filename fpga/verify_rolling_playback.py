@@ -80,12 +80,12 @@ def intended(fixture: str, preset: str | None = None,
     the hold, spacing intact.
 
     `image` is the TARGET the expectation is built for, never the sender's
-    selector. For R1 ("tree") the expectation is checked against the frozen
+    selector. For R1 ("r1", the named release; #323) the expectation is checked against the frozen
     target (fpga/release/r1_candidate.py) before it is used: the known-state
     preamble and the revision-14 kit by digest, with its nonzero final
     strike. An expectation that is not that target REFUSES (Refused)."""
     static_w, timed_w, _n, _host = uh.fixture_split(fixture, image)
-    static = [tuple(w) for w in r1c.PREAMBLE] if image == r1c.HOST_IMAGE else []
+    static = [tuple(w) for w in r1c.PREAMBLE] if image in uh.KNOWN_STATE_IMAGES else []
     static += [tuple(w) for w in uh.voice_image_writes(preset)]
     static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static_w]
     held = []
@@ -381,6 +381,7 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
            "truncation_control": trunc,
            "comparison": comp, "detail": detail[:10],
            "reused_rtl_run": bool(rr.get("reused")),
+           "rtl_run": vub.rtl_run_report(rr),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
     out["control"] = rtl_control(fixture, outdir, vub, work)
@@ -484,7 +485,7 @@ def run_control(name: str, image: str = uh.DEFAULT_IMAGE, target: str | None = N
 
 
 def wrong_kit_control(fixture: str, target: str) -> dict:
-    """The sender plays the RELEASE (revision-11) kit under `--image tree`
+    """The sender plays the RELEASE (revision-11) kit under `--image r1`
     (uart_host INJECT WRONG_KIT) while the expectation stays the frozen R1
     target. Caught only if the check fails FOR THE KIT: the init-byte check
     names the kit or the final strike (plan088)."""

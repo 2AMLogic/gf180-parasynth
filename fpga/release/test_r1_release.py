@@ -59,7 +59,7 @@ def test_the_image_is_the_r1_build_and_passes_every_gate(fresh):
 def test_the_host_is_bound_as_r1_and_r0_is_the_rollback(fresh):
     h = fresh["host"]
     assert fresh["contract_revision"] == 14 and h["contract_revision"] == 14
-    assert h["selector"] == "--image tree"
+    assert h["selector"] == "--image r1"                  # the named R1 selection (#323)
     assert h["kit"]["clap_final_strike"]["value"] == 68
     # #280 keeps R0 the default; the switch is the operator's
     assert h["default_image"] == "release" and h["default_image_is_r1"] is False

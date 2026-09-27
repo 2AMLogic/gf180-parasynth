@@ -31,14 +31,27 @@ def _capture(tmp_path: Path) -> str:
     return str(prefix)
 
 
+# the simulator's reported version; a test may change it to fake a different
+# simulator (#313: a run from another iverilog must never be reused)
+SIM_VERSION = {"iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd)",
+               "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd)"}
+
+
 @pytest.fixture
 def fake_sim(monkeypatch, tmp_path):
     calls = []
     rom = tmp_path / "voice.hex"
     rom.write_text("0001\n0002\n")
     monkeypatch.setattr(vub, "roms", lambda: [rom])
+    monkeypatch.setitem(SIM_VERSION, "iverilog", SIM_VERSION["iverilog"])
 
     def run(cmd, **kw):
+        if len(cmd) == 2 and cmd[1] == "-V":                  # a version query
+            name = Path(str(cmd[0])).name
+            # as the real tools do: iverilog -V on stdout, vvp -V on STDERR
+            if name == "vvp":
+                return subprocess.CompletedProcess(cmd, 0, "", SIM_VERSION[name] + "\n")
+            return subprocess.CompletedProcess(cmd, 0, SIM_VERSION[name] + "\n", "")
         calls.append(cmd)
         if any(str(c).startswith("+i2s=") for c in cmd):      # the vvp run
             for c in cmd:
@@ -130,3 +143,47 @@ def test_the_identity_names_every_rom_the_bench_reads(tmp_path, fake_sim):
 def test_the_real_rom_set_is_not_empty():
     # the resolver the identity uses must find the repository's ROMs
     assert any(str(p).endswith(".hex") for p in vub.roms())
+
+
+# ---- #313: the simulator is part of the identity ------------------------------------
+def test_the_identity_names_the_simulator_and_the_oss_cad_pin(tmp_path, fake_sim):
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    vub.simulate_replay(cap, out)
+    sim = json.loads((out / "run_identity.json").read_text())["identity"]["simulator"]
+    assert sim["iverilog -V"] == SIM_VERSION["iverilog"]
+    assert sim["vvp -V"] == SIM_VERSION["vvp"]
+    assert sim["oss_cad_pin"]["release"] and len(sim["oss_cad_pin"]["sha256"]) == 64
+
+
+def test_control_a_different_simulator_version_forces_re_simulation(tmp_path, fake_sim,
+                                                                     capsys):
+    """THE CONTROL: the same sources, ROMs, stimulus and length, but the
+    simulator reports another version. `reuse="auto"` (the trials'
+    --reuse-rtl-if-identical) must SIMULATE; reuse=True must REFUSE, naming
+    the simulator."""
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    vub.simulate_replay(cap, out)
+    n = len(fake_sim)
+    SIM_VERSION["iverilog"] = "Icarus Verilog version 12.0 (stable) ()"
+    assert vub.simulate_replay(cap, out, reuse=True) is None
+    assert "simulator" in capsys.readouterr().out
+    again = vub.simulate_replay(cap, out, reuse="auto")
+    assert again and not again.get("reused") and len(fake_sim) > n     # it re-ran
+    assert "simulator" in again["reuse"]["why"]
+
+
+def test_an_unknown_simulator_version_is_never_reused(tmp_path, fake_sim, capsys):
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    vub.simulate_replay(cap, out)
+    SIM_VERSION["iverilog"] = ""                         # -V answered nothing
+    assert vub.simulate_replay(cap, out, reuse=True) is None
+    assert "simulator" in capsys.readouterr().out
+
+
+def test_the_run_reports_whether_it_was_reused_and_why(tmp_path, fake_sim):
+    cap, out = _capture(tmp_path), tmp_path / "rtl"
+    fresh = vub.simulate_replay(cap, out, reuse="auto")
+    assert fresh["reuse"] == {"asked": "auto", "reused": False,
+                              "why": fresh["reuse"]["why"]} and fresh["reuse"]["why"]
+    again = vub.simulate_replay(cap, out, reuse="auto")
+    assert again["reuse"]["reused"] is True and again["reuse"]["why"] == "identical run on disk"

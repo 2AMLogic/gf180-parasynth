@@ -188,7 +188,7 @@
     ]
   },
   "host": {
-    "selector": "--image tree",
+    "selector": "--image r1",
     "contract_revision": 14,
     "default_image": "release",
     "default_image_is_r1": false,
@@ -245,7 +245,7 @@
     },
     "commands": {
       "held-default": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image r1",
         "cmds_sha256": "b467f217e6dd8e082f4cfcc18df0a73979770eb24f68707c87935c3ea3ad3695",
         "packets": 38,
         "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -253,7 +253,7 @@
         "loads_kit": false
       },
       "held-m5a-saw": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image r1",
         "cmds_sha256": "8b8b6cc2dd852cea74a7bd95aa7a6f4dcaf534f815cea7007346ba1b3a04024e",
         "packets": 38,
         "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -261,7 +261,7 @@
         "loads_kit": false
       },
       "held-m5a-pulse": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image r1",
         "cmds_sha256": "67fa0afe046f1d73bad3e30455613116d604296201b6a5d0c7095f68c818df36",
         "packets": 38,
         "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -269,7 +269,7 @@
         "loads_kit": false
       },
       "run-m5a": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image r1",
         "cmds_sha256": "5480209251f1fe9dc71ab3ce9a37a3b1916b2d81bc07806900f86049043b23da",
         "packets": 105,
         "validator": "uart_host: release domain OK -- 15 increment writes, 0 glide transitions, all in [2858, 4384395]",
@@ -277,7 +277,7 @@
         "loads_kit": false
       },
       "demo": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r1",
         "cmds_sha256": "bc8cb37d29efe14f6cd53b57be72d26dcd2d2cc207a1c9bee72d8da84792a2de",
         "packets": 511,
         "validator": "uart_host: release domain OK -- 48 increment writes, 45 glide transitions, all in [2858, 4384395]",
@@ -285,7 +285,7 @@
         "loads_kit": true
       },
       "bar808-full": {
-        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image tree",
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r1",
         "cmds_sha256": "a3c3dd548d589e5c43d790fe425e5a8233e2a372e18cf11f646c5711123c6c28",
         "packets": 397,
         "validator": "uart_host: release domain OK -- 6 increment writes, 3 glide transitions, all in [2858, 4384395]",
@@ -293,7 +293,7 @@
         "loads_kit": true
       },
       "live-midi": {
-        "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image tree",
+        "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1",
         "sim_start": ".venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage",
         "init_writes": 193
       }
@@ -342,14 +342,14 @@
           127
         ]
       },
-      "session_start": "every R1 image-loading command (uart_host run/load --image tree, midi_session --image tree) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
+      "session_start": "every R1 image-loading command (uart_host run/load --image r1, midi_session --image r1) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
       "physical_precondition": "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). The host cannot read the image identity back, so this is declared, not verified.",
       "open_defect": "#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent",
       "drift": "DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player domain: a nonzero write is refused (NOT_IN_IMAGE rule, R1 wording)"
     },
     "candidate": {
       "record": "fpga/release/r1-candidate.json",
-      "sha256": "e2659bf6d079dfc72ed0938d30bfda48bea6c63a24a2a223e443bf29422cb56e",
+      "sha256": "8ce7b36950dd339ea18f79c38171250dfd7bd89a7a2c0d313aa05af4979f59af",
       "evidence_dir": "fpga/reports/r1-candidate",
       "rtl_runs_bound": 12
     }
@@ -369,8 +369,8 @@
     "check": "python fpga/release/release_manifest.py (T-RELEASE-BOUND)"
   },
   "default_switch": {
-    "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image targets R0; R1 is selected with --image tree",
-    "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"tree\"",
+    "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image targets R0; R1 is selected by name with --image r1 (#323; tree stays a development selector)",
+    "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"r1\" (not planned: plan092 keeps the public default on R0)",
     "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 (measured by fpga/release/test_r1_release.py; only the verdict is quoted, because the first reason printed depends on how the default is flipped, #319) -- the gate doing its job: the same change must give R0's documented commands and its manifest's captures an explicit --image release. This manifest records host.default_image and goes STALE, and is re-bound with --write.",
     "decided_by": "the operator (#280 keeps release as the default)"
   },

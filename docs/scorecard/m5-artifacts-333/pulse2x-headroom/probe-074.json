@@ -1,0 +1,521 @@
+{
+ "mode": "probe",
+ "scope": "rect",
+ "base_gain_q15": 27853,
+ "commit": "cd18464bb6c1bd61611008f7d80b087a9f46d3cc",
+ "sources_dirty": false,
+ "results": {
+  "square/36": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -81.0473,
+    "unwanted_rel_db": -70.0821,
+    "intended_dbfs": -10.9652,
+    "upper_wanted_rel_db": -29.6074
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -82.5269,
+    "unwanted_rel_db": -70.3944,
+    "intended_dbfs": -12.1325,
+    "upper_wanted_rel_db": -29.4185
+   }
+  },
+  "square/60": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -69.4123,
+    "unwanted_rel_db": -58.0732,
+    "intended_dbfs": -11.3392,
+    "upper_wanted_rel_db": -23.6619
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -70.2001,
+    "unwanted_rel_db": -57.8109,
+    "intended_dbfs": -12.3892,
+    "upper_wanted_rel_db": -23.5839
+   }
+  },
+  "square/84": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -59.6802,
+    "unwanted_rel_db": -46.6607,
+    "intended_dbfs": -13.0195,
+    "upper_wanted_rel_db": -14.6276
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -60.2834,
+    "unwanted_rel_db": -46.7014,
+    "intended_dbfs": -13.582,
+    "upper_wanted_rel_db": -14.7703
+   }
+  },
+  "square/96": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -67.6929,
+    "unwanted_rel_db": -52.8515,
+    "intended_dbfs": -14.8414,
+    "upper_wanted_rel_db": -11.1193
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -69.4916,
+    "unwanted_rel_db": -54.3156,
+    "intended_dbfs": -15.1759,
+    "upper_wanted_rel_db": -11.2191
+   }
+  },
+  "square/108": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -66.8932,
+    "unwanted_rel_db": -49.4149,
+    "intended_dbfs": -17.4782,
+    "upper_wanted_rel_db": -14.0949
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -68.3005,
+    "unwanted_rel_db": -50.6035,
+    "intended_dbfs": -17.697,
+    "upper_wanted_rel_db": -14.1393
+   }
+  },
+  "square/114": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -67.3665,
+    "unwanted_rel_db": -48.135,
+    "intended_dbfs": -19.2315,
+    "upper_wanted_rel_db": -0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -68.8618,
+    "unwanted_rel_db": -49.4336,
+    "intended_dbfs": -19.4282,
+    "upper_wanted_rel_db": -0.0
+   }
+  },
+  "square/120": {
+   "0.850": {
+    "osc_rail": 6012,
+    "unwanted_dbfs": -50.9235,
+    "unwanted_rel_db": -29.3929,
+    "intended_dbfs": -21.5306,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -51.3672,
+    "unwanted_rel_db": -29.661,
+    "intended_dbfs": -21.7062,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "square/127": {
+   "0.850": {
+    "osc_rail": 4721,
+    "unwanted_dbfs": -65.5952,
+    "unwanted_rel_db": -40.78,
+    "intended_dbfs": -24.8152,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -69.061,
+    "unwanted_rel_db": -44.0503,
+    "intended_dbfs": -25.0107,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse29/36": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -82.7255,
+    "unwanted_rel_db": -71.7525,
+    "intended_dbfs": -10.9731,
+    "upper_wanted_rel_db": -29.6996
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -84.7318,
+    "unwanted_rel_db": -72.5915,
+    "intended_dbfs": -12.1403,
+    "upper_wanted_rel_db": -29.5092
+   }
+  },
+  "pulse29/60": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -69.3385,
+    "unwanted_rel_db": -57.9907,
+    "intended_dbfs": -11.3477,
+    "upper_wanted_rel_db": -23.2443
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -70.1286,
+    "unwanted_rel_db": -57.7311,
+    "intended_dbfs": -12.3975,
+    "upper_wanted_rel_db": -23.1719
+   }
+  },
+  "pulse29/84": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -64.2423,
+    "unwanted_rel_db": -51.2128,
+    "intended_dbfs": -13.0294,
+    "upper_wanted_rel_db": -14.7673
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -64.96,
+    "unwanted_rel_db": -51.3679,
+    "intended_dbfs": -13.5921,
+    "upper_wanted_rel_db": -14.9042
+   }
+  },
+  "pulse29/96": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -61.4227,
+    "unwanted_rel_db": -46.5703,
+    "intended_dbfs": -14.8524,
+    "upper_wanted_rel_db": -11.1976
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -62.2348,
+    "unwanted_rel_db": -47.048,
+    "intended_dbfs": -15.1868,
+    "upper_wanted_rel_db": -11.2932
+   }
+  },
+  "pulse29/108": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -61.0066,
+    "unwanted_rel_db": -43.5136,
+    "intended_dbfs": -17.4931,
+    "upper_wanted_rel_db": -13.8317
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -61.6258,
+    "unwanted_rel_db": -43.9149,
+    "intended_dbfs": -17.711,
+    "upper_wanted_rel_db": -13.8911
+   }
+  },
+  "pulse29/114": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -65.94,
+    "unwanted_rel_db": -46.6945,
+    "intended_dbfs": -19.2455,
+    "upper_wanted_rel_db": -0.0006
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -68.1131,
+    "unwanted_rel_db": -48.6722,
+    "intended_dbfs": -19.4408,
+    "upper_wanted_rel_db": -0.0006
+   }
+  },
+  "pulse29/120": {
+   "0.850": {
+    "osc_rail": 5149,
+    "unwanted_dbfs": -51.441,
+    "unwanted_rel_db": -29.88,
+    "intended_dbfs": -21.5611,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -51.8412,
+    "unwanted_rel_db": -30.105,
+    "intended_dbfs": -21.7362,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse29/127": {
+   "0.850": {
+    "osc_rail": 3719,
+    "unwanted_dbfs": -62.9835,
+    "unwanted_rel_db": -38.148,
+    "intended_dbfs": -24.8355,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -65.0876,
+    "unwanted_rel_db": -40.0582,
+    "intended_dbfs": -25.0294,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse25/36": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -82.3628,
+    "unwanted_rel_db": -70.1083,
+    "intended_dbfs": -12.2546,
+    "upper_wanted_rel_db": -28.3203
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -84.1431,
+    "unwanted_rel_db": -70.7334,
+    "intended_dbfs": -13.4097,
+    "upper_wanted_rel_db": -28.1434
+   }
+  },
+  "pulse25/60": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -69.486,
+    "unwanted_rel_db": -56.7212,
+    "intended_dbfs": -12.7648,
+    "upper_wanted_rel_db": -22.2566
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -70.2724,
+    "unwanted_rel_db": -56.5147,
+    "intended_dbfs": -13.7578,
+    "upper_wanted_rel_db": -22.2286
+   }
+  },
+  "pulse25/84": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -60.8413,
+    "unwanted_rel_db": -46.1617,
+    "intended_dbfs": -14.6796,
+    "upper_wanted_rel_db": -13.5132
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -62.3899,
+    "unwanted_rel_db": -47.1497,
+    "intended_dbfs": -15.2402,
+    "upper_wanted_rel_db": -13.6071
+   }
+  },
+  "pulse25/96": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -63.7246,
+    "unwanted_rel_db": -47.0589,
+    "intended_dbfs": -16.6657,
+    "upper_wanted_rel_db": -11.4232
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -66.3673,
+    "unwanted_rel_db": -49.3765,
+    "intended_dbfs": -16.9908,
+    "upper_wanted_rel_db": -11.656
+   }
+  },
+  "pulse25/108": {
+   "0.850": {
+    "osc_rail": 1007,
+    "unwanted_dbfs": -58.0076,
+    "unwanted_rel_db": -38.1039,
+    "intended_dbfs": -19.9037,
+    "upper_wanted_rel_db": -5.5818
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -57.6103,
+    "unwanted_rel_db": -37.59,
+    "intended_dbfs": -20.0203,
+    "upper_wanted_rel_db": -5.7344
+   }
+  },
+  "pulse25/114": {
+   "0.850": {
+    "osc_rail": 1895,
+    "unwanted_dbfs": -65.8267,
+    "unwanted_rel_db": -43.453,
+    "intended_dbfs": -22.3736,
+    "upper_wanted_rel_db": -0.0089
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -72.297,
+    "unwanted_rel_db": -49.9285,
+    "intended_dbfs": -22.3685,
+    "upper_wanted_rel_db": -0.0068
+   }
+  },
+  "pulse25/120": {
+   "0.850": {
+    "osc_rail": 5392,
+    "unwanted_dbfs": -51.3174,
+    "unwanted_rel_db": -26.4911,
+    "intended_dbfs": -24.8262,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -51.9342,
+    "unwanted_rel_db": -27.038,
+    "intended_dbfs": -24.8962,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse25/127": {
+   "0.850": {
+    "osc_rail": 7107,
+    "unwanted_dbfs": -52.9148,
+    "unwanted_rel_db": -22.6281,
+    "intended_dbfs": -30.2867,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -53.0096,
+    "unwanted_rel_db": -22.7477,
+    "intended_dbfs": -30.2619,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse15/36": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -84.1328,
+    "unwanted_rel_db": -70.127,
+    "intended_dbfs": -14.0058,
+    "upper_wanted_rel_db": -26.5981
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -86.6026,
+    "unwanted_rel_db": -71.4653,
+    "intended_dbfs": -15.1374,
+    "upper_wanted_rel_db": -26.4445
+   }
+  },
+  "pulse15/60": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -70.0754,
+    "unwanted_rel_db": -55.3196,
+    "intended_dbfs": -14.7558,
+    "upper_wanted_rel_db": -20.3985
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -70.9356,
+    "unwanted_rel_db": -55.2712,
+    "intended_dbfs": -15.6644,
+    "upper_wanted_rel_db": -20.3653
+   }
+  },
+  "pulse15/84": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -60.9894,
+    "unwanted_rel_db": -44.0385,
+    "intended_dbfs": -16.9509,
+    "upper_wanted_rel_db": -13.0427
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -60.5375,
+    "unwanted_rel_db": -43.0199,
+    "intended_dbfs": -17.5176,
+    "upper_wanted_rel_db": -13.3032
+   }
+  },
+  "pulse15/96": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -59.9027,
+    "unwanted_rel_db": -40.6343,
+    "intended_dbfs": -19.2684,
+    "upper_wanted_rel_db": -6.5842
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -60.7127,
+    "unwanted_rel_db": -41.1863,
+    "intended_dbfs": -19.5263,
+    "upper_wanted_rel_db": -6.7523
+   }
+  },
+  "pulse15/108": {
+   "0.850": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -55.676,
+    "unwanted_rel_db": -32.0581,
+    "intended_dbfs": -23.6179,
+    "upper_wanted_rel_db": -4.7847
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -56.5232,
+    "unwanted_rel_db": -33.0467,
+    "intended_dbfs": -23.4766,
+    "upper_wanted_rel_db": -4.6969
+   }
+  },
+  "pulse15/114": {
+   "0.850": {
+    "osc_rail": 3370,
+    "unwanted_dbfs": -64.8542,
+    "unwanted_rel_db": -38.5679,
+    "intended_dbfs": -26.2863,
+    "upper_wanted_rel_db": -0.0193
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -66.6305,
+    "unwanted_rel_db": -40.4901,
+    "intended_dbfs": -26.1404,
+    "upper_wanted_rel_db": -0.0197
+   }
+  },
+  "pulse15/120": {
+   "0.850": {
+    "osc_rail": 6064,
+    "unwanted_dbfs": -60.8329,
+    "unwanted_rel_db": -29.2824,
+    "intended_dbfs": -31.5505,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -59.7611,
+    "unwanted_rel_db": -28.7135,
+    "intended_dbfs": -31.0475,
+    "upper_wanted_rel_db": 0.0
+   }
+  },
+  "pulse15/127": {
+   "0.850": {
+    "osc_rail": 5370,
+    "unwanted_dbfs": -67.7888,
+    "unwanted_rel_db": -21.2462,
+    "intended_dbfs": -46.5426,
+    "upper_wanted_rel_db": 0.0
+   },
+   "0.740": {
+    "osc_rail": 0,
+    "unwanted_dbfs": -67.4327,
+    "unwanted_rel_db": -23.2514,
+    "intended_dbfs": -44.1813,
+    "upper_wanted_rel_db": 0.0
+   }
+  }
+ }
+}
