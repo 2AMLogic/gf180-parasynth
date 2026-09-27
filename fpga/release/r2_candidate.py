@@ -25,8 +25,8 @@ built. Open before a freeze or a Vivado build:
     voice_fx._render_2x, with the INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM
     control);
   * (carried: the #315 XDC repair, PR #358);
-  * #354 (verify_voice --set full, inherited from R1); its repair joins
-    EXPECTED_CHANGES by review if it is an RTL change;
+  * (settled: the #354 repair is an RTL change, ladder_dp_n.v's xg held in
+    26 bits (PR #364), and joins EXPECTED_CHANGES by review);
   * confirmed preset changes, only through a versioned profile;
   * the named image selector (#323). The host has no `--image r2` yet, so
     the domain admission cannot be used from the CLI.
@@ -59,16 +59,21 @@ NAME = "R2 candidate"
 IMAGE = "r2-candidate"                      # qualified_domain.PULSE2X_IMAGES
 CONFIG = {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}
 DEFINES = ["VOICE_OSC_2X", "VOICE_FILTER_2X", "VOICE_PULSE_2X"]
-STATUS = ("DRAFT -- not frozen, no image built. Open: #354 (verify_voice --set full, "
-          "inherited from R1), the named image selector (#323); #356 and #315 (#358) must "
-          "merge first; the build must produce constraint_matches.rpt and exceptions.rpt")
+STATUS = ("DRAFT -- not frozen, no image built. The set is settled (operator, #282/#355): "
+          "pulse2x at 0.74 rectangle headroom (an operator OVERRIDE of the acceptance rule, "
+          "known limitations in R2.md), skip2xwin, the #354 repair (#364), #315. Open: the "
+          "settled combination's evidence, the named `r2` selection, the Vivado build "
+          "(constraint_matches.rpt and exceptions.rpt)")
 # the only compiled source R2 may differ in from R1's freeze, and why
 EXPECTED_CHANGES = {"rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)",
                     "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 "
                                                       "(#333, recheck-333 item 5)",
                     "fpga/boards/arty-a7-100.xdc": "UART-RX sync constraints bind g_uart.u_uart "
                                                    "(#315); build and publisher assert binding "
-                                                   "and effect (fpga/xdc_bindings.py)"}
+                                                   "and effect (fpga/xdc_bindings.py)",
+                    "rtl-sketch/ladder_dp_n.v": "(x * gain) >> 11 held in 26 bits, not 25: the "
+                                                "first wrong operation behind #354 (PR #364); "
+                                                "control INJECT_BUG_LADDER_XG25"}
 
 
 class Refused(RuntimeError):
@@ -110,6 +115,9 @@ def rtl() -> dict:
     pair = (ROOT / "rtl-sketch/polyblep_saw_pair.v").read_text()
     if pair.count("localparam signed [15:0] RECT_GAIN_Q15=16'sd24248;") != 1:
         raise Refused("polyblep_saw_pair.v does not hold the 24248 rectangle headroom exactly once")
+    lad = (ROOT / "rtl-sketch/ladder_dp_n.v").read_text()
+    if lad.count("xg    <= xg_full[SW+1:0];") != 1 or "reg signed [SW+1:0] xg;" not in lad:
+        raise Refused("ladder_dp_n.v does not hold the #354 26-bit xg repair")
     import xdc_bindings as xb
     try:
         xb.object_queries(ba.XDC.read_text())
