@@ -559,9 +559,10 @@ AMP_CY_HI = 1.0
 # nor the two modes' ratio. `--balance` reports x2.2532 for RS and x1.00 +- 0.08
 # for the other fifteen, i.e. nothing else moved.
 PEAK_RSG, PEAK_CLG, PEAK_MA = 0.7728, 0.5, 0.5395
-# The gate peak the PUBLISHED revision-11 image was verified with, kept so
-# `kit_808_rev11()` can undo the re-balance above (see its `undo`).
-PEAK_RSG_REV11 = 0.343
+# The gate peak revisions 10 to 14 shipped -- what the PUBLISHED R0 and R1 Arty
+# images were verified with -- kept so `kit_808_rev14()` can undo the re-balance
+# above (see its `undo`), and through it `kit_808_rev11()`.
+PEAK_RSG_REV14 = 0.343
 # ---- the clap, contract revision 14 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
@@ -1733,11 +1734,14 @@ def _kit_sha256(kit: list) -> str:
 
 
 def kit_808_rev11() -> list:
-    """The reference kit a revision-11 image plays: `kit_808()` with revision
-    13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
-    480, no ENV_FRATE[8] write at all (the register does not exist there), and
-    ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
-    its order.
+    """The reference kit a revision-11 image plays: `kit_808_rev14()` with
+    revision 14's three clap writes undone -- ENV_CTL[8] back to three strikes
+    at period 480, no ENV_FRATE[8] write at all (the register does not exist
+    there), and ENV_RATE[9] back to the 47 ms tail. Every other write is
+    revision 14's, in its order. It starts from revision 14 rather than the live
+    kit because revision 15 (#388) moved two rimshot writes the revision-11
+    image also never had: undoing one revision's changes at a time is what keeps
+    each `KitRefused` message pointing at the revision that actually moved.
 
     FROZEN BY HASH, CHECKED AT THE POINT OF USE: the result must hash to
     KIT808_REV11_SHA256, or this REFUSES (KitRefused). A later change to any
@@ -1748,20 +1752,8 @@ def kit_808_rev11() -> list:
     burst = A_ENV + E_CPBURST * ENV_STRIDE
     tail = A_ENV + E_CPTAIL * ENV_STRIDE
     undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
-            tail + 2: rate_reg(47e-3),                   # the R348 x C138 tail
-            # #388's RS_LO_X_ATT: the published image was verified with an
-            # UNATTENUATED pulse into the 455 Hz network, so this kit keeps it.
-            # The register field exists in revision 11 and the new word would be
-            # accepted -- which is exactly why it has to be undone here rather
-            # than left to work by accident: the released image's rimshot is the
-            # one it was measured with, and a host driving it gets that one.
-            A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1),
-            # ...and with it the gate peak that re-balanced the voice after it.
-            # The two go together: RS_LO_X_ATT without PEAK_RSG's x2.25 is a
-            # rimshot 7 dB below its share of Roland's chart, so undoing one and
-            # not the other would give revision 11 a kit neither release had.
-            A_ENV + E_RSG * ENV_STRIDE + 1: peak_reg(PEAK_RSG_REV11)}
-    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
+            tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
+    kit = [(a, undo.get(a, v)) for a, v in kit_808_rev14() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
         raise KitRefused(f"kit_808_rev11() hashes to {got[:12]}, not revision 11's "
@@ -1771,9 +1763,44 @@ def kit_808_rev11() -> list:
     return kit
 
 
+# ...and as revision 14 stated it, the kit the PUBLISHED R1 player preview was
+# built and measured with (fpga/release/r1-kit.json holds the same writes by
+# value). Revision 15 is #388's two rimshot writes; see `kit_808_rev14`.
+KIT808_REV14_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def kit_808_rev14() -> list:
+    """The reference kit a revision-14 image plays: `kit_808()` with revision
+    15's TWO rimshot writes undone (#388) -- PATH[15] back to an UNATTENUATED
+    pulse into the 455 Hz network, and ENV_PEAK[14] back to the gate peak that
+    went with it. Revision 15 adds and removes no write, so the address list and
+    the order are `kit_808()`'s exactly.
+
+    The two go together and neither may be undone alone: RS_LO_X_ATT without
+    PEAK_RSG's x2.2532 is a rimshot 7.05 dB below its share of Roland's chart,
+    which is a kit no release ever had. Both register fields exist in revision
+    14 and both new words would be ACCEPTED by that image -- which is exactly
+    why they have to be undone here rather than left to work by accident: a host
+    driving the published image gets the rimshot that image was measured with.
+
+    FROZEN BY HASH, CHECKED AT THE POINT OF USE, on the same contract as
+    `kit_808_rev11`: the result must hash to KIT808_REV14_SHA256 or this
+    REFUSES (KitRefused)."""
+    undo = {A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+            A_ENV + E_RSG * ENV_STRIDE + 1: peak_reg(PEAK_RSG_REV14)}
+    kit = [(a, undo.get(a, v)) for a, v in kit_808()]
+    got = _kit_sha256(kit)
+    if got != KIT808_REV14_SHA256:
+        raise KitRefused(f"kit_808_rev14() hashes to {got[:12]}, not revision 14's "
+                         f"KIT808 {KIT808_REV14_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-14 image was verified with; freeze the literal "
+                         "image or cut a new release")
+    return kit
+
+
 # The kit each supported image revision plays. A host names the image it
 # drives; it does not assume the tree's.
-KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808}
+KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808_rev14, 15: kit_808}
 
 
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:
