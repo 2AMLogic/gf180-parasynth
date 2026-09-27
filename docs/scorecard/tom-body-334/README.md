@@ -91,7 +91,7 @@ The departure level is the same whatever the ping, at about 6,000–7,900 LSB of
 deadband** in the recursion, and pure LTI behaviour cannot produce it.
 
 - **How it hits the candidate.** A numerator lowers the state by |N(ω₀)| (−32 dB at LT). Output amp restores the level but not the state, so the ring reaches the deadband 32 dB sooner. The Schroeder decay then reads the collapse. The exciter is already near its register ceiling, which buys back only 12 dB.
-- **What it already does to the shipped kit.** Tails end in a limit cycle or a **stuck DC state** rather than decaying. Whether that is audible at the bus depends on each mode's amp. It is filed as its own artifact issue.
+- **What it already does to the shipped kit.** Tails end in a limit cycle or a **stuck DC state** rather than decaying. Whether that is audible at the bus depends on each mode's amp. It is filed as #350.
 
 ## Next decisive step
 
