@@ -420,6 +420,214 @@ def test_a_document_with_no_markers_at_all_is_refused_not_passed(fixtures):
 
 
 # --------------------------------------------------------------------------
+# the default document set, and the audit that keeps it honest (#435)
+#
+# The bug these cover: the default set was `docs/*.md`, so a marker anywhere
+# else was parsed by nothing and looked EXACTLY like one that passed. Eleven
+# real markers were in that position under a green "51 ok" summary.
+# --------------------------------------------------------------------------
+
+def run_default(monkeypatch, capsys, includes=None, tracked=None,
+                excludes=None, argv=()):
+    """`main()` in default mode, with the scope knobs under the test's control.
+
+    In-process rather than via subprocess so a control can narrow the document
+    set to its own fixture: the real one is 168 files and about two minutes,
+    which is not a unit test. Everything under test -- resolution, the scope
+    audit, the summary, the exit code -- is still the shipped code path.
+    """
+    if includes is not None:
+        monkeypatch.setattr(cdc, "DEFAULT_INCLUDES", tuple(includes))
+    if excludes is not None:
+        monkeypatch.setattr(cdc, "EXCLUDED_PREFIXES", tuple(excludes))
+    if tracked is not None:
+        monkeypatch.setattr(cdc, "tracked_markdown", lambda: (list(tracked), None))
+    monkeypatch.setattr(sys, "argv", ["check_doc_claims.py", *argv])
+    code = cdc.main()
+    cap = capsys.readouterr()
+    return code, cap.out, cap.err
+
+
+def test_the_default_set_reaches_every_directory_that_carries_claims():
+    """The document-set decision, asserted rather than described.
+
+    Each path below is a real claim-bearing document; three of them
+    (`docs/scorecard/README.md`, `docs/scorecard/ensemble-e1a/rtl/README.md`
+    and decision record 0018) were evaluated by NOTHING before this change.
+    """
+    inside = {cdc._rel(p) for p in cdc.default_docs()}
+    for rel in (
+            "CLAUDE.md",
+            "docs/failure-modes.md",
+            "docs/scorecard/README.md",
+            "docs/scorecard/ensemble-e1a/rtl/README.md",
+            "docs/scorecard/cymbal-369/tone-render/README.md",
+            "fpga/ARTY.md",
+            "spec/decision-records/0018-the-half-sample-delay-is-load-bearing.md",
+    ):
+        assert (ROOT / rel).is_file(), f"{rel} moved; update this control"
+        assert rel in inside, f"{rel} is not in the default document set"
+    # And the directories the widening was specified over, whether or not they
+    # carry a marker today -- the point is that the next one written there is
+    # checked rather than silent.
+    for prefix in ("fpga/release/", "fpga/reports/", "pnr/"):
+        assert any(r.startswith(prefix) for r in inside), \
+            f"nothing under {prefix} is scanned"
+
+
+def test_the_default_set_excludes_vendored_and_generated_trees():
+    """`.loom/worktrees/` holds whole second copies of this repository: a bare
+    `**/*.md` sweep would count every claim once per live worktree and report a
+    stale one against a path that is not the tree you are looking at."""
+    inside = {cdc._rel(p) for p in cdc.default_docs()}
+    for rel in inside:
+        assert not cdc.is_excluded(rel), rel
+        assert not rel.startswith((".loom/", ".claude/", ".github/", "build/")), rel
+
+
+def test_claude_md_is_scanned_once_despite_the_agents_md_symlink():
+    """`AGENTS.md` is a symlink to `CLAUDE.md`. Scanning both would count every
+    claim in the project's most-read document twice and, on a stale one, name a
+    path nobody would go to in order to fix it."""
+    assert (ROOT / "AGENTS.md").is_symlink(), "the symlink went away; re-read this"
+    rels = [cdc._rel(p) for p in cdc.default_docs()]
+    assert rels.count("CLAUDE.md") == 1
+    assert "AGENTS.md" not in rels
+    # ...and the scope audit must not then report the symlink as unchecked.
+    strays, err = cdc.out_of_scope_claims(cdc.default_docs())
+    assert err is None, err
+    assert not any(c.where.startswith("AGENTS.md") for c in strays)
+
+
+def test_no_claim_marker_in_this_tree_is_outside_the_scanned_set():
+    """The live assertion, in the fast suite: today, nothing is silent.
+
+    This costs no pytest subprocess -- it only parses Markdown -- so it can sit
+    in the broad suite and fail the moment someone writes a claim in a corner
+    the include list does not reach.
+    """
+    strays, err = cdc.out_of_scope_claims(cdc.default_docs())
+    assert err is None, err
+    assert not [(c.where, c.prose) for c in strays]
+
+
+def test_a_stale_marker_in_a_newly_scanned_file_turns_the_run_red_and_names_it(
+        monkeypatch, capsys, fixtures):
+    """THE RED-FIRST CONTROL for the widening (#435's Test Plan).
+
+    Verified red before the fix: with the old `docs/*.md` resolution this
+    document is not in the set at all, so the run reported `51 ok, 0 stale` and
+    exited 0 -- the injected defect produced no output whatsoever. The two
+    assertions below are what that run could not make: the file is resolved into
+    the default set, and its contradicted claim is reported BY NAME with exit 1.
+    """
+    rel_backing = (fixtures / "test_claim_fixture_backing.py").relative_to(ROOT).as_posix()
+    doc = write_doc(fixtures, {"injected": f"test={rel_backing}::test_fixture_fails"})
+    rel_doc = doc.relative_to(ROOT).as_posix()
+
+    # The old resolution: this file is not even a candidate.
+    assert doc not in sorted((ROOT / "docs").glob("*.md"))
+
+    code, out, _ = run_default(
+        monkeypatch, capsys,
+        includes=(rel_doc,),
+        # `build/` is excluded in the shipped list precisely so fixtures cannot
+        # pollute a real run; lift it for this one file so the control can use a
+        # directory outside `docs/` without writing into the working tree.
+        excludes=tuple(p for p in cdc.EXCLUDED_PREFIXES if p != "build/"),
+        tracked=(rel_doc,),
+    )
+    assert code == 1, out
+    assert "STALE" in out
+    assert rel_doc in out, "a red run that does not name the file is not actionable"
+
+
+def test_a_marker_outside_the_scanned_set_is_refused_rather_than_silent(
+        monkeypatch, capsys, fixtures):
+    """The behaviour #435 asked for: converting silence into REFUSED.
+
+    Widening the set only moves the boundary. Without this, the next document
+    written outside it is unchecked in exactly the same invisible way -- and a
+    marker the scanner never reaches is weaker than a skipped test, which at
+    least produces a refusal.
+    """
+    rel_backing = (fixtures / "test_claim_fixture_backing.py").relative_to(ROOT).as_posix()
+    stray = fixtures / "stray.md"
+    stray.write_text("A claim nobody scans.\n"
+                     f"<!-- claim: test={rel_backing}::test_fixture_passes -->\n")
+    inside = write_doc(fixtures, {"scanned": f"test={rel_backing}::test_fixture_passes"})
+    rel_stray = stray.relative_to(ROOT).as_posix()
+    rel_inside = inside.relative_to(ROOT).as_posix()
+
+    code, out, _ = run_default(
+        monkeypatch, capsys,
+        includes=(rel_inside,),
+        excludes=tuple(p for p in cdc.EXCLUDED_PREFIXES if p != "build/"),
+        tracked=(rel_inside, rel_stray),
+    )
+    # Its backing test PASSES. It is still red, because it was never evaluated
+    # by the run that matters -- that is the whole distinction.
+    assert code == 2, out
+    assert "REFUSED" in out and rel_stray in out
+    assert "outside the default document set" in out
+    assert "DEFAULT_INCLUDES" in out, "a refusal must say how to satisfy it"
+
+
+def test_naming_documents_explicitly_does_not_drag_in_the_scope_audit(
+        monkeypatch, capsys, fixtures):
+    """Narrowing by argument is deliberate -- a fixture run, a one-off check.
+    Only the no-argument run, which is the one `make verify` reads, audits."""
+    rel_backing = (fixtures / "test_claim_fixture_backing.py").relative_to(ROOT).as_posix()
+    stray = fixtures / "stray2.md"
+    stray.write_text("Unscanned.\n"
+                     f"<!-- claim: test={rel_backing}::test_fixture_passes -->\n")
+    inside = write_doc(fixtures, {"scanned": f"test={rel_backing}::test_fixture_passes"})
+
+    code, out, _ = run_default(
+        monkeypatch, capsys,
+        tracked=(stray.relative_to(ROOT).as_posix(),),
+        argv=(str(inside),),
+    )
+    assert code == 0, out
+    assert "stray2.md" not in out
+
+
+def test_the_scope_audit_refuses_rather_than_reporting_clean_when_it_cannot_run(
+        monkeypatch, capsys, fixtures):
+    """An apparatus with an unmet precondition must say so. "git is unavailable"
+    reported as "no unscanned markers found" is an answer to a question that was
+    never asked, which is the failure this whole tool is about."""
+    rel_backing = (fixtures / "test_claim_fixture_backing.py").relative_to(ROOT).as_posix()
+    inside = write_doc(fixtures, {"scanned": f"test={rel_backing}::test_fixture_passes"})
+    monkeypatch.setattr(cdc, "tracked_markdown",
+                        lambda: ([], "not a git checkout, or git is unavailable"))
+    code, out, err = run_default(
+        monkeypatch, capsys,
+        includes=(inside.relative_to(ROOT).as_posix(),),
+        excludes=tuple(p for p in cdc.EXCLUDED_PREFIXES if p != "build/"),
+    )
+    assert code == 2, out                      # every claim OK, and still red
+    assert "0 stale, 0 refused" in out
+    assert "cannot audit for markers outside the scanned set" in err
+
+
+def test_a_marker_in_an_excluded_tree_stays_out_of_both_the_set_and_the_audit(
+        monkeypatch, capsys, fixtures):
+    """The exclude list is the one remaining silencer, so it is deliberate and
+    enumerated: a vendored `.loom/` document is neither scanned nor refused."""
+    rel_backing = (fixtures / "test_claim_fixture_backing.py").relative_to(ROOT).as_posix()
+    inside = write_doc(fixtures, {"scanned": f"test={rel_backing}::test_fixture_passes"})
+    code, out, _ = run_default(
+        monkeypatch, capsys,
+        includes=(inside.relative_to(ROOT).as_posix(),),
+        excludes=tuple(p for p in cdc.EXCLUDED_PREFIXES if p != "build/") + (".loom/",),
+        tracked=(".loom/docs/vendored.md",),
+    )
+    assert code == 0, out
+    assert "vendored.md" not in out
+
+
+# --------------------------------------------------------------------------
 # and the document this was commissioned for
 # --------------------------------------------------------------------------
 
