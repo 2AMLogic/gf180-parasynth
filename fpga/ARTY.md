@@ -57,26 +57,45 @@ That split is by *compiled source*, and **the constraint file is in neither
 comparison set by default** (#421). The digital bench drives no physical pin,
 so the default `verification` scope is `sources() + roms()` — what
 `build_arty.validate_verification` checks — and no verification record this
-repository has produced hashes `boards/arty-a7-100.xdc` at all. Ask the
-publication question explicitly:
+repository has produced hashes `boards/arty-a7-100.xdc` at all, nor ever will.
+Ask the publication question explicitly:
 
 ```text
 python3 tools/check_arty_evidence_binding.py --scope publication
 ```
 
-On the current tree that **REFUSES** (exit 2, `NOT COVERED`) rather than
-reporting a verdict: the bound record never read those bytes, and "never
-hashed" is not the same finding as "hashed and moved". What the wider scope
-*can* answer is the published images — R1 (`r1-player-preview-2025.1`) was
-built on a branch that did not carry `383f10b`, so **its only divergence from
-this tree is the XDC**, which the default scope reports as no divergence at
-all.
-<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_the_newest_published_image_moved_only_its_constraints -->
-<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_publication_scope_refuses_rather_than_calling_an_unhashed_xdc_drift -->
+Until #436 that could only **REFUSE** (exit 2, `NOT COVERED`): the bound record
+never read those bytes, and "never hashed" is not the same finding as "hashed
+and moved". It now exits 0, and **not by widening the digital record** — a
+record claiming coverage of bytes its bench never opened is the failure
+`docs/failure-modes.md` is about. The scope is answered by two records, each
+covering only what its own bench read:
 
-Making publication scope *answerable* needs a record that covers the
-constraints, which is a change to the bench's evidence semantics and is not
-this gate's to make — issue #436.
+| record | bench | answers for |
+|---|---|---|
+| `reports/arty/rev14-clean/verification.json` | `fpga/verify_uart_bridge.py` | `sources() + roms()` |
+| `reports/arty/xdc-binding/binding.json` | `fpga/verify_xdc_binding.py` | the XDC + the sources its names resolve against |
+
+A file no bound record answers for REFUSES rather than passing unasked, so
+narrowing a bench's read set cannot make this gate greener.
+<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_publication_scope_is_satisfied_against_the_current_tree -->
+<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_control_a_file_no_record_answers_for_refuses_rather_than_passing -->
+
+The constraint record is a **binding** record, not an effect record: it says
+the constraint file still refers to this wrapper — every `get_ports` naming a
+real port, every hierarchical path joining a generate block with a dot and an
+instance with a slash, every output delay equal to the budget
+`ext_io_timing.py` derives from the PCM5102 datasheet. How many objects a query
+*matched* still needs the netlist, and is `constraint_matches.rpt` (below).
+Its start-red is the pre-#315 file that R0 and R1 were routed against, which
+fails `hier_separators` on lines 42 and 46.
+<!-- claim: test=fpga/test_verify_xdc_binding.py::test_red_first_the_constraints_r0_and_r1_shipped_fail_by_name -->
+
+What the wider scope also answers is the published images — R1
+(`r1-player-preview-2025.1`) was built on a branch that did not carry
+`383f10b`, so **its only divergence from this tree is the XDC**, which the
+default scope reports as no divergence at all.
+<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_the_newest_published_image_moved_only_its_constraints -->
 
 Since 2026-09-22 the publisher additionally binds, at publication time and
 refusing drift (regression-tested in `fpga/test_publish_binding.py`):

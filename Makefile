@@ -46,6 +46,26 @@ help:
 ## explains all 23 is buried in a traceback. The same question answered in
 ## 0.2s, naming the source file that moved, is worth a job slot.
 ##
+## check_arty_evidence_binding.py --scope publication is a SECOND rung on the
+## same tool asking a different question, and it could not be one until #436:
+## the constraint file had no committed evidence at all, so the mode could only
+## REFUSE and an unsatisfiable gate is worse than no gate. It is answered by two
+## records now, each covering what its own bench read -- the UART digital record
+## for sources()+roms(), fpga/reports/arty/xdc-binding/binding.json for the XDC
+## -- and it goes red when the constraint file moves without its bench being
+## re-run. That re-run is `fpga/verify_xdc_binding.py --outdir
+## fpga/reports/arty/xdc-binding` and takes 0.2 s, which is what makes the rung
+## satisfiable rather than merely strict. The default rung's question, verdict
+## and output are unchanged.
+##
+## verify_xdc_binding.py itself is here for the reason the publication rung is
+## not enough on its own: the gate compares hashes, and this is the thing that
+## decides whether the constraint file still BINDS -- every get_ports naming a
+## real port, every hierarchical path joining generate blocks with a dot and
+## instances with a slash (#315, which shipped dead in R0 and R1), every
+## output delay equal to the datasheet budget ext_io_timing derives. 0.2 s,
+## pure Python, no Vivado.
+##
 ## check_doc_claims.py ran THREE TIMES until #435 and now runs once, which is a
 ## widening rather than a saving. Its default set was docs/*.md -- one
 ## directory, not even recursive -- so fpga/ARTY.md and
@@ -88,6 +108,8 @@ verify:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
+	  "$(PY) tools/check_arty_evidence_binding.py --scope publication" \
+	  "$(PY) fpga/verify_xdc_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
@@ -325,6 +347,19 @@ verify-full:
 ##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
 ##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
 ##
+## THE CONSTRAINT-BINDING CONTROLS (#436) close rule 5 on #315: the UART-RX
+## synchroniser constraints joined their generate block with a slash, matched
+## nothing, and were DROPPED by Vivado from R0 and R1 while every text-level
+## gate passed. `--inject UART_SLASH_JOIN` is those exact bytes, and `--matrix`
+## runs all eight injections and prints the properties x defects matrix
+## (docs/verification-rules.md 4) -- it exits 1 if any injection moves NO
+## property, which is the only way a control can be a no-op and still look like
+## one. probe_arty_constraint_scope.py is the gate-level pair: ten arms, each
+## printing the gate's own exit code, including the arm that must stay GREEN
+## (the default rung, blind to the constraints on purpose) and a start-red that
+## runs the bench against the pre-#315 file from git history. All three are pure
+## Python, about 2 s together.
+##
 ## report_synth_area is THE ONLY JOB IN THIS FILE THAT NEEDS yosys (it also needs
 ## iverilog, which everything here already needs). It REFUSES rather than skips
 ## when either is absent, which is why it is not in the nightly's controls job:
@@ -403,7 +438,10 @@ controls:
 	  "$(PY) pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular --outdir build/pnr-die-utilreq" \
 	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk" \
 	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_SKIP_INTERP --expect-mismatch" \
-	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch"
+	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch" \
+	  "$(PY) fpga/verify_xdc_binding.py --matrix" \
+	  "$(PY) fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail" \
+	  "$(PY) tools/probe_arty_constraint_scope.py"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
