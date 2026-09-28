@@ -14,8 +14,9 @@ measured with the unmodified instruments the issue requires (`tools/cymbal_mid.p
 `tools/cymbal_bands.thirds`); neither instrument was changed. Preservation holds: all 15 non-CY
 sounds stay bit-identical (`preservation` below, all `True`).
 
-Instrumented at `2dd8f8d` (clean tree; every number below is reproducible from that commit —
-`docs/scorecard/cymbal-369/candidate4/candidate4.json` records `"sources_dirty": false`).
+Every number below is reproducible from a clean tree: `candidate4.json` and
+`gain-invariance-probe.json` each record their own `"commit"` and
+`"sources_dirty": false`.
 
 ## 1. The prediction and the change
 
@@ -146,5 +147,5 @@ by this branch's diff (`git diff --stat` against `main` touches only `model/cymb
 ## Files
 
 - `candidate4.json` — the full `cymbal_candidate_eval.py --variant candidate4` record (levels,
-  preservation, bands, thirds, mid), commit `2dd8f8d`, clean tree.
-- `gain-invariance-probe.json` — the clipping-elimination probe's record, same commit.
+  preservation, bands, thirds, mid).
+- `gain-invariance-probe.json` — the clipping-elimination probe's record.
