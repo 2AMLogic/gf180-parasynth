@@ -550,6 +550,27 @@ def test_the_three_frozen_windows_cover_every_setting_and_no_two_of_them_do():
         assert c2["n_covered"] < 25, f"the {drop} window is redundant"
 
 
+def test_the_reference_bands_own_decay_already_matches_the_machine():
+    """The one number §5b's reconciliation with `../mid-band/` rests on, and the
+    reason a within-record ratio is the right statistic here rather than an
+    absolute decay time carrying a +-50 % unit-to-unit tolerance: at CY5025 the
+    LOW band's own decay is 591.16 ms for the 808 and 590.56 ms for our shipped
+    render. If that ever stopped being true the reconciliation would need
+    rewriting, so it fails here rather than going stale in prose."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    w = json.loads(RESULT.read_text())["windows"]["2.0s"]
+    ref808 = w["fischer"]["CY5025"]["bands"]["Ln"]["times_ms"]["-10"]
+    refours = w["shipped"]["bands"]["Ln"]["times_ms"]["-10"]
+    assert abs(ref808 / refours - 1.0) < 0.005, (ref808, refours)
+    # And the band beside it is out by far more than that, in opposite directions
+    # relative to each record's own low band. That asymmetry IS the finding.
+    m808 = w["fischer"]["CY5025"]["bands"]["M"]["times_ms"]["-10"]
+    mours = w["shipped"]["bands"]["M"]["times_ms"]["-10"]
+    assert m808 > ref808 and mours < refours, (m808, ref808, mours, refours)
+    assert abs(m808 / mours - 1.0) > 0.15, (m808, mours)
+
+
 def test_the_committed_result_files_noise_floor_control_excludes_the_floor_artefact():
     """The control's verdict, pinned. Our render is the NOISIER one in M
     (-33.9 dB against the 808's -60.9), so the noise is added to the 808's

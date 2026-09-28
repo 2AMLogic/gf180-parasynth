@@ -316,6 +316,53 @@ says so itself in one qualitative sentence. Filed as a follow-up rather than pat
 
 ---
 
+## 5b. Reconciliation with `../mid-band/` — the same numbers, a different tolerance
+
+**Two instruments were built for #400 in parallel, by different agents, and they reach opposite-sounding
+conclusions.** `tools/cymbal_mid.py` (`../mid-band/README.md`, PR #410) compares the 1–2.5 kHz band's **absolute**
+decay time against the repository's ±50 % time tolerance and concludes *"the defect is a level, not a decay."* This
+document compares the same band against **the same record's own low band** and concludes the decay is wrong. Read
+carelessly they contradict each other. They do not, and the reason matters more than either headline.
+
+**They agree on every number.** At CY5025, on the absolute quantity:
+
+| | 1–2.5 kHz decay | reference band (2.9–4.1 kHz) | ratio |
+|---|---|---|---|
+| 808 CY5025 | `cymbal_mid` 631.6 ms · this 662.2 ms | **591.16 ms** | **1.120** |
+| shipped | `cymbal_mid` 527.5 ms · this 514.3 ms | **590.56 ms** | **0.871** |
+| candidate 3 | `cymbal_mid` 451.2 ms · this 504.3 ms | 570.31 ms | 0.884 |
+
+The two instruments' absolute figures differ by 2–5 % on the 808 and shipped (different definitions — an EDT10 fitted
+over 0 to −10 dB against a raw Schroeder crossing at −10 dB, in different windows), which is agreement, not
+disagreement. Both also agree on the *level*: `cymbal_mid` has shipped 3.9 dB hot in M relative to the full band and
+candidate 3 8.5 dB quiet; this document has shipped 0.45 dB hot relative to Ln and candidate 3 3.6 dB quiet. Same
+signs, same story.
+
+**The difference is entirely in the denominator, and one number settles it:**
+
+> **T_Ln is 591.16 ms for the 808 and 590.56 ms for our shipped render — a 0.1 % match.**
+
+The low band's own decay is already *exactly* right. So the ±50 % time tolerance — which exists because the TR-808's
+bridged-T resonators vary ±50 % in Q unit to unit, and τ ∝ Q — is being spent on a variation that demonstrably is not
+present in this comparison. Against a reference band that matches to 0.1 %, a 20 % error in the band beside it is not
+inside the tolerance in any meaningful sense; it is 200× the variation the reference band exhibits. That is precisely
+what a within-record ratio measures and an absolute comparison cannot: **rho needs no tolerance for unit-to-unit
+variation because it cancels it.**
+
+**So the defensible joint statement is both, not either:**
+
+- the 1–2.5 kHz **level** is a real defect where candidate 3 is concerned (it is 3.6–8.5 dB too quiet) and a small one
+  for the shipped kit (0.45–3.9 dB hot) — `../mid-band/`'s finding, and §5 above adds that **no documented filter can
+  supply the level the machine has**, at any balance;
+- the 1–2.5 kHz **decay relative to the low band** is also a real defect, in the shipped kit and in candidate 3
+  alike, and it is invisible to an absolute comparison carrying a ±50 % tolerance.
+
+Neither document should be cited alone for "is the 1–2.5 kHz decay wrong?". `../mid-band/`'s §5 conclusion is sound
+for the quantity it measures and its tolerance; it should be read as *"absolute M decay is within the unit-to-unit
+tolerance"*, which is what it demonstrates, rather than as *"M's decay is right"*, which this measurement contradicts.
+
+---
+
 ## 6. Wrong-then-right rate: 7, all caught by controls rather than by inspection
 
 Published here because that rate is how a reader calibrates any single figure above.
