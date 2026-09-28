@@ -112,6 +112,11 @@ That map is **not** a measurement of the instrument. Its knob laws need their ow
 claim can be made. Wrong-then-right 2: I rendered through `kit_at` first and nearly reported a 10 dB band error that
 the shipped instrument does not have.
 
+**This blocker was cited four times as "#371" and #371 is a merged pull request, not an open issue** — step 1 of
+this chain. So the thing gating acceptance item 3 of #396, the listening pack's other 24 settings and `gate-379`'s
+§2 selection argument was tracked by nothing. It now has its own issue; `balance/README.md` §6 lists the four
+citations that need correcting to point at it.
+
 > **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
 > `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by
 > `tools/werner_fig4.py`, and a second negative that eliminates the filter values as the cause).
@@ -128,6 +133,13 @@ the shipped instrument does not have.
 > measurement says why: the 1–2.5 kHz error that remains is **time-dependent** (our thirds fall 5–11 dB
 > more than the 808's between the strike and 50–300 ms, a figure identical in the shipped kit, candidate 2
 > and candidate 3), so no filter magnitude and no inter-band balance can be the answer to it.
+>
+> **The inter-band balance is `balance/README.md`** — the half #396 left open, now **REFUSED with the reason
+> measured** rather than deferred. The obstacle is not the 9–18 dB of Figure 9 window this file and reference §18
+> blamed: at the frequency each band's level is actually set, those bounds are 7.4 / 13.9 / 0.04 dB. The obstacle is
+> the three swing VCAs' drive levels, which no W14b figure plots — a +38.2 dB gap in the short band against the
+> shipped-kit level rule. Applying every resolved factor with the drives held equal was rendered and lands H−L at
+> 24.38 dB against the 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it.**
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 

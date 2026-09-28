@@ -816,6 +816,23 @@ and the short band +10.0 dB above the low band. The
 VCAs' asymmetric clipping is what makes the sum "sizzle"; a linear VCA gives a
 flat, chorus-like tone.
 
+**The filter chain is not the whole band balance, and the missing factor is the
+larger one [measured: `tools/cymbal_band_balance.py`,
+`docs/scorecard/cymbal-369/balance/`].** Including the tone stage, and
+evaluated at the frequency each band's level is actually set (3175 Hz for the
+low band, 10079 Hz for both high bands), the circuit puts the DECAY band
+**+17.2 dB** and the short band **+24.7 dB** above the low band. But **three
+separate envelope generators and three separate swing VCAs (Q16/Q17/Q18) sit
+between the band-passes and the high-passes, and no W14b figure plots them.**
+Against the model's own shipped-kit level rule that leaves a gap of +9.9 dB
+(DECAY) and **+38.2 dB (short)** unaccounted for, an order of magnitude more
+than the tone stage's own figure-reading bound at those frequencies (7.4 /
+13.9 / 0.04 dB). Applying the resolved factors with the VCA drives held equal
+was rendered and measured: H−L 24.38 dB against the 808 CY5025's 8.16, where
+the level rule it replaced reads 12.09. **So the band balance needs the VCA
+drives from the schematic as well as VR4's network; VR4 alone does not resolve
+it.**
+
 **Do not implement the level stage without the tone stage.** They are the same
 size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
 the rising slope and no tone stage is *further* from the machine than one with
@@ -1195,18 +1212,34 @@ envelopes.
   +24.0 dB excess tilt at CY5025, and it is the cymbal's largest single
   modelling error.
 
-  **What is still open is narrower than "the tone stage".** Figure 9 plots Ht1
-  on a 4 dB tall axis and Ht2 on a 3 dB tall one, so neither is plotted in the
-  cymbal's band at all, and their extrapolated values at 7.1 kHz carry an 18 dB
-  and a 9 dB spread over the sections a 3 dB window cannot exclude. The tone
-  stage's effect on **band balance** is therefore unresolved. Three routes, in
-  order: SN p.13's R/C values around VR4 (the only one that yields circuit
-  values); re-fitting Ht1/Ht2 with Ht3's measured poles held fixed, since three
-  transfer functions of one network to one output node share a denominator; or
-  applying only the tilt, normalised out of each band's gain, and leaving the
-  balance alone. Also unresolved: **which curve of each family is which k**.
-  Only k = 1.0 is marked, and the four other members carry no k value, so no
-  TONE knob position except fully-open is readable from this figure.
+  **What is still open is narrower than "the tone stage" — and it is NOT mostly
+  Figure 9's window** [`tools/cymbal_band_balance.py`,
+  `docs/scorecard/cymbal-369/balance/`]. Figure 9 plots Ht1 on a 4 dB tall axis
+  and Ht2 on a 3 dB tall one, so neither is plotted in the cymbal's band at
+  all, and at 7.1 kHz their extrapolations carry an 18 dB and a 9 dB spread.
+  **Those two figures are quoted at the wrong frequency for the balance
+  question.** Each band's level is set in one 1/3 octave (3175 Hz for the low
+  band, 10079 Hz for both high bands), and at those frequencies the same bound
+  is **7.4 dB (Ht1), 13.9 dB (Ht2) and 0.04 dB (Ht3, measured rather than
+  extrapolated)**.
+
+  What is actually unresolved is a factor **neither figure carries at all: the
+  three envelope generators' and swing VCAs' drive levels.** Against the
+  model's shipped-kit level rule, the filters-plus-tone balance alone leaves a
+  +9.9 dB (DECAY) and **+38.2 dB (short)** gap, and applying it with the VCA
+  drives held equal was rendered and lands 16.2 dB from the 808's band split
+  where the rule it replaced is 3.9 dB from it. **Two routes remain, and the
+  first needs both halves:** SN p.13's R/C values around VR4 *and* the envelope
+  generator / VCA drive networks (the only route that yields circuit values);
+  or re-fitting Ht1/Ht2 with Ht3's measured poles held fixed, since three
+  transfer functions of one network to one output node share a denominator —
+  which would narrow the tone term and still leave the VCA drives. Applying
+  only the tilt, normalised out of each band's gain, is what
+  `docs/scorecard/cymbal-369/candidate3/` did.
+
+  Also unresolved: **which curve of each family is which k**. Only k = 1.0 is
+  marked, and the four other members carry no k value, so no TONE knob position
+  except fully-open is readable from this figure.
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6

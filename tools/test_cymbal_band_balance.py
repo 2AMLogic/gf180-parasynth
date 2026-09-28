@@ -137,6 +137,19 @@ def test_the_models_recorded_peak_db_literals_are_the_artifacts(figs):
         assert cc.TONE_K1[band]["peak_db"] == pytest.approx(fit["gain_db"], abs=0.01), name
 
 
+def test_the_models_recorded_bounds_and_gap_are_the_tools(figs):
+    """`TONE_BOUND_AT_CENTRE_DB` and `BALANCE_GAP_DB` are the numbers the
+    model's docstring argues from. A literal that drifts from the tool that
+    produced it is failure-modes.md's "claims outliving their evidence"."""
+    fig9, corner = figs
+    for band in bb.BANDS:
+        got = bb.tone_term(band, fig9)["width_db"]
+        assert got == pytest.approx(cc.TONE_BOUND_AT_CENTRE_DB[band], abs=0.01), band
+    g = bb.gap_db(fig9, corner)
+    for band in bb.BANDS:
+        assert g[band]["gap_db"] == pytest.approx(cc.BALANCE_GAP_DB[band], abs=0.01), band
+
+
 # ---- the bound, evaluated where the levels are actually set ---------------
 
 
@@ -310,6 +323,29 @@ def test_the_committed_ablation_used_the_gaps_this_tool_computes(figs):
         assert v == pytest.approx(gaps[b]["gap_db"], abs=0.01), b
     assert blob["variant"] == "balance"
     assert blob["sources_dirty"] is False
+
+
+# `docs/scorecard/cymbal-369/balance/README.md` §4, as (tilt, worst, n>6) per
+# window. A table in a document is not a fact: these are re-derived from the
+# record on every run, so a scorecard number that drifts from its render breaks
+# the suite instead of quietly outliving its evidence.
+ABLATION_SUMMARY = {"0-50ms": (8.4, 17.1, 8),
+                    "50-300ms": (19.6, 17.0, 9),
+                    "300-1000ms": (21.6, 14.8, 10)}
+
+
+@pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")
+def test_the_scorecard_summary_table_is_the_records_own_numbers():
+    blob = json.loads(ABLATION.read_text())
+    for window, (tilt, worst, n) in ABLATION_SUMMARY.items():
+        r = blob["thirds"][window]["candidate_minus_808"]
+        keys = list(r)
+        assert r[keys[-1]] - r[keys[0]] == pytest.approx(tilt, abs=0.05), window
+        assert max(abs(v) for v in r.values()) == pytest.approx(worst, abs=0.05), window
+        assert sum(1 for v in r.values() if abs(v) > 6.0) == n, window
+    assert blob["bands"]["candidate"]["H_minus_L_db"] == pytest.approx(24.38, abs=0.01)
+    assert blob["bands"]["candidate"]["H"]["edt10_ms"] == pytest.approx(69.9, abs=0.1)
+    assert blob["levels"]["ablation"]["common_scale_db"] == pytest.approx(-33.82, abs=0.01)
 
 
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")

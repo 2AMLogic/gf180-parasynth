@@ -90,11 +90,32 @@ the two digitised artifacts and REFUSES outside its bound):
     N_NUMS 11. No mode of revision 3 carries numerator code 3, so the shared
     `modal_fixed` decode does NOT need HP3 and neither does modal_dp.v -- the
     RTL change revisions 1 and 2 would have required is no longer required.
-  * NOT APPLIED, exactly as in revision 2: the inter-band balance. TONE_K1's
-    `peak_db` (9-18 dB uncertain, #396) and the filter chain's own
-    HH2_PASS_DB / HH3_PASS_DB / BP_PEAK_DB stay recorded and unused; the
-    levels stay on the shipped-kit 1/3-octave rule. One question at a time.
-  * NOT APPLIED: the TONE knob law. Figure 9 identifies only k = 1.0.
+  * REFUSED, not merely deferred: the inter-band balance. TONE_K1's `peak_db`
+    and the filter chain's own HH2_PASS_DB / HH3_PASS_DB / BP_PEAK_DB stay
+    recorded and unused; the levels stay on the shipped-kit 1/3-octave rule.
+    Revision 3 left this as "one question at a time"; #396 then asked the
+    question and `tools/cymbal_band_balance.py` answered it with a measurement
+    (`docs/scorecard/cymbal-369/balance/`):
+
+      - The blocking uncertainty is NOT the 9-18 dB of Figure 9 window that
+        revision 3's comment below blames. Evaluated where each band's level is
+        actually SET rather than at a shared 7.1 kHz, the low band's tone term
+        is 7.4 dB wide and the short band's is 0.04 dB (measured, not
+        extrapolated).
+      - What blocks it is a factor neither figure carries: the three swing
+        VCAs' drive levels (Q16/Q17/Q18). Against this rule, the
+        filters-plus-tone balance alone demands +9.9 dB on the decay band and
+        +38.2 dB on the short band.
+      - Applying every resolved factor with the VCA drives held equal is
+        rendered as `cymbal_candidate_eval.py --variant balance` and puts the
+        band split 16.2 dB from the 808 CY5025 (H-L 24.38 against 8.16) where
+        this rule is 3.9 dB from it, and takes the strike window from 0 of 14
+        thirds outside +-6 dB to 8 of 14. So the balance is not applicable
+        until SN p.13's VR4 network AND the VCA drives are both digitised.
+  * NOT APPLIED: the TONE knob law. Figure 9 identifies only k = 1.0, and the
+    knob-law render is separately not the instrument
+    (`docs/scorecard/cymbal-369/README.md` §4, and §6 of `balance/README.md`
+    for why that blocker needed filing as an issue at all).
 
 Prediction, stated before the render (docs/scorecard/cymbal-369/candidate3/):
 removing the differentiator's zero tilts the low band's response, relative to
@@ -199,7 +220,12 @@ BP_PEAK_DB = {"low": 22.95, "high": 24.10}                  # recorded, not appl
 #     Ht1 on a 4 dB axis and Ht2 on a 3 dB axis, so neither is plotted in the
 #     cymbal's band; their 7.1 kHz values carry an 18 dB and a 9 dB bound.
 #     Applying these three peak levels as if they were circuit values is the
-#     mistake this comment exists to prevent. STILL NOT APPLIED.
+#     mistake this comment exists to prevent. STILL NOT APPLIED -- and #396
+#     found the reason is bigger than this bound: see the docstring's REFUSED
+#     bullet and tools/cymbal_band_balance.py. At each band's OWN calibration
+#     centre the bounds are TONE_BOUND_AT_CENTRE_DB below, not the 18 / 9 dB
+#     read at 7.1 kHz; the unmeasured VCA drives are what actually block the
+#     balance.
 TONE_K1 = {
     "low":   {"f0": 274.4, "q": 0.383, "peak_db": -26.44,
               "poles_hz": (127.7, 589.5), "plotted_hz": (121.0, 563.8)},
@@ -211,6 +237,21 @@ TONE_K1 = {
 # Ht3 is the one path plotted across the whole axis; this is its own measured
 # tilt over 2-20 kHz, against the LEVEL stage's +16.6 dB from Figure 10.
 TONE_TILT_2K_20K_DB = -17.7
+# How wide `peak_db`'s uncertainty is AT THE FREQUENCY EACH BAND'S LEVEL IS SET
+# (tools/cymbal_candidate_eval.CENTRE: 3175 / 10079 / 10079 Hz), from
+# tools/cymbal_band_balance.py via werner_fig9.extrapolation_bound. The 18 dB
+# and 9 dB figures #396 and reference §18 quote are the same bound at 7.1 kHz,
+# which is not where two of the three bands are levelled -- and the short
+# band's is MEASURED there, not extrapolated. Bound to the tool by
+# tools/test_cymbal_band_balance.py so it cannot outlive its evidence.
+TONE_BOUND_AT_CENTRE_DB = {"low": 7.36, "decay": 13.90, "short": 0.04}
+# The inter-band balance's verdict (#396), in one place, with its number: the
+# gap between the circuit's filters-plus-tone balance and the shipped-kit level
+# rule this module uses, per band, in dB relative to the low band. It is what
+# the two absent artifacts (SN p.13's VR4 network, the VCA drives) have to
+# account for, and it is far larger than TONE_BOUND_AT_CENTRE_DB -- which is
+# why the balance is REFUSED rather than applied.
+BALANCE_GAP_DB = {"low": 0.0, "decay": 9.85, "short": 38.23}
 # The LEVEL buffer's differentiator corner, W14b Figure 10 via
 # tools/werner_fig4.py (docs/scorecard/cymbal-369/werner-fig4.json,
 # level_stage.one_pole_corner_hz). Revision 3 needs it as a NUMBER, not as a
