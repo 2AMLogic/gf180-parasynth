@@ -237,11 +237,55 @@ untouched, and that scope is unaffected. The balance above is available for whic
 up the levels — #390 does not build that candidate (out of scope by its own acceptance criteria) and does not
 alter `model/cymbal_candidate.py`.
 
+### The read is pinned to a source someone else can re-open
+
+"SN p.13" is a citation, not evidence: nothing in the first pass let a reader check that the twelve component
+values were read off the page correctly, or even off the same printing. So the scan is now pinned by **SHA-256**
+with its page number and the two crop boxes (400 dpi and 500 dpi, coordinates recorded) that every value came
+from. `tools/tone_stage_schematic.py --verify-source <sn.pdf>` re-renders exactly those crops after checking the
+hash, and **REFUSES with exit 3** on a missing file or a mismatch rather than answering from a different
+printing — a plausible-looking page 13 from another revision is precisely the failure that would not announce
+itself. The PDF is a ~6 MB third-party download and is deliberately **not** a test dependency: the tests cover
+the refusal paths, and `make verify` still needs no network.
+
+Re-reading against that crop (2026-09-28) confirmed all twelve values, VR4's wiper-to-ground wiring, and Q25's
+emitter as Ht1's source — and settled one thing the fit could only choose:
+
+**The rail assignment is confirmed by the schematic, independently of the fit.** The two controls above show
+that a swapped assignment fits 20–100× worse, which is evidence *from Figure 9*. The scan gives it a second,
+unrelated derivation: the top rail's op-amp has a **three**-capacitor input network (C49 .0033, C53 .001,
+C54 .001) and the bottom rail's has **two** (C51 .001, C52 .001), which is exactly the 3rd-order/2nd-order split
+already recorded for Hh3/Hh2 in `docs/tr808-reference.md` §10 — and the bottom op-amp is the one wired to VR2
+**"CY DECAY"**, which is Hh2's band by definition. Two independent routes, same answer.
+
+### A test that could not run looked exactly like a test that passed
+
+The claim "five capacitors, no cap-only loop, therefore fifth-order with one shared denominator" is the most
+structural thing in this derivation — it is what makes each narrow window's 2-pole fit a *local approximation of
+a known object* rather than a competing model. It was tested only under `sympy`, and **no workflow in this
+repository installs `sympy`** (they install `numpy scipy pytest`, plus `pyyaml`). The test therefore *skipped* in
+CI, where a skip is reported beside passes and is read as one.
+
+It is now derived a second way, with numpy/scipy only, so it runs wherever the suite runs:
+
+- the network is rebuilt as a plain `(G + sC)` pencil over **seven** nodes, splitting each series R-C branch at
+  its own internal node, rather than folding it into `Z = R + 1/(sC)` by hand as `solve_vtone` does;
+- "fifth-order" becomes a **count** of finite generalised eigenvalues of `(-G, C)`, not an assertion about a
+  polynomial's degree: 128.31 / 509.09 / 681.37 / 1635.75 / 4191.51 Hz;
+- "one network, one denominator" becomes **structural**: neither `G` nor `C` is a function of which source is
+  driven, so all three paths share the pencil and hence the poles by construction;
+- the two formulations agree to **~1e-14 dB**, which turns `solve_vtone`'s hand elimination from an assumed step
+  into a checked one. Injecting an R119/R129 swap into one of them alone diverges by **2.62 dB**, so that
+  agreement test is not vacuous.
+
+The `sympy` test is kept as a third, symbolic witness and still skips where `sympy` is absent — it is now
+corroboration rather than the only thing standing behind the claim.
+
 Evidence and code: `tools/tone_stage_schematic.py`, `tools/test_tone_stage_schematic.py`. Component values and
 the full nodal-analysis derivation are documented in the module's own docstring and in
 `docs/tr808-reference.md` §10/§18.
 
-## 6. Wrong-then-right, twice
+## 6. Wrong-then-right, four times
 
 1. **Every curve in the top sub-plot stopped at 13.5 kHz.** The containment test that selects a sub-plot's own
    polylines used a 1e-6 pt tolerance; MATLAB's exporter rounds to 1/60 pt in the 0.1-scaled space it emits, so a
@@ -252,6 +296,19 @@ the full nodal-analysis derivation are documented in the module's own docstring 
    extrapolation control expected a full-range one, and `max()` over an empty list raised `ValueError`. A crash
    in a gate is not a verdict; `truncation_control` now REFUSES with the reason, and the control passes for the
    right reason rather than by exception.
+3. **The schematic route shipped with an uncheckable citation.** The twelve component values were tagged
+   "SN p.13" and nothing more, so no reader could confirm they had been read correctly, or off the same printing.
+   The values turned out to be right — re-reading them against a hash-pinned scan changed none of them — but
+   *that they were right was luck from the reader's point of view*, because there was no way to tell. Pinning the
+   SHA-256, page and crop boxes is the fix; the re-read also produced a genuinely new result (the schematic
+   confirms the rail assignment independently of the fit), which is the usual pattern: the check that was skipped
+   because "the answer is already known" is the one that had something left to say.
+4. **The load-bearing structural test was gated on a package CI does not install.** "Fifth-order, one shared
+   denominator" was asserted only under `sympy`, so in CI it *skipped*. A skip sits in the report next to passes
+   and is read as one, which makes a skipped check of a central claim worse than an absent one — the same shape
+   as the unsatisfiable-gate problem `CLAUDE.md` warns about, arriving from the opposite direction. Now derived
+   with numpy/scipy as an eigenvalue count, cross-checked against a second node formulation. **Worth assuming
+   this recurs elsewhere in this suite**: the general check is "does this test run in CI, or only here?".
 
 ## Files
 

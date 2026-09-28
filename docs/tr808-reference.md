@@ -812,11 +812,29 @@ to 0.001–0.013 dB rms — including the fully-measured Ht3 curve across three
 decades, not merely its narrow local window. The network is independently
 5th-order (five capacitors, no cap-only loop), matching W14b's own word for
 it, and its three transfer functions share **exactly one pole set**
-(128/509/681/1636/4192 Hz) — "one network, one denominator" is now an
-algebraic fact rather than a plausibility argument. Two wrong rail
-assignments (swapping which op-amp is which, or putting Hh1's pre-filter on
-the other band) fit 20–100× worse, which is what makes this a measurement and
-not a curve-fit coincidence (`tools/test_tone_stage_schematic.py`).
+(128.3/509.1/681.4/1635.7/4191.5 Hz) — "one network, one denominator" is now
+an algebraic fact rather than a plausibility argument, because neither matrix
+of the `(G + sC)` pencil depends on which source is driven; only the
+right-hand side does. Two wrong rail assignments (swapping which op-amp is
+which, or putting Hh1's pre-filter on the other band) fit 20–100× worse,
+which is what makes this a measurement and not a curve-fit coincidence
+(`tools/test_tone_stage_schematic.py`).
+
+**The read is pinned to a re-renderable source, and re-reading it settled one
+more thing than the fit could.** "SN p.13" is not checkable on its own, so the
+scan is pinned by SHA-256 with the page and the two crop boxes every value was
+read off; `tools/tone_stage_schematic.py --verify-source <sn.pdf>` re-renders
+them and **REFUSES** on a missing file or a hash mismatch rather than
+answering from a different printing. Re-verified 2026-09-28: all values, VR4's
+wiper-to-ground wiring, and Q25's emitter as Ht1's source match the scan.
+The crop also **confirms the rail assignment independently of the fit** — the
+top rail's op-amp has a three-capacitor input network (C49 .0033, C53 .001,
+C54 .001) and the bottom rail's has two (C51 .001, C52 .001), which is exactly
+the 3rd-order/2nd-order split recorded for Hh3/Hh2 in the table above, and the
+bottom op-amp is the one wired to VR2 "CY DECAY", which is Hh2's band by
+definition. So the assignment is reached two independent ways, not one. The
+scan is a third-party download and deliberately **not** a test dependency:
+`make verify` never needs the network.
 
 Reading the three transfer functions directly off the solved network (no
 extrapolation needed — it covers the whole audio band) at the cymbal's own
@@ -1250,14 +1268,37 @@ envelopes.
   **one** shared free parameter (the pot's wiper fraction) and no per-path
   gain fudge. Route 2 (a shared-denominator constrained fit, holding Ht3's
   poles fixed while refitting Ht1/Ht2) was accordingly not needed — route 1
-  succeeded outright rather than merely narrowing the bound, and the two
-  wrong-rail-assignment controls in `tools/test_tone_stage_schematic.py` show
-  the fit is not a coincidence (20–100× worse when a band is put on the wrong
-  rail). Resolved balance, relative to Ht3 across 3.45–7.1 kHz: **Ht2 +7.0 to
-  +7.6 dB, Ht1 −13.9 to −18.1 dB.** Whether/how to apply this into a
-  candidate is **#396's job, not this issue's** — #396 already scopes "the
-  tilt only, levels unchanged" for its own step and can pick up the resolved
-  balance from here for a later revision.
+  succeeded outright rather than merely narrowing the bound, and it did so on
+  a *stronger* footing than route 2 could have offered: route 2's premise is
+  the shared denominator, whereas route 1 *derives* it, so there is nothing
+  left for route 2 to test. The two wrong-rail-assignment controls in
+  `tools/test_tone_stage_schematic.py` show the fit is not a coincidence
+  (20–100× worse when a band is put on the wrong rail). Resolved balance,
+  relative to Ht3 across 3.45–7.1 kHz: **Ht2 +7.0 to +7.6 dB, Ht1 −13.9 to
+  −18.1 dB.** Whether/how to apply this into a candidate is **#396's job, not
+  this issue's** — #396 already scopes "the tilt only, levels unchanged" for
+  its own step. What it can now take from here is a *level* per band as well
+  as a shape: normalise each path to 0 dB at 1 kHz as it already plans, then
+  reinstate the three offsets above rather than the current inter-band gain
+  rule. That is a revision-3 change and needs its own before/after on
+  conditions not used to select it; nothing here claims it sounds better yet.
+
+  **Two things about this entry's own evidence, recorded because they were
+  wrong-then-right.** (1) The component values were cited as "SN p.13" and
+  were not independently checkable; they have since been re-read against a
+  SHA-256-pinned scan at a recorded page and crop box, and all of them, plus
+  VR4's grounded wiper and Q25's emitter as Ht1's source, hold. The re-read
+  also confirmed the rail assignment from the schematic itself (three-cap vs
+  two-cap op-amp input networks, and which op-amp VR2 "CY DECAY" is wired to),
+  where previously only the fit had chosen it. (2) The "fifth-order, one
+  shared denominator" claim — the most structural claim in §10 — was tested
+  only under `sympy`, which **no workflow here installs**, so that test
+  *skipped* in CI and read like a pass. It is now also derived with
+  numpy/scipy only, as a count of finite generalised eigenvalues of the
+  `(G + sC)` pencil, and cross-checked against a second, independent node
+  formulation that agrees to ~1e-14 dB. A skipped check of a load-bearing
+  claim is the failure mode `docs/failure-modes.md` names; it is worth
+  assuming it will recur elsewhere in this suite.
 
   **Still open, and explicitly out of scope for #390: which curve of each
   family is which k.** Only k = 1.0 is marked, and the four other members
