@@ -55,6 +55,9 @@ refprofile/cache/
 
 # Pinned CI simulator source and release binary cache.
 .tools/verilator-5.052/
+
+# Repo Skills guard-hook logs (machine-local; carry absolute paths)
+.claude/skills/repo/logs/
 # >>> loom-managed (do not edit) >>>
 # Loom runtime state (don't commit these)
 .loom-in-use
