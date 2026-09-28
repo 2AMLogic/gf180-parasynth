@@ -101,11 +101,21 @@ length is a function of the DECAY code alone:
 So NO single window covers all 25 settings, and this module reports TWO frozen
 windows, never mixed inside one comparison:
 
-    1.5 s   all 25 settings answer -- the only window in which the whole knob
-            grid can be reported (#369 acceptance 3, "report every setting")
-    2.0 s   20 of 25 answer; the five DECAY 00 files REFUSE. This is the window
-            that reaches the deeper depths, and it is the one CY5025 (the D14A
-            anchor, a DECAY 25 file at 2.001 s) is measured in.
+    1.5 s   all 25 records are long enough; rho answers at DECAY 00 and 25
+    2.0 s   20 records are long enough (the five DECAY 00 files REFUSE as too
+            short); rho answers at DECAY 25 and 50. This is the window the D14A
+            anchor CY5025 (a DECAY 25 file, 2.001 s) is measured in.
+    3.5 s   10 records are long enough; rho answers at DECAY 75 and 10, and at
+            all six depths.
+
+Being long enough is necessary and not sufficient: at DECAY 10 and 75 the LOW
+band is still ringing at 2.0 s (CY5010's Ln has 12.5 dB of end margin against
+the 15 dB the guard requires), so the REFERENCE band refuses and rho refuses
+with it at every depth. That is why a third window exists rather than two.
+
+The UNION of the three covers all 25 settings, which is #369 acceptance 3's
+"report every setting" for this quantity; two windows cover 15. `coverage()`
+computes it and a test asserts it, so the claim cannot go stale.
 
 `run_case.render_drum_solo("CY")` is 3.6 s, so our renders support both.
 
@@ -206,7 +216,12 @@ LOW_BANDS = {"M": (891.0, 2828.0), "Mn": (891.0, 1782.0)}
 REF_BAND = "Ln"                                   # cymbal_bands.BANDS["Ln"]
 BANDS = dict(LOW_BANDS, **{REF_BAND: cb.BANDS[REF_BAND]})
 DEPTHS = (-5.0, -10.0, -15.0, -20.0, -25.0, -30.0)
-TRIM_S = 2.0                     # the Fischer CY files are 2.013 s; see above
+TRIM_S = 2.0                     # the default; see WINDOWS_S and the docstring
+# The three frozen common analysis windows. Their UNION covers all 25 Fischer
+# settings and no single one of them does -- see `coverage()`, which asserts it,
+# and the DECAY-to-length table in the module docstring. A comparison is only
+# ever made inside one window.
+WINDOWS_S = (1.5, 2.0, 3.5)
 TRUNC_MARGIN_DB = 15.0
 ENERGY_S = 1.0
 ONSET_S = 0.005                  # the click window of the onset-confound figure
@@ -811,6 +826,35 @@ def noise_floor_control(refs, setting="CY5025", *, trim_s=TRIM_S, band="M") -> d
     return out
 
 
+def coverage(res: dict, band="M", depth="-10") -> dict:
+    """Per setting, which of the frozen windows actually ANSWERS rho -- and the
+    union, which is the claim #369 acceptance 3 makes ("report every setting").
+
+    This is the number that has to be stated rather than implied, because no
+    single window can do it: a 1.5 s window reaches DECAY 00 and 25, a 2.0 s one
+    reaches 25 and 50, and only a 3.5 s one reaches 75 and 10, whose LOW band is
+    still ringing at 2.0 s (CY5010's Ln has 12.5 dB of end margin against the
+    15 dB the guard requires, so the REFERENCE band refuses and rho refuses with
+    it at every depth). Three windows cover all 25; two cover 15."""
+    out, per_window = {}, {}
+    for wname, w in res["windows"].items():
+        answered = set()
+        for s, m in w["fischer"].items():
+            if "rho" in m and m["rho"][band][depth] is not None:
+                answered.add(s)
+                out.setdefault(s, []).append(wname)
+        per_window[wname] = sorted(answered)
+    settings = set()
+    for w in res["windows"].values():
+        settings |= set(w["fischer"])
+    return {"band": band, "depth": depth,
+            "by_setting": {s: out.get(s, []) for s in sorted(settings)},
+            "by_window": {k: len(v) for k, v in per_window.items()},
+            "n_settings": len(settings),
+            "n_covered": sum(1 for s in settings if out.get(s)),
+            "uncovered": sorted(s for s in settings if not out.get(s))}
+
+
 def summarise(res: dict) -> dict:
     """The comparison the scorecard quotes, computed from a `--out` JSON rather
     than retyped: per window, per band, per depth, the 808's range across the
@@ -856,6 +900,10 @@ def summarise(res: dict) -> dict:
 
 def print_summary(res: dict) -> None:
     s = summarise(res)
+    c = coverage(res)
+    print(f"coverage of rho_{c['band']}({c['depth']}): {c['n_covered']}/{c['n_settings']} settings answer in "
+          f"at least one frozen window; per window " + ", ".join(f"{k} {v}" for k, v in c["by_window"].items())
+          + (f"; NOT covered anywhere: {', '.join(c['uncovered'])}" if c["uncovered"] else ""))
     for wname, w in s["windows"].items():
         print(f"\n=== {wname} window: {w['n_answered']}/{w['n_settings']} settings ACCEPT the window "
               f"({w['n_refused_short']} refuse it as too short). How many then answer a given DEPTH "
@@ -887,7 +935,7 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true", help="the properties x defects matrix only")
     ap.add_argument("--all-settings", action="store_true", help="all 25 Fischer CY files, not just CY5025")
     ap.add_argument("--candidate", action="store_true", help="also render and measure the #369 candidate (~2 min)")
-    ap.add_argument("--windows", default="1.5,2.0",
+    ap.add_argument("--windows", default=",".join(f"{w:g}" for w in WINDOWS_S),
                     help="comma-separated common analysis windows, seconds. A comparison may only be "
                          "made inside one window; the Fischer set's record length varies with DECAY.")
     ap.add_argument("--report", type=pathlib.Path, default=None,

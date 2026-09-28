@@ -507,14 +507,15 @@ def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_s
     if not RESULT.is_file():
         pytest.skip(f"{RESULT} is not present")
     s = lt.summarise(json.loads(RESULT.read_text()))
-    assert set(s["windows"]) == {"1.5s", "2.0s"}
+    assert set(s["windows"]) == {"1.5s", "2.0s", "3.5s"}
     assert s["windows"]["1.5s"]["n_refused_short"] == 0
     assert s["windows"]["2.0s"]["n_refused_short"] == 5
-    for wname in ("1.5s", "2.0s"):
+    assert s["windows"]["3.5s"]["n_refused_short"] == 15
+    for wname in ("1.5s", "2.0s", "3.5s"):
         for band in ("M", "Mn"):
-            r = s["windows"][wname][f"rows"][f"{band}-10"]
+            r = s["windows"][wname]["rows"][f"{band}-10"]
             # The whole finding, in one shape: the 808 above the instrument's
-            # zero, both our renders below it, in both bands and both windows.
+            # zero, both our renders below it, in every band and every window.
             assert r["min"] > r["shipped"], (wname, band, r)
             assert r["shipped"] < r["baseline_min"], (wname, band, r)
             assert r["candidate"] < r["baseline_min"], (wname, band, r)
@@ -524,6 +525,29 @@ def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_s
     assert s["windows"]["2.0s"]["rows"]["M-10"]["n_808_above_baseline_max"] == 10
     # Mn is the leakage-proof one: 8 of 10, which is the honest weaker figure.
     assert s["windows"]["2.0s"]["rows"]["Mn-10"]["n_808_above_baseline_max"] == 8
+
+
+def test_the_three_frozen_windows_cover_every_setting_and_no_two_of_them_do():
+    """#369 acceptance 3 is "report every setting", and for a decay quantity that
+    is a claim about WINDOWS, not about loading 25 files. Asserted both ways: the
+    union of the three frozen windows must answer all 25, and dropping the 3.5 s
+    one must leave settings uncovered -- otherwise the third window is
+    unjustified and should go."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    res = json.loads(RESULT.read_text())
+    assert set(res["windows"]) == {f"{w:.1f}s" for w in lt.WINDOWS_S}, sorted(res["windows"])
+    c = lt.coverage(res)
+    assert c["n_settings"] == 25, c
+    assert c["uncovered"] == [], c
+    assert c["n_covered"] == 25, c
+    two = lt.coverage({"windows": {k: v for k, v in res["windows"].items() if k != "3.5s"}})
+    assert two["uncovered"], "the 3.5 s window adds nothing and should be dropped"
+    assert two["n_covered"] == 15, two
+    # Each window pulls its weight: none of the three is redundant.
+    for drop in res["windows"]:
+        c2 = lt.coverage({"windows": {k: v for k, v in res["windows"].items() if k != drop}})
+        assert c2["n_covered"] < 25, f"the {drop} window is redundant"
 
 
 def test_the_committed_result_files_noise_floor_control_excludes_the_floor_artefact():
