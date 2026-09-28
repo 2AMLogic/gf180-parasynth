@@ -112,6 +112,12 @@ That map is **not** a measurement of the instrument. Its knob laws need their ow
 claim can be made. Wrong-then-right 2: I rendered through `kit_at` first and nearly reported a 10 dB band error that
 the shipped instrument does not have.
 
+**Step 9 names the mechanism, which is worse than a miscalibration.** `_cy_hi_amp` solves in closed form for the
+**808's own** measured 5–13 kHz / 2–5 kHz ratio at each TONE position, so a render driven through it reproduces the
+reference's band ratio by construction and cannot be evidence about ours. Any TONE comparison drawn through
+`kit_at`'s `CY.tone_ratio` law is therefore circular; `tone-knob/README.md` supplies the replacement, taken from
+VR4's wiper rather than from the recordings.
+
 **This blocker was cited four times as "#371" and #371 is a merged pull request, not an open issue** — step 1 of
 this chain. So the thing gating acceptance item 3 of #396, the listening pack's other 24 settings and `gate-379`'s
 §2 selection argument was tracked by nothing. It now has its own issue, **#413**; `balance/README.md` §6 lists the
@@ -191,6 +197,29 @@ four citations that need correcting to point at it.
 > are the balances that starve M, so `n_balances_in_808_box` is **0** for the linear chain at every
 > balance and for the clipper at every position, drive and asymmetry. Wrong-then-right rate of step 8:
 > **4**, one of them a verdict function that reported a match from two rows twelve dB apart.
+>
+> **Step 9 is `tone-knob/README.md`**, and it does not ask any of step 8's three candidates — it asks the
+> question acceptance 3 needs answered before any of them can be judged across the knobs, and which §4 of
+> this file says the existing map cannot answer. **The TONE knob is VR4's wiper, and the schematic predicts
+> the machine's own TONE law**: with `alpha = TONE/100` read off the pot's "20K(B)" linear-taper marking —
+> nothing fitted to the recordings — and ONE inter-band balance shared by all 25 settings, #417's nodal
+> solution reproduces the 808's H − L versus TONE to **0.33 dB** against a 3.0 dB bound, over a measured
+> span of 7.1–8.1 dB per DECAY column. The inverted wiper law (5.47), no tone network at all (5.46) and the
+> low band on the top rail (6.95) each have the same two free numbers and are excluded. H's own EDT10 falls
+> 1.4–2.4× with TONE while the low band's moves 2.5–9.7 %, which is the same structure seen in a decay
+> rather than an energy.
+>
+> **And the residual is not by itself the evidence** — that half is worth more than the headline. The same
+> two free numbers also reach a *flat* TONE law (0.38 dB, at a decay-dominated balance) and a straight ramp
+> (0.34), so what is decisive is the three shapes and three structures they cannot reach. Three things stay
+> unresolved with their numbers: the exact shape of alpha(TONE) (five of seven swept mappings are inside the
+> bound), the Ht2/Ht3 rail assignment (**blind by construction** — both land in H), and the inter-band
+> balance, whose admitted region still fills the swept grid, so **this does not lift #396's refusal**.
+> Wrong-then-right rate of step 9: **7**, including an overstated headline that only a control written to
+> break it found, and a `--require-corpus` escalation that two documents described and `main()` never read —
+> so the two corpus-gated controls were documented as enforced and were enforced nowhere. The flag is now
+> wired, `make reference-integration` is the gate that passes it, and it is the one of the seven that no
+> control caught.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
@@ -203,7 +232,9 @@ Restore §10's structure, as a set of discrete choices checked against the circu
 **Budget.** 16 → 17+ modes. The operator has accepted padding the bank to 32, about +31 % of drum-section area. Paths and envelopes must be counted exactly.
 
 **Selection and confirmation.**
-- Select on the 9 development settings, once the knob law renders the shipped structure faithfully.
+- Select on the 9 development settings, once the knob law renders the shipped structure faithfully. **Step 9
+  supplies the TONE half of that law from the circuit** (`tone-knob/README.md`), and states why the existing
+  one cannot be used for it: §4 below is not merely a calibration defect, it is a closed loop.
 - Confirm on the 16 untouched settings, including CY2500.
 - Preserve the hats: D15A, D16A and OH00–OH75.
 - Then carry it through RTL, I²S and the deadlines, and produce the loudness-matched A/B pack (`tools/ab_808.py`, `tools/ab_808_loud.py`, committed here).

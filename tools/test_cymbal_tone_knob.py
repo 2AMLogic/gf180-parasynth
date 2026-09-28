@@ -7,15 +7,18 @@ apparatus can be shown to (a) recover a planted answer, (b) REJECT a planted
 wrong one, and (c) refuse rather than answer when a precondition fails. Those
 are the three groups below, in that order.
 
-Nothing here needs the ~30 MB Fischer corpus except the four tests that say so
-and skip without it: the committed `fischer.json` carries the 25 measurements
-the headline property runs on.
+Nothing here needs the ~30 MB Fischer corpus except the tests that say so and
+skip without it: the committed `fischer.json` carries the 25 measurements the
+headline property runs on. Where `${GF180_REQUIRE_TR808_REFS}=1` those skips
+become failures, `tools/test_run_case.py`'s convention exactly -- a required
+gate that goes green through skips has checked nothing.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 import pathlib
 import sys
 
@@ -228,11 +231,53 @@ def test_the_source_tilt_is_blind_and_by_how_much():
     assert abs(a - b) < 0.1, (a, b)
 
 
-def test_the_gate_passes_on_this_tree_without_the_corpus():
+@pytest.fixture(scope="module")
+def gate_without_corpus():
+    """The no-corpus gate, run ONCE. `tk.check()` takes ~5 s, and the three
+    tests below ask three different questions of the same run rather than
+    paying for it three times."""
+    return tk.check()
+
+
+def test_the_gate_passes_on_this_tree_without_the_corpus(gate_without_corpus):
     """CLAUDE.md: run the gate against the current state before committing it.
     An unsatisfiable gate is worse than no gate."""
-    ok, lines = tk.check()
+    ok, lines = gate_without_corpus
     assert ok, "\n".join(lines)
+
+
+def test_the_two_corpus_gated_controls_are_NO_VERDICT_and_not_a_pass(gate_without_corpus):
+    """Without the WAVs those two rows cannot be decided. Rule 5's condition 2:
+    a mutant that does not execute is NO VERDICT, which is not a pass -- so the
+    report must SAY so rather than omitting the row, which is the whole reason
+    the flag below has to exist."""
+    _, lines = gate_without_corpus
+    for d in tk.CORPUS_DEFECTS:
+        row = [ln for ln in lines if ln.startswith(d)]
+        assert len(row) == 1, (d, lines)
+        assert "NO VERDICT" in row[0], row[0]
+
+
+def test_require_corpus_is_reachable_from_the_command_line(tmp_path, capsys):
+    """The flag was documented in two places and `main` never read it, so the
+    escalation the docs promised did not exist. Known answer: the same tree,
+    the same absent corpus, TWO different exit codes -- 0 without the flag and
+    1 with it. If argparse ever stops wiring it, this test is what goes red.
+
+    And it must fail for the RIGHT reason: the two corpus-gated rows are what
+    refuse, while every property decidable without the WAVs still passes in the
+    same run. A gate that exits 1 because something else broke would satisfy
+    the exit codes and teach a reader the opposite of the truth.
+    """
+    argv = ["--check", "--refs", str(tmp_path / "no-corpus-here")]
+    assert tk.main(argv) == 0
+    assert tk.main(argv + ["--require-corpus"]) == 1
+    out = capsys.readouterr().out.splitlines()
+    assert "REFUSED: --require-corpus" in "\n".join(out), out
+    for d in tk.CORPUS_DEFECTS:
+        assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
+                   for ln in out), (d, out)
+    assert not [ln for ln in out if ln.rstrip().endswith("FAIL")], out
 
 
 # ---------------------------------------------------------------------------
@@ -356,10 +401,22 @@ def test_the_balance_is_only_constrained_in_its_difference():
 # the four that need the corpus
 # ---------------------------------------------------------------------------
 def _refs_or_skip():
+    """Optional locally, REQUIRED where ${GF180_REQUIRE_TR808_REFS}=1.
+
+    `make reference-integration` sets it, and that target's whole contract is
+    that a missing corpus REFUSES rather than skips -- an earlier version of
+    this helper skipped unconditionally, so adding this file to that target
+    would have added four tests that could go green having read nothing.
+    """
     refs = tk.rc.configured_refs()
-    if not (refs / "cy8").is_dir():
-        pytest.skip(f"the Fischer corpus is not present at {refs}")
-    return refs
+    if (refs / "cy8").is_dir():
+        return refs
+    msg = (f"the Fischer corpus is not present at {refs} (no cy8/); clone "
+           f"tidalcycles/sounds-tr808-fischer there or set {tk.rc.REFS_ENV}")
+    if os.environ.get(tk.rc.REFS_REQUIRED_ENV) == "1":
+        pytest.fail(f"REFUSED: {msg}. {tk.rc.REFS_REQUIRED_ENV}=1 makes this a required "
+                    f"gate, and a required gate does not pass by skipping.", pytrace=False)
+    pytest.skip(f"OPTIONAL local run, skipped: {msg}")
 
 
 @pytest.fixture(scope="module")
@@ -397,3 +454,12 @@ def test_the_corpus_gated_controls_fire(measured):
         red = [n for n in tk.PROPERTIES
                if clean[n]["ok"] is True and got[n]["ok"] is not True]
         assert red, defect
+
+
+def test_the_required_corpus_gate_is_satisfiable_where_the_wavs_are():
+    """The other half of the flag above, and the one that has to be run before
+    the Makefile target quoting it is committed: with the corpus present,
+    `--check --require-corpus` must EXIT 0. An unsatisfiable gate is worse than
+    no gate, so this is the test that would have caught one."""
+    refs = _refs_or_skip()
+    assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 0

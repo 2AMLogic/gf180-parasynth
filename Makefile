@@ -422,8 +422,14 @@ trial-bootstrap:
 ## they skip, marked OPTIONAL, when the corpus is absent; here a missing corpus
 ## is REFUSED (non-zero), because a required job green through skips checked
 ## nothing. Location: $GF180_TR808_REFS, else /tmp/tr808-ref.
+## #369 step 9's TONE knob law is here for the half of it CI cannot decide: its
+## two corpus-gated controls (WRONG_ANALYSIS_BANDS, SHORT_RECORD) report NO
+## VERDICT in the no-corpus job, and NO VERDICT is not a pass. `--require-corpus`
+## is what turns them into a failure, so this is the only place they are
+## actually enforced -- the claim its docstring makes, made true.
 reference-integration:
-	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py -q
+	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py tools/test_cymbal_tone_knob.py -q
+	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/cymbal_tone_knob.py --check --require-corpus
 
 board:
 	-@$(PY) tools/run_case.py --batch "First 32"

@@ -193,10 +193,13 @@ SOURCE_DB_PER_OCT = -6.0206
 DEFECTS = ("NO_TONE_NETWORK", "ALPHA_INVERTED", "RAIL_LOW_ON_TOP",
            "RAIL_SWAP_HT2_HT3", "EDT_BAND_SWAP")
 # Two controls need the ~30 MB corpus, so they cannot run in the CI job that
-# runs the rest. They are reported as NO VERDICT there -- which is red, and is
-# not a pass (docs/verification-rules.md rule 5) -- and `--require-corpus`
-# turns that NO VERDICT into a failure for the gate that does have the corpus
-# (`make reference-integration`, the build box).
+# runs the rest. They are reported as NO VERDICT there -- which is not a pass
+# (docs/verification-rules.md rule 5) -- but be exact about what that means:
+# the no-corpus invocation still EXITS 0 with those two rows undecided. The
+# only place they are enforced is `--require-corpus`, which turns the NO
+# VERDICT into a non-zero exit, and `make reference-integration` is the gate
+# that passes it. Saying "it is red" without naming that target would describe
+# an enforcement that does not run anywhere.
 CORPUS_DEFECTS = ("WRONG_ANALYSIS_BANDS", "SHORT_RECORD")
 BLIND_BY_CONSTRUCTION = ("SOURCE_FLAT",)
 PROPERTIES = ("tone-exact", "artifact-binds", "floor-margin",
@@ -436,7 +439,7 @@ def fit_balance(g: dict, measured: dict, *, grid=None) -> dict:
     dd, ss = np.meshgrid(grid, grid, indexing="ij")
     w = np.stack([np.zeros_like(dd), dd, ss], axis=-1).reshape(-1, 3)
     pred = _anchored(predicted_hml(g, w))                      # (n_w, 5)
-    cols = sorted(measured)
+    cols = sorted(measured, key=lambda c: FRAC[c])             # knob order, not string order
     missing = [(c, t) for c in cols for t in CODES if measured[c].get(t) is None]
     if missing:
         raise Refused("the measurement refused "
@@ -475,7 +478,7 @@ def balance_region(g: dict, measured: dict, *, bound=BOUND_DB, grid=None) -> dic
     dd, ss = np.meshgrid(grid, grid, indexing="ij")
     w = np.stack([np.zeros_like(dd), dd, ss], axis=-1).reshape(-1, 3)
     pred = _anchored(predicted_hml(g, w))
-    cols = sorted(measured)
+    cols = sorted(measured, key=lambda c: FRAC[c])
     obs = np.array([_anchored(np.array([measured[c][t] for t in CODES])) for c in cols])
     worst = np.max(np.abs(pred[:, None, :] - obs[None, :, :]), axis=(1, 2))
     ok = w[worst <= bound]
@@ -874,7 +877,10 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
     for d in DEFECTS + CORPUS_DEFECTS:
         if d in CORPUS_DEFECTS and meas is None:
             lines.append(f"{d:26s} NO VERDICT -- needs the Fischer corpus; "
-                         f"run with --refs (make reference-integration)")
+                         f"run with --refs (make reference-integration)"
+                         + ("   [REFUSED: --require-corpus makes this a required "
+                            "control, and a required control does not pass by "
+                            "going undecided]" if require_corpus else ""))
             if require_corpus:
                 ok = False
             continue
@@ -997,6 +1003,9 @@ def main(argv=None) -> int:
                     help="the Fischer corpus; without it the two windowed properties REFUSE")
     ap.add_argument("--out", type=pathlib.Path, default=None)
     ap.add_argument("--check", action="store_true", help="the gate only")
+    ap.add_argument("--require-corpus", action="store_true",
+                    help="the two corpus-gated controls must be DECIDED, not NO VERDICT; "
+                         "for the gate that has the WAVs (make reference-integration)")
     a = ap.parse_args(argv)
 
     assert BOUND_DB == tr.SHAPE_BOUND_DB, (BOUND_DB, tr.SHAPE_BOUND_DB)
@@ -1004,7 +1013,7 @@ def main(argv=None) -> int:
 
     refs = a.refs
     meas, why = measured_or_refused(refs)
-    ok, lines = check(refs=refs, meas=meas)
+    ok, lines = check(refs=refs, meas=meas, require_corpus=a.require_corpus)
     print("\n".join(lines))
     if why:
         print(f"\n(the windowed measurement REFUSED: {why})")
@@ -1022,7 +1031,7 @@ def main(argv=None) -> int:
           f"{h['worst_db']:.2f} dB against a {BOUND_DB} dB bound")
     print(f"\n{'DECAY':6s} {'span':>6s} {'worst':>6s}   residual per TONE "
           f"({'/'.join(CODES)})")
-    for d, c in sorted(h["per_column"].items()):
+    for d, c in sorted(h["per_column"].items(), key=lambda kv: FRAC[kv[0]]):
         print(f"{d:6s} {c['measured_span_db']:6.2f} {c['worst_db']:6.2f}   "
               + " ".join(f"{x:+5.2f}" for x in c["residual_db"]))
     print("\nstructural alternatives, each with the same two free numbers:")
