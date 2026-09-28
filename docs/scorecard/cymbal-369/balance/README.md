@@ -104,9 +104,28 @@ from Figures 4, 9 and 10 — so it is a genuine independent check rather than a 
 first and the ablation rendered after it, and the render has been reproduced identically from a later clean commit —
 every field of `balance-ablation.json` except the recorded commit hash is byte-identical between the two runs.
 
+**Reproduced a third time after `main` moved under the branch, and the record deliberately NOT re-anchored.** #412
+(#388, the rimshot) changed `model/drums_fx.py` — `PEAK_RSG 0.343 → 0.7728` and a new `RS_LO_X_ATT = 3` on the path
+word into `M_RS1` — so `main` was brought in with a **merge** rather than a rebase: a rebase would have rewritten
+`cf2741e8` out of the history and left the record's `"commit"` pointing at a hash that no longer exists.
+`tools/probes/balance_input_invariance.py` then measured, rather than argued, whether the drift reaches this
+measurement: exactly two register addresses move in the whole image (`E_RSG+1` and `P_RS1X`), `drums_fx`'s own
+`preset_writes` attributes both to CL and RS alone, and no CY address or CY envelope-peak register moves. The render
+was repeated on the merged tree (clean, `cdff9ba`) to check that rather than trust it: **194 of 194 fields identical,
+the recorded commit hash the only difference** — `preservation` for RS and CL included, which is the pair whose own
+registers did move and which move on both the shipped and the candidate side. So the record still describes the tree
+that ships, and `"commit": "cf2741e8…"` is left as rendered.
+
 The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
 short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
-binds. The ratios are the claim; that common scale is not.
+binds. The ratios are the claim; that common scale is not — **except in one respect the CY path makes, recorded here
+rather than left implied.** The anchor leaves `env_gain` at 1.0 for the low and decay bands but **3.0864** for the
+short band: its amp register is already at the Q0.16 ceiling, so the rest of that band's gain lands on its envelope
+peak (0.324 → the 1.0 ceiling), which is **+9.79 dB more excitation into `NL_SWING`** for that band alone. The swing
+VCA is not linear, so the ablation moved the short band's operating point inside that nonlinearity as well as the
+three band ratios. It does not change the verdict — the direction is conservative for a refusal — but it is the same
+class of confound as the sibling one §5 discloses (H's internal mix moved, EDT10 147 → 70 ms), and a sentence that
+claimed neutrality for a common scale on a nonlinear path would be claiming more than the path allows.
 
 | | 808 CY5025 | shipped | candidate 3 | **balance ablation** |
 |---|---:|---:|---:|---:|
