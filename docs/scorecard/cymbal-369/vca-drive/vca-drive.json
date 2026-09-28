@@ -1,0 +1,388 @@
+{
+  "balance": {
+    "centre_hz": {
+      "decay": 10079.0,
+      "low": 3175.0,
+      "short": 10079.0
+    },
+    "gap_db": {
+      "decay": 9.85,
+      "short": 38.23
+    },
+    "path": "docs/scorecard/cymbal-369/balance/balance.json"
+  },
+  "bandpass": {
+    "high": {
+      "cap_f": 3.3e-09,
+      "caps": [
+        "C15",
+        "C16"
+      ],
+      "f0_hz": 7100.0,
+      "fb": "R59",
+      "fb_ohm": 82000.0,
+      "in_cap": "C11",
+      "in_cap_f": 1e-09,
+      "in_res": "R55",
+      "in_res_ohm": 22000.0,
+      "out_pin": "IC3 pin 7",
+      "shunt": "R58",
+      "shunt_ohm": 560.0
+    },
+    "low": {
+      "cap_f": 6.8e-09,
+      "caps": [
+        "C13",
+        "C14"
+      ],
+      "f0_hz": 3450.0,
+      "fb": "R57",
+      "fb_ohm": 82000.0,
+      "in_cap": "C10",
+      "in_cap_f": 3.3e-09,
+      "in_res": "R52",
+      "in_res_ohm": 33000.0,
+      "out_pin": "IC3 pin 1",
+      "shunt": "R56",
+      "shunt_ohm": 560.0
+    }
+  },
+  "bandpass_peak": {
+    "high": {
+      "f_hz": 7094.618013682774,
+      "gain_db": 24.10513069940636
+    },
+    "low": {
+      "f_hz": 3434.5214865233856,
+      "gain_db": 22.963431322693623
+    }
+  },
+  "commit": "ac55d5c0cc0c2e3b5e3c5d1307c8c32b973c5772",
+  "defects": [
+    "SWAP_BP_CAPS",
+    "DROP_INPUT_NETWORK",
+    "UNEQUAL_EMITTER",
+    "SPLIT_HIGH_FEED",
+    "EQUAL_COLLECTOR_LOADS",
+    "HUGE_SHORT_LOAD",
+    "HH1_WRONG_RATIO"
+  ],
+  "gate": {
+    "lines": [
+      "  PASS  bp-peak-matches-figure4: band-pass peak gain from the schematic == W14b Fig. 4's digitised peak",
+      "  PASS  bp-f0-matches-reference: bridged-T centres are \u00a710's 3450 and 7100 Hz",
+      "  PASS  bp-q-matches-reference: both bridged-T Q are \u00a710's 6",
+      "  PASS  hh1-matches-reference: Hh1 from C48/C59/R124/R127 is \u00a710's 2.5 kHz, Q 0.97",
+      "  PASS  only-collector-load-differs: the three swing-VCA stages differ in the collector load and nothing else",
+      "  PASS  high-bands-share-one-node: Q16 and Q17 hang on the same IC3 output pin, so their signal drives are equal",
+      "  PASS  vca-term-far-below-the-gap: the short band's whole VCA term is >= 20 dB below the balance's gap",
+      "  PASS  required-load-not-printed: closing the short band's gap in the VCA needs a collector load >= 20 dB above the printed one",
+      "  PASS  same-pinned-scan-as-vr4: this read and the VR4 read are pinned to the same printing and page",
+      "  -- injected defects, each must turn at least one property red --",
+      "  PASS  SWAP_BP_CAPS: turns red ['bp-f0-matches-reference', 'bp-peak-matches-figure4']",
+      "  PASS  DROP_INPUT_NETWORK: turns red ['bp-peak-matches-figure4']",
+      "  PASS  UNEQUAL_EMITTER: turns red ['only-collector-load-differs']",
+      "  PASS  SPLIT_HIGH_FEED: turns red ['high-bands-share-one-node']",
+      "  PASS  EQUAL_COLLECTOR_LOADS: turns red ['only-collector-load-differs']",
+      "  PASS  HUGE_SHORT_LOAD: turns red ['required-load-not-printed', 'vca-term-far-below-the-gap']",
+      "  PASS  HH1_WRONG_RATIO: turns red ['hh1-matches-reference']",
+      "  -- blindness, asserted and verified blind --",
+      "  PASS  DROP_INPUT_NETWORK leaves ['bp-f0-matches-reference', 'bp-q-matches-reference'] untouched",
+      "  PASS  SPLIT_HIGH_FEED leaves ['bp-f0-matches-reference', 'bp-peak-matches-figure4', 'hh1-matches-reference'] untouched",
+      "  PASS  UNEQUAL_EMITTER leaves ['bp-peak-matches-figure4', 'required-load-not-printed', 'vca-term-far-below-the-gap'] untouched",
+      "  PASS  SWAP_BP_CAPS leaves ['high-bands-share-one-node', 'only-collector-load-differs', 'vca-term-far-below-the-gap'] untouched"
+    ],
+    "ok": true
+  },
+  "hh1": {
+    "c_in": "C48",
+    "c_in_f": 1.5e-09,
+    "c_mid": "C59",
+    "c_mid_f": 1.5e-09,
+    "f0_hz": 2500.0,
+    "q": 0.97,
+    "r_fb": "R124",
+    "r_fb_ohm": 22000.0,
+    "r_gnd": "R127",
+    "r_gnd_ohm": 82000.0
+  },
+  "properties": {
+    "bp-f0-matches-reference": {
+      "bound_rel": 0.05,
+      "ok": true,
+      "per_band": {
+        "high": {
+          "f0_hz": 7117.1,
+          "q": 6.05,
+          "target_hz": 7100.0
+        },
+        "low": {
+          "f0_hz": 3453.9,
+          "q": 6.05,
+          "target_hz": 3450.0
+        }
+      },
+      "value_rel": 0.0024,
+      "what": "bridged-T centres are \u00a710's 3450 and 7100 Hz"
+    },
+    "bp-peak-matches-figure4": {
+      "bound_db": 0.05,
+      "ok": true,
+      "per_band": {
+        "high": {
+          "computed_db": 24.105,
+          "delta_db": 0.005,
+          "figure4_db": 24.1
+        },
+        "low": {
+          "computed_db": 22.963,
+          "delta_db": 0.013,
+          "figure4_db": 22.95
+        }
+      },
+      "value_db": 0.013,
+      "what": "band-pass peak gain from the schematic == W14b Fig. 4's digitised peak"
+    },
+    "bp-q-matches-reference": {
+      "bound_rel": 0.1,
+      "ok": true,
+      "value_rel": 0.0084,
+      "what": "both bridged-T Q are \u00a710's 6"
+    },
+    "hh1-matches-reference": {
+      "bound_rel": 0.05,
+      "f0_hz": 2498.1,
+      "ok": true,
+      "q": 0.965,
+      "what": "Hh1 from C48/C59/R124/R127 is \u00a710's 2.5 kHz, Q 0.97"
+    },
+    "high-bands-share-one-node": {
+      "feed": {
+        "decay": "IC3 pin 7",
+        "low": "IC3 pin 1",
+        "short": "IC3 pin 7"
+      },
+      "ok": true,
+      "what": "Q16 and Q17 hang on the same IC3 output pin, so their signal drives are equal"
+    },
+    "only-collector-load-differs": {
+      "differing": [
+        "load_ohm"
+      ],
+      "ok": true,
+      "what": "the three swing-VCA stages differ in the collector load and nothing else"
+    },
+    "required-load-not-printed": {
+      "bound_db": 20.0,
+      "ok": true,
+      "printed_ohm": 39000.0,
+      "required_ohm": 1794414.1,
+      "shortfall_db": 33.257,
+      "what": "closing the short band's gap in the VCA needs a collector load >= 20 dB above the printed one"
+    },
+    "same-pinned-scan-as-vr4": {
+      "ok": true,
+      "what": "this read and the VR4 read are pinned to the same printing and page"
+    },
+    "vca-term-far-below-the-gap": {
+      "bound_db": 8.715,
+      "bound_margin_db": 20.0,
+      "chain_db": 4.973,
+      "gap_db": 38.23,
+      "margin_db": 29.515,
+      "ok": true,
+      "what": "the short band's whole VCA term is >= 20 dB below the balance's gap"
+    }
+  },
+  "required_collector_load": {
+    "decay": {
+      "printed_ohm": 33000.0,
+      "required_ohm": 68378.98986026846,
+      "shortfall_db": 6.328
+    },
+    "short": {
+      "printed_ohm": 39000.0,
+      "required_ohm": 1794414.131692131,
+      "shortfall_db": 33.257
+    }
+  },
+  "source": {
+    "crops": {
+      "bandpass": {
+        "dpi": 400,
+        "h": 1100,
+        "w": 1100,
+        "x": 700,
+        "y": 3250
+      },
+      "vca-hi": {
+        "dpi": 600,
+        "h": 1150,
+        "w": 1550,
+        "x": 2350,
+        "y": 4180
+      },
+      "vca-lo": {
+        "dpi": 600,
+        "h": 1100,
+        "w": 1500,
+        "x": 2350,
+        "y": 5250
+      }
+    },
+    "page": 13,
+    "sha256": "d3239b51e2eb5523ff7247528667dc753f9db84a8d29b62cf763cbc51d4aad74",
+    "url": "https://archive.org/download/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf",
+    "url_node": "https://ia801906.us.archive.org/9/items/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf"
+  },
+  "sources_dirty": false,
+  "stage_differences": {
+    "differing": [
+      "load_ohm"
+    ],
+    "high_bands_share_feed": true,
+    "identical": [
+      "bias_ohm",
+      "couple_f",
+      "emitter_ohm"
+    ],
+    "values": {
+      "bias_ohm": {
+        "decay": 2000000.0,
+        "low": 2000000.0,
+        "short": 2000000.0
+      },
+      "couple_f": {
+        "decay": 2.2e-08,
+        "low": 2.2e-08,
+        "short": 2.2e-08
+      },
+      "emitter_ohm": {
+        "decay": 100.0,
+        "low": 100.0,
+        "short": 100.0
+      },
+      "feed": {
+        "decay": "IC3 pin 7",
+        "low": "IC3 pin 1",
+        "short": "IC3 pin 7"
+      },
+      "load_ohm": {
+        "decay": 33000.0,
+        "low": 22000.0,
+        "short": 39000.0
+      }
+    }
+  },
+  "stages": {
+    "decay": {
+      "bias": [
+        "R100 1M",
+        "R99 1M"
+      ],
+      "bias_ohm": 2000000.0,
+      "bypass": [
+        "C43",
+        "C50"
+      ],
+      "bypass_f": [
+        1.5e-09,
+        1.5e-09
+      ],
+      "couple": "C44",
+      "couple_f": 2.2e-08,
+      "emitter": "R98",
+      "emitter_ohm": 100.0,
+      "feed": "IC3 pin 7",
+      "load": "R90",
+      "load_ohm": 33000.0,
+      "q": "Q17",
+      "reservoir": "C40 1u/50 via D7, smoothed by R88 33k + C39 0.47u",
+      "series_diode": "D11"
+    },
+    "low": {
+      "bias": [
+        "R102 1M",
+        "R103 1M"
+      ],
+      "bias_ohm": 2000000.0,
+      "bypass": [
+        null,
+        null
+      ],
+      "bypass_f": [
+        null,
+        null
+      ],
+      "couple": "C46",
+      "couple_f": 2.2e-08,
+      "emitter": "R101",
+      "emitter_ohm": 100.0,
+      "feed": "IC3 pin 1",
+      "load": "R104",
+      "load_ohm": 22000.0,
+      "q": "Q18",
+      "reservoir": "via R105 33k from the Q20 envelope, smoothed by C45 2.2u",
+      "series_diode": "D12"
+    },
+    "short": {
+      "bias": [
+        "R96 1M",
+        "R97 1M"
+      ],
+      "bias_ohm": 2000000.0,
+      "bypass": [
+        "C36",
+        "C47"
+      ],
+      "bypass_f": [
+        1.5e-09,
+        1.5e-09
+      ],
+      "couple": "C42",
+      "couple_f": 2.2e-08,
+      "emitter": "R95",
+      "emitter_ohm": 100.0,
+      "feed": "IC3 pin 7",
+      "load": "R94",
+      "load_ohm": 39000.0,
+      "q": "Q16",
+      "reservoir": "C38 1u/50 via D6, smoothed by R87 22k + C37 2.2u",
+      "series_diode": "D5"
+    }
+  },
+  "summing_bus": {
+    "designators": [
+      "R35",
+      "R37",
+      "R39",
+      "R46",
+      "R48",
+      "R50"
+    ],
+    "note": "both filters tap this one node",
+    "per_square_ohm": 120000.0,
+    "shunt": "R53",
+    "shunt_ohm": 1000.0
+  },
+  "tool": "tools/cymbal_vca_drive.py",
+  "vca_term_db": {
+    "bound_db": {
+      "decay": 7.264,
+      "low": 0.0,
+      "short": 8.715
+    },
+    "chain_db": {
+      "decay": 3.522,
+      "low": 0.0,
+      "short": 4.973
+    },
+    "collector_load_ohm": {
+      "decay": 33000.0,
+      "low": 22000.0,
+      "short": 39000.0
+    },
+    "hh1_z_ohm": 40566.81508773157,
+    "low_loaded_ohm": 14298.521897090348
+  }
+}
