@@ -1,0 +1,5 @@
+{
+ "schema": "holdout-ledger/1",
+ "note": "Append-only. One entry per act that a holdout policy depends on: a READ (a number was taken off a sealed case) or an OPENED transition (the case has informed a change and is development data from here on). Written by tools/holdout.py; read by `tools/holdout.py check`, which is what catches a seal edited after it was read.",
+ "entries": []
+}

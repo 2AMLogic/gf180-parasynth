@@ -83,6 +83,17 @@ help:
 ## line has to be remembered. 167 documents, 69 claims, 116s measured against
 ## the old 48/51/88s.
 ##
+## holdout.py check is 0.2s and asks the one question a holdout's value rests
+## on: did the settings exist in the repository before the render that read
+## them, and have they moved since? The seal's own git state answers the first;
+## the ledger's record of WHAT was read answers the second, and that second half
+## is the failure the seal alone cannot catch -- settings genuinely committed
+## first, then edited once the error was known. Where a commit is missing from
+## the clone (squash merges do this) the ordering half reports a note rather
+## than a failure: an unsatisfiable gate is worse than no gate, and the seal-hash
+## half is always answerable. It is green on a tree with no seals at all, which
+## is the state every Holdout case but F1D is in.
+##
 ## check_decision_record_numbers.py is here because a DR number cannot be
 ## allocated correctly from one branch: two PRs each took 0017 within two
 ## minutes in September, on branches that never saw each other, and both merges
@@ -112,6 +123,7 @@ verify:
 	  "$(PY) fpga/verify_xdc_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
+	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
 
