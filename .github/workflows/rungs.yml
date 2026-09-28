@@ -162,13 +162,29 @@ jobs:
       - name: everything else
         run: python -m pytest model/ spec/ -q
 
+      # ---------------------------------------------------------------------
+      # THE GATES THEMSELVES. Every step from here to the end of this job is a
+      # TOOL issuing a verdict about this tree, and each one used to be preceded
+      # here by a named `pytest tools/test_<that checker>.py` step carrying its
+      # controls. Those per-file steps are gone, and the reason is #404: naming
+      # files here made the set of tool tests CI runs and the set that exists
+      # two lists that could drift, and they had -- to 7 files named against 90
+      # that exist. The `tools` job below now collects the WHOLE directory, so
+      # every one of these checkers' controls still runs on every push, along
+      # with the 83 files that were in no list at all.
+      #
+      # "Controls first" survives as a property of the RUN rather than of the
+      # step order: a broken checker turns the `tools` job red beside whichever
+      # gate below it invalidates, in the same checks list, on the same commit.
+      # What these steps keep is the thing a directory run cannot give -- a GATE
+      # failure and a TEST failure are different facts, and the checks list
+      # should say which one happened without anyone opening a log.
+      # ---------------------------------------------------------------------
+
       # The claim checker gates prose against the tree, so it has to RUN on a
       # pull request or it gates nothing -- the list it was commissioned to fix
       # stayed wrong for a week because nothing was re-deriving it, and a gate
-      # nothing invokes fails exactly the same way. Its own controls first: an
-      # unexercised checker measures the checker, not the docs.
-      - name: the claim checker's controls
-        run: python -m pytest tools/test_check_doc_claims.py -q
+      # nothing invokes fails exactly the same way.
       - name: documented claims match the evidence
         run: python tools/check_doc_claims.py
 
@@ -179,11 +195,8 @@ jobs:
       # checker ran only under `make verify` (build box) and `make controls`
       # (not what nightly.yml's controls job invokes) -- a comment asserting an
       # enforcement no CI job performs is issue #271's own defect, one level up.
-      # Controls first, for the reason above: an unexercised checker measures
-      # the checker. Measured 0.72s + <0.1s, so the 40-minute cap and the
-      # variance note at the top of this job are untouched.
-      - name: the Shape/Width transcription checker's controls
-        run: python -m pytest tools/test_check_surge_waveform_comment.py -q
+      # Measured <0.1s, so the 40-minute cap and the variance note at the top of
+      # this job are untouched.
       - name: the oscillator-1 comment still transcribes the sweep
         run: python tools/check_surge_waveform_comment.py
 
@@ -193,53 +206,38 @@ jobs:
       # were clean because the filenames differ (issue #250). The pull request is
       # the only place the collision is visible before it is on main. `make
       # verify` is invoked by no workflow, so the Makefile job alone would not
-      # have caught either of the two collisions that shipped. Controls first,
-      # same reason as above. Measured 0.9s + 0.05s.
-      - name: the DR-numbering checker's controls
-        run: python -m pytest tools/test_check_decision_record_numbers.py -q
+      # have caught either of the two collisions that shipped. Measured 0.05s.
       - name: every decision record owns its number
         run: python tools/check_decision_record_numbers.py
 
-      # Same argument again, and #390 found it the hard way: the SN p.13 tone
-      # stage's most structural claim ("five capacitors, no cap-only loop,
-      # therefore fifth-order with ONE shared denominator") was carried by a
-      # test file NO workflow collected. Not skipped -- absent. This job runs a
-      # named list, `pytest tools/` in full runs only under `make verify` (which
-      # no workflow invokes; rungs.yml runs `make verify-fast`), and docs/dag.json
-      # has no node under tools/. Naming the two files here is what makes the
-      # question "does this check run in CI, or only on a build box?" answer YES
-      # for them. The `sympy` witness inside the first file still skips, because
-      # sympy is deliberately not installed above -- but it is now a visible skip
-      # BESIDE two numpy-only witnesses of the same fact that do run, rather than
-      # the sole evidence in a file nothing collected.
-      # Measured 4.0 s + 2.3 s, so the 40-minute cap above is untouched. Neither
-      # needs the network: the ~6 MB SN scan is not a test dependency (the tests
-      # cover the refusal paths), and the digitised Figure 9 evidence artifact is
-      # committed.
-      - name: the SN p.13 tone-stage derivation and its controls
-        run: python -m pytest tools/test_tone_stage_schematic.py -q
-      - name: the Figure 9 digitiser and its controls
-        run: python -m pytest tools/test_werner_fig9.py -q
-      # Same argument a third time (#369 step 9). The TONE knob law's headline
-      # property runs off the COMMITTED docs/scorecard/cymbal-369/fischer.json,
-      # so the 25 measurements it is judged against are here even though the
-      # ~30 MB corpus is not: 9 tests and parametrised cases that need the WAVs
-      # skip visibly, and the two corpus-gated controls report NO VERDICT.
+      # The three cymbal-369 / W14b gates. Each is a tool issuing a verdict off
+      # COMMITTED evidence -- docs/scorecard/cymbal-369/fischer.json for the
+      # TONE knob law, werner-fig9.json and werner-fig4.json for the other two
+      # -- so all three answer here without the ~30 MB Fischer corpus and
+      # without the ~6 MB SN scan. Measured on this worker: 31 s, 6.6 s, 2.5 s.
       #
-      # NO VERDICT is not a pass, but be exact about what this job does with
-      # it: BOTH steps below exit 0 with those two controls undecided. They are
-      # enforced by `make reference-integration`, which runs the same file with
-      # GF180_REQUIRE_TR808_REFS=1 and the same tool with --require-corpus, on
-      # the box that has the corpus. This job is the part of the argument that
-      # can be made without 30 MB of WAVs -- all 25 settings in the 1 s window,
-      # and 5 of the 7 injected defects -- and not all of it.
+      # Be exact about what this job does NOT decide. The TONE knob gate's two
+      # corpus-gated controls report NO VERDICT without the WAVs, and this step
+      # still exits 0 with them undecided. NO VERDICT is not a pass; those two
+      # are enforced by `make reference-integration`, which runs the same tool
+      # with --require-corpus on the box that has the corpus. This job is the
+      # part of the argument that can be made without the corpus -- all 25
+      # settings in the 1 s window, and 5 of the 7 injected defects -- and not
+      # all of it.
       #
-      # Measured on the 8-vCPU worker: 31 s / 4.8 s here without the corpus,
-      # 45 s / 9.2 s with it.
-      - name: the VR4 TONE knob law and its controls
-        run: python -m pytest tools/test_cymbal_tone_knob.py -q
+      # #390 found the shape of this the hard way one level down: the SN p.13
+      # tone stage's most structural claim was carried by a test file NO
+      # workflow collected -- not skipped, absent -- and the fix at the time was
+      # to name two more files in this job. #404 is that fix generalised: the
+      # `tools` job below collects the directory, so the answer to "does this
+      # check run in CI, or only on a build box?" is YES by construction rather
+      # than by whoever remembered to edit this list.
       - name: the TONE knob gate itself, as the tool issues it
         run: python tools/cymbal_tone_knob.py --check
+      - name: the tone-stage realisation gate, as the tool issues it
+        run: python tools/cymbal_tone_realisation.py --check
+      - name: the Figure 9 digitiser gate, as the tool issues it
+        run: python tools/werner_fig9.py --check
 
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
@@ -296,6 +294,57 @@ jobs:
               sys.exit("negative control failed:\n  " + "\n  ".join(failures))
           print("negative control OK -- wrong arithmetic turns the suite red")
           PY
+
+  # The tooling suite, collected as a DIRECTORY and not as a hand-maintained
+  # list of filenames (#404).
+  #
+  # Before this job, rungs.yml named 7 of the 90 tools/test_*.py files that
+  # exist. The other 83 ran under `make verify` on a build box and under NO CI
+  # job at all -- including every cymbal-369 gate's injected-bug controls, whose
+  # whole purpose is to be the thing that turns red. A check that CANNOT RUN
+  # must never look like one that passed, and a control nothing exercises is the
+  # quietest version of that failure: it reads green because it never reads at
+  # all. The gap was not noticed by anyone maintaining the list; it was noticed
+  # by counting the list against the directory.
+  #
+  # So the point of the directory form is one mechanism instead of two lists
+  # that can drift -- and had, by 83 files. A new tools/test_*.py is covered
+  # here by EXISTING. That is also the acceptance test this job was written
+  # against: a deliberately-failing file dropped under tools/ must turn this
+  # job red with no edit to this file.
+  #
+  # Its own job rather than a step in `python`, and the reason is the cap, not
+  # taste. The directory measured ~21 min alone (1346 passed, 1 skipped, #401's
+  # recorded run at c20162c) against a `python` job whose own two runs on one PR
+  # took 14m39s and 27m20s. Folding them together buys an intermittent red --
+  # the exact trade the note at the top of `python` says not to make -- and the
+  # split also keeps a TOOLING failure readable as a tooling failure in the
+  # checks list rather than as a line in someone else's 40-minute log.
+  tools:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # tools/test_run_case.py asserts batch provenance against origin/main
+          # and tools/test_check_stale_base-style tests compute a merge-base;
+          # neither can be answered from a shallow single-branch clone.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      # Three files under tools/ shell out to iverilog (test_check_f1_rtl_record,
+      # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
+      # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
+      # beside two numpy-only witnesses of the same fact that do run.
+      - run: sudo apt-get update && sudo apt-get install -y iverilog
+      # Not set here, on purpose: GF180_TR808_REFS. The corpus is ~30 MB and is
+      # not in the repo, so the tests that need the WAVs skip visibly and the
+      # corpus-gated controls report NO VERDICT. `make reference-integration`
+      # runs the same files with GF180_REQUIRE_TR808_REFS=1 on the box that has
+      # them, where a missing corpus REFUSES instead of skipping.
+      - name: every tools/ test, by directory
+        run: python -m pytest tools/ -q
 
   # RTL bit-exactness. Separate job because iverilog is slow: the ladder is
   # ~1 min, the full voice is ~20 and does not belong on every push.
