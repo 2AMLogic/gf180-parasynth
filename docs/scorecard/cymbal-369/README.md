@@ -135,6 +135,22 @@ the shipped instrument does not have.
 > independent 1–1.8 kHz content than the machine and candidate 3 has ~4 dB less — which is where the
 > omitted Hh1 acts.
 
+> **Step 6/7 is `low-tail/README.md`** — the qualified 1–2.5 kHz decay #400 asked for, and the answer to
+> step 5's unqualified finding. The within-record ratio rho(d) = T_M(d)/T_Ln(d) at six depths, with eight
+> named properties, six injected defects, a measured zero point (rho is **not** 1.0 on a skirt-only
+> record: Mn's zero is 0.89–0.99), three frozen windows whose union covers all 25 settings, and both
+> confounds bounded rather than assumed. **The 808's 1–2.5 kHz outlasts its own low band at every one of
+> the 25 settings (rho_M(−10) 1.021–1.139); ours dies first at every setting (0.866–0.894), and candidate
+> 3 is worse than shipped in the leakage-proof band.** The recordings' noise floor is excluded (ours is
+> 27 dB the *noisier*; adding our floor to the 808's record moves its rho by 0.0015 of a 0.249 gap) and
+> the onset bounds at most a quarter of our deficit.
+>
+> And the cause is not a filter: the three-band chain §10 documents cannot reach the 808's 1–2.5 kHz
+> **energy** at any inter-band balance — short by 9.4 dB in M and 16.6 dB in Mn, 20 of 20 settings above
+> the bound — nor its decay (rho_M tops out at 0.97 over a −12…+30 dB balance sweep). The tone stage's
+> shape, the obvious suspect, is worth 0.80 dB. §10 names one element it describes and does not quantify:
+> the VCAs' asymmetric clipping. Wrong-then-right rate of that step: **7**.
+
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
 Restore §10's structure, as a set of discrete choices checked against the circuit, not Q hacks:
