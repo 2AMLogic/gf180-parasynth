@@ -328,7 +328,8 @@ there is no margin for a 21st, and any further section needs a register-map revi
 > **What are the three envelope generators' peak collector voltages?** All three reservoirs charge from Q19
 > through their own diode (D6/D7/D8), so the answer is plausibly "equal at the peak, different only in decay" —
 > but each sits behind a different smoothing network (R87+C37, R88+C39, R105+C45), and the collector's DC
-> operating point is what sets where each swing VCA clips. Same kind of read as step 11, same tool.
+> operating point is what sets where each swing VCA clips. Same kind of read as step 11, same tool. Filed as
+> **#432**; the gate defect step 11 refused to satisfy by existence alone is **#431**.
 
 Until the balance is resolved, nothing about it or the knobs' tracking can be promoted, and steps 7, 8 and 10 each
 say so from a different direction — step 11 narrows *where* the answer can be, it does not supply it. What can be

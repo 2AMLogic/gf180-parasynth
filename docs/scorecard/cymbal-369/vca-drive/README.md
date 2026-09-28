@@ -203,7 +203,7 @@ schematic prints, and the printed ones are +4.97 / +3.52 dB.
 **existence** and never reads its contents, so creating it would shorten the refusal list without one drive
 number reaching the balance — a false green of exactly the kind this chain exists to avoid. This step therefore
 writes to `vca-drive/vca-drive.json`, asserts the mismatch in
-`test_this_artifact_is_not_at_the_path_that_would_flip_396s_refusal`, and files the gate defect separately.
+`test_this_artifact_is_not_at_the_path_that_would_flip_396s_refusal`, and the gate defect is **#431**.
 
 **The next question, and it is one question:**
 
@@ -213,6 +213,8 @@ writes to `vca-drive/vca-drive.json`, asserts the mismatch in
 > "equal at the peak and different only in decay" — but each sits behind a different smoothing network
 > (R87 22 k + C37 2.2 µF; R88 33 k + C39 0.47 µF; R105 33 k + C45 2.2 µF), and the collector's DC operating point
 > is what sets where a swing VCA clips. It is the same kind of read as this one and belongs in the same tool.
+
+That question is filed as **#432**, with the components for all three networks in its body.
 
 Still open and unchanged by this step: #396 (the inter-band balance — its `schematic-vr4` precondition artifact
 has still never been written, and its `vca-drive` precondition is now measured but deliberately not flipped),
