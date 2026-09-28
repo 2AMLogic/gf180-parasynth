@@ -236,5 +236,21 @@ So the 8 non-passing jobs are 7 retained design counterexamples and 1 apparatus 
 ```
 .venv/bin/python tools/deadline_batch.py      # writes docs/deadline/runs/, ~35 min
 .venv/bin/python tools/deadline_reanalyse.py  # re-judges the retained captures, archives traces; no simulation
+.venv/bin/python tools/deadline_recapture_l2.py  # re-cuts the two -l2 evidence traces, ~80 s
 .venv/bin/python -m pytest tools/test_verify_deadline.py -q
 ```
+
+`tools/test_verify_deadline.py` judges two committed captures,
+`traces/prod-stress-saw-l2` (clean) and `traces/ctl-prod-stress-late15-l2`
+(its `late:15` negative control), and **refuses** either one that was not
+driven by the stimulus this tree builds now — the same precondition
+`verify_deadline.analyse_capture` enforces. So when the `stress-saw` stimulus
+moves, those two tests go red and the repair is
+`tools/deadline_recapture_l2.py`, not a change to the test. The retained
+pre-L2 `prod-stress-saw` / `ctl-prod-stress-late15` captures stay in the tree
+as history and are *expected* to be refused; one test asserts exactly that.
+
+This binding is to the stimulus bytes, so it is strictly stronger than the
+property it protects — a register value that moves without changing the
+schedule invalidates the capture anyway. It has cost two re-captures in three
+days. What it should bind to instead is #443.

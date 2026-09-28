@@ -223,14 +223,14 @@
   "three_2x_audible_dfilt": 1188
  },
  "provenance": {
-  "commit": "0939a1f",
+  "commit": "c50e36a",
   "files": {
    "synth_top.v": "2fc3939d1140",
-   "voice_dp.v": "1c8cfdbe1737",
+   "voice_dp.v": "67d59af7e249",
    "spi_ctl.v": "8892b72cde65",
-   "drum_regs.v": "783e31010926",
+   "drum_regs.v": "1282ebc944ee",
    "drum_kit.v": "23e97ff6e0e4",
-   "drum_dp.v": "83d739063736",
+   "drum_dp.v": "2ad7e5cec5b3",
    "modal_dp.v": "dd4906617919",
    "i2s_tx.v": "2cdb2112a11e",
    "ladder_dp_n.v": "22e2be19863b",

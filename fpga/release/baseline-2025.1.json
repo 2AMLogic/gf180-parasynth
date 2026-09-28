@@ -375,7 +375,7 @@
     },
     "deadline": {
       "readme": "docs/deadline/README.md",
-      "readme_sha256": "4353b90f888148c12432214fce8aa1461499d962a8639c37ccaa86885015860e",
+      "readme_sha256": "a2db67709596e1f2d3da34b504f00c8c62a94f2a7dac12b179e334d040ee70cd",
       "runs": "docs/deadline/runs/run_all.json",
       "runs_sha256": "1885d3ea52cd7bb9cf47241d492b0ffc79193711557ba0894b92bac22e18866a"
     },
