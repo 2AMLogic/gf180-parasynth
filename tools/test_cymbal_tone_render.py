@@ -306,6 +306,136 @@ def test_cy_owned_addresses_excludes_every_shared_register():
 # the committed evidence record
 # ---------------------------------------------------------------------------
 RECORD = ROOT / "docs" / "scorecard" / "cymbal-369" / "tone-render" / "tone-render.json"
+README = ROOT / "docs" / "scorecard" / "cymbal-369" / "tone-render" / "README.md"
+MODEL = ROOT / "model" / "cymbal_candidate.py"
+
+
+def _git(*args):
+    """(returncode, stdout). Never raises: a repository this test cannot read is
+    a REFUSAL to report, not a contradiction to assert."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True,
+                           text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:      # pragma: no cover
+        return 127, str(exc)
+    return r.returncode, r.stdout
+
+
+def _provenance_records() -> list:
+    """Every committed scorecard record carrying BOTH provenance fields."""
+    import json
+    out = []
+    for p in sorted((ROOT / "docs" / "scorecard").rglob("*.json")):
+        try:
+            d = json.loads(p.read_text())
+        except (ValueError, OSError):
+            continue
+        if isinstance(d, dict) and "commit" in d and "sources_dirty" in d:
+            out.append((p, d))
+    return out
+
+
+def test_no_committed_scorecard_record_was_produced_from_a_dirty_tree():
+    """#429: `tone-render.json` was the one record in eleven whose own
+    provenance said its figures could not be reproduced from any commit --
+    `sources_dirty: true`, at a commit whose tree predates the revision-4 model
+    change it was measuring. The field that exists to tell a reader that was
+    doing its job, and nothing was reading it.
+
+    Generalised to every record that carries the two fields, so the next one
+    cannot regress the same way. It is deliberately NOT generalised to commit
+    reachability: three of the records here name commits that are not in this
+    clone at all (feature branches that merged under different shas), so an
+    ancestry gate over all of them would be unsatisfiable -- and an
+    unsatisfiable gate trains everyone to ignore gates."""
+    recs = _provenance_records()
+    assert len(recs) >= 11, f"expected the scorecard's provenance records; found {len(recs)}"
+    dirty = [str(p.relative_to(ROOT)) for p, d in recs if d["sources_dirty"] is not False]
+    assert not dirty, ("records whose sources were dirty when they were written: "
+                       + ", ".join(dirty))
+    malformed = [str(p.relative_to(ROOT)) for p, d in recs
+                 if not (isinstance(d["commit"], str) and len(d["commit"]) == 40)]
+    assert not malformed, malformed
+
+
+@pytest.mark.skipif(not RECORD.exists(), reason="the render record is not committed")
+def test_the_render_record_is_reproducible_from_a_commit_in_this_history():
+    """The record's own commit must be reachable from HEAD and its tree must
+    contain the model revision the write-up is about. The committed record
+    named `28db319a`, which is in the history but whose `cymbal_candidate.py`
+    has no revision 4 -- so every headline figure of step 10 was unreachable
+    from any commit in the PR that reported it."""
+    import json
+    d = json.loads(RECORD.read_text())
+    sha = d["commit"]
+    if _git("cat-file", "-e", f"{sha}^{{commit}}")[0] != 0:
+        pytest.skip(f"REFUSED: commit {sha[:8]} is not in this clone "
+                    "(shallow checkout or a pruned branch) -- cannot answer")
+    assert _git("merge-base", "--is-ancestor", sha, "HEAD")[0] == 0, (
+        f"{sha[:8]} is not an ancestor of HEAD: the record cannot be "
+        "reproduced from this history")
+    rc, text = _git("show", f"{sha}:model/cymbal_candidate.py")
+    assert rc == 0, f"model/cymbal_candidate.py is absent at {sha[:8]}"
+    assert "REVISION 4" in text.upper(), (
+        f"the tree at {sha[:8]} has no revision 4 of the model, so it cannot "
+        "be the tree that produced this record")
+
+
+@pytest.mark.skipif(not RECORD.exists(), reason="the render record is not committed")
+def test_every_recorded_property_flag_is_a_real_boolean():
+    """`h-edt-falls-with-tone` serialised as `1.0`, not `true`: `x < 1.0 and
+    y > 1.0` returns the second operand, which was an np.bool_, and
+    `json.dumps(..., default=float)` sent it through the float fallback. Truthy,
+    so every consumer worked -- and an `is True` assertion on it would not."""
+    import json
+    d = json.loads(RECORD.read_text())
+    for name, p in d["verdict"]["properties"].items():
+        assert isinstance(p["ok"], bool), (name, type(p["ok"]).__name__, p["ok"])
+    for col in d["verdict"]["columns"].values():
+        assert isinstance(col["h_minus_l_ok"], bool) and isinstance(col["h_edt10_ok"], bool)
+    assert isinstance(d["preservation"]["ok"], bool)
+    assert isinstance(d["superposition"]["ok"], bool)
+
+
+def test_the_verdicts_flags_are_booleans_before_they_are_serialised():
+    """...and the same thing checked at the source, so a record regenerated on a
+    different numpy cannot reintroduce it."""
+    ref = tre.fischer_curves()
+    col = ref["50"]
+    v = tre.verdict(_synthetic(col["h_minus_l_anchored_db"], col["h_edt10_ratio"]), ref)
+    for name, p in v["properties"].items():
+        assert type(p["ok"]) is bool, (name, type(p["ok"]).__name__)
+
+
+def test_the_808s_decay_columns_agree_to_what_the_writeup_says():
+    """The DECAY confound the write-up bounds rather than assumes. Both figures
+    it quotes -- the worst cross-column disagreement and the range of the
+    columns' own spans -- are re-derived from `fischer_curves()` here, because
+    #429 found both stated wrong (0.5 dB for a computed 0.601, and 7.15 for a
+    7.14 that was read off a rounded table)."""
+    import re
+    ref = tre.fischer_curves()
+    cols = {k: v["h_minus_l_anchored_db"] for k, v in ref.items()}
+    worst = max(max(c[t] for c in cols.values()) - min(c[t] for c in cols.values())
+                for t in tn.CODES)
+    spans = [max(c.values()) - min(c.values()) for c in cols.values()]
+    assert worst == pytest.approx(0.601, abs=5e-4), worst
+    assert min(spans) == pytest.approx(7.143, abs=5e-4), spans
+    assert max(spans) == pytest.approx(8.086, abs=5e-4), spans
+
+    flat = re.sub(r"\s+", " ", README.read_text())
+    m = re.findall(r"DECAY columns to \*\*([\d.]+) dB\*\*.*?spans run ([\d.]+)–([\d.]+) dB",
+                   flat)
+    assert len(m) == 1, "the DECAY-confound sentence moved; it is now unchecked"
+    got = [float(x) for x in m[0]]
+    assert got[0] == pytest.approx(round(worst, 3), abs=5e-4), got
+    assert got[1] == pytest.approx(min(spans), abs=5e-3), got
+    assert got[2] == pytest.approx(max(spans), abs=5e-3), got
+
+    d = re.findall(r"the same to within ([\d.]+) dB in all five of its DECAY columns",
+                   re.sub(r"\s+", " ", MODEL.read_text()))
+    assert len(d) == 1 and float(d[0]) == pytest.approx(round(worst, 3), abs=5e-4), d
 
 
 @pytest.mark.skipif(not RECORD.exists(), reason="the render record is not committed")
@@ -313,6 +443,7 @@ def test_the_committed_record_says_what_the_writeup_says():
     import json
     d = json.loads(RECORD.read_text())
     assert d["preservation_complete"] is True
+    assert d["sources_dirty"] is False
     assert d["preservation"]["ok"] is True
     assert d["precondition"]["budget"]["modes"] == 20
     # the headline: monotone and inside the bracket, but not tracking

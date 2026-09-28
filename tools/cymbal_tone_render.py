@@ -436,7 +436,13 @@ def verdict(ours: dict, ref: dict) -> dict:
             "value": {c: [a[c], br[c]] for c in CODES},
             "what": "inside the pre-render bracket the circuit's per-band levels allow"},
         "h-edt-falls-with-tone": {
-            "ok": ours["h_edt10_ratio"]["10"] < 1.0 and ours["h_edt10_ratio"]["00"] > 1.0,
+            # bool(): `x and y` returns y, and y here is a numpy comparison, so
+            # this `ok` was an np.bool_ and json.dumps(..., default=float)
+            # serialised it as 1.0 rather than true -- truthy for every consumer
+            # but not equal to True, while every sibling property serialised as
+            # a real boolean. A record's flag must not depend on which branch of
+            # an `and` produced it.
+            "ok": bool(ours["h_edt10_ratio"]["10"] < 1.0 and ours["h_edt10_ratio"]["00"] > 1.0),
             "value": ours["h_edt10_ratio"],
             "what": "H's own EDT10 falls as TONE opens -- a decay, so no balance can fake it"},
         "ln-edt-tone-invariant": {
