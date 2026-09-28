@@ -49,17 +49,54 @@ def test_prepared_script_reads_both_constraint_files_in_order(tmp_path):
     assert "SIM_NO_MMCM=0" in text
 
 
-def test_sd_xdc_dispositions_exactly_the_pdm_ports():
+def test_sd_xdc_dispositions_exactly_the_pdm_ports_and_the_constant_sck():
     import xdc_bindings as xb
     text = sd.SD_XDC.read_text()
     assert xb.expected_exceptions(text) == [("*", "[get_ports sd_left]"),
-                                            ("*", "[get_ports sd_right]")]
+                                            ("*", "[get_ports sd_right]"),
+                                            ("*", "[get_ports dac_sck]")]
     assert "set_output_delay" not in text
-    pins = dict(re.findall(r"PACKAGE_PIN (\w+) \[get_ports (\w+)\]", text))
-    assert pins == {"D4": "sd_left", "D3": "sd_right"}
-    # JA (I2S) and JB (SPI) pins stay where the shared XDC puts them
-    shared = dict(re.findall(r"PACKAGE_PIN (\w+) \[get_ports (\w+)\]", build.XDC.read_text()))
-    assert not set(pins) & set(shared)
+
+
+def test_effective_pins_are_the_direct_plug_layout():
+    # the shared XDC, then the demo XDC's overrides, in the order Vivado reads them
+    pins = sd.effective_pins([build.XDC.read_text(), sd.SD_XDC.read_text()])
+    for port, site in sd.DIRECT_PLUG_PINS.items():
+        assert pins[port] == site, port
+    assert len(set(pins.values())) == len(pins)           # one port per site
+    # the published images keep the jumper layout: the shared XDC alone
+    shared = sd.effective_pins([build.XDC.read_text()])
+    assert (shared["i2s_bclk"], shared["i2s_lrclk"], shared["i2s_sdata"]) == ("G13", "B11", "A11")
+
+
+def test_direct_plug_table_is_the_breakout_header_order():
+    # PCM5102 breakout header from its VIN end, into JA6..JA1 (Digilent: JA1..JA4
+    # = G13 B11 A11 D12); written out independently of the XDC under test
+    header = ["VIN", "GND", "LCK", "DIN", "BCK", "SCK"]
+    ja = {6: "VCC", 5: "GND", 4: "D12", 3: "A11", 2: "B11", 1: "G13"}
+    plug = dict(zip(header, [ja[n] for n in (6, 5, 4, 3, 2, 1)]))
+    port_for = {"SCK": "dac_sck", "BCK": "i2s_bclk", "DIN": "i2s_sdata", "LCK": "i2s_lrclk"}
+    assert {port_for[k]: plug[k] for k in port_for} == \
+        {k: v for k, v in sd.DIRECT_PLUG_PINS.items() if k in port_for.values()}
+
+
+def test_an_override_onto_an_occupied_site_is_refused():
+    bad = sd.SD_XDC.read_text().replace(
+        "set_property PACKAGE_PIN D12 [get_ports i2s_lrclk]\n"
+        "set_property PACKAGE_PIN B11 [get_ports i2s_bclk]\n",
+        "set_property PACKAGE_PIN B11 [get_ports i2s_bclk]\n"
+        "set_property PACKAGE_PIN D12 [get_ports i2s_lrclk]\n")
+    assert bad != sd.SD_XDC.read_text()
+    with pytest.raises(ValueError, match="holds it"):
+        sd.effective_pins([build.XDC.read_text(), bad])
+
+
+def test_placed_pins_reads_a_report_io_table():
+    rpt = ("| Pin Number | Signal Name | Bank Type  |\n"
+           "| B11        | i2s_bclk    | High Range |\n"
+           "| G13        | dac_sck     | High Range |\n")
+    assert sd.placed_pins(rpt, ["i2s_bclk", "dac_sck", "sd_left"]) == \
+        {"i2s_bclk": "B11", "dac_sck": "G13"}
 
 
 def test_output_disposition_reads_a_real_published_report():
@@ -151,6 +188,7 @@ initial begin
  #22 button=0;
  repeat (256*6) @(posedge clk);
  if (dut.sd_sample !== 16'sh4000) $fatal(1,"decoded %h, sent 4000", dut.sd_sample);
+ if (dut.dac_sck !== 1'b0) $fatal(1,"dac_sck is %b, must be held low", dut.dac_sck);
  for (i = 0; i < 256*64; i = i + 1) begin
    @(posedge clk); ones = ones + l; differ = differ + (l !== r);
  end

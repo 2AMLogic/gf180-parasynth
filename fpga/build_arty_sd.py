@@ -8,7 +8,10 @@ entry for arty_a7_sd_top, so the release publisher refuses it; this script is
 the whole of its build record. Decided in #406: the demo wrapper is not scoped
 into the release gate (`output_delay_exceptions == ["i2s_bclk"]`); instead its
 own gate below requires exactly that forwarded-clock exception AND exactly
-the two PDM ports as user false paths, with nothing unconstrained.
+the two PDM ports plus the constant dac_sck as user false paths, with nothing
+unconstrained. The image lays JA out for a PCM5102 breakout plugged straight in
+(see arty_a7_sd_top.v), and the gate reads the ROUTED design's report_io to
+confirm every port sits on the pin that layout needs.
 
 Before Vivado runs, two digital proofs must bind to the live tree, or the
 build is REFUSED:
@@ -47,7 +50,13 @@ ROOT = build.ROOT
 TOP = "arty_a7_sd_top"
 SD_XDC = ROOT / "fpga/boards/arty-a7-100-sd.xdc"
 PDM_PORTS = ["sd_left", "sd_right"]
+FALSE_PATH_PORTS = sorted(PDM_PORTS + ["dac_sck"])     # dac_sck: a constant 0
 FORWARDED_CLOCKS = ["i2s_bclk"]
+# JA as the plugged-in PCM5102 needs it, written from the BREAKOUT'S header
+# order (VIN GND LCK DIN BCK SCK into JA6..JA1) and Digilent's master XDC --
+# not read back from our XDC, so a wrong override cannot agree with itself.
+DIRECT_PLUG_PINS = {"dac_sck": "G13", "i2s_bclk": "B11", "i2s_sdata": "A11",
+                    "i2s_lrclk": "D12", "sd_left": "D4", "sd_right": "D3"}
 
 
 def sources():
@@ -106,13 +115,48 @@ def check_implementation(directory: Path) -> dict:
     problems += xb.check_route((directory / xb.REPORT).read_text(),
                                (directory / xb.EXCEPTIONS).read_text(), xdc_text)
     classes = output_disposition((directory / "timing.rpt").read_text())
-    want = {"unconstrained": [], "false_path": PDM_PORTS, "forwarded_clock": FORWARDED_CLOCKS}
+    want = {"unconstrained": [], "false_path": FALSE_PATH_PORTS,
+            "forwarded_clock": FORWARDED_CLOCKS}
     if classes != want:
         problems.append(f"output-port disposition {classes} is not {want}")
+    pins = placed_pins((directory / IO_REPORT).read_text(), DIRECT_PLUG_PINS)
+    if pins != DIRECT_PLUG_PINS:
+        problems.append(f"placed pins {pins} are not the direct-plug map {DIRECT_PLUG_PINS}")
     if problems:
         raise ValueError("; ".join(problems))
     return {"timing": summary["timing"], "resources": summary["resources"],
-            "drc": summary["drc"], "output_disposition": classes}
+            "drc": summary["drc"], "output_disposition": classes, "placed_pins": pins}
+
+
+IO_REPORT = "io.rpt"
+
+
+def effective_pins(xdc_texts: list) -> dict:
+    """port -> PACKAGE_PIN after the XDCs apply in order (a later set wins).
+    Raises if any assignment moves a port onto a site another port holds at
+    that moment -- the order the demo XDC's overrides must respect."""
+    pins = {}
+    for text in xdc_texts:
+        for site, port in re.findall(r"^set_property PACKAGE_PIN (\w+) "
+                                     r"\[get_ports \{?([\w\[\]]+)\}?\]", text, re.M):
+            holder = next((p for p, s_ in pins.items() if s_ == site and p != port), None)
+            if holder:
+                raise ValueError(f"{port} moved onto {site} while {holder} holds it")
+            pins[port] = site
+    return pins
+
+
+def placed_pins(io_report: str, ports) -> dict:
+    """port -> package pin from the routed design's report_io table."""
+    out = {}
+    for line in io_report.splitlines():
+        cells = [c.strip() for c in line.split("|")]
+        for port in ports:
+            if port in cells:
+                site = next((c for c in cells if re.fullmatch(r"[A-Z]{1,2}\d{1,2}", c)), None)
+                if site:
+                    out[port] = site
+    return out
 
 
 def main(argv=None):
@@ -153,8 +197,13 @@ def main(argv=None):
         n = len(sources())
         verilog, xdcs = snapshots[:n], snapshots[-len(constraints):]
         script = directory / "build.tcl"
-        script.write_text(build.tcl_script(directory, verilog, xdcs[0], top=TOP,
-                                           extra_constraints=xdcs[1:]))
+        # the pins the ROUTED design actually used, for the direct-plug check
+        effective_pins([x.read_text() for x in xdcs])     # refuses an unsafe order
+        text = build.tcl_script(directory, verilog, xdcs[0], top=TOP,
+                                extra_constraints=xdcs[1:])
+        text = text.replace("write_bitstream", "report_io -file "
+                            + build.tcl_word(directory / IO_REPORT) + "\nwrite_bitstream", 1)
+        script.write_text(text)
         report["script_sha256"] = build.sha(script)
         if args.prepare_only:
             report["state"] = "PREPARED"
@@ -170,7 +219,7 @@ def main(argv=None):
         return 2
     outputs = [directory / name for name in
                ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt",
-                "routed.dcp", xb.REPORT, xb.EXCEPTIONS)]
+                "routed.dcp", xb.REPORT, xb.EXCEPTIONS, IO_REPORT)]
     for path in outputs:
         path.unlink(missing_ok=True)
     started = time.monotonic()

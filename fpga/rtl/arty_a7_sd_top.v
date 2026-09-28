@@ -4,6 +4,16 @@
 //
 //   sd_left  = JD1 (D4), sd_right = JD2 (D3), ground on JD5 or JD11.
 //
+// JA IS LAID OUT FOR A PCM5102 BOARD PLUGGED STRAIGHT IN (the purple
+// "SCK BCK DIN LCK GND VIN" breakout), NOT for the R0/R1 jumper wiring:
+//
+//   JA1 (G13) dac_sck = 0     JA2 (B11) i2s_bclk     JA3 (A11) i2s_sdata
+//   JA4 (D12) i2s_lrclk       JA5 GND                JA6 3.3 V
+//
+// SCK low makes the PCM5102 derive its clock from BCK. The move is made in
+// fpga/boards/arty-a7-100-sd.xdc (the shared XDC is untouched), so the
+// published images keep BCLK/LRCLK/DATA on JA1/JA2/JA3.
+//
 // MONO, on both pins. The core's sample is mono by contract (both I2S slots
 // carry the same word), so one modulator drives both pads: a stereo line
 // input hears it in both channels, and either pin alone is the whole signal.
@@ -31,8 +41,10 @@ module arty_a7_sd_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
     input wire spi_sck, spi_mosi, spi_cs_n, output wire spi_miso,
     input wire uart_rxd, output wire uart_txd,
     output wire i2s_bclk, i2s_lrclk, i2s_sdata,
-    output wire sd_left, sd_right
+    output wire sd_left, sd_right,
+    output wire dac_sck                 // JA1: held low for a plugged-in PCM5102
 );
+    assign dac_sck = 1'b0;
     wire core_clk, clock_locked;
     generate if (SIM_NO_MMCM) begin: simulation_clock
         // Testbench supplies 12.288 MHz here. Never select for a bitstream.
