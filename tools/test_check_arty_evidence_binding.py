@@ -236,6 +236,193 @@ def test_control_a_reverted_compiled_source_turns_the_r0_binding_red(monkeypatch
         _check_r0_binding(sha)
 
 
+XDC_REL = "fpga/boards/arty-a7-100.xdc"
+R1 = "fpga/reports/arty/r1-player-preview-2025.1/publication.json"
+
+
+def _bound_record_plus_xdc(tmp_path, xdc_sha):
+    """The live bound record with the one key a verification record never
+    carries: the constraint file. No bench in this repository emits such a
+    record (the UART bench hashes sources()+roms() only), so publication scope
+    can only be exercised against a synthesised one -- which is itself the
+    finding in #421, and is why publication scope REFUSES on the real tree
+    rather than reporting a verdict it cannot support."""
+    import json
+    source = gate.bound_bindings()[0][1]
+    record = json.loads(source.read_text())
+    record["source_sha256"][XDC_REL] = xdc_sha
+    path = tmp_path / "verification.json"
+    path.write_text(json.dumps(record, indent=2) + "\n")
+    return path
+
+
+def _bind(path):
+    saved = dict(publish_arty.VERIFICATION_BY_WRAPPER)
+    publish_arty.VERIFICATION_BY_WRAPPER.clear()
+    publish_arty.VERIFICATION_BY_WRAPPER["arty_a7_top"] = path
+    return saved
+
+
+def _restore(saved):
+    publish_arty.VERIFICATION_BY_WRAPPER.clear()
+    publish_arty.VERIFICATION_BY_WRAPPER.update(saved)
+
+
+def test_publication_scope_refuses_rather_than_calling_an_unhashed_xdc_drift(capsys):
+    """#421 point 3. The bound record has no source_sha256 entry for the XDC
+    AT ALL, and that is a different state from "the bytes moved": the bench
+    never read those bytes. It must be named, and it must REFUSE (2) rather
+    than report STALE (1), because a record cannot disagree about a file it
+    never saw."""
+    assert gate.coverage(gate.bound_bindings()[0][1], gate.PUBLICATION_SCOPE) == \
+        [(XDC_REL, gate.NOT_COVERED)]
+    assert gate.main(["--scope", "publication"]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out
+    assert XDC_REL in out
+    assert gate.NOT_COVERED in out
+    assert gate.DIFFERS not in out, \
+        "an unhashed file must never be reported as drift"
+    # and the same binding in the default scope is clean -- the two scopes
+    # disagree, which is the whole point of having two.
+    capsys.readouterr()
+    assert gate.main([]) == 0
+
+
+def test_verification_scope_names_the_question_it_does_not_answer(capsys):
+    """Until #421 the rung printed "covers every compiled source" and stopped.
+    383f10b changed the XDC and nothing said a word. The verdict is unchanged
+    (that would be an unsatisfiable rung) but the output must no longer read
+    as constraint coverage."""
+    assert gate.main([]) == 0
+    out = capsys.readouterr().out
+    assert "BOUND: arty_a7_top" in out
+    assert XDC_REL in out, "the rung must name the file it does not check"
+    assert gate.NOT_COVERED in out
+    assert "--scope publication" in out
+    assert "STALE" not in out
+
+
+def test_control_a_reverted_xdc_turns_the_publication_gate_red(tmp_path, monkeypatch, capsys):
+    """THE control for #421, driven directly: both arms call gate.main and
+    assert its exit code, so a widening that failed to fire shows up as the
+    GREEN arm's code repeated, not as an unraised exception swallowed by a
+    matcher.
+
+    Arm 1 proves the mode is not red by construction; arm 2 reverts the XDC to
+    the bytes R0 was published with and requires a red that NAMES the file."""
+    import build_arty as build
+    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
+    saved = _bind(record)
+    try:
+        assert gate.main(["--scope", "publication"]) == 0, \
+            "a record that does cover the live XDC must be BOUND"
+        assert "BOUND: arty_a7_top" in capsys.readouterr().out
+
+        _revert_to_r0(XDC_REL, monkeypatch)
+        code = gate.main(["--scope", "publication"])
+        out = capsys.readouterr().out
+        assert code == 1, ("the XDC moved and publication scope stayed green: "
+                           "the constraint file is not in its comparison set")
+        assert "STALE" in out
+        assert XDC_REL in out, "a red must name the file, not just a count"
+        assert gate.DIFFERS in out
+    finally:
+        _restore(saved)
+
+
+def test_the_same_reverted_xdc_stays_invisible_to_the_default_rung(tmp_path, monkeypatch, capsys):
+    """The other half of the decision, pinned so it cannot be widened by
+    accident: verification scope still does not look at the constraints, so
+    Makefile:73 cannot go red for a question no committed record can answer.
+    If this ever fails, the default was widened and
+    test_the_bound_record_is_exactly_what_build_arty_accepts is now checking a
+    different question from build_arty.validate_verification."""
+    import build_arty as build
+    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
+    saved = _bind(record)
+    try:
+        _revert_to_r0(XDC_REL, monkeypatch)
+        assert gate.main([]) == 0
+        out = capsys.readouterr().out
+        assert "BOUND: arty_a7_top" in out
+        assert gate.DIFFERS in out, \
+            "invisible to the VERDICT is not invisible to the READER: the " \
+            "constraint line must still report the reverted state"
+    finally:
+        _restore(saved)
+
+
+def test_control_a_moved_source_is_not_reported_as_constraint_drift(tmp_path, monkeypatch, capsys):
+    """False-positive control. Publication scope must go red for voice_dp.v
+    and say nothing about the XDC -- otherwise "red when the XDC moves" is
+    just "red", and the mode carries no constraint information."""
+    import build_arty as build
+    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
+    saved = _bind(record)
+    try:
+        _revert_to_r0("rtl-sketch/voice_dp.v", monkeypatch)
+        assert gate.main(["--scope", "publication"]) == 1
+        out = capsys.readouterr().out
+        assert "rtl-sketch/voice_dp.v" in out
+        assert XDC_REL not in out
+    finally:
+        _restore(saved)
+
+
+def test_coverage_separates_the_two_states_where_drift_cannot(tmp_path):
+    """drift() returns names, so "never hashed" and "hashed and moved" are the
+    same string to it. That conflation is what hid the gap; coverage() is the
+    call that can tell them apart, and both must still agree on the names."""
+    bound = gate.bound_bindings()[0][1]
+    stale_xdc = _bound_record_plus_xdc(tmp_path, "0" * 64)
+    assert gate.coverage(bound, gate.PUBLICATION_SCOPE) == [(XDC_REL, gate.NOT_COVERED)]
+    assert gate.coverage(stale_xdc, gate.PUBLICATION_SCOPE) == [(XDC_REL, gate.DIFFERS)]
+    assert gate.drift(bound, gate.PUBLICATION_SCOPE) == [XDC_REL]
+    assert gate.drift(stale_xdc, gate.PUBLICATION_SCOPE) == [XDC_REL]
+    assert gate.drift(bound) == [] and gate.drift(stale_xdc) == []
+
+
+def test_an_unknown_scope_refuses_rather_than_silently_narrowing():
+    """A typo must not fall back to the narrow scope and answer anyway."""
+    for call in (lambda: gate.scope_files("verfication"),
+                 lambda: gate.coverage(gate.bound_bindings()[0][1], "pub"),
+                 lambda: gate.historical("")):
+        try:
+            call()
+        except ValueError:
+            continue
+        raise AssertionError("an unknown scope was accepted")
+
+
+def test_publication_scope_reproduces_the_hand_named_r0_moved_set():
+    """External-ish agreement: R0_MOVED is maintained by hand, one entry per
+    commit that moved a source, and includes the XDC because publication scope
+    is wider. gate.historical(PUBLICATION_SCOPE) derives the same set from the
+    records. Two independently maintained things agreeing is worth more than
+    either alone -- and before #421 the gate could not produce this set."""
+    records = dict(gate.historical(gate.PUBLICATION_SCOPE))
+    key = "fpga/reports/arty/integrated-baseline-2025.1/publication.json"
+    assert records[key] == sorted(R0_MOVED)
+    narrow = dict(gate.historical())
+    assert set(records[key]) - set(narrow.get(key, [])) == {XDC_REL}
+
+
+def test_the_newest_published_image_moved_only_its_constraints():
+    """The gap is not hypothetical. R1 (e0dd329, the player-preview image) was
+    built on a branch that did not carry 383f10b, so the published bitstream's
+    ONLY divergence from this tree is the constraint file -- and verification
+    scope reports that image as covering the tree exactly.
+
+    Stated as a delta rather than an exact list so ordinary RTL churn does not
+    turn it red for an unrelated reason; the claim is the delta."""
+    wide = set(dict(gate.historical(gate.PUBLICATION_SCOPE)).get(R1, []))
+    narrow = set(dict(gate.historical()).get(R1, []))
+    assert wide - narrow == {XDC_REL}, (
+        "publication scope must see exactly one thing verification scope "
+        "cannot for R1: its pin constraints")
+
+
 def test_control_rebinding_the_live_wrapper_to_r0s_proof_turns_it_red():
     """Control: the failure the docstring promises. If someone rebinds the
     published image's pre-drift proof as the wrapper's live evidence, R0 stops
