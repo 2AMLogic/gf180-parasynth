@@ -49,7 +49,7 @@ an invalid or missing measurement has **no** distance, never zero.
 | `D08B` | Drums | Holdout | High conga / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D09A` | Drums | Development | Claves / anchor | Fischer hardware sample | fixed-model | ✅ pass | 0.61 |  |
 | `D09B` | Drums | Holdout | Claves / variation | Second documented hardware setting | — | ⬜ not run |  |  |
-| `D10A` | Drums | Development | Rimshot / anchor | Fischer hardware sample | fixed-model | ❌ fail | 5.17 | worst: Partial balance |
+| `D10A` | Drums | Development | Rimshot / anchor | Fischer hardware sample | fixed-model | ❌ fail | 2.85 | worst: Partial balance |
 | `D10B` | Drums | Development | Rimshot / variation | Second documented hardware setting | — | ⬜ not run |  |  |
 | `D11A` | Drums | Development | Maracas / anchor | Fischer hardware sample | fixed-model | ❌ fail | 5.42 | worst: decay |
 | `D11B` | Drums | Development | Maracas / variation | Second documented hardware setting | — | ⬜ not run |  |  |
