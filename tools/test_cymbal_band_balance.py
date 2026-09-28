@@ -480,9 +480,9 @@ def test_the_committed_ablation_used_the_gaps_this_tool_computes(figs):
 # window. A table in a document is not a fact: these are re-derived from the
 # record on every run, so a scorecard number that drifts from its render breaks
 # the suite instead of quietly outliving its evidence.
-ABLATION_SUMMARY = {"0-50ms": (8.4, 17.1, 8),
-                    "50-300ms": (19.6, 17.0, 9),
-                    "300-1000ms": (21.6, 14.8, 10)}
+ABLATION_SUMMARY = {"0-50ms": (9.0, 18.0, 8),
+                    "50-300ms": (19.3, 17.3, 9),
+                    "300-1000ms": (21.3, 14.5, 10)}
 
 
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")
@@ -494,9 +494,9 @@ def test_the_scorecard_summary_table_is_the_records_own_numbers():
         assert r[keys[-1]] - r[keys[0]] == pytest.approx(tilt, abs=0.05), window
         assert max(abs(v) for v in r.values()) == pytest.approx(worst, abs=0.05), window
         assert sum(1 for v in r.values() if abs(v) > 6.0) == n, window
-    assert blob["bands"]["candidate"]["H_minus_L_db"] == pytest.approx(24.38, abs=0.01)
-    assert blob["bands"]["candidate"]["H"]["edt10_ms"] == pytest.approx(69.9, abs=0.1)
-    assert blob["levels"]["ablation"]["common_scale_db"] == pytest.approx(-33.82, abs=0.01)
+    assert blob["bands"]["candidate"]["H_minus_L_db"] == pytest.approx(25.07, abs=0.01)
+    assert blob["bands"]["candidate"]["H"]["edt10_ms"] == pytest.approx(58.8, abs=0.1)
+    assert blob["levels"]["ablation"]["common_scale_db"] == pytest.approx(-35.38, abs=0.01)
 
 
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")

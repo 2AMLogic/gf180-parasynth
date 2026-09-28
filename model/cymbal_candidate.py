@@ -114,10 +114,10 @@ the two digitised artifacts and REFUSES outside its bound):
         explanation of them would have predicted.
       - Applying every resolved factor with the VCA drives held equal is
         rendered as `cymbal_candidate_eval.py --variant balance` and puts the
-        band split 16.2 dB from the 808 CY5025 (H-L 24.38 against 8.16) where
+        band split 16.9 dB from the 808 CY5025 (H-L 25.07 against 8.16) where
         this rule is 3.9 dB from it, and takes the strike window from 0 of 14
-        thirds outside +-6 dB to 8 of 14. So the balance is not applicable
-        until SN p.13's VR4 network AND the VCA drives are both digitised.
+        thirds outside +-6 dB to 8 of 14. VR4's network IS now digitised and
+        solved, so the balance is not applicable until the VCA drives are too.
   * NOT APPLIED: the TONE knob law. Figure 9 identifies only k = 1.0, and the
     knob-law render is separately not the instrument
     (`docs/scorecard/cymbal-369/README.md` §4, and §6 of `balance/README.md`
