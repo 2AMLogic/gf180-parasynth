@@ -80,13 +80,26 @@ with no cap-only loop, so the transfer function from any one of the three
 sources to N2 is a ratio of polynomials in `s` with a 5th-order denominator
 -- W14b's own word for it, arrived at independently of W14b's coefficients.
 
-That claim is checked TWO ways, and the reason there are two is that the
-first one does not run where it matters. `sympy` is not in any of this
-repository's CI requirement sets (the workflows install `numpy scipy pytest`,
-plus `pyyaml`), so a `sympy`-gated test of the single most structural claim
-here is a check that silently does not run -- indistinguishable, in the
-report, from one that passed. `poles_hz()` / `solve_vtone_mna()` below
-therefore re-derive the same facts with numpy/scipy only:
+That claim is checked TWO ways, and the reason there are two is that the first
+one did not run where it matters -- twice over, and the second reason was found
+only when the first was checked.
+
+  1. `sympy` is not in any of this repository's CI requirement sets (the
+     workflows install `numpy scipy pytest`, plus `pyyaml`), so a
+     `sympy`-gated test skips wherever it is collected, and a skip is reported
+     beside passes and read as one.
+  2. It was not being collected either. `tools/test_tone_stage_schematic.py`
+     was in no workflow at all: rungs.yml's `python` job runs `model/`, `spec/`
+     and a NAMED list of `tools/test_*.py` files, full `pytest tools/` runs
+     only under `make verify` (which no workflow invokes), and `docs/dag.json`
+     has no node under `tools/`. So the first diagnosis -- "it skipped in CI"
+     -- was itself wrong: nothing here appeared in a CI report, skipped or
+     otherwise.
+
+Both are fixed. This file's tests are now named in rungs.yml's `python` job
+(#417), so they run on every pull request, and `poles_hz()` /
+`solve_vtone_mna()` below re-derive the same facts with numpy/scipy only so
+what runs there is the structural claim itself, not a skip line:
 
   * `solve_vtone_mna()` builds the network a DIFFERENT way -- seven nodes with
     each series R-C split at its own internal node, so every element is a
@@ -105,8 +118,14 @@ therefore re-derive the same facts with numpy/scipy only:
     `b` changes. "One network, one denominator" is therefore true by
     construction for all three paths, which is what W14b asserts in prose.
 
+The agreement in the first bullet is not vacuous: swapping R119 and R129 inside
+`mna_matrices` alone, leaving `solve_vtone`'s hand elimination on the true
+values, parts the two formulations by 2.75 dB against that 1e-14 dB baseline
+(`test_control_the_formulations_would_notice_a_swapped_component`).
+
 The `sympy` test is kept as a third, symbolic witness and still skips where
-`sympy` is absent; it is no longer the only thing standing behind the claim.
+`sympy` is absent; it is no longer the only thing standing behind the claim,
+and it is no longer the only thing in a file CI does not collect.
 
 WHICH RAIL IS WHICH BAND, AND WHAT "k = 1.0" MEANS ON THIS POT. Nothing on
 the schematic says so directly, so it is resolved the same way Figure 9's own

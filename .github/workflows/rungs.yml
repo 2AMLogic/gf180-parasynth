@@ -200,6 +200,27 @@ jobs:
       - name: every decision record owns its number
         run: python tools/check_decision_record_numbers.py
 
+      # Same argument again, and #390 found it the hard way: the SN p.13 tone
+      # stage's most structural claim ("five capacitors, no cap-only loop,
+      # therefore fifth-order with ONE shared denominator") was carried by a
+      # test file NO workflow collected. Not skipped -- absent. This job runs a
+      # named list, `pytest tools/` in full runs only under `make verify` (which
+      # no workflow invokes; rungs.yml runs `make verify-fast`), and docs/dag.json
+      # has no node under tools/. Naming the two files here is what makes the
+      # question "does this check run in CI, or only on a build box?" answer YES
+      # for them. The `sympy` witness inside the first file still skips, because
+      # sympy is deliberately not installed above -- but it is now a visible skip
+      # BESIDE two numpy-only witnesses of the same fact that do run, rather than
+      # the sole evidence in a file nothing collected.
+      # Measured 4.0 s + 2.3 s, so the 40-minute cap above is untouched. Neither
+      # needs the network: the ~6 MB SN scan is not a test dependency (the tests
+      # cover the refusal paths), and the digitised Figure 9 evidence artifact is
+      # committed.
+      - name: the SN p.13 tone-stage derivation and its controls
+        run: python -m pytest tools/test_tone_stage_schematic.py -q
+      - name: the Figure 9 digitiser and its controls
+        run: python -m pytest tools/test_werner_fig9.py -q
+
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
       # renamed a parameter into `def rms(_unused=None, x)`, which is a syntax

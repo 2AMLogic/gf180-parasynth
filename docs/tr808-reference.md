@@ -1292,13 +1292,26 @@ envelopes.
   two-cap op-amp input networks, and which op-amp VR2 "CY DECAY" is wired to),
   where previously only the fit had chosen it. (2) The "fifth-order, one
   shared denominator" claim — the most structural claim in §10 — was tested
-  only under `sympy`, which **no workflow here installs**, so that test
-  *skipped* in CI and read like a pass. It is now also derived with
-  numpy/scipy only, as a count of finite generalised eigenvalues of the
-  `(G + sC)` pencil, and cross-checked against a second, independent node
-  formulation that agrees to ~1e-14 dB. A skipped check of a load-bearing
-  claim is the failure mode `docs/failure-modes.md` names; it is worth
-  assuming it will recur elsewhere in this suite.
+  only under `sympy`, which **no workflow here installs**. The first account
+  of what that cost was itself wrong, and the correction is the more useful
+  half, so both are recorded: this entry originally said the test *skipped* in
+  CI and read like a pass. **It did not skip in CI; it was never collected in
+  CI.** `tools/test_tone_stage_schematic.py` was named by no workflow — the
+  `python` job in `.github/workflows/rungs.yml` runs `model/`, `spec/` and a
+  named list of `tools/test_*.py` files, full `pytest tools/` runs only under
+  `make verify` (which no workflow invokes), and `docs/dag.json` has no node
+  under `tools/`. The `sympy` gate was a real but second-order problem on top
+  of that. Both are now repaired: the file is named in that job (#417), so it
+  runs on every pull request, and the claim is also derived with numpy/scipy
+  only, as a count of finite generalised eigenvalues of the `(G + sC)` pencil,
+  cross-checked against a second, independent node formulation that agrees to
+  2.1e-14 dB — an agreement whose non-vacuity is itself a committed control
+  (swapping R119/R129 in one formulation alone parts them by 2.75 dB). A
+  load-bearing check that no job runs is the failure mode
+  `docs/failure-modes.md` names, arriving one level up in the measurement
+  apparatus rather than in the evidence; the general question to ask of any
+  check here is **"which job names this file?"**, and for most of `tools/` the
+  honest answer is still *none*.
 
   **Still open, and explicitly out of scope for #390: which curve of each
   family is which k.** Only k = 1.0 is marked, and the four other members

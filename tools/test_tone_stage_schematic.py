@@ -167,11 +167,20 @@ def test_solve_vtone_rejects_an_unknown_drive():
 # ---------------------------------------------------------------------------
 # Structural facts, with numpy/scipy only.
 #
-# These exist because the `sympy` witness at the bottom of this file SKIPS in
-# CI -- no workflow here installs sympy (they install `numpy scipy pytest`,
-# plus `pyyaml`) -- and a skipped check of the single most structural claim in
-# the module reads, in the report, exactly like a passing one. Everything
-# below runs wherever the rest of the suite runs.
+# These exist because the `sympy` witness at the bottom of this file cannot be
+# the sole evidence for the module's most structural claim: no workflow here
+# installs sympy (they install `numpy scipy pytest`, plus `pyyaml`), so wherever
+# the file IS collected the witness skips, and a skip is reported beside passes
+# and read as one.
+#
+# The first diagnosis of that was itself wrong, and the correction is the more
+# useful half: this file was not being SKIPPED in CI, it was not being COLLECTED
+# in CI. The `python` job in `.github/workflows/rungs.yml` runs `model/`, `spec/`
+# and a named list of `tools/test_*.py` files; full `pytest tools/` runs only
+# under `make verify`, which no workflow invokes; and `docs/dag.json` has no node
+# under `tools/`. So the sympy gate was a second-order problem sitting on top of
+# a first-order one. Both are now fixed: this file is named in that job (#417),
+# and everything below runs there with numpy/scipy alone.
 # ---------------------------------------------------------------------------
 
 
@@ -186,6 +195,54 @@ def test_the_two_independent_node_formulations_agree():
         a = 20.0 * np.log10(np.abs(ts.solve_vtone_mna(f, ts.ALPHA_K1, drive)))
         b = ts.db_at(f, ts.ALPHA_K1, name)
         assert np.max(np.abs(a - b)) < 1e-9, f"{name}: formulations disagree"
+
+
+def test_control_the_formulations_would_notice_a_swapped_component(monkeypatch):
+    """A negative control for the test directly above, which is otherwise the
+    weakest kind of agreement test: two routines that happen to share a bug
+    agree perfectly. R119 (22 k, N1->N2) and R129 (15 k, N4->N2) are the two
+    rails' bridging resistors -- swap them in the MNA build ONLY, leaving
+    `solve_vtone`'s hand elimination reading the true values, and the two
+    formulations must part company by a wide margin.
+
+    Measured here: 2.6-2.8 dB of divergence against a 2.1e-14 dB baseline
+    agreement, i.e. ~13 orders of magnitude of separation. Thresholds below are
+    deliberately loose (> 1 dB injected, < 1e-10 dB baseline) so this asserts
+    the separation, not the exact numbers.
+
+    This was run by hand twice during review and quoted only in prose; a number
+    in prose is a claim, so it is committed here as a check.
+    """
+    f = np.logspace(1.0, 4.4, 64)
+
+    def worst_divergence_db():
+        worst = 0.0
+        for name, drive in ts.DRIVE_OF.items():
+            a = 20.0 * np.log10(np.abs(ts.solve_vtone_mna(f, ts.ALPHA_K1, drive)))
+            b = ts.db_at(f, ts.ALPHA_K1, name)
+            worst = max(worst, float(np.max(np.abs(a - b))))
+        return worst
+
+    baseline = worst_divergence_db()
+    assert baseline < 1e-10, f"baseline formulations already disagree: {baseline} dB"
+
+    real_mna = ts.mna_matrices
+
+    def mna_with_r119_r129_swapped(alpha):
+        # Swap only for the duration of the MNA build, so `solve_vtone` (called
+        # via db_at, outside this window) still sees the real component values.
+        r119, r129 = ts.R119, ts.R129
+        ts.R119, ts.R129 = r129, r119
+        try:
+            return real_mna(alpha)
+        finally:
+            ts.R119, ts.R129 = r119, r129
+
+    monkeypatch.setattr(ts, "mna_matrices", mna_with_r119_r129_swapped)
+    injected = worst_divergence_db()
+    assert injected > 1.0, (
+        f"an R119/R129 swap moved the MNA answer by only {injected} dB -- the "
+        "agreement test above is vacuous")
 
 
 def test_exactly_five_finite_poles_without_sympy():
