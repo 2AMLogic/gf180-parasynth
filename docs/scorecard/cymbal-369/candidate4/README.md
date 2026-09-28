@@ -1,4 +1,4 @@
-# #369 step 8 (#411): Hh1's own gain, restored to its circuit value — REFUSED
+# #369 step 11 (#411): Hh1's own gain, restored to its circuit value — REFUSED
 
 **The question** (issue #411): *does restoring Hh1 at the level the circuit gives — and nothing
 else — bring the mid band's independent content to the 808's +4.4 dB, and does it move the
@@ -19,7 +19,7 @@ Instrumented at `2dd8f8d` (clean tree; every number below is reproducible from t
 
 ## 1. The prediction and the change
 
-`model/cymbal_candidate.py`'s REVISION 4 docstring (committed before this render) states the
+`model/cymbal_candidate.py`'s REVISION 5 docstring (committed before this render) states the
 change and its predicted consequence: Hh1's amp rises by `AMP_MAX / 0.693828 = 1.4413` = **+3.17
 dB**, a flat linear multiplier on Hh1's entire post-filter output, so (a) the mid band's
 over-skirt residual "should move toward the 808's +4.41 dB by close to +3.17 dB, and possibly by
@@ -81,7 +81,7 @@ outside ±6 dB, both vs. 808):
 
 On this fixed-time-window instrument, the tail genuinely improves: fewer thirds exceed the bound
 and the worst case shrinks by 2–3 dB in both windows, roughly tracking the measured +2.42 dB
-absolute gain on the mid band. **This is the part of the render that behaves as revision 4's
+absolute gain on the mid band. **This is the part of the render that behaves as revision 5's
 docstring predicted**; the over-skirt metric above is the part that does not, and that
 distinction — one instrument improving while the metric the issue is framed around does not — is
 the reportable finding, not a contradiction to paper over.
@@ -123,7 +123,7 @@ finding).
 Before accepting the gain-invariance explanation in §2, the shared-accumulator saturation
 `model/modal_fixed.sat` performs once per sample across every active mode
 (`model/cymbal_candidate.py`'s `ModalFxHP3.step`) was checked directly, at both revision 3's and
-revision 4's calibrated amp, for the same full CY render:
+revision 5's calibrated amp, for the same full CY render:
 
 | variant | Hh1 amp | `sat()` calls | clipped | peak output (full scale) | headroom |
 |---|---:|---:|---:|---:|---:|
