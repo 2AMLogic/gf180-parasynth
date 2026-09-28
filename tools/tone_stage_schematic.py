@@ -173,6 +173,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import pathlib
 import shutil
@@ -531,6 +532,204 @@ def fit_alpha_k1(data):
     return alpha, rms
 
 
+def fit_alpha_k1_with_sigma(data):
+    """`fit_alpha_k1`'s answer plus a 1-sigma UNCERTAINTY on alpha.
+
+    Returns (alpha, rms_db, sigma_alpha, n_points). The fit is done directly in
+    alpha rather than through `fit_alpha_k1`'s logit, so the covariance comes
+    straight out of the Jacobian in the units the network is parameterised in
+    (`sigma^2 = s^2 (J^T J)^-1`, `s^2 = RSS/(N-1)`) with no chain rule to get
+    wrong. The two parameterisations agree on alpha to ~1e-12, which
+    `test_the_two_alpha_fits_agree` asserts.
+
+    Alpha is the ONE free parameter in this module: everything else is a
+    printed component value. So this sigma, propagated to a frequency, is the
+    whole of the parameter-uncertainty term in `resolved_bound_db` below.
+    """
+    from scipy.optimize import least_squares
+
+    curves = ("Ht3", "Ht2", "Ht1")
+    measured = {name: _measured_k1(data, name) for name in curves}
+
+    def resid(p):
+        alpha = float(np.clip(p[0], 1e-6, 1.0 - 1e-6))
+        return np.concatenate([db_at(measured[n][0], alpha, n) - measured[n][1]
+                               for n in curves])
+
+    r = least_squares(resid, [0.4])
+    alpha = float(r.x[0])
+    n = int(r.fun.size)
+    rss = float(np.sum(r.fun ** 2))
+    cov = (rss / (n - 1)) * np.linalg.inv(r.jac.T @ r.jac)
+    return alpha, float(np.sqrt(rss / n)), float(np.sqrt(cov[0, 0])), n
+
+
+# ---------------------------------------------------------------------------
+# The resolved record: what a consumer of this network may read, and the
+# uncertainty it comes with
+# ---------------------------------------------------------------------------
+
+
+def residual_stats(data, alpha=None) -> dict:
+    """Per family, how far this network sits from Figure 9's OWN digitised
+    k = 1.0 curve, over the window Figure 9 actually plots.
+
+    `rms_db` is the number the module docstring quotes; `max_db` is the one
+    `resolved_bound_db` uses, because an rms is an average and a bound is not.
+    `window_hz` is recorded beside them so a reader can see at a glance whether
+    the frequency they care about is inside the evidence or outside it -- which
+    for Ht1 and Ht2 it is not, and that is the whole reason #390 exists.
+    """
+    a = ALPHA_K1 if alpha is None else alpha
+    out = {}
+    for name in ("Ht1", "Ht2", "Ht3"):
+        hz, db = _measured_k1(data, name)
+        err = db_at(hz, a, name) - db
+        out[name] = {"rms_db": float(np.sqrt(np.mean(err ** 2))),
+                     "max_db": float(np.max(np.abs(err))),
+                     "n_points": int(hz.size),
+                     "window_hz": [float(hz.min()), float(hz.max())]}
+    return out
+
+
+# How many standard deviations of the fitted wiper fraction the bound carries.
+# Stated here, before any bound below was computed, so it is a policy and not a
+# number chosen to make an answer come out.
+ALPHA_K_SIGMA = 3.0
+
+
+def resolved_bound_db(f_hz, name, *, stats, sigma_alpha, k_sigma=ALPHA_K_SIGMA) -> dict:
+    """Half-width on this network's transmission at `f_hz`, and what it is made of.
+
+    TWO terms, both measured rather than assumed:
+
+      * `residual_db` -- the LARGEST disagreement between this network and
+        Figure 9's own digitised curve for this family, over the window Figure
+        9 plots. For Ht3 that window CONTAINS the cymbal's own band, so this
+        term is validated at the frequency it is used at. For Ht1 and Ht2 it is
+        not: their windows stop at 564 Hz and 1.64 kHz, so the residual is
+        being carried outward, which is a weaker statement and is recorded as
+        such (`residual_measured_here`).
+      * `alpha_db` -- how far the value moves over +-k_sigma on the one free
+        parameter this module has. Everything else in the network is a printed
+        component value.
+
+    WHAT IT DOES NOT COVER, said rather than left implied: those printed values
+    are taken as EXACT. A real board's resistors and capacitors carry tolerance,
+    and nothing in this repository measures a TR-808's actual VR4 network, so a
+    component-tolerance term would be invented rather than read. The bound below
+    is therefore "this network, at its nominal printed values, against the
+    evidence it was fitted to" -- not "a TR-808's tone stage, unit to unit".
+    """
+    f = float(f_hz)
+    st = stats[name]
+    base = float(db_at(np.array([f]), ALPHA_K1, name)[0])
+    lo_a = max(ALPHA_K1 - k_sigma * sigma_alpha, 0.0)
+    hi_a = min(ALPHA_K1 + k_sigma * sigma_alpha, 1.0)
+    spread = max(abs(float(db_at(np.array([f]), a, name)[0]) - base)
+                 for a in (lo_a, hi_a))
+    half = st["max_db"] + spread
+    return {"hz": f, "db": base, "bound_db": half,
+            "lo_db": base - half, "hi_db": base + half,
+            "residual_db": st["max_db"], "alpha_db": spread,
+            "k_sigma": float(k_sigma),
+            "residual_measured_here": bool(st["window_hz"][0] <= f <= st["window_hz"][1])}
+
+
+# The frequencies this artifact solves the network at. They are the ones
+# `tools/cymbal_band_balance.py` evaluates the inter-band balance at -- each
+# band's own calibration third (`cymbal_candidate_eval.CENTRE`, reached through
+# `cymbal_tone_realisation.CENTRE_HZ` so the two cannot drift apart) -- plus
+# 7.1 kHz, the single shared frequency #396 and reference 18 quoted before that
+# correction, kept so the old reading stays checkable against the new one.
+RECORD_EXTRA_HZ = (7100.0,)
+
+
+def record_frequencies_hz() -> list[float]:
+    import cymbal_tone_realisation as ct          # noqa: PLC0415 (avoids a cycle)
+    return sorted(set(float(v) for v in ct.CENTRE_HZ.values()) | set(RECORD_EXTRA_HZ))
+
+
+def band_of() -> dict:
+    """{balance band -> Ht family}, read from the module that owns it."""
+    import cymbal_tone_realisation as ct          # noqa: PLC0415
+    return dict(ct.BAND_OF)
+
+
+ARTIFACT = pathlib.Path(__file__).resolve().parents[1] / "docs" / "scorecard" \
+    / "cymbal-369" / "sn-p13-vr4.json"
+
+
+def balance_record(data, *, fig9_path=None) -> dict:
+    """The evidence record this module emits for `schematic-vr4`.
+
+    WHY AN ARTIFACT AND NOT AN IMPORT (#420 scope item 1). `cymbal_band_balance`
+    states four preconditions and refuses on the ones whose named repo path is
+    absent. Repointing one of the four at a Python module would make that one
+    precondition unfalsifiable -- an import of a module sitting next to the
+    caller always succeeds, so the check could never fail and would stop being
+    a check. Keeping all four as named paths keeps the contract uniform, and it
+    makes the thing the balance reads a COMMITTED RECORD with its own
+    provenance (the pinned scan's SHA-256, the fitted alpha, the residuals, and
+    the SHA-256 of the Figure 9 artifact alpha was fitted against) rather than
+    "whatever the module computes on the day you ask it".
+
+    The record cannot drift from the module, because
+    `test_cymbal_band_balance.test_the_committed_schematic_artifact_is_the_modules_own_solution`
+    recomputes every field from this function and compares.
+    """
+    p = pathlib.Path(fig9_path) if fig9_path is not None else w9.ARTIFACT
+    alpha, rms, sigma, n = fit_alpha_k1_with_sigma(data)
+    stats = residual_stats(data)
+    freqs = record_frequencies_hz()
+    root = pathlib.Path(__file__).resolve().parents[1]
+
+    bands = {}
+    for band, name in band_of().items():
+        bands[band] = {
+            "family": name,
+            "drive": DRIVE_OF[name],
+            "at_hz": {f"{f:.1f}": resolved_bound_db(
+                f, name, stats=stats, sigma_alpha=sigma) for f in freqs},
+        }
+
+    return {
+        "artifact": "sn-p13-vr4",
+        "what": "the CY TONE network around VR4 (SN p.13, voicing board "
+                "VG 3116-140), solved by nodal analysis -- the resolved "
+                "inter-band tone term, not a bound on it",
+        "tool": "tools/tone_stage_schematic.py",
+        "emit": "python3 tools/tone_stage_schematic.py --emit",
+        "source": {"url": SN_PDF_URL, "sha256": SN_PDF_SHA256,
+                   "page": SN_PDF_PAGE, "board": "VG 3116-140",
+                   "crops": SN_CROPS},
+        "components": {"C55": C55, "R112": R112, "R119": R119,
+                       "VR4_TOTAL": VR4_TOTAL, "R125": R125, "R129": R129,
+                       "R120": R120, "C56": C56, "C58": C58, "R123": R123,
+                       "C57": C57, "R121": R121, "C90": C90},
+        "alpha_k1": ALPHA_K1,
+        "alpha_sigma": sigma,
+        "alpha_k_sigma": ALPHA_K_SIGMA,
+        "fit": {"alpha": alpha, "joint_rms_db": rms, "n_points": n,
+                "free_per_path_gain": False, "per_family": stats},
+        "fitted_against": {
+            "path": str(p.relative_to(root)) if p.is_absolute() else str(p),
+            "sha256": hashlib.sha256(p.read_bytes()).hexdigest()},
+        "poles_hz": [float(v) for v in poles_hz()],
+        "bands": bands,
+        "bound_excludes": "component tolerance -- the printed nominal values "
+                          "are taken as exact; see resolved_bound_db",
+    }
+
+
+def emit(data, path=None, *, fig9_path=None) -> pathlib.Path:
+    out = pathlib.Path(path) if path is not None else ARTIFACT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(balance_record(data, fig9_path=fig9_path),
+                              indent=1, sort_keys=True) + "\n")
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Reporting / gate
 # ---------------------------------------------------------------------------
@@ -625,6 +824,11 @@ def main(argv=None) -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--poles", action="store_true",
                     help="the shared pole set, from the numpy-only formulation")
+    ap.add_argument("--emit", nargs="?", const=str(ARTIFACT), default=None,
+                    metavar="PATH",
+                    help="write the resolved record the inter-band balance "
+                         f"reads as its `schematic-vr4` precondition "
+                         f"(default {ARTIFACT.name})")
     ap.add_argument("--verify-source", metavar="SN_PDF",
                     help="check a local copy of the pinned SN scan against "
                          "SN_PDF_SHA256 and re-render the crops the component "
@@ -661,7 +865,7 @@ def main(argv=None) -> int:
         return 3
 
     rc = 0
-    if a.check or not a.report:
+    if a.check or not (a.report or a.emit):
         ok, lines = check(data)
         for line in lines:
             print(line)
@@ -673,6 +877,10 @@ def main(argv=None) -> int:
             print()
         for line in report(data):
             print(line)
+
+    if a.emit:
+        out = emit(data, a.emit, fig9_path=pathlib.Path(a.artifact))
+        print(f"wrote {out}")
 
     return rc
 

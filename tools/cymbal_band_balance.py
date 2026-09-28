@@ -9,18 +9,30 @@ came from R124/R127/C48/C59) over any further fitting of W14b Figure 9.
 
 THIS TOOL DOES NOT RESOLVE THE BALANCE. It decomposes it, states each factor's
 provenance and uncertainty, asserts the preconditions an applicable answer
-needs, and REFUSES when they are absent -- which they are. The value is in the
-numbers the refusal is made of, because two of them were not known before:
+needs, and REFUSES when they are absent -- which one of them still is. The
+value is in the numbers the refusal is made of:
 
   1. The 9-18 dB the issue quotes is read at the WRONG FREQUENCY for the
-     balance question. That 9/18 dB is `werner_fig9.extrapolation_bound`
+     balance question, and it is now the wrong QUANTITY as well.
+
+     Wrong frequency: that 9/18 dB is `werner_fig9.extrapolation_bound`
      evaluated at 7.1 kHz for every band. Each band's level is set in one
      1/3 octave (3175 Hz for the low band, 10079 Hz for both high bands), and
-     there the same bound is 7.4 dB (low, against the 18.0 dB read at
+     there the same figure bound is 7.4 dB (low, against the 18.0 dB read at
      7.1 kHz), 13.9 dB (decay, which is WIDER than its own 9.1 dB at 7.1 kHz)
      and 0.04 dB (short, MEASURED rather than extrapolated, because 10079 Hz
-     is inside Ht3's plotted range). So Figure 9's window is not the binding
-     constraint it was taken for -- see 2 for what is.
+     is inside Ht3's plotted range).
+
+     Wrong quantity: #390/#417 stopped bounding that network and SOLVED it.
+     `tools/tone_stage_schematic.py` reads SN p.13's R/C values around VR4 off
+     a SHA-256-pinned scan and solves the network by nodal analysis, fitting
+     one shared wiper fraction -- no per-path gain -- to all three of Figure
+     9's digitised k = 1.0 families to 0.001-0.013 dB rms. So the `tone`
+     column below is a CIRCUIT VALUE, and `tone +-` is that solution's own
+     residual: 0.008 / 0.008 / 0.067 dB wide, not 7.4 / 13.9 / 0.04 (#420).
+     The figure route is still computed, because #396 EXCLUDES it and an
+     exclusion has to be a measurement: `figure_route_gains()` refuses on a
+     propagated bound of up to 21.3 dB against a 3.0 dB tolerance.
 
   2. What IS binding is a factor neither figure carries at all: **the three
      swing VCAs' drive levels.** §10's three bands leave the same source
@@ -32,14 +44,18 @@ numbers the refusal is made of, because two of them were not known before:
 
      Its size is measured here rather than argued: against the shipped-kit
      level rule that candidate 3 ships, the filters-plus-tone balance alone
-     demands about +10 dB on the decay band and +38 dB on the short band. A
-     38 dB unexplained residual is not a 9-18 dB figure-reading problem.
+     demands +10.1 dB on the decay band and +39.8 dB on the short band. A
+     39.8 dB unexplained residual is not a 9-18 dB figure-reading problem, and
+     resolving the tone term MOVED IT THE WRONG WAY for anyone hoping VR4
+     would explain it: the gap grew by 0.3 dB (decay) and 1.6 dB (short).
 
 Everything is read from the committed artifacts -- `werner-fig4.json` (the
 band-pass peaks and the high-pass pass bands, whose digitiser is gated on
-schematic R/C values), `werner-fig9.json` (the tone stage), and
-`candidate3/candidate3.json` (the shipped-kit rule's realised levels) -- and
-from `model/cymbal_candidate.py`, so the tool and the model cannot drift.
+schematic R/C values), `werner-fig9.json` (the tone stage as a figure),
+`sn-p13-vr4.json` (the tone stage as a solved circuit, emitted by
+`tone_stage_schematic.py --emit`) and `candidate3/candidate3.json` (the
+shipped-kit rule's realised levels) -- and from `model/cymbal_candidate.py`,
+so the tool and the model cannot drift.
 
   --report   the decomposition, per band, with provenance and bounds
   --check    the gate: five named properties, and a properties x defects
@@ -47,9 +63,10 @@ from `model/cymbal_candidate.py`, so the tool and the model cannot drift.
   --json P   the evidence record
 
 REFUSES rather than answering when an artifact is absent, and `balance_gains()`
-REFUSES unconditionally today because two of its preconditions are unmet. That
-refusal is verified to be non-vacuous: hand the tool a complete synthetic
-precondition set and it answers.
+still REFUSES today because ONE of its four preconditions is unmet -- the VCA
+drives. That refusal is verified to be non-vacuous in both directions: it names
+`vca-drive` and no longer names `schematic-vr4`, and handed a complete
+synthetic precondition set it answers.
 """
 from __future__ import annotations
 
@@ -66,6 +83,7 @@ sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import drums_fx as dx                       # noqa: E402
 import cymbal_candidate as cc               # noqa: E402
 import cymbal_tone_realisation as ct        # noqa: E402
+import tone_stage_schematic as ts           # noqa: E402
 import werner_fig4 as wf                    # noqa: E402
 import werner_fig9 as w9                    # noqa: E402
 
@@ -101,6 +119,13 @@ SCORECARD = ROOT / "docs" / "scorecard" / "cymbal-369"
 SCHEMATIC_ARTIFACT = SCORECARD / "sn-p13-vr4.json"
 VCA_ARTIFACT = SCORECARD / "vca-drive.json"
 CANDIDATE3_ARTIFACT = SCORECARD / "candidate3" / "candidate3.json"
+
+# The two routes to the tone term, kept side by side on purpose. The schematic
+# one is what the balance uses; the figure one is what #396 EXCLUDES, and it is
+# computed anyway so the exclusion stays a measurement (`figure_route_gains`).
+ROUTE_SCHEMATIC = "schematic"
+ROUTE_FIGURE = "figure"
+ROUTES = (ROUTE_SCHEMATIC, ROUTE_FIGURE)
 
 
 # ---------------------------------------------------------------------------
@@ -185,8 +210,10 @@ def _bound_cached(band, hz, db, f):
     return _BOUND_CACHE[key]
 
 
-def tone_term(band, fig9, *, at_hz=None, defect=None):
-    """The tone stage's contribution to this band's level, with its bound.
+def figure_tone_term(band, fig9, *, at_hz=None, defect=None):
+    """The tone stage's contribution to this band's level FROM FIGURE 9, with
+    its bound -- the route #396 excludes, kept because the exclusion has to be
+    a measurement rather than a decree.
 
     The bound is `werner_fig9.extrapolation_bound` -- the spread of every
     alternative section the plotted window cannot tell apart from the 2-pole
@@ -202,7 +229,7 @@ def tone_term(band, fig9, *, at_hz=None, defect=None):
     nominal = float(tone_db(band, np.array([f]), fig9)[0])
     if defect == "NO_TONE_TERM":
         return {"hz": f, "db": 0.0, "lo_db": 0.0, "hi_db": 0.0, "width_db": 0.0,
-                "measured": True, "n_alternatives": 0}
+                "measured": True, "n_alternatives": 0, "route": ROUTE_FIGURE}
     return {
         "hz": f,
         "db": nominal,
@@ -211,7 +238,94 @@ def tone_term(band, fig9, *, at_hz=None, defect=None):
         "width_db": float(b["hi_db"] - b["lo_db"]),
         "measured": bool(hz.min() <= f <= hz.max()),
         "n_alternatives": int(b["n_alternatives"]),
+        "route": ROUTE_FIGURE,
     }
+
+
+# ---------------------------------------------------------------------------
+# The RESOLVED tone term: SN p.13's VR4 network, solved (#390/#417, applied
+# here by #420). Read from the committed `sn-p13-vr4.json` record, not
+# recomputed on the fly, so the precondition below is load-bearing at the point
+# of use rather than a token the tool checks and then ignores.
+# ---------------------------------------------------------------------------
+
+_SCHEMATIC_CACHE: dict = {}
+
+
+def schematic_record(path: pathlib.Path | None = None) -> dict:
+    """`sn-p13-vr4.json`, or a REFUSAL naming the command that writes it."""
+    p = path or SCHEMATIC_ARTIFACT
+    key = str(p)
+    if key not in _SCHEMATIC_CACHE:
+        if not p.exists():
+            raise Refused(
+                f"{p} is absent; run tools/tone_stage_schematic.py --emit "
+                f"{p}")
+        blob = json.loads(p.read_text())
+        if blob.get("artifact") != "sn-p13-vr4" or "bands" not in blob:
+            raise Refused(f"{p} is not an sn-p13-vr4 record "
+                          "(no artifact/bands key)")
+        _SCHEMATIC_CACHE[key] = blob
+    return _SCHEMATIC_CACHE[key]
+
+
+def schematic_tone_term(band, *, at_hz=None, defect=None, path=None):
+    """The tone stage's contribution to this band's level AS A CIRCUIT VALUE.
+
+    `db` is `tone_stage_schematic.solve_vtone` at the fitted wiper fraction;
+    `width_db` is twice that solution's own bound (its largest disagreement
+    with Figure 9's digitised curve, plus 3 sigma on the one fitted parameter)
+    -- NOT an extrapolation spread, because nothing is being extrapolated: the
+    network is solved at whatever frequency it is asked about.
+
+    REFUSES for a frequency the record does not carry rather than interpolating
+    one, and REFUSES if the record's frequency for this band is no longer the
+    frequency the band's level is set at -- a record that quietly answered for
+    the wrong third would look exactly like a record that answered.
+    """
+    f = float(at_hz if at_hz is not None else CENTRE_HZ[band])
+    if defect == "TONE_AT_7100_FOR_ALL":
+        f = 7100.0
+    if defect == "NO_TONE_TERM":
+        return {"hz": f, "db": 0.0, "lo_db": 0.0, "hi_db": 0.0, "width_db": 0.0,
+                "measured": True, "route": ROUTE_SCHEMATIC}
+    rec = schematic_record(path)
+    try:
+        entry = rec["bands"][band]["at_hz"][f"{f:.1f}"]
+    except KeyError:
+        have = sorted(rec.get("bands", {}).get(band, {}).get("at_hz", {}))
+        raise Refused(
+            f"{SCHEMATIC_ARTIFACT.name} solves the {band} band at "
+            f"{', '.join(have) or 'no frequency'} Hz, not at {f:.1f} Hz; "
+            "re-emit it with tools/tone_stage_schematic.py --emit") from None
+    if at_hz is None and defect != "TONE_AT_7100_FOR_ALL" \
+            and abs(entry["hz"] - CENTRE_HZ[band]) > 1e-6:
+        raise Refused(f"{SCHEMATIC_ARTIFACT.name} records the {band} band at "
+                      f"{entry['hz']} Hz but its level is set at "
+                      f"{CENTRE_HZ[band]} Hz")
+    half = float(entry["bound_db"])
+    return {
+        "hz": f,
+        "db": float(entry["db"]),
+        "lo_db": float(entry["lo_db"]),
+        "hi_db": float(entry["hi_db"]),
+        "width_db": 2.0 * half,
+        "measured": bool(entry["residual_measured_here"]),
+        "residual_db": float(entry["residual_db"]),
+        "alpha_db": float(entry["alpha_db"]),
+        "family": rec["bands"][band]["family"],
+        "route": ROUTE_SCHEMATIC,
+    }
+
+
+def tone_term(band, fig9, *, at_hz=None, defect=None, route=None):
+    """The tone term by `route`. The default is the RESOLVED circuit value."""
+    r = ROUTE_SCHEMATIC if route is None else route
+    if r == ROUTE_SCHEMATIC:
+        return schematic_tone_term(band, at_hz=at_hz, defect=defect)
+    if r == ROUTE_FIGURE:
+        return figure_tone_term(band, fig9, at_hz=at_hz, defect=defect)
+    raise ValueError(f"unknown tone route {r!r}; expected one of {ROUTES}")
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +339,12 @@ PROVENANCE = {
     "band-pass peak": "W14b Fig. 4 via tools/werner_fig4.py; the digitiser is "
                       "gated on SN p.13 R/C values (R56-R59, C13-C16)",
     "high-pass pass band": "W14b Fig. 4 via tools/werner_fig4.py, same gate",
-    "tone stage": "W14b Fig. 9 via tools/werner_fig9.py; BOUNDED, see width_db",
+    "tone stage": "SN p.13's VR4 network via tools/tone_stage_schematic.py, "
+                  "solved by nodal analysis and emitted as sn-p13-vr4.json -- "
+                  "RESOLVED (#390/#417, applied by #420). `width_db` is that "
+                  "solution's own residual against W14b Fig. 9's digitised "
+                  "curves, not an extrapolation spread. Fig. 9's own bounded "
+                  "reading is kept beside it as the route #396 excludes",
     "LEVEL differentiator": "W14b Fig. 10 via tools/werner_fig4.py; common to "
                             "all three bands, so it cancels in a ratio -- but "
                             "not its frequency dependence, and the bands are "
@@ -237,7 +356,7 @@ PROVENANCE = {
 }
 
 
-def band_terms(band, fig9, corner_hz, *, defect=None) -> dict:
+def band_terms(band, fig9, corner_hz, *, defect=None, route=None) -> dict:
     """Every factor of one band's level, at the frequency its level is set."""
     f = np.array([CENTRE_HZ[band]])
     peaks = dict(cc.BP_PEAK_DB)
@@ -245,7 +364,7 @@ def band_terms(band, fig9, corner_hz, *, defect=None) -> dict:
         peaks = {"low": cc.BP_PEAK_DB["high"], "high": cc.BP_PEAK_DB["low"]}
     hp_pass = {"low": cc.HH1_PASS_DB, "decay": cc.HH2_PASS_DB,
                "short": cc.HH3_PASS_DB}[band]
-    tone = tone_term(band, fig9, defect=defect)
+    tone = tone_term(band, fig9, defect=defect, route=route)
     level = float(highpass1_db(f, corner_hz)[0])
     total = float(band_filter_db(band, f, defect=defect)[0]) + tone["db"] + level
     if defect == "UNIFORM_6DB_ALL_BANDS":
@@ -265,10 +384,11 @@ def band_terms(band, fig9, corner_hz, *, defect=None) -> dict:
     }
 
 
-def relative_db(fig9, corner_hz, *, ref="low", defect=None) -> dict:
+def relative_db(fig9, corner_hz, *, ref="low", defect=None, route=None) -> dict:
     """Each band's circuit level relative to `ref`, with the tone bound
     propagated. The VCA-drive factor is NOT in here -- that is the point."""
-    t = {b: band_terms(b, fig9, corner_hz, defect=defect) for b in BANDS}
+    t = {b: band_terms(b, fig9, corner_hz, defect=defect, route=route)
+         for b in BANDS}
     out = {}
     for b in BANDS:
         nom = t[b]["total_db"] - t[ref]["total_db"]
@@ -278,8 +398,11 @@ def relative_db(fig9, corner_hz, *, ref="low", defect=None) -> dict:
               - (t[ref]["total_db"] - t[ref]["tone"]["db"] + t[ref]["tone"]["hi_db"]))
         hi = ((t[b]["total_db"] - t[b]["tone"]["db"] + t[b]["tone"]["hi_db"])
               - (t[ref]["total_db"] - t[ref]["tone"]["db"] + t[ref]["tone"]["lo_db"]))
-        out[b] = {"db": round(nom, 2), "lo_db": round(lo, 2), "hi_db": round(hi, 2),
-                  "width_db": round(hi - lo, 2)}
+        # 4 decimals, not 2: #420's resolved tone term makes the propagated
+        # width 0.015-0.075 dB, and at 2 decimals that reads as "0.02" -- a
+        # rounding artefact standing where a measurement belongs.
+        out[b] = {"db": round(nom, 4), "lo_db": round(lo, 4), "hi_db": round(hi, 4),
+                  "width_db": round(hi - lo, 4)}
     return out
 
 
@@ -330,7 +453,7 @@ def shipped_rule_relative_db(path: pathlib.Path | None = None, *,
             for b in BANDS}
 
 
-def gap_db(fig9, corner_hz, *, defect=None, path=None) -> dict:
+def gap_db(fig9, corner_hz, *, defect=None, path=None, route=None) -> dict:
     """Circuit balance minus shipped-kit balance, per band.
 
     This difference is what the two ABSENT preconditions have to account for:
@@ -339,7 +462,7 @@ def gap_db(fig9, corner_hz, *, defect=None, path=None) -> dict:
     reported as one number because nothing available here separates them --
     saying which is which is exactly what the schematic would do.
     """
-    circuit = relative_db(fig9, corner_hz, defect=defect)
+    circuit = relative_db(fig9, corner_hz, defect=defect, route=route)
     rule = shipped_rule_relative_db(path=path, defect=defect)
     return {b: {"circuit_db": circuit[b]["db"], "rule_db": rule[b],
                 "gap_db": round(circuit[b]["db"] - rule[b], 2),
@@ -362,7 +485,9 @@ def preconditions(*, present=None) -> list[dict]:
          "the band-pass peaks and high-pass pass bands (W14b Figs. 4, 10)"),
         ("schematic-vr4", SCHEMATIC_ARTIFACT,
          "SN p.13's R/C values around VR4, as circuit values rather than a "
-         "figure fit -- #396's preferred route, and reference §18's first"),
+         "figure fit -- #396's preferred route, and reference §18's first. "
+         "RESOLVED by #390/#417: emitted from the nodal solution with "
+         "tools/tone_stage_schematic.py --emit"),
         ("vca-drive", VCA_ARTIFACT,
          "the three envelope generators' and swing VCAs' peak drive "
          "(Q16/Q17/Q18), which no W14b figure plots"),
@@ -378,11 +503,13 @@ def preconditions(*, present=None) -> list[dict]:
 def balance_gains(fig9, corner_hz, *, present=None) -> dict:
     """The per-band gains an applicable balance would impose. REFUSES today.
 
-    The refusal is the deliverable of #396's item 2: the schematic route is
-    preferred and the schematic is not in this repository, so the tool says so
-    instead of quietly substituting the figure-fitting route the issue
-    excludes. Hand it a complete precondition set and it answers -- that is
-    `test_the_refusal_is_not_vacuous`.
+    The refusal is the deliverable of #396's item 2. It used to name TWO
+    missing inputs; #390/#417 supplied the first, so today it names exactly one
+    -- `vca-drive` -- and the tool says so instead of quietly substituting the
+    figure-fitting route the issue excludes. Hand it a complete precondition
+    set and it answers: that is `test_the_refusal_is_not_vacuous`, and it is
+    why the remaining refusal is an assertion rather than an opinion compiled
+    into a function.
     """
     missing = [p for p in preconditions(present=present) if not p["present"]]
     if missing:
@@ -391,9 +518,9 @@ def balance_gains(fig9, corner_hz, *, present=None) -> dict:
             + "; ".join(f"{p['name']} absent ({p['path']}) -- needed for "
                         f"{p['needed_for']}" for p in missing)
         )
-    # Past this point `schematic-vr4` is present, so the tone term is a circuit
-    # value and carries no figure-reading bound -- which is precisely why #396
-    # prefers this route.
+    # Past this point every precondition holds, and the tone term is already a
+    # circuit value carrying no figure-reading bound -- which is precisely why
+    # #396 prefers this route.
     return {b: v["db"] for b, v in relative_db(fig9, corner_hz).items()}
 
 
@@ -405,7 +532,7 @@ def figure_route_gains(fig9, corner_hz, *, defect=None) -> dict:
     bound is `relative_db`'s propagated extrapolation spread, and it is wider
     than `BALANCE_BOUND_DB` in more than one band, so this refuses.
     """
-    rel = relative_db(fig9, corner_hz, defect=defect)
+    rel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
     wide = {b: v["width_db"] for b, v in rel.items() if v["width_db"] > BALANCE_BOUND_DB}
     if wide:
         raise Refused(
@@ -527,25 +654,40 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
         f"max {worst:.4f} dB at each band's own band-pass peak ({at or 'n/a'}), "
         f"bound {CHAIN_TOL_DB}")
 
-    # 2. tone-bound: the balance's tone term must be OUTSIDE the applicability
-    #    bound for at least one band -- otherwise this tool's whole refusal is
-    #    unearned, and the balance should simply be applied.
-    rel = relative_db(fig9, corner_hz, defect=defect)
-    wide = [b for b in BANDS if rel[b]["width_db"] > BALANCE_BOUND_DB]
+    # 2. tone-bound: the two routes must say the two different things they are
+    #    each here to say. The FIGURE route must be outside the applicability
+    #    bound for at least one band -- otherwise #396's exclusion of it is
+    #    unearned and the balance could simply be read off Figure 9. The
+    #    SCHEMATIC route must be INSIDE it for every band -- otherwise #390's
+    #    solution has not actually resolved the term it claims to resolve, and
+    #    the `tone +-` column below would be decoration.
+    #
+    #    Before #420 this property was the first half alone, and the first half
+    #    alone would now be satisfied by a tone term that had resolved nothing.
+    figrel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
+    rel = relative_db(fig9, corner_hz, defect=defect, route=ROUTE_SCHEMATIC)
+    wide = [b for b in BANDS if figrel[b]["width_db"] > BALANCE_BOUND_DB]
+    loose = [b for b in BANDS if rel[b]["width_db"] > BALANCE_BOUND_DB]
     out["tone-bound"] = (
-        bool(wide),
-        "  ".join(f"{b} {rel[b]['db']:+.1f} +-{rel[b]['width_db'] / 2:.1f}" for b in BANDS)
-        + f"  dB re low; {len(wide)} band(s) outside {BALANCE_BOUND_DB} dB")
+        bool(wide) and not loose,
+        "figure route "
+        + "  ".join(f"{b} +-{figrel[b]['width_db'] / 2:.1f}" for b in BANDS)
+        + f" dB re low ({len(wide)} outside {BALANCE_BOUND_DB} dB); schematic route "
+        + "  ".join(f"{b} {rel[b]['db']:+.1f} +-{rel[b]['width_db'] / 2:.3f}" for b in BANDS)
+        + f" dB re low ({len(loose)} outside)")
 
-    # 3. centre-bound-tighter: the new number. At its own 3175 Hz calibration
-    #    third the low band's tone term is bounded MORE tightly than the
-    #    18 dB #396 quotes, which is the same bound at 7.1 kHz.
-    here = tone_term("low", fig9, defect=defect)["width_db"]
-    there = tone_term("low", fig9, at_hz=7100.0, defect=defect)["width_db"]
+    # 3. centre-bound-tighter: #396's own arithmetic error, kept as a live
+    #    assertion because it is what sent the chain after the wrong factor. At
+    #    its own 3175 Hz calibration third the low band's FIGURE bound is
+    #    tighter than the 18 dB #396 quotes, which is the same bound read at
+    #    7.1 kHz. This one stays on the figure route by construction: the
+    #    schematic route has no frequency-dependent window to be wrong about.
+    here = figure_tone_term("low", fig9, defect=defect)["width_db"]
+    there = figure_tone_term("low", fig9, at_hz=7100.0, defect=defect)["width_db"]
     out["centre-bound-tighter"] = (
         here < there,
-        f"low band tone term {here:.1f} dB wide at its own {CENTRE_HZ['low']:.0f} Hz "
-        f"centre vs {there:.1f} dB at 7.1 kHz")
+        f"low band figure tone term {here:.1f} dB wide at its own "
+        f"{CENTRE_HZ['low']:.0f} Hz centre vs {there:.1f} dB at 7.1 kHz")
 
     # 4. rule-bind: the balance being differenced against is the one the kit
     #    actually writes. `candidate3.json`'s per-band energies and its amp /
@@ -555,9 +697,18 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
     #    nothing implements. The magnitude claim rides on the same property:
     #    the gap must exceed the widest tone bound, or Figure 9's window really
     #    would be what is blocking the balance.
+    #
+    #    The magnitude comparison is deliberately made against the FIGURE
+    #    route's bound, not the schematic route's. #420 collapsed the tone
+    #    term's own bound to ~0.07 dB, and "39.8 dB exceeds 0.07 dB" is a
+    #    sentence that asserts nothing. The claim that has to keep holding is
+    #    the one the refusal rests on: the gap is larger than the WIDEST
+    #    uncertainty anyone has ever offered for the tone term -- 21.3 dB, from
+    #    the figure window that #396 blamed.
     try:
         lv = shipped_rule_levels(defect=defect)
         g = gap_db(fig9, corner_hz, defect=defect)
+        figg = gap_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
         worst_bind, at = 0.0, ""
         for b in BANDS:
             want = math.sqrt(lv[b]["shipped_abs"] / lv[b]["unit_abs"]) * UNIT_AMP
@@ -566,12 +717,12 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
             if d > worst_bind:
                 worst_bind, at = d, b
         biggest = max(abs(v["gap_db"]) for v in g.values())
-        widest = max(v["bound_db"] for v in g.values())
+        widest = max(v["bound_db"] for v in figg.values())
         out["rule-bind"] = (
             worst_bind <= RULE_BIND_TOL and biggest > widest,
             f"registers vs energies {worst_bind:.5f} dB ({at or 'n/a'}, bound {RULE_BIND_TOL}); gaps "
             + "  ".join(f"{b} {v['gap_db']:+.1f}" for b, v in g.items())
-            + f" dB re low; worst |gap| {biggest:.1f} vs widest tone bound {widest:.1f}")
+            + f" dB re low; worst |gap| {biggest:.1f} vs widest FIGURE tone bound {widest:.1f}")
     except Refused as exc:
         out["rule-bind"] = (False, f"REFUSED: {exc}")
 
@@ -580,14 +731,20 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
     #    for its own, different reason. A refusal that can never lift is a
     #    hard-coded opinion, not an assertion (CLAUDE.md: run a gate against
     #    the current state before committing it).
+    #
+    #    #420 adds one clause: the live refusal must name `vca-drive`. Before
+    #    #420 it named two preconditions and #390/#417 supplied one of them, so
+    #    "it still refuses" is no longer enough on its own -- a refusal that
+    #    had gone on naming the resolved input would be reporting a state of
+    #    the repository that stopped being true.
     fired = lifted = excluded = False
-    lifted_why = ""
+    fired_why = lifted_why = ""
     try:
         balance_gains(fig9, corner_hz,
                       present=({p["name"]: True for p in preconditions()}
                                if defect == "PRECOND_ALWAYS_OK" else None))
-    except Refused:
-        fired = True
+    except Refused as exc:
+        fired, fired_why = "vca-drive" in str(exc), str(exc)
     try:
         balance_gains(fig9, corner_hz,
                       present={p["name"]: True for p in preconditions()})
@@ -600,10 +757,12 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
         excluded = True
     out["refusal-live"] = (
         fired and lifted and excluded,
-        "refuses on this tree, answers on a complete precondition set, and the "
-        "excluded figure route refuses on its bound"
+        "refuses on this tree naming vca-drive (schematic-vr4 is resolved), "
+        "answers on a complete precondition set, and the excluded figure route "
+        "refuses on its bound"
         if fired and lifted and excluded else
-        ("does not refuse on this tree" if not fired else
+        (f"does not refuse on this tree for vca-drive: {fired_why or 'no refusal'}"
+         if not fired else
          f"never lifts: {lifted_why}" if not lifted else
          "the excluded figure route does not refuse"))
     return out
@@ -652,7 +811,8 @@ def report(fig9, corner_hz) -> list[str]:
              f"applicability bound {BALANCE_BOUND_DB} dB "
              "(docs/audio-distance-metrics.md, the board's tolerance for a band split)",
              ""]
-    lines.append("Each band's circuit level AT THE FREQUENCY ITS LEVEL IS SET:")
+    lines.append("Each band's circuit level AT THE FREQUENCY ITS LEVEL IS SET "
+                 "(tone = SN p.13's VR4 network solved, sn-p13-vr4.json):")
     lines.append(f"  {'band':6s} {'centre':>9s} {'BP peak':>8s} {'BP shape':>9s} "
                  f"{'HP pass':>8s} {'tone':>9s} {'tone +-':>8s} {'LEVEL':>7s} {'total':>8s}")
     for band in BANDS:
@@ -660,8 +820,19 @@ def report(fig9, corner_hz) -> list[str]:
         lines.append(
             f"  {band:6s} {t['centre_hz']:8.0f}H {t['bp_peak_db']:+8.2f} "
             f"{t['bp_shape_db']:+9.2f} {t['hp_pass_db']:+8.2f} {t['tone']['db']:+9.2f} "
-            f"{t['tone']['width_db'] / 2:8.2f} {t['level_db']:+7.2f} {t['total_db']:+8.2f}"
-            + ("" if t["tone"]["measured"] else "   tone EXTRAPOLATED"))
+            f"{t['tone']['width_db'] / 2:8.4f} {t['level_db']:+7.2f} {t['total_db']:+8.2f}"
+            + ("" if t["tone"]["measured"]
+               else "   residual carried outside Fig. 9's window"))
+    lines.append("")
+    lines.append("The same tone term the EXCLUDED figure route gives, for comparison "
+                 "(#396's route, W14b Fig. 9):")
+    lines.append(f"  {'band':6s} {'tone':>9s} {'tone +-':>8s}   {'schematic - figure':>18s}")
+    for band in BANDS:
+        ft = figure_tone_term(band, fig9)
+        st = schematic_tone_term(band)
+        lines.append(f"  {band:6s} {ft['db']:+9.2f} {ft['width_db'] / 2:8.2f}   "
+                     f"{st['db'] - ft['db']:+18.2f}"
+                     + ("" if ft["measured"] else "   EXTRAPOLATED"))
     lines.append("")
     rel = relative_db(fig9, corner_hz)
     g = gap_db(fig9, corner_hz)
@@ -702,16 +873,22 @@ def record(fig9, corner_hz) -> dict:
         applied, refusal = None, str(exc)
     return {
         "tool": "tools/cymbal_band_balance.py",
-        "sources": {"tone": str(w9.ARTIFACT.relative_to(ROOT)),
+        "sources": {"tone": str(SCHEMATIC_ARTIFACT.relative_to(ROOT)),
+                    "tone_figure": str(w9.ARTIFACT.relative_to(ROOT)),
                     "filters": str(wf.ARTIFACT.relative_to(ROOT)),
                     "shipped_rule": str(CANDIDATE3_ARTIFACT.relative_to(ROOT))},
+        "tone_route": ROUTE_SCHEMATIC,
         "level_corner_hz": corner_hz,
         "balance_bound_db": BALANCE_BOUND_DB,
         "centre_hz": CENTRE_HZ,
         "bands": {b: band_terms(b, fig9, corner_hz) for b in BANDS},
+        "figure_route_bands": {b: band_terms(b, fig9, corner_hz, route=ROUTE_FIGURE)
+                               for b in BANDS},
         "relative_db": relative_db(fig9, corner_hz),
+        "figure_route_relative_db": relative_db(fig9, corner_hz, route=ROUTE_FIGURE),
         "shipped_rule_db": shipped_rule_relative_db(),
         "gap_db": gap_db(fig9, corner_hz),
+        "figure_route_gap_db": gap_db(fig9, corner_hz, route=ROUTE_FIGURE),
         "preconditions": preconditions(),
         "applied": applied,
         "refused": refusal,

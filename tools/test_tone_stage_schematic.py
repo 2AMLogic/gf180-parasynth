@@ -12,6 +12,7 @@ visibly worse, not just "still okay".
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 
@@ -377,3 +378,74 @@ def test_the_network_is_exactly_fifth_order_and_shares_one_pole_set():
     # not merely a structural argument.
     for name in ("Ht2", "Ht1"):
         assert np.allclose(pole_sets[name], pole_sets["Ht3"], rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# The emitted record (#420): what `tools/cymbal_band_balance.py` reads as its
+# `schematic-vr4` precondition
+# ---------------------------------------------------------------------------
+
+
+def test_the_two_alpha_fits_agree(evidence):
+    """`fit_alpha_k1_with_sigma` refits in alpha rather than through
+    `fit_alpha_k1`'s logit so the covariance needs no chain rule. The two
+    parameterisations must therefore land on the same alpha -- otherwise the
+    sigma belongs to a different fit than the value it is quoted beside."""
+    data, _meta, _blob = evidence
+    a_logit, rms_logit = ts.fit_alpha_k1(data)
+    a_direct, rms_direct, sigma, n = ts.fit_alpha_k1_with_sigma(data)
+    assert a_direct == pytest.approx(a_logit, abs=1e-9)
+    assert rms_direct == pytest.approx(rms_logit, abs=1e-9)
+    assert n == 707
+    # One free parameter fitted to 707 points at ~0.01 dB rms: the sigma has to
+    # be small, and it has to be nonzero. Both directions asserted, because a
+    # sigma of exactly zero would silently delete a term of the bound below.
+    assert 0.0 < sigma < 1e-3
+
+
+def test_the_bound_is_the_residual_plus_the_parameter_term_and_nothing_else(evidence):
+    """`resolved_bound_db` is the whole of #420's `tone ±` column, so its
+    construction is asserted rather than described: half-width = this family's
+    largest disagreement with Figure 9's digitised curve + the move over
+    ±3 sigma of alpha. Both terms must be present and neither may dominate to
+    the point of hiding the other."""
+    data, _meta, _blob = evidence
+    stats = ts.residual_stats(data)
+    _, _, sigma, _ = ts.fit_alpha_k1_with_sigma(data)
+    for name in ("Ht1", "Ht2", "Ht3"):
+        for f in ts.record_frequencies_hz():
+            b = ts.resolved_bound_db(f, name, stats=stats, sigma_alpha=sigma)
+            assert b["bound_db"] == pytest.approx(
+                b["residual_db"] + b["alpha_db"], abs=1e-12)
+            assert b["residual_db"] == pytest.approx(stats[name]["max_db"], abs=1e-12)
+            assert b["alpha_db"] > 0.0
+            assert b["hi_db"] - b["lo_db"] == pytest.approx(2 * b["bound_db"], abs=1e-12)
+            # Ht3 is the only family Figure 9 plots across the cymbal's band, so
+            # it is the only one whose residual is measured where it is used.
+            assert b["residual_measured_here"] is (name == "Ht3")
+
+
+def test_the_record_covers_every_frequency_the_balance_levels_a_band_at(evidence):
+    """The emitter's own precondition. If `cymbal_candidate_eval.CENTRE` ever
+    moves, this record must move with it -- the balance REFUSES on a frequency
+    the record does not carry, and that refusal should be caught here rather
+    than at the far end of the chain."""
+    import cymbal_tone_realisation as ct  # noqa: PLC0415
+
+    data, _meta, _blob = evidence
+    rec = ts.balance_record(data)
+    for band, name in ct.BAND_OF.items():
+        assert rec["bands"][band]["family"] == name
+        assert f"{ct.CENTRE_HZ[band]:.1f}" in rec["bands"][band]["at_hz"]
+
+
+def test_the_emitted_record_round_trips_and_pins_its_sources(evidence, tmp_path):
+    data, _meta, _blob = evidence
+    out = ts.emit(data, tmp_path / "sn-p13-vr4.json")
+    blob = json.loads(out.read_text())
+    assert blob["artifact"] == "sn-p13-vr4"
+    assert blob["source"]["sha256"] == ts.SN_PDF_SHA256
+    assert blob["source"]["page"] == ts.SN_PDF_PAGE
+    assert len(blob["fitted_against"]["sha256"]) == 64
+    assert len(blob["poles_hz"]) == 5
+    assert blob["alpha_k1"] == ts.ALPHA_K1
