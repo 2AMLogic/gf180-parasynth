@@ -1916,11 +1916,18 @@ def test_rimshot_is_distorted_and_that_is_the_sound():
 
 
 def test_control_the_harmonic_estimator_cannot_separate_the_second_rimshot_mode():
-    """The control for the change above, so the reason it was made is a test and
-    not a comment: a PURE decaying sinusoid at RS_HI_HZ, with no nonlinearity and
-    no 455 Hz content in it at all, must still report a large "harmonic" in the
-    fourth bin of RS_LO_HZ. If a future estimator could separate them this turns
-    red, and the two-mode measurement becomes available again."""
+    """[method] The control for the test above, so the reason it measures ONE
+    mode is itself a test and not a comment: a PURE decaying sinusoid at
+    RS_HI_HZ, synthesised here, with no nonlinearity and no 455 Hz content in it
+    at all, must still report a large "harmonic" in the fourth bin of RS_LO_HZ
+    -- because 4 x 455 = 1820 Hz is 1.9 % away and the mode's own bandwidth is
+    hundreds of Hz. If a future estimator could separate them this turns red,
+    and the two-mode measurement becomes available again (#388).
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    -- the same estimator, shown there to recover a series it CAN separate, which
+    is what makes this a limit of the signal rather than of the code.
+    """
     n = int((0.4 + PRE_ROLL_S) * SR)
     t = np.arange(n) / SR
     pure = np.sin(2 * math.pi * dx.RS_HI_HZ * t) * np.exp(-t / 2.4e-3) * 8000.0
