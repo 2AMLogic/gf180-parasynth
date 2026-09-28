@@ -329,5 +329,21 @@ It passes because `candidate_kit` touches only the cymbal's own registers, which
 - `tools/cymbal_tone_render.py` / `tools/test_cymbal_tone_render.py` — the render and its verdict, with the verdict's
   own controls (a planted 4 dB miss, a flat curve, a reversed curve).
 - `model/cymbal_candidate.py` — revision 4, with §2's prediction in its docstring, committed before the render.
+- `tools/diff_scorecard_record.py` — compares a regenerated record against the committed one leaf by leaf, because
+  the load-bearing claim of a regeneration is *"no figure moved"* and `git diff` cannot establish that: it cannot
+  tell a reordered key from a changed one, or the fourth decimal from the first. It REFUSES (exit 2) on a
+  structural difference rather than reporting agreement over the leaves that happen to match.
+- **What the regeneration found.** The record this one replaces was written from a dirty tree, so its figures were
+  unreachable from any commit. Regenerating from a clean tree at `a899cd1` moved **no figure**: of 680 leaves,
+  the only non-provenance change is `verdict.properties.h-edt-falls-with-tone.ok`, `1.0` → `true`, which is the
+  `np.bool_` serialisation defect fixed in the same change. So the earlier figures were in fact right — but
+  "right" is a thing that had to be *measured*, and the field that existed to say it could not be was being read
+  by nothing.
+- **The render is not bit-reproducible, and that is worth writing down.** At exact equality 16 of the 680 leaves
+  differ, all in the last bits: the largest absolute move is `band_shares.low.L`, 2.5e-12 on 1582.24 (1.6e-15
+  relative), and every one is float reassociation, not a different answer. No figure is quoted anywhere to better
+  than three decimals, so nothing downstream moves — but a future regeneration should be diffed with a tolerance,
+  not with `cmp`, and a test asserting bit-equality of this record would be unsatisfiable.
 - Reproduce: `python3 tools/cymbal_tone_nodal.py --check` (2.4 s), then
-  `python3 tools/cymbal_tone_render.py --out <path>` (≈12 min).
+  `python3 tools/cymbal_tone_render.py --out <path>` (≈12 min of CPU; 46 min wall on a loaded laptop), then
+  `python3 tools/diff_scorecard_record.py <path> --baseline docs/scorecard/cymbal-369/tone-render/tone-render.json`.

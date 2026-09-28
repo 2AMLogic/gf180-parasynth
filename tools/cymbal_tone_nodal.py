@@ -59,6 +59,28 @@ import cymbal_tone_realisation as tr       # noqa: E402
 import tone_stage_schematic as ts          # noqa: E402
 
 SR = float(dx.SR)
+
+
+def json_leaf(o):
+    """`json.dumps` default that cannot turn a flag into a number.
+
+    #429 found `verdict.properties["h-edt-falls-with-tone"].ok` serialised as
+    `1.0` rather than `true`, and the cause was not the comparison that produced
+    it -- it was `json.dumps(..., default=float)` here. An np.bool_ is not
+    JSON-serialisable, so it reached `default`, and `float(np.True_)` is `1.0`.
+    Every numpy comparison anywhere in either tool is one `and` away from the
+    same defect, so casting at each site is whack-a-mole; the coercion is what
+    has to stop. Booleans are answered as booleans, integers as integers, and
+    anything else keeps the previous float() behaviour rather than becoming a
+    new way for a record to fail to be written.
+    """
+    if isinstance(o, (bool, np.bool_)):
+        return bool(o)
+    if isinstance(o, np.integer):
+        return int(o)
+    return float(o)
+
+
 BANDS = ("low", "decay", "short")
 # Which network rail each band's high-pass drives. Imported from step 9 rather
 # than restated: the assignment is resolved twice over (SN p.13's capacitor
@@ -708,7 +730,7 @@ def main(argv=None) -> int:
             rc_ = 0 if ok else 1
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
-            a.json.write_text(json.dumps(record(), indent=1, default=float) + "\n")
+            a.json.write_text(json.dumps(record(), indent=1, default=json_leaf) + "\n")
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3

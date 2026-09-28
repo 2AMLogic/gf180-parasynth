@@ -400,12 +400,39 @@ def test_every_recorded_property_flag_is_a_real_boolean():
 
 def test_the_verdicts_flags_are_booleans_before_they_are_serialised():
     """...and the same thing checked at the source, so a record regenerated on a
-    different numpy cannot reintroduce it."""
+    different numpy cannot reintroduce it.
+
+    The per-column flags are here because the first pass at #429 fixed only the
+    property the issue named. `h_edt10_ok` has the identical defect from the
+    identical cause -- `d_hed`'s values come from a numpy ratio, so
+    `max(...) <= TIME_TOL` is a numpy comparison -- and it survived a `bool()`
+    cast aimed at one site. That is what made a per-site cast the wrong fix."""
     ref = tre.fischer_curves()
     col = ref["50"]
     v = tre.verdict(_synthetic(col["h_minus_l_anchored_db"], col["h_edt10_ratio"]), ref)
     for name, p in v["properties"].items():
         assert type(p["ok"]) is bool, (name, type(p["ok"]).__name__)
+    for dec, c in v["columns"].items():
+        assert type(c["h_minus_l_ok"]) is bool, (dec, type(c["h_minus_l_ok"]).__name__)
+        assert type(c["h_edt10_ok"]) is bool, (dec, type(c["h_edt10_ok"]).__name__)
+
+
+def test_the_serialiser_cannot_turn_a_flag_into_a_number():
+    """The root cause, tested where it lives rather than at each of its outlets:
+    `default=float` served every numpy scalar, and `float(np.True_)` is `1.0`.
+    The first two assertions are the injected control -- they state what the old
+    default did, so this test would have been red before the fix and cannot pass
+    by accident afterwards."""
+    import json
+    import numpy as np
+    assert json.dumps(np.True_, default=float) == "1.0"           # the defect
+    assert json.dumps(np.float64(0.5), default=float) == "0.5"    # ...and why it looked fine
+    assert json.dumps(np.True_, default=tn.json_leaf) == "true"
+    assert json.dumps(np.False_, default=tn.json_leaf) == "false"
+    assert json.dumps(np.int64(20), default=tn.json_leaf) == "20"
+    assert json.dumps(np.float64(0.5), default=tn.json_leaf) == "0.5"
+    # a nested flag, which is how it actually reached the record
+    assert json.dumps({"ok": np.True_}, default=tn.json_leaf) == '{"ok": true}'
 
 
 def test_the_808s_decay_columns_agree_to_what_the_writeup_says():

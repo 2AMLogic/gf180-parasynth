@@ -460,10 +460,10 @@ def verdict(ours: dict, ref: dict) -> dict:
                       for c in CODES},
             "h_minus_l_anchored_delta_db": d_hml,
             "h_minus_l_worst_db": round(max(abs(v) for v in d_hml.values()), 3),
-            "h_minus_l_ok": max(abs(v) for v in d_hml.values()) <= BOUND_DB,
+            "h_minus_l_ok": bool(max(abs(v) for v in d_hml.values()) <= BOUND_DB),
             "h_edt10_ratio_rel_err": d_hed,
             "h_edt10_worst_rel": round(max(abs(v) for v in d_hed.values()), 4),
-            "h_edt10_ok": max(abs(v) for v in d_hed.values()) <= TIME_TOL,
+            "h_edt10_ok": bool(max(abs(v) for v in d_hed.values()) <= TIME_TOL),
         }
     out["h-minus-l-tracks-808"] = {
         "ok": all(v["h_minus_l_ok"] for v in cols.values()),
@@ -585,7 +585,7 @@ def main(argv=None) -> int:
     res["sources_dirty"] = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
                                           cwd=ROOT).returncode != 0
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+    a.out.write_text(json.dumps(res, indent=1, default=tn.json_leaf) + "\n")
     return 0 if (pres is None or pres["ok"]) else 1
 
 
