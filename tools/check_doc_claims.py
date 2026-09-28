@@ -45,6 +45,27 @@ rather than no problem:
 
 STALE outranks REFUSED because it is the more actionable of the two, but both
 are non-zero: `make claims` is red either way, deliberately.
+
+WHICH DOCUMENTS ARE SCANNED, AND WHY THAT IS A THIRD THING TO GET WRONG (#435).
+The default set was `docs/*.md` -- one directory, not even recursive -- so a
+marker anywhere else was parsed by nothing, reported by nothing, and looked
+EXACTLY like one that passed. That is weaker than a skipped test: a skip at
+least produces a REFUSED. Eleven markers sat outside it (`docs/scorecard/
+README.md`, `docs/scorecard/ensemble-e1a/rtl/README.md`, and decision record
+0018) with nothing evaluating them, under a green "51 ok" summary.
+
+So the default set is now an EXPLICIT include list (`DEFAULT_INCLUDES`) with an
+explicit exclude list (`EXCLUDED_PREFIXES`) for vendored and generated trees --
+not a bare `**/*.md` sweep, which would also pick up `.loom/worktrees/`, i.e.
+whole second copies of this repository.
+
+And the include list is backed by its own check, because an include list is
+just another thing that can silently fail to cover something: in default mode
+the tool reads every git-tracked Markdown file OUTSIDE the scanned set and
+REFUSES, by name, on any that carries a marker. Adding a claim to a new corner
+of the tree is then a red run that tells you to widen the list, rather than
+silence. The exclude list is the one remaining silencer, which is why it is
+short, enumerated, and restricted to trees this project does not author.
 """
 from __future__ import annotations
 
@@ -564,12 +585,132 @@ def check(docs: list[pathlib.Path], python: str) -> list[Claim]:
 
 
 # --------------------------------------------------------------------------
+# the default document set -- stated, not glob-shaped (#435)
+# --------------------------------------------------------------------------
+
+# The prose this project authors. Each entry is a repo-relative glob; a
+# directory appears here because someone writes claims in it, and the list is
+# meant to be edited when that becomes true of a new directory. It is not
+# `**/*.md` because that sweep also reaches `.loom/worktrees/`, which holds
+# whole second checkouts of this repository -- every claim would be counted
+# once per live worktree, and a stale one would be reported against a path that
+# is not the tree you are looking at.
+DEFAULT_INCLUDES = (
+    "CLAUDE.md",             # the file every session is told to read first,
+    "AGENTS.md",             # and its runtime-neutral twin
+    "README.md",
+    "docs/**/*.md",          # including docs/scorecard/**, one level too deep
+    "fpga/**/*.md",          # ARTY.md, release/RELEASE.md, release/R1.md,
+                             # reports/**/README.md
+    "model/**/*.md",
+    "pnr/**/*.md",
+    "refaudio/**/*.md",
+    "refprofile/**/*.md",
+    "rtl-sketch/**/*.md",
+    "spec/**/*.md",          # including spec/decision-records/**
+    "tools/**/*.md",
+)
+
+# The only trees whose markers are deliberately NOT evaluated, because this
+# project does not author them. Everything here is either vendored (installed
+# by another tool and replaced wholesale on update) or generated. This list is
+# the one remaining way a marker can be silent, so keep it short and say why.
+EXCLUDED_PREFIXES = (
+    ".git/",
+    ".github/",         # workflow prose, vendored templates
+    ".claude/",         # vendored agent surface
+    ".loom/",           # vendored Loom surface, and .loom/worktrees/ holds
+                        # whole second copies of this repository
+    ".venv/",
+    "build/",           # generated; also where this tool's own test fixtures go
+    "node_modules/",
+)
+
+
+def is_excluded(rel: str) -> bool:
+    return any(rel == p.rstrip("/") or rel.startswith(p) for p in EXCLUDED_PREFIXES)
+
+
+def default_docs() -> list[pathlib.Path]:
+    """`DEFAULT_INCLUDES` expanded against this tree, minus the excludes.
+
+    Deduplicated by RESOLVED path, because `AGENTS.md` is a symlink to
+    `CLAUDE.md`: scanning both would count every claim in the project's most-read
+    document twice, and report a stale one against a path that is not where
+    anyone would go to fix it.
+    """
+    by_target: dict[pathlib.Path, pathlib.Path] = {}
+    for pattern in DEFAULT_INCLUDES:
+        for p in ROOT.glob(pattern):
+            if not p.is_file() or is_excluded(_rel(p)):
+                continue
+            target = p.resolve()
+            kept = by_target.get(target)
+            if kept is None or (kept.is_symlink() and not p.is_symlink()):
+                by_target[target] = p
+    return sorted(by_target.values())
+
+
+def tracked_markdown() -> tuple[list[str], str | None]:
+    """Every git-tracked `.md` path, or a reason the question cannot be asked."""
+    if not git("rev-parse", "--git-dir"):
+        return [], "not a git checkout, or git is unavailable"
+    out = git("ls-files", "-z", "--", "*.md", "**/*.md")
+    if not out:
+        return [], "git ls-files listed no Markdown files"
+    return [p for p in out.split("\0") if p], None
+
+
+def out_of_scope_claims(scanned: list[pathlib.Path]) -> tuple[list[Claim], str | None]:
+    """Markers in tracked Markdown the default set does not reach.
+
+    This is the check that makes the include list honest. Without it, widening
+    the scope only moves the boundary -- the next document written outside it is
+    unchecked in exactly the same silent way, and #435's whole finding was that
+    silence is indistinguishable from a pass.
+
+    Returns REFUSED claims (never OK, never STALE: the point is that these were
+    never evaluated) and, separately, a reason the audit itself could not run.
+    """
+    tracked, err = tracked_markdown()
+    if err:
+        return [], err
+    inside = {_rel(p) for p in scanned}
+    strays: list[Claim] = []
+    for rel in sorted(tracked):
+        path = ROOT / rel
+        if not path.is_file():
+            continue                      # tracked but deleted in the worktree
+        # `_rel` resolves, so a symlink into the scanned set (AGENTS.md ->
+        # CLAUDE.md) is recognised as already covered rather than reported as
+        # an unchecked second copy.
+        if _rel(path) in inside or is_excluded(rel):
+            continue
+        try:
+            found = find_claims(path)
+        except (OSError, UnicodeDecodeError):
+            continue
+        for c in found:
+            c.refuse("this file is outside the default document set, so this "
+                     "marker was checked by nothing -- add its directory to "
+                     "DEFAULT_INCLUDES (or EXCLUDED_PREFIXES) in "
+                     "tools/check_doc_claims.py")
+            strays.append(c)
+    return strays, None
+
+
+# --------------------------------------------------------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("paths", nargs="*", default=None,
-                    help="documents to check (default: docs/*.md)")
+                    help="documents to check (default: the DEFAULT_INCLUDES set "
+                         "-- CLAUDE.md and docs/, fpga/, model/, pnr/, refaudio/, "
+                         "refprofile/, rtl-sketch/, spec/, tools/ recursively, "
+                         "minus the vendored and generated trees in "
+                         "EXCLUDED_PREFIXES. With no paths the run also REFUSES "
+                         "on any marker found outside that set.)")
     ap.add_argument("--python", default=sys.executable,
                     help="interpreter used to run backing tests")
     ap.add_argument("--quiet", action="store_true",
@@ -585,9 +726,19 @@ def main() -> int:
                 print(f"REFUSED  {d}: no such file", file=sys.stderr)
             return 2
     else:
-        docs = sorted((ROOT / "docs").glob("*.md"))
+        docs = default_docs()
 
     claims = check(docs, a.python)
+
+    # The scope audit runs only in default mode: naming a document explicitly is
+    # a deliberate narrowing (that is how the fixtures and one-off runs work),
+    # whereas the no-argument run is the one `make verify` reads, and the one
+    # whose silence #435 was about.
+    scope_err = None
+    if not a.paths:
+        strays, scope_err = out_of_scope_claims(docs)
+        claims += strays
+
     if not claims:
         print("check_doc_claims: REFUSED -- no claim markers found in "
               f"{len(docs)} document(s); see docs/claim-markers.md", file=sys.stderr)
@@ -604,9 +755,14 @@ def main() -> int:
     n = {s: sum(1 for c in claims if c.status == s) for s in (OK, STALE, REFUSED)}
     print(f"\n{len(claims)} claim(s) in {len(docs)} document(s): "
           f"{n[OK]} ok, {n[STALE]} stale, {n[REFUSED]} refused")
+    if scope_err:
+        # The audit is an apparatus with a precondition, so it says so rather
+        # than reporting "no strays found" from a question it never asked.
+        print(f"REFUSED  cannot audit for markers outside the scanned set: "
+              f"{scope_err}", file=sys.stderr)
     if n[STALE]:
         return 1
-    if n[REFUSED]:
+    if n[REFUSED] or scope_err:
         return 2
     return 0
 
