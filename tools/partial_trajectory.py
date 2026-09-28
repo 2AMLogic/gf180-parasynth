@@ -16,6 +16,13 @@ Method, per partial:
   4. a FLOOR measured on the same record and the same window, by projecting at
      guard frequencies that hold no partial. Any point within `floor_margin_db`
      of it is dropped, and a fit with too few surviving points REFUSES.
+
+Step 1 is a MAXIMUM over a grid, so on a record that holds no partial the value
+at the frequency it returns is biased upward by the pick itself, and any
+comparison of it against a floor read at FIXED frequencies measures that bias
+rather than a partial. `line_is_resolved` is the precondition that catches it
+(#389): it tests the SHAPE of the line against a damped sinusoid's closed form,
+where the height -- and with it the selection bias -- divides out.
 """
 import math
 import numpy as np
@@ -52,6 +59,177 @@ def find_partial(x, sr, f_lo, f_hi, *, seconds=None, df=0.05):
         if v[j] > best_v:
             best_v, best_f = float(v[j]), float(g[j])
     return best_f
+
+
+# --------------------------------------------------------------------------
+# Is the line `find_partial` returned a PARTIAL, or the maximum of a
+# fluctuation? (#389)
+#
+# A damped sinusoid of decay tau, projected coherently over a span T about its
+# own line, has a Lorentzian magnitude:
+#
+#     P(f0 + d) = P(f0) / sqrt(1 + (2*pi*tau*d)**2)
+#
+# so the DROP in dB at an offset d is 10*log10(1 + (2*pi*tau*d)**2) -- a
+# one-parameter curve in d whose only free parameter is the mode's own tau, and
+# which does not contain P(f0) at all. That is the whole point: the pick's
+# upward bias lives entirely in P(f0), so a test on the SHAPE is a test the bias
+# cannot pass on noise's behalf.
+#
+# The gate is therefore a one-parameter least-squares fit of that closed form to
+# the drops measured at +-`n_bins` search bins, scored by its RMS residual in dB.
+# Nothing in it is calibrated against our own model: the curve comes from the
+# DTFT, and both the width and the tolerance were set from the gap between real
+# records and white noise (tools/probes/balance_line_shape.py `sweep` chose
+# n_bins, `margin` chose max_resid_db).
+# --------------------------------------------------------------------------
+_TAU_GRID_S = np.logspace(-5.0, 0.0, 501)          # 10 us .. 1 s
+
+
+def line_offsets(x, sr, f, *, seconds, n_bins=6):
+    """The measured line shape about `f`: (P(f), offsets in Hz, drops in dB).
+
+    Offsets are whole multiples of `1/seconds` -- the resolution of the very
+    span the line was FOUND on, so they are the estimator's own bins and not a
+    chosen span. Both sides are returned, interleaved (-1, +1, -2, +2, ...),
+    because a line sitting on the shoulder of another partial is asymmetric and
+    the fit should see that as residual."""
+    d = 1.0 / seconds
+    y = x[: int(seconds * sr)]
+    p0 = project(y, f, sr)
+    ds, drops = [], []
+    for k in range(1, n_bins + 1):
+        for side in (-1.0, +1.0):
+            p = project(y, f + side * k * d, sr)
+            ds.append(k * d)
+            drops.append(20.0 * math.log10(p0 / p) if p > 0 and p0 > 0 else math.inf)
+    return p0, np.asarray(ds, float), np.asarray(drops, float)
+
+
+_PEDESTAL_GRID_DB = np.concatenate(([-300.0], np.arange(-60.0, -2.9, 0.5)))
+
+
+def _lorentzian_fit(ds, drops_db, *, min_points=9, pedestal=False):
+    """Best-fit tau for the drops at offsets `ds`, and the fit's RMS dB residual.
+
+        (P(f0+d)/P(f0))**2 = 1/(1 + (2*pi*tau*d)**2) + g**2
+
+    with `g` -- a pedestal standing for whatever else the record holds at these
+    offsets -- FORCED TO ZERO by default, which is the surprise in this function
+    and the reason it is a keyword rather than a constant.
+
+    The pedestal is the physically honest model: a real neighbourhood is never
+    empty, and a mode whose skirt has fallen into the record's own floor by the
+    sixth bin reads a drop that stops growing. It was added for that reason. Then
+    `balance_line_shape.py margin` measured it, over 8 real partials and 96
+    white-noise partials: giving the fit a floor term to absorb makes it fit
+    NOISE better too, and it closes the residual margin from 1.71x to 1.17x.
+    An extra parameter helps the null more than the signal here, so it is off --
+    a decision that can only be made by measuring both, which is why both are
+    still reachable and why the probe prints both columns.
+
+    Grids rather than a solver (501 taus over five decades, ~2.3 % apart; `g`
+    from -60 dB in 0.5 dB steps plus exactly zero) because the residual surface
+    is not convex in tau, the grid is finer than the residual's own noise, and a
+    grid cannot fail to converge -- which a precondition must never do. Returns
+    dict(ok, tau_ms, pedestal_db, resid_db, n_points, reason)."""
+    m = np.isfinite(drops_db)
+    if int(m.sum()) < min_points:
+        return dict(ok=False, tau_ms=math.inf, pedestal_db=math.nan,
+                    resid_db=math.inf, n_points=int(m.sum()),
+                    reason=f"only {int(m.sum())} of {len(drops_db)} offsets hold any "
+                           f"energy at all (need {min_points})")
+    d, y = ds[m], drops_db[m]
+    gs = _PEDESTAL_GRID_DB if pedestal else _PEDESTAL_GRID_DB[:1]
+    lor = 1.0 / (1.0 + (2.0 * math.pi * np.outer(_TAU_GRID_S, d)) ** 2)   # (T, D)
+    g2 = 10.0 ** (gs / 10.0)                                             # (G,)
+    pred = -10.0 * np.log10(lor[None, :, :] + g2[:, None, None])         # (G, T, D)
+    resid = np.sqrt(np.mean((pred - y[None, None, :]) ** 2, axis=2))
+    gi, ti = np.unravel_index(int(np.argmin(resid)), resid.shape)
+    return dict(ok=True, tau_ms=float(_TAU_GRID_S[ti] * 1e3),
+                pedestal_db=float(gs[gi]), resid_db=float(resid[gi, ti]),
+                n_points=int(m.sum()), reason="")
+
+
+def line_is_resolved(x, sr, f, *, seconds, n_bins=6, max_resid_db=2.2):
+    """Is the line `find_partial` returned at `f` a resolved DECAYING MODE of
+    this record, or the maximum of a fluctuation? (#389)
+
+    `find_partial` returns the strongest line in its search range -- a maximum
+    over thousands of grid points -- so on a record that holds no partial the
+    value at the frequency it picks is upward-biased by the pick itself. Every
+    downstream comparison against a floor read at FIXED frequencies then
+    measures that selection artifact rather than a partial, which is how
+    `run_case.balance_trajectory_db` came to REPORT a balance on white noise.
+
+    TWO CONDITIONS, BOTH ON THE SHAPE AND NEITHER ON THE HEIGHT. They catch
+    different records and only one of them catches noise -- said plainly here
+    because a gate whose conditions are described as interchangeable is a gate
+    nobody can reason about:
+
+      1. THE SHAPE, which is what refuses NOISE. The drops at +-`n_bins` search
+         bins must fit a damped sinusoid's Lorentzian to within `max_resid_db`
+         RMS. Noise cannot: at a spacing of a whole multiple of 1/seconds a
+         rectangular window's correlation with its own line is zero (sinc(k)=0),
+         so noise's off-centre projections are independent of the peak and of
+         each other and scatter by several dB about no curve at all.
+      2. THE DECAY, which is what refuses a STEADY TONE. The tau the fit
+         recovers must decay inside the window it was measured over
+         (`tau < seconds`). This condition does NOT discriminate noise -- 96 of
+         96 white-noise partials measured fit a tau between 0.04 and 0.47 of
+         their window, comfortably inside the bound -- and a reading of this
+         function that assumed it did would be wrong. It is here for the
+         undamped-tone record, which is a clean line and still not a struck mode.
+
+    MEASURED (tools/probes/balance_line_shape.py margin 24, 2026-09-27, 48 kHz):
+    over 8 real partials -- the Fischer TR-808 rimshot and cowbell and our own
+    renders of both, low and high, at both shipping operating points -- the
+    residual runs 0.22 to 1.70 dB, while over 96 white-noise partials it runs
+    2.91 to 12.60 dB. `max_resid_db=2.2` is the geometric mean of those two
+    edges: 1.29x of margin above the worst real record, 1.32x below the best
+    noise record. Four other statistics were measured on the same signals and
+    every one of them overlaps; the probe carries all five columns and says which.
+
+    THE MARGIN IS THE WEAK POINT, and quoting it is the point of quoting it: 1.3x
+    is thin, it rests on 8 real partials, and `margin` is the command to re-run
+    before trusting this gate on a fifth record or a third voice.
+
+    Returns dict(ok, tau_ms, resid_db, drop1_db, n_points, max_resid_db, reason).
+    This is a PRECONDITION, so the reason names what failed and `ok=False` is
+    REFUSED rather than a verdict. `max_resid_db` is echoed back because the
+    residual is only readable against the tolerance that scored it, and callers
+    that record the one (`run_case.balance_trajectory_db`'s `detail`) should not
+    have to re-derive the other from this signature.
+
+    Ground truth: test_line_is_resolved_passes_a_damped_mode_at_every_tau,
+    test_line_is_resolved_refuses_white_noise,
+    test_line_is_resolved_refuses_a_line_that_never_decays,
+    test_line_is_resolved_is_blind_to_the_lines_height."""
+    p0, ds, drops = line_offsets(x, sr, f, seconds=seconds, n_bins=n_bins)
+    drop1 = tuple(float(v) for v in drops[:2])
+    if not (p0 > 0):
+        return dict(ok=False, tau_ms=math.inf, resid_db=math.inf, drop1_db=drop1,
+                    n_points=0, max_resid_db=float(max_resid_db),
+                    reason=f"no energy at all at {f:.1f} Hz")
+    fit = _lorentzian_fit(ds, drops)
+    out = dict(tau_ms=fit["tau_ms"], resid_db=fit["resid_db"], drop1_db=drop1,
+               n_points=fit["n_points"], max_resid_db=float(max_resid_db))
+    if not fit["ok"]:
+        return dict(ok=False, reason=fit["reason"], **out)
+    if not (fit["tau_ms"] * 1e-3 < seconds):
+        return dict(ok=False, reason=(
+            f"the line at {f:.1f} Hz fits a mode of tau {fit['tau_ms']:.1f} ms, which "
+            f"does not decay inside the {seconds*1e3:.0f} ms window it was measured "
+            f"over: this is the shape of a steady tone, not of a struck mode"), **out)
+    if fit["resid_db"] > max_resid_db:
+        return dict(ok=False, reason=(
+            f"the line at {f:.1f} Hz does not have the shape of one: its drops over "
+            f"+-{n_bins} search bins ({ds[-1]:.0f} Hz) fit a damped sinusoid's "
+            f"Lorentzian no better than {fit['resid_db']:.2f} dB RMS (accepted "
+            f"{max_resid_db:.1f}), at a best-fit tau of {fit['tau_ms']:.1f} ms. This "
+            f"is the shape of a maximum picked out of a fluctuation, not of a "
+            f"partial"), **out)
+    return dict(ok=True, reason="", **out)
 
 
 def trajectory(x, sr, f, *, win_ms=20.0, hop_ms=2.0, t_end=None):

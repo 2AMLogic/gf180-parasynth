@@ -263,25 +263,34 @@ def cmd_validate():
         print(f"    {name:28s} REFUSED  (best joint headroom "
               f"{r['best_joint_db']:+.1f} dB)")
 
-    print("\nNOT ASSERTED, BECAUSE IT IS FALSE -- and that is a finding, not a")
-    print("relaxation. WHITE NOISE IS REPORTED, not refused, by the SHIPPING")
-    print("`run_case.balance_trajectory_db` at D10A's own operating point:")
-    for seed in range(4):
+    print("\nWHITE NOISE, NOW ASSERTED (#389). This block used to be headed 'NOT")
+    print("ASSERTED, BECAUSE IT IS FALSE': every seed was REPORTED a balance, and")
+    print("this probe printed the fact and explained it instead of failing on it.")
+    print("`run_case.balance_trajectory_db` now REFUSES, so it is an assertion --")
+    print("this command exits 1 if any seed is reported, exactly like the block above.")
+    for seed in range(8):
         x = 0.01 * np.random.default_rng(seed).standard_normal(int(0.25 * SYN_SR))
         e = shipping(x, SYN_SR, OP["guards"])
-        verdict = (f"REPORTED bal1 {e.value:+7.2f} dB at t1 {e.detail['t1_ms']:5.2f} ms"
-                   if e.ok else "refused")
-        print(f"    white noise, seed {seed}          {verdict}")
-    print("    The joint-headroom gate compares partials found by `find_partial`")
-    print("    (the STRONGEST line in each search range -- an upward-biased pick on")
-    print("    noise) against guards read at FIXED frequencies (an unbiased one), so")
-    print("    the headroom it measures on a record with no partials at all is a")
-    print("    selection artifact. `measure_partial_balance.py validate` does refuse")
-    print("    noise, but through `fit_decay`'s decay fit, not through this gate.")
-    print("    Out of scope for #380 (which is about WHERE the floor is read, not")
-    print("    about what the gate does with a record that has no partials) and")
-    print("    filed separately; recorded here so a reader of the tables below knows")
-    print("    the 6 dB gate is weaker than it looks.")
+        if e.ok:
+            print(f"    white noise, seed {seed}          REPORTED bal1 "
+                  f"{e.value:+7.2f} dB at t1 {e.detail['t1_ms']:5.2f} ms "
+                  f"-- a record with no partials has no balance")
+            return 1
+        why = ("line shape" if "not a resolved line" in e.reason else "floor")
+        print(f"    white noise, seed {seed}          REFUSED ({why})")
+    print("    The hole this closes: the joint-headroom gate compares partials found")
+    print("    by `find_partial` (the STRONGEST line in each search range -- an")
+    print("    upward-biased pick on noise) against guards read at FIXED frequencies")
+    print("    (an unbiased one), so the headroom it measured on a record with no")
+    print("    partials at all was a selection artifact. The floor could not be the")
+    print("    fix -- our own rimshot clears it by 0.4 dB and noise by 6 dB and more --")
+    print("    so the precondition is on the line's SHAPE, where the pick's bias")
+    print("    divides out: `partial_trajectory.line_is_resolved`. The measurements")
+    print("    that chose it, and the four candidate gates they refuted, are in")
+    print("    `tools/probes/balance_line_shape.py`; its ground truth is")
+    print("    test_line_is_resolved_* and")
+    print("    test_balance_trajectory_db_refuses_white_noise_at_both_operating_points")
+    print("    in tools/test_run_case.py.")
 
     print("\nKNOWN BALANCES -- two damped partials, balance at the onset CHOSEN,")
     print("zero energy at any guard by construction. 'err' is the gate's balance")

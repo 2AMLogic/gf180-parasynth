@@ -99,9 +99,43 @@ verify:
 ## measured with iverilog removed from PATH -- so it costs the shared runner
 ## nothing and cannot go red on simulator noise. The rest of rtl-sketch's
 ## pytest files DO need iverilog and stay in `make verify` only.
+##
+## THE TIMEOUT IS PER JOB, SO THE SHAPE OF THE SPLIT IS THE GATE'S HEADROOM.
+## tools/test_run_case.py is its own job rather than a member of the big one
+## (review of PR #405). That bundle was one 292 s job on main against a 600 s
+## cap -- 49 % of it, which is 97 % of it on the 2x-slower runner this repo's own
+## logs show `ubuntu-latest` handing out (`measure_m5a_signal_path` 24.0 s vs
+## 48.2 s, `verify_mono_case` 43.5 s vs 76.2 s, the fpga bundle 13.9 s vs 22.5 s,
+## same commit-adjacent jobs) -- and #389's six new tests took it over the cap
+## twice, NO-VERDICT at 600.0 s. A NO-VERDICT is not a FAIL, which is exactly
+## why it must not be tolerated: it is the gate reporting nothing in the place a
+## result belongs.
+##
+## Measured on an 8-vCPU worker before choosing the split (serial, so the two
+## numbers are each job's own cost and not a scheduling artifact):
+##   tools/test_run_case.py alone   282.9 s   112 tests
+##   every other file in the bundle 278.7 s   424 tests
+## AND THEN MEASURED IN CI, WHICH DISAGREED ABOUT THE BALANCE -- worth leaving
+## here rather than quoting only the local numbers, because the runner's own
+## speed is the variable this gate keeps tripping over. Two m5a-fast runs of the
+## same commit, with `measure_m5a_signal_path` alongside as the runner's ruler
+## (main measured it at 24.0 s):
+##   ruler 49.5 s   test_run_case 274.6 s   other files 323.6 s   worst 54 % of cap
+##   ruler 74.1 s   test_run_case 335.8 s   other files 444.9 s   worst 74 % of cap
+## so the split is even to ~15 % rather than to 1.5 %, the OTHER-FILES job is now
+## the longer one, and a 3.1x runner still leaves a quarter of the cap spare --
+## against 97 % of it for main's single 292 s bundle on a 2x runner, and past the
+## cap entirely for the unsplit version. `run_all.py` runs jobs concurrently with
+## `min(len(cmds), cpu_count)` workers and these two are submitted FIRST, so they
+## both start at t=0 on the runner's two cores; the remaining jobs queue behind
+## whichever finishes first, so the target's own wall clock does not grow.
+## Adding a file to either job is fine; adding a 150 s test to one is the thing
+## that broke this, so put the next expensive file in whichever job is shorter --
+## which the CI rows above, not the local ones, say is tools/test_run_case.py.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_check_workflows.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
+	  "$(PY) -m pytest tools/test_run_case.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_check_workflows.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
  	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \

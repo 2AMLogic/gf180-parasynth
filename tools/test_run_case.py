@@ -26,6 +26,7 @@ runner thinks it said:
 """
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -258,6 +259,10 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
 RS_TEST_OP = {k: v for k, v in rc.RS_BALANCE_OP.items()
               if k not in ("f_lo_range", "f_hi_range")}
 RS_TEST_RANGES = (rc.RS_BALANCE_OP["f_lo_range"], rc.RS_BALANCE_OP["f_hi_range"])
+# Also derived rather than copied: the floor margin is a DEFAULT of the estimator
+# rather than a member of the OP dict, so it has to be read off the signature.
+FLOOR_MARGIN_DB = inspect.signature(
+    rc.balance_trajectory_db).parameters["floor_margin_db"].default
 
 
 def _damped(f, tau, amp, n, sr, phase=0.0):
@@ -323,9 +328,58 @@ def test_balance_trajectory_db_a_flat_balance_reads_flat():
 
 def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     """#92's own pattern: a point measured to be inside the record's floor is
-    excluded, not integrated. A strong tone AT one of the guard frequencies
-    (neither partial) for the first 20 ms raises the floor there and nowhere
-    else; the earliest reported instant must move past it."""
+    excluded, not integrated. A tone AT one of the guard frequencies (neither
+    partial) for the first 20 ms raises the floor there and nowhere else; the
+    earliest reported instant must move past it.
+
+    THE FIXTURE NOW ASSERTS ITS OWN PREMISE, and the burst amplitude is 0.6
+    rather than the 5.0 it was written with (#389). "Raises the floor there and
+    nowhere else" was a claim this fixture made in prose and violated in fact: a
+    5x tone at 1000 Hz throws a 1/df skirt across the whole record, and at the
+    +-100 Hz offsets around the LOW partial that `line_is_resolved` reads, the
+    burst alone measured 13 to 21 dB BELOW that partial -- comparable to, and at
+    the outer offsets louder than, the partial's own skirt, which it scrambled by
+    up to 7 dB. #389's line-shape precondition saw that and refused the record,
+    correctly: the low partial's neighbourhood in the 5x fixture genuinely does
+    not look like an isolated mode, so there was nothing there to take a verdict
+    from.
+
+    So the premise is now assertions rather than a sentence, and the amplitude
+    was SWEPT rather than guessed -- `balance_line_shape.py fixture` is the
+    sweep, so this table is a command and not a transcription:
+
+        A      t1     spill onto 460 Hz   shape residual lo / hi
+        0.4   3.0 ms        -36.5 dB        1.09 dB   0.31 dB
+        0.6  21.0 ms        -33.0 dB        1.42 dB   0.32 dB
+        1.0  21.5 ms        -28.6 dB        2.07 dB   0.39 dB
+        5.0  REFUSED        -14.6 dB        3.72 dB   1.56 dB
+
+    0.4 is too quiet to raise the floor past the estimator's own 6 dB gate at
+    all, so the fixture stops testing anything; 1.0 leaves the shape residual
+    within 6 % of the gate's 2.2 dB tolerance, which is a flake waiting to
+    happen. 0.6 is 2.9 dB inside the floor gate and 1.55x inside the shape gate.
+    5.0 bought nothing this test asserts and cost the premise it claims.
+
+    WHERE THE PREMISE BAR COMES FROM, which is the review finding on PR #405 and
+    the reason this docstring changed. The first version of the assertion
+    compared the burst's spill onto each partial against -`FLOOR_MARGIN_DB`
+    (-6 dB) -- and EVERY row of that table clears -6 dB, including the 5.0 the
+    gate refuses. It was a precondition that read stronger than it was: it could
+    not fail on the drift it was written to catch, and what actually failed at
+    5.0 was `contaminated.ok`. The floor margin is the wrong scale because the
+    gate that notices this contamination is the LINE SHAPE, and the sweep above
+    puts its sensitivity about 20 dB below the floor margin: the largest spill
+    whose residual still fits inside 2.2 dB is near -28 dB (1.0 reads 2.07 at
+    -28.6 dB; interpolating the two rows either side puts the crossing at
+    -27.8 dB). `spill_bar_db = -30.0` is 2 dB inside that measured edge and
+    3.0 dB clear of the shipping fixture's -33.0, the 5.0 case is carried below
+    as the control that the bar is not vacuous, and "nowhere else" is asserted at
+    the HIGH partial as a residual rather than as a spill -- because 1000 and
+    1800 Hz are both whole numbers of cycles over the burst's own 20 ms, so a
+    projection of the burst at 1800 Hz is exactly orthogonal to it and reads
+    -316 dB whatever the amplitude. A spill assertion there would be vacuous by
+    construction; the residual is not (0.319 dB clean, 0.323 with the burst,
+    1.56 at 5.0)."""
     tau, a_lo, a_hi = 0.020, 1.0, 1.0
     x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
     clean = rc.balance_trajectory_db(x, SR, *RS_TEST_RANGES, **RS_TEST_OP)
@@ -333,11 +387,58 @@ def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     t = np.arange(len(x)) / SR
     burst_end_s = 0.020
     guard_hz = RS_TEST_OP["guards"][0]
-    dirty = x + 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    burst = 0.6 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    dirty = x + burst
+
+    # THE PREMISE, ASSERTED, at the scale the SHAPE gate works on rather than at
+    # the floor margin -- see the docstring: a -6 dB bar here passes on the 5.0
+    # fixture it exists to reject, so it could not have caught the drift it was
+    # written for. -30 dB is 2 dB inside the measured edge of the shape gate's
+    # own sensitivity (`balance_line_shape.py fixture`).
+    spill_bar_db = -30.0
+    m = int(0.020 * SR)
+    partial_lo = pt.project(x[:m], 460.0, SR)
+    spill_lo_db = 20.0 * math.log10(pt.project(burst[:m], 460.0, SR) / partial_lo)
+    assert spill_lo_db < spill_bar_db, (
+        f"the burst spills onto the low partial at 460 Hz at {spill_lo_db:.1f} dB "
+        f"re that partial, past the {spill_bar_db:.0f} dB this fixture is allowed: "
+        f"it is then contaminating the partial, not only the guard")
+    # AND THE CONTROL THAT THE BAR IS NOT VACUOUS (verification-rules.md rule 2):
+    # the 5.0 burst this fixture was written with must FAIL it. The -6 dB bar this
+    # replaces passed at 5.0 -- an assertion that holds whatever the fixture does
+    # is documentation, not a precondition.
+    old_burst = 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    old_spill_db = 20.0 * math.log10(pt.project(old_burst[:m], 460.0, SR) / partial_lo)
+    assert old_spill_db > spill_bar_db, (
+        f"the 5.0 burst spills onto the low partial at {old_spill_db:.1f} dB and the "
+        f"bar is {spill_bar_db:.0f} dB: the bar no longer rejects the fixture this "
+        f"test spent its first life with, so it is not guarding anything")
+    assert old_spill_db < -FLOOR_MARGIN_DB, (
+        "and this is why the bar is NOT the floor margin, pinned as code rather "
+        "than left in prose: the 5.0 fixture clears -6 dB comfortably, so an "
+        "assertion set from the floor margin cannot fail on it (review of #405)")
+    at_guard = pt.project(burst[:m], guard_hz, SR)
+    assert at_guard > pt.project(x[:m], guard_hz, SR) * 10.0, \
+        "the burst must be what sets the floor at the guard, or this tests nothing"
+
     contaminated = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
-    assert contaminated.ok
+    assert contaminated.ok, contaminated.reason
     assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
     assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
+    # "THERE, AND NOWHERE ELSE" AS A NUMBER: the burst moves the guard's floor by
+    # >20 dB (asserted above) and the LOW line's shape residual by ~0.95 dB, and
+    # leaves the HIGH line's alone to within 0.005 dB. Read off the accepted
+    # verdict's own detail, which is why those fields exist on this path.
+    assert contaminated.detail["hi_resid_db"] == pytest.approx(
+        clean.detail["hi_resid_db"], abs=0.05), (
+        "the burst was supposed to leave the high partial's line shape alone; it "
+        f"moved from {clean.detail['hi_resid_db']:.3f} to "
+        f"{contaminated.detail['hi_resid_db']:.3f} dB")
+    assert contaminated.detail["lo_resid_db"] > clean.detail["lo_resid_db"] + 0.5, (
+        "the burst must actually reach the low partial's neighbourhood, or the "
+        "spill bar above is satisfied by a fixture that does nothing")
+    assert (contaminated.detail["lo_resid_db"]
+            < contaminated.detail["line_max_resid_db"])
 
 
 def test_rs_guards_sit_clear_of_the_strikes_own_broadband_splash():
@@ -422,6 +523,195 @@ def test_rs_guards_still_refuse_mid_band_contamination_a_900hz_guard_caught():
             f"{new.value:+.2f} dB on a record contaminated at {hz:.0f} Hz by "
             f"{level_db:.0f} dB re the low partial, which (900, 1100) refused "
             "-- the retune traded contamination sensitivity for a verdict")
+
+
+def test_balance_trajectory_db_refuses_white_noise_at_both_operating_points():
+    """#389: a record made of NOISE has no partials, so it has no balance --
+    and the estimator must say so rather than report one.
+
+    THE BUG THIS PINS, as it shipped (verification-rules.md rule 5 -- the
+    control is the exact broken behaviour, not an imagined one). The 6 dB
+    joint-headroom gate compared two quantities measured in different ways:
+    the partials came from `find_partial`, the STRONGEST line over ~4800 and
+    ~14000 grid points -- on noise an upward-biased pick -- while the floor
+    came from `floor_at` at FIXED guard frequencies, an unbiased read of the
+    same noise. The headroom between them was therefore a selection artifact,
+    and on noise it cleared 6 dB at some instant out of the 240 the trajectory
+    visits. Every seed below REPORTED a balance at `RS_BALANCE_OP` before this
+    test existed -- seed 0 at +4.14 dB, seed 3 at -16.23 dB, seed 7 at
+    +5.74 dB -- and seeds 2, 5, 6 and 7 did at `CB_BALANCE_OP`.
+
+    BOTH shipping operating points, because the gate is shared: D10A scores
+    `RS_BALANCE_OP` and D13A scores `CB_BALANCE_OP`, and a fix that only knows
+    about the rimshot's window is not a fix to the gate.
+
+    The seeds that clear the floor gate must be refused by the NEW precondition
+    by name -- otherwise this test could go green on the old code's own floor
+    refusals (5 of 8 RS seeds and 4 of 8 CB seeds already refused that way) and
+    prove nothing about the hole it is here to close."""
+    for label, op, seconds, min_by_line_shape in (
+            ("RS_BALANCE_OP", rc.RS_BALANCE_OP, 0.25, 8),
+            ("CB_BALANCE_OP", rc.CB_BALANCE_OP, 0.75, 4)):
+        kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+        by_line_shape = 0
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(seconds * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            assert not e.ok and e.value is None, (
+                f"{label} seed {seed}: white noise has no partials, so it has no "
+                f"balance -- REPORTED {e.value} dB at t1 "
+                f"{e.detail.get('t1_ms')} ms instead of refusing")
+            assert ("is not a resolved line" in e.reason
+                    or "clears the record's own floor" in e.reason), (
+                f"{label} seed {seed}: a refusal must name the precondition that "
+                f"failed; got {e.reason!r}")
+            by_line_shape += "is not a resolved line" in e.reason
+        assert by_line_shape >= min_by_line_shape, (
+            f"{label}: only {by_line_shape} of 8 noise seeds were refused by the "
+            f"line-shape precondition; the rest went out through the floor gate, "
+            f"which already refused them before #389. This test is then green for "
+            f"the wrong reason.")
+
+
+def test_balance_trajectory_db_would_report_noise_again_with_the_gate_DISABLED():
+    """The injected-bug control for the test above (verification-rules.md rule 2).
+
+    A green refusal test proves nothing until something has been shown to turn
+    it red, and "white noise is refused" has a trivial wrong reason to be green:
+    the floor gate might be doing all the work, or the estimator might be
+    refusing for a reason that has nothing to do with #389. So RELAX the line
+    shape tolerance to infinity -- the one line of the fix, and nothing else --
+    and the old behaviour must come back."""
+    op = rc.RS_BALANCE_OP
+    kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+    real = pt.line_is_resolved
+    reported = 0
+    try:
+        pt.line_is_resolved = lambda *a, **k: real(*a, **{**k, "max_resid_db": math.inf})
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(0.25 * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            reported += e.ok
+    finally:
+        pt.line_is_resolved = real
+    assert reported > 0, (
+        "with the line-shape tolerance relaxed to infinity, NO noise seed was "
+        "reported -- so the refusals the test above observes are not this gate's "
+        "doing and that test is green for some other reason")
+
+
+def test_line_is_resolved_passes_a_damped_mode_at_every_tau():
+    """The gate must accept a damped sinusoid across the whole range of decays a
+    drum voice presents, from a hat-fast 0.5 ms to two thirds of the window.
+
+    This is the external grounding, and it is the case a shape gate is most
+    likely to get wrong: the statistic's closed form is tau-free, so every row
+    here has the same right answer for a reason that comes from the DTFT of a
+    damped sinusoid and not from anything measured in this repository. An earlier
+    draft of this gate (#389, `balance_line_shape.py` wrong-then-right item 3)
+    refused the rows below 2 ms, which is where the rimshot's HIGH mode lives."""
+    T = RS_TEST_OP["t_end"]
+    for tau_ms in (0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0):
+        for f in (452.0, 1795.0):
+            x = _damped(f, tau_ms * 1e-3, 1.0, int(0.25 * SR), SR, 0.3)
+            r = pt.line_is_resolved(x, SR, f, seconds=T)
+            assert r["ok"], (f"tau {tau_ms} ms at {f} Hz is a damped mode and the "
+                            f"gate refused it: {r['reason']}")
+            assert r["tau_ms"] == pytest.approx(tau_ms, rel=0.15), (
+                f"the shape fit recovered tau {r['tau_ms']:.2f} ms from a mode "
+                f"built with {tau_ms} ms -- the gate passed, but not because it "
+                f"measured the right thing")
+
+
+def test_line_is_resolved_refuses_white_noise():
+    """The other side of the same gate, at the unit rather than the estimator.
+
+    8 seeds at both operating points' windows, because a precondition that
+    holds on most records is not a precondition. The reason must name the
+    statistic and its tolerance, so a reader of a REFUSED verdict can tell
+    whether the record was nearly a partial or nowhere near one.
+
+    WHY 8 AND NOT THE 16 THIS WAS WRITTEN WITH, and why the record is no longer
+    3x the window (review of PR #405 -- this test cost 81 s of a 600 s CI budget
+    and took `make verify-fast`'s first pytest bundle over it):
+
+      - The cost is `find_partial`, and it is grid x samples: 4800 grid points
+        (240 Hz at df=0.05) against `seconds` of record, twice per seed. At the
+        cowbell's 600 ms window that is 138 M complex projections per seed, and
+        it is ~90 % of this test's wall clock. Halving the seeds halves it;
+        measured 81.2 s -> 40.6 s on an 8-vCPU worker.
+      - The 3x record length was NOT where the time went, which is worth
+        recording because it was the first hypothesis. `find_partial` and
+        `line_offsets` both slice `x[: int(seconds * sr)]`, so the last two
+        thirds of the record were never read: dropping the multiplier leaves the
+        analysed samples BIT-IDENTICAL (asserted in this test) and saves only the
+        RNG draw, about 1 ms.
+      - Seeds 1000..1007 are the same eight records the 16-seed version tested
+        first, at the same two windows, so this is a strict subset of what was
+        green and not a re-roll onto easier draws. The estimator-level test keeps
+        its 8 seeds per operating point, which is where #389's acceptance
+        criterion put the >=8 requirement.
+
+    8 seeds x 2 windows is still 16 independent noise records, every one of which
+    must be refused; the gate's null distribution is characterised over 96
+    partials in `balance_line_shape.py margin`, not here."""
+    for seconds in (RS_TEST_OP["t_end"], rc.CB_BALANCE_OP["t_end"]):
+        n_read = int(seconds * SR)
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(1000 + seed).standard_normal(n_read)
+            # the slice both functions below actually read, so "shortening the
+            # record changed nothing" is asserted rather than reasoned about
+            assert len(x) == n_read
+            assert np.array_equal(x, 0.01 * np.random.default_rng(
+                1000 + seed).standard_normal(int(3.0 * seconds * SR))[:n_read])
+            f = pt.find_partial(x, SR, *RS_TEST_RANGES[0], seconds=seconds)
+            r = pt.line_is_resolved(x, SR, f, seconds=seconds)
+            assert not r["ok"], (
+                f"seed {seed} over {seconds*1e3:.0f} ms: the strongest line white "
+                f"noise happens to have at {f:.1f} Hz is not a partial, and the "
+                f"gate accepted it (residual {r['resid_db']:.2f} dB, fitted tau "
+                f"{r['tau_ms']:.1f} ms)")
+            assert "does not have the shape of one" in r["reason"]
+            assert "RMS" in r["reason"]
+
+
+def test_line_is_resolved_refuses_a_line_that_never_decays():
+    """A steady tone is a line, and a very clean one, but it is not a STRUCK
+    MODE -- so the second condition, that the fitted tau decays inside the
+    window, is what has to refuse it. The reason must say so by name rather than
+    blaming the shape, because those are different findings about the record."""
+    n = int(0.25 * SR)
+    x = np.sin(2 * math.pi * 452.0 * np.arange(n) / SR + 0.3)
+    r = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    assert not r["ok"]
+    assert "does not decay inside" in r["reason"], r["reason"]
+    assert r["tau_ms"] > RS_TEST_OP["t_end"] * 1e3
+
+
+def test_line_is_resolved_is_blind_to_the_lines_height():
+    """The whole reason this gate is on the SHAPE: `find_partial`'s upward bias
+    lives entirely in the line's height, so a statistic that moved with the
+    height would carry the bias it exists to defeat.
+
+    Scaling a record by 60 dB either way changes every projection and must
+    change neither the residual nor the fitted tau -- and must not change the
+    verdict on noise either, which is the direction that matters."""
+    x = _damped(452.0, 0.006, 1.0, int(0.25 * SR), SR, 0.3)
+    base = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    noise = 0.01 * np.random.default_rng(7).standard_normal(int(0.25 * SR))
+    f_n = pt.find_partial(noise, SR, *RS_TEST_RANGES[0], seconds=RS_TEST_OP["t_end"])
+    base_n = pt.line_is_resolved(noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+    assert base["ok"] and not base_n["ok"]
+    for g in (1e-3, 1e3):
+        s = pt.line_is_resolved(g * x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+        assert s["ok"]
+        assert s["resid_db"] == pytest.approx(base["resid_db"], abs=1e-9), (
+            f"scaling by {g} moved the residual from {base['resid_db']:.6f} to "
+            f"{s['resid_db']:.6f} dB: the statistic is reading the height")
+        assert s["tau_ms"] == pytest.approx(base["tau_ms"], rel=1e-9)
+        sn = pt.line_is_resolved(g * noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+        assert not sn["ok"]
+        assert sn["resid_db"] == pytest.approx(base_n["resid_db"], abs=1e-9)
 
 
 def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():

@@ -336,10 +336,29 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
     once, with the best margin actually found, rather than reporting a
     contaminated ratio.
 
+    AND REFUSES WHEN EITHER "PARTIAL" IS NOT A RESOLVED LINE (#389), which the
+    floor gate on its own could not see. `find_partial` returns the STRONGEST
+    line in its search range -- a maximum over ~4800 and ~14000 grid points --
+    while `floor_at` reads FIXED guard frequencies, so on a record that holds no
+    partial the headroom between the two is the pick's own selection bias, and
+    it cleared 6 dB at some instant out of the 240 this trajectory visits: white
+    noise was REPORTED a balance at both shipping operating points, for most
+    seeds. The floor gate cannot be tightened to close that, because our own
+    rimshot clears it by 0.4 dB and noise clears it by 6 dB and more, so any
+    raised floor or margin silences D10A -- a real record with a real defect in
+    it -- before it silences noise. The precondition is on the line's SHAPE
+    instead, where the pick's bias divides out:
+    `partial_trajectory.line_is_resolved`.
+
+    THE FLOOR GATE RUNS FIRST, so a record with no energy at all keeps naming
+    the floor, which is that case's own ground truth
+    (test_..._refuses_when_no_instant_clears_the_floor).
+
     Ground truth: test_balance_trajectory_db_reports_two_points_not_one,
     test_balance_trajectory_db_a_flat_balance_reads_flat,
     test_balance_trajectory_db_excludes_a_point_below_the_floor,
-    test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor."""
+    test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor,
+    test_balance_trajectory_db_refuses_white_noise_at_both_operating_points."""
     f_lo = PT.find_partial(x, sr, *f_lo_range, seconds=t_end)
     f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
     if f_lo is None or f_hi is None:
@@ -361,11 +380,41 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                            f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
                            dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
                                 best_headroom_db=float(headroom[i])))
+    shapes = {}
+    for tag, f in (("low", f_lo), ("high", f_hi)):
+        shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
+        if not shape["ok"]:
+            return am.Estimate(None, False,
+                               f"the {tag} partial is not a resolved line: "
+                               f"{shape['reason']}",
+                               dict(f_lo=f_lo, f_hi=f_hi, unresolved=tag,
+                                    unresolved_hz=float(f),
+                                    line_resid_db=shape["resid_db"],
+                                    line_tau_ms=shape["tau_ms"],
+                                    line_drop1_db=shape["drop1_db"]))
+        shapes[tag] = shape
     i1 = int(idxs[0])
     balance1 = 20.0 * math.log10(ah[i1] / al[i1])
+    # THE SHAPE EVIDENCE TRAVELS WITH AN ACCEPTED VERDICT TOO, not only with a
+    # refusal (review of #405). `line_is_resolved`'s own docstring tells a reader
+    # to watch the residual against its tolerance -- the margin is 1.29x on the
+    # worst real partial measured -- and a verdict that records the number only
+    # when it fails cannot show that margin moving. The gate's value is recorded
+    # beside the two residuals so the pair is readable without going to look up
+    # which default was in force; `max_resid_db` and `n_bins` are still
+    # `partial_trajectory` defaults rather than members of the OP dicts, and
+    # `detail` is not serialised on the accepted path, so the scorecard JSON
+    # still cannot show this (Judge's non-blocking (2)/(3) on PR #405 -- the
+    # remaining half is plumbing `detail` into `diagnostics`, which touches every
+    # metric and is not this change).
     detail = dict(f_lo=f_lo, f_hi=f_hi, t1_ms=float(ts[i1] * 1e3),
                  balance1_db=balance1, headroom1_db=float(headroom[i1]),
-                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)))
+                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)),
+                 lo_resid_db=shapes["low"]["resid_db"],
+                 lo_tau_ms=shapes["low"]["tau_ms"],
+                 hi_resid_db=shapes["high"]["resid_db"],
+                 hi_tau_ms=shapes["high"]["tau_ms"],
+                 line_max_resid_db=shapes["low"]["max_resid_db"])
     later = idxs[ts[idxs] > ts[i1] + min_gap_ms * 1e-3]
     if len(later):
         i2 = int(later[-1])
