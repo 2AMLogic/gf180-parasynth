@@ -459,9 +459,17 @@ check caught it, and the CIC is now exact integer arithmetic. A derived
 latency of 323 was also wrong: it missed the output register, and the
 measurement was 324.
 
-**On the bench.** Build on the box with `python fpga/build_arty_sd.py` (Vivado
-2025.1). Load with `openFPGALoader -b arty_a7_100t build/arty-sd/arty.bit`
-(SRAM) or `-f` (flash). Then play with the same `fpga/uart_host.py run` that
+**Built.** On 2026-09-27, Vivado 2025.1 (the AMD Vivado AMI box) built it in
+241 s with state `BUILT_DEMO_TIMING_PASS`. WNS was +16.28 ns and WHS +0.03 ns,
+with zero failing endpoints. The output ports were classified exactly as the
+gate requires, and the log had zero critical warnings. The DRC census matched
+R0's. The record and bitstream (`0d22b944…`) are in
+[reports/arty/sd-demo-2025.1](reports/arty/sd-demo-2025.1/README.md): a build
+record, not a publication.
+
+**On the bench.** Rebuild with `python fpga/build_arty_sd.py` on a Vivado 2025.1
+host. Load with `openFPGALoader -b arty_a7_100t
+fpga/reports/arty/sd-demo-2025.1/arty.bit` (SRAM) or `-f` (flash). Then play with the same `fpga/uart_host.py run` that
 #208 uses. The operator confirms by ear.
 
 **Reuse.** `sd_dac.v` is PDK- and board-independent, and this file is its
