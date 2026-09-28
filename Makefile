@@ -19,7 +19,7 @@ help:
 	@echo "make verify-full  adds the hour-long runs (voice full set, drums)"
 	@echo "make controls     every injected defect that must turn something red"
 	@echo "make test         the Python suites only"
-	@echo "make claims       re-derive every marked prose claim in docs/ from evidence"
+	@echo "make claims       re-derive every marked prose claim in the tree from evidence"
 	@echo "make board        fill the scorecard's first batch and re-render the board"
 	@echo "make reference-integration  the Fischer-corpus tests as a REQUIRED gate (refuses if absent)"
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
@@ -46,16 +46,22 @@ help:
 ## explains all 23 is buried in a traceback. The same question answered in
 ## 0.2s, naming the source file that moved, is worth a job slot.
 ##
-## check_doc_claims.py runs THREE TIMES, and neither repeat is a duplicate: its
-## default document set is docs/*.md only, so the claim markers in fpga/ARTY.md
-## -- a claim-dense document that lives beside the thing it describes -- and
-## those in docs/scorecard/cymbal-369/tone-render/README.md (a scorecard, one
-## directory too deep for the glob) are checked by nothing unless those files
-## are named. A marker the rung does not scan looks exactly like one that
-## passed, which is the failure this whole tool exists to catch -- and is
-## literally how #429's three transcribed figures sat under a green 44/44 gate.
-## Naming the files keeps the widening auditable; the general case (every
-## claim-dense document outside docs/) is issue #435.
+## check_doc_claims.py ran THREE TIMES until #435 and now runs once, which is a
+## widening rather than a saving. Its default set was docs/*.md -- one
+## directory, not even recursive -- so fpga/ARTY.md and
+## docs/scorecard/cymbal-369/tone-render/README.md had to be named here to be
+## checked at all, and that is exactly how #429's three transcribed figures sat
+## under a green 44/44 gate. Naming files kept the widening auditable but could
+## only ever cover the ones somebody remembered: eleven further markers
+## (docs/scorecard/README.md, docs/scorecard/ensemble-e1a/rtl/README.md,
+## decision record 0018) were evaluated by nothing under a green "51 ok".
+##
+## The default set is now an explicit include list in the tool
+## (DEFAULT_INCLUDES), and the no-argument run REFUSES by name on any marker in
+## a tracked Markdown file outside it -- so a document in a new corner of the
+## tree turns this red instead of being silently unchecked, and no Makefile
+## line has to be remembered. 167 documents, 69 claims, 116s measured against
+## the old 48/51/88s.
 ##
 ## check_decision_record_numbers.py is here because a DR number cannot be
 ## allocated correctly from one branch: two PRs each took 0017 within two
@@ -83,8 +89,6 @@ verify:
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
-	  "$(PY) tools/check_doc_claims.py fpga/ARTY.md" \
-	  "$(PY) tools/check_doc_claims.py docs/scorecard/cymbal-369/tone-render/README.md" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
@@ -404,15 +408,17 @@ controls:
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
 
-## Re-derive every marked prose claim in docs/ from the evidence it names.
+## Re-derive every marked prose claim in this tree from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts
 ## the prose -- exit 1), REFUSED (the claim could not be evaluated at all --
 ## exit 2, this repository's "no evidence", not "no problem"). Both are red.
-## Convention: docs/claim-markers.md. Also a job in `verify`.
+##
+## One invocation, because the tool's own default set is now the whole authored
+## tree (#435) AND it refuses on any marker outside that set -- so a document
+## this line forgot to name is red rather than silent. Which directories are
+## scanned, and which are deliberately not: docs/claim-markers.md.
 claims:
 	@$(PY) tools/check_doc_claims.py
-	@$(PY) tools/check_doc_claims.py fpga/ARTY.md
-	@$(PY) tools/check_doc_claims.py docs/scorecard/cymbal-369/tone-render/README.md
 
 dag:
 	@$(PY) tools/compile_dag.py --run && $(PY) tools/compile_dag.py
