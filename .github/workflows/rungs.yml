@@ -103,6 +103,51 @@ jobs:
     # the price of an intermittent red, which is the trade
     # docs/failure-modes.md says not to make.
     timeout-minutes: 40
+
+    # Issue #422. On 2026-09-28 the `everything else` step below exited 139 --
+    # SIGSEGV, core dumped -- 12m40s in, at 30 % collected, with the innermost
+    # Python frame at model/drums_fx.py's `Env.out`:
+    #
+    #     return self.level >> (ENV_BITS - 15)
+    #
+    # A shift of two ints cannot fault, and the traceback's ~30 Python frames run
+    # unbroken into pytest's runner, so it is neither our arithmetic nor runaway
+    # recursion: the interpreter or a native extension died and surfaced at
+    # whatever frame happened to be innermost. The SAME COMMIT passed this job on
+    # its other trigger -- push 36377452558 crashed, pull_request 36377455006
+    # passed -- so it is non-deterministic, established rather than assumed.
+    #
+    # The full measurement is docs/ci-segfault-2026-09-28.md. What is pinned here
+    # does NOT claim to fix it -- nothing reproduced it in 120 runs -- and is
+    # justified by two numbers rather than by plausibility:
+    #
+    #   - `tools/crash_rate.py --runs 60`, twice, on the exact failing nodeid and
+    #     the exact stack that crashed (Python 3.12, numpy 2.5.3, scipy 1.18.1):
+    #     0 crashes in 120 runs that reached the code. So the honest status is
+    #     "bounded and instrumented", not "repaired", and the reason for pinning
+    #     is the second number, not the first.
+    #   - that same path takes the process from 1 OS thread to 15 under those pip
+    #     wheels, and to 1 under Ubuntu's apt numpy. The thread count of a job
+    #     that died in its main interpreter thread is therefore a function of the
+    #     runner tier and of whatever pip resolved that morning, neither of which
+    #     is in the commit. Pinning makes the numeric environment a property of
+    #     the commit, which is what makes a future crash rate comparable at all.
+    #     Cost, from the 60+60 paired runs under one load: median 12.86 s pinned
+    #     against 13.26 s unpinned -- 3 % FASTER, because these are least-squares
+    #     fits over a few hundred samples, where starting a thread pool costs
+    #     more than it returns.
+    #
+    # Deliberately NOT applied to the other jobs in this file, which run the same
+    # wheels unpinned. That leaves a control: a recurrence in `m5a-fast` or `rtl`
+    # but never here is evidence about threading, and a recurrence in both is
+    # evidence against it. Pinning everything would have destroyed the only
+    # comparison this repository can run without reproducing the crash.
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -159,8 +204,35 @@ jobs:
         run: python -m pytest model/test_audio_measure.py -q
       - name: M2 -- the voice is musically a Minimoog
         run: python -m pytest model/test_moog_acceptance.py -q
+      # The two instruments issue #422 added live under tools/, which
+      # `pytest model/ spec/` does not collect and which no job runs in full --
+      # exactly the gap #390 found, where the SN tone-stage derivation was
+      # carried by a file no workflow collected. Named here, and named BEFORE the
+      # step it guards: tools/run_with_rss.py stands in front of the one step
+      # that has already died of SIGSEGV, so an unexercised copy of it is a false
+      # green waiting to happen. Its load-bearing control is a child that really
+      # does segfault and must still exit 139 through the wrapper.
+      # Measured 7.7 s + 8.3 s on the 8-vCPU worker, so the 40-minute cap above
+      # is untouched.
+      - name: the crash instruments' controls
+        run: |
+          python -m pytest tools/test_run_with_rss.py -q
+          python -m pytest tools/test_crash_rate.py -q
+
+      # Wrapped for issue #422. The crash could not be classified after the fact
+      # because this job recorded neither peak RSS nor `ulimit -s`, and an OOM
+      # kill (137) and a native fault (139) are different problems with different
+      # fixes. The wrapper prints both, plus MemTotal/MemAvailable and which
+      # thread limits are in force, BEFORE the command runs -- so the envelope
+      # survives a child that takes the runner down with it -- and passes the
+      # child's status through unchanged: a SIGSEGV still exits 139 here.
+      # Measured on the 8-vCPU worker: 98 MB peak for the failing test alone and
+      # 245 MB for this whole step, so on a runner with GB of headroom memory was
+      # never near the edge, which is what makes 139 rather than 137 coherent.
+      # The runner's OWN ulimit and MemTotal have never been recorded; the next
+      # run of this job is the first that will print them.
       - name: everything else
-        run: python -m pytest model/ spec/ -q
+        run: python tools/run_with_rss.py -- python -m pytest model/ spec/ -q
 
       # The claim checker gates prose against the tree, so it has to RUN on a
       # pull request or it gates nothing -- the list it was commissioned to fix
