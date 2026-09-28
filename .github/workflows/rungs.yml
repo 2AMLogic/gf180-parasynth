@@ -231,8 +231,23 @@ jobs:
       # never near the edge, which is what makes 139 rather than 137 coherent.
       # The runner's OWN ulimit and MemTotal have never been recorded; the next
       # run of this job is the first that will print them.
+      #
+      # `--require-thread-pins` asserts the job-level env: block above is
+      # actually in force, at the one step whose numeric environment it changes.
+      # Measured (docs/ci-segfault-2026-09-28.md §2, replicated on a second
+      # host): this path runs 15 OS threads unpinned and 1 pinned, and the two
+      # logs are otherwise identical -- so a mitigation that silently stopped
+      # applying (a renamed key, a step-level env: shadowing it, the job split in
+      # two) would leave every future crash rate incomparable with no signal at
+      # all. It refuses with 126 WITHOUT running the suite rather than measuring
+      # an environment nobody checked; 126 and 127 are used because no pytest run
+      # produces either. Both directions are controlled in
+      # tools/test_run_with_rss.py, including that the refusal cannot launder a
+      # SIGSEGV -- with the pin in force a segfaulting child still exits 139.
       - name: everything else
-        run: python tools/run_with_rss.py -- python -m pytest model/ spec/ -q
+        run: >-
+          python tools/run_with_rss.py --require-thread-pins --
+          python -m pytest model/ spec/ -q
 
       # The claim checker gates prose against the tree, so it has to RUN on a
       # pull request or it gates nothing -- the list it was commissioned to fix

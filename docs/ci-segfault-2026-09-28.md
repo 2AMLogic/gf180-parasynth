@@ -100,7 +100,25 @@ counts `/proc/self/task`:
 | stack | threads before import | threads after the render | native extensions |
 |---|---|---|---|
 | pip wheels (numpy 2.5.3 / scipy 1.18.1) — **what CI installs** | 1 | **15** | 75 |
+| the same wheels, all five thread vars = 1 — **what is now pinned** | 1 | **1** | 75 |
+| the same wheels, `OPENBLAS_NUM_THREADS=1` alone | 1 | **1** | 75 |
 | Ubuntu apt numpy 1.26.4 / scipy 1.11.4 | 1 | **1** | 78 |
+
+The first and last rows are the original session's. **Rows 2 and 3 were added on
+a second pass, on a different 8-vCPU host, which also re-derived rows 1 and 4
+unchanged** (same wheels, same 75 extensions, 1 → 15) — so the finding
+replicates across hosts, not just across runs on one.
+
+Rows 2 and 3 exist because the first pass pinned a mitigation without ever
+measuring the pinned arm. The table justified the pin by showing the environment
+*varies*; it did not show that the pin *removes the variation*. That is the
+repository's own second root cause — a precondition assumed rather than asserted
+— committed into the fix for a bug about assumed preconditions. It now measures:
+the pin takes the path from 15 threads to 1, and `OPENBLAS_NUM_THREADS` alone
+accounts for every one of the 14. The other four are carried anyway because they
+cost nothing and a future wheel resolution can ship MKL or a second OpenMP
+runtime; `--require-thread-pins` therefore requires all five, so dropping one is
+a refusal rather than a silent narrowing.
 
 This is the finding that justifies the mitigation, and it is also this
 investigation's **wrong-then-right**: the first probe ran under the host's apt
@@ -161,6 +179,25 @@ measurement. What matters here is the magnitude of the RSS: a few hundred MB.
 3. **Both instruments' controls named as a CI step, before the step they
    guard.** A status-propagating wrapper that nothing exercises is a false green
    waiting to happen, and `pytest model/ spec/` does not collect `tools/`.
+4. **`--require-thread-pins` on that same step**, so the mitigation asserts its
+   own precondition at the point of use. Justified by §2 rows 1–2: pinned and
+   unpinned differ by 14 OS threads and by nothing visible in the log. A
+   job-level `env:` block can stop being in force without the step that depends
+   on it changing a character — a renamed key, a step-level `env:` shadowing it,
+   the job split in two — and every crash rate measured afterwards would be
+   incomparable with no signal that anything had changed. It exits **126**
+   without running the suite; 126 and 127 are used because no pytest run
+   produces either, so a refusal can never be read as an interrupted suite (2)
+   or a pass.
+   <!-- claim: test=tools/test_run_with_rss.py::test_require_thread_pins_refuses_when_the_pin_is_not_in_force -->
+
+   Both directions were run against the **committed** workflow before the gate
+   was committed — the job's `env:` block and the step's `run:` string parsed
+   out of `rungs.yml` and executed, passing with them and refusing with them
+   removed — because an unsatisfiable gate is worse than no gate. And the
+   property the wrapper exists for survives the addition: with the pin in force,
+   a child that segfaults still exits 139, not 126 and not 0.
+   <!-- claim: test=tools/test_run_with_rss.py::test_the_pin_check_never_launders_a_segfault -->
 
 ## The blast-radius question (#422 item 3), and its answer
 
@@ -168,8 +205,8 @@ The crash killed the whole process, so the 70 % of `model/` and `spec/` after it
 was never collected. In this job that reads as a failure, correctly. The question
 was whether any job could reach the same state and still report green.
 
-**One can, and it is filed separately** (per #422's own instruction not to fold
-it in): `rungs.yml`'s and `dag.yml`'s
+**One can. It is filed as #438**, separately, per #422's own instruction not to
+fold it in: `rungs.yml`'s and `dag.yml`'s
 
 ```
 python tools/compile_dag.py --run || true
@@ -194,11 +231,33 @@ behind it. It is still a gate that does not gate.
 ```bash
 uv venv --python 3.12 /tmp/ci-venv                       # the workflow's stack
 uv pip install --python /tmp/ci-venv/bin/python numpy scipy pytest pyyaml
-/tmp/ci-venv/bin/python tools/crash_rate.py --probe      # threads, extensions
+/tmp/ci-venv/bin/python tools/crash_rate.py --probe      # §2 row 1: 15 threads
 /tmp/ci-venv/bin/python tools/crash_rate.py --runs 60    # the rate
+
+env OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+    /tmp/ci-venv/bin/python tools/crash_rate.py --probe   # §2 row 2: 1 thread
+
 /tmp/ci-venv/bin/python tools/run_with_rss.py -- \
     /tmp/ci-venv/bin/python -m pytest model/ spec/ -q    # the envelope
 ```
 
 `--probe` under the host's own `python3` will report one thread and mislead you,
 as it misled this investigation. Build the venv.
+
+## The wrong-then-right rate for this investigation
+
+Two of the measurements here were wrong before they were right, and neither was
+caught by reading the code:
+
+1. **The thread probe reported 1 and meant 15.** Run under the host's apt numpy
+   rather than the venv the workflow builds. It pointed at "threading is not
+   involved", which would have ended the investigation.
+2. **The mitigation was pinned without the pinned arm being measured** (§2 rows
+   2–3, added on the second pass). The table showed the environment varies; it
+   never showed the pin removes the variation. It does — but that was a
+   *conclusion presented as a measurement* until it was one.
+
+Both are the same failure in different clothes: a correct instrument in an
+unchecked state. Publishing the rate is what lets a reader calibrate the numbers
+above, per `CLAUDE.md`.

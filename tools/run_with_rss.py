@@ -27,9 +27,23 @@ success while the suite dies at 30 %. So:
     really does segfault. A status-propagating wrapper with no injected-crash
     control is the same unexercised instrument this repo keeps finding.
 
+AND ONE PRECONDITION IT ASSERTS. `--require-thread-pins` refuses to launch at
+all unless every one of the five BLAS/OpenMP thread-count variables is set. The
+mitigation pinned in `.github/workflows/rungs.yml` is a job-level `env:` block,
+and a job-level `env:` block is exactly the kind of thing that stops being in
+force silently -- a renamed key, a step-level `env:` that shadows it, a job
+split in two. Measured (docs/ci-segfault-2026-09-28.md §2): unpinned, the
+failing path takes the process from 1 OS thread to 15; pinned, it stays at 1. So
+an un-pinned run is a DIFFERENT numeric environment from the one this
+investigation measured, and its log looks identical to a pinned one. Asserting
+the precondition at the point of use is the whole of CLAUDE.md's second root
+cause; reporting a number from an environment you did not check is the failure
+it describes.
+
 USAGE
 
     tools/run_with_rss.py -- python -m pytest model/ spec/ -q
+    tools/run_with_rss.py --require-thread-pins -- python -m pytest model/ -q
 
 Everything after `--` is the command. The report goes to stderr, so a caller
 parsing the child's stdout is unaffected.
@@ -38,6 +52,14 @@ from __future__ import annotations
 import os, pathlib, resource, signal, subprocess, sys, time
 
 LAUNCH_FAILED = 127      # no pytest exit code collides with this
+# REFUSED is deliberately NOT 2, this repo's usual refusal code, because this
+# tool's exit status IS the wrapped command's: pytest itself exits 2 for
+# "interrupted", and a refusal that cannot be told apart from a real pytest
+# outcome is not a refusal. 126 is unused by pytest, as 127 is.
+REFUSED = 126
+
+THREAD_VARS = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+               "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
 
 
 def meminfo_kb() -> dict:
@@ -61,9 +83,7 @@ def preamble() -> None:
         affinity = len(os.sched_getaffinity(0))
     except AttributeError:
         affinity = os.cpu_count()
-    thread_vars = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
-                   "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
-    pinned = {k: os.environ[k] for k in thread_vars if k in os.environ}
+    pinned = {k: os.environ[k] for k in THREAD_VARS if k in os.environ}
     print(f"[rss] ulimit -s {stack} (hard "
           f"{'unlimited' if hard == resource.RLIM_INFINITY else str(hard // 1024) + ' kB'})"
           f"  cpus {affinity}/{os.cpu_count()}"
@@ -74,15 +94,42 @@ def preamble() -> None:
           file=sys.stderr, flush=True)
 
 
+def missing_thread_pins() -> list[str]:
+    """Which of the five thread-count variables are absent or empty. Empty
+    counts as absent: `OMP_NUM_THREADS=` sets nothing and reads as pinned."""
+    return [k for k in THREAD_VARS if not os.environ.get(k, "").strip()]
+
+
 def main(argv: list[str]) -> int:
+    require_pins = False
     if "--" in argv:
-        cmd = argv[argv.index("--") + 1:]
+        flags, cmd = argv[:argv.index("--")], argv[argv.index("--") + 1:]
+        for f in flags:
+            if f == "--require-thread-pins":
+                require_pins = True
+            else:
+                # A typo'd flag must not be silently ignored: the whole point of
+                # the flag is that an un-asserted precondition is invisible.
+                print(f"[rss] REFUSED: unknown option {f!r}", file=sys.stderr)
+                return REFUSED
     else:
         cmd = argv
     if not cmd:
         print(__doc__, file=sys.stderr)
         print("[rss] REFUSED: no command given", file=sys.stderr)
         return LAUNCH_FAILED
+
+    if require_pins:
+        missing = missing_thread_pins()
+        if missing:
+            print(f"[rss] REFUSED: --require-thread-pins, but these are unset: "
+                  f"{', '.join(missing)}. The mitigation for issue #422 is a "
+                  f"job-level env: block in .github/workflows/rungs.yml; if it "
+                  f"is not in force this run is a different numeric environment "
+                  f"(15 OS threads, not 1 -- docs/ci-segfault-2026-09-28.md §2) "
+                  f"from the one that was measured. Nothing was run; exiting "
+                  f"{REFUSED}.", file=sys.stderr, flush=True)
+            return REFUSED
 
     preamble()
     t0 = time.monotonic()
