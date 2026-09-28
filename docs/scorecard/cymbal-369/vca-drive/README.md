@@ -20,8 +20,8 @@ correction to `docs/tr808-reference.md` §10 and `tools/werner_fig4.py`.
 | **The question's premise is wrong, and that is the finding** | There are not three drive levels to read. The three stages are **component-identical** — same 0.022 µF coupling cap, same **2 MΩ series** base bias from B1 (no ground leg, so the same Ic and the same gm), same 100 Ω emitter degeneration, same series diode — and **Q16 and Q17 hang on the same node**, IC3 pin 7, with nothing between them. Their signal drives are equal by construction, not by approximation. |
 | **The one element that differs** | the collector load, from each band's own envelope reservoir down to its VCA output node: **R94 39 kΩ** (short), **R90 33 kΩ** (DECAY), **R104 22 kΩ** (low). |
 | **The number** | **+4.97 dB** (short) and **+3.52 dB** (DECAY) relative to the low band; **+8.72 / +7.26 dB** as an upper bound that loads the low band with Hh1's own measured input impedance and leaves the high bands unloaded. |
-| **Against #396's gap** | the short band's gap is **+38.23 dB**. Closing it inside the VCA needs a collector load of **1.79 MΩ**; the schematic prints **39 kΩ**, which is **33.26 dB** short. **The missing factor is not in the cymbal's VCA section.** |
-| **The half that does NOT support the headline** | the DECAY band's gap is +9.85 dB and the upper bound supplies +7.26 dB — within 2.6 dB. The conclusion is carried by the short band alone, and this file says so rather than averaging the two. |
+| **Against #396's gap** | the short band's gap is **+39.79 dB**. Closing it inside the VCA needs a collector load of **2.15 MΩ**; the schematic prints **39 kΩ**, which is **34.82 dB** short. **The missing factor is not in the cymbal's VCA section.** |
+| **The half that does NOT support the headline** | the DECAY band's gap is +10.13 dB and the upper bound supplies +7.26 dB — within 2.87 dB. The conclusion is carried by the short band alone, and this file says so rather than averaging the two. |
 | **The external known answer that qualifies the read** | the two band-passes' **input networks** (C10 0.0033 µF + R52 33 kΩ; C11 0.001 µF + R55 22 kΩ) appear in no prior document here and are what set the filters' absolute gain. Solving both filters with them gives **+22.96 / +24.11 dB**, against W14b Figure 4's digitised **+22.95 / +24.10** — **0.01 dB**, from a different artifact by a different author who never saw these four parts. |
 | **Correction** | §10's two band-pass rows carried each other's reference designators. No value or f0 moves; the label a reader would use to find the part on the board was wrong. Details in §5. |
 
@@ -84,20 +84,20 @@ thing to argue against, because the headline is that the term is too *small*.
 |---|---:|---:|
 | collector-load ratio (`chain_db`) | **+4.97 dB** | **+3.52 dB** |
 | upper bound (`bound_db`) | **+8.72 dB** | **+7.26 dB** |
-| #396's gap (`../balance/balance.json`) | **+38.23 dB** | **+9.85 dB** |
-| margin | **29.5 dB** | 2.6 dB |
+| #396's gap (`../balance/balance.json`) | **+39.79 dB** | **+10.13 dB** |
+| margin | **31.1 dB** | 2.87 dB |
 
 ### The same statement with no gain model in it at all
 
 | band | gap | collector load it would need | printed | short by |
 |---|---:|---:|---:|---:|
-| short | +38.23 dB | **1.79 MΩ** | R94 **39 kΩ** | **33.26 dB** |
-| DECAY | +9.85 dB | 68.4 kΩ | R90 33 kΩ | 6.33 dB |
+| short | +39.79 dB | **2.15 MΩ** | R94 **39 kΩ** | **34.82 dB** |
+| DECAY | +10.13 dB | 70.6 kΩ | R90 33 kΩ | 6.61 dB |
 
 The short band's row needs no assumption about gm, r_e, loading or clipping: it is the resistance the schematic
 would have to print against the resistance it does print.
 
-**And the DECAY row is why this file does not claim more than it has.** 6.3 dB is within the range a loading
+**And the DECAY row is why this file does not claim more than it has.** 6.6 dB is within the range a loading
 treatment could plausibly move, so the DECAY band's gap is *not* refuted here. The conclusion — the balance's
 missing factor is not in the VCA section — rests on the short band, which is also the band the gap is largest on
 and the band step 10 §4 measured as sitting 10.59 dB below the decay band inside H.
@@ -155,7 +155,7 @@ one formulation only to show that agreement is not two names for one code path.
 - **The pinned scan.** Absent or wrong hash ⇒ `SourceUnavailable`, exit 3 (`--verify-source`) or exit 1
   (`--require-source`). A schematic read checked against the wrong printing looks exactly like a checked one.
 - **The gap this file is judged against.** `balance_targets()` re-reads `../balance/balance.json` and REFUSES if
-  either figure has moved from the +9.85 / +38.23 quoted here. A conclusion quoted against a number that has
+  either figure has moved from the +10.13 / +39.79 quoted here. A conclusion quoted against a number that has
   since drifted is this repository's recurring failure, and it is cheap to make impossible.
 
 ## 5. The correction: §10's two band-pass rows carried each other's designators
@@ -219,7 +219,7 @@ That question is filed as **#432**, with the components for all three networks i
 Still open and unchanged by this step: #396 (the inter-band balance — its `schematic-vr4` precondition artifact
 has still never been written, and its `vca-drive` precondition is now measured but deliberately not flipped),
 #413, #400's tail question, the DECAY knob's own law, and the listening pack at other settings. **And the
-balance's +38.23 dB gap now has one fewer place to live**, which is the whole point of a negative.
+balance's +39.79 dB gap now has one fewer place to live**, which is the whole point of a negative.
 
 ## Files
 

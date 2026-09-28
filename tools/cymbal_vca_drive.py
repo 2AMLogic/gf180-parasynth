@@ -49,8 +49,8 @@ A common-emitter stage with the same degeneration and the same bias has gain
 proportional to that resistor, so the VCA section's whole inter-band
 contribution is 20*log10(39/22) = +4.97 dB on the short band and
 20*log10(33/22) = +3.52 dB on the DECAY band, relative to the low band. The
-balance needs +38.23 dB and +9.85 dB (`../balance/balance.json`). To supply
-the short band's, R94 would have to be 1.79 Mohm. The schematic prints 39 k.
+balance needs +39.79 dB and +10.13 dB (`../balance/balance.json`). To supply
+the short band's, R94 would have to be 2.15 Mohm. The schematic prints 39 k.
 
 WHY THE READ CAN BE TRUSTED -- an external known answer, not a self-check.
 The read includes two elements no document in this repository has ever
@@ -95,7 +95,7 @@ WHAT THIS MODULE DOES NOT SETTLE, stated rather than left to be assumed:
     impedance is computed exactly; Hh2's and Hh3's are not. Because a passive
     load can only REDUCE |Z|, leaving the high bands unloaded makes the
     reported ratio an UPPER BOUND, which is the direction that matters: the
-    bound is +8.60 dB (short) and +7.15 dB (decay), still 29.6 dB short of the
+    bound is +8.71 dB (short) and +7.26 dB (decay), still 31.1 dB short of the
     balance's own requirement for the short band.
 
 Usage:
@@ -555,7 +555,7 @@ def balance_targets(path=None) -> dict:
         raise Refused(f"{path} is absent; the gap this module is judged "
                       "against is #396's, not one chosen here")
     rec = json.loads(path.read_text())
-    want = {"decay": 9.85, "short": 38.23}
+    want = {"decay": 10.13, "short": 39.79}
     got = {b: float(rec["gap_db"][b]["gap_db"]) for b in want}
     drift = {b: round(got[b] - want[b], 3) for b in want if abs(got[b] - want[b]) > 0.005}
     if drift:

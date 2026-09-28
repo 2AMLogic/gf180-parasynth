@@ -6,8 +6,8 @@
       "short": 10079.0
     },
     "gap_db": {
-      "decay": 9.85,
-      "short": 38.23
+      "decay": 10.13,
+      "short": 39.79
     },
     "path": "docs/scorecard/cymbal-369/balance/balance.json"
   },
@@ -49,15 +49,15 @@
   },
   "bandpass_peak": {
     "high": {
-      "f_hz": 7094.618013682774,
-      "gain_db": 24.10513069940636
+      "f_hz": 7094.618013682773,
+      "gain_db": 24.105130699406363
     },
     "low": {
       "f_hz": 3434.5214865233856,
       "gain_db": 22.963431322693623
     }
   },
-  "commit": "ac55d5c0cc0c2e3b5e3c5d1307c8c32b973c5772",
+  "commit": "9653c3444d9aaea3985d960c9458cc5ad64c987f",
   "defects": [
     "SWAP_BP_CAPS",
     "DROP_INPUT_NETWORK",
@@ -176,8 +176,8 @@
       "bound_db": 20.0,
       "ok": true,
       "printed_ohm": 39000.0,
-      "required_ohm": 1794414.1,
-      "shortfall_db": 33.257,
+      "required_ohm": 2147448.1,
+      "shortfall_db": 34.817,
       "what": "closing the short band's gap in the VCA needs a collector load >= 20 dB above the printed one"
     },
     "same-pinned-scan-as-vr4": {
@@ -188,8 +188,8 @@
       "bound_db": 8.715,
       "bound_margin_db": 20.0,
       "chain_db": 4.973,
-      "gap_db": 38.23,
-      "margin_db": 29.515,
+      "gap_db": 39.79,
+      "margin_db": 31.075,
       "ok": true,
       "what": "the short band's whole VCA term is >= 20 dB below the balance's gap"
     }
@@ -197,13 +197,13 @@
   "required_collector_load": {
     "decay": {
       "printed_ohm": 33000.0,
-      "required_ohm": 68378.98986026846,
-      "shortfall_db": 6.328
+      "required_ohm": 70619.1816926352,
+      "shortfall_db": 6.608
     },
     "short": {
       "printed_ohm": 39000.0,
-      "required_ohm": 1794414.131692131,
-      "shortfall_db": 33.257
+      "required_ohm": 2147448.1213464686,
+      "shortfall_db": 34.817
     }
   },
   "source": {
@@ -235,7 +235,7 @@
     "url": "https://archive.org/download/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf",
     "url_node": "https://ia801906.us.archive.org/9/items/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf"
   },
-  "sources_dirty": false,
+  "sources_dirty": true,
   "stage_differences": {
     "differing": [
       "load_ohm"

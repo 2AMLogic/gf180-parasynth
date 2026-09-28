@@ -171,14 +171,14 @@ def test_the_loaded_convention_is_an_upper_bound_on_the_unloaded_one():
 def test_the_short_band_would_need_a_collector_load_the_schematic_does_not_print():
     need = vd.required_collector_load()
     assert need["short"]["printed_ohm"] == 39e3
-    assert need["short"]["required_ohm"] == pytest.approx(1.79e6, rel=0.01)
+    assert need["short"]["required_ohm"] == pytest.approx(2.15e6, rel=0.01)
     assert need["short"]["shortfall_db"] > 30.0
 
 
 def test_the_decay_bands_gap_is_the_one_the_vca_nearly_reaches():
     """Reported because it is the half that does NOT support the headline.
 
-    The DECAY band's gap is 9.85 dB and the upper bound supplies 7.26 dB. The
+    The DECAY band's gap is 10.13 dB and the upper bound supplies 7.26 dB. The
     conclusion "the VCA section is not the missing factor" is carried by the
     SHORT band alone, and saying so is the difference between a finding and an
     overstatement.
@@ -298,8 +298,8 @@ def test_balance_targets_refuses_when_the_record_has_drifted(tmp_path):
 def test_balance_targets_accepts_the_committed_record():
     """The refusal above is not vacuous: the real file passes."""
     t = vd.balance_targets()
-    assert t["gap_db"]["short"] == pytest.approx(38.23, abs=0.005)
-    assert t["gap_db"]["decay"] == pytest.approx(9.85, abs=0.005)
+    assert t["gap_db"]["short"] == pytest.approx(39.79, abs=0.005)
+    assert t["gap_db"]["decay"] == pytest.approx(10.13, abs=0.005)
 
 
 def test_the_pinned_scan_is_the_one_the_vr4_read_used():

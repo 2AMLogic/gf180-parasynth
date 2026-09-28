@@ -291,7 +291,7 @@ is the state, not a plan, and each row names the step that resolved it.
 | Short band: 7.1 kHz → VCA → **Hh3** | **in** and resolved: 2-pole 10323 Hz Q 5.64 **plus a 1-pole at 5195 Hz**, not at the same corner (step 3). No longer borrows the closed hat's 11.7 kHz high-pass |
 | The level stage's +6 dB/oct | **in**, as a 1-pole differentiator cornered at 18972 Hz, *with* the tone stage against it (steps 4/5 — alone it makes things worse, §10 says so) |
 | The **TONE knob** | **in**, from VR4's wiper with nothing fitted (steps 9/10). Rendered, and it moves H − L by 1.13 dB where the machine moves 7.3 |
-| The **inter-band balance** | **NOT in, and it is the whole remaining gap** — but step 11 removes the VCA drives as its explanation: the three stages are component-identical bar one resistor each, and the short band's +38.23 dB would need a 1.79 MΩ collector load where the schematic prints 39 kΩ |
+| The **inter-band balance** | **NOT in, and it is the whole remaining gap** — but step 11 removes the VCA drives as its explanation: the three stages are component-identical bar one resistor each, and the short band's +39.79 dB would need a 2.15 MΩ collector load where the schematic prints 39 kΩ |
 | The **DECAY knob's** own law | not started. VR2 is on the other rail and no step has read it |
 
 **Budget, exact.** 16 → **20 modes, 25 paths**, `N_NUMS` 11, no `HP3` decode. The operator's accepted padding to 32
@@ -306,8 +306,8 @@ there is no margin for a 21st, and any further section needs a register-map revi
 > node**, IC3 pin 7, so their signal drives are equal by construction. The only per-band element is the collector
 > load: **R94 39 k / R90 33 k / R104 22 k**, i.e. **+4.97 and +3.52 dB** re the low band, or **+8.72 / +7.26 dB**
 > as an upper bound that loads the low band with Hh1's measured input impedance and leaves the high bands
-> unloaded. **The short band's +38.23 dB gap would need a 1.79 MΩ collector load and the schematic prints 39 k**
-> — 33.26 dB short, a statement with no gain model in it at all. So the balance's missing factor is not in the
+> unloaded. **The short band's +39.79 dB gap would need a 2.15 MΩ collector load and the schematic prints 39 k**
+> — 34.82 dB short, a statement with no gain model in it at all. So the balance's missing factor is not in the
 > VCA section.
 >
 > The read is qualified by an external known answer on its *newest* part: the two band-passes' **input networks**
