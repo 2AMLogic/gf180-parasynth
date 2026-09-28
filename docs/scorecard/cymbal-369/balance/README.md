@@ -198,7 +198,7 @@ sub-plots the marked curve is not the topmost one).
 
 - `tools/cymbal_band_balance.py` — the decomposition, the bounds, the preconditions, the refusal, and the ablation's
   level solver. `--report` / `--check` / `--json`.
-- `tools/test_cymbal_band_balance.py` — 30 tests: closed-form normalisation known answers, cross-checks against
+- `tools/test_cymbal_band_balance.py` — 32 tests: closed-form normalisation known answers, cross-checks against
   Figure 9's *digitised points* rather than its fit, the refusal asserted in both directions, the level solver's
   ratios and its register refusal, and the 5-control properties × defects matrix with one control blind by
   construction.

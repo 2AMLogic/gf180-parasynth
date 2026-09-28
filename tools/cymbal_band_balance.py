@@ -12,13 +12,15 @@ provenance and uncertainty, asserts the preconditions an applicable answer
 needs, and REFUSES when they are absent -- which they are. The value is in the
 numbers the refusal is made of, because two of them were not known before:
 
-  1. The tone-stage term's uncertainty is much SMALLER at each band's own
-     centre than the 9-18 dB the issue quotes. That 9/18 dB is
-     `werner_fig9.extrapolation_bound` evaluated at 7.1 kHz for every band.
-     The low band does not live at 7.1 kHz; it lives at its 3175 Hz
-     calibration third, where the same bound is 8.3 dB wide, and the short
-     band's tone term is MEASURED, not extrapolated, over most of its range.
-     So Figure 9's window is not the binding constraint it was taken for.
+  1. The 9-18 dB the issue quotes is read at the WRONG FREQUENCY for the
+     balance question. That 9/18 dB is `werner_fig9.extrapolation_bound`
+     evaluated at 7.1 kHz for every band. Each band's level is set in one
+     1/3 octave (3175 Hz for the low band, 10079 Hz for both high bands), and
+     there the same bound is 7.4 dB (low, against the 18.0 dB read at
+     7.1 kHz), 13.9 dB (decay, which is WIDER than its own 9.1 dB at 7.1 kHz)
+     and 0.04 dB (short, MEASURED rather than extrapolated, because 10079 Hz
+     is inside Ht3's plotted range). So Figure 9's window is not the binding
+     constraint it was taken for -- see 2 for what is.
 
   2. What IS binding is a factor neither figure carries at all: **the three
      swing VCAs' drive levels.** §10's three bands leave the same source
