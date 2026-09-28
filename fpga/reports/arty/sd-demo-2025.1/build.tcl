@@ -74,5 +74,6 @@ report_timing_summary -check_timing_verbose -file {<box>/build/arty-sd/timing.rp
 report_clocks -file {<box>/build/arty-sd/clocks.rpt}
 report_drc -file {<box>/build/arty-sd/drc.rpt}
 write_checkpoint -force {<box>/build/arty-sd/routed.dcp}
+report_io -file {<box>/build/arty-sd/io.rpt}
 write_bitstream -force {<box>/build/arty-sd/arty.bit}
 exit

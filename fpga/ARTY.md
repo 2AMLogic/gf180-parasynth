@@ -459,13 +459,22 @@ check caught it, and the CIC is now exact integer arithmetic. A derived
 latency of 323 was also wrong: it missed the output register, and the
 measurement was 324.
 
-**Built.** On 2026-09-27, Vivado 2025.1 (the AMD Vivado AMI box) built it in
-241 s with state `BUILT_DEMO_TIMING_PASS`. WNS was +16.28 ns and WHS +0.03 ns,
-with zero failing endpoints. The output ports were classified exactly as the
-gate requires, and the log had zero critical warnings. The DRC census matched
-R0's. The record and bitstream (`0d22b944…`) are in
+**Built.** On 2026-09-28, Vivado 2025.1 built it in 242 s with state
+`BUILT_DEMO_TIMING_PASS`. WNS was +15.085 ns and WHS +0.037 ns, with zero failing
+endpoints and zero critical warnings, and the DRC census matched R0's. Every
+port sits where `report_io` on the routed design says it should. The record and
+bitstream (`95a4f92f…`) are in
 [reports/arty/sd-demo-2025.1](reports/arty/sd-demo-2025.1/README.md): a build
 record, not a publication.
+
+**This image's JA is laid out for the purple PCM5102 breakout plugged straight
+in.** The breakout's header (SCK BCK DIN LCK GND VIN) sits in JA's top row:
+JA1 (G13) is driven low for SCK, BCK is on JA2 (B11), DIN on JA3 (A11), LCK
+on JA4 (D12), GND on JA5 and VIN on JA6. The published R0/R1 images keep the
+jumper layout in §Wiring (BCK on JA1, LCK on JA2, DIN on JA3), so **do not
+plug the breakout straight into an R0/R1 image**. The power pins line up, so
+nothing is damaged, but the signals are wrong. The breakout's back jumpers
+must set XSMT high (unmuted) and FMT low (I2S).
 
 **On the bench.** Rebuild with `python fpga/build_arty_sd.py` on a Vivado 2025.1
 host. Load with `openFPGALoader -b arty_a7_100t

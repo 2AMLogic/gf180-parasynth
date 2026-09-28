@@ -9,7 +9,7 @@
   },
   "published": false,
   "source_sha256": {
-    "fpga/rtl/arty_a7_sd_top.v": "8968e569cff8e772a0731b7e65659f1f0849d9bfce819bef4817325e0cc4d55a",
+    "fpga/rtl/arty_a7_sd_top.v": "8dd41381eb36ca9c1375c99882148f8efed8aacfafe96bd38685d224c5dc253d",
     "fpga/rtl/i2s_rx.v": "3753160399e6f6aa33626539d156ed0c43be282395f8b0c9461569547bf5c87e",
     "fpga/rtl/sd_dac.v": "eefb66b891dda59fbdee31445523cf755425043673cefa63423d417afe5e5791",
     "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
@@ -37,7 +37,7 @@
     "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
     "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
     "fpga/boards/arty-a7-100.xdc": "b594cc1545a73cdfd7753f578f03de51758ee962fff723273bece33ec3e48715",
-    "fpga/boards/arty-a7-100-sd.xdc": "8f762d792a16e9a4d1aa1f8b603ff51886d0c6f5bf007482fa4fc6ab4f853067"
+    "fpga/boards/arty-a7-100-sd.xdc": "601f30244cec31335d13714d1119ae2bb87b197bcf4ba039bb1a9cb3e2b866ff"
   },
   "verification": {
     "record_sha256": "ccc7ba037ba4f9afcdb7c17cadbac59f2c59d7a2f578a20b4fa5750ce82e72ed",
@@ -54,7 +54,7 @@
       "silence": null
     }
   },
-  "script_sha256": "fd1f1f3b470a3845879a74966780226fb8ad12d8a1509a08afc56faa811318b1",
+  "script_sha256": "ab6b4e4b9eb367717605530b0fd9b87056cfaf6aa83279398b2834203778757a",
   "vivado_version": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
   "command": [
     "/tools/Xilinx/2025.1/Vivado/bin/vivado",
@@ -68,24 +68,25 @@
     "<box>/build/arty-sd/vivado.jou"
   ],
   "exit_code": 0,
-  "seconds": 241.405,
+  "seconds": 242.453,
   "artifact_sha256": {
-    "arty.bit": "0d22b944f58fe5a19d4dcef88acc9a4f67f897b52be186c1b94fae6d8268d0bd",
-    "utilization.rpt": "07d820e2be2c19fba5a80c7e8332684dcb05dad4ccd759715aa2de9b6b072022",
-    "timing.rpt": "e26748f763e248fe96011d5cdec4c5389f744078ae73e8ca161253a81993b9e3",
-    "clocks.rpt": "a1b2124bb5b198b8bb2c574b2f5d98683529895779024b95e92a891d9f28f48b",
-    "drc.rpt": "14ca406edfbe694a7fbcfcbfa9460fa5cf01991c3dd8bfa594f1351764bca054",
-    "routed.dcp": "9eaa5f1c57f13ef00df3594961a4a1916721acdd66e59c65b820401052640af6",
-    "constraint_matches.rpt": "7105c979b588758705981d3c947e651e1c258d1c9e895823947fc4ac0b662dba",
-    "exceptions.rpt": "c42ec8b6d421ac20f9e08df0fa580c6c942eeff817ef181030e427dd132caef6"
+    "arty.bit": "95a4f92ffa1135b08fa1591220fb384c9ac1229d53cdb298376540010bb10a22",
+    "utilization.rpt": "d0c147daa23dee67e05c013d2e647f8a42a7cee1c0d1eef2b3d0254d359023a0",
+    "timing.rpt": "7261ab2fcc331de017518a8c2e8648f91691ae004cdea49a121b8a6987a33c3a",
+    "clocks.rpt": "816bf22fd49d7d0d60739cb8c0d241f1919d9e36bf8959636d9f266ff101f672",
+    "drc.rpt": "c0b23ed9a310f3ed49b8488a581963c11a75f165231de01ea482efc8250762f3",
+    "routed.dcp": "8126c1b3d074cddf8bffdd226292d28dfd83e3975742e73b065ea7ad36485412",
+    "constraint_matches.rpt": "f54d170efa3490742e934488aae33686c4b1afa6284f91eb464137f20bce0945",
+    "exceptions.rpt": "b4678b756ad3f351f404433f695efe7440e39ef3fbf5055c5aa6080cf4b11ebf",
+    "io.rpt": "b86dea742c562a054288a564ba5b541bbd90238cc680eb5426af566506cef743"
   },
   "implementation": {
     "timing": {
-      "wns_ns": 16.28,
+      "wns_ns": 15.085,
       "tns_ns": 0.0,
       "setup_failing": 0.0,
       "setup_endpoints": 43340.0,
-      "whs_ns": 0.03,
+      "whs_ns": 0.037,
       "ths_ns": 0.0,
       "hold_failing": 0.0,
       "hold_endpoints": 43340.0,
@@ -96,7 +97,7 @@
     },
     "resources": {
       "Slice LUTs": {
-        "used": 14129.0,
+        "used": 14132.0,
         "available": 63400.0
       },
       "Slice Registers": {
@@ -112,7 +113,7 @@
         "available": 135.0
       },
       "Bonded IOB": {
-        "used": 17.0,
+        "used": 18.0,
         "available": 210.0
       }
     },
@@ -143,6 +144,14 @@
       "forwarded_clock": [
         "i2s_bclk"
       ]
+    },
+    "placed_pins": {
+      "i2s_sdata": "A11",
+      "i2s_bclk": "B11",
+      "sd_right": "D3",
+      "sd_left": "D4",
+      "i2s_lrclk": "D12",
+      "dac_sck": "G13"
     }
   }
 }

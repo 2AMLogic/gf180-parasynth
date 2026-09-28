@@ -8,5 +8,5 @@ END	0
 CHECK	uart_stage1	1	stage1 u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]; uart_rxd drives u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]; stage2 u_arty/u_synth/g_uart.u_uart/rx_q_reg[1]; async cells u_arty/u_synth/g_uart.u_uart/rx_q_reg[0] u_arty/u_synth/g_uart.u_uart/rx_q_reg[1]
 CHECK	uart_false	1	4 path(s): {u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path} {u_arty/u_synth/g_uart.u_uart/rx_q_reg[0]/D:False Path}
 CHECK	uart_s1s2	1	1 path: slack 80.514 exception {}
-CHECK	uart_down	1	20 path(s), worst slack 78.220, none excepted
+CHECK	uart_down	1	20 path(s), worst slack 78.239, none excepted
 ROUTE_END	0
