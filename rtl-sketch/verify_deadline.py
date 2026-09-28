@@ -350,6 +350,123 @@ SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_sa
                  "extreme-pulse-mod": sc_extreme_pulse_mod}
 
 
+# ---- what a retained capture is bound to (#443) -----------------------------------
+# A committed capture is judged against the stimulus that DROVE it (its own
+# top_bx_cmds.txt), and is admitted as THIS tree's evidence only if that
+# stimulus and the one the scenario builds now agree on everything that can
+# move the schedule. That used to be every byte, which went stale twice in 24 h
+# on changes the verdict could not see (#426: two drum register values, and the
+# re-capture's schedule trace was byte-identical to the stale one's).
+#
+# WHAT IS RELAXED -- exactly one thing: the DATA of a drum-page write whose
+# address is not STOPS. The argument, in the RTL (drum_dp.v / modal_dp.v /
+# drum_kit.v / drum_regs.v):
+#   * drum_dp's sequencer advances on the counters e (0..ENVS) and p
+#     (0..PATHS-1) only: 1 + ENVS + 1 + 2*PATHS + 2 clocks every frame, then
+#     bank_start; modal_dp runs 3*MODES + 2 from there. No branch reads a
+#     register value; values only choose WHICH operand a fixed-slot multiply
+#     uses and WHERE its product goes (mix bus or a mode's exc register).
+#   * drum_regs acts on ADDRESSES (soft_rst is address 0xFF), never on data.
+#   * the voice waits on drum_done (dwait) and consumes the drum buses as data;
+#     so a drum parameter value can change what the chip sounds like, never when
+#     it finishes.
+# Corroboration, not the argument: d_start/d_last are 9/125 in every one of the
+# 2159 frames of both -l2 captures, through 30+ strikes of every stop.
+#
+# WHAT IS STILL REFUSED -- everything else, byte-exact: the write count and
+# order, every wait (so every landing frame), every flag, section and address,
+# EVERY voice-page value (an INC moves how often a PolyBLEP window opens, a WAVE
+# whether the 2x bank or the window loop runs, ROUTE the drum filter's wait,
+# GLIDE/MOD the reciprocal divisions -- the voice is where the schedule lives,
+# so none of it is classified, all of it is bound), and the STOPS value (it
+# does not move the drum section's latency, but it decides which frames count
+# as `three_2x_audible_with_strike`, a coverage fact the verdict REFUSES on).
+#
+# PRECONDITIONS, asserted at the point of use: the relaxation applies only if
+# the drum RTL is the RTL the argument was made on (DRUM_LATENCY_ARGUED_AT) --
+# in the current tree AND in the capture's own run record -- and the capture's
+# schedule shows one drum busy window in every frame. If any of these fails,
+# the binding falls back to byte-exact: a changed drum section must be argued
+# again, not inherited.
+#
+# NOT COVERED, and it never was: the capture is bound to the stimulus, not to
+# the RTL that ran it. The byte-exact binding had the same gap.
+#: sha256[:12] of the drum-section RTL at which the latency argument above was
+#: made (provenance() format). Update only after re-reading those files.
+DRUM_LATENCY_ARGUED_AT = {"drum_dp.v": "2ad7e5cec5b3", "drum_kit.v": "23e97ff6e0e4",
+                          "modal_dp.v": "dd4906617919", "drum_regs.v": "1282ebc944ee"}
+
+
+def read_cmds(path):
+    """A top_bx_cmds.txt back as (wait, flag, sec, addr, data) tuples: the
+    inverse of verify_synth_top.write_cmds. A malformed line raises."""
+    out = []
+    with open(path) as fh:
+        for i, ln in enumerate(fh, 1):
+            if not ln.strip():
+                continue
+            p = ln.split()
+            if len(p) != 5:
+                raise ValueError(f"{path}:{i}: not a (wait flag sec addr data) line: {ln.strip()[:60]!r}")
+            out.append(tuple(int(x) for x in p))
+    return out
+
+
+def schedule_projection(cmds):
+    """The part of a stimulus the frame schedule can depend on: every field of
+    every write, except the data of a drum-page write that is not STOPS
+    (replaced by None). See the argument above."""
+    return [(w, fl, sec, a, None if (sec == SEC_D and a != dx.A_STOPS) else d)
+            for w, fl, sec, a, d in cmds]
+
+
+def drum_rtl_hashes(rtl_dir=HERE):
+    return {n: hashlib.sha256(open(os.path.join(rtl_dir, n), "rb").read()).hexdigest()[:12]
+            for n in DRUM_LATENCY_ARGUED_AT}
+
+
+def stimulus_binding(captured, current, *, sched_rows=None, record=None, tree_drum_rtl=None):
+    """Is a capture driven by `captured` admissible evidence for a tree whose
+    scenario builds `current`? Returns (kind, reasons):
+
+      "identical"    every byte agrees
+      "drum-values"  only drum parameter values differ, and every precondition
+                     of the relaxation holds -- admitted
+      "refused"      anything else; `reasons` says what differs or which
+                     precondition failed
+
+    `sched_rows` is the capture's schedule, `record` its run record (the
+    provenance of the RTL that ran it), `tree_drum_rtl` the current tree's
+    drum RTL hashes (default: read from rtl-sketch)."""
+    if list(captured) == list(current):
+        return "identical", []
+    pa, pb = schedule_projection(captured), schedule_projection(current)
+    if len(pa) != len(pb):
+        return "refused", [f"write count {len(pa)} captured vs {len(pb)} now"]
+    diff = [(i, x, y) for i, (x, y) in enumerate(zip(pa, pb)) if x != y]
+    if diff:
+        i, x, y = diff[0]
+        return "refused", [f"{len(diff)} write(s) differ in a schedule-relevant field; first at "
+                           f"line {i + 1}: {x} captured vs {y} now"]
+    why = []
+    tree = tree_drum_rtl if tree_drum_rtl is not None else drum_rtl_hashes()
+    if tree != DRUM_LATENCY_ARGUED_AT:
+        why.append(f"the tree's drum RTL {tree} is not the RTL the latency argument was made on "
+                   f"{DRUM_LATENCY_ARGUED_AT}")
+    ran = {n: (record or {}).get("provenance", {}).get("files", {}).get(n) for n in DRUM_LATENCY_ARGUED_AT}
+    if ran != DRUM_LATENCY_ARGUED_AT:
+        why.append(f"the capture's run record names drum RTL {ran}, not {DRUM_LATENCY_ARGUED_AT}")
+    windows = {(r["d_start"], r["d_last"]) for r in (sched_rows or [])}
+    if len(windows) != 1:
+        why.append(f"the capture's schedule shows {len(windows)} drum busy windows "
+                   f"({sorted(windows)[:4]}), not one fixed window")
+    n = sum(1 for x, y in zip(captured, current) if x != y)
+    if why:
+        return "refused", [f"{n} drum parameter value(s) differ and the relaxation's precondition "
+                           "failed: " + "; ".join(why)]
+    return "drum-values", [f"{n} drum parameter value(s) differ; the schedule cannot see them"]
+
+
 # ---- coverage: what the landed writes say the chip was doing, frame by frame --------
 def image_timeline(model_writes, n):
     """Per frame, from the writes AT THE FRAMES THEY LANDED: waves, weights, gate,
