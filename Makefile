@@ -139,6 +139,14 @@ verify:
 ## nothing and cannot go red on simulator noise. The rest of rtl-sketch's
 ## pytest files DO need iverilog and stay in `make verify` only.
 ##
+## fpga/test_verify_xdc_binding.py and tools/test_check_arty_evidence_binding.py
+## are in the fpga bundle rather than only in `make verify` because THIS target
+## is what CI runs (rungs.yml `make verify-fast`) and #404 -- no CI job collects
+## tools/ or fpga/ wholesale -- is still open. Without them the constraint
+## bench's start-red on the pre-#315 file, and the publication rung's controls,
+## would be checks that only ever ran on a developer's machine. 2.5 s measured
+## together, against a 600 s cap.
+##
 ## THE TIMEOUT IS PER JOB, SO THE SHAPE OF THE SPLIT IS THE GATE'S HEADROOM.
 ## tools/test_run_case.py is its own job rather than a member of the big one
 ## (review of PR #405). That bundle was one 292 s job on main against a 600 s
@@ -175,7 +183,7 @@ verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
 	  "$(PY) -m pytest tools/test_run_case.py -q" \
 	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_check_workflows.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
