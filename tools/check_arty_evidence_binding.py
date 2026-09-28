@@ -57,7 +57,13 @@ the Makefile rung permanently red for a question no committed evidence can
 answer, and an unsatisfiable gate is worse than no gate (CLAUDE.md). Making
 publication scope *answerable* needs a bench or build record that covers the
 XDC, which is a change to fpga/build_arty.py's evidence semantics and is
-deliberately out of scope here.
+deliberately out of scope here: issue #436.
+
+WHAT THE WIDER SCOPE ALREADY SHOWS, ON REAL EVIDENCE. R1
+(reports/arty/r1-player-preview-2025.1, e0dd329) is the newest published image
+and was built on a branch without 383f10b, so its ONLY divergence from this
+tree is the constraint file. The default scope reports it as covering the tree
+exactly. `--scope publication --list-historical` is where that shows up.
 
 THREE STATES, NOT TWO. "the record does not mention these bytes" is not the
 same finding as "the record mentions them and they moved", and conflating them

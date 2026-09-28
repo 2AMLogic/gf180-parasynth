@@ -76,7 +76,7 @@ all.
 
 Making publication scope *answerable* needs a record that covers the
 constraints, which is a change to the bench's evidence semantics and is not
-this gate's to make.
+this gate's to make — issue #436.
 
 Since 2026-09-22 the publisher additionally binds, at publication time and
 refusing drift (regression-tested in `fpga/test_publish_binding.py`):

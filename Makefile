@@ -46,6 +46,14 @@ help:
 ## explains all 23 is buried in a traceback. The same question answered in
 ## 0.2s, naming the source file that moved, is worth a job slot.
 ##
+## check_doc_claims.py runs TWICE, and the second run is not a duplicate: its
+## default document set is docs/*.md only, so the claim markers in fpga/ARTY.md
+## -- a claim-dense document that lives beside the thing it describes -- are
+## checked by nothing unless that file is named. A marker the rung does not
+## scan looks exactly like one that passed, which is the failure this whole
+## tool exists to catch. Naming one file keeps the widening auditable; the
+## general case (every claim-dense document outside docs/) is issue #435.
+##
 ## check_decision_record_numbers.py is here because a DR number cannot be
 ## allocated correctly from one branch: two PRs each took 0017 within two
 ## minutes in September, on branches that never saw each other, and both merges
@@ -72,6 +80,7 @@ verify:
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
+	  "$(PY) tools/check_doc_claims.py fpga/ARTY.md" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
