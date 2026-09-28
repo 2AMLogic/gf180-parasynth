@@ -757,11 +757,12 @@ kicks some more AC energy into each band pass filter" **[verified: W14b §4]**
 — the cymbal is really *ring-down of two resonators struck by an aperiodic
 edge train*, plus VCA distortion.
 
-**Controls [verified: SN p.6; W14b §7, §10].** DECAY changes only the middle
-band's RC (chart: 350/800/1200 ms overall). TONE (VR4 20 kΩ) is a passive
-network that mainly attenuates the third (highest) band but also shifts the
-others ("weakly-separated, non-orthogonal controls… like guitar amplifier
-tone stacks"). LEVEL's buffer "also acts as a differentiator in the audio
+**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY
+changes only the middle band's RC (chart: 350/800/1200 ms overall). TONE
+(VR4 20 kΩ(B), linear taper) is a passive network that mainly attenuates the
+third (highest) band but also shifts the others ("weakly-separated,
+non-orthogonal controls… like guitar amplifier tone stacks") — see below for
+the network itself. LEVEL's buffer "also acts as a differentiator in the audio
 band — a 6 dB/octave rising slope" **[verified: W14b §11]**. That slope has a
 corner: W14b Fig. 10's family is a **single-pole differentiator with its corner
 at 18.97 kHz** (0.02 dB rms over 21 Hz–19 kHz), which tilts **+16.6 dB across
@@ -784,15 +785,56 @@ low-pass, which is what a passive network builds:
 
 All fifteen plotted curves fit that form to ≤ 0.05 dB rms. **Ht3 is the only
 one measured in the cymbal's own band**: Fig. 9 draws Ht1 on a 4 dB tall axis
-and Ht2 on a 3 dB tall axis, so both leave the plot far below 3.45 kHz. Values
-quoted for them higher up are extrapolations with an 18 dB (Ht1) and 9 dB (Ht2)
-spread at 7.1 kHz, and the inter-band balance the tone stage imposes is
-therefore **not** resolved — see §18.
+and Ht2 on a 3 dB tall axis, so both leave the plot far below 3.45 kHz, and
+naively extrapolating the local 2-pole window fit above would carry an 18 dB
+(Ht1) and 9 dB (Ht2) spread at 7.1 kHz. **That balance is now resolved
+instead** — see below and §18.
 
-**The one number that is resolved, and it matters:** across 2–20 kHz Ht3 tilts
-**−17.7 dB**, against the LEVEL buffer's +16.6 dB over the same span. The tone
-stage very nearly cancels the level stage's rising slope. Each path's tilt
-relative to 1 kHz is −24.7 (Ht1), −19.4 (Ht2), −20.2 dB (Ht3) at 20 kHz.
+**The one number that was already resolved, and it matters:** across 2–20 kHz
+Ht3 tilts **−17.7 dB**, against the LEVEL buffer's +16.6 dB over the same
+span. The tone stage very nearly cancels the level stage's rising slope. Each
+path's tilt relative to 1 kHz is −24.7 (Ht1), −19.4 (Ht2), −20.2 dB (Ht3) at
+20 kHz.
+
+**The inter-band balance, resolved by nodal analysis [verified: SN p.13
+schematic values, `tools/tone_stage_schematic.py`].** SN p.13's voicing board
+(VG 3116-140) prints the tone network's own resistors and capacitors around
+VR4 ("CY TONE", 20 kΩ(B) linear) and VR6/IC6 ("CY LEVEL"): two op-amp outputs
+(the two 7.1 kHz-band Sallen-Keys, Hh2 and Hh3) and Q25's emitter (Hh1) feed a
+4-node passive bridging network (C55/R112/R119 on one rail, C56/R120 + Q25's
+own C58/R123/C57/R121 pre-filter on the other, VR4 splitting attenuation
+between them, C90 loading the mix node into IC6's virtual ground). Solving it
+by nodal analysis — the same route that gave Hh1 from R124/R127/C48/C59 above
+— and fitting only the pot's wiper fraction (no per-path gain) against Fig.
+9's own digitised k = 1.0 curves gives a single wiper position that matches
+**all three families at once**, 707 points across three independent windows,
+to 0.001–0.013 dB rms — including the fully-measured Ht3 curve across three
+decades, not merely its narrow local window. The network is independently
+5th-order (five capacitors, no cap-only loop), matching W14b's own word for
+it, and its three transfer functions share **exactly one pole set**
+(128/509/681/1636/4192 Hz) — "one network, one denominator" is now an
+algebraic fact rather than a plausibility argument. Two wrong rail
+assignments (swapping which op-amp is which, or putting Hh1's pre-filter on
+the other band) fit 20–100× worse, which is what makes this a measurement and
+not a curve-fit coincidence (`tools/test_tone_stage_schematic.py`).
+
+Reading the three transfer functions directly off the solved network (no
+extrapolation needed — it covers the whole audio band) at the cymbal's own
+corners:
+
+| | 3.45 kHz | 7.1 kHz | vs. Fig. 9's own extrapolation bound at 7.1 kHz |
+|---|---|---|---|
+| Ht1 | −42.0 dB | −51.8 dB | inside [−54.5, −36.5] |
+| Ht2 | −20.5 dB | −26.7 dB | inside [−31.1, −22.0] |
+| Ht3 | −28.1 dB | −33.7 dB | matches the *measured* value (−33.67 dB) to 0.01 dB |
+
+i.e. relative to Ht3, **Ht2 sits +7.0 to +7.6 dB above it and Ht1 sits 13.9 to
+18.1 dB below it** across the cymbal's own band — the balance a candidate
+would need, resolved rather than bounded. This is a schematic/nodal result,
+not a fresh figure measurement, so it inherits the SN scan's own limits (a
+1981 print, hand-read component values) rather than Fig. 9's digitisation
+error; the fit residual above is the honest measure of how much slack that
+leaves, and it is small.
 
 Two defects in Fig. 9 itself, both resolved against W14b §10's prose and both
 asserted by the tool: its legend prints `Ht3` twice and `Ht1` never (the
@@ -808,13 +850,16 @@ paths: (low band: τ ≈ 100 ms fixed), (high band: τ = decay knob, ≈40 ms �
 low band; 8.84 kHz Q 1.00 at +6.03 dB on the DECAY band; 10.32 kHz Q 5.64
 cascaded with a 1-pole high-pass at 5.20 kHz, at +8.86 dB, on the short band)
 → **tone stage** — per band, a 2-pole band-pass with the real poles in the
-table above, which costs each band about −20 dB of tilt from 1 kHz to 20 kHz →
-the level stage's rising slope, a 1-pole differentiator cornered
+table above, which costs each band about −20 dB of tilt from 1 kHz to 20 kHz,
+**and now also an inter-band balance resolved by nodal analysis** (Ht2 +7.0 to
++7.6 dB above Ht3, Ht1 13.9 to 18.1 dB below Ht3 across 3.45–7.1 kHz, see
+above) → the level stage's rising slope, a 1-pole differentiator cornered
 at 18.97 kHz. The two band-passes' own peak gains are +22.95 dB (3.45 kHz) and
 +24.10 dB (7.1 kHz), so the **filter chain alone** puts the DECAY band +7.2 dB
 and the short band +10.0 dB above the low band. The
 VCAs' asymmetric clipping is what makes the sum "sizzle"; a linear VCA gives a
-flat, chorus-like tone.
+flat, chorus-like tone. Applying this balance into a candidate is #396's job,
+not this section's — see §18.
 
 **Do not implement the level stage without the tone stage.** They are the same
 size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
@@ -1185,28 +1230,43 @@ envelopes.
   13 kHz and a low-Q high-pass at that corner cannot make that shape.
   `docs/drum-verification.md` §10 has the derivation.
 
-- **The tone stage — its SHAPE is closed, its inter-band BALANCE is not.**
-  W14b Figure 9 has been digitised (`tools/werner_fig9.py`,
+- **The tone stage — SHAPE and inter-band BALANCE are both closed (2026-09-28,
+  #390).** W14b Figure 9 has been digitised (`tools/werner_fig9.py`,
   `docs/scorecard/cymbal-369/werner-fig9.json`,
-  `docs/scorecard/cymbal-369/tone-stage/`). §10 now carries all three paths as
-  2-pole band-passes with real poles, and the headline: the tone stage tilts
-  each band about −20 dB from 1 kHz to 20 kHz, which very nearly cancels the
-  LEVEL buffer's +16.6 dB. That is the right sign and size for candidate 2's
-  +24.0 dB excess tilt at CY5025, and it is the cymbal's largest single
-  modelling error.
+  `docs/scorecard/cymbal-369/tone-stage/`). §10 carries all three paths as
+  2-pole band-passes with real poles (their local window shape), and the
+  headline: the tone stage tilts each band about −20 dB from 1 kHz to 20 kHz,
+  which very nearly cancels the LEVEL buffer's +16.6 dB. That is the right
+  sign and size for candidate 2's +24.0 dB excess tilt at CY5025, and it is
+  the cymbal's largest single modelling error.
 
-  **What is still open is narrower than "the tone stage".** Figure 9 plots Ht1
-  on a 4 dB tall axis and Ht2 on a 3 dB tall one, so neither is plotted in the
-  cymbal's band at all, and their extrapolated values at 7.1 kHz carry an 18 dB
-  and a 9 dB spread over the sections a 3 dB window cannot exclude. The tone
-  stage's effect on **band balance** is therefore unresolved. Three routes, in
-  order: SN p.13's R/C values around VR4 (the only one that yields circuit
-  values); re-fitting Ht1/Ht2 with Ht3's measured poles held fixed, since three
-  transfer functions of one network to one output node share a denominator; or
-  applying only the tilt, normalised out of each band's gain, and leaving the
-  balance alone. Also unresolved: **which curve of each family is which k**.
-  Only k = 1.0 is marked, and the four other members carry no k value, so no
-  TONE knob position except fully-open is readable from this figure.
+  **The balance that Figure 9 alone could only bound to 18 dB (Ht1) / 9 dB
+  (Ht2) at 3.45/7.1 kHz is now resolved by route 1 of the three named below**:
+  SN p.13's schematic gives the tone network's own R/C values around VR4
+  ("CY TONE") and VR6/IC6 ("CY LEVEL"), and solving that network by nodal
+  analysis (`tools/tone_stage_schematic.py`, §10 above) reproduces Figure 9's
+  own digitised k = 1.0 curves — all three families, 707 points, including the
+  fully-measured Ht3 curve across three decades — to 0.001–0.013 dB rms with
+  **one** shared free parameter (the pot's wiper fraction) and no per-path
+  gain fudge. Route 2 (a shared-denominator constrained fit, holding Ht3's
+  poles fixed while refitting Ht1/Ht2) was accordingly not needed — route 1
+  succeeded outright rather than merely narrowing the bound, and the two
+  wrong-rail-assignment controls in `tools/test_tone_stage_schematic.py` show
+  the fit is not a coincidence (20–100× worse when a band is put on the wrong
+  rail). Resolved balance, relative to Ht3 across 3.45–7.1 kHz: **Ht2 +7.0 to
+  +7.6 dB, Ht1 −13.9 to −18.1 dB.** Whether/how to apply this into a
+  candidate is **#396's job, not this issue's** — #396 already scopes "the
+  tilt only, levels unchanged" for its own step and can pick up the resolved
+  balance from here for a later revision.
+
+  **Still open, and explicitly out of scope for #390: which curve of each
+  family is which k.** Only k = 1.0 is marked, and the four other members
+  carry no k value, so no TONE knob position except fully-open is readable
+  from Figure 9, and the wiper fraction fitted above (`alpha ≈ 0.398`) is a
+  property of k = 1.0 only — nothing here claims a linear or otherwise known
+  map from W14b's own `k` parameter to this pot's physical rotation. That
+  stays the knob-law repair named in `docs/scorecard/cymbal-369/README.md`
+  §4.
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6

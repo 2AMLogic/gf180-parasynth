@@ -175,6 +175,9 @@ Three routes, in the order they should be tried:
    current rule. That answers the one question this measurement does settle, and defers the one it does not.
    It is the cheapest confirmation of the headline and probably the right next step.
 
+**Route 1 was tried (#390, 2026-09-28) and it worked — see section 7.** Route 2 was not needed as a result;
+route 3 was already absorbed into #396 before #390 started (see that issue's "Related Open Work").
+
 ## 5. What is now closed in the reference
 
 - §10 gains the tone stage: three paths, each a 2-pole band-pass with real poles, with Ht3 measured in full and
@@ -185,6 +188,58 @@ Three routes, in the order they should be tried:
 - §10's "what to implement" gains the tilt, and says plainly that the LEVEL stage must not be implemented without
   it — the two are the same magnitude and opposite in sign, and a model with one and not the other is further
   from the machine than a model with neither.
+
+**Superseded by section 7 below (#390): the inter-band balance is no longer open.** §18 now records it as
+resolved, not bounded.
+
+## 7. #390: the schematic resolves the balance route 1 could only be hoped for
+
+Route 1 above was attempted by reading SN p.13's voicing board (VG 3116-140) directly: the resistors and
+capacitors around VR4 ("CY TONE", printed as 20 kΩ(B), linear taper) and VR6/IC6 ("CY LEVEL"). Two op-amp
+outputs (the two 7.1 kHz-band Sallen-Keys, Hh2 and Hh3) and Q25's emitter (Hh1, already used for the R124/R127/
+C48/C59 derivation) feed a 4-node passive network: C55/R112/R119 forms one rail, C56/R120 the other, with Q25's
+own C58/R123/C57/R121 stage pre-filtering Hh1 before it joins the second rail; VR4 is a balanced bridging
+attenuator (its wiper grounded, not a simple divider) splitting attenuation between the two rails; the mix node
+is loaded by C90 into IC6's virtual ground.
+
+**The result matches Figure 9 without needing a fudge factor.** Fitting only the pot's wiper fraction (no
+per-path gain offset) against Figure 9's own digitised k = 1.0 curves gives a *single* value that fits **all
+three families at once** — 707 points across three independently-plotted windows — to 0.001–0.013 dB rms,
+including the fully-measured Ht3 curve across three decades (not merely its narrow local window). The network is
+independently 5th order (5 capacitors, no cap-only loop — matches W14b's own word, derived without ever seeing
+W14b's coefficients) and its three transfer functions share **exactly one pole set**
+(128/509/681/1636/4192 Hz): "one network, one denominator" is now an algebraic fact, not an argument from
+plausibility.
+
+**Two controls rule out coincidence.** Swapping which op-amp rail is Hh2 vs. Hh3, or moving Hh1's pre-filter
+onto the other rail, degrades the fit 20–100×. A wrong circuit does not accidentally land this close.
+
+**The resolved balance**, read directly off the solved network at the cymbal's own corners (no extrapolation
+needed — the network covers the whole audio band), relative to Ht3:
+
+| | 3.45 kHz | 7.1 kHz |
+|---|---|---|
+| Ht2 − Ht3 | +7.61 dB | +6.98 dB |
+| Ht1 − Ht3 | −13.93 dB | −18.11 dB |
+
+Both Ht1 and Ht2's absolute values also fall inside Figure 9's own (much wider) extrapolation bounds at 7.1 kHz
+— −51.8 dB inside [−54.5, −36.5] for Ht1, −26.7 dB inside [−31.1, −22.0] for Ht2 — an independent cross-check
+the schematic route did not have to pass to be usable, and did.
+
+Route 2 (the shared-denominator constrained fit) turned out not to be needed: route 1 resolved the balance
+outright rather than merely narrowing the bound, so there is nothing left for a constrained refit to add. This
+also means the "at most one of Ht1/Ht2/Ht3's window-fit pole pairs is the network's real pair" caveat in
+section 2 is now explained rather than merely observed: the true network has *five* poles, and each narrow
+window's 2-pole fit is a local approximation dominated by whichever two of those five sit nearest that window.
+
+**What this does and does not change for #396.** #396 was scoped to apply the tone stage's *tilt* only, levels
+untouched, and that scope is unaffected. The balance above is available for whichever candidate revision picks
+up the levels — #390 does not build that candidate (out of scope by its own acceptance criteria) and does not
+alter `model/cymbal_candidate.py`.
+
+Evidence and code: `tools/tone_stage_schematic.py`, `tools/test_tone_stage_schematic.py`. Component values and
+the full nodal-analysis derivation are documented in the module's own docstring and in
+`docs/tr808-reference.md` §10/§18.
 
 ## 6. Wrong-then-right, twice
 
@@ -206,3 +261,7 @@ Three routes, in the order they should be tried:
   that run the gate each trip a different item: `passive`, `one-x`, `marker`, `prose`, `extrap`.
 - `../werner-fig9.json` — the digitised curves, so the gate runs with no paper and no network.
 - `tools/werner_fig4.py` — `calibrate()` now takes a box. Figure 4's and Figure 10's numbers are unchanged.
+- `tools/tone_stage_schematic.py` (#390) — the SN p.13 nodal analysis. `--check` is the gate, `--report` the
+  resolved balance.
+- `tools/test_tone_stage_schematic.py` (#390) — known-answer tests against Figure 9's digitised curves, plus
+  wrong-rail-assignment and component-perturbation controls.
