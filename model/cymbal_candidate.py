@@ -233,6 +233,83 @@ to within 0.5 dB in all five of its DECAY columns. So:
 
 Point 3 is the one worth the render. It is the only one of the four that no
 choice of inter-band balance can manufacture.
+
+===========================================================================
+REVISION 5 (#411) CHANGES ONE NUMBER: Hh1's OWN gain register. Everything
+else in revision 3 -- Hh1's filter shape (2.5 kHz Q 0.97, HP numerator), the
+decay and short bands, the bandpass, envelope and path registers -- is
+byte-for-byte unchanged. (Revision 4 above, #369 step 10, is orthogonal: it
+is additive and OFF by default -- `candidate_kit(tone=None)` still builds
+revision 3 exactly -- so it does not touch what this revision changes.)
+
+`docs/scorecard/cymbal-369/mid-band/README.md` (#369 step 7, `tools/cymbal_mid.py`)
+qualified the 1-2.5 kHz decay band and found the defect is a LEVEL, not a rate:
+revision 3's mid band is 4.4 dB under the 808's independent content there
+(+0.04 dB over the band-pass-only skirt prediction against the 808's +4.41 dB),
+while the shipped kit (which omits Hh1 entirely) is 6.1 dB over it. Revision 3's
+decay rate is inside tolerance in both cases, so a level-only change is the
+thing to test, not another filter -- and the level rule that sets it is the
+prime suspect: each band's amp is matched to the SHIPPED kit's same band, in
+the 1/3-octave at the band's own centre (3.175 kHz for the low band), over the
+first second of a CY strike (`tools/cymbal_candidate_eval.calibrate`). For Hh1
+this is a strange thing to do: Hh1 is a stage the shipped kit never had (its
+low band goes straight to the mix bus, `dx.kit_808`'s P_CYL path), so "matching
+the shipped kit" for Hh1's own gain means deriving a NEW register from a
+single-frequency energy ratio, when the circuit states Hh1's gain directly --
+docs/tr808-reference.md Sec.10's table and `HH1_PASS_DB = 0.0` above both read
+Hh1 as unity-gain -- and the path feeding it, `P_CYL` (att = CY_ATT = 0), is
+otherwise IDENTICAL to the shipped kit's own low-band path: same source
+(M_CYBP), same envelope (E_CYL), same attenuation register, only `dest` moves
+from DEST_MIX to M_CYH1 to route through Hh1 first. So the low band's absolute
+scale is already inherited, unmodified, from the shipped kit through that
+unchanged path; the ONE thing revision 3 then does is compute a SECOND, new
+number for Hh1's own amp by matching 3.175 kHz post-Hh1 to the shipped kit
+AGAIN, on top of a chain that already matches it. Revision 4 removes that
+second match for Hh1 only and gives Hh1's own amp register its stated circuit
+value instead: AMP_MAX (0.99998, the closest representable value to the
+Q0.16 register's unity), the same ceiling HH2's and HH3's own amp registers
+already sit at in revision 3.
+
+THE PREDICTION, before the render. Revision 3's calibration measured Hh1's amp
+at 0.693828 (`docs/scorecard/cymbal-369/candidate3/candidate3.json`, `levels
+-> per_band -> low -> amp`); AMP_MAX / 0.693828 = 1.4413 = +3.17 dB. Because
+`amp` is a flat linear multiplier applied identically to Hh1's ENTIRE output
+spectrum (the same per-mode register revision 3 already computes, only its
+VALUE changes -- no filter, no numerator, no coefficient moves), revision 4's
+whole low-band output should be +3.17 dB louder than revision 3's at every
+frequency and every time window, with no change in shape or decay rate. Two
+consequences follow, and both have to be confirmed by the render, not assumed:
+
+  * The mid band's over-skirt residual (revision 3: +0.04 dB) should move
+    toward the 808's +4.41 dB by close to +3.17 dB, and possibly by more: the
+    leak prediction it is measured against comes from the L band's OWN energy
+    in the same render, and L mixes the low band with the (unchanged) decay
+    and short bands, so a uniform +3.17 dB on the low band alone should raise
+    L's measured energy by LESS than +3.17 dB, and the residual (M minus a
+    leak prediction scaled from L) should therefore open by MORE than +3.17 dB
+    of headroom against that prediction.
+  * Revision 3's own strike-window thirds already sit within 0.5 dB of the
+    3.0 dB board bound this chain reports against (candidate3/README.md Sec.4:
+    +5.5 dB at 2.5 kHz, worst 5.7 dB at 16 kHz, against a 6 dB no-third-outside
+    bound) -- a flat +3.17 dB there would put 2.5 kHz at +8.7 dB, over the
+    bound. So revision 5 is very likely to trade back some or all of the one
+    property no earlier revision in this chain has had (no strike-window third
+    outside +-6 dB of the 808), which is exactly what
+    docs/scorecard/cymbal-369/README.md's acceptance for this step requires be
+    measured and reported, not assumed away because the mid-band tail improved.
+
+RESULT, MEASURED (docs/scorecard/cymbal-369/candidate4/README.md): the second
+consequence held -- the strike window gains one violation (2.5 kHz, +8.3 dB,
+against the predicted +8.7). The first did NOT: the over-skirt residual moved
+to -0.55 dB, AWAY from the 808's +4.41 dB rather than toward it. Both M's and
+L's measured energy in the render rose together (L is (almost) entirely the
+same post-Hh1 signal M is a sub-band of, and `amp` is a flat scalar on that
+whole signal applied AFTER its filtering), so the ratio the over-skirt metric
+reads is close to invariant to Hh1's own amp by construction -- not a render
+defect: `tools/probes/cymbal_candidate4_gain_invariance.py` finds zero
+saturation events in either render (0 of 25,152,000 `modal_fixed.sat` calls),
+ruling out clipping as the cause. REFUSED: not promoted. `--variant
+candidate4` in `tools/cymbal_candidate_eval.py` stays a diagnostic ablation.
 """
 from __future__ import annotations
 

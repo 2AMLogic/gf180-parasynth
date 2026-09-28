@@ -1,0 +1,26 @@
+{
+ "probes": [
+  {
+   "variant": "full",
+   "hh1_amp": 0.6938275769639202,
+   "sat_calls": 25152000,
+   "sat_clipped": 0,
+   "sat_clip_fraction": 0.0,
+   "max_mix_magnitude": 399787,
+   "peak_output_sample_full_scale": 0.28631591796875,
+   "peak_output_headroom_db": 10.86
+  },
+  {
+   "variant": "candidate4",
+   "hh1_amp": 0.9999847412109375,
+   "sat_calls": 25152000,
+   "sat_clipped": 0,
+   "sat_clip_fraction": 0.0,
+   "max_mix_magnitude": 399787,
+   "peak_output_sample_full_scale": 0.285797119140625,
+   "peak_output_headroom_db": 10.88
+  }
+ ],
+ "commit": "82628532604707f05b960477832379de309ad244",
+ "sources_dirty": false
+}
