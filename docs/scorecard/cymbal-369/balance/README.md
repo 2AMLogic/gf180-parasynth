@@ -20,7 +20,8 @@
 > digitised k = 1.0 curves to 0.001–0.013 dB rms. So §1's tone bounds and §5's second bullet (*"no other artifact
 > here carries VR4's R/C values"*) are **stale as of `aded99a`** and are flagged in place below rather than
 > silently rewritten, because re-deriving the decomposition from the nodal solution is a new measurement with its
-> own record, not a prose edit. **The verdict is not superseded.** This step's binding factor is the **VCA
+> own record, not a prose edit — **filed as #420**, not left as "follow-up" citing nothing (§6 is this chain's own
+> incident report on exactly that). **The verdict is not superseded.** This step's binding factor is the **VCA
 > drives** — a +38.2 dB gap in the short band, against a widest tone bound of 21.3 dB — and it predicted, before
 > #390 was finished, that *VR4's network alone would not unblock item 1*. #390 resolved VR4 and the VCA-drive term
 > is untouched by it, so the prediction held and the refusal stands.
@@ -58,7 +59,7 @@ Each band's level, **at the frequency its level is set** (`cymbal_candidate_eval
 |---|---|
 | band-pass peak | W14b Fig. 4 (`tools/werner_fig4.py`), whose digitiser is gated on SN p.13's R56–R59, C13–C16 — **resolved** |
 | high-pass pass band | W14b Fig. 4, same gate — **resolved** |
-| tone stage | W14b Fig. 9 (`tools/werner_fig9.py`) — **bounded**, per-band widths above. **Stale as of `aded99a`:** #390/#417 *resolved* this network from SN p.13 by nodal analysis (`tools/tone_stage_schematic.py`), so these bounds are superseded and want re-deriving — see the supersession note at the top. It does not move the verdict: the tone term's widest bound is 21.3 dB against the VCA drives' 38.2 dB gap |
+| tone stage | W14b Fig. 9 (`tools/werner_fig9.py`) — **bounded**, per-band widths above. **Stale as of `aded99a`:** #390/#417 *resolved* this network from SN p.13 by nodal analysis (`tools/tone_stage_schematic.py`), so these bounds are superseded and want re-deriving — **#420**, and the supersession note at the top. It does not move the verdict: the tone term's widest bound is 21.3 dB against the VCA drives' 38.2 dB gap |
 | LEVEL differentiator | W14b Fig. 10 — common to all three bands, so it cancels in a ratio; its *frequency dependence* does not, because the bands are levelled at different frequencies |
 | **VCA drive** | **ABSENT.** Three envelope generators and three swing VCAs (Q16/Q17/Q18, reference §10) sit between the band-passes and the high-passes. No W14b figure plots them and no artifact in this repository carries them. |
 
@@ -159,7 +160,7 @@ Measured rather than asserted again: `balance_input_invariance.py --baseline-rev
 addresses moved**, nothing unattributed, no CY envelope-peak register moved, `cy_render_inputs_identical: true`.
 So the ablation is not re-rendered for these either. **What #417 *does* change is the prose, not the render:** it
 resolves the tone term this step only bounded, which is flagged at the top of this file, in §1's factor table and
-in §5's second bullet, and left for its own follow-up rather than back-fitted here.
+in §5's second bullet, and left for **#420** rather than back-fitted here.
 
 The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
 short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
@@ -225,8 +226,8 @@ once.
   was true when it was written and is not any more — **#390/#417 landed `tools/tone_stage_schematic.py`**, which
   carries those values and solves the network. The named JSON is still absent, so the tool's refusal is still
   correct as written; what has changed is that the tone half of route 1 is now *available* rather than missing, and
-  wiring this precondition to the nodal solution (and re-deriving §1's tone column from it) is follow-up work with
-  its own record, not something to assert here.
+  wiring this precondition to the nodal solution (and re-deriving §1's tone column from it) is **#420**, not
+  something to assert here.
 - **The schematic needs to supply two things, not one.** VR4's network resolves the tone term. It does **not**
   resolve the VCA drives, and this step's measurement says those are the larger term: the gap is 38.2 dB in the
   short band against a widest tone bound of 21.3 dB, and the ablation's 16.2 dB H−L error is what remains after

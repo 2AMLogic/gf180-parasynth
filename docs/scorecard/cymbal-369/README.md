@@ -165,7 +165,7 @@ four citations that need correcting to point at it.
 > 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it** — a prediction
 > #390/#417 has since tested by resolving VR4, after which the 38.2 dB VCA term is still there. Its own Figure 9
 > *bounds* for the tone term (7.4 / 13.9 / 0.04 dB) are **superseded** by #390's nodal solution and need
-> re-deriving from `tools/tone_stage_schematic.py`; the refusal itself does not, because the VCA drives are the
+> re-deriving from `tools/tone_stage_schematic.py` (**#420**); the refusal itself does not, because the VCA drives are the
 > binding term and #390 does not carry them. Step 7's finding is the sharper statement of the same limit: no
 > inter-band balance at all reaches the 808's 1–2.5 kHz energy.
 

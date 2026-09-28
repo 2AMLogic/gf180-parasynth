@@ -1355,8 +1355,8 @@ envelopes.
   states as *bounded* rather than resolved (Ht1 7.4 dB / Ht2 13.9 dB / Ht3
   0.04 dB at each band's own calibration third, read off Figure 9) is
   **superseded by the nodal solution above** and needs re-deriving from
-  `tools/tone_stage_schematic.py`; that re-derivation is follow-up work, filed
-  separately, not done in #396's step. The VCA-drive half of route 1 — the
+  `tools/tone_stage_schematic.py`; that re-derivation is **#420**, not done in
+  #396's step. The VCA-drive half of route 1 — the
   envelope generator and swing VCA drive networks from SN p.13 — is what is
   still missing.
 
