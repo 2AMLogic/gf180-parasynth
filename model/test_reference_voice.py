@@ -14,6 +14,9 @@ convenience.
 The last group is the aliasing control: PolyBLEP switched off must be visible,
 or the oscillator comparison has no power.
 """
+import ast
+import contextlib
+import io
 import math
 import os
 import sys
@@ -26,6 +29,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
+import reference_voice as rv                                        # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = 48000
@@ -657,3 +661,99 @@ def test_the_mistuning_that_breaks_repetition_is_repaired_by_measuring_it():
     f = am.refine_f0(x, f0, SR).require("refine")
     w = am.waveform_id(x, f, SR)
     assert w.ok and w.label == "saw", w
+
+
+# ===========================================================================
+# 9. THE REPORT ITSELF PRINTS WHAT THE MODULE SAYS IT PRINTS
+#
+# `reference_voice`'s docstring promises two jobs: COMPARE, and TARGET for the
+# shark-tooth we do not have. Section 4 of the oscillator report is the whole
+# of the TARGET half, and for three commits it sat AFTER `_floor_fmt`'s
+# returns -- unreachable, so `--stage osc` never printed it and a later commit
+# edited its text (DR 0017, issue #48) without that text ever reaching a
+# reader. A section nobody can see is the same failure class as a measurement
+# nobody made: the interface claims something the implementation does not do.
+#
+# These tests drive `report_osc` directly on synthetic rows -- no plugin, no
+# audio -- so they run anywhere and fail red the moment a section stops
+# printing. The AST check is the general form: no statement in this module may
+# sit after a return in the same block, which is what made the section
+# invisible in the first place.
+# ===========================================================================
+def _row(device, wave, note, **kw):
+    """One `measure()`-shaped row, with every key `report_osc` reads present
+    and defaulted, so a test states only the fields it is about."""
+    r = dict(device=device, wave=wave, note=note, f0_cmd=vf.note_hz(note),
+             tag=f"{device}/{wave}/{note}", verified=True, verify_why="",
+             wave_label=wave, wave_reason="", steady=True, valid=True,
+             invalid_harmonics=[], period_residual=0.0002, crossings=2, jumps=1,
+             step_ratio=8.0, duty_measured=0.5, inharmonic_db=-90.0,
+             half_period_corr=None, rectangularity=None, n_valid=8)
+    for k in range(2, rv.KMAX + 1):
+        r[f"h{k}"] = 20 * math.log10(1.0 / k)
+    r.update(kw)
+    return r
+
+
+def _osc_report(rows):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rv.report_osc(rows)
+    return buf.getvalue()
+
+
+def _shark_rows(notes=(45, 81)):
+    return [_row("miniv3", "shark", n, verified=False, steady=True,
+                 verify_why="no closed form to check the shape against",
+                 wave_label=None, inharmonic_db=-61.0 + n / 10.0) for n in notes]
+
+
+def test_the_oscillator_report_prints_every_section_it_numbers():
+    """Sections 0 through 4 are the report's own contract. Section 4 was
+    unreachable code for three commits and no run ever said so."""
+    rows = [_row("ideal", "saw", 45, inharmonic_db=-113.0),
+            _row("ours", "saw", 45, inharmonic_db=-88.0)] + _shark_rows()
+    out = _osc_report(rows)
+    for section in ("0. WAVEFORM QUALIFICATION", "1. HARMONIC SERIES",
+                    "2. WHICH RECTANGULAR IS OURS?", "3. ALIASING",
+                    "4. TARGET"):
+        assert section in out, (section, out)
+
+
+def test_the_shark_tooth_target_section_reports_the_rows_it_is_about():
+    """The TARGET half of the study: Mini V3's shark-tooth, STEADY but not
+    VERIFIED, one line per pitch with its harmonics and its aliasing."""
+    rows = [_row("ours", "saw", 45), _row("ideal", "saw", 45)] + _shark_rows()
+    out = _osc_report(rows).split("4. TARGET", 1)[1]
+    for note in (45, 81):
+        assert f"{vf.note_hz(note):7.1f} Hz" in out, (note, out)
+    assert "BLEP and BLAMP" in out and "measure_shark_blamp.py" in out, out
+
+
+def test_the_target_section_is_silent_when_no_shark_row_qualifies():
+    """A row that is not STEADY is not a target description -- the heading
+    prints, the unqualified row does not."""
+    rows = [_row("ours", "saw", 45), _row("ideal", "saw", 45)] + [
+        _row("miniv3", "shark", 45, verified=False, steady=False,
+             verify_why="does not repeat at the commanded pitch")]
+    out = _osc_report(rows).split("4. TARGET", 1)[1]
+    assert f"{vf.note_hz(45):7.1f} Hz" not in out, out
+
+
+def test_no_statement_in_reference_voice_sits_after_a_return():
+    """The general form of the defect: a refactor inserted two functions into
+    the middle of `report_osc` and left its last section attached to
+    `_floor_fmt`, after that function's returns. Python raises nothing for
+    that -- it simply never runs the code."""
+    src = os.path.join(HERE, "reference_voice.py")
+    tree = ast.parse(open(src).read(), filename=src)
+    dead = []
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(body, list):
+            continue
+        for i, stmt in enumerate(body[:-1]):
+            if isinstance(stmt, (ast.Return, ast.Raise, ast.Continue, ast.Break)):
+                dead.append((stmt.lineno, body[i + 1].lineno))
+    assert not dead, (f"unreachable statements in {src}, as "
+                      f"(return at line, dead code at line): {dead}")
