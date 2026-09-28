@@ -168,6 +168,29 @@ four citations that need correcting to point at it.
 > re-deriving from `tools/tone_stage_schematic.py` (**#420**); the refusal itself does not, because the VCA drives are the
 > binding term and #390 does not carry them. Step 7's finding is the sharper statement of the same limit: no
 > inter-band balance at all reaches the 808's 1–2.5 kHz energy.
+>
+> **Both of those two sentences are corrected by step 8 below, and the gap is 1.3 dB rather than 9.4.**
+> Read §5 of `low-tail/README.md` with §3 of `vca-clip/README.md` beside it.
+
+> **Step 8 is `vca-clip/README.md`** — §10's asymmetric clipping, the one element step 7 named and did
+> not test, put in the chain at three discrete positions, seven drives and four asymmetries and
+> **eliminated**. It overshoots: by the drive at which its 1–2.5 kHz energy enters the 808's measured
+> range, rho_M has reached 2.0–3.1 against the machine's 1.048–1.139. The prediction was written first
+> and was wrong in sign, and why is recorded.
+>
+> The larger half of that step is a correction to step 7's own headline, from two preconditions step 7
+> assumed rather than asserted. Its 9.4 dB gap compares an **analytic** bound with a **filtered**
+> measurement: the analysis band-pass reads M **+3.67 and +9.49 dB high** on the two bands peaking at
+> 7.1 kHz (it reads the low band true, because Ln *is* its peak), and §1.5's staircase source is not the
+> flat one the bound assumed (+4.55 dB on the low band). Computing the bound the way the measurement was
+> made — rendered, same instrument, documented source — moves it from −12.74 to **−5.07 dB** against the
+> 808's −5.00…−3.45. Step 7's "no linear balance clears the skirt baseline" does not hold either: the
+> rendered chain reaches rho_M 1.2413.
+>
+> What survives is **a joint constraint**, which is sharper than either half: the balances that raise rho
+> are the balances that starve M, so `n_balances_in_808_box` is **0** for the linear chain at every
+> balance and for the clipper at every position, drive and asymmetry. Wrong-then-right rate of step 8:
+> **4**, one of them a verdict function that reported a match from two rows twelve dB apart.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
