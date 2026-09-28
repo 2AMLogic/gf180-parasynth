@@ -333,17 +333,23 @@ It passes because `candidate_kit` touches only the cymbal's own registers, which
   the load-bearing claim of a regeneration is *"no figure moved"* and `git diff` cannot establish that: it cannot
   tell a reordered key from a changed one, or the fourth decimal from the first. It REFUSES (exit 2) on a
   structural difference rather than reporting agreement over the leaves that happen to match.
-- **What the regeneration found.** The record this one replaces was written from a dirty tree, so its figures were
-  unreachable from any commit. Regenerating from a clean tree at `a899cd1` moved **no figure**: of 680 leaves,
-  the only non-provenance change is `verdict.properties.h-edt-falls-with-tone.ok`, `1.0` → `true`, which is the
-  `np.bool_` serialisation defect fixed in the same change. So the earlier figures were in fact right — but
-  "right" is a thing that had to be *measured*, and the field that existed to say it could not be was being read
-  by nothing.
-- **The render is not bit-reproducible, and that is worth writing down.** At exact equality 16 of the 680 leaves
-  differ, all in the last bits: the largest absolute move is `band_shares.low.L`, 2.5e-12 on 1582.24 (1.6e-15
-  relative), and every one is float reassociation, not a different answer. No figure is quoted anywhere to better
-  than three decimals, so nothing downstream moves — but a future regeneration should be diffed with a tolerance,
-  not with `cmp`, and a test asserting bit-equality of this record would be unsatisfiable.
+- **What the regeneration found: no figure moved.** The record this one replaces was written from a dirty tree, so
+  its figures were unreachable from any commit — including the 4.47 dB worst deviation the whole step turns on.
+  Regenerating from a clean tree moved **none of the 680 leaves**. The only non-provenance changes are six boolean
+  flags that were serialised as numbers (below). So the earlier figures were in fact right — but "right" is a thing
+  that had to be *measured*, and the field that existed to say it could not be was being read by nothing.
+- **The `np.bool_` defect hid two `false` flags, not just a `true` one.** #429 named
+  `verdict.properties.h-edt-falls-with-tone.ok` (`1.0` for `true`). The same cause put `0.0` in
+  `verdict.columns.10.h_edt10_ok` and `.75.h_edt10_ok` — genuinely failing columns, rendered in a form a reader
+  grepping for `false` would not find. The aggregate `h-edt-tracks-808.ok` was a real boolean and already `false`,
+  so no conclusion moves; the point is that a coerced flag is unreadable in both directions.
+- **Reproducibility, measured rather than assumed.** Two independent renders on the same host at different commits
+  agree **bit for bit** — 680 of 680 leaves at `--rel-tol 0`, the five boolean type changes aside. Against the
+  record produced for #428, however, 16 leaves differ in their last bits (largest: `band_shares.low.L`, 2.5e-12 on
+  1582.24, i.e. 1.6e-15 relative). So the arithmetic here is deterministic and something about that environment
+  was not this one. Nothing is quoted to better than three decimals, so no figure downstream moves — but diff a
+  regeneration with a tolerance rather than `cmp`, because bit-equality holds only within one environment and a
+  gate asserting it across environments would be unsatisfiable.
 - Reproduce: `python3 tools/cymbal_tone_nodal.py --check` (2.4 s), then
   `python3 tools/cymbal_tone_render.py --out <path>` (≈12 min of CPU; 46 min wall on a loaded laptop), then
   `python3 tools/diff_scorecard_record.py <path> --baseline docs/scorecard/cymbal-369/tone-render/tone-render.json`.
