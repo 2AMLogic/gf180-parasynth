@@ -147,7 +147,7 @@ def main():
     try:
         print("the real tree, the real committed records:")
         ok &= arm("0. default scope (the Makefile rung)", [], 0,
-                  want_names=["BOUND", XDC_REL, gate.NOT_COVERED])
+                  want_names=["BOUND", XDC_REL, "xdc-binding"])
         ok &= arm("1. satisfiability: publication scope is answerable",
                   ["--scope", "publication"], 0,
                   want_names=["BOUND", XDC_REL, "xdc-binding"],

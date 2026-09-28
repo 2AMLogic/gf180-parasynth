@@ -45,9 +45,9 @@ does depend on its constraints, and records sources()+roms()+[XDC].
 
 Until #421 this script only implemented the first scope and did not say so:
 383f10b (#315) changed fpga/boards/arty-a7-100.xdc and this gate still printed
-"covers every compiled source". It now names the constraint file and its
-coverage state on every run, and `--scope publication` asks the constraint
-question directly.
+"covers every compiled source". It now names the constraint file on every run
+-- and, since #436, the record that DOES answer for it and that record's state
+-- while `--scope publication` asks the constraint question directly.
 
 WHY PUBLICATION SCOPE IS NOT THE DEFAULT, AND ONE RECORD CANNOT ANSWER IT.
 Until #436 this mode could only REFUSE (exit 2, NOT COVERED): the bound record
