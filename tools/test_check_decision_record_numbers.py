@@ -284,6 +284,8 @@ def test_this_checker_is_invoked_by_a_ci_job_and_not_only_by_make():
     """
     import yaml
 
+    import check_workflows as cw
+
     workflow = yaml.safe_load((REPO / ".github/workflows/rungs.yml").read_text())
     runs = [str(step.get("run", "")) for step in workflow["jobs"]["python"]["steps"]]
 
@@ -292,7 +294,19 @@ def test_this_checker_is_invoked_by_a_ci_job_and_not_only_by_make():
         "rungs.yml's `python` job no longer runs "
         "tools/check_decision_record_numbers.py -- two concurrent PRs can each "
         "allocate the same number again with nothing on either PR to say so")
-    assert any("pytest" in r and "tools/test_check_decision_record_numbers.py" in r
-               for r in runs), (
-        "rungs.yml's `python` job no longer runs these controls -- an "
-        "unexercised checker measures the checker, not the directory")
+
+    # The CONTROLS are no longer named in rungs.yml, and that is the fix rather
+    # than the regression (#404): naming test files there made the set CI runs
+    # and the set that exists two lists that could drift, and they had, by 83
+    # files. The `tools` job now collects the whole directory, which subsumes
+    # this file. The property this assertion was written for is unchanged --
+    # something on the PULL REQUEST must still exercise the controls -- so it is
+    # the directory run that is asserted now, with enough of the command to
+    # exclude a single-file or `-k`-narrowed invocation that would collect these
+    # controls without running them.
+    blocks, reason = cw.step_would_block_pull_request(
+        workflow, "tools", "python -m pytest tools/ -q")
+    assert blocks, (
+        "rungs.yml's `tools` job no longer collects tools/ as a directory in a "
+        "way that can block a pull request -- an unexercised checker measures "
+        f"the checker, not the directory: {reason}")

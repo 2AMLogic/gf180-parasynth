@@ -343,8 +343,45 @@ jobs:
       # corpus-gated controls report NO VERDICT. `make reference-integration`
       # runs the same files with GF180_REQUIRE_TR808_REFS=1 on the box that has
       # them, where a missing corpus REFUSES instead of skipping.
+      #
+      # TWO TESTS ARE DESELECTED, BY NAME, AND THEY ARE RED ON MAIN TODAY --
+      # not flaky, not environment-dependent: 1.0 s, same two failures on macOS
+      # and on this runner. This job's first outing is what found them, which is
+      # the whole argument for the job. tools/test_verify_deadline.py judges the
+      # retained `-l2` captures against the stimulus THIS tree builds, and the
+      # captures (8c3de22, 2026-09-26, "the revision-13 tree") predate
+      # verify_synth_top's saw-drive phrase reserving room for three more writes
+      # (5e53531/e322e68/b3e5463, 2026-09-27). The test is behaving correctly:
+      # it refuses to judge historical evidence against current source. Fixing
+      # it means re-capturing on the build box, which is issue #426's work and
+      # not this job's.
+      #
+      # A deselect that nobody is forced to revisit is how 83 files got here, so
+      # the step below makes it self-retiring: it REQUIRES those two to still
+      # fail, for that reason. Re-capture the traces and this job goes red until
+      # the deselect is deleted.
       - name: every tools/ test, by directory
-        run: python -m pytest tools/ -q
+        run: >-
+          python -m pytest tools/ -q
+          --deselect tools/test_verify_deadline.py::test_the_retained_clean_capture_passes_and_each_corruption_refuses
+          --deselect tools/test_verify_deadline.py::test_a_late_but_complete_capture_is_still_a_deadline_fail
+      - name: the two deselected deadline tests are still red for the reason #426 names
+        run: |
+          python - <<'PY'
+          import subprocess, sys
+          IDS = ["tools/test_verify_deadline.py::test_the_retained_clean_capture_passes_and_each_corruption_refuses",
+                 "tools/test_verify_deadline.py::test_a_late_but_complete_capture_is_still_a_deadline_fail"]
+          r = subprocess.run([sys.executable, "-m", "pytest", *IDS, "-q"],
+                             capture_output=True, text=True)
+          if r.returncode == 0:
+              sys.exit("the deselected deadline tests now PASS -- #426's re-capture has landed.\n"
+                       "Delete the two --deselect flags in the step above and this step with them;\n"
+                       "an exclusion nobody is forced to revisit is how 83 files went unrun.")
+          if "not driven by this tree" not in r.stdout + r.stderr:
+              sys.exit("the deselected deadline tests fail for a DIFFERENT reason than #426's "
+                       "stale capture, so the exclusion is now hiding something else:\n" + r.stdout[-3000:])
+          print("deselect still justified: both fail on the stale-capture precondition (#426)")
+          PY
 
   # RTL bit-exactness. Separate job because iverilog is slow: the ladder is
   # ~1 min, the full voice is ~20 and does not belong on every push.
