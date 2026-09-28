@@ -143,8 +143,11 @@ so its value is not resolved even though its ordering is.
    +36 dB) in both absolute weights; only their difference is constrained, to [−9.0, +8.0] dB. **This does not lift
    the balance refusal of #396/#414**, whose blocking factor is the VCA drives' absolute levels.
 4. **Anything about our own cymbal.** No render of ours appears anywhere in this step. What it delivers is the law a
-   future candidate must be driven by instead of the closed-loop one in §4 of `../README.md` — filed as the
-   follow-up named below.
+   future candidate must be driven by instead of the closed-loop one in §4 of `../README.md`. That is the follow-up
+   named below, and it is tracked by **#369 itself** (§5 of `../README.md`, "Next step") — *not* by a separate issue,
+   which this sentence said in an earlier draft. `../README.md` records what that costs: a blocker cited four times
+   as "#371" when #371 is a merged pull request, so the thing gating acceptance was tracked by nothing until it
+   became #413. A write-up that says "filed" had better name the number.
 
 ## 7. The controls
 
@@ -214,8 +217,8 @@ every control it gates was executed by hand and by `test_the_corpus_gated_contro
 ### Next question, one at a time
 
 **Does a candidate driven by this law track the 808 as TONE moves?** That is a kit change and needs a render, the
-frozen development/confirmation split, and the hats' preservation set — a separate increment, filed rather than
-started here. The DECAY knob's law is a second, separate question: VR2 sits on the bottom rail's op-amp
+frozen development/confirmation split, and the hats' preservation set — a separate increment of **#369**, deliberately
+not started here. The DECAY knob's law is a second, separate question: VR2 sits on the bottom rail's op-amp
 (`tone_stage_schematic`'s own read of SN p.13 confirms it) and this step says nothing about it.
 
 **What this step forbids the next one to do:** drive a TONE comparison through
