@@ -59,6 +59,28 @@ import cymbal_tone_realisation as tr       # noqa: E402
 import tone_stage_schematic as ts          # noqa: E402
 
 SR = float(dx.SR)
+
+
+def json_leaf(o):
+    """`json.dumps` default that cannot turn a flag into a number.
+
+    #429 found `verdict.properties["h-edt-falls-with-tone"].ok` serialised as
+    `1.0` rather than `true`, and the cause was not the comparison that produced
+    it -- it was `json.dumps(..., default=float)` here. An np.bool_ is not
+    JSON-serialisable, so it reached `default`, and `float(np.True_)` is `1.0`.
+    Every numpy comparison anywhere in either tool is one `and` away from the
+    same defect, so casting at each site is whack-a-mole; the coercion is what
+    has to stop. Booleans are answered as booleans, integers as integers, and
+    anything else keeps the previous float() behaviour rather than becoming a
+    new way for a record to fail to be written.
+    """
+    if isinstance(o, (bool, np.bool_)):
+        return bool(o)
+    if isinstance(o, np.integer):
+        return int(o)
+    return float(o)
+
+
 BANDS = ("low", "decay", "short")
 # Which network rail each band's high-pass drives. Imported from step 9 rather
 # than restated: the assignment is resolved twice over (SN p.13's capacitor
@@ -456,8 +478,17 @@ def properties(cfg=None) -> dict:
     fl = fig9_target_db("low", hz, cfg)
     nl = nl - float(np.interp(tr.CENTRE_HZ["low"], hz, nl))
     fl = fl - float(np.interp(tr.CENTRE_HZ["low"], hz, fl))
-    d_low = float(np.max(np.abs((nl - fl)[act_l])))
+    dl = (nl - fl)[act_l]
+    d_low = float(np.max(np.abs(dl)))
+    # BOTH constructions are recorded, because prose has already confused them:
+    # step 10's write-up quoted 5.62 dB for this property, which is neither the
+    # de-trended maximum the property measures (4.61 dB) nor exactly the
+    # peak-to-peak span over the same range (5.59 dB). A number a document can
+    # only get by re-deriving it by hand is a number that will drift, so the
+    # span is computed here and cited by name rather than described in words.
+    span_low = float(np.max(dl) - np.min(dl))
     out["fig9-window-blind"] = {"value_db": round(d_low, 3), "bound_db": CROSS_BOUND_DB,
+                                "span_db": round(span_low, 3),
                                 "ok": d_low > CROSS_BOUND_DB,
                                 "what": "Ht1's 121-564 Hz window DISAGREES with the network over 2-8 kHz"}
 
@@ -512,9 +543,21 @@ def properties(cfg=None) -> dict:
                            "what": "no pole sits so far outside its band that the choice is asymptotic"}
 
     # 6. one fixed register set covers the whole knob: letting each pole follow
-    #    the network's own movement with alpha (4132 -> 4712 Hz on the top pole)
-    #    must not buy more than TRACK_TOL_DB, or TONE would need a coefficient
-    #    rewrite per position and the RTL deadlines would have to carry it.
+    #    the network's own movement with alpha must not buy more than
+    #    TRACK_TOL_DB, or TONE would need a coefficient rewrite per position and
+    #    the RTL deadlines would have to carry it.
+    #
+    #    How far the top pole actually moves is recorded rather than written
+    #    into prose, because the two available answers differ and a document
+    #    that quotes one cannot say which: over the five TONE codes the wiper
+    #    law clamps alpha to 0.001..0.999 (4132.2 -> 4712.0 Hz), while the
+    #    ideal full rotation alpha 0 -> 1 -- which no TONE code selects -- gives
+    #    4132.1 -> 4715.1 Hz. `codes_hz` is the one the knob can reach and the
+    #    one this property is evaluated over.
+    tops = [max(network_poles(alpha_of(c, cfg))) for c in CODES]
+    top_pole = {"codes_hz": [round(tops[0], 1), round(tops[-1], 1)],
+                "rotation_hz": [round(max(network_poles(0.0)), 1),
+                                round(max(network_poles(1.0)), 1)]}
     gain, detail = 0.0, {}
     if ch is not None:
         for b, v in ch.items():
@@ -524,7 +567,7 @@ def properties(cfg=None) -> dict:
             detail[b] = {"fixed_db": round(fixed, 3), "tracking_db": round(track, 3)}
             gain = max(gain, fixed - track)
     out["one-register-set"] = {"value_db": round(gain, 3), "bound_db": TRACK_TOL_DB,
-                              "per_band": detail,
+                              "per_band": detail, "top_pole_hz": top_pole,
                               "ok": ch is not None and gain <= TRACK_TOL_DB,
                               "what": "fixing the pole at the anchor costs no more than letting it track alpha"}
 
@@ -687,7 +730,7 @@ def main(argv=None) -> int:
             rc_ = 0 if ok else 1
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
-            a.json.write_text(json.dumps(record(), indent=1, default=float) + "\n")
+            a.json.write_text(json.dumps(record(), indent=1, default=json_leaf) + "\n")
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3

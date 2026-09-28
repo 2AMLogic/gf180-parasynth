@@ -40,8 +40,11 @@ replaced its own.** This step did, and the same construction, the same bound, th
 
 **The nodal route is not the suspect, and that is asserted rather than argued.** The short band is the one path
 Figure 9 draws across the whole audio band (Ht3, 20 Hz–20 kHz); over its active range the two routes agree to
-**0.10 dB** (`nodal-grounded`, bound 0.5). Over the low band's active range they disagree by **5.62 dB**
-(`fig9-window-blind`, which must exceed the same 0.5 dB or the finding is not a finding). Figure 9 plots Ht1 only
+**0.026 dB** (`nodal-grounded`, bound 0.5). Over the low band's active range they disagree by **4.61 dB**
+(`fig9-window-blind`, which must exceed the same 0.5 dB or the finding is not a finding); peak-to-peak over that
+same range the two routes span **5.59 dB** (`fig9-window-blind.span_db`).
+<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="all three figures on this line were transcribed, not computed: 0.10/5.62 against a tool that returns 0.026/4.61" -->
+Figure 9 plots Ht1 only
 over **121–564 Hz**, on a 4 dB tall axis; its fitted low-pass pole is **589.5 Hz** and the network's dominant
 in-band pole is at **4219 Hz**. A window a decade below the band cannot see it.
 
@@ -81,9 +84,13 @@ and each is a named property with a bound:
 4219.0 Hz reads **1.79 dB** — the structurally correct value is 0.45 dB *worse* by the same metric. Both are inside
 the bound. A value that reads better and is not in the circuit is not the one to keep.
 
-**`one-register-set`: 0.00 dB.** The network's top pole moves 4132 → 4712 Hz over the rotation (14 %). Letting each
-pole track alpha buys nothing measurable against fixing it at the anchor, so **TONE needs no coefficient rewrite** —
-one register set covers all five positions, and the RTL deadlines do not have to carry a per-position write.
+**`one-register-set`: 0.171 dB, against a 0.25 dB bound.** The network's top pole moves **4132.2 → 4712.0 Hz** across
+the five TONE codes (14 %; the ideal full rotation α = 0 → 1, which no code selects, gives 4132.1 → 4715.1 Hz —
+`top_pole_hz.codes_hz` and `.rotation_hz`). Letting each pole track alpha buys **0.171 dB** at most: the low band
+reads 0.878 dB with its pole fixed against 0.707 dB tracking, and the other two bands gain nothing. That is 68 % of
+the bound and it is the whole of what fixing the poles costs, so **TONE still needs no coefficient rewrite** — one
+register set covers all five positions, and the RTL deadlines do not have to carry a per-position write.
+<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="this paragraph read 0.00 dB, and it is the paragraph that justifies not realising the knob's shape change" -->
 
 ### Budget, counted exactly — and the margin is now zero
 
@@ -143,8 +150,10 @@ bracket's lower edge at every position**, and that edge is by construction *"H i
 knob's 51 dB of authority over the short band buys 0.2 dB of H − L because the short band is not in H.
 
 **The DECAY confound is bounded, not assumed.** The render sits at the shipped kit's one DECAY; the 808's anchored
-H − L agrees across all five of its DECAY columns to **0.5 dB** (span 7.15–8.09 dB), which is a sixth of the
-deviation being reported. So this comparison does not need the DECAY law that step 9 explicitly did not supply.
+H − L agrees across all five of its DECAY columns to **0.601 dB** (worst case DECAY 50 against DECAY 75 at TONE 100;
+the columns' own spans run 7.14–8.09 dB), which is a seventh of the deviation being reported. So this comparison
+does not need the DECAY law that step 9 explicitly did not supply.
+<!-- claim: test=tools/test_cymbal_tone_render.py::test_the_808s_decay_columns_agree_to_what_the_writeup_says issue=429 why="both numbers were read off the rounded table above rather than computed: 0.5 for 0.601, 7.15 for 7.14" -->
 
 **H's own EDT10, ratio to TONE 50** — and this is the half no balance can fake, because it is a decay:
 
@@ -310,11 +319,37 @@ It passes because `candidate_kit` touches only the cymbal's own registers, which
 ## Files
 
 - `tone-render.json` — the whole record: precondition, levels, per-TONE band measures, all 25 settings' comparison,
-  band shares, the superposition check, preservation, commit and dirty flag.
+  band shares, the superposition check, preservation, commit and dirty flag. The dirty flag is `false` and the
+  commit is an ancestor of `HEAD` whose tree carries revision 4, so every figure below is reproducible from this
+  history — which was **not** true of the record this one replaces (#429).
+<!-- claim: test=tools/test_cymbal_tone_render.py::test_the_render_record_is_reproducible_from_a_commit_in_this_history issue=429 -->
+<!-- claim: test=tools/test_cymbal_tone_render.py::test_no_committed_scorecard_record_was_produced_from_a_dirty_tree issue=429 why="generalised to every scorecard record carrying the two provenance fields" -->
 - `tools/cymbal_tone_nodal.py` / `tools/test_cymbal_tone_nodal.py` — the realisation, 10 properties, 7 injected
   defects, 4 blindness assertions, 34 tests. `--report` / `--check` / `--json`.
 - `tools/cymbal_tone_render.py` / `tools/test_cymbal_tone_render.py` — the render and its verdict, with the verdict's
   own controls (a planted 4 dB miss, a flat curve, a reversed curve).
 - `model/cymbal_candidate.py` — revision 4, with §2's prediction in its docstring, committed before the render.
+- `tools/diff_scorecard_record.py` — compares a regenerated record against the committed one leaf by leaf, because
+  the load-bearing claim of a regeneration is *"no figure moved"* and `git diff` cannot establish that: it cannot
+  tell a reordered key from a changed one, or the fourth decimal from the first. It REFUSES (exit 2) on a
+  structural difference rather than reporting agreement over the leaves that happen to match.
+- **What the regeneration found: no figure moved.** The record this one replaces was written from a dirty tree, so
+  its figures were unreachable from any commit — including the 4.47 dB worst deviation the whole step turns on.
+  Regenerating from a clean tree moved **none of the 680 leaves**. The only non-provenance changes are six boolean
+  flags that were serialised as numbers (below). So the earlier figures were in fact right — but "right" is a thing
+  that had to be *measured*, and the field that existed to say it could not be was being read by nothing.
+- **The `np.bool_` defect hid two `false` flags, not just a `true` one.** #429 named
+  `verdict.properties.h-edt-falls-with-tone.ok` (`1.0` for `true`). The same cause put `0.0` in
+  `verdict.columns.10.h_edt10_ok` and `.75.h_edt10_ok` — genuinely failing columns, rendered in a form a reader
+  grepping for `false` would not find. The aggregate `h-edt-tracks-808.ok` was a real boolean and already `false`,
+  so no conclusion moves; the point is that a coerced flag is unreadable in both directions.
+- **Reproducibility, measured rather than assumed.** Two independent renders on the same host at different commits
+  agree **bit for bit** — 680 of 680 leaves at `--rel-tol 0`, the five boolean type changes aside. Against the
+  record produced for #428, however, 16 leaves differ in their last bits (largest: `band_shares.low.L`, 2.5e-12 on
+  1582.24, i.e. 1.6e-15 relative). So the arithmetic here is deterministic and something about that environment
+  was not this one. Nothing is quoted to better than three decimals, so no figure downstream moves — but diff a
+  regeneration with a tolerance rather than `cmp`, because bit-equality holds only within one environment and a
+  gate asserting it across environments would be unsatisfiable.
 - Reproduce: `python3 tools/cymbal_tone_nodal.py --check` (2.4 s), then
-  `python3 tools/cymbal_tone_render.py --out <path>` (≈12 min).
+  `python3 tools/cymbal_tone_render.py --out <path>` (≈12 min of CPU; 46 min wall on a loaded laptop), then
+  `python3 tools/diff_scorecard_record.py <path> --baseline docs/scorecard/cymbal-369/tone-render/tone-render.json`.

@@ -156,9 +156,12 @@ at 4219 Hz, not 589.5 Hz. Measured against the nodal target
 
 The nodal route is not the suspect: the SHORT band is the one path Figure 9
 draws across the whole audio band (20 Hz-20 kHz), and the two routes agree
-there to 0.10 dB over its active range. The low band's disagreement is 5.6 dB
-over the same construction. That asymmetry is exactly what a narrow window
-predicts, and it is asserted as two named properties rather than argued.
+there to 0.026 dB over its active range. The low band's disagreement is 4.61 dB
+over the same construction (5.59 dB peak-to-peak). That asymmetry is exactly
+what a narrow window predicts, and it is asserted as two named properties
+rather than argued -- `nodal-grounded` and `fig9-window-blind`, both re-derived
+from the tool by `tools/test_cymbal_tone_writeup_figures.py` so that this
+paragraph cannot drift away from them again (#429).
 
 WHAT REVISION 4 CHANGES, each a discrete choice checked against the circuit:
 
@@ -191,9 +194,12 @@ WHAT REVISION 4 CHANGES, each a discrete choice checked against the circuit:
 
     The knob's SHAPE change with alpha is second order and is not realised:
     one fixed register set covers all five positions, which the
-    `one-register-set` property measures at 0.00 dB of forgone accuracy
-    against letting each pole track alpha (the network's top pole moves
-    4132 -> 4712 Hz over the rotation).
+    `one-register-set` property measures at 0.171 dB of forgone accuracy
+    against letting each pole track alpha -- 68 % of its own 0.25 dB bound,
+    carried entirely by the low band (0.878 dB fixed against 0.707 dB
+    tracking), with the other two bands gaining nothing. The network's top
+    pole moves 4132.2 -> 4712.0 Hz across the five TONE codes (the ideal full
+    rotation alpha 0 -> 1, which no code selects, gives 4132.1 -> 4715.1 Hz).
 
 BUDGET, counted exactly. 19 -> 20 modes, 24 -> 25 paths, N_NUMS 11. No mode
 carries numerator code 3, so `modal_dp.v` still needs no HP3 decode. AND THE
@@ -216,7 +222,8 @@ the short band's, so
            -0.03]    -0.06]            +3.2]    +9.9]
 
 and the 808's own anchored H - L is -2.3 / -1.4 / 0 / +1.5 / +5.1 dB, the same
-to within 0.5 dB in all five of its DECAY columns. So:
+to within 0.601 dB in all five of its DECAY columns (worst case DECAY 50
+against DECAY 75 at TONE 100). So:
 
   1. the rendered anchored H - L must RISE monotonically with TONE;
   2. it must land inside the bracket above -- and where inside is set by the

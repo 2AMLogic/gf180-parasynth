@@ -863,8 +863,10 @@ local fit of Ht1 over 121–564 Hz puts its low-pass pole at **589.5 Hz**, and
 its 2-pole form therefore reads (tone × LEVEL) as **flat to 0.46 dB** across
 2–8 kHz where the network's own response **falls 5.9 dB**. Over the *short*
 band — the one path Fig. 9 draws across the whole audio band — the two routes
-agree to **0.10 dB**, which is what makes this a statement about the window
-rather than about the network. Consequence for an implementation: a model that
+agree to **0.026 dB**, which is what makes this a statement about the window
+rather than about the network.
+<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="the 0.026 dB above is cymbal_tone_nodal.py's nodal-grounded property; it read 0.10 dB here for a week under a [measured:] tag" -->
+ Consequence for an implementation: a model that
 drops the tone low-pass pole against the LEVEL differentiator (on the grounds
 that both are asymptotic over the band) is right for the **DECAY and short**
 bands, whose active ranges lie entirely above 4219 Hz, and **wrong for the low
