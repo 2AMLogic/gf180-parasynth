@@ -51,15 +51,27 @@ H = 6-14 kHz) at all 25 Fischer settings, in three frozen windows. H - L is a
 ratio inside one file, so it survives `run_case.prepare`'s peak normalisation
 and any per-file capture gain; an absolute band energy would not.
 
-THE ONE FREE PARAMETER, and why it cannot absorb the answer. The three bands'
-relative drive -- §10's three envelope generators into three swing VCAs
-(Q16/Q17/Q18) -- is the term `docs/scorecard/cymbal-369/balance/README.md`
-REFUSED for want of any artifact that carries it. It is therefore fitted here,
-as ONE balance shared by all 25 settings (two numbers, decay and short relative
-to low), and the residual is reported per setting. Two numbers against 25
-measurements spanning 7.1-8.1 dB per column is not a fit that can hide a wrong
-mechanism -- and the three structural alternatives below, each with the SAME two
-free numbers, miss by 4.9-6.9 dB.
+THE TWO FREE NUMBERS, and how much they can absorb -- MEASURED, not asserted.
+The three bands' relative drive (§10's three envelope generators into three
+swing VCAs, Q16/Q17/Q18) is the term `docs/scorecard/cymbal-369/balance/README.md`
+REFUSED for want of any artifact that carries it. It is therefore fitted here, as
+ONE balance shared by all 25 settings -- two numbers, decay and short relative to
+low -- and the residual is reported per setting.
+
+**The small residual is NOT by itself the evidence, and an early draft of this
+docstring said it was.** `shape_audit()` fits the same two numbers to eight
+stated five-point curves and finds the family reaches five of them inside the
+bound: the machine's own curve (0.20 dB), a FLAT line (0.38), a straight ramp of
+the same span (0.34), and two curved ramps. So "0.33 dB over a 7.3 dB span" is
+consistent with the circuit but is not on its own decisive -- the family is
+flexible across monotone rises.
+
+What IS decisive is what the same freedom cannot reach: the machine's curve
+REVERSED (5.47 dB), a step (4.51) and a V (7.75), and, on the real data, the
+three structural alternatives -- the inverted wiper law (5.47), no tone network
+at all (5.46) and the low band on the top rail (6.95). Every one of those has the
+same two free numbers. That is the argument, and it is a weaker and more honest
+one than the residual alone.
 
 WHAT THIS RESOLVES, AND WHAT IT LEAVES OPEN. Read `verdict()`'s own output, not
 this paragraph, but in summary: the orientation (alpha rises with TONE), the
@@ -190,7 +202,15 @@ BLIND_BY_CONSTRUCTION = ("SOURCE_FLAT",)
 PROPERTIES = ("tone-exact", "artifact-binds", "floor-margin",
               "low-decay-tone-invariant", "h-edt-falls-with-tone",
               "alpha-law-1s", "alpha-law-strike", "alpha-law-tail",
-              "orientation-decisive", "tone-load-bearing", "low-band-rail")
+              "orientation-decisive", "tone-load-bearing", "low-band-rail",
+              "family-selective")
+
+# Eight five-point curves the two free numbers are fitted to, to measure how much
+# they can absorb. All but the first are synthetic and are built from the
+# MACHINE's own span so that "can the family reach this" is asked at the size
+# that matters. Frozen here rather than chosen after the answers were seen.
+SHAPES = ("machine", "flat", "linear-ramp", "machine-reversed",
+          "convex", "concave", "step", "vee")
 
 # Rule 4's matrix is per (property, defect), not per defect: a defect that moves
 # one property and is BLIND to another is the interesting case, and asserting
@@ -471,6 +491,41 @@ def balance_region(g: dict, measured: dict, *, bound=BOUND_DB, grid=None) -> dic
             "grid_db": [float(grid[0]), float(grid[-1])]}
 
 
+def shape_audit(measured: dict, *, column=None, cfg=None) -> dict:
+    """How much the two free numbers can absorb, as a table rather than a claim.
+
+    Each entry is a five-point H - L curve the family is fitted to with its own
+    best balance. `machine` is the real column; the rest are synthetic, built
+    from that column's own span. A family that reaches ALL of them would make the
+    headline residual meaningless, and this is the measurement that says it does
+    not -- three of the eight are out of reach, including the machine's own curve
+    reversed.
+    """
+    col = column or ANCHOR_TONE
+    real = [measured[col][t] for t in CODES]
+    span = max(real) - min(real)
+    curves = {
+        "machine": real,
+        "flat": [0.0] * len(CODES),
+        "linear-ramp": [span * FRAC[t] for t in CODES],
+        "machine-reversed": real[::-1],
+        "convex": [0.0] * (len(CODES) - 1) + [span],
+        "concave": [0.0] + [span] * (len(CODES) - 1),
+        "step": [0.0, 0.0] + [span] * (len(CODES) - 2),
+        "vee": [span, span / 2, 0.0, span / 2, span],
+    }
+    assert tuple(curves) == SHAPES, sorted(set(curves) ^ set(SHAPES))
+    g = gain_table(cfg if cfg is not None else config())
+    out = {}
+    for name, y in curves.items():
+        m = {d: {t: float(v) for t, v in zip(CODES, y)} for d in CODES}
+        f = fit_balance(g, m)
+        out[name] = {"worst_db": f["worst_db"], "balance_db": f["balance_db"],
+                     "reachable": f["worst_db"] <= BOUND_DB,
+                     "span_db": round(float(span), 3)}
+    return out
+
+
 def mapping_sweep(measured: dict, *, mappings=("linear", "sqrt", "square",
                                                "upper-half", "lower-half",
                                                "inverted", "fixed")) -> dict:
@@ -727,6 +782,21 @@ def _alpha_law(g, measured) -> dict:
                                               for v in f["per_column"].values()), 3)}
 
 
+def _family_selective(measured, cfg=None) -> dict:
+    """The family must reach the machine's curve AND miss at least one of the
+    stated shapes. Both halves are needed: reaching everything would make the
+    residual meaningless, and reaching nothing would mean the instrument is
+    broken. A defect that breaks the law fails the first half, which is what
+    makes this a property with a control rather than a printed table."""
+    a = shape_audit(measured, cfg=cfg)
+    n = sum(1 for v in a.values() if v["reachable"])
+    return {"value": n, "bound": f"machine reachable, < {len(SHAPES)} of {len(SHAPES)}",
+            "ok": a["machine"]["reachable"] and n < len(SHAPES),
+            "machine_worst_db": a["machine"]["worst_db"],
+            "unreachable": sorted(k for k, v in a.items() if not v["reachable"]),
+            "per_shape_db": {k: v["worst_db"] for k, v in a.items()}}
+
+
 def _alternative_fails(name, measured, cfg) -> dict:
     """A structural alternative must MISS the bound. Its value is its own best
     worst-residual, so "decisive" carries a size and not only a sign.
@@ -774,6 +844,7 @@ def properties(*, refs=None, meas=None, defect=None) -> dict:
         "orientation-decisive": _alternative_fails("inverted", art_1s, cfg),
         "tone-load-bearing": _alternative_fails("no-tone-network", art_1s, cfg),
         "low-band-rail": _alternative_fails("low-on-top-rail", art_1s, cfg),
+        "family-selective": _family_selective(art_1s, cfg),
     }
     assert set(out) == set(PROPERTIES), sorted(set(out) ^ set(PROPERTIES))
     return out
