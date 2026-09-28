@@ -141,6 +141,10 @@ def _binding_files() -> tuple[list[str], list[str]]:
     files = {"tools/check_arty_evidence_binding.py", "rtl-sketch/verify_synth_top.py"}
     files |= {rel(p) for p in (ROOT / "fpga").glob("*.py")}
     files |= {rel(p) for p in build_arty.sources() + build_arty.roms()}
+    # the constraint file: outside the checker's default (verification) scope,
+    # but since #421 it reports the file's coverage state alongside the
+    # verdict, and an isolated copy missing it can only report ABSENT
+    files |= {rel(build_arty.XDC)}
     files |= {rel(p) for p in (ROOT / "rtl-sketch").glob("*.hex")}
     return sorted(files | set(records)), records
 
@@ -199,14 +203,25 @@ def binding_control(out: Path) -> int:
     if rc == 0:
         return say("BOUND", f"check_arty_evidence_binding.py ACCEPTED {what}: not caught")
     if rc != 1:
+        # 2 is REFUSED, which since #421 also covers "the record never hashed
+        # this file at all" -- a different finding from the drift this control
+        # injects, so it is still not the answer this control accepts.
         raise Refused(f"check_arty_evidence_binding.py exited {rc}, not 1: {text[:300]}")
     # the checker lists the uncovered sources between its STALE line and its
-    # "Re-run the bench" advice (whose commands share the indentation)
-    moved = []
+    # "Re-run the bench" advice (whose commands share the indentation). Since
+    # #421 each line carries a trailing `  [DIFFERS]` / `  [NOT COVERED]`
+    # state; take the path and check the state rather than dropping it, so a
+    # NOT COVERED cannot be read as the drift this control injected.
+    moved, states = [], []
     for ln in text.splitlines()[1:]:
         if not ln.startswith("           "):
             break
-        moved.append(ln.strip())
+        path, _, state = ln.strip().partition("  [")
+        moved.append(path)
+        states.append(state.rstrip("]"))
+    if states and set(states) != {"DIFFERS"}:
+        raise Refused(f"STALE for a different reason: states {sorted(set(states))}, "
+                      "the counterexample injects drift (DIFFERS)")
     if not text.startswith("STALE") or moved != [BINDING_SUBSTITUTE]:
         raise Refused(f"STALE for a different reason: it names {moved}, the counterexample "
                       f"changed [{BINDING_SUBSTITUTE!r}]")
