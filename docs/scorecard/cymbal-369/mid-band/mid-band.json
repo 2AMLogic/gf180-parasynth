@@ -1,0 +1,2349 @@
+{
+ "bands": {
+  "M": [
+   891.0,
+   1782.0
+  ],
+  "M25": [
+   891.0,
+   2818.0
+  ]
+ },
+ "preconditions": {
+  "floor_margin_db": 10.0,
+  "leak_margin_db": 6.0,
+  "xcheck_tol": 0.25
+ },
+ "skirt": {
+  "M": {
+   "with_hh1": -30.03,
+   "bp_only": -21.4
+  },
+  "M25": {
+   "with_hh1": -13.07,
+   "bp_only": -11.36
+  }
+ },
+ "renders": {
+  "fischer_CY5025": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.875,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.768,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.14,
+    "over_leak_1s_bp_only_db": 4.51,
+    "floor_db_re_peak": -56.76,
+    "edt10_ms": 631.63,
+    "end_margin_db": 32.5,
+    "late_residual_db": 1.57,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 48.57,
+    "margin30_db": 32.5,
+    "xcheck": {
+     "start_ms": 698.4,
+     "win_ms": 289.3,
+     "w1_over_floor_db": 44.01,
+     "w2_over_floor_db": 36.84,
+     "ln_ratio": 1.651,
+     "t20_ms": 807.17
+    },
+    "edt10_env_ms": 563.72,
+    "edt10_qualified_ms": 631.63,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.03,
+    "over_leak_late_db": 14.32,
+    "over_leak_edt_bp_only_db": 4.41,
+    "over_leak_late_bp_only_db": 5.69,
+    "edt_env_rel_diff": -0.108
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.889,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.06,
+    "over_leak_1s_bp_only_db": 4.35,
+    "floor_db_re_peak": -61.68,
+    "edt10_ms": null,
+    "end_margin_db": 38.49,
+    "late_residual_db": 1.52,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 54.73,
+    "margin30_db": 38.49,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 548.75,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.92,
+    "over_leak_late_db": 7.9,
+    "over_leak_edt_bp_only_db": 4.21,
+    "over_leak_late_bp_only_db": 6.19,
+    "refused": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "shipped": {
+   "sr": 48000,
+   "record_s": 3.591,
+   "low_has_hh1": false,
+   "L_energy_share_db": -11.851,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -22.827,
+    "skirt_db_at_edges": [
+     -26.73,
+     -18.67
+    ],
+    "predicted_leak_db_re_L": -21.4,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 10.43,
+    "over_leak_1s_bp_only_db": 10.43,
+    "floor_db_re_peak": -261.14,
+    "edt10_ms": 527.54,
+    "end_margin_db": 230.08,
+    "late_residual_db": 0.54,
+    "t20_late_ms": 1248.5,
+    "margin10_db": 250.81,
+    "margin30_db": 230.08,
+    "xcheck": {
+     "start_ms": 500.0,
+     "win_ms": 320.0,
+     "w1_over_floor_db": null,
+     "w2_over_floor_db": null,
+     "ln_ratio": 1.435,
+     "t20_ms": 1026.94
+    },
+    "edt10_env_ms": 470.0,
+    "edt10_qualified_ms": 527.54,
+    "t20_qualified_ms": 1248.5,
+    "over_leak_edt_db": 10.52,
+    "over_leak_late_db": 9.57,
+    "over_leak_edt_bp_only_db": 10.52,
+    "over_leak_late_bp_only_db": 9.57,
+    "xcheck_rel_diff": -0.177,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.109
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -17.253,
+    "skirt_db_at_edges": [
+     -26.73,
+     -8.44
+    ],
+    "predicted_leak_db_re_L": -11.36,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.96,
+    "over_leak_1s_bp_only_db": 5.96,
+    "floor_db_re_peak": -266.38,
+    "edt10_ms": 517.06,
+    "end_margin_db": 235.1,
+    "late_residual_db": 0.42,
+    "t20_late_ms": null,
+    "margin10_db": 256.35,
+    "margin30_db": 235.1,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "late window is leak-dominated"
+    },
+    "edt10_env_ms": 495.0,
+    "edt10_qualified_ms": 517.06,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.08,
+    "over_leak_late_db": 4.9,
+    "over_leak_edt_bp_only_db": 6.08,
+    "over_leak_late_bp_only_db": 4.9,
+    "t20_refused": "over the late window the band is only 4.9 dB above the 3.45 kHz band's predicted skirt leakage (need 6)",
+    "edt_env_rel_diff": -0.043
+   }
+  },
+  "candidate3": {
+   "sr": 48000,
+   "record_s": 3.991,
+   "low_has_hh1": true,
+   "L_energy_share_db": -13.651,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -35.263,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 8.42,
+    "over_leak_1s_bp_only_db": -0.21,
+    "floor_db_re_peak": -249.18,
+    "edt10_ms": 451.17,
+    "end_margin_db": 215.43,
+    "late_residual_db": 0.89,
+    "t20_late_ms": 1296.04,
+    "margin10_db": 238.36,
+    "margin30_db": 215.43,
+    "xcheck": {
+     "start_ms": 345.0,
+     "win_ms": 345.0,
+     "w1_over_floor_db": 237.36,
+     "w2_over_floor_db": 230.15,
+     "ln_ratio": 1.66,
+     "t20_ms": 957.06
+    },
+    "edt10_env_ms": 320.0,
+    "edt10_qualified_ms": 451.17,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 8.66,
+    "over_leak_late_db": 6.52,
+    "over_leak_edt_bp_only_db": 0.04,
+    "over_leak_late_bp_only_db": -2.11,
+    "xcheck_rel_diff": -0.262,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by -26 % (Schroeder 1296 ms, two-window 957 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.291
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -22.728,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 4.0,
+    "over_leak_1s_bp_only_db": 2.29,
+    "floor_db_re_peak": -260.48,
+    "edt10_ms": null,
+    "end_margin_db": 229.08,
+    "late_residual_db": 0.52,
+    "t20_late_ms": null,
+    "margin10_db": 250.76,
+    "margin30_db": 229.08,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 525.0,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 4.08,
+    "over_leak_late_db": 3.2,
+    "over_leak_edt_bp_only_db": 2.37,
+    "over_leak_late_bp_only_db": 1.49,
+    "refused": "over the EDT window the band is only 4.08 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  }
+ },
+ "fischer": {
+  "CY0000": {
+   "sr": 44100,
+   "record_s": 1.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.279,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.18,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.13,
+    "over_leak_1s_bp_only_db": 4.5,
+    "floor_db_re_peak": -54.83,
+    "edt10_ms": 419.98,
+    "end_margin_db": 32.65,
+    "late_residual_db": 1.93,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)",
+    "margin10_db": 47.92,
+    "margin30_db": 32.65,
+    "xcheck": {
+     "start_ms": 538.8,
+     "win_ms": 99.8,
+     "w1_over_floor_db": 42.59,
+     "w2_over_floor_db": 36.79,
+     "ln_ratio": 1.335,
+     "t20_ms": 344.11
+    },
+    "edt10_env_ms": 458.96,
+    "edt10_qualified_ms": 419.98,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.0,
+    "over_leak_late_db": 14.55,
+    "over_leak_edt_bp_only_db": 4.37,
+    "over_leak_late_bp_only_db": 5.93,
+    "edt_env_rel_diff": 0.093
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.574,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.78,
+    "over_leak_1s_bp_only_db": 4.07,
+    "floor_db_re_peak": -60.45,
+    "edt10_ms": null,
+    "end_margin_db": 37.81,
+    "late_residual_db": 1.61,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 54.67,
+    "margin30_db": 37.81,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 443.99,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.6,
+    "over_leak_late_db": 7.82,
+    "over_leak_edt_bp_only_db": 3.89,
+    "over_leak_late_bp_only_db": 6.12,
+    "refused": "over the EDT window the band is only 5.6 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY0010": {
+   "sr": 44100,
+   "record_s": 4.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -6.787,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -22.784,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 14.03,
+    "over_leak_1s_bp_only_db": 5.41,
+    "floor_db_re_peak": -57.15,
+    "edt10_ms": 1290.98,
+    "end_margin_db": 30.81,
+    "late_residual_db": 1.2,
+    "t20_late_ms": 1386.1,
+    "margin10_db": 47.73,
+    "margin30_db": 30.81,
+    "xcheck": {
+     "start_ms": 1247.2,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 45.98,
+     "w2_over_floor_db": 40.12,
+     "ln_ratio": 1.349,
+     "t20_ms": 1706.27
+    },
+    "edt10_env_ms": 1082.54,
+    "edt10_qualified_ms": 1290.98,
+    "t20_qualified_ms": 1386.1,
+    "over_leak_edt_db": 14.07,
+    "over_leak_late_db": 14.72,
+    "over_leak_edt_bp_only_db": 5.45,
+    "over_leak_late_bp_only_db": 6.09,
+    "xcheck_rel_diff": 0.231,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.161
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -13.039,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.82,
+    "over_leak_1s_bp_only_db": 5.11,
+    "floor_db_re_peak": -62.82,
+    "edt10_ms": 1307.71,
+    "end_margin_db": 38.18,
+    "late_residual_db": 1.62,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 55.45,
+    "margin30_db": 38.18,
+    "xcheck": {
+     "start_ms": 1381.9,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 51.48,
+     "w2_over_floor_db": 46.28,
+     "ln_ratio": 1.197,
+     "t20_ms": 1923.52
+    },
+    "edt10_env_ms": 1217.23,
+    "edt10_qualified_ms": 1307.71,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.9,
+    "over_leak_late_db": 7.7,
+    "over_leak_edt_bp_only_db": 5.19,
+    "over_leak_late_bp_only_db": 5.99,
+    "edt_env_rel_diff": -0.069
+   }
+  },
+  "CY0025": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -7.842,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.881,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.99,
+    "over_leak_1s_bp_only_db": 5.37,
+    "floor_db_re_peak": -56.06,
+    "edt10_ms": 585.99,
+    "end_margin_db": 31.61,
+    "late_residual_db": 1.7,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 48.61,
+    "margin30_db": 31.61,
+    "xcheck": {
+     "start_ms": 748.3,
+     "win_ms": 264.4,
+     "w1_over_floor_db": 42.76,
+     "w2_over_floor_db": 35.98,
+     "ln_ratio": 1.56,
+     "t20_ms": 780.42
+    },
+    "edt10_env_ms": 439.0,
+    "edt10_qualified_ms": 585.99,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.99,
+    "over_leak_late_db": 13.98,
+    "over_leak_edt_bp_only_db": 5.37,
+    "over_leak_late_bp_only_db": 5.36,
+    "edt_env_rel_diff": -0.251
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -14.517,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.4,
+    "over_leak_1s_bp_only_db": 4.69,
+    "floor_db_re_peak": -61.97,
+    "edt10_ms": 650.14,
+    "end_margin_db": 38.17,
+    "late_residual_db": 1.45,
+    "t20_late_ms": 629.52,
+    "margin10_db": 54.49,
+    "margin30_db": 38.17,
+    "xcheck": {
+     "start_ms": 743.3,
+     "win_ms": 334.2,
+     "w1_over_floor_db": 48.72,
+     "w2_over_floor_db": 39.42,
+     "ln_ratio": 2.141,
+     "t20_ms": 718.77
+    },
+    "edt10_env_ms": 533.79,
+    "edt10_qualified_ms": 650.14,
+    "t20_qualified_ms": 629.52,
+    "over_leak_edt_db": 6.28,
+    "over_leak_late_db": 7.83,
+    "over_leak_edt_bp_only_db": 4.57,
+    "over_leak_late_bp_only_db": 6.12,
+    "xcheck_rel_diff": 0.142,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.179
+   }
+  },
+  "CY0050": {
+   "sr": 44100,
+   "record_s": 2.5,
+   "low_has_hh1": true,
+   "L_energy_share_db": -7.263,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.181,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 14.11,
+    "over_leak_1s_bp_only_db": 5.49,
+    "floor_db_re_peak": -51.9,
+    "edt10_ms": 888.5,
+    "end_margin_db": 27.87,
+    "late_residual_db": 1.86,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)",
+    "margin10_db": 44.2,
+    "margin30_db": 27.87,
+    "xcheck": {
+     "start_ms": 883.0,
+     "win_ms": 493.9,
+     "w1_over_floor_db": 38.89,
+     "w2_over_floor_db": 30.96,
+     "ln_ratio": 1.826,
+     "t20_ms": 1245.39
+    },
+    "edt10_env_ms": 553.74,
+    "edt10_qualified_ms": 888.5,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 14.09,
+    "over_leak_late_db": 14.54,
+    "over_leak_edt_bp_only_db": 5.46,
+    "over_leak_late_bp_only_db": 5.92,
+    "edt_env_rel_diff": -0.377
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -13.741,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.6,
+    "over_leak_1s_bp_only_db": 4.89,
+    "floor_db_re_peak": -52.22,
+    "edt10_ms": 934.74,
+    "end_margin_db": 28.09,
+    "late_residual_db": 1.71,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 44.31,
+    "margin30_db": 28.09,
+    "xcheck": {
+     "start_ms": 1002.7,
+     "win_ms": 429.0,
+     "w1_over_floor_db": 38.59,
+     "w2_over_floor_db": 31.53,
+     "ln_ratio": 1.625,
+     "t20_ms": 1215.82
+    },
+    "edt10_env_ms": 823.13,
+    "edt10_qualified_ms": 934.74,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.59,
+    "over_leak_late_db": 7.68,
+    "over_leak_edt_bp_only_db": 4.88,
+    "over_leak_late_bp_only_db": 5.97,
+    "edt_env_rel_diff": -0.119
+   }
+  },
+  "CY0075": {
+   "sr": 44100,
+   "record_s": 3.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -6.885,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.338,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.58,
+    "over_leak_1s_bp_only_db": 4.95,
+    "floor_db_re_peak": -56.78,
+    "edt10_ms": 1216.28,
+    "end_margin_db": 32.89,
+    "late_residual_db": 1.03,
+    "t20_late_ms": 1221.65,
+    "margin10_db": 47.87,
+    "margin30_db": 32.89,
+    "xcheck": {
+     "start_ms": 1192.3,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 45.69,
+     "w2_over_floor_db": 39.11,
+     "ln_ratio": 1.513,
+     "t20_ms": 1521.47
+    },
+    "edt10_env_ms": 878.0,
+    "edt10_qualified_ms": 1216.28,
+    "t20_qualified_ms": 1221.65,
+    "over_leak_edt_db": 13.62,
+    "over_leak_late_db": 14.89,
+    "over_leak_edt_bp_only_db": 5.0,
+    "over_leak_late_bp_only_db": 6.27,
+    "xcheck_rel_diff": 0.245,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.278
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -13.315,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.64,
+    "over_leak_1s_bp_only_db": 4.93,
+    "floor_db_re_peak": -61.18,
+    "edt10_ms": 1206.33,
+    "end_margin_db": 37.37,
+    "late_residual_db": 1.56,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 53.64,
+    "margin30_db": 37.37,
+    "xcheck": {
+     "start_ms": 1451.7,
+     "win_ms": 478.9,
+     "w1_over_floor_db": 47.95,
+     "w2_over_floor_db": 41.35,
+     "ln_ratio": 1.519,
+     "t20_ms": 1451.76
+    },
+    "edt10_env_ms": 1302.04,
+    "edt10_qualified_ms": 1206.33,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.72,
+    "over_leak_late_db": 7.85,
+    "over_leak_edt_bp_only_db": 5.01,
+    "over_leak_late_bp_only_db": 6.14,
+    "edt_env_rel_diff": 0.079
+   }
+  },
+  "CY1000": {
+   "sr": 44100,
+   "record_s": 1.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -15.529,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -34.782,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 10.78,
+    "over_leak_1s_bp_only_db": 2.15,
+    "floor_db_re_peak": -45.96,
+    "edt10_ms": 399.0,
+    "end_margin_db": 22.82,
+    "late_residual_db": 1.4,
+    "t20_late_ms": 405.84,
+    "margin10_db": 39.07,
+    "margin30_db": 22.82,
+    "xcheck": {
+     "start_ms": 384.1,
+     "win_ms": 149.7,
+     "w1_over_floor_db": 36.68,
+     "w2_over_floor_db": 31.74,
+     "ln_ratio": 1.137,
+     "t20_ms": 606.14
+    },
+    "edt10_env_ms": 384.13,
+    "edt10_qualified_ms": 399.0,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 10.57,
+    "over_leak_late_db": 13.27,
+    "over_leak_edt_bp_only_db": 1.95,
+    "over_leak_late_bp_only_db": 4.64,
+    "xcheck_rel_diff": 0.494,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +49 % (Schroeder 406 ms, two-window 606 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.037
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -24.757,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 3.84,
+    "over_leak_1s_bp_only_db": 2.14,
+    "floor_db_re_peak": -52.32,
+    "edt10_ms": null,
+    "end_margin_db": 30.58,
+    "late_residual_db": 2.04,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 2.0 dB)",
+    "margin10_db": 46.5,
+    "margin30_db": 30.58,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 439.0,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 3.61,
+    "over_leak_late_db": 6.81,
+    "over_leak_edt_bp_only_db": 1.9,
+    "over_leak_late_bp_only_db": 5.1,
+    "refused": "over the EDT window the band is only 3.61 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY1010": {
+   "sr": 44100,
+   "record_s": 4.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -12.592,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -30.589,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 12.03,
+    "over_leak_1s_bp_only_db": 3.41,
+    "floor_db_re_peak": -48.84,
+    "edt10_ms": 1277.6,
+    "end_margin_db": 23.28,
+    "late_residual_db": 1.36,
+    "t20_late_ms": 1402.63,
+    "margin10_db": 41.12,
+    "margin30_db": 23.28,
+    "xcheck": {
+     "start_ms": 1262.1,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 38.0,
+     "w2_over_floor_db": 32.45,
+     "ln_ratio": 1.279,
+     "t20_ms": 1800.52
+    },
+    "edt10_env_ms": 1262.13,
+    "edt10_qualified_ms": 1277.6,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 12.16,
+    "over_leak_late_db": 13.42,
+    "over_leak_edt_bp_only_db": 3.54,
+    "over_leak_late_bp_only_db": 4.8,
+    "xcheck_rel_diff": 0.284,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +28 % (Schroeder 1403 ms, two-window 1801 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.012
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -20.245,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.42,
+    "over_leak_1s_bp_only_db": 3.71,
+    "floor_db_re_peak": -54.67,
+    "edt10_ms": null,
+    "end_margin_db": 31.49,
+    "late_residual_db": 1.67,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 47.1,
+    "margin30_db": 31.49,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 1207.26,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.61,
+    "over_leak_late_db": 7.32,
+    "over_leak_edt_bp_only_db": 3.9,
+    "over_leak_late_bp_only_db": 5.61,
+    "refused": "over the EDT window the band is only 5.61 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY1025": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -14.563,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -32.678,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 11.92,
+    "over_leak_1s_bp_only_db": 3.29,
+    "floor_db_re_peak": -46.59,
+    "edt10_ms": 631.68,
+    "end_margin_db": 23.33,
+    "late_residual_db": 1.54,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 40.09,
+    "margin30_db": 23.33,
+    "xcheck": {
+     "start_ms": 763.3,
+     "win_ms": 164.6,
+     "w1_over_floor_db": 34.99,
+     "w2_over_floor_db": 31.11,
+     "ln_ratio": 0.894,
+     "t20_ms": 847.58
+    },
+    "edt10_env_ms": 763.27,
+    "edt10_qualified_ms": 631.68,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 11.75,
+    "over_leak_late_db": 13.85,
+    "over_leak_edt_bp_only_db": 3.13,
+    "over_leak_late_bp_only_db": 5.23,
+    "edt_env_rel_diff": 0.208
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -22.762,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 4.87,
+    "over_leak_1s_bp_only_db": 3.16,
+    "floor_db_re_peak": -53.0,
+    "edt10_ms": null,
+    "end_margin_db": 29.75,
+    "late_residual_db": 1.54,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 45.76,
+    "margin30_db": 29.75,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 573.7,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 4.68,
+    "over_leak_late_db": 7.55,
+    "over_leak_edt_bp_only_db": 2.97,
+    "over_leak_late_bp_only_db": 5.84,
+    "refused": "over the EDT window the band is only 4.68 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY1050": {
+   "sr": 44100,
+   "record_s": 2.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -13.576,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -31.835,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 11.77,
+    "over_leak_1s_bp_only_db": 3.15,
+    "floor_db_re_peak": -46.19,
+    "edt10_ms": 923.95,
+    "end_margin_db": 21.57,
+    "late_residual_db": 1.41,
+    "t20_late_ms": 959.37,
+    "margin10_db": 38.07,
+    "margin30_db": 21.57,
+    "xcheck": {
+     "start_ms": 5.0,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 43.11,
+     "w2_over_floor_db": 39.48,
+     "ln_ratio": 0.836,
+     "t20_ms": 2755.32
+    },
+    "edt10_env_ms": 4.99,
+    "edt10_qualified_ms": 923.95,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 11.73,
+    "over_leak_late_db": 13.48,
+    "over_leak_edt_bp_only_db": 3.11,
+    "over_leak_late_bp_only_db": 4.85,
+    "xcheck_rel_diff": 1.872,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +187 % (Schroeder 959 ms, two-window 2755 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.995
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -21.345,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.3,
+    "over_leak_1s_bp_only_db": 3.59,
+    "floor_db_re_peak": -49.07,
+    "edt10_ms": null,
+    "end_margin_db": 25.9,
+    "late_residual_db": 1.81,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "margin10_db": 41.76,
+    "margin30_db": 25.9,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 878.0,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.28,
+    "over_leak_late_db": 7.17,
+    "over_leak_edt_bp_only_db": 3.57,
+    "over_leak_late_bp_only_db": 5.46,
+    "refused": "over the EDT window the band is only 5.28 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY1075": {
+   "sr": 44100,
+   "record_s": 3.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -12.549,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -30.299,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 12.28,
+    "over_leak_1s_bp_only_db": 3.66,
+    "floor_db_re_peak": -47.72,
+    "edt10_ms": 1133.99,
+    "end_margin_db": 23.51,
+    "late_residual_db": 1.99,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 2.0 dB)",
+    "margin10_db": 39.29,
+    "margin30_db": 23.51,
+    "xcheck": {
+     "start_ms": 1082.5,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 37.63,
+     "w2_over_floor_db": 32.37,
+     "ln_ratio": 1.212,
+     "t20_ms": 1899.74
+    },
+    "edt10_env_ms": 1082.54,
+    "edt10_qualified_ms": 1133.99,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 12.32,
+    "over_leak_late_db": 13.11,
+    "over_leak_edt_bp_only_db": 3.69,
+    "over_leak_late_bp_only_db": 4.48,
+    "edt_env_rel_diff": -0.045
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -20.067,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.56,
+    "over_leak_1s_bp_only_db": 3.85,
+    "floor_db_re_peak": -53.71,
+    "edt10_ms": null,
+    "end_margin_db": 29.7,
+    "late_residual_db": 1.61,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 45.85,
+    "margin30_db": 29.7,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 1082.54,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.67,
+    "over_leak_late_db": 7.46,
+    "over_leak_edt_bp_only_db": 3.96,
+    "over_leak_late_bp_only_db": 5.75,
+    "refused": "over the EDT window the band is only 5.67 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY2500": {
+   "sr": 44100,
+   "record_s": 1.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.939,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.179,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.79,
+    "over_leak_1s_bp_only_db": 5.17,
+    "floor_db_re_peak": -56.4,
+    "edt10_ms": 416.08,
+    "end_margin_db": 32.26,
+    "late_residual_db": 1.18,
+    "t20_late_ms": 380.68,
+    "margin10_db": 49.71,
+    "margin30_db": 32.26,
+    "xcheck": {
+     "start_ms": 493.9,
+     "win_ms": 134.7,
+     "w1_over_floor_db": 43.94,
+     "w2_over_floor_db": 37.46,
+     "ln_ratio": 1.492,
+     "t20_ms": 415.82
+    },
+    "edt10_env_ms": 344.22,
+    "edt10_qualified_ms": 416.08,
+    "t20_qualified_ms": 380.68,
+    "over_leak_edt_db": 13.65,
+    "over_leak_late_db": 15.41,
+    "over_leak_edt_bp_only_db": 5.02,
+    "over_leak_late_bp_only_db": 6.78,
+    "xcheck_rel_diff": 0.092,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.173
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -17.403,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.61,
+    "over_leak_1s_bp_only_db": 3.9,
+    "floor_db_re_peak": -60.89,
+    "edt10_ms": null,
+    "end_margin_db": 38.53,
+    "late_residual_db": 1.28,
+    "t20_late_ms": null,
+    "margin10_db": 55.23,
+    "margin30_db": 38.53,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 354.2,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.41,
+    "over_leak_late_db": 7.95,
+    "over_leak_edt_bp_only_db": 3.7,
+    "over_leak_late_bp_only_db": 6.24,
+    "refused": "over the EDT window the band is only 5.41 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY2510": {
+   "sr": 44100,
+   "record_s": 4.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -7.401,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.548,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.88,
+    "over_leak_1s_bp_only_db": 5.26,
+    "floor_db_re_peak": -55.38,
+    "edt10_ms": 1301.88,
+    "end_margin_db": 30.37,
+    "late_residual_db": 1.18,
+    "t20_late_ms": 1340.81,
+    "margin10_db": 47.12,
+    "margin30_db": 30.37,
+    "xcheck": {
+     "start_ms": 1416.8,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 43.83,
+     "w2_over_floor_db": 38.23,
+     "ln_ratio": 1.288,
+     "t20_ms": 1787.2
+    },
+    "edt10_env_ms": 1217.23,
+    "edt10_qualified_ms": 1301.88,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.96,
+    "over_leak_late_db": 14.65,
+    "over_leak_edt_bp_only_db": 5.33,
+    "over_leak_late_bp_only_db": 6.03,
+    "xcheck_rel_diff": 0.333,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +33 % (Schroeder 1341 ms, two-window 1787 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.065
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -13.682,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.79,
+    "over_leak_1s_bp_only_db": 5.08,
+    "floor_db_re_peak": -61.78,
+    "edt10_ms": 1326.78,
+    "end_margin_db": 38.02,
+    "late_residual_db": 1.6,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 54.23,
+    "margin30_db": 38.02,
+    "xcheck": {
+     "start_ms": 1491.6,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 50.46,
+     "w2_over_floor_db": 44.71,
+     "ln_ratio": 1.323,
+     "t20_ms": 1739.8
+    },
+    "edt10_env_ms": 1366.89,
+    "edt10_qualified_ms": 1326.78,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.89,
+    "over_leak_late_db": 7.84,
+    "over_leak_edt_bp_only_db": 5.18,
+    "over_leak_late_bp_only_db": 6.13,
+    "edt_env_rel_diff": 0.03
+   }
+  },
+  "CY2525": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -8.808,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -24.844,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 14.0,
+    "over_leak_1s_bp_only_db": 5.37,
+    "floor_db_re_peak": -57.18,
+    "edt10_ms": 595.26,
+    "end_margin_db": 31.97,
+    "late_residual_db": 1.74,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 48.8,
+    "margin30_db": 31.97,
+    "xcheck": {
+     "start_ms": 648.5,
+     "win_ms": 324.3,
+     "w1_over_floor_db": 44.71,
+     "w2_over_floor_db": 37.29,
+     "ln_ratio": 1.709,
+     "t20_ms": 873.96
+    },
+    "edt10_env_ms": 563.72,
+    "edt10_qualified_ms": 595.26,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.98,
+    "over_leak_late_db": 14.13,
+    "over_leak_edt_bp_only_db": 5.36,
+    "over_leak_late_bp_only_db": 5.51,
+    "edt_env_rel_diff": -0.053
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -15.449,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.43,
+    "over_leak_1s_bp_only_db": 4.72,
+    "floor_db_re_peak": -62.62,
+    "edt10_ms": 653.38,
+    "end_margin_db": 38.33,
+    "late_residual_db": 1.66,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 55.27,
+    "margin30_db": 38.33,
+    "xcheck": {
+     "start_ms": 793.2,
+     "win_ms": 269.4,
+     "w1_over_floor_db": 49.67,
+     "w2_over_floor_db": 42.32,
+     "ln_ratio": 1.693,
+     "t20_ms": 732.93
+    },
+    "edt10_env_ms": 643.54,
+    "edt10_qualified_ms": 653.38,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.31,
+    "over_leak_late_db": 7.88,
+    "over_leak_edt_bp_only_db": 4.6,
+    "over_leak_late_bp_only_db": 6.17,
+    "edt_env_rel_diff": -0.015
+   }
+  },
+  "CY2550": {
+   "sr": 44100,
+   "record_s": 2.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -7.778,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.913,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.9,
+    "over_leak_1s_bp_only_db": 5.27,
+    "floor_db_re_peak": -49.24,
+    "edt10_ms": 915.85,
+    "end_margin_db": 26.14,
+    "late_residual_db": 1.49,
+    "t20_late_ms": 962.14,
+    "margin10_db": 41.7,
+    "margin30_db": 26.14,
+    "xcheck": {
+     "start_ms": 1042.6,
+     "win_ms": 434.0,
+     "w1_over_floor_db": 36.66,
+     "w2_over_floor_db": 28.89,
+     "ln_ratio": 1.788,
+     "t20_ms": 1118.1
+    },
+    "edt10_env_ms": 733.33,
+    "edt10_qualified_ms": 915.85,
+    "t20_qualified_ms": 962.14,
+    "over_leak_edt_db": 13.89,
+    "over_leak_late_db": 14.57,
+    "over_leak_edt_bp_only_db": 5.26,
+    "over_leak_late_bp_only_db": 5.94,
+    "xcheck_rel_diff": 0.162,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.199
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -14.302,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.55,
+    "over_leak_1s_bp_only_db": 4.84,
+    "floor_db_re_peak": -50.79,
+    "edt10_ms": 954.65,
+    "end_margin_db": 26.75,
+    "late_residual_db": 1.67,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 43.32,
+    "margin30_db": 26.75,
+    "xcheck": {
+     "start_ms": 1047.6,
+     "win_ms": 444.0,
+     "w1_over_floor_db": 37.19,
+     "w2_over_floor_db": 29.78,
+     "ln_ratio": 1.706,
+     "t20_ms": 1198.35
+    },
+    "edt10_env_ms": 897.96,
+    "edt10_qualified_ms": 954.65,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.52,
+    "over_leak_late_db": 7.93,
+    "over_leak_edt_bp_only_db": 4.81,
+    "over_leak_late_bp_only_db": 6.22,
+    "edt_env_rel_diff": -0.059
+   }
+  },
+  "CY2575": {
+   "sr": 44100,
+   "record_s": 3.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -7.534,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -23.638,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.93,
+    "over_leak_1s_bp_only_db": 5.3,
+    "floor_db_re_peak": -57.5,
+    "edt10_ms": 1158.1,
+    "end_margin_db": 32.92,
+    "late_residual_db": 1.29,
+    "t20_late_ms": 1240.35,
+    "margin10_db": 50.47,
+    "margin30_db": 32.92,
+    "xcheck": {
+     "start_ms": 1282.1,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 44.2,
+     "w2_over_floor_db": 38.22,
+     "ln_ratio": 1.377,
+     "t20_ms": 1672.22
+    },
+    "edt10_env_ms": 1147.39,
+    "edt10_qualified_ms": 1158.1,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.96,
+    "over_leak_late_db": 14.49,
+    "over_leak_edt_bp_only_db": 5.33,
+    "over_leak_late_bp_only_db": 5.86,
+    "xcheck_rel_diff": 0.348,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +35 % (Schroeder 1240 ms, two-window 1672 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": -0.009
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -13.847,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.76,
+    "over_leak_1s_bp_only_db": 5.05,
+    "floor_db_re_peak": -61.63,
+    "edt10_ms": 1187.39,
+    "end_margin_db": 37.77,
+    "late_residual_db": 1.52,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 54.2,
+    "margin30_db": 37.77,
+    "xcheck": {
+     "start_ms": 1292.1,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 49.52,
+     "w2_over_floor_db": 43.43,
+     "ln_ratio": 1.403,
+     "t20_ms": 1641.57
+    },
+    "edt10_env_ms": 1067.57,
+    "edt10_qualified_ms": 1187.39,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.81,
+    "over_leak_late_db": 7.69,
+    "over_leak_edt_bp_only_db": 5.11,
+    "over_leak_late_bp_only_db": 5.98,
+    "edt_env_rel_diff": -0.101
+   }
+  },
+  "CY5000": {
+   "sr": 44100,
+   "record_s": 1.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -11.114,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -28.336,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 12.81,
+    "over_leak_1s_bp_only_db": 4.18,
+    "floor_db_re_peak": -54.41,
+    "edt10_ms": 402.11,
+    "end_margin_db": 30.89,
+    "late_residual_db": 1.47,
+    "t20_late_ms": 400.09,
+    "margin10_db": 47.48,
+    "margin30_db": 30.89,
+    "xcheck": {
+     "start_ms": 508.8,
+     "win_ms": 129.7,
+     "w1_over_floor_db": 41.49,
+     "w2_over_floor_db": 35.5,
+     "ln_ratio": 1.378,
+     "t20_ms": 433.51
+    },
+    "edt10_env_ms": 349.21,
+    "edt10_qualified_ms": 402.11,
+    "t20_qualified_ms": 400.09,
+    "over_leak_edt_db": 12.7,
+    "over_leak_late_db": 13.88,
+    "over_leak_edt_bp_only_db": 4.08,
+    "over_leak_late_bp_only_db": 5.26,
+    "xcheck_rel_diff": 0.084,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.132
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -18.69,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.5,
+    "over_leak_1s_bp_only_db": 3.79,
+    "floor_db_re_peak": -60.48,
+    "edt10_ms": null,
+    "end_margin_db": 37.85,
+    "late_residual_db": 1.57,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 54.22,
+    "margin30_db": 37.85,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 419.05,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.3,
+    "over_leak_late_db": 7.92,
+    "over_leak_edt_bp_only_db": 3.59,
+    "over_leak_late_bp_only_db": 6.21,
+    "refused": "over the EDT window the band is only 5.3 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY5010": {
+   "sr": 44100,
+   "record_s": 4.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -8.392,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -24.61,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.81,
+    "over_leak_1s_bp_only_db": 5.19,
+    "floor_db_re_peak": -56.36,
+    "edt10_ms": 1269.02,
+    "end_margin_db": 30.41,
+    "late_residual_db": 1.55,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 47.02,
+    "margin30_db": 30.41,
+    "xcheck": {
+     "start_ms": 1052.6,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 47.15,
+     "w2_over_floor_db": 42.77,
+     "ln_ratio": 1.006,
+     "t20_ms": 2287.79
+    },
+    "edt10_env_ms": 912.93,
+    "edt10_qualified_ms": 1269.02,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.86,
+    "over_leak_late_db": 14.33,
+    "over_leak_edt_bp_only_db": 5.24,
+    "over_leak_late_bp_only_db": 5.71,
+    "edt_env_rel_diff": -0.281
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -14.766,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.7,
+    "over_leak_1s_bp_only_db": 4.99,
+    "floor_db_re_peak": -62.18,
+    "edt10_ms": 1320.43,
+    "end_margin_db": 38.13,
+    "late_residual_db": 1.47,
+    "t20_late_ms": 1373.18,
+    "margin10_db": 54.17,
+    "margin30_db": 38.13,
+    "xcheck": {
+     "start_ms": 1551.5,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 49.7,
+     "w2_over_floor_db": 44.0,
+     "ln_ratio": 1.311,
+     "t20_ms": 1755.97
+    },
+    "edt10_env_ms": 1341.95,
+    "edt10_qualified_ms": 1320.43,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.79,
+    "over_leak_late_db": 7.79,
+    "over_leak_edt_bp_only_db": 5.08,
+    "over_leak_late_bp_only_db": 6.08,
+    "xcheck_rel_diff": 0.279,
+    "xcheck_agrees": false,
+    "t20_refused": "the two estimators disagree by +28 % (Schroeder 1373 ms, two-window 1756 ms; bound 25 %), so neither is qualified here",
+    "edt_env_rel_diff": 0.016
+   }
+  },
+  "CY5025": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.875,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.768,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.14,
+    "over_leak_1s_bp_only_db": 4.51,
+    "floor_db_re_peak": -56.76,
+    "edt10_ms": 631.63,
+    "end_margin_db": 32.5,
+    "late_residual_db": 1.57,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 48.57,
+    "margin30_db": 32.5,
+    "xcheck": {
+     "start_ms": 698.4,
+     "win_ms": 289.3,
+     "w1_over_floor_db": 44.01,
+     "w2_over_floor_db": 36.84,
+     "ln_ratio": 1.651,
+     "t20_ms": 807.17
+    },
+    "edt10_env_ms": 563.72,
+    "edt10_qualified_ms": 631.63,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.03,
+    "over_leak_late_db": 14.32,
+    "over_leak_edt_bp_only_db": 4.41,
+    "over_leak_late_bp_only_db": 5.69,
+    "edt_env_rel_diff": -0.108
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.889,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.06,
+    "over_leak_1s_bp_only_db": 4.35,
+    "floor_db_re_peak": -61.68,
+    "edt10_ms": null,
+    "end_margin_db": 38.49,
+    "late_residual_db": 1.52,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 54.73,
+    "margin30_db": 38.49,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 548.75,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.92,
+    "over_leak_late_db": 7.9,
+    "over_leak_edt_bp_only_db": 4.21,
+    "over_leak_late_bp_only_db": 6.19,
+    "refused": "over the EDT window the band is only 5.92 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY5050": {
+   "sr": 44100,
+   "record_s": 2.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -8.967,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -25.512,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.49,
+    "over_leak_1s_bp_only_db": 4.86,
+    "floor_db_re_peak": -49.99,
+    "edt10_ms": 929.0,
+    "end_margin_db": 26.28,
+    "late_residual_db": 1.51,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 42.0,
+    "margin30_db": 26.28,
+    "xcheck": {
+     "start_ms": 1042.6,
+     "win_ms": 463.9,
+     "w1_over_floor_db": 37.0,
+     "w2_over_floor_db": 28.79,
+     "ln_ratio": 1.891,
+     "t20_ms": 1129.75
+    },
+    "edt10_env_ms": 917.91,
+    "edt10_qualified_ms": 929.0,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.45,
+    "over_leak_late_db": 14.58,
+    "over_leak_edt_bp_only_db": 4.83,
+    "over_leak_late_bp_only_db": 5.96,
+    "edt_env_rel_diff": -0.012
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -15.475,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.57,
+    "over_leak_1s_bp_only_db": 4.86,
+    "floor_db_re_peak": -50.87,
+    "edt10_ms": 938.12,
+    "end_margin_db": 27.76,
+    "late_residual_db": 1.68,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 43.76,
+    "margin30_db": 27.76,
+    "xcheck": {
+     "start_ms": 1012.7,
+     "win_ms": 468.9,
+     "w1_over_floor_db": 37.83,
+     "w2_over_floor_db": 29.99,
+     "ln_ratio": 1.807,
+     "t20_ms": 1195.32
+    },
+    "edt10_env_ms": 858.05,
+    "edt10_qualified_ms": 938.12,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.54,
+    "over_leak_late_db": 7.81,
+    "over_leak_edt_bp_only_db": 4.83,
+    "over_leak_late_bp_only_db": 6.1,
+    "edt_env_rel_diff": -0.085
+   }
+  },
+  "CY5075": {
+   "sr": 44100,
+   "record_s": 3.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -8.462,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -24.615,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.88,
+    "over_leak_1s_bp_only_db": 5.25,
+    "floor_db_re_peak": -56.85,
+    "edt10_ms": 1142.79,
+    "end_margin_db": 32.28,
+    "late_residual_db": 2.14,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 2.1 dB)",
+    "margin10_db": 48.41,
+    "margin30_db": 32.28,
+    "xcheck": {
+     "start_ms": 957.8,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 46.62,
+     "w2_over_floor_db": 42.09,
+     "ln_ratio": 1.043,
+     "t20_ms": 2207.51
+    },
+    "edt10_env_ms": 838.1,
+    "edt10_qualified_ms": 1142.79,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.9,
+    "over_leak_late_db": 14.56,
+    "over_leak_edt_bp_only_db": 5.27,
+    "over_leak_late_bp_only_db": 5.93,
+    "edt_env_rel_diff": -0.267
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -14.909,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.63,
+    "over_leak_1s_bp_only_db": 4.92,
+    "floor_db_re_peak": -62.13,
+    "edt10_ms": 1194.51,
+    "end_margin_db": 37.74,
+    "late_residual_db": 1.78,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "margin10_db": 53.85,
+    "margin30_db": 37.74,
+    "xcheck": {
+     "start_ms": 1292.1,
+     "win_ms": 434.0,
+     "w1_over_floor_db": 50.28,
+     "w2_over_floor_db": 45.02,
+     "ln_ratio": 1.212,
+     "t20_ms": 1649.29
+    },
+    "edt10_env_ms": 1127.44,
+    "edt10_qualified_ms": 1194.51,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.68,
+    "over_leak_late_db": 8.0,
+    "over_leak_edt_bp_only_db": 4.97,
+    "over_leak_late_bp_only_db": 6.29,
+    "edt_env_rel_diff": -0.056
+   }
+  },
+  "CY7500": {
+   "sr": 44100,
+   "record_s": 1.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -12.38,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -29.677,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 12.73,
+    "over_leak_1s_bp_only_db": 4.11,
+    "floor_db_re_peak": -53.64,
+    "edt10_ms": 391.13,
+    "end_margin_db": 29.16,
+    "late_residual_db": 1.25,
+    "t20_late_ms": 396.5,
+    "margin10_db": 45.27,
+    "margin30_db": 29.16,
+    "xcheck": {
+     "start_ms": 409.1,
+     "win_ms": 199.5,
+     "w1_over_floor_db": 42.24,
+     "w2_over_floor_db": 33.85,
+     "ln_ratio": 1.931,
+     "t20_ms": 475.88
+    },
+    "edt10_env_ms": 294.33,
+    "edt10_qualified_ms": 391.13,
+    "t20_qualified_ms": 396.5,
+    "over_leak_edt_db": 12.62,
+    "over_leak_late_db": 13.92,
+    "over_leak_edt_bp_only_db": 3.99,
+    "over_leak_late_bp_only_db": 5.3,
+    "xcheck_rel_diff": 0.2,
+    "xcheck_agrees": true,
+    "edt_env_rel_diff": -0.247
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -20.241,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.21,
+    "over_leak_1s_bp_only_db": 3.5,
+    "floor_db_re_peak": -57.79,
+    "edt10_ms": null,
+    "end_margin_db": 35.61,
+    "late_residual_db": 1.7,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 50.96,
+    "margin30_db": 35.61,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 414.06,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.02,
+    "over_leak_late_db": 7.46,
+    "over_leak_edt_bp_only_db": 3.31,
+    "over_leak_late_bp_only_db": 5.75,
+    "refused": "over the EDT window the band is only 5.02 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY7510": {
+   "sr": 44100,
+   "record_s": 4.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.675,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.479,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.23,
+    "over_leak_1s_bp_only_db": 4.6,
+    "floor_db_re_peak": -53.38,
+    "edt10_ms": 1270.91,
+    "end_margin_db": 28.62,
+    "late_residual_db": 1.69,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 47.07,
+    "margin30_db": 28.62,
+    "xcheck": {
+     "start_ms": 1511.6,
+     "win_ms": 399.1,
+     "w1_over_floor_db": 40.8,
+     "w2_over_floor_db": 36.16,
+     "ln_ratio": 1.07,
+     "t20_ms": 1717.66
+    },
+    "edt10_env_ms": 1257.14,
+    "edt10_qualified_ms": 1270.91,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.32,
+    "over_leak_late_db": 13.79,
+    "over_leak_edt_bp_only_db": 4.7,
+    "over_leak_late_bp_only_db": 5.17,
+    "edt_env_rel_diff": -0.011
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.298,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.45,
+    "over_leak_1s_bp_only_db": 4.74,
+    "floor_db_re_peak": -60.15,
+    "edt10_ms": 1326.46,
+    "end_margin_db": 35.94,
+    "late_residual_db": 1.66,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 51.38,
+    "margin30_db": 35.94,
+    "xcheck": {
+     "start_ms": 1496.6,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 48.29,
+     "w2_over_floor_db": 42.66,
+     "ln_ratio": 1.297,
+     "t20_ms": 1775.0
+    },
+    "edt10_env_ms": 1371.88,
+    "edt10_qualified_ms": 1326.46,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.55,
+    "over_leak_late_db": 7.65,
+    "over_leak_edt_bp_only_db": 4.84,
+    "over_leak_late_bp_only_db": 5.95,
+    "edt_env_rel_diff": 0.034
+   }
+  },
+  "CY7525": {
+   "sr": 44100,
+   "record_s": 2.001,
+   "low_has_hh1": true,
+   "L_energy_share_db": -11.29,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -28.288,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.03,
+    "over_leak_1s_bp_only_db": 4.41,
+    "floor_db_re_peak": -53.17,
+    "edt10_ms": 609.07,
+    "end_margin_db": 29.58,
+    "late_residual_db": 1.8,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "margin10_db": 45.65,
+    "margin30_db": 29.58,
+    "xcheck": {
+     "start_ms": 723.4,
+     "win_ms": 274.4,
+     "w1_over_floor_db": 39.96,
+     "w2_over_floor_db": 33.44,
+     "ln_ratio": 1.502,
+     "t20_ms": 841.24
+    },
+    "edt10_env_ms": 488.89,
+    "edt10_qualified_ms": 609.07,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 12.95,
+    "over_leak_late_db": 13.93,
+    "over_leak_edt_bp_only_db": 4.33,
+    "over_leak_late_bp_only_db": 5.3,
+    "edt_env_rel_diff": -0.197
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -18.538,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 5.83,
+    "over_leak_1s_bp_only_db": 4.12,
+    "floor_db_re_peak": -59.62,
+    "edt10_ms": null,
+    "end_margin_db": 36.3,
+    "late_residual_db": 1.92,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)",
+    "margin10_db": 52.36,
+    "margin30_db": 36.3,
+    "xcheck": {
+     "t20_ms": null,
+     "refused": "band refused"
+    },
+    "edt10_env_ms": 633.56,
+    "edt10_qualified_ms": null,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 5.69,
+    "over_leak_late_db": 7.51,
+    "over_leak_edt_bp_only_db": 3.98,
+    "over_leak_late_bp_only_db": 5.8,
+    "refused": "over the EDT window the band is only 5.69 dB above the 3.45 kHz band's predicted skirt leakage (need 6): what decays here cannot be separated from the low band"
+   }
+  },
+  "CY7550": {
+   "sr": 44100,
+   "record_s": 2.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -10.063,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.866,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.23,
+    "over_leak_1s_bp_only_db": 4.6,
+    "floor_db_re_peak": -51.98,
+    "edt10_ms": 899.14,
+    "end_margin_db": 28.21,
+    "late_residual_db": 1.77,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)",
+    "margin10_db": 42.07,
+    "margin30_db": 28.21,
+    "xcheck": {
+     "start_ms": 893.0,
+     "win_ms": 459.0,
+     "w1_over_floor_db": 39.26,
+     "w2_over_floor_db": 32.36,
+     "ln_ratio": 1.589,
+     "t20_ms": 1330.03
+    },
+    "edt10_env_ms": 783.22,
+    "edt10_qualified_ms": 899.14,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.21,
+    "over_leak_late_db": 14.02,
+    "over_leak_edt_bp_only_db": 4.58,
+    "over_leak_late_bp_only_db": 5.39,
+    "edt_env_rel_diff": -0.129
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.885,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.25,
+    "over_leak_1s_bp_only_db": 4.54,
+    "floor_db_re_peak": -51.85,
+    "edt10_ms": 936.35,
+    "end_margin_db": 27.79,
+    "late_residual_db": 1.53,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)",
+    "margin10_db": 43.7,
+    "margin30_db": 27.79,
+    "xcheck": {
+     "start_ms": 1022.7,
+     "win_ms": 459.0,
+     "w1_over_floor_db": 38.07,
+     "w2_over_floor_db": 30.25,
+     "ln_ratio": 1.801,
+     "t20_ms": 1173.61
+    },
+    "edt10_env_ms": 818.14,
+    "edt10_qualified_ms": 936.35,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.23,
+    "over_leak_late_db": 7.61,
+    "over_leak_edt_bp_only_db": 4.52,
+    "over_leak_late_bp_only_db": 5.9,
+    "edt_env_rel_diff": -0.126
+   }
+  },
+  "CY7575": {
+   "sr": 44100,
+   "record_s": 3.501,
+   "low_has_hh1": true,
+   "L_energy_share_db": -9.742,
+   "M": {
+    "band_hz": [
+     891.0,
+     1782.0
+    ],
+    "energy_share_db": -26.208,
+    "skirt_db_at_edges": [
+     -45.24,
+     -24.54
+    ],
+    "predicted_leak_db_re_L": -30.03,
+    "predicted_leak_db_re_L_bp_only": -21.4,
+    "over_leak_1s_db": 13.56,
+    "over_leak_1s_bp_only_db": 4.94,
+    "floor_db_re_peak": -54.01,
+    "edt10_ms": 1130.91,
+    "end_margin_db": 27.91,
+    "late_residual_db": 1.69,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)",
+    "margin10_db": 44.71,
+    "margin30_db": 27.91,
+    "xcheck": {
+     "start_ms": 1182.3,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 42.19,
+     "w2_over_floor_db": 36.3,
+     "ln_ratio": 1.356,
+     "t20_ms": 1698.06
+    },
+    "edt10_env_ms": 982.77,
+    "edt10_qualified_ms": 1130.91,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 13.55,
+    "over_leak_late_db": 13.79,
+    "over_leak_edt_bp_only_db": 4.93,
+    "over_leak_late_bp_only_db": 5.17,
+    "edt_env_rel_diff": -0.131
+   },
+   "M25": {
+    "band_hz": [
+     891.0,
+     2818.0
+    ],
+    "energy_share_db": -16.468,
+    "skirt_db_at_edges": [
+     -45.24,
+     -8.95
+    ],
+    "predicted_leak_db_re_L": -13.07,
+    "predicted_leak_db_re_L_bp_only": -11.36,
+    "over_leak_1s_db": 6.35,
+    "over_leak_1s_bp_only_db": 4.64,
+    "floor_db_re_peak": -59.94,
+    "edt10_ms": 1220.45,
+    "end_margin_db": 35.76,
+    "late_residual_db": 1.57,
+    "t20_late_ms": null,
+    "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)",
+    "margin10_db": 51.96,
+    "margin30_db": 35.76,
+    "xcheck": {
+     "start_ms": 1327.0,
+     "win_ms": 500.0,
+     "w1_over_floor_db": 47.4,
+     "w2_over_floor_db": 41.25,
+     "ln_ratio": 1.416,
+     "t20_ms": 1625.72
+    },
+    "edt10_env_ms": 1142.4,
+    "edt10_qualified_ms": 1220.45,
+    "t20_qualified_ms": null,
+    "over_leak_edt_db": 6.43,
+    "over_leak_late_db": 7.72,
+    "over_leak_edt_bp_only_db": 4.72,
+    "over_leak_late_bp_only_db": 6.01,
+    "edt_env_rel_diff": -0.064
+   }
+  }
+ },
+ "commit": "cf057cef6450b9732d3f94bbae300ba7d4fd6545",
+ "sources_dirty": false
+}
