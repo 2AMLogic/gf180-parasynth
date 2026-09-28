@@ -221,20 +221,73 @@ four citations that need correcting to point at it.
 > wired, `make reference-integration` is the gate that passes it, and it is the one of the seven that no
 > control caught.
 
-## 5. Next step: one structural candidate, fixed before it is rendered
+> **Step 10 is `tone-render/README.md`** — step 9's own next question, asked on a rendered candidate: *does a
+> candidate driven by VR4's wiper law track the 808 as TONE moves?* **No, and the law is not why.** It carries a
+> repair, a negative and a blocker with a number.
+>
+> The repair is that **revision 3's low-band tone realisation was outside its own bound and nobody had
+> re-measured it.** Step 5 validated the realisation against Figure 9's 121–564 Hz window fit at 0.45 dB;
+> against the nodal solution that #390/#417 put in its place it is **4.06–4.72 dB** off, at every TONE position,
+> against the 3.0 dB bound revision 3 declared. The nodal route is not the suspect: over the **short** band, the
+> one path Figure 9 plots across the whole audio band, the two routes agree to **0.10 dB**, and over the low
+> band's 2–8 kHz they disagree by 5.62 dB — which is what a window a decade below the band predicts. Revision 3's
+> "the tone pole and the LEVEL differentiator cancel" argument is *correct* for the decay and short bands, whose
+> active ranges sit entirely above the network's 4219 Hz pole, and fails for the low band, which straddles it.
+> Repaired with one discrete section carrying that pole — 0.56–0.88 dB — chosen by enumerating 42 realisations per
+> band over the **network's own pole set**, with a stated rule that excludes poles too far outside a band to be
+> distinguishable there (four sub-2 kHz poles read within 0.09 dB of each other over the short band; picking among
+> them by 0.09 dB is #102's Q trap in a different coordinate). Budget **20 modes, 25 paths**, `N_NUMS` 11, no
+> `HP3` decode — and **the margin is now exactly zero**: mode 19's `num` register *is* `A_RESET` (0xFF), which is
+> survivable only because 19 ≥ `N_NUMS`, and a 21st mode has no address at all.
+>
+> The negative is that the rendered anchored H − L moves **+1.13 dB** across the whole knob where the machine
+> moves **+7.3 dB** (worst deviation 4.47 dB against a 3.0 dB bound, at the *development* setting CY1050;
+> development and confirmation agree). It is monotone, the right sign, and inside the bracket the circuit's own
+> per-band levels allow — **pinned to that bracket's decay-dominated lower edge at every position.** H's own
+> EDT10 moves 2.9 % where the machine's moves a factor of 1.4–2.4, and that half is a **decay**, so no
+> inter-band balance can manufacture it.
+>
+> The mechanism is rendered rather than inferred, one band at a time: inside H the short band sits **10.59 dB
+> below** the decay band and the **low band leaks in 6.02 dB above the short band**, so TONE's 51 dB of authority
+> acts on 6 % of H. And the obvious deliverable — "the short band needs +X dB" — is **REFUSED**: a linear mix of
+> the three separately-rendered bands misses the render's own curve by **1.26 dB** on a 1.13 dB quantity and
+> *overpredicts* the knob's swing 2.3× at TONE 100, because the swing VCAs clip. That is the third independent
+> route to the balance terminating on the same unmeasured quantity (#396's VCA drives, step 8's joint box, this).
+> Preservation passes completely, including **OH and CH bit-identical at every one of the five TONE positions**.
+> Wrong-then-right rate of step 10: **4**, one of them a 130 Hz pole that would have shipped with a better error
+> figure and no circuit behind it.
 
-Restore §10's structure, as a set of discrete choices checked against the circuit, not Q hacks:
-1. Low band: 3.45 kHz Q 6 band-pass → its own VCA/envelope → **Hh1, 2.5 kHz Q 0.97 high-pass**.
-2. High, DECAY band: 7.1 kHz band-pass → VCA → **Hh2**, a resonant 2nd-order high-pass. Its corner is still unresolved in the reference, and that will be stated.
-3. High, short band: 7.1 kHz band-pass → VCA → **Hh3, a 2-pole plus a 1-pole at the same ≈10.5 kHz corner**, instead of borrowing the closed hat's 11.7 kHz high-pass.
-4. The level stage's +6 dB/oct.
+## 5. Where the structure stands after step 10, and the one question that is left
 
-**Budget.** 16 → 17+ modes. The operator has accepted padding the bank to 32, about +31 % of drum-section area. Paths and envelopes must be counted exactly.
+**§10's structure is built.** What this section asked for as "the next step" is done and measured; the list below
+is the state, not a plan, and each row names the step that resolved it.
 
-**Selection and confirmation.**
-- Select on the 9 development settings, once the knob law renders the shipped structure faithfully. **Step 9
-  supplies the TONE half of that law from the circuit** (`tone-knob/README.md`), and states why the existing
-  one cannot be used for it: §4 below is not merely a calibration defect, it is a closed loop.
-- Confirm on the 16 untouched settings, including CY2500.
-- Preserve the hats: D15A, D16A and OH00–OH75.
+| §10 element | state |
+|---|---|
+| Low band: 3.45 kHz Q 6 → own VCA/envelope → **Hh1 2.5 kHz Q 0.97** | **in** (step 2), and its **tone section** repaired in step 10 (the network's 4219 Hz pole; revision 3 was 4.7 dB out of bound against the nodal target) |
+| DECAY band: 7.1 kHz → VCA → **Hh2** | **in** and **resolved**: 8839 Hz, Q 1.00, +6.03 dB — *not* resonant. Read off W14b Fig. 4 in step 3; the "corner still unresolved" this section used to say is superseded |
+| Short band: 7.1 kHz → VCA → **Hh3** | **in** and resolved: 2-pole 10323 Hz Q 5.64 **plus a 1-pole at 5195 Hz**, not at the same corner (step 3). No longer borrows the closed hat's 11.7 kHz high-pass |
+| The level stage's +6 dB/oct | **in**, as a 1-pole differentiator cornered at 18972 Hz, *with* the tone stage against it (steps 4/5 — alone it makes things worse, §10 says so) |
+| The **TONE knob** | **in**, from VR4's wiper with nothing fitted (steps 9/10). Rendered, and it moves H − L by 1.13 dB where the machine moves 7.3 |
+| The **inter-band balance** | **NOT in, and it is the whole remaining gap.** #396 refused on the VCA drives; step 8's joint box admits 0 balances; step 10 cannot even state a requirement, because the VCAs' clipping breaks superposition |
+| The **DECAY knob's** own law | not started. VR2 is on the other rail and no step has read it |
+
+**Budget, exact.** 16 → **20 modes, 25 paths**, `N_NUMS` 11, no `HP3` decode. The operator's accepted padding to 32
+covers the area — but **mode 19 is the last mode contract 15.1 can address** (its `num` register is `A_RESET`), so
+there is no margin for a 21st, and any further section needs a register-map revision rather than area.
+
+**The one question that is left, and every route now terminates on it:**
+
+> **What sets the three swing VCAs' drive levels (Q16/Q17/Q18)?** Resolve it the way #390/#417 resolved VR4 —
+> nodal analysis off SN p.13's own resistor network, hash-pinned scan, `--verify-source`, and a refusal rather
+> than an answer if the scan does not match. Not by fitting a drive to a recording.
+
+Until it is resolved, nothing about the band balance or the knobs' tracking can be promoted, and steps 7, 8 and 10
+each say so from a different direction. What can be done meanwhile is what step 10 forbade itself: isolate why the
+**low band leaks into H 6 dB above the short band's own contribution** (analysis skirt, its own chain, or the swing
+VCA's clipping harmonics — measured, not isolated), and #400's tail question.
+
+**Unchanged constraints for whatever comes next.**
+- Select on the 9 development settings; confirm on the 16 untouched ones, including CY2500; report all 25.
+- Preserve the hats: D15A, D16A and OH00–OH75. Step 10 holds OH and CH bit-identical at every TONE position.
 - Then carry it through RTL, I²S and the deadlines, and produce the loudness-matched A/B pack (`tools/ab_808.py`, `tools/ab_808_loud.py`, committed here).

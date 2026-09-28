@@ -124,6 +124,109 @@ revision 2 and to its own level at its 3.175 kHz calibration centre, by
 +19.4 and -4.0 dB), so revision 2's +24.0 dB residual climb should mostly close. The cymbal's VCAs
 clip and the bands are re-levelled, so this is arithmetic on transfer functions
 and has to be confirmed by the render, not assumed.
+
+===========================================================================
+REVISION 4 (#369 step 10) ADDS THE TONE KNOB, AND REPAIRS THE LOW BAND'S
+TONE REALISATION, WHICH REVISION 3 GOT WRONG.
+
+Revision 4 is ADDITIVE: `candidate_kit(tone=None)` still builds revision 3
+exactly, register for register, so every artifact of steps 5-9 stays
+reproducible. Revision 4 is what `candidate_kit(tone="<code>")` builds.
+
+WHY THE LOW BAND CHANGES. Revision 3 realised (tone stage x LEVEL stage) per
+band against W14b Figure 9's per-band 2-pole fit, inside a 3.0 dB bound stated
+in advance, and read 0.45 / 1.41 / 1.35 dB. Figure 9 plots Ht1 only over
+121-564 Hz, so its low-band low-pass pole -- 589.5 Hz -- is an extrapolation
+out of a window a decade below where the low band lives. #390/#417 replaced
+that extrapolation with a NODAL solution of the actual network off SN p.13
+(`tools/tone_stage_schematic.py`), and the network's dominant in-band pole is
+at 4219 Hz, not 589.5 Hz. Measured against the nodal target
+(`tools/cymbal_tone_nodal.py`):
+
+  band    rev 3 vs Figure 9   rev 3 vs NODAL         revision 4
+  low          0.45 dB          4.06-4.72 dB  <-- OUT   0.56-0.88 dB
+  decay        1.41 dB          1.55-1.77 dB           unchanged (empty)
+  short        1.35 dB          1.31-1.34 dB            1.75-1.79 dB
+
+The nodal route is not the suspect: the SHORT band is the one path Figure 9
+draws across the whole audio band (20 Hz-20 kHz), and the two routes agree
+there to 0.10 dB over its active range. The low band's disagreement is 5.6 dB
+over the same construction. That asymmetry is exactly what a narrow window
+predicts, and it is asserted as two named properties rather than argued.
+
+WHAT REVISION 4 CHANGES, each a discrete choice checked against the circuit:
+
+  * LOW BAND gains ONE new bank section, M_CYH1B (mode 19), holding ONE REAL
+    POLE at 4219 Hz -- the network's own top pole -- with numerator RAW. Its
+    shape error falls 4.72 -> 0.88 dB. The pole is taken from
+    `tone_stage_schematic.poles_hz`, not fitted: nothing else the bank can hold
+    clears the bound.
+  * SHORT BAND's tone pole moves 1511.2 -> 4219.0 Hz. 1511.2 Hz is NOT a pole
+    of the network (its nearest is 1625.4 Hz); it is an artifact of the same
+    2-pole window fit. Following the rule costs 0.45 dB of shape error here
+    (1.34 -> 1.79) and is taken anyway, because a value that reads better and
+    is not in the circuit is the trap #102 records for Q.
+  * DECAY BAND is UNCHANGED. Its active range is 5-16 kHz, entirely above
+    4219 Hz, so there the tone pole and the LEVEL differentiator really are in
+    their asymptotic regions and really do cancel -- revision 3's argument,
+    which holds for this band and not for the low band, whose 2-8 kHz range
+    straddles the pole. 1.77 dB, inside the bound, at no cost.
+  * THE TONE KNOB itself: alpha = TONE/100 off VR4's "20K(B)" linear-taper
+    marking (step 9, `tools/cymbal_tone_knob.alpha_of`), and the knob acts as
+    a PER-BAND LEVEL taken from the nodal network at each band's own
+    calibration centre, relative to the anchor TONE 50:
+
+        TONE    low    decay    short
+           0  +1.02    +0.99   -48.41
+          25  +0.69    +0.63    -3.67
+          50   0.00     0.00     0.00
+          75  -1.54    -1.36    +1.68
+         100  -7.26    -6.46    +2.65
+
+    The knob's SHAPE change with alpha is second order and is not realised:
+    one fixed register set covers all five positions, which the
+    `one-register-set` property measures at 0.00 dB of forgone accuracy
+    against letting each pole track alpha (the network's top pole moves
+    4132 -> 4712 Hz over the rotation).
+
+BUDGET, counted exactly. 19 -> 20 modes, 24 -> 25 paths, N_NUMS 11. No mode
+carries numerator code 3, so `modal_dp.v` still needs no HP3 decode. AND THE
+MARGIN IS NOW ZERO: mode 19 is the LAST mode the 8-bit register map (contract
+15.1) can address, because `A_RESET` = 0xFF is decoded before the mode range
+and mode 19's `num` register IS 0xFF. That is harmless only because mode 19
+sits at or above N_NUMS = 11, so `ModalFx.step` never reads its numerator --
+and it is why revision 4's low-band section must have numerator RAW rather
+than a zero. A 21st mode has no address at all. The operator's +31 % drum-area
+allowance (padding the bank to 32) covers the area; it does not cover the map.
+
+PREDICTION, STATED BEFORE THE RENDER (docs/scorecard/cymbal-369/tone-render/).
+The knob's per-band levels above bound what the render can do to H - L
+(6-14 kHz minus 2-5 kHz), anchored at TONE 50, without knowing the inter-band
+balance: L follows the low band, and H lies between the decay band's shift and
+the short band's, so
+
+    TONE     0        25        50       75       100
+    Delta  [-49.4,   [-4.4,    0.00    [+0.2,   [+0.8,
+           -0.03]    -0.06]            +3.2]    +9.9]
+
+and the 808's own anchored H - L is -2.3 / -1.4 / 0 / +1.5 / +5.1 dB, the same
+to within 0.5 dB in all five of its DECAY columns. So:
+
+  1. the rendered anchored H - L must RISE monotonically with TONE;
+  2. it must land inside the bracket above -- and where inside is set by the
+     inter-band balance, which is #396's open half, so a miss at TONE 0 or
+     TONE 100 is a balance result and a miss in the MIDDLE (TONE 25, 75, where
+     the bracket is 4.3 and 3.0 dB wide) is a TONE-law result;
+  3. H's own EDT10 must FALL with TONE -- the short band, whose envelope is
+     the fast one, takes over the high band as TONE opens. The 808's ratio to
+     TONE 50 is 1.09-1.38 at TONE 0 and 0.58-0.76 at TONE 100. This is a
+     DECAY, so no energy balance can produce it;
+  4. Ln's EDT10 must stay TONE-invariant: the low band's envelope does not
+     move with TONE in this model, and the machine's does not either (+-3 %
+     across all five columns).
+
+Point 3 is the one worth the render. It is the only one of the four that no
+choice of inter-band balance can manufacture.
 """
 from __future__ import annotations
 
@@ -193,6 +296,17 @@ M_CYH1, M_CYH3, M_CYH3B = 8, 9, 10
 NEW_M = {"BD": 16, "SDLO": 17, "SDHI": 18}
 OLD_TO_NEW = {dx.M_BD: 16, dx.M_SDLO: 17, dx.M_SDHI: 18}     # every other mode keeps its index
 N_MODES, N_PATH, N_NUMS = 19, 24, 11
+
+# ---- revision 4 (step 10): the low band's own tone section -----------------
+# Mode 19 is the LAST mode contract 15.1 can address: A_RESET (0xFF) is decoded
+# before the mode range and mode 19's `num` register IS 0xFF, so its numerator
+# can never be written. That is harmless here and ONLY here, because 19 >=
+# N_NUMS and `ModalFx.step` reads `num` only below N_NUMS -- which is also why
+# this section's numerator must be RAW. Asserted by
+# tools/test_cymbal_tone_nodal.py, not assumed.
+M_CYH1B = 19
+P_CYH1B = 24
+N_MODES_R4, N_PATH_R4 = 20, 25
 # Every value below is from W14b Figures 4 and 10, read by tools/werner_fig4.py
 # and committed as docs/scorecard/cymbal-369/werner-fig4.json. Hh1's own
 # 2500 Hz / Q 0.97 comes from SN p.13 component values and is what validates
@@ -269,6 +383,30 @@ TONE_REALISATION = {
     "decay": {"extra_pole_hz": None,   "num": HP, "shape_err_db": 1.41},
     "short": {"extra_pole_hz": 1511.2, "num": HP, "shape_err_db": 1.35},
 }
+# REVISION 4's realisation, from the NODAL network instead of Figure 9's window
+# fit (tools/cymbal_tone_nodal.py -- which derives these and REFUSES outside the
+# same 3.0 dB bound; the numbers here are the record, the tool is the authority,
+# and test_cymbal_candidate_r4 binds them together so they cannot drift).
+# `section` says where the pole goes: "new" = a new mode and path (the low band,
+# whose Hh1 pole pair fills M_CYH1), "cyh3b" = M_CYH3B's free second slot
+# (free), None = no section at all (the two stages really do cancel there).
+TONE_R4 = {
+    "low":   {"pole_hz": 4219.0, "section": "new",   "num": mf.RAW, "shape_err_db": 0.88},
+    "decay": {"pole_hz": None,   "section": None,    "num": HP,     "shape_err_db": 1.77},
+    "short": {"pole_hz": 4219.0, "section": "cyh3b", "num": HP,     "shape_err_db": 1.79},
+}
+# The knob's five positions and the per-band level the nodal network puts on each,
+# in dB relative to the anchor TONE 50, at each band's own calibration centre
+# (3175 / 10079 / 10079 Hz). Derived by tools/cymbal_tone_nodal.tone_gain_db();
+# recorded here so the model states what it applies, bound to the tool by test.
+TONE_ANCHOR = "50"
+TONE_GAIN_DB = {
+    "00": {"low": 1.017, "decay": 0.988, "short": -48.411},
+    "25": {"low": 0.692, "decay": 0.632, "short": -3.670},
+    "50": {"low": 0.000, "decay": 0.000, "short": 0.000},
+    "75": {"low": -1.544, "decay": -1.358, "short": 1.676},
+    "10": {"low": -7.261, "decay": -6.460, "short": 2.652},
+}
 P_CYS, P_CYD, P_CYL = 20, 21, 22                             # indices in kit_808's path list
 P_CYH3 = 23
 
@@ -342,21 +480,54 @@ def layout():
             setattr(dx, k, v)
 
 
-def candidate_kit(amps: dict | None = None, kit=None):
+def tone_gains(tone: str) -> dict:
+    """{band: LINEAR gain} the TONE knob puts on each band's level at `tone`,
+    relative to the anchor. The caller applies it, because only the caller knows
+    how much headroom the amp register has left and whether the remainder fits
+    on the envelope peak -- and it must REFUSE rather than clip.
+
+    Revision 4 realises the knob entirely as these three levels; its shape
+    change with the wiper is bounded by `tools/cymbal_tone_nodal.py`'s
+    `chosen-in-bound` property and deliberately not realised.
+    """
+    if tone not in TONE_GAIN_DB:
+        raise ValueError(f"TONE code {tone!r} is not one of {sorted(TONE_GAIN_DB)}")
+    return {b: 10.0 ** (v / 20.0) for b, v in TONE_GAIN_DB[tone].items()}
+
+
+def candidate_kit(amps: dict | None = None, kit=None, tone: str | None = None):
     """The §10 structure on the remapped image. `amps` (mode -> level, and
     'E_CYS' -> envelope peak) are the band levels; None uses unity placeholders
-    for calibration renders."""
+    for calibration renders.
+
+    `tone=None` builds REVISION 3, register for register -- every artifact of
+    steps 5-9 stays reproducible. `tone="00".."75"` builds REVISION 4: the low
+    band's own tone section on mode 19, and the short band's tone pole moved to
+    the network's own 4219 Hz. The TONE code itself selects no coefficients
+    (one register set covers the whole knob); it is here so that asking for a
+    revision-4 image and asking for a TONE position cannot come apart.
+    """
     img = remap_kit(kit if kit is not None else dx.kit_808())
     amps = amps or {}
-    for m, f0, q, num in ((M_CYH1, HH1_HZ, HH1_Q, TONE_REALISATION["low"]["num"]),
-                          (dx.M_CYHI, HH2_HZ, HH2_Q, TONE_REALISATION["decay"]["num"]),
-                          (M_CYH3, HH3_HZ, HH3_Q, HP)):
-        for a, v in dx.mode_writes(m, f0, q, amps.get(m, 0.0 if m == M_CYH3 else 1.0), num):
+    r4 = tone is not None
+    if r4:
+        tone_gains(tone)                     # validate the code before anything is written
+    # In revision 4 the low band's output leaves the chain at M_CYH1B, so
+    # M_CYH1 becomes an intermediate stage and contributes nothing to the mix --
+    # the same arrangement Hh3 already uses for M_CYH3 -> M_CYH3B.
+    low_amp = 0.0 if r4 else amps.get(M_CYH1, 1.0)
+    for m, f0, q, num, amp in (
+            (M_CYH1, HH1_HZ, HH1_Q, TONE_REALISATION["low"]["num"], low_amp),
+            (dx.M_CYHI, HH2_HZ, HH2_Q, TONE_REALISATION["decay"]["num"], amps.get(dx.M_CYHI, 1.0)),
+            (M_CYH3, HH3_HZ, HH3_Q, HP, amps.get(M_CYH3, 0.0))):
+        for a, v in dx.mode_writes(m, f0, q, amp, num):
             img[a] = v
-    # Hh3's 1-pole stage, plus revision 3's one exactly-realisable tone pole:
-    # two REAL poles in the one section, its numerator HP = (Hh3's own zero) x
-    # (the LEVEL differentiator's zero).
-    poles = [HH3_P1_HZ] + [f for f in (TONE_REALISATION["short"]["extra_pole_hz"],) if f]
+    # Hh3's 1-pole stage, plus the one exactly-realisable tone pole: two REAL
+    # poles in the one section, its numerator HP = (Hh3's own zero) x (the LEVEL
+    # differentiator's zero). Revision 3 put Figure 9's 1511.2 Hz here; revision
+    # 4 puts the network's own 4219.0 Hz.
+    short_pole = TONE_R4["short"]["pole_hz"] if r4 else TONE_REALISATION["short"]["extra_pole_hz"]
+    poles = [HH3_P1_HZ] + [f for f in (short_pole,) if f]
     a1, a2 = real_pole_regs(poles)
     base = dx.A_MODE + M_CYH3B * dx.MODE_STRIDE
     img[base] = a1 & COEF_MASK
@@ -371,6 +542,17 @@ def candidate_kit(amps: dict | None = None, kit=None):
                                           att=dx.CY_ATT, dest=M_CYH1)
     img[dx.A_PATH + P_CYH3] = dx.path_word(dx.SRC_TAP + M_CYH3, dx.ENV_FULL, nl=dx.NL_LIN,
                                            dest=M_CYH3B)
+    if r4:
+        # The low band's own tone pole: ONE real pole, numerator RAW (mode 19 is
+        # at or above N_NUMS, so the bank never reads a numerator for it -- and
+        # its `num` register is A_RESET and cannot be written; see M_CYH1B).
+        b1, b2 = real_pole_regs([TONE_R4["low"]["pole_hz"]])
+        nb = dx.A_MODE + M_CYH1B * dx.MODE_STRIDE
+        img[nb] = b1 & COEF_MASK
+        img[nb + 1] = b2 & COEF_MASK
+        img[nb + 2] = dx.amp_reg(amps.get(M_CYH1B, 1.0))
+        img[dx.A_PATH + P_CYH1B] = dx.path_word(dx.SRC_TAP + M_CYH1, dx.ENV_FULL,
+                                                nl=dx.NL_LIN, dest=M_CYH1B)
     if "E_CYS" in amps:
         img[dx.A_ENV + dx.E_CYS * dx.ENV_STRIDE + 1] = dx.peak_reg(amps["E_CYS"])
     return sorted(img.items())
