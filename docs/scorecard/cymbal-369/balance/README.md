@@ -100,8 +100,9 @@ from Figures 4, 9 and 10 — so it is a genuine independent check rather than a 
 
 ## 4. Result — the prediction holds, and the assumption is refuted
 
-`balance-ablation.json`, rendered from a **clean tree at commit `48552e8`** — the commit that carries §3's
-prediction and nothing after it, so the prediction provably precedes the number (`sources_dirty: false`).
+`balance-ablation.json`, rendered from a **clean tree** (`sources_dirty: false`). The prediction in §3 was committed
+first and the ablation rendered after it, and the render has been reproduced identically from a later clean commit —
+every field of `balance-ablation.json` except the recorded commit hash is byte-identical between the two runs.
 
 The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
 short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
