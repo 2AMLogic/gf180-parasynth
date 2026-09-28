@@ -22,6 +22,29 @@ network by nodal analysis -- the same route that produced Hh1 from
 R124/R127/C48/C59 (`docs/tr808-reference.md` §10) -- rather than fitting or
 bounding a curve.
 
+WHERE THE VALUES CAME FROM, SO A READER CAN RE-READ THEM. The citation "SN
+p.13" is not checkable on its own, and this repository's own rule is that a
+number without the instrument that produced it is a claim rather than
+evidence. So the source is pinned: `SN_PDF_URL` / `SN_PDF_SHA256` /
+`SN_PDF_PAGE` / `SN_CROP_*` below name the exact scan, page and crop box that
+every value in the next section was read off, and `--verify-source
+<local.pdf>` re-renders that crop after checking the file's SHA-256. It
+REFUSES (exit 3) when the PDF is absent or its hash does not match, rather
+than answering from an unverified file -- the scan is a ~6 MB third-party
+download, so it is deliberately NOT a test dependency and nothing in
+`make verify` needs the network.
+
+The read was re-verified against that crop on 2026-09-28: every value below,
+the wiper-to-ground wiring of VR4, and Q25's emitter as Ht1's source all
+match the scan. Two things the crop settles that the fit could only infer:
+the top rail's op-amp has a THREE-capacitor input network (C49 .0033, C53
+.001, C54 .001) and the bottom rail's has TWO (C51 .001, C52 .001), which is
+exactly the 3rd-order/2nd-order split `docs/tr808-reference.md` §10 already
+records for Hh3/Hh2; and the bottom op-amp is the one wired to VR2 "CY
+DECAY", which is Hh2's band by definition. The rail assignment is therefore
+confirmed by the schematic as well as selected by the fit -- two independent
+routes to the same answer, not one.
+
 THE NETWORK (SN p.13, voicing board, around VR4/"CY TONE"/"CY LEVEL"). Two
 op-amp outputs and one transistor-buffer output feed it:
 
@@ -56,9 +79,34 @@ Five capacitors (C55, C56, C57, C58, C90) feed a connected resistive network
 with no cap-only loop, so the transfer function from any one of the three
 sources to N2 is a ratio of polynomials in `s` with a 5th-order denominator
 -- W14b's own word for it, arrived at independently of W14b's coefficients.
-`test_tone_stage_schematic.py` checks this with `sympy` where available and
-skips (not xfails) where it is not, since the primary, tested result below
-does not depend on it.
+
+That claim is checked TWO ways, and the reason there are two is that the
+first one does not run where it matters. `sympy` is not in any of this
+repository's CI requirement sets (the workflows install `numpy scipy pytest`,
+plus `pyyaml`), so a `sympy`-gated test of the single most structural claim
+here is a check that silently does not run -- indistinguishable, in the
+report, from one that passed. `poles_hz()` / `solve_vtone_mna()` below
+therefore re-derive the same facts with numpy/scipy only:
+
+  * `solve_vtone_mna()` builds the network a DIFFERENT way -- seven nodes with
+    each series R-C split at its own internal node, so every element is a
+    plain resistor or a plain capacitor and the system is exactly
+    `(G + s*C) v = b`. `solve_vtone()` instead eliminates those internal nodes
+    by hand into `Z = R + 1/(sC)` series impedances. The two agree to ~1e-14
+    dB, which makes the hand elimination a checked step rather than an assumed
+    one (`test_the_two_independent_node_formulations_agree`).
+  * `poles_hz()` takes the finite generalised eigenvalues of `(-G, C)`. `C` has
+    exactly five nonzero entries and full rank on its support, so "exactly
+    five finite poles" is a countable fact rather than a degree assertion, and
+    it holds with no symbolic algebra: 128.3 / 509.1 / 681.4 / 1635.7 /
+    4191.5 Hz at ALPHA_K1.
+  * The shared denominator is structural, not measured: `A` in either
+    formulation depends on the network and the pot, never on `drive` -- only
+    `b` changes. "One network, one denominator" is therefore true by
+    construction for all three paths, which is what W14b asserts in prose.
+
+The `sympy` test is kept as a third, symbolic witness and still skips where
+`sympy` is absent; it is no longer the only thing standing behind the claim.
 
 WHICH RAIL IS WHICH BAND, AND WHAT "k = 1.0" MEANS ON THIS POT. Nothing on
 the schematic says so directly, so it is resolved the same way Figure 9's own
@@ -98,19 +146,46 @@ schematic route did not need to pass to be usable, and did. See `--report`.
 Usage:
     python3 tools/tone_stage_schematic.py --report   # the resolved numbers
     python3 tools/tone_stage_schematic.py --check     # the gate
+    python3 tools/tone_stage_schematic.py --poles     # the shared pole set
+    python3 tools/tone_stage_schematic.py --verify-source <sn.pdf>
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import math
 import pathlib
+import shutil
+import subprocess
 import sys
 
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import werner_fig9 as w9  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# The source, pinned so the read below is reproducible rather than merely
+# cited. `--verify-source <path>` checks the hash and re-renders the crop.
+# ---------------------------------------------------------------------------
+
+SN_PDF_URL = ("https://archive.org/download/synthmanual-roland-tr-808-service-"
+              "notes/rolandtr-808servicenotes.pdf")
+SN_PDF_SHA256 = "d3239b51e2eb5523ff7247528667dc753f9db84a8d29b62cf763cbc51d4aad74"
+SN_PDF_PAGE = 13  # 1-based; the voicing-board schematic, VG 3116-140
+
+# Crop boxes in pixels at 400 dpi on that page (A3, 1190.52 x 840.96 pt), as
+# consumed by `pdftoppm -r <dpi> -x -y -W -H`. These are the two regions every
+# component value in the next section was read off.
+SN_CROPS = {
+    # VR4 "CY TONE", both rail op-amps, R125, C90, IC6 "CY LEVEL".
+    "tone": {"dpi": 400, "x": 2480, "y": 3040, "w": 1600, "h": 1300},
+    # Q25's emitter follower and the C58/R123/C57/R121 pre-filter (Ht1's path),
+    # plus Hh1's own C48/C59/R124/R127 for cross-reference against §10.
+    "q25": {"dpi": 500, "x": 2500, "y": 4700, "w": 1500, "h": 900},
+}
+
 
 # ---------------------------------------------------------------------------
 # Component values, read off SN p.13 (Roland TR-808 Service Notes, 1st ed.,
@@ -147,6 +222,58 @@ CY_BANDS_HZ = (3450.0, 7100.0)
 
 class Refused(Exception):
     """Raised when a precondition this module needs is not met."""
+
+
+class SourceUnavailable(Refused):
+    """The pinned scan is absent, unreadable, or does not match its hash.
+
+    A distinct type because it is the one REFUSAL a caller may reasonably
+    treat as "not checkable here" rather than "something is wrong": the scan
+    is a third-party download and deliberately not a test dependency.
+    """
+
+
+def verify_source(path) -> dict:
+    """Assert `path` IS the pinned SN scan, then render `SN_CROPS` beside it.
+
+    REFUSES rather than answering when the file is missing or its SHA-256 does
+    not match `SN_PDF_SHA256` -- a schematic read checked against the wrong
+    printing of the service notes would look exactly like a checked one.
+    Returns a dict describing what was verified and written.
+    """
+    path = pathlib.Path(path)
+    if not path.is_file():
+        raise SourceUnavailable(
+            f"{path} does not exist. Fetch the pinned scan first:\n"
+            f"  curl -sL -o {path} {SN_PDF_URL}")
+
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != SN_PDF_SHA256:
+        raise SourceUnavailable(
+            f"{path} is not the pinned scan: sha256 {digest}, expected "
+            f"{SN_PDF_SHA256}. Component values were read off the pinned "
+            "printing; a different scan may paginate or revise differently.")
+
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftoppm is None:
+        raise SourceUnavailable(
+            "pdftoppm (poppler-utils) is not on PATH, so the crop cannot be "
+            "re-rendered. The hash above still matched.")
+
+    written = []
+    for name, c in SN_CROPS.items():
+        stem = path.parent / f"sn-p{SN_PDF_PAGE}-{name}"
+        subprocess.run(
+            [pdftoppm, "-png", "-r", str(c["dpi"]),
+             "-f", str(SN_PDF_PAGE), "-l", str(SN_PDF_PAGE),
+             "-x", str(c["x"]), "-y", str(c["y"]),
+             "-W", str(c["w"]), "-H", str(c["h"]),
+             str(path), str(stem)],
+            check=True, capture_output=True)
+        written.extend(str(p) for p in sorted(path.parent.glob(f"{stem.name}*.png")))
+
+    return {"path": str(path), "sha256": digest, "page": SN_PDF_PAGE,
+            "crops": written}
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +345,105 @@ def solve_vtone(f_hz, alpha, drive):
 
 
 DRIVE_OF = {"Ht1": "hh1", "Ht2": "bottom", "Ht3": "top"}
+
+
+# ---------------------------------------------------------------------------
+# The same network, built a second and structurally different way, with
+# numpy/scipy only -- see the module docstring's "checked TWO ways".
+#
+# Here each series R-C branch is split at its own internal node (Pa, Pb, P1),
+# so every element is a plain resistor or a plain capacitor and the system is
+# exactly (G + s*C) v = b with G, C real and constant. `solve_vtone` instead
+# folds those branches into Z = R + 1/(sC) by hand. Agreement between the two
+# is what makes that hand elimination a checked step.
+# ---------------------------------------------------------------------------
+
+MNA_NODES = ("N1", "N2", "N4", "Nx", "Pa", "Pb", "P1")
+_MNA_IDX = {name: i for i, name in enumerate(MNA_NODES)}
+
+# Which internal node each source injects into, and through which coupling cap.
+MNA_SOURCE = {"top": ("Pa", "C55"), "bottom": ("Pb", "C56"), "hh1": ("P1", "C58")}
+
+
+def mna_matrices(alpha):
+    """(G, C): the conductance and capacitance matrices over `MNA_NODES`.
+
+    Neither depends on which source is driven -- that is the whole content of
+    "one network, one denominator": `drive` only ever changes the right-hand
+    side, so all three transfer functions share this matrix pencil and hence
+    their poles, exactly and by construction.
+    """
+    if not (0.0 <= alpha <= 1.0):
+        raise ValueError(f"alpha out of [0, 1]: {alpha}")
+
+    n = len(MNA_NODES)
+    G = np.zeros((n, n))
+    C = np.zeros((n, n))
+
+    def stamp(M, a, b, value):
+        """Stamp `value` between nodes `a` and `b` (None == ground)."""
+        if a is not None:
+            M[_MNA_IDX[a], _MNA_IDX[a]] += value
+        if b is not None:
+            M[_MNA_IDX[b], _MNA_IDX[b]] += value
+        if a is not None and b is not None:
+            M[_MNA_IDX[a], _MNA_IDX[b]] -= value
+            M[_MNA_IDX[b], _MNA_IDX[a]] -= value
+
+    Ra = max(alpha, 1e-9) * VR4_TOTAL
+    Rb = R125 + (1.0 - alpha) * VR4_TOTAL
+
+    stamp(G, "Pa", "N1", 1.0 / R112)
+    stamp(G, "N1", "N2", 1.0 / R119)
+    stamp(G, "N1", None, 1.0 / Ra)
+    stamp(G, "Pb", "N4", 1.0 / R120)
+    stamp(G, "N4", "N2", 1.0 / R129)
+    stamp(G, "N4", None, 1.0 / Rb)
+    stamp(G, "P1", "Nx", 1.0 / R123)
+    stamp(G, "Nx", "N4", 1.0 / R121)
+
+    stamp(C, "Pa", None, C55)
+    stamp(C, "Pb", None, C56)
+    stamp(C, "P1", None, C58)
+    stamp(C, "Nx", None, C57)
+    stamp(C, "N2", None, C90)
+
+    return G, C
+
+
+def solve_vtone_mna(f_hz, alpha, drive):
+    """`solve_vtone`'s answer, from the seven-node formulation instead."""
+    if drive not in MNA_SOURCE:
+        raise ValueError(drive)
+    G, C = mna_matrices(alpha)
+    node, cap = MNA_SOURCE[drive]
+    c_val = {"C55": C55, "C56": C56, "C58": C58}[cap]
+
+    f_hz = np.asarray(f_hz, dtype=float)
+    s = 2j * np.pi * f_hz
+    out = np.empty(f_hz.shape, dtype=complex)
+    for i, sv in enumerate(s):
+        b = np.zeros(len(MNA_NODES), dtype=complex)
+        # A unit source behind the coupling cap injects s*C*Vsrc into the node.
+        b[_MNA_IDX[node]] = sv * c_val
+        out[i] = np.linalg.solve(G + sv * C, b)[_MNA_IDX["N2"]]
+    return out
+
+
+def poles_hz(alpha=None):
+    """The network's pole frequencies in Hz, shared by all three paths.
+
+    Finite generalised eigenvalues of the pencil (-G, C). `C` has exactly five
+    nonzero (diagonal) entries, so a 5th-order denominator is a COUNT here,
+    not an assertion about a polynomial degree -- and it needs no symbolic
+    algebra, so unlike the `sympy` witness it runs wherever numpy/scipy do.
+    """
+    from scipy.linalg import eig
+
+    G, C = mna_matrices(ALPHA_K1 if alpha is None else alpha)
+    ev = eig(-G, C, right=False)
+    finite = ev[np.isfinite(ev)]
+    return np.sort(np.abs(finite) / (2.0 * np.pi))
 
 
 def db_at(f_hz, alpha, name):
@@ -378,7 +604,36 @@ def main(argv=None) -> int:
     ap.add_argument("--artifact", default=str(w9.ARTIFACT))
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--poles", action="store_true",
+                    help="the shared pole set, from the numpy-only formulation")
+    ap.add_argument("--verify-source", metavar="SN_PDF",
+                    help="check a local copy of the pinned SN scan against "
+                         "SN_PDF_SHA256 and re-render the crops the component "
+                         "values were read off")
     a = ap.parse_args(argv)
+
+    if a.verify_source:
+        try:
+            info = verify_source(a.verify_source)
+        except SourceUnavailable as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 3
+        print(f"source OK: {info['path']}")
+        print(f"  sha256 {info['sha256']} (matches SN_PDF_SHA256)")
+        print(f"  page   {info['page']} (voicing board VG 3116-140)")
+        for p in info["crops"]:
+            print(f"  crop   {p}")
+        return 0
+
+    if a.poles:
+        p = poles_hz()
+        print(f"shared denominator, {len(p)} finite poles at "
+              f"alpha = {ALPHA_K1:.4f} (Hz):")
+        for f in p:
+            print(f"  {f:10.2f}")
+        if not (a.check or a.report):
+            return 0
+        print()
 
     try:
         data, _meta, _blob = w9.from_artifact(pathlib.Path(a.artifact))

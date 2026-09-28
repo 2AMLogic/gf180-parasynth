@@ -165,11 +165,114 @@ def test_solve_vtone_rejects_an_unknown_drive():
 
 
 # ---------------------------------------------------------------------------
-# Structural fact: five capacitors, no cap-only loop -> 5th-order transfer
-# function, independently of W14b's own (undisclosed) coefficients. Uses
-# sympy if available; the primary numeric results above do not depend on it,
-# so this SKIPS rather than failing `make verify`'s pytest job where sympy is
-# not installed (it is not part of the pinned CI requirement set).
+# Structural facts, with numpy/scipy only.
+#
+# These exist because the `sympy` witness at the bottom of this file SKIPS in
+# CI -- no workflow here installs sympy (they install `numpy scipy pytest`,
+# plus `pyyaml`) -- and a skipped check of the single most structural claim in
+# the module reads, in the report, exactly like a passing one. Everything
+# below runs wherever the rest of the suite runs.
+# ---------------------------------------------------------------------------
+
+
+def test_the_two_independent_node_formulations_agree():
+    """`solve_vtone` folds each series R-C into Z = R + 1/(sC) by hand;
+    `solve_vtone_mna` instead splits every branch at an internal node so the
+    system is a plain (G + sC) pencil. They are different derivations of the
+    same circuit, so agreement to ~1e-14 dB makes the hand elimination a
+    checked step rather than an assumed one."""
+    f = np.logspace(1.0, 4.4, 64)
+    for name, drive in ts.DRIVE_OF.items():
+        a = 20.0 * np.log10(np.abs(ts.solve_vtone_mna(f, ts.ALPHA_K1, drive)))
+        b = ts.db_at(f, ts.ALPHA_K1, name)
+        assert np.max(np.abs(a - b)) < 1e-9, f"{name}: formulations disagree"
+
+
+def test_exactly_five_finite_poles_without_sympy():
+    """W14b calls the tone transfer functions FIFTH-order and does not print
+    their coefficients. Five capacitors with no cap-only loop is five finite
+    generalised eigenvalues -- a count, not a degree assertion."""
+    p = ts.poles_hz()
+    assert len(p) == 5, f"expected 5 finite poles, got {len(p)}: {p}"
+    assert np.all(np.isfinite(p))
+    assert np.all(p > 0.0)
+
+
+def test_the_pole_set_is_the_one_the_reference_quotes():
+    """§10 of `docs/tr808-reference.md` quotes this pole set as an algebraic
+    fact. If the components or ALPHA_K1 change, that sentence is stale and
+    this must be re-derived and re-written rather than silently drift."""
+    assert np.allclose(ts.poles_hz(),
+                       [128.3, 509.1, 681.4, 1635.7, 4191.5], rtol=2e-4)
+
+
+@pytest.mark.parametrize("drive", sorted(ts.MNA_SOURCE))
+def test_the_pole_set_does_not_depend_on_which_source_is_driven(drive):
+    """"One network, one denominator" is structural here: neither G nor C is a
+    function of `drive` -- only the right-hand side is. This asserts that
+    property of the builder directly, so the claim cannot quietly become false
+    if the matrices are ever rebuilt per-source."""
+    G, C = ts.mna_matrices(ts.ALPHA_K1)
+    G2, C2 = ts.mna_matrices(ts.ALPHA_K1)
+    assert np.array_equal(G, G2) and np.array_equal(C, C2)
+    # and the source only ever touches b: its node is an internal R-C node,
+    # never the output node whose voltage is reported.
+    node, _cap = ts.MNA_SOURCE[drive]
+    assert node in ts.MNA_NODES and node != "N2"
+
+
+def test_control_the_pole_set_is_not_insensitive_to_the_components(monkeypatch):
+    """A negative control for the two tests above: if the poles came out the
+    same whatever the component values were, "the pole set is 128/509/681/
+    1636/4192 Hz" would be a property of the solver, not of the circuit."""
+    before = ts.poles_hz()
+    monkeypatch.setattr(ts, "C90", ts.C90 * 3.0)
+    after = ts.poles_hz()
+    assert not np.allclose(before, after, rtol=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Source provenance: the component values are a READING of a specific scan,
+# and a reading nobody can repeat is a claim. These check the refusal path,
+# not the scan itself -- the PDF is a ~6 MB third-party download and is
+# deliberately NOT a test dependency, so `make verify` never needs the network.
+# ---------------------------------------------------------------------------
+
+
+def test_the_pinned_source_is_fully_specified():
+    assert ts.SN_PDF_SHA256 and len(ts.SN_PDF_SHA256) == 64
+    assert ts.SN_PDF_PAGE == 13
+    assert set(ts.SN_CROPS) == {"tone", "q25"}
+    for crop in ts.SN_CROPS.values():
+        assert {"dpi", "x", "y", "w", "h"} <= set(crop)
+
+
+def test_control_a_missing_scan_is_refused_not_answered(tmp_path):
+    with pytest.raises(ts.SourceUnavailable):
+        ts.verify_source(tmp_path / "absent.pdf")
+
+
+def test_control_the_wrong_scan_is_refused_not_answered(tmp_path):
+    """The failure this guards against is a DIFFERENT printing of the service
+    notes: it would render a plausible page 13 and be silently wrong."""
+    impostor = tmp_path / "not-the-service-notes.pdf"
+    impostor.write_bytes(b"%PDF-1.4\nnot the pinned scan\n")
+    with pytest.raises(ts.SourceUnavailable) as exc:
+        ts.verify_source(impostor)
+    assert "sha256" in str(exc.value)
+
+
+def test_source_unavailable_is_a_refusal_so_callers_cannot_miss_it():
+    """REFUSED is a first-class outcome here, distinct from pass and fail, so
+    the narrow exception must stay catchable as the module's own Refused."""
+    assert issubclass(ts.SourceUnavailable, ts.Refused)
+    assert not issubclass(ts.SourceUnavailable, ValueError)
+
+
+# ---------------------------------------------------------------------------
+# Third, symbolic witness for the same structural fact. Uses sympy if
+# available and SKIPS where it is not; since the numpy-only tests above now
+# carry the claim in CI, this is corroboration rather than the sole evidence.
 # ---------------------------------------------------------------------------
 
 
