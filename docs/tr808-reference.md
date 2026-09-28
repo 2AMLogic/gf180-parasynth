@@ -854,6 +854,24 @@ not a fresh figure measurement, so it inherits the SN scan's own limits (a
 error; the fit residual above is the honest measure of how much slack that
 leaves, and it is small.
 
+**A third thing the nodal solution settles, and it changed a candidate
+[measured: `tools/cymbal_tone_nodal.py`, `docs/scorecard/cymbal-369/tone-render/`].**
+Fig. 9's per-band 2-pole *window* fits are not the network's poles, and for Ht1
+the difference matters inside the cymbal's own band. The network's five shared
+poles are 130.0/488.6/713.5/1625.4/**4219.0** Hz at the fitted wiper; Fig. 9's
+local fit of Ht1 over 121–564 Hz puts its low-pass pole at **589.5 Hz**, and
+its 2-pole form therefore reads (tone × LEVEL) as **flat to 0.46 dB** across
+2–8 kHz where the network's own response **falls 5.9 dB**. Over the *short*
+band — the one path Fig. 9 draws across the whole audio band — the two routes
+agree to **0.10 dB**, which is what makes this a statement about the window
+rather than about the network. Consequence for an implementation: a model that
+drops the tone low-pass pole against the LEVEL differentiator (on the grounds
+that both are asymptotic over the band) is right for the **DECAY and short**
+bands, whose active ranges lie entirely above 4219 Hz, and **wrong for the low
+band**, whose 2–8 kHz range straddles it. The low band needs that one real pole
+realised, and Fig. 9's 1511.2 Hz value for Ht3's low-pass pole is likewise a
+window artifact — the network's nearest pole is 1625.4 Hz.
+
 Two defects in Fig. 9 itself, both resolved against W14b §10's prose and both
 asserted by the tool: its legend prints `Ht3` twice and `Ht1` never (the
 bottom sub-plot is Ht1, and also mistitles both of its own axes), and **the
