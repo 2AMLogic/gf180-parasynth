@@ -2,8 +2,14 @@
 
 plan092 section 2: R1 is selected by name. `release` and no --image stay R0,
 and `tree` stays a development selector. `r1` sends R1's kit frozen BY VALUE,
-with R1's known-state start, and today it emits exactly the bytes the R1
-evidence replayed with `--image tree`.
+with R1's known-state start, and it emits exactly the bytes the R1 evidence
+replayed -- which `--image tree` produced AT THE FREEZE, i.e. at contract
+revision 14. Since revision 15 (#388, the rimshot's two bridged-T modes) the
+tree's kit is NOT R1's any more: `tree` followed the sound work and `r1` did
+not, which is the whole reason R1 is selected by name. The tests below
+therefore compare `r1` against revision 14 rather than against the live tree,
+and assert separately that the live tree differs from it in exactly revision
+15's two writes.
 """
 import contextlib
 import io
@@ -35,7 +41,9 @@ def _bytes(argv):
 
 def test_the_defaults_do_not_move():
     assert uh.DEFAULT_IMAGE == "release"
-    assert uh.IMAGE_REVISION == {"release": 11, "tree": 14, "r1": 14}
+    # `tree` moved to 15 with #388's rimshot writes; `r1` stays 14, which is the
+    # whole point of naming the image rather than assuming the tree's.
+    assert uh.IMAGE_REVISION == {"release": 11, "tree": 15, "r1": 14}
     assert ms.resolve_image("/dev/ttyUSB1", None) == "release"
     assert ms.resolve_image("sim", None) == "tree"
     assert ms.resolve_image("sim", "r1") == "r1"
@@ -52,7 +60,7 @@ def test_r1_does_not_follow_a_later_change_to_the_trees_kit(monkeypatch):
     before = uh.image_kit("r1")
     moved = [(a, v + 1 if i == 0 else v) for i, (a, v) in enumerate(dx.kit_808())]
     monkeypatch.setattr(dx, "kit_808", lambda: moved)
-    monkeypatch.setitem(dx.KITS_BY_REVISION, 14, lambda: moved)
+    monkeypatch.setitem(dx.KITS_BY_REVISION, 15, lambda: moved)
     assert uh.image_kit("tree") == moved
     assert uh.image_kit("r1") == before
 
@@ -68,10 +76,36 @@ def test_control_a_tampered_frozen_r1_kit_is_refused(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("name,argv", r1c.COMMANDS)
-def test_every_r1_command_emits_the_bytes_r1s_evidence_replayed(name, argv):
-    """Today the frozen kit IS the tree's, so r1 and tree are byte-identical --
-    the R1 RTL evidence (recorded with `--image tree`) covers `--image r1`."""
-    assert _bytes([*argv, "--image", "r1"]) == _bytes([*argv, "--image", "tree"])
+def test_every_r1_command_emits_the_bytes_r1s_evidence_replayed(name, argv, monkeypatch):
+    """R1's RTL evidence was recorded with `--image tree`, at the freeze, when
+    the tree's kit WAS R1's. Contract revision 15 (#388) moved the tree's kit,
+    so this is no longer a bare identity with `tree` -- and it must not become
+    one, because `tree` following later sound work is exactly what `r1` exists
+    to be insulated from. What the evidence actually rests on is revision 14's
+    kit, so `tree` is driven at revision 14 here: `--image r1` reads its writes
+    from r1-kit.json and never from the tree, so a failure means the FROZEN kit
+    moved, which is the thing worth a red test."""
+    r1_stream = _bytes([*argv, "--image", "r1"])
+    monkeypatch.setitem(uh.IMAGE_REVISION, "tree", 14)
+    assert r1_stream == _bytes([*argv, "--image", "tree"])
+
+
+def test_r1_is_no_longer_the_trees_kit_and_differs_only_where_revision_15_did():
+    """The other side of the test above, so "they match" cannot pass by both
+    sides being broken the same way. At the LIVE tree revision the two kits must
+    DIFFER -- revision 15 (#388) moved the rimshot -- and the difference must be
+    exactly revision 15's two register writes, at the same addresses and with no
+    write added or dropped."""
+    r1_kit, tree_kit = dict(uh.image_kit("r1")), dict(uh.image_kit("tree"))
+    assert set(r1_kit) == set(tree_kit), "revision 15 adds and removes no write"
+    moved = {a for a in tree_kit if tree_kit[a] != r1_kit[a]}
+    assert moved == {dx.A_PATH + dx.P_RS1X,
+                     dx.A_ENV + dx.E_RSG * dx.ENV_STRIDE + 1}, sorted(hex(a) for a in moved)
+    # and the streams a player actually gets differ too, on the commands that
+    # send a kit at all (`--fixture none` holds a note and sends none).
+    differ = [n for n, argv in r1c.COMMANDS
+              if _bytes([*argv, "--image", "r1"]) != _bytes([*argv, "--image", "tree"])]
+    assert differ, "no R1 command sends the kit, so the freeze is untested end to end"
 
 
 def test_r1_starts_from_the_known_state_and_passes_the_frozen_target():
@@ -92,14 +126,22 @@ def test_control_an_r0_sender_fails_the_r1_target():
 
 
 def test_midi_session_r1_known_state_is_the_frozen_target():
+    """`r1`'s session still starts from R1's frozen target. It is no longer
+    ALSO the tree's: contract revision 15 (#388) moved two rimshot writes, and
+    the session is asserted against R1's own `check_init` -- the frozen target
+    -- rather than against `tree`, which is free to move and did."""
     class _Nul:
         timeout = 0
         def write(self, b): return len(b)
         def read(self, n=1): return b""
         def flush(self): pass
     s_r1 = ms.MidiSession(_Nul(), image="r1").init_writes()
+    assert r1c.check_init(s_r1, kit_expected=True) == []
     s_tree = ms.MidiSession(_Nul(), image="tree").init_writes()
-    assert s_r1 == s_tree and r1c.check_init(s_r1, kit_expected=True) == []
+    assert s_r1 != s_tree, "revision 15 moved the tree's rimshot; r1 must not follow"
+    moved = {a for (_, _, a, v), (_, _, _, w) in zip(s_r1, s_tree) if v != w}
+    assert moved == {dx.A_PATH + dx.P_RS1X,
+                     dx.A_ENV + dx.E_RSG * dx.ENV_STRIDE + 1}, sorted(hex(a) for a in moved)
 
 
 def _tampered_kit(tmp_path, monkeypatch):

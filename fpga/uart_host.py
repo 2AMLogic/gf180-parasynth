@@ -135,7 +135,7 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 # on the tree's kit cannot change what an R1 board is sent. `tree` stays the
 # development selector: whatever this tree builds. `release` and no --image
 # stay R0 (plan092: the public default does not flip).
-IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14}
+IMAGE_REVISION = {"release": 11, "tree": 15, "r1": 14}
 DEFAULT_IMAGE = "release"
 # the images whose sessions start from the known state (voice + drum RESET)
 KNOWN_STATE_IMAGES = ("tree", "r1")
