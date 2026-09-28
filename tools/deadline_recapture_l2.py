@@ -15,7 +15,8 @@ and it has done so twice inside 24 h (#426, and contract revision 14 before
 it). Both times the fix was the same two simulator runs plus a gzip, and both
 times the recipe had to be reconstructed by reading a months-old commit's
 `--stat` output and its message. That reconstruction is the thing this file
-removes. It does NOT change what the capture binds to -- see #<followup>.
+removes. It does NOT change what the capture binds to, which is the actual
+cause of the staleness -- that is #443.
 
 WHAT IT DOES, in the order `8c3de22` did it by hand:
 
