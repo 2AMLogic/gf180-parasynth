@@ -114,8 +114,8 @@ the shipped instrument does not have.
 
 **This blocker was cited four times as "#371" and #371 is a merged pull request, not an open issue** — step 1 of
 this chain. So the thing gating acceptance item 3 of #396, the listening pack's other 24 settings and `gate-379`'s
-§2 selection argument was tracked by nothing. It now has its own issue; `balance/README.md` §6 lists the four
-citations that need correcting to point at it.
+§2 selection argument was tracked by nothing. It now has its own issue, **#413**; `balance/README.md` §6 lists the
+four citations that need correcting to point at it.
 
 > **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
 > `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by

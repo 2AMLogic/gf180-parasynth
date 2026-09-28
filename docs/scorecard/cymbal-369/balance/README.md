@@ -168,7 +168,8 @@ once.
   is a two-band energy ratio and the ablation also moved the *mix within* H (H EDT10 collapsed from 147 to 70 ms
   as the short band took over from the decay band), so the number confounds a level with a mix. It is a sanity
   check to run against a real schematic value, not a substitute for one.
-- **#396's item 3 (the TONE knob law) is deferred, and its blocker did not exist as an issue.** See §6.
+- **#396's item 3 (the TONE knob law) is deferred, and its blocker did not exist as an issue until now: #413.**
+  See §6.
 
 ## 6. The blocker for the TONE knob law, and why it needed filing
 
@@ -183,8 +184,9 @@ tools/make_cymbal_pack.py:79      tools/cymbal_candidate_eval.py:18
 ```
 
 **#371 is a merged pull request** — step 1 of this very chain — **not an open issue.** So the blocker that gates
-acceptance item 3 of #396, the listening pack's other settings, and `gate-379`'s §2 selection argument was tracked
-by nothing. Filed now as a real issue, and the citations above are left for that issue to correct rather than
+acceptance item 3 of #396, the listening pack's other 24 settings, and `gate-379`'s §2 selection argument was
+tracked by nothing. **Filed now as #413**, with the diagnosis, the repair's acceptance bar and a must-fail control
+for the saturation the render currently has. The four citations above are left for #413 to correct rather than
 rewritten here, so the filing is visible in one place.
 
 Figure 9 itself is the second half of the knob-law problem and is not repairable: it marks only k = 1.0 and gives
