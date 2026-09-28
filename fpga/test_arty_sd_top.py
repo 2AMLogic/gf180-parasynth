@@ -49,12 +49,13 @@ def test_prepared_script_reads_both_constraint_files_in_order(tmp_path):
     assert "SIM_NO_MMCM=0" in text
 
 
-def test_sd_xdc_dispositions_exactly_the_pdm_ports_and_the_constant_sck():
+def test_sd_xdc_dispositions_exactly_the_pdm_ports():
     import xdc_bindings as xb
     text = sd.SD_XDC.read_text()
     assert xb.expected_exceptions(text) == [("*", "[get_ports sd_left]"),
-                                            ("*", "[get_ports sd_right]"),
-                                            ("*", "[get_ports dac_sck]")]
+                                            ("*", "[get_ports sd_right]")]
+    # the constant dac_sck carries no exception: Vivado would never apply it
+    assert sd.CONSTANT_PORTS == ["dac_sck"]
     assert "set_output_delay" not in text
 
 
@@ -201,3 +202,12 @@ endmodule
     ones, total, differ = map(int, m.groups())
     assert differ == 0
     assert abs(ones / total - 0.71875) < 1e-3
+
+
+def test_constant_port_evidence_matches_vivados_own_warning():
+    # the line Vivado 2025.1 printed for this port on the first direct-plug build
+    import re
+    line = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
+    assert re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0", line)
+    assert not re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0",
+                         line.replace("dac_sck", "sd_left"))

@@ -8,8 +8,8 @@ entry for arty_a7_sd_top, so the release publisher refuses it; this script is
 the whole of its build record. Decided in #406: the demo wrapper is not scoped
 into the release gate (`output_delay_exceptions == ["i2s_bclk"]`); instead its
 own gate below requires exactly that forwarded-clock exception AND exactly
-the two PDM ports plus the constant dac_sck as user false paths, with nothing
-unconstrained. The image lays JA out for a PCM5102 breakout plugged straight in
+the two PDM ports as user false paths, with nothing unconstrained; the
+constant dac_sck must be in no timing class and named constant by synthesis. The image lays JA out for a PCM5102 breakout plugged straight in
 (see arty_a7_sd_top.v), and the gate reads the ROUTED design's report_io to
 confirm every port sits on the pin that layout needs.
 
@@ -50,7 +50,7 @@ ROOT = build.ROOT
 TOP = "arty_a7_sd_top"
 SD_XDC = ROOT / "fpga/boards/arty-a7-100-sd.xdc"
 PDM_PORTS = ["sd_left", "sd_right"]
-FALSE_PATH_PORTS = sorted(PDM_PORTS + ["dac_sck"])     # dac_sck: a constant 0
+CONSTANT_PORTS = ["dac_sck"]     # tied off by synthesis; timed by nothing
 FORWARDED_CLOCKS = ["i2s_bclk"]
 # JA as the plugged-in PCM5102 needs it, written from the BREAKOUT'S header
 # order (VIN GND LCK DIN BCK SCK into JA6..JA1) and Digilent's master XDC --
@@ -110,15 +110,24 @@ def output_disposition(timing: str) -> dict:
 
 def check_implementation(directory: Path) -> dict:
     summary = publish.inspect_reports(directory, design=TOP)
-    xdc_text = "".join(p.read_text() for p in (build.XDC, SD_XDC))
+    # the constraints this build COMPILED (its snapshot), never the live tree's
+    xdc_text = "".join((directory / "inputs" / p.relative_to(ROOT)).read_text()
+                       for p in (build.XDC, SD_XDC))
     problems = xb.check_report((directory / xb.REPORT).read_text(), xdc_text)
     problems += xb.check_route((directory / xb.REPORT).read_text(),
                                (directory / xb.EXCEPTIONS).read_text(), xdc_text)
     classes = output_disposition((directory / "timing.rpt").read_text())
-    want = {"unconstrained": [], "false_path": FALSE_PATH_PORTS,
+    want = {"unconstrained": [], "false_path": PDM_PORTS,
             "forwarded_clock": FORWARDED_CLOCKS}
     if classes != want:
         problems.append(f"output-port disposition {classes} is not {want}")
+    # a constant port is dispositioned by evidence that it IS constant: the
+    # synthesis log must say so, and no timing class may hold it
+    log = (directory / "vivado.log").read_text(errors="replace")
+    for port in CONSTANT_PORTS:
+        if not re.search(r"Synth 8-3917\].* port " + re.escape(port) + r" driven by constant 0",
+                         log):
+            problems.append(f"{port} is not shown constant by the synthesis log")
     pins = placed_pins((directory / IO_REPORT).read_text(), DIRECT_PLUG_PINS)
     if pins != DIRECT_PLUG_PINS:
         problems.append(f"placed pins {pins} are not the direct-plug map {DIRECT_PLUG_PINS}")

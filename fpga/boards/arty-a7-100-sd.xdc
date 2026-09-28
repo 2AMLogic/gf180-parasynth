@@ -35,5 +35,9 @@ set_property PACKAGE_PIN G13 [get_ports dac_sck]
 set_property IOSTANDARD LVCMOS33 [get_ports dac_sck]
 set_property DRIVE 4 [get_ports dac_sck]
 set_property SLEW SLOW [get_ports dac_sck]
-# dac_sck is a constant 0: no transition, so no timing to budget.
-set_false_path -to [get_ports dac_sck]
+# dac_sck is a constant 0. There is deliberately NO set_false_path on it:
+# synthesis ties it off (Synth 8-3917, "driven by constant 0"), Vivado times no
+# path to it and leaves it out of check_timing's no_output_delay classes, and
+# a false path on it is inert -- the first build carried one and report_
+# exceptions never listed it. build_arty_sd.py instead requires the port to be
+# in no timing class AND the synthesis log to name it as a constant.
