@@ -18,6 +18,7 @@ The module under test adds a QUALIFIED 1-2.5 kHz decay to the cymbal work
   * every injected defect turns at least one named property red, and the one
     transformation asserted blind stays blind.
 """
+import json
 import math
 import pathlib
 import sys
@@ -373,6 +374,52 @@ def test_a_broadband_click_drags_rho_down_and_shows_up_in_the_onset_share():
     assert loud["onset_excess_db"] > base["onset_excess_db"] + 3.0, rows
 
 
+def test_the_click_sweep_is_monotone_in_both_columns_so_it_can_be_read_backwards():
+    """The onset table is used BACKWARDS -- a record's measured onset excess is
+    looked up to bound how much of its rho deficit a click could explain. That
+    only works if both columns are monotone in the planted click, so assert it
+    rather than assuming the lookup is single-valued."""
+    rows = lt.onset_sensitivity()
+    rho = [r["rho_M_-10"] for r in rows]
+    onset = [r["onset_excess_db"] for r in rows]
+    assert rho == sorted(rho, reverse=True), rows
+    assert onset == sorted(onset), rows
+    # And the sweep must span the onset excess our own renders actually read
+    # (+3.24 dB on the shipped CY), or the bound would be an extrapolation.
+    assert onset[0] < 3.24 < onset[-1], rows
+
+
+# --------------------------------------------------------------------------
+# the noise-floor control, and the refusal that stops it lying
+# --------------------------------------------------------------------------
+def test_match_floor_refuses_a_target_below_the_records_existing_floor():
+    """Wrong-then-right 6, reinstated as a control per verification rule 5. Noise
+    can only be ADDED, so a target below the record's own floor is unreachable --
+    and the bisection asked for one converges on zero amplitude and hands back
+    the UNMODIFIED record. That is exactly what happened: the control printed
+    three identical rows (M floor -33.87 dB, rho 0.8709) with no complaint."""
+    y, sr = lt.synth(tau_l=0.20, a_h=0.0, dur=3.0, floor=0.01)
+    have = lt.measure(y, sr)["bands"]["M"]["floor_db_re_peak"]
+    with pytest.raises(lt.Refused) as e:
+        lt.match_floor(y, sr, have - 20.0)
+    assert "noise can only be added" in str(e.value)
+    assert "other direction" in str(e.value)
+
+
+def test_match_floor_reaches_a_reachable_target_and_actually_changes_the_record():
+    """The paired positive. A target ABOVE the existing floor must be hit to
+    within the stated tolerance, and the returned record must differ from the
+    input -- the second half is the one the silent no-op would have failed."""
+    y, sr = lt.synth(tau_l=0.20, a_h=0.0, dur=3.0)
+    have = lt.measure(y, sr)["bands"]["M"]["floor_db_re_peak"]
+    target = have + 10.0
+    yn, amp, got = lt.match_floor(y, sr, target)
+    assert got == pytest.approx(target, abs=0.05), (have, target, got)
+    assert amp > 0.0
+    assert not np.array_equal(np.asarray(yn)[: len(y)], np.asarray(y)), "record unchanged"
+    assert lt.measure(yn, sr)["bands"]["M"]["floor_db_re_peak"] > have + 5.0
+
+
 # --------------------------------------------------------------------------
 # the matrix itself
 # --------------------------------------------------------------------------
@@ -434,3 +481,65 @@ def test_check_returns_ok_on_the_current_tree():
     unsatisfiable gate trains everyone to ignore gates."""
     ok, lines = lt.check()
     assert ok, "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# the summariser, which is what the scorecard's numbers come from
+# --------------------------------------------------------------------------
+RESULT = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
+
+
+def test_summarise_refuses_a_result_whose_own_controls_did_not_pass():
+    """The console refusal is gone by the time someone picks the JSON up, so the
+    precondition is asserted again at the point of USE. A summary of a run whose
+    controls failed would look exactly like a summary of one whose controls
+    passed."""
+    with pytest.raises(lt.Refused):
+        lt.summarise({"controls_pass": False, "windows": {}, "skirt_baseline": {}})
+    with pytest.raises(lt.Refused):
+        lt.summarise({"windows": {}, "skirt_baseline": {}})       # absent, not merely false
+
+
+def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_says():
+    """The scorecard's headline numbers, read back out of the committed JSON by
+    the same function that produced them. If a later run changes them, this fails
+    rather than the prose silently going stale (#383's lesson)."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    s = lt.summarise(json.loads(RESULT.read_text()))
+    assert set(s["windows"]) == {"1.5s", "2.0s"}
+    assert s["windows"]["1.5s"]["n_refused_short"] == 0
+    assert s["windows"]["2.0s"]["n_refused_short"] == 5
+    for wname in ("1.5s", "2.0s"):
+        for band in ("M", "Mn"):
+            r = s["windows"][wname][f"rows"][f"{band}-10"]
+            # The whole finding, in one shape: the 808 above the instrument's
+            # zero, both our renders below it, in both bands and both windows.
+            assert r["min"] > r["shipped"], (wname, band, r)
+            assert r["shipped"] < r["baseline_min"], (wname, band, r)
+            assert r["candidate"] < r["baseline_min"], (wname, band, r)
+            assert r["median"] > r["baseline_max"], (wname, band, r)
+            assert r["n_808"] == 10, (wname, band, r)
+    # M is the wide band and every answering setting clears its baseline there.
+    assert s["windows"]["2.0s"]["rows"]["M-10"]["n_808_above_baseline_max"] == 10
+    # Mn is the leakage-proof one: 8 of 10, which is the honest weaker figure.
+    assert s["windows"]["2.0s"]["rows"]["Mn-10"]["n_808_above_baseline_max"] == 8
+
+
+def test_the_committed_result_files_noise_floor_control_excludes_the_floor_artefact():
+    """The control's verdict, pinned. Our render is the NOISIER one in M
+    (-33.9 dB against the 808's -60.9), so the noise is added to the 808's
+    record; 27 dB of it must leave the 808's rho essentially where it was, or the
+    gap is a floor artefact and the finding is withdrawn."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    n = json.loads(RESULT.read_text())["noise_floor_control"]
+    assert n["cleaner"] == "ref", n
+    assert n["ours_floor_db"] > n["ref_floor_db"] + 20.0, n
+    assert n["noise_added_to"].startswith("808"), n
+    before = n["ref"]["rho_M"]["-10"]
+    after = n["runs"]["matched"]["rho_M"]["-10"]
+    assert abs(after - before) < 0.01, (before, after)
+    # And the gap it was meant to explain is 25x larger than what it moved.
+    assert n["gap_before"] > 0.2, n
+    assert abs(n["moved_toward_other_by"]) < 0.02 * n["gap_before"], n

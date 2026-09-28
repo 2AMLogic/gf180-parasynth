@@ -710,23 +710,35 @@ def detection_floor_fast(levels=(0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0)) -> l
     return rows
 
 
+FLOOR_TOL_DB = 0.5
+
+
 def match_floor(y, sr, target_db, band="M", *, trim_s=TRIM_S, seed=11) -> tuple:
     """Add white noise to `y` until its `band` floor sits at `target_db` re that
     band's peak. Bisects on the noise amplitude and returns (record, amplitude,
     achieved_db).
 
-    Why this exists: our renders are numerically noiseless (the shipped kit's M
-    floor is -266 dB re its peak) and the Fischer recordings are not (CY5025's
-    is -61 dB). A Schroeder curve is a floor-subtracted integral, so a residual
-    floor is the most plausible way an apparatus could manufacture a longer
-    apparent tail for the 808 than for us. `noise_floor_control()` uses this to
-    put the 808's own floor level onto OUR render and re-measure: if rho moves
-    toward the 808's, the finding is an artefact of the recordings' noise."""
+    REFUSES rather than answering when the target is at or below the record's
+    existing floor, because noise can only be ADDED: there is no amplitude that
+    makes a record quieter, and a bisection asked to find one converges silently
+    on zero and hands back the unmodified record. That is not a hypothetical --
+    it is wrong-then-right 6 of this module. `noise_floor_control` called this
+    function with a target 27 dB below our render's own floor and printed three
+    IDENTICAL rows (M floor -33.87 dB, rho 0.8709, three times) without a word.
+    A control whose three conditions all report the same number did not run, and
+    looked exactly like one that had."""
     y = np.asarray(y, dtype=np.float64)
+    have = measure(y, sr, trim_s=trim_s)["bands"][band]["floor_db_re_peak"]
+    if target_db <= have + FLOOR_TOL_DB:
+        raise Refused(
+            f"cannot raise the {band} floor to {target_db:.2f} dB: it is already "
+            f"{have:.2f} dB re peak, and noise can only be added. Run the control "
+            f"in the other direction (add noise to the quieter record).")
     rng = np.random.default_rng(seed)
     w = rng.standard_normal(len(y))
-    lo, hi = 1e-9, 1.0
-    for _ in range(60):
+    lo, hi = 1e-12, 100.0
+    a = got = None
+    for _ in range(80):
         a = math.sqrt(lo * hi)
         got = measure(y + a * w, sr, trim_s=trim_s)["bands"][band]["floor_db_re_peak"]
         if got < target_db:
@@ -735,30 +747,127 @@ def match_floor(y, sr, target_db, band="M", *, trim_s=TRIM_S, seed=11) -> tuple:
             hi = a
         if abs(got - target_db) < 0.05:
             return y + a * w, a, got
-    return y + a * w, a, got
+    raise Refused(f"the {band} floor did not converge on {target_db:.2f} dB "
+                  f"(reached {got:.2f} dB at amplitude {a:.3g})")
 
 
-def noise_floor_control(target_db=None, *, trim_s=TRIM_S) -> dict:
-    """THE control that decides whether the 808-vs-ours rho gap is real.
+def noise_floor_control(refs, setting="CY5025", *, trim_s=TRIM_S, band="M") -> dict:
+    """THE control that decides whether the 808-vs-ours rho gap is a floor
+    artefact. A Schroeder curve is a floor-SUBTRACTED backward integral, so a
+    residual floor is the most plausible way an apparatus could manufacture a
+    longer apparent tail for one record than another.
 
-    Our render, measured three ways: as rendered (floor ~ -266 dB), with white
-    noise brought up to the 808 CY5025 M-band floor, and with noise 10 dB
-    higher still. If the gap were the recordings' noise floor, adding that floor
-    to our render would move its rho up toward the 808's 1.12. Reported whatever
-    it shows."""
+    The direction of the test is DECIDED BY MEASUREMENT, not assumed. An earlier
+    version assumed our renders were numerically noiseless ("the shipped kit's M
+    floor is -266 dB re its peak") and the recordings noisy, and so only knew how
+    to add noise to ours. Both halves of that were wrong: our shipped render's M
+    floor is -33.87 dB re its peak and the 808 CY5025's is -60.88 dB, so the
+    RECORDING is 27 dB cleaner in this band than the thing we make. The control
+    therefore runs the only direction that is physically available -- noise is
+    added to whichever record is cleaner, until its floor matches the noisier
+    one's -- and REFUSES if asked for the impossible direction.
+
+    If the gap were a floor artefact, putting OUR floor onto the 808's record
+    would drag the 808's rho down toward ours. Reported whatever it shows, at
+    the matched floor and 10 dB noisier still."""
     x, sr = rc.render_drum_solo("CY")
-    y = rc.prepare(x, sr, side="shipped CY")
-    base = measure(y, sr, trim_s=trim_s)
-    out = {"target_db": target_db, "as_rendered": base}
-    if target_db is None:
-        return out
-    for tag, t in (("at_808_floor", target_db), ("ten_db_louder", target_db + 10.0)):
-        yn, amp, got = match_floor(y, sr, t, trim_s=trim_s)
-        m = measure(yn, sr, trim_s=trim_s)
-        out[tag] = {"noise_amp": amp, "achieved_floor_db": got,
-                    "rho_M": m["rho"]["M"], "rho_Mn": m["rho"]["Mn"],
-                    "M_floor_db": m["bands"]["M"]["floor_db_re_peak"]}
+    ours = rc.prepare(x, sr, side="shipped CY")
+    p = pathlib.Path(refs) / "cy8" / f"{setting}.WAV"
+    rx, rsr = cb._load(p)
+    ref = rc.prepare(rx, rsr, side=p.name)
+    m_ours = measure(ours, sr, trim_s=trim_s)
+    m_ref = measure(ref, rsr, trim_s=trim_s)
+    f_ours = m_ours["bands"][band]["floor_db_re_peak"]
+    f_ref = m_ref["bands"][band]["floor_db_re_peak"]
+    out = {"setting": setting, "band": band, "trim_s": trim_s,
+           "ours_floor_db": f_ours, "ref_floor_db": f_ref,
+           "cleaner": "ref" if f_ref < f_ours else "ours",
+           "ours": {"rho_M": m_ours["rho"]["M"], "rho_Mn": m_ours["rho"]["Mn"]},
+           "ref": {"rho_M": m_ref["rho"]["M"], "rho_Mn": m_ref["rho"]["Mn"]},
+           "runs": {}}
+    if f_ref < f_ours:
+        y, y_sr, target, who = ref, rsr, f_ours, "808 " + setting
+    else:
+        y, y_sr, target, who = ours, sr, f_ref, "shipped"
+    out["noise_added_to"] = who
+    for tag, t in (("matched", target), ("ten_db_noisier", target + 10.0)):
+        try:
+            yn, amp, got = match_floor(y, y_sr, t, band, trim_s=trim_s)
+        except Refused as e:
+            out["runs"][tag] = {"refused": str(e)}
+            continue
+        m = measure(yn, y_sr, trim_s=trim_s)
+        out["runs"][tag] = {"noise_amp": amp, "achieved_floor_db": got,
+                            "rho_M": m["rho"]["M"], "rho_Mn": m["rho"]["Mn"],
+                            "floor_db": m["bands"][band]["floor_db_re_peak"]}
+    # The assertion the control exists to make, computed rather than eyeballed:
+    # did the noisier floor move the cleaner record's rho toward the other one's?
+    a = out["runs"].get("matched", {}).get("rho_M", {}).get("-10")
+    b = (m_ref if f_ref < f_ours else m_ours)["rho"]["M"]["-10"]
+    other = (m_ours if f_ref < f_ours else m_ref)["rho"]["M"]["-10"]
+    if None not in (a, b, other):
+        out["moved_toward_other_by"] = round(abs(b - other) - abs(a - other), 4)
+        out["gap_before"] = round(abs(b - other), 4)
     return out
+
+
+def summarise(res: dict) -> dict:
+    """The comparison the scorecard quotes, computed from a `--out` JSON rather
+    than retyped: per window, per band, per depth, the 808's range across the
+    settings that ANSWER, the instrument's own skirt baseline, our two renders,
+    and the count of 808 settings lying above the baseline's top.
+
+    REFUSES a JSON whose `controls_pass` is not true. The tool that wrote the
+    file already refuses in that case, so this is the second gate on the same
+    precondition -- deliberately, because the JSON is what a reader picks up
+    later, by which time the console output is gone."""
+    if not res.get("controls_pass"):
+        raise Refused("this result file's own controls did not pass; it may not be summarised")
+    sb = res["skirt_baseline"]
+    out = {"commit": res.get("commit"), "sources_dirty": res.get("sources_dirty"), "windows": {}}
+    for wname, w in res["windows"].items():
+        answered = {k: m for k, m in w["fischer"].items() if "rho" in m}
+        rows = {}
+        for band in ("M", "Mn"):
+            for depth in ("-5", "-10"):
+                v = {k: m["rho"][band][depth] for k, m in answered.items()
+                     if m["rho"][band][depth] is not None}
+                if not v:
+                    continue
+                b = sb[f"{band}_{depth}"]
+                vals = sorted(v.values())
+                rows[f"{band}{depth}"] = {
+                    "n_808": len(v), "min": vals[0], "max": vals[-1],
+                    "median": float(np.median(vals)),
+                    "argmin": min(v, key=v.get), "argmax": max(v, key=v.get),
+                    "baseline_min": b["min"], "baseline_max": b["max"], "baseline_median": b["median"],
+                    "n_808_above_baseline_max": sum(1 for x in vals if x > b["max"]),
+                    "shipped": w["shipped"]["rho"][band][depth],
+                    "candidate": w.get("candidate", {}).get("rho", {}).get(band, {}).get(depth),
+                }
+        out["windows"][wname] = {
+            "n_answered": len(answered),
+            "n_refused_short": sum(1 for m in w["fischer"].values() if "refused" in m),
+            "n_settings": len(w["fischer"]),
+            "rows": rows,
+        }
+    return out
+
+
+def print_summary(res: dict) -> None:
+    s = summarise(res)
+    for wname, w in s["windows"].items():
+        print(f"\n=== {wname} window: {w['n_answered']}/{w['n_settings']} settings ACCEPT the window "
+              f"({w['n_refused_short']} refuse it as too short). How many then answer a given DEPTH "
+              f"is the (n) below, and it is smaller. ===")
+        print(f"  {'band/depth':11s} {'808 range (n of those that answer)':34s} {'median':>7s}  "
+              f"{'baseline':17s} {'shipped':>8s} {'cand':>8s}  above-baseline")
+        for k, r in w["rows"].items():
+            print(f"  {k:11s} {r['min']:.3f} ({r['argmin']}) - {r['max']:.3f} ({r['argmax']})"
+                  f"  {r['median']:7.3f}  {r['baseline_min']:.3f}-{r['baseline_max']:.3f}"
+                  f" ({r['baseline_median']:.3f}) {r['shipped']:8.3f} "
+                  f"{r['candidate'] if r['candidate'] is None else format(r['candidate'], '8.3f')}"
+                  f"  {r['n_808_above_baseline_max']}/{r['n_808']}")
 
 
 def _row(label, m) -> str:
@@ -781,7 +890,17 @@ def main(argv=None) -> int:
     ap.add_argument("--windows", default="1.5,2.0",
                     help="comma-separated common analysis windows, seconds. A comparison may only be "
                          "made inside one window; the Fischer set's record length varies with DECAY.")
+    ap.add_argument("--report", type=pathlib.Path, default=None,
+                    help="summarise an existing --out JSON instead of measuring anything")
     a = ap.parse_args(argv)
+
+    if a.report:
+        try:
+            print_summary(json.loads(a.report.read_text()))
+        except Refused as e:
+            print(f"REFUSED: {e}")
+            return 1
+        return 0
 
     if a.check:
         ok, lines = check()
@@ -825,15 +944,20 @@ def main(argv=None) -> int:
         print("  " + b.ljust(3) + "  " + "   ".join(
             f"rho({d:.0f}) {sb[f'{b}_{d:.0f}']['min']:.3f}-{sb[f'{b}_{d:.0f}']['max']:.3f} "
             f"(median {sb[f'{b}_{d:.0f}']['median']:.3f})" for d in (-5.0, -10.0, -20.0)))
-    anchor = res["windows"].get("2.0s", {}).get("fischer", {}).get("CY5025")
-    if anchor and "bands" in anchor:
-        res["noise_floor_control"] = noise_floor_control(anchor["bands"]["M"]["floor_db_re_peak"])
-        n = res["noise_floor_control"]
-        print("\nnoise-floor control (our render, 808's own M floor added):")
-        print(f"  as rendered      M floor {n['as_rendered']['bands']['M']['floor_db_re_peak']:8.2f} dB   "
-              f"rho(-10) {n['as_rendered']['rho']['M']['-10']}")
-        for tag in ("at_808_floor", "ten_db_louder"):
-            print(f"  {tag:16s} M floor {n[tag]['M_floor_db']:8.2f} dB   rho(-10) {n[tag]['rho_M']['-10']}")
+    if "2.0s" in res["windows"]:
+        n = res["noise_floor_control"] = noise_floor_control(a.refs, "CY5025")
+        print(f"\nnoise-floor control (M band, {n['setting']}, {n['trim_s']} s window):")
+        print(f"  as measured:  ours floor {n['ours_floor_db']:8.2f} dB  rho(-10) {n['ours']['rho_M']['-10']}"
+              f"   |   808 floor {n['ref_floor_db']:8.2f} dB  rho(-10) {n['ref']['rho_M']['-10']}")
+        print(f"  the {n['cleaner']} record is the cleaner one, so noise is added to {n['noise_added_to']}")
+        for tag, r in n["runs"].items():
+            if "refused" in r:
+                print(f"  {tag:16s} REFUSED: {r['refused']}")
+            else:
+                print(f"  {tag:16s} floor {r['floor_db']:8.2f} dB   rho(-10) {r['rho_M']['-10']}")
+        if "moved_toward_other_by" in n:
+            print(f"  gap in rho(-10) before {n['gap_before']}; the matched floor closed it by "
+                  f"{n['moved_toward_other_by']}")
 
     print("\nonset (click) sensitivity: " + ", ".join(
         f"click {r['click_db']} dB: rho {r['rho_M_-10']}, onset M-Ln {r['onset_excess_db']} dB"
