@@ -740,8 +740,8 @@ All three scenarios have zero device ERRs and zero missed samples.
 - **Start-red:** 9,593 mismatches and 0 writes.
 - **Controls:** all four were caught for their recorded reasons. The
   double-fire made 7 extra writes, one extra BD hit. The stuck trigger made
-  44 bad writes and 8,395 mismatches. The stuck switch left 162 host writes
-  missing. The tampered kit was REFUSED before simulation.
+  44 bad writes and 8,395 mismatches. The stuck switch lost all three host
+  writes and put 162 writes out of place. The tampered kit was REFUSED before simulation.
 
 **Wrong before right: two of seven results.**
 
