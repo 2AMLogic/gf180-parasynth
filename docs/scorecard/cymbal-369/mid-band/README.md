@@ -18,7 +18,7 @@ qualify is a **level** difference, and it points at a part of the circuit alread
 
 Nothing here changes the kit, the RTL or R1. No candidate is selected, promoted or rendered new.
 
-## 1. The instrument (`tools/cymbal_mid.py`, 33 tests in `tools/test_cymbal_mid.py`, 11 s)
+## 1. The instrument (`tools/cymbal_mid.py`, 36 tests in `tools/test_cymbal_mid.py`)
 
 A **separate module**, not a new entry in `cymbal_bands.BANDS`: plan098 forbids changing the frozen
 instrument mid-selection, so every L/Ln/H number and every committed scorecard JSON in this
@@ -29,7 +29,7 @@ EDT10 and late T20 with their refusals) and adds a band, two preconditions, and 
 | band | range | status |
 |---|---|---|
 | **M** | 891–1782 Hz (the 1.0 / 1.26 / 1.59 kHz thirds) | **qualified.** The low band's 3.45 kHz Q 6 band-pass is 18.7 dB down at 1782 Hz and 26.7 dB at 891 Hz — what Ln is to the high bands |
-| M25 | 891–2818 Hz (adds the 2.0 and 2.5 kHz thirds §6 quotes) | **reported, not separable.** The same skirt is only 8.4 dB down at 2818 Hz, and the leakage precondition below refuses M25 on most records for exactly that reason |
+| M25 | 891–2818 Hz (adds the 2.0 and 2.5 kHz thirds §6 quotes) | **reported, not separable.** The same skirt is only 8.4 dB down at 2818 Hz, and for exactly that reason the leakage precondition below refuses M25's EDT10 on **11 of the 25** Fischer records and its late T20 on **24 of 25** — including, in both cases, CY5025, the setting this step's whole comparison rests on |
 
 **Preconditions, asserted per record, that REFUSE rather than answer.**
 
@@ -81,16 +81,28 @@ number exists, is wrong, and is not quotable.
 
 **2. The band-pass-only leak prediction refused all 25 recordings, and that was the prediction's
 fault, not the machine's.** With the low band modelled as the bare 3.45 kHz Q 6 band-pass — chosen
-as the deliberate worst case — every Fischer CY file sits only **4.1–5.5 dB** above the predicted
-skirt and every one REFUSES. The machine's low path is the band-pass **then Hh1** (2.5 kHz Q 0.97,
-reference §10's "low" row), and Hh1's further ~8.6 dB of rejection over 0.9–1.8 kHz belongs in the
-prediction. So `low_has_hh1` became a **required** argument of `measure_mid` with no default,
+as the deliberate worst case — every Fischer CY file sits only **1.9–5.5 dB** above the predicted
+skirt over the EDT window (1.95 dB at CY1000, 5.46 dB at CY0050; six of the 25 are below 4 dB) and
+every one REFUSES against the 6 dB margin. The machine's low path is the band-pass **then Hh1**
+(2.5 kHz Q 0.97, reference §10's "low" row), and Hh1's further **8.63 dB** of rejection over
+0.9–1.8 kHz belongs in the prediction — with it every record clears the margin, the tightest of the
+25 sitting **10.6 dB** above the prediction against the 6 dB required. So `low_has_hh1` became a
+**required** argument of `measure_mid` with no default,
 because it decides whether the 808's own mid band is measurable at all; both predictions are
 reported for every record, and **the EDT10/T20 values themselves do not depend on it** — only
 whether they are qualified.
 
 Wrong-then-right rate for this step: **2 results that were wrong before they were right, both
 caught by a control or a paired estimator rather than by inspection.**
+
+**And 4 numbers in this document and in `cymbal_mid`'s docstrings that were wrong before they were
+right, none of them caught by anything mechanical — they were caught by a reviewer recomputing them
+from `mid-band.json`.** The measurements were correct throughout; the prose describing them was not
+(§2's leak range stated as 4.1–5.5 dB where the artefact says 1.9–5.5; the Hh1 delta stated as
+"~10 dB" in three docstrings where the integral gives 8.63; M25 said to refuse "on most records"
+where it refuses on 11 of 25; §3's TONE spread bounded at ≤ 7 % where it reaches 7.8 %). The one
+number that *was* pinned by a test — `skirt_db` at the band edges — did not drift. That is the
+lesson, and §6 lists the four tests that now pin the rest.
 
 ## 3. The external check: the recordings' own knob
 
@@ -106,7 +118,8 @@ monotone in DECAY in every TONE column** while being nearly independent of TONE:
 | 7.5 | 391 | 609 | 899 | 1131 | 1271 |
 | 10 | 399 | 632 | 924 | 1134 | 1278 |
 
-(ms. The spread across TONE at fixed DECAY is 29–85 ms, ≤ 7 %, against a 3.3× range over DECAY.)
+(ms. The spread across TONE at fixed DECAY is 29–85 ms — at worst **7.8 %** of its column, 45.7 ms
+on 586.0 ms at DECAY 2.5 — against a 3.3× range over DECAY.)
 
 This agrees with what `../README.md` §1 already found for Ln: **DECAY moves the low band's envelope
 too**, which contradicts §10's "DECAY changes only the middle band's RC". The mid band, whose
@@ -161,10 +174,15 @@ it is restored **too hard**, not that it should not be there.
 - **Does not support**: any claim about the *cause* of the level difference beyond "it is where Hh1
   acts and the shipped kit omits Hh1". Hh1 is the documented difference, not a demonstrated one —
   isolating it needs a render with Hh1 alone changed, which is a candidate, not a measurement.
-- **Does not support**: anything about 2.0–2.5 kHz. M25 refuses on most records, including the 808's
-  CY5025 (5.9 dB, just under the 6 dB margin), so the upper half of §6's 1–2.5 kHz span still has
-  **no** qualified decay measure. Widening M would not fix that: the skirt is 8.4 dB down there and
-  the content genuinely is mostly the low band's.
+- **Does not support**: anything about 2.0–2.5 kHz. The basis for that is the **band-level**
+  declaration in §1 — M25 is reported, not qualified for separation, because the low band's skirt is
+  only 8.4 dB down at 2818 Hz — plus the fact that **CY5025 itself refuses**, at 5.92 dB against the
+  6 dB margin, and CY5025 is the one setting every comparison in §4 is made at. It is **not** that
+  M25 refuses on most records: M25's EDT10 is qualified on **14 of the 25** and refused on 11, so a
+  per-record majority claim would be false (its *late T20* is the quantity refused on nearly all of
+  them, 24 of 25). Either way the upper half of §6's 1–2.5 kHz span has **no** qualified decay
+  measure at the setting the answer rests on. Widening M would not fix that: the skirt is 8.4 dB
+  down there and the content genuinely is mostly the low band's.
 - **Cannot catch**: two estimators biased the same way by the same cause. EDT10's own second
   estimator was built, measured (−36 %..+10 % scatter on planted exponentials, against the Schroeder
   EDT10's ≤ 9 %) and **demoted to a diagnostic** rather than made a gate, so EDT10 rests on its
@@ -183,8 +201,22 @@ it is restored **too hard**, not that it should not be there.
   change was the rimshot's drive (#388), the cymbal is untouched by it, and **every field of both
   runs is identical** — which is a checked statement rather than an assumed one.
 - `tools/cymbal_mid.py`, `tools/test_cymbal_mid.py` — the instrument and its known answers,
-  controls and refusals. `python3 -m pytest tools/test_cymbal_mid.py -q` is 11 s and is picked up by
-  `make verify`'s broad pytest job.
+  controls and refusals. `python3 -m pytest tools/test_cymbal_mid.py -q` needs **no reference
+  corpus, no render and no simulator** — every signal is planted by the test file, and the only
+  external input is `mid-band.json` in this directory — so it is cheap enough for a broad pytest
+  job. **No wall-clock figure is quoted here on purpose:** it was first stated as 11 s, and a
+  reviewer measured 154 s for the same 33 tests on a different machine and Python. The load-bearing
+  property is that it needs no external input, not a duration.
+- **The four numbers in this document that drifted are now pinned to the artefact**, in the
+  `the committed artefact vs. the prose` section of `tools/test_cymbal_mid.py`:
+  `test_the_documented_bp_only_over_leak_range_is_the_artefacts_range` (§2's 1.9–5.5 dB and the
+  10.6 dB tightest with-Hh1 over-leak), `test_m25_is_refused_on_a_minority_of_records_not_most_of_them`
+  (§1 and §5's 11-of-25) and `test_the_documented_tone_spread_at_fixed_decay_is_the_artefacts_spread`
+  (§3's 29–85 ms and 7.8 %); the 8.63 dB Hh1 delta is pinned to ±0.02 dB by
+  `test_hh1_changes_the_leak_prediction_by_8_63_db_and_must_be_declared`, which previously allowed
+  ±2 dB and so let "~10 dB" stand in three docstrings. These are ordinary tests rather than
+  `docs/claim-markers.md` markers because `tools/check_doc_claims.py` reads only `docs/*.md`, and a
+  marker nothing evaluates is worse than none.
 - Reproduce: `python3 tools/cymbal_mid.py --fischer --renders --out <path>` (≈9 min, most of it
   candidate 3's level calibration; `--no-candidate` drops it to ≈4 min).
 

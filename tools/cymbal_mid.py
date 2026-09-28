@@ -50,15 +50,18 @@ TWO PRECONDITIONS, ASSERTED PER RECORD, THAT REFUSE RATHER THAN ANSWER.
      measured energy in that same window times the analytic response of the low path -- the
      3.45 kHz Q 6 band-pass, THEN Hh1 (2.5 kHz Q 0.97) if the record under test has Hh1. Which
      applies is a required argument, `low_has_hh1`, not a default: the 808 and any candidate that
-     restores Hh1 have it, the shipped kit does not, and it moves the prediction by ~10 dB over
+     restores Hh1 have it, the shipped kit does not, and it moves the prediction by 8.63 dB over
      0.9-1.8 kHz. Both numbers are reported for every record.
      6 dB rather than the 3 dB "energy ratio" convention: 3 dB is the threshold for calling two
      energies different, and here the neighbour must be not merely smaller but subordinate.
 
      THIS IS THE PRECONDITION THAT DECIDED THE ANSWER. Run with the band-pass alone, all 25 808
-     recordings REFUSE: their 1-1.8 kHz sits only 4.1-5.5 dB above what the band-pass skirt alone
-     predicts. The machine's actual path has Hh1's extra rejection in it, and then they clear the
-     margin. The shipped kit, which omits Hh1, is 10.5 dB clear either way -- it has independent
+     recordings REFUSE: over the EDT window their 1-1.8 kHz sits only 1.9-5.5 dB above what the
+     band-pass skirt alone predicts (1.95 dB at CY1000, 5.46 dB at CY0050 -- so every record is
+     under the 6 dB margin, and six of the 25 by more than 2 dB). The machine's actual path has
+     Hh1's extra rejection in it, and then every record clears the margin: the tightest sits
+     10.6 dB above the prediction, against the 6 dB required.
+     The shipped kit, which omits Hh1, is 10.5 dB clear either way -- it has independent
      content at 1-1.8 kHz that the 808 does not.
 
 A SECOND ESTIMATOR, ON DIFFERENT ARITHMETIC (`two_window_t20`). Two adjacent equal windows of
@@ -173,9 +176,9 @@ def skirt_leak_db(band, with_hh1, n=4001):
     over the analytic response on a log-frequency grid.
 
     `with_hh1` is REQUIRED, not defaulted, because getting it wrong is the difference between a
-    measurement and a refusal: with the band-pass alone the 808's own M band sits only 4.1-5.5 dB
+    measurement and a refusal: with the band-pass alone the 808's own M band sits only 1.9-5.5 dB
     above this prediction and every one of the 25 recordings REFUSES, while the machine's actual
-    low path -- band-pass THEN Hh1 -- puts Hh1's ~10 dB of extra rejection over 0.9-1.8 kHz into
+    low path -- band-pass THEN Hh1 -- puts Hh1's 8.63 dB of extra rejection over 0.9-1.8 kHz into
     the prediction and the same records clear the margin. A default here would silently pick one.
 
     Assumes the source driving the path is flat in frequency over 0.9-5 kHz, which six beating
@@ -353,7 +356,7 @@ def measure_mid(y, sr, low_has_hh1, bands=None) -> dict:
     `low_has_hh1` DECLARES whether the record's low band has Hh1 (the 2.5 kHz Q 0.97 high-pass
     after its VCA) behind its 3.45 kHz band-pass -- True for the 808 and for any candidate that
     restores Hh1, False for the shipped kit, which omits it. It has no default on purpose: it
-    changes the leakage prediction by ~10 dB over 0.9-1.8 kHz, which is the difference between
+    changes the leakage prediction by 8.63 dB over 0.9-1.8 kHz, which is the difference between
     measuring the 808's mid band and refusing it. Both values are reported per band
     (`over_leak_*_db` under the declaration, `*_bp_only_db` with the band-pass alone) so a reader
     can see the effect of the declaration rather than take it on trust.

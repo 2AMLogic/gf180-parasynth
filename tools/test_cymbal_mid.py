@@ -10,6 +10,7 @@ Each control states its paired opposite explicitly. #376 is the precedent: the c
 crosstalk control could not fail, and passed vacuously for weeks.
 """
 import functools
+import json
 import math
 import pathlib
 import sys
@@ -131,14 +132,19 @@ def test_predicted_leak_is_larger_for_the_wider_band_and_both_are_well_below_L()
     assert -30.0 < lm < -15.0, lm
 
 
-def test_hh1_changes_the_leak_prediction_by_about_ten_db_and_must_be_declared():
+def test_hh1_changes_the_leak_prediction_by_8_63_db_and_must_be_declared():
     """The declaration that decided this module's answer. Hh1 (2.5 kHz, Q 0.97, reference §10's
     "low" row) sits after the low band's VCA in the machine, and its extra rejection over
     0.9-1.8 kHz is what makes the 808's own mid band separable: with the band-pass alone all 25
-    recordings refuse. So the two predictions must differ by about 10 dB, and `low_has_hh1` must
-    have NO default -- a silently-chosen one would silently decide the result."""
+    recordings refuse. So the two predictions must differ by 8.63 dB, and `low_has_hh1` must
+    have NO default -- a silently-chosen one would silently decide the result.
+
+    The bound is 0.02 dB, not the abs=2.0 it was first written with: at abs=2.0 the docstrings
+    could say (and did say) "~10 dB" while the integral gave 8.63, and no test noticed. This is
+    the number three docstrings and `../../docs/scorecard/cymbal-369/mid-band/README.md` quote,
+    so it is pinned to the precision they quote it at."""
     assert cm.skirt_leak_db(cm.MID["M"], False) - cm.skirt_leak_db(cm.MID["M"], True) == \
-        pytest.approx(10.0, abs=2.0)
+        pytest.approx(8.63, abs=0.02)
     # a 2-pole high-pass: -12 dB/octave asymptote, and -3 dB at its corner for Q ~ 0.71..1
     assert 20 * math.log10(float(cm.hp2_mag(2500.0))) == pytest.approx(20 * math.log10(0.97), abs=0.01)
     assert (20 * math.log10(float(cm.hp2_mag(100.0))) - 20 * math.log10(float(cm.hp2_mag(200.0)))) == \
@@ -361,3 +367,73 @@ def test_boxcar_same_matches_numpy_convolve():
         p = rng.standard_normal(9001) ** 2
         assert np.allclose(cm._boxcar_same(p, k), np.convolve(p, np.ones(k) / k, mode="same"),
                            rtol=0, atol=1e-12), k
+
+
+# ------------------------------------------------------- the committed artefact vs. the prose
+#
+# These do not measure anything: they assert that the numbers `cymbal_mid`'s docstrings and
+# `docs/scorecard/cymbal-369/mid-band/README.md` STATE are the numbers in the artefact committed
+# beside them. Four such numbers had drifted when this PR was first reviewed -- "4.1-5.5 dB" for a
+# range that is 1.95-5.46, "~10 dB" for 8.63, "most records" for 11 of 25, "<= 7 %" for 7.8 % --
+# and none of them was pinned by anything, while `skirt_db` at the band edges was and had not
+# drifted. `docs/failure-modes.md` mechanism 4: a claim in a document is not a fact.
+
+ARTEFACT = pathlib.Path(__file__).resolve().parents[1] / \
+    "docs/scorecard/cymbal-369/mid-band/mid-band.json"
+
+
+def _artefact():
+    """Load the committed run. A MISSING artefact FAILS rather than skips: a skipped check looks
+    exactly like a passing one (CLAUDE.md, "preconditions assumed rather than asserted")."""
+    assert ARTEFACT.is_file(), f"the committed run is missing: {ARTEFACT}"
+    d = json.loads(ARTEFACT.read_text())
+    assert len(d["fischer"]) == 25, len(d["fischer"])
+    return d
+
+
+def test_the_documented_bp_only_over_leak_range_is_the_artefacts_range():
+    """`skirt_leak_db`'s docstring, the module docstring and README §2 all state this range as the
+    reason `low_has_hh1` has no default. It is the spread of `over_leak_edt_bp_only_db` over the
+    25 Fischer records -- 1.9-5.5 dB, not the 4.1-5.5 first written -- and what it has to support
+    is that ALL 25 are under the 6 dB margin, i.e. all 25 refuse with the band-pass alone."""
+    f = _artefact()["fischer"]
+    bp = sorted(v["M"]["over_leak_edt_bp_only_db"] for v in f.values())
+    assert (min(bp), max(bp)) == pytest.approx((1.95, 5.46), abs=0.01), bp
+    assert 1.9 <= min(bp) < 2.0 and 5.4 < max(bp) <= 5.5, "the stated 1.9-5.5 dB no longer brackets"
+    assert max(bp) < cm.LEAK_MARGIN_DB, "the 'all 25 refuse with the band-pass alone' claim"
+    # ...and with the machine's actual low path every record clears it: the tightest sits 10.57 dB
+    # above the prediction against the 6 dB required, which is the figure README §2 quotes as 10.6.
+    with_hh1 = [v["M"]["over_leak_edt_db"] for v in f.values()]
+    assert min(with_hh1) == pytest.approx(10.57, abs=0.01), min(with_hh1)
+
+
+def test_m25_is_refused_on_a_minority_of_records_not_most_of_them():
+    """README §1 and §5 said M25 is refused "on most records". It is not: EDT10 is qualified on 14
+    of the 25 and refused on 11. What IS refused on nearly all of them is M25's LATE T20 (1 of 25),
+    and what the §5 conclusion actually rests on is that CY5025 -- the anchor of the whole
+    comparison -- is among the 11, at 5.92 dB against the 6 dB margin."""
+    f = _artefact()["fischer"]
+    edt = [k for k, v in f.items() if v["M25"]["edt10_qualified_ms"] is not None]
+    t20 = [k for k, v in f.items() if v["M25"]["t20_qualified_ms"] is not None]
+    assert (len(edt), len(t20)) == (14, 1), (sorted(edt), sorted(t20))
+    assert f["CY5025"]["M25"]["edt10_qualified_ms"] is None
+    assert f["CY5025"]["M25"]["over_leak_edt_db"] == pytest.approx(5.92, abs=0.01)
+    # M, by contrast, is qualified on all 25 -- which is the band-level distinction README §1 draws.
+    assert all(v["M"]["edt10_qualified_ms"] is not None for v in f.values())
+
+
+def test_the_documented_tone_spread_at_fixed_decay_is_the_artefacts_spread():
+    """README §3's table footnote. The Fischer keys are CY<TONE><DECAY> with 00/10/25/50/75
+    standing for 0/10/2.5/5.0/7.5 on each knob, so a fixed DECAY is a fixed key SUFFIX. The spread
+    across TONE there is 29-85 ms and at worst 7.8 % of its column -- not the <= 7 % first
+    written, which the DECAY 2.5 column (45.7 ms on 586.0) breaks."""
+    f = _artefact()["fischer"]
+    knobs = ("00", "10", "25", "50", "75")
+    spreads, pct = [], []
+    for decay in knobs:
+        col = [f[f"CY{tone}{decay}"]["M"]["edt10_qualified_ms"] for tone in knobs]
+        spreads.append(max(col) - min(col))
+        pct.append(100.0 * (max(col) - min(col)) / min(col))
+    assert (min(spreads), max(spreads)) == pytest.approx((28.85, 85.37), abs=0.01), spreads
+    assert max(pct) == pytest.approx(7.80, abs=0.01), pct
+    assert max(pct) <= 7.8, "the stated <= 7.8 % bound no longer holds"
