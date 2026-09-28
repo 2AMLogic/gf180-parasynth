@@ -5,6 +5,7 @@ The simulation itself is exercised by rtl-sketch/verify_deadline.py and its
 VOICE_LATE_DONE control; these tests pin the part that turns monitor rows into
 a verdict, because a deadline checker's only failure that matters is a false
 green."""
+import json
 import os
 import re
 import sys
@@ -405,8 +406,14 @@ def test_the_relaxation_is_refused_when_its_premise_is_not_asserted(tmp_path, mo
 
 
 def test_the_drum_rtl_is_the_rtl_the_argument_was_made_on():
-    """Pinned so a drum-section change is SEEN (the relaxation silently turning
-    off would make every drum value change red again, with no reason given)."""
+    """Pinned so a drum-section RTL change is SEEN. Without the pin it would go
+    unseen: an identical stimulus returns "identical" before stimulus_binding
+    ever looks at the RTL, so the relaxation's precondition could be broken
+    with nothing red. The busy-window precondition cannot stand in for this --
+    it is measured on the capture's old values, so it corroborates the latency
+    argument without protecting it. Deliberate cost: ANY edit to these drum RTL
+    files turns this test red, even when the stimulus is unchanged, until the
+    argument is re-read and DRUM_LATENCY_ARGUED_AT updated."""
     assert vd.drum_rtl_hashes() == vd.DRUM_LATENCY_ARGUED_AT
 
 
@@ -438,7 +445,7 @@ def test_the_controls_can_fail(tmp_path, monkeypatch):
     tests above red."""
     cur, _, _ = vd.SPI_SCENARIOS["stress-saw"](False)
     inc = REFUSED_EDITS["voice-inc-value"]([list(c) for c in cur])
-    rec = __import__("json").load(open(os.path.join(RUNS, CLEAN + ".json")))
+    rec = json.load(open(os.path.join(RUNS, CLEAN + ".json")))
     rows = _committed_sched(CLEAN)
     assert vd.stimulus_binding(cur, inc, sched_rows=rows, record=rec)[0] == "refused"
     monkeypatch.setattr(vd, "schedule_projection", lambda cmds: [c[:4] for c in cmds])   # values ignored

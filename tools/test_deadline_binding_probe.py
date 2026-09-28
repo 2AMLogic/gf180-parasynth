@@ -1,5 +1,6 @@
 """The simulator-free parts of tools/deadline_binding_probe.py: its perturbations
 land where they say, and its verdict table has no false green (#443)."""
+import json
 import os
 import sys
 
@@ -18,7 +19,7 @@ def _cmds():
 def test_each_probe_changes_what_it_claims_and_the_binding_predicts_it():
     cur = _cmds()
     rows = p.base_rows()
-    rec = __import__("json").load(open(os.path.join(p.ROOT, "docs", "deadline", "runs", p.RECORD + ".json")))
+    rec = json.load(open(os.path.join(p.ROOT, "docs", "deadline", "runs", p.RECORD + ".json")))
     want = {"drum-426": "drum-values", "drum-all-params": "drum-values", "drum-env-ctl": "drum-values",
             "voice-inc": "refused"}
     assert set(want) == set(p.PROBES)

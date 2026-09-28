@@ -389,6 +389,15 @@ SPI_SCENARIOS = {"threesaw-f1cal": sc_threesaw_f1cal, "stress-saw": sc_stress_sa
 # the binding falls back to byte-exact: a changed drum section must be argued
 # again, not inherited.
 #
+# They are not equally strong. The busy-window check reads the capture's
+# schedule, which ran on the capture's OLD drum values, so it can corroborate
+# the argument but cannot speak for the new values. The RTL-hash pin is what
+# actually protects the argument's precondition: the argument is about the
+# drum RTL's control flow, and the pin is what notices when that RTL changes.
+# The cost is deliberate: tools/test_verify_deadline.py pins these hashes, so
+# ANY edit to these four files turns the deadline suite red, even with a
+# byte-identical stimulus, until someone re-reads them and updates the pin.
+#
 # NOT COVERED, and it never was: the capture is bound to the stimulus, not to
 # the RTL that ran it. The byte-exact binding had the same gap.
 #: sha256[:12] of the drum-section RTL at which the latency argument above was
