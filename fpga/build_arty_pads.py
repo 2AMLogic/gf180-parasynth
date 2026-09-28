@@ -59,6 +59,11 @@ SCENARIOS = ("phases", "switch", "reset")
 sha = build_arty.sha
 
 
+def _key(p: Path) -> str:
+    p = Path(p)
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+
+
 def sources():
     """The wrapper, the pads front end and its generated ROM, then the release
     image's core list minus its wrapper (build_arty.sources()[0])."""
@@ -142,7 +147,7 @@ def validate_verification(directory: Path, paths: list) -> dict:
                 or comp.get("writes_seen", 0) < 1 or comp.get("presses", 0) < 1):
             raise ValueError(f"pads verification {sc}: no complete, passing comparison")
         for src in paths:
-            key = str(src.relative_to(ROOT)) if src.is_relative_to(ROOT) else str(src)
+            key = _key(src)
             if rec.get("source_sha256", {}).get(key) != sha(src):
                 raise ValueError(f"pads verification {sc}: source differs: {key}")
         transcript = path.with_name("transcript.txt")
@@ -224,7 +229,7 @@ def main(argv=None):
     report = {"state": "REFUSED", "top": TOP, "part": PART, "configuration": CONFIG,
               "release_image": False, "hardware_playback_tested": False,
               "external_io_timing_qualified": False,
-              "source_sha256": {str(p.relative_to(ROOT)): sha(p) for p in files + [XDC]}}
+              "source_sha256": {_key(p): sha(p) for p in files + [XDC]}}
     report_path = directory / "report.json"
 
     def save():
@@ -240,10 +245,10 @@ def main(argv=None):
         report["verification"] = validate_verification(args.verification.resolve(), files)
         snapshots = []
         for path in sources() + [XDC] + roms():
-            dest = directory / "inputs" / path.relative_to(ROOT)
+            dest = directory / "inputs" / _key(path)
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, dest)
-            if sha(dest) != report["source_sha256"][str(path.relative_to(ROOT))]:
+            if sha(dest) != report["source_sha256"][_key(path)]:
                 raise ValueError("source changed during snapshot: " + str(path))
             snapshots.append(dest)
         n = len(sources())

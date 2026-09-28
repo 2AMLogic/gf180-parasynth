@@ -43,7 +43,9 @@ Scenarios:
 
 Negative controls (each must turn this red for its recorded reason):
   PADS_DEBOUNCE_DOUBLE  no lockout: the release bounce of the held press
-                        fires an extra hit (extra writes at the port).
+                        fires an extra hit (extra writes at the port). The
+                        chord is placed so that extra hit cannot be masked
+                        by a later busy drop (see sc_phases).
   PADS_TRIG_STUCK       the stop's bit is never dropped: the second press of a
                         button writes no 0->1 edge and is SILENT (wire mismatch).
   PADS_SRC_STUCK        the source select ignores SW0: host mode's writes never
@@ -219,7 +221,13 @@ def sc_phases():
             s.press(v, latch(f, phase), 150 * CPF)
     f1 = f0 + 16 * 300
     s.press(0, latch(f1, 40), 1500 * CPF, bounce=True)       # held, bouncing: one hit
-    f2 = f1 + 1500 + 400
+    # The chord must start after any BD busy window a SPURIOUS release press
+    # could open (release + bounce + last_off + LAT = ~1500 + 100 + 192 + 704).
+    # At f1 + 1900 it did not: a double-firing debouncer's extra BD hit made the
+    # chord's BD press a busy drop, the write count came out equal, and the
+    # PADS_DEBOUNCE_DOUBLE control went red only through misplaced frames --
+    # the wrong reason (measured, 2026-09-28; extra_writes 0, hit_frame_bad 16).
+    f2 = f1 + 1500 + 1100
     for v in range(4):                                       # the chord: all four at once
         s.pin(v, latch(f2, 60), 1)
         s.pin(v, latch(f2, 60) + 100 * CPF, 0)
