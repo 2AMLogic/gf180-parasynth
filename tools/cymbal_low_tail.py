@@ -85,22 +85,62 @@ REFUSALS (a depth is refused, not answered)
 THE PRECONDITION THAT IS ASSERTED, NOT ASSUMED
 ----------------------------------------------
 A Schroeder curve is computed from the END of the record backwards, so its
-depths are NOT comparable between records of different length. The Fischer CY
-files are 2.013 s; `run_case.render_drum_solo("CY")` is 3.6 s. Every record is
-therefore trimmed to the same TRIM_S = 2.0 s window after t = 0 before anything
-is measured, and a record that cannot supply it REFUSES.
+depths are NOT comparable between records of different length. Every record is
+therefore trimmed to the same window after t = 0 before anything is measured,
+and a record that cannot supply that window REFUSES.
 
-Honest note on how much that trim buys: on the shipped render the untrimmed
+**And the Fischer set does not have one length.** An earlier draft of this
+docstring said "the Fischer CY files are 2.013 s", which is false and would have
+made every cross-DECAY comparison in this module an artefact. Measured, all 25
+files (`test_the_real_corpus_record_lengths_force_two_windows`), the record
+length is a function of the DECAY code alone:
+
+    DECAY   00      25      50      75      10
+    length  1.501 s 2.001 s 2.501 s 3.501 s 4.001 s
+
+So NO single window covers all 25 settings, and this module reports TWO frozen
+windows, never mixed inside one comparison:
+
+    1.5 s   all 25 settings answer -- the only window in which the whole knob
+            grid can be reported (#369 acceptance 3, "report every setting")
+    2.0 s   20 of 25 answer; the five DECAY 00 files REFUSE. This is the window
+            that reaches the deeper depths, and it is the one CY5025 (the D14A
+            anchor, a DECAY 25 file at 2.001 s) is measured in.
+
+`run_case.render_drum_solo("CY")` is 3.6 s, so our renders support both.
+
+Honest note on how much the trim buys: on the shipped render the untrimmed
 (3.6 s) and trimmed (2.0 s) readings differ by 0.6 % at T_M(-10) (517.3 ->
 514.4 ms), because the floor is subtracted and there is almost no energy left
 out there to integrate. The trim is therefore a cheap precondition rather than a
 large correction -- but the SHORT side of it is not cheap: the same record cut
 to 1.5 s reads 500 ms, and the `refuse-short-record` property below is what
-stops the tool answering at all in that case.
+stops the tool answering at all when the window is not there.
+
+RHO'S ZERO POINT IS NOT 1.0, AND THAT IS MEASURED
+-------------------------------------------------
+`skirt_baseline()` sweeps tau_l over 0.10-0.60 s on records whose ONLY
+891-2828 Hz content is the 3.45 kHz Q 6 band-pass's own skirt -- i.e. records
+with, by construction, no separate low component at all. rho should read 1.0
+there. It does not:
+
+    band  rho(-10) over the sweep   rho(-5) over the sweep
+    M     0.943 - 1.017             0.914 - 1.012
+    Mn    0.892 - 0.985             0.847 - 0.916
+
+Mn's zero point sits near 0.92 at -10 dB and near 0.87 at -5 dB, roughly 8-13 %
+below 1.0. The reason is physical rather than a defect: the skirt's own spectrum
+falls steeply below 3.45 kHz, so Mn's copy of the low band's envelope is more
+noise-limited than M's, and its floor-subtracted curve crosses each depth
+slightly early. A reading of rho_Mn = 0.92 on a real record is therefore NOT
+evidence that the 1-2.5 kHz band dies before the low band; it is the
+instrument's own zero. Every downward claim in this module is stated as a
+DEPARTURE from this baseline at the same tau, not as a distance from 1.0
+(wrong-then-right 5 below is exactly that mistake).
 
 CONTROLS: `--check`
 -------------------
-Seven named properties over synthetic strikes with planted time constants, and a
+Eight named properties over synthetic strikes with planted time constants, and a
 properties x defects matrix over six injected defects (each of which must turn
 at least one property red) plus one transformation asserted BLIND by
 construction and verified to stay blind. `--check` exits non-zero if any
@@ -108,8 +148,14 @@ property fails on the clean measurement, if any defect is caught by nothing, or
 if the blind transformation moves anything. `main()` runs it BEFORE measuring
 any record and REFUSES to report a result if it does not pass.
 
-Wrong-then-right rate of this module: 2 of the numbers below were wrong before
-they were right, and the controls caught both rather than inspection.
+Both DIRECTIONS are properties, which matters because the direction our own
+renders read is the downward one: `rho-tracks` is a planted SLOWER low component
+(rho must rise) and `rho-inverts` is a planted FASTER one (rho must fall below
+its own skirt baseline). A suite with only the first would have had no control
+at all on the sign it is actually used to report.
+
+Wrong-then-right rate of this module: 5 of the numbers below were wrong before
+they were right, and the controls caught all five rather than inspection.
   1. `t_edt` said a Schroeder curve falls 2*8.686/tau dB/s, so every planted
      time was half what it should have been; `edt-known` failed on the first
      run. See `t_edt`'s docstring.
@@ -118,6 +164,25 @@ they were right, and the controls caught both rather than inspection.
      that could never fire before the end-margin guard. The cases were rebuilt
      until each defect had a property it genuinely moved, and the redundant
      guard was deleted rather than kept as a control that cannot fail.
+  3. The onset-confound control was a single-sample impulse whose amplitude was
+     swept 0 -> 0.4. A one-sample impulse carries so little ENERGY next to a
+     1 s strike that rho(-10) moved by 0.0001 across the whole sweep: the
+     control could not fail. It is now a 0.2 ms broadband burst specified in
+     dB relative to the record's own first-second energy (`click_db`), and the
+     test asserts both that rho moves DOWN and that the onset share moves by
+     more than 3 dB -- so the confound is bounded rather than assumed away.
+  4. "The Fischer CY files are 2.013 s." They are 1.501-4.001 s and the length
+     is set by the DECAY code (table above). A single 2.0 s window would have
+     silently refused the five DECAY 00 settings; a single 1.5 s window would
+     have thrown away half of DECAY 10's record with no note. Caught by writing
+     the corpus length down as a test rather than as prose.
+  5. The paired negative for the downward direction asserted rho_M(-10) < 0.92
+     on a planted FASTER low component and read 0.944 -- a FAIL. The assertion
+     was wrong, not the instrument: it measured distance from 1.0, and 1.0 is
+     not this instrument's zero (see the section above). Restated as a departure
+     from the same-tau skirt baseline, the same record reads 0.966 against a
+     baseline of 0.996, and `detection_floor_fast()` now states how large a
+     faster component must be before that departure is visible at all.
 """
 from __future__ import annotations
 
@@ -288,8 +353,11 @@ def _bandnoise(lo, hi, n, seed, fs=SR):
                    np.random.default_rng(seed).standard_normal(n))
 
 
+CLICK_S = 2e-4          # 0.2 ms: short enough to be broadband over 0.9-2.9 kHz
+
+
 def synth(*, tau_l=0.35, tau_m=None, a_m=0.0, tau_h=0.05, a_h=0.5,
-          click=0.0, floor=0.0, dur=3.0, seed=7, sr=SR):
+          click_db=None, floor=0.0, dur=3.0, seed=7, sr=SR):
     """A three-band strike with every constant planted.
 
     low band   3.45 kHz Q 6 skirt noise x exp(-t/tau_l). Its own skirt is the
@@ -299,8 +367,13 @@ def synth(*, tau_l=0.35, tau_m=None, a_m=0.0, tau_h=0.05, a_h=0.5,
                deliberately separate low component, the thing the 808 might
                have and we might not.
     high band  7.1 kHz Q 6 skirt noise x exp(-t/tau_h) at `a_h`.
-    click      a single-sample impulse at t = 0 of this amplitude: the onset
-               confound, broadband and therefore biggest in the widest band.
+    click_db   a CLICK_S (0.2 ms) broadband burst at t = 0, scaled so that its
+               energy is this many dB relative to the record's own first-second
+               energy: the onset confound. Specified in energy, not amplitude,
+               because a single-sample impulse -- what an earlier revision used
+               -- carries so little energy next to a 1 s strike that it moved
+               rho by 0.0001 over a 20x amplitude sweep. That control could not
+               fail (wrong-then-right 3 of this module).
     floor      additive white noise at this amplitude.
     """
     n = int(dur * sr)
@@ -310,8 +383,13 @@ def synth(*, tau_l=0.35, tau_m=None, a_m=0.0, tau_h=0.05, a_h=0.5,
     if a_m > 0.0:
         y = y + a_m * _bandnoise(891.0, 2828.0, n, seed + 2, sr) * np.exp(-t / (tau_m or tau_l))
     y = y / float(np.max(np.abs(y)))
-    if click:
-        y[0] += click
+    if click_db is not None:
+        nc = max(1, int(CLICK_S * sr))
+        c = np.random.default_rng(seed + 4).standard_normal(nc)
+        e1 = float(np.sum(y[:int(ENERGY_S * sr)] ** 2))
+        c *= math.sqrt(e1 * 10 ** (click_db / 10.0) / float(np.sum(c * c)))
+        y[:nc] = y[:nc] + c
+        y = y / float(np.max(np.abs(y)))
     if floor:
         y = y + floor * np.random.default_rng(seed + 3).standard_normal(n)
     return rc.prepare(np.concatenate([np.zeros(sr // 20), y]), sr, side="synthetic"), sr
@@ -336,7 +414,7 @@ def t_edt(tau, depth=-10.0):
 # --------------------------------------------------------------------------
 # properties and the injected defects that must turn them red
 # --------------------------------------------------------------------------
-PROPERTIES = ("rho-tracks", "skirt-blind", "edt-known", "depth-monotone",
+PROPERTIES = ("rho-tracks", "rho-inverts", "skirt-blind", "edt-known", "depth-monotone",
               "refuse-truncated", "refuse-short-record", "floor-subtracted")
 DEFECTS = ("FORWARD_INTEGRAL", "WIDE_M", "SWAP_BANDS", "NO_TRIM",
            "NO_TRUNC_GUARD", "NO_FLOOR_SUB")
@@ -364,8 +442,20 @@ def _case(name):
 
 def _build(name):
     if name == "slow_m":
-        # A planted M component decaying 2.5x slower than the low band.
+        # A planted M component decaying 2.5x slower than the low band. At
+        # tau_m = 0.875 s the 2.0 s window supports M down to -10 dB and Mn only
+        # to -5; the deeper depths REFUSE, which is the end-margin guard being
+        # right rather than a defect. `rho-tracks` therefore reads M at -10.
+        # The same ratio scaled into the window's measurable range (tau_l 0.15,
+        # tau_m 0.375) answers all six depths in both bands and is the known
+        # answer `test_rho_reads_a_planted_slower_low_component` uses.
         return synth(tau_l=0.35, tau_m=0.875, a_m=0.35)
+    if name == "fast_m":
+        # The paired OPPOSITE of `slow_m`, and the direction our own renders
+        # read: a planted M component decaying 3.5x FASTER than the low band, at
+        # a level (a_m = 1.0) that adds only 1.2 dB to the M band's own energy.
+        # Judged against `skirt_only`'s rho at the SAME tau_l, never against 1.0.
+        return synth(tau_l=0.35, tau_m=0.10, a_m=1.0)
     if name == "skirt_only":
         return synth(tau_l=0.35, a_m=0.0)
     if name == "single":
@@ -412,7 +502,16 @@ def properties(*, defect=None) -> dict:
 
     y, sr = _case("skirt_only")
     m = measure(scale * y, sr, defect=d)
-    out["skirt-blind"] = _tf(m["rho"]["M"]["-10"] or 0.0, 0.90, 1.10)
+    base = m["rho"]["M"]["-10"] or 0.0
+    out["skirt-blind"] = _tf(base, 0.90, 1.10)
+
+    # The DOWNWARD direction, judged against the line above at the same tau_l --
+    # not against 1.0, which is not this instrument's zero (wrong-then-right 5).
+    y, sr = _case("fast_m")
+    m = measure(scale * y, sr, defect=d)
+    fast = m["rho"]["M"]["-10"]
+    out["rho-inverts"] = ((fast is not None and base > 0.0 and fast <= base - 0.05),
+                          None if fast is None else round(fast - base, 4))
 
     y, sr = _case("single")
     m = measure(scale * y, sr, defect=d)
@@ -484,21 +583,30 @@ def check() -> tuple[bool, list[str]]:
 # --------------------------------------------------------------------------
 # against the recordings and our renders
 # --------------------------------------------------------------------------
-def fischer(refs: pathlib.Path, settings=None) -> dict:
+def fischer(refs: pathlib.Path, settings=None, *, trim_s=TRIM_S) -> dict:
+    """Every requested Fischer CY file, or a REFUSED entry for the ones whose
+    record is shorter than `trim_s`. The Fischer set's record length is a
+    function of the DECAY code -- 1.501 s at DECAY 00, 2.001 at 25, 2.501 at 50,
+    3.501 at 75 and 4.001 at 10 -- so NO single window covers all 25, and the
+    two frozen windows this module reports (1.5 s, which every file supports,
+    and 2.0 s, which 20 of 25 support) are never mixed in one comparison."""
     out = {}
     for s in (settings or [f"CY{t}{d}" for t in cb.CODES for d in cb.CODES]):
         p = refs / "cy8" / f"{s}.WAV"
         x, sr = cb._load(p)
-        out[s] = measure(rc.prepare(x, sr, side=p.name), sr)
+        try:
+            out[s] = measure(rc.prepare(x, sr, side=p.name), sr, trim_s=trim_s)
+        except Refused as e:
+            out[s] = {"refused": str(e)}
     return out
 
 
-def shipped() -> dict:
+def shipped(*, trim_s=TRIM_S) -> dict:
     x, sr = rc.render_drum_solo("CY")
-    return measure(rc.prepare(x, sr, side="shipped CY"), sr)
+    return measure(rc.prepare(x, sr, side="shipped CY"), sr, trim_s=trim_s)
 
 
-def candidate() -> dict:
+def candidate(*, trim_s=TRIM_S) -> dict:
     """The #369 candidate at the shipped setting, through the same calibration
     and render path `tools/cymbal_candidate_eval.py` uses (so the candidate
     measured here is the candidate that tool reports on). ~2 min."""
@@ -506,32 +614,35 @@ def candidate() -> dict:
     import cymbal_candidate_eval as ce
     cal = ce.calibrate()
     y, sr = cc.render(ce.kit_with_levels(cal["amps"]), "CY")
-    return measure(rc.prepare(y, sr, side="candidate CY"), sr)
+    return measure(rc.prepare(y, sr, side="candidate CY"), sr, trim_s=trim_s)
 
 
-def onset_sensitivity(levels=(0.0, 0.02, 0.05, 0.1, 0.2, 0.4)) -> list[dict]:
+def onset_sensitivity(levels=(None, -30.0, -20.0, -13.0, -10.0, -6.0)) -> list[dict]:
     """How far a broadband click at t = 0 can move rho, and what it costs in the
-    onset-energy share that the same measurement reports for every record. This
-    bounds the one confound rho's early depths have: a click is broadband, so it
-    lands in M (1937 Hz wide) harder than in Ln (1200 Hz wide) and drags rho
-    DOWN. If a click large enough to explain the 808-vs-ours gap would also show
-    up as an onset share the records do not have, the click explanation is
-    excluded -- and if it would not, that has to be said."""
+    onset-energy share that the same measurement reports for every record.
+
+    This bounds the one confound rho's shallow depths have. A click is
+    broadband, so it lands in M (1937 Hz wide) harder than in Ln (1200 Hz wide)
+    and drags rho DOWN -- so it can only ever explain a rho BELOW 1, never one
+    above. And it cannot do so invisibly: the same measurement reports each
+    band's first-5-ms energy share, so a click large enough to matter has to
+    appear there too."""
     rows = []
     for c in levels:
-        y, sr = synth(tau_l=0.35, a_h=0.5, click=c)
+        y, sr = synth(tau_l=0.35, a_h=0.5, click_db=c)
         m = measure(y, sr)
-        rows.append({"click": c,
+        rows.append({"click_db": c,
                      "rho_M_-10": m["rho"]["M"]["-10"],
                      "onset_excess_db": m["onset_excess_db"]["M"],
                      "M_onset_share_db": m["bands"]["M"]["onset_share_db"]})
     return rows
 
 
-def detection_floor(levels=(0.0, 0.02, 0.05, 0.1, 0.2, 0.35, 0.7)) -> list[dict]:
+def detection_floor(levels=(0.0, 0.05, 0.1, 0.2, 0.35, 0.5)) -> list[dict]:
     """The smallest planted M component (tau 2.5x the low band's) that rho(-10)
     can see, expressed in the M band's own energy -- the instrument's floor,
-    stated rather than assumed."""
+    stated rather than assumed, and the thing that turns a measured rho into a
+    size for whatever the 808 has that we do not."""
     base = measure(*_case("skirt_only"))
     e0 = base["bands"]["M"]["energy_j"]
     rows = [{"a_m": 0.0, "M_energy_vs_skirt_db": 0.0, "rho_M_-10": base["rho"]["M"]["-10"]}]
@@ -544,7 +655,115 @@ def detection_floor(levels=(0.0, 0.02, 0.05, 0.1, 0.2, 0.35, 0.7)) -> list[dict]
     return rows
 
 
+SKIRT_TAUS = (0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.50, 0.60)
+
+
+def skirt_baseline(taus=SKIRT_TAUS) -> dict:
+    """rho on records that have NO separate low component at all: their entire
+    891-2828 Hz content is the 3.45 kHz Q 6 band-pass's own skirt, which carries
+    the low band's envelope and nothing else. rho ought to read 1.0 for every
+    tau. It does not, and this is the instrument's measured zero point rather
+    than a number anyone chose -- see the module docstring. Reported beside every
+    real reading, because a downward claim smaller than this is not a claim."""
+    rows, out = [], {}
+    for tau in taus:
+        m = measure(*synth(tau_l=tau, a_m=0.0))
+        rows.append({"tau_l": tau,
+                     **{f"rho_{b}_{d:.0f}": m["rho"][b][f"{d:.0f}"]
+                        for b in ("M", "Mn") for d in (-5.0, -10.0, -20.0)}})
+    out["rows"] = rows
+    for b in ("M", "Mn"):
+        for d in (-5.0, -10.0, -20.0):
+            v = [r[f"rho_{b}_{d:.0f}"] for r in rows if r[f"rho_{b}_{d:.0f}"] is not None]
+            out[f"{b}_{d:.0f}"] = {"min": min(v), "max": max(v), "median": float(np.median(v)),
+                                   "n": len(v), "refused": len(rows) - len(v)}
+    return out
+
+
+def detection_floor_fast(levels=(0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0)) -> list[dict]:
+    """The DOWNWARD twin of `detection_floor`, and the one that matters for our
+    own renders, because ours read rho below their skirt baseline rather than
+    above it.
+
+    A planted M component decaying 3.5x FASTER than the low band (tau 0.10 s
+    against 0.35 s), swept in level, against the same-tau skirt baseline. The
+    two columns are the departure from that baseline, so a measured departure on
+    a real record can be converted into a size. `d_rho` is signed and must be
+    <= 0; `M_energy_vs_skirt_db` is what the same component costs in the M
+    band's own first-second energy.
+
+    The asymmetry this reports is the reason Mn is quoted beside M everywhere:
+    Mn is about 3x more sensitive downward than M (at a_m = 1.0, M departs 0.12
+    from its baseline and Mn departs 0.33), because M is dominated by the skirt
+    it shares with the low band and Mn is not."""
+    base = measure(*_case("skirt_only"))
+    e0 = base["bands"]["M"]["energy_j"]
+    b_m, b_mn = base["rho"]["M"]["-10"], base["rho"]["Mn"]["-10"]
+    rows = []
+    for a in levels:
+        m = base if a == 0.0 else measure(*synth(tau_l=0.35, tau_m=0.10, a_m=a))
+        r_m, r_mn = m["rho"]["M"]["-10"], m["rho"]["Mn"]["-10"]
+        rows.append({"a_m": a,
+                     "M_energy_vs_skirt_db": round(10 * math.log10(m["bands"]["M"]["energy_j"] / e0), 2),
+                     "rho_M_-10": r_m, "d_rho_M": None if r_m is None else round(r_m - b_m, 4),
+                     "rho_Mn_-10": r_mn, "d_rho_Mn": None if r_mn is None else round(r_mn - b_mn, 4)})
+    return rows
+
+
+def match_floor(y, sr, target_db, band="M", *, trim_s=TRIM_S, seed=11) -> tuple:
+    """Add white noise to `y` until its `band` floor sits at `target_db` re that
+    band's peak. Bisects on the noise amplitude and returns (record, amplitude,
+    achieved_db).
+
+    Why this exists: our renders are numerically noiseless (the shipped kit's M
+    floor is -266 dB re its peak) and the Fischer recordings are not (CY5025's
+    is -61 dB). A Schroeder curve is a floor-subtracted integral, so a residual
+    floor is the most plausible way an apparatus could manufacture a longer
+    apparent tail for the 808 than for us. `noise_floor_control()` uses this to
+    put the 808's own floor level onto OUR render and re-measure: if rho moves
+    toward the 808's, the finding is an artefact of the recordings' noise."""
+    y = np.asarray(y, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    w = rng.standard_normal(len(y))
+    lo, hi = 1e-9, 1.0
+    for _ in range(60):
+        a = math.sqrt(lo * hi)
+        got = measure(y + a * w, sr, trim_s=trim_s)["bands"][band]["floor_db_re_peak"]
+        if got < target_db:
+            lo = a
+        else:
+            hi = a
+        if abs(got - target_db) < 0.05:
+            return y + a * w, a, got
+    return y + a * w, a, got
+
+
+def noise_floor_control(target_db=None, *, trim_s=TRIM_S) -> dict:
+    """THE control that decides whether the 808-vs-ours rho gap is real.
+
+    Our render, measured three ways: as rendered (floor ~ -266 dB), with white
+    noise brought up to the 808 CY5025 M-band floor, and with noise 10 dB
+    higher still. If the gap were the recordings' noise floor, adding that floor
+    to our render would move its rho up toward the 808's 1.12. Reported whatever
+    it shows."""
+    x, sr = rc.render_drum_solo("CY")
+    y = rc.prepare(x, sr, side="shipped CY")
+    base = measure(y, sr, trim_s=trim_s)
+    out = {"target_db": target_db, "as_rendered": base}
+    if target_db is None:
+        return out
+    for tag, t in (("at_808_floor", target_db), ("ten_db_louder", target_db + 10.0)):
+        yn, amp, got = match_floor(y, sr, t, trim_s=trim_s)
+        m = measure(yn, sr, trim_s=trim_s)
+        out[tag] = {"noise_amp": amp, "achieved_floor_db": got,
+                    "rho_M": m["rho"]["M"], "rho_Mn": m["rho"]["Mn"],
+                    "M_floor_db": m["bands"]["M"]["floor_db_re_peak"]}
+    return out
+
+
 def _row(label, m) -> str:
+    if "rho" not in m:
+        return f"{label:14s} REFUSED: {m['refused']}"
     r, rn = m["rho"]["M"], m["rho"]["Mn"]
     f = lambda v: " REF " if v is None else f"{v:5.3f}"
     return (f"{label:14s} " + " ".join(f(r[f'{d:.0f}']) for d in DEPTHS) + "  | Mn "
@@ -559,6 +778,9 @@ def main(argv=None) -> int:
     ap.add_argument("--check", action="store_true", help="the properties x defects matrix only")
     ap.add_argument("--all-settings", action="store_true", help="all 25 Fischer CY files, not just CY5025")
     ap.add_argument("--candidate", action="store_true", help="also render and measure the #369 candidate (~2 min)")
+    ap.add_argument("--windows", default="1.5,2.0",
+                    help="comma-separated common analysis windows, seconds. A comparison may only be "
+                         "made inside one window; the Fischer set's record length varies with DECAY.")
     a = ap.parse_args(argv)
 
     if a.check:
@@ -578,25 +800,49 @@ def main(argv=None) -> int:
         return 1
 
     settings = None if a.all_settings else ["CY5025"]
-    res["fischer"] = fischer(pathlib.Path(a.refs), settings)
-    res["shipped"] = shipped()
-    if a.candidate:
-        res["candidate"] = candidate()
+    res["windows"] = {}
+    for trim_s in (float(w) for w in a.windows.split(",")):
+        w = {"fischer": fischer(pathlib.Path(a.refs), settings, trim_s=trim_s),
+             "shipped": shipped(trim_s=trim_s)}
+        if a.candidate:
+            w["candidate"] = candidate(trim_s=trim_s)
+        res["windows"][f"{trim_s:.1f}s"] = w
+        print(f"\n=== common analysis window {trim_s:.1f} s ===")
+        print(f"{'record':14s} " + " ".join(f"{d:>5.0f}" for d in DEPTHS)
+              + "  | Mn at the same depths" + " " * 20 + "| onset M-Ln")
+        for s, m in w["fischer"].items():
+            print(_row("808 " + s, m))
+        print(_row("shipped", w["shipped"]))
+        if a.candidate:
+            print(_row("candidate", w["candidate"]))
     res["onset_sensitivity"] = onset_sensitivity()
     res["detection_floor"] = detection_floor()
+    res["detection_floor_fast"] = detection_floor_fast()
+    res["skirt_baseline"] = skirt_baseline()
+    sb = res["skirt_baseline"]
+    print("\nthe instrument's own zero point (records with NO separate low component):")
+    for b in ("M", "Mn"):
+        print("  " + b.ljust(3) + "  " + "   ".join(
+            f"rho({d:.0f}) {sb[f'{b}_{d:.0f}']['min']:.3f}-{sb[f'{b}_{d:.0f}']['max']:.3f} "
+            f"(median {sb[f'{b}_{d:.0f}']['median']:.3f})" for d in (-5.0, -10.0, -20.0)))
+    anchor = res["windows"].get("2.0s", {}).get("fischer", {}).get("CY5025")
+    if anchor and "bands" in anchor:
+        res["noise_floor_control"] = noise_floor_control(anchor["bands"]["M"]["floor_db_re_peak"])
+        n = res["noise_floor_control"]
+        print("\nnoise-floor control (our render, 808's own M floor added):")
+        print(f"  as rendered      M floor {n['as_rendered']['bands']['M']['floor_db_re_peak']:8.2f} dB   "
+              f"rho(-10) {n['as_rendered']['rho']['M']['-10']}")
+        for tag in ("at_808_floor", "ten_db_louder"):
+            print(f"  {tag:16s} M floor {n[tag]['M_floor_db']:8.2f} dB   rho(-10) {n[tag]['rho_M']['-10']}")
 
-    print(f"\n{'record':14s} " + " ".join(f"{d:>5.0f}" for d in DEPTHS) + "  | Mn at the same depths"
-          + " " * 20 + "| onset M-Ln")
-    for s, m in res["fischer"].items():
-        print(_row("808 " + s, m))
-    print(_row("shipped", res["shipped"]))
-    if a.candidate:
-        print(_row("candidate", res["candidate"]))
     print("\nonset (click) sensitivity: " + ", ".join(
-        f"click {r['click']}: rho {r['rho_M_-10']}, onset M-Ln {r['onset_excess_db']} dB"
+        f"click {r['click_db']} dB: rho {r['rho_M_-10']}, onset M-Ln {r['onset_excess_db']} dB"
         for r in res["onset_sensitivity"]))
-    print("detection floor: " + ", ".join(
+    print("detection floor (a SLOWER planted low component): " + ", ".join(
         f"+{r['M_energy_vs_skirt_db']} dB -> rho {r['rho_M_-10']}" for r in res["detection_floor"]))
+    print("detection floor (a FASTER one, vs the skirt baseline): " + ", ".join(
+        f"+{r['M_energy_vs_skirt_db']} dB -> drho M {r['d_rho_M']} / Mn {r['d_rho_Mn']}"
+        for r in res["detection_floor_fast"]))
 
     res["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                                    capture_output=True, text=True).stdout.strip()
