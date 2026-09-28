@@ -637,9 +637,9 @@ pinout is measured, and its first-edge pin is **TMS**, not VREF.
 **What is specific to this repository:**
 
 - **Builds run through the checked build scripts**, never a bare
-  `vivado -source`: `fpga/build_arty.py` for the release wrapper and
-  `fpga/build_arty_sd.py` for the demo image. Each one binds its digital
-  proofs before Vivado runs and gates the routed reports afterwards.
+  `vivado -source`: `fpga/build_arty.py` for the release wrapper. It
+  binds its digital proofs before Vivado runs and gates the routed reports
+  afterwards.
 - **Ship the tree as a `git bundle`** and run the script on the box inside
   a venv with numpy and scipy, with `settings64.sh` sourced. Copy results
   back with `tar` over ssh; `scp` with `{a,b}` braces does not expand on
@@ -660,4 +660,5 @@ pinout is measured, and its first-edge pin is **TMS**, not VREF.
   that. The readiness-probe race seen then is
   [Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
 - Superseded since 2026-09-27: the 2am note's box has Vivado 2025.1 at
-  `/tools/Xilinx/2025.1`, and the demo-image builds of #408 ran on it.
+  `/tools/Xilinx/2025.1`, and the note records a successful `blink` build
+  there on 2026-09-27.
