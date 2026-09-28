@@ -291,23 +291,50 @@ is the state, not a plan, and each row names the step that resolved it.
 | Short band: 7.1 kHz → VCA → **Hh3** | **in** and resolved: 2-pole 10323 Hz Q 5.64 **plus a 1-pole at 5195 Hz**, not at the same corner (step 3). No longer borrows the closed hat's 11.7 kHz high-pass |
 | The level stage's +6 dB/oct | **in**, as a 1-pole differentiator cornered at 18972 Hz, *with* the tone stage against it (steps 4/5 — alone it makes things worse, §10 says so) |
 | The **TONE knob** | **in**, from VR4's wiper with nothing fitted (steps 9/10). Rendered, and it moves H − L by 1.13 dB where the machine moves 7.3 |
-| The **inter-band balance** | **NOT in, and it is the whole remaining gap.** #396 refused on the VCA drives; step 8's joint box admits 0 balances; step 10 cannot even state a requirement, because the VCAs' clipping breaks superposition |
+| The **inter-band balance** | **NOT in, and it is the whole remaining gap** — but step 11 removes the VCA drives as its explanation: the three stages are component-identical bar one resistor each, and the short band's +38.23 dB would need a 1.79 MΩ collector load where the schematic prints 39 kΩ |
 | The **DECAY knob's** own law | not started. VR2 is on the other rail and no step has read it |
 
 **Budget, exact.** 16 → **20 modes, 25 paths**, `N_NUMS` 11, no `HP3` decode. The operator's accepted padding to 32
 covers the area — but **mode 19 is the last mode contract 15.1 can address** (its `num` register is `A_RESET`), so
 there is no margin for a 21st, and any further section needs a register-map revision rather than area.
 
-**The one question that is left, and every route now terminates on it:**
+> **Step 11 is `vca-drive/README.md`**, and it asks the one question step 10 named — *what sets the three swing
+> VCAs' drive levels?* — off SN p.13, hash-pinned, with `--verify-source` and a refusal. **The premise is wrong,
+> and that is the finding: there are not three drives.** The three stages are component-identical (the same
+> 0.022 µF coupling cap, the same **2 MΩ series** base bias from B1 with no ground leg — so the same Ic and the
+> same gm — the same 100 Ω emitter degeneration and the same series diode), and **Q16 and Q17 hang on the same
+> node**, IC3 pin 7, so their signal drives are equal by construction. The only per-band element is the collector
+> load: **R94 39 k / R90 33 k / R104 22 k**, i.e. **+4.97 and +3.52 dB** re the low band, or **+8.72 / +7.26 dB**
+> as an upper bound that loads the low band with Hh1's measured input impedance and leaves the high bands
+> unloaded. **The short band's +38.23 dB gap would need a 1.79 MΩ collector load and the schematic prints 39 k**
+> — 33.26 dB short, a statement with no gain model in it at all. So the balance's missing factor is not in the
+> VCA section.
+>
+> The read is qualified by an external known answer on its *newest* part: the two band-passes' **input networks**
+> (C10/R52, C11/R55) are in no prior document here and set the filters' absolute gain, and solving both filters
+> with them reproduces W14b Figure 4's digitised peaks to **0.01 dB** — while f0 and Q are asserted blind to
+> those components and verified blind, so they cannot stand in for the check. Step 11 also corrects §10: its two
+> band-pass rows carried each other's reference designators (no value or f0 moves), and `werner_fig4.py` printed
+> the wrong capacitance beside the right ones. Wrong-then-right rate of step 11: **3**, and number 3 is a
+> designator test that **passed on the exact string it was written to catch** — #376's vacuous control in a new
+> coordinate.
+>
+> Two things it does not settle, both stated with the components: the three envelope generators' **peak collector
+> voltages** (the last per-band freedom inside the VCA section, and the next question), and the high bands' own
+> high-pass input loading, which is why the second convention is reported as a bound rather than an estimate.
 
-> **What sets the three swing VCAs' drive levels (Q16/Q17/Q18)?** Resolve it the way #390/#417 resolved VR4 —
-> nodal analysis off SN p.13's own resistor network, hash-pinned scan, `--verify-source`, and a refusal rather
-> than an answer if the scan does not match. Not by fitting a drive to a recording.
+**The one question that is left:**
 
-Until it is resolved, nothing about the band balance or the knobs' tracking can be promoted, and steps 7, 8 and 10
-each say so from a different direction. What can be done meanwhile is what step 10 forbade itself: isolate why the
-**low band leaks into H 6 dB above the short band's own contribution** (analysis skirt, its own chain, or the swing
-VCA's clipping harmonics — measured, not isolated), and #400's tail question.
+> **What are the three envelope generators' peak collector voltages?** All three reservoirs charge from Q19
+> through their own diode (D6/D7/D8), so the answer is plausibly "equal at the peak, different only in decay" —
+> but each sits behind a different smoothing network (R87+C37, R88+C39, R105+C45), and the collector's DC
+> operating point is what sets where each swing VCA clips. Same kind of read as step 11, same tool.
+
+Until the balance is resolved, nothing about it or the knobs' tracking can be promoted, and steps 7, 8 and 10 each
+say so from a different direction — step 11 narrows *where* the answer can be, it does not supply it. What can be
+done meanwhile is what step 10 forbade itself: isolate why the **low band leaks into H 6 dB above the short band's
+own contribution** (analysis skirt, its own chain, or the swing VCA's clipping harmonics — measured, not
+isolated), and #400's tail question.
 
 **Unchanged constraints for whatever comes next.**
 - Select on the 9 development settings; confirm on the 16 untouched ones, including CY2500; report all 25.
