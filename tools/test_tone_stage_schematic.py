@@ -449,3 +449,347 @@ def test_the_emitted_record_round_trips_and_pins_its_sources(evidence, tmp_path)
     assert len(blob["fitted_against"]["sha256"]) == 64
     assert len(blob["poles_hz"]) == 5
     assert blob["alpha_k1"] == ts.ALPHA_K1
+
+
+# ---------------------------------------------------------------------------
+# Component sensitivity, and the tolerance term the bound still does NOT carry
+# (#425). The table is published because no tolerance class is citable; these
+# are the checks that make it evidence rather than an output.
+#
+# The two identities below are the reason this is not an estimator calibrated
+# on our own model. Neither is derived from anything in this module: both are
+# properties of ANY resistor-capacitor network whose answer is a voltage RATIO.
+#
+#   1. IMPEDANCE SCALING. R -> lambda*R with C -> C/lambda leaves every
+#      impedance ratio, and hence H, exactly unchanged. So the resistors' and
+#      the capacitors' log-sensitivities must sum to the SAME number.
+#   2. FREQUENCY SCALING. H depends on the capacitors only through the products
+#      omega*C, so scaling every capacitor by lambda is identical to scaling
+#      the frequency by lambda. The capacitors' sensitivities must therefore
+#      sum to d(dB)/d(ln f) -- computed here by perturbing the FREQUENCY, a
+#      quantity no component perturbation touches.
+# ---------------------------------------------------------------------------
+
+
+SENS_CASES = [("Ht1", 3175.0), ("Ht2", 10079.0), ("Ht3", 10079.0),
+              ("Ht3", 3175.0), ("Ht1", 7100.0)]
+
+
+def test_the_sensitivity_table_covers_every_printed_component():
+    """All thirteen values read off SN p.13, and nothing else. A table missing
+    a component would understate every tolerance lever computed from it."""
+    assert set(ts.COMPONENT_KIND) == {
+        "C55", "R112", "R119", "VR4_TOTAL", "R125", "R129", "R120", "C56",
+        "C58", "R123", "C57", "R121", "C90"}
+    assert len(ts.RESISTORS) == 8 and len(ts.CAPACITORS) == 5
+    s = ts.sensitivity_db_per_pct(3175.0, "Ht1")
+    assert set(s) == set(ts.COMPONENT_KIND)
+    assert all(np.isfinite(v) for v in s.values())
+
+
+@pytest.mark.parametrize("name,f", SENS_CASES)
+def test_the_sensitivity_table_obeys_the_impedance_scaling_identity(name, f):
+    c = ts.component_sensitivity(f, name)["checks"]
+    scale = max(abs(c["sum_resistors_db_per_pct"]), 1e-12)
+    assert abs(c["impedance_scaling_residual_db_per_pct"]) < 1e-6 * scale + 1e-9
+
+
+@pytest.mark.parametrize("name,f", SENS_CASES)
+def test_the_sensitivity_table_obeys_the_frequency_scaling_identity(name, f):
+    c = ts.component_sensitivity(f, name)["checks"]
+    scale = max(abs(c["frequency_db_per_pct"]), 1e-12)
+    assert abs(c["frequency_scaling_residual_db_per_pct"]) < 1e-6 * scale + 1e-9
+    # and the frequency derivative is not itself ~0 here, which would make the
+    # identity above satisfiable by a table of zeros.
+    assert abs(c["frequency_db_per_pct"]) > 1e-4
+
+
+def test_control_the_two_identities_are_not_redundant_and_neither_is_vacuous():
+    """Rule 4's matrix, for a two-property check.
+
+    `DROP_C90` (a component missing from the table) moves BOTH. `PER_UNIT`
+    (log-sensitivity published without the per-cent conversion -- a 100x units
+    bug that would silently inflate every number in the record) leaves the
+    impedance identity BLIND, because scaling every entry by the same constant
+    preserves `sum(R) == sum(C)`, and is caught ONLY by the frequency identity.
+
+    So the second identity is load-bearing rather than a restatement of the
+    first, and that is asserted here rather than argued in prose.
+    """
+    m = ts.sensitivity_control_matrix(3175.0, "Ht1")
+    assert m["DROP_C90"] == {"impedance_scaling": "MOVED",
+                             "frequency_scaling": "MOVED"}
+    assert m["PER_UNIT_NOT_PER_PCT"] == {"impedance_scaling": "BLIND",
+                                         "frequency_scaling": "MOVED"}
+    # and the labels are not threshold luck: every cell is orders of magnitude
+    # from the line it is being judged against, in its own direction.
+    mar = ts.sensitivity_control_matrix(3175.0, "Ht1", margins=True)
+    assert mar["DROP_C90"]["impedance_scaling"] > 1e3
+    assert mar["DROP_C90"]["frequency_scaling"] > 1e3
+    assert mar["PER_UNIT_NOT_PER_PCT"]["frequency_scaling"] > 1e3
+    assert mar["PER_UNIT_NOT_PER_PCT"]["impedance_scaling"] < 1e-2
+
+
+@pytest.mark.parametrize("name,f", SENS_CASES)
+@pytest.mark.parametrize("tol_pct,lo,hi", [(1.0, 1.0, 1.005), (5.0, 1.0, 1.02)])
+def test_the_first_order_table_predicts_an_exact_corner(name, f, tol_pct, lo, hi):
+    """The derivative, validated against the solver it came from at a
+    perturbation 100-500x larger than the step it was measured with: every
+    component moved in its own worst direction and the network re-solved
+    exactly, with nothing linearised.
+
+    WRONG BEFORE IT WAS RIGHT, and the record of that is the point of this
+    docstring. The first version asserted `exact <= predicted` -- that the
+    first-order sum was a ceiling, which is the comfortable direction and the
+    one a reader assumes. It is false: curvature pushes the exact corner
+    ABOVE the linear sum, by up to 0.9 % at 5 % tolerance (measured
+    1.0002-1.0017x at 1 %, 1.0012-1.0092x at 5 % over these five pairs). So
+    `worst_case_db_per_pct` is a first-order lever and NOT a bound, and the
+    asymmetric window below says so in a form that must stay true.
+    """
+    s = ts.sensitivity_db_per_pct(f, name)
+    predicted = sum(abs(v) for v in s.values()) * tol_pct
+    step = tol_pct / 100.0
+    factors = {k: 1.0 + step * (1.0 if v > 0 else -1.0) for k, v in s.items()}
+    base = float(ts.db_at(np.array([f]), ts.ALPHA_K1, name)[0])
+    with ts.scaled_components(factors):
+        moved = float(ts.db_at(np.array([f]), ts.ALPHA_K1, name)[0])
+    exact = abs(moved - base)
+    assert lo <= exact / predicted <= hi, (name, f, tol_pct, exact, predicted)
+
+
+def test_scaled_components_restores_every_value_including_on_an_exception():
+    """The sensitivity table is measured by mutating the module's own
+    constants, so a leaked perturbation would silently poison every number
+    computed after it -- including the record's `db` column."""
+    before = {k: getattr(ts, k) for k in ts.COMPONENT_KIND}
+    with pytest.raises(RuntimeError):
+        with ts.scaled_components({k: 2.0 for k in ts.COMPONENT_KIND}):
+            assert ts.C90 == pytest.approx(2.0 * before["C90"])
+            raise RuntimeError("boom")
+    assert {k: getattr(ts, k) for k in ts.COMPONENT_KIND} == before
+    with pytest.raises(ValueError):
+        with ts.scaled_components({"R999": 2.0}):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# The finding: no tolerance class is citable, so none is carried
+# ---------------------------------------------------------------------------
+
+
+def test_the_dominant_components_are_few_and_named():
+    """#425's cheap half, answered: which of the thirteen the answer at each
+    band's own frequency actually depends on.
+
+    Four parts carry 99 % of Ht3's lever at 10079 Hz; C90 -- the shunt at the
+    output node -- is in all three families' dominant sets. These are the
+    committed measured values, so a component read or a rail assignment that
+    changed would land here rather than quietly re-ranking the table.
+    """
+    short = ts.component_sensitivity(10079.0, "Ht3")
+    assert set(short["dominant"]) == {"C90", "R112", "R119", "VR4_TOTAL"}
+    assert short["dominant_share"] > 0.99
+    low = ts.component_sensitivity(3175.0, "Ht1")
+    decay = ts.component_sensitivity(10079.0, "Ht2")
+    assert len(low["dominant"]) == 7 and len(decay["dominant"]) == 5
+    for cs in (short, low, decay):
+        assert "C90" in cs["dominant"]
+        # the two summaries answer different questions and must not collapse
+        # into each other: the adversarial corner is ~2x the independent one.
+        assert 1.8 < cs["worst_case_db_per_pct"] / cs["rss_db_per_pct"] < 2.6
+
+
+def test_the_lever_alone_is_larger_than_the_bound_that_is_carried(evidence):
+    """The reason #425 is not a footnote, before any tolerance class is
+    applied at all.
+
+    The published half-width is 0.004-0.034 dB. One per cent on all thirteen
+    parts is worth 0.26-0.33 dB at the same frequencies -- an order of
+    magnitude more at a tolerance nobody would call loose, and W14a's cited
+    class is 5-20x that (see
+    `test_the_unit_term_dwarfs_the_solution_bound_and_the_ratio_shrinks_it`).
+
+    (It still changes no verdict: the balance's refusal is bound by the
+    +39.8 dB VCA-drive gap, which is more than an order above even the unit
+    term. `test_the_bound_itself_is_unchanged_by_this_issue` asserts that the
+    number the balance reads did not move.)
+    """
+    data, _meta, _blob = evidence
+    stats = ts.residual_stats(data)
+    _, _, sigma, _ = ts.fit_alpha_k1_with_sigma(data)
+    for band, name, f in (("low", "Ht1", 3175.0), ("decay", "Ht2", 10079.0),
+                          ("short", "Ht3", 10079.0)):
+        carried = ts.resolved_bound_db(f, name, stats=stats,
+                                       sigma_alpha=sigma)["bound_db"]
+        lever = ts.component_sensitivity(f, name)["worst_case_db_per_pct"]
+        assert 0.2 < lever < 0.4, (band, lever)
+        assert lever > 5.0 * carried, (band, lever, carried)
+
+
+def test_the_service_notes_search_is_recorded_and_says_which_corpus_it_covered():
+    """The search that found nothing, kept because it is still true and still
+    the reason the class has to come from W14a rather than from SN p.13.
+
+    It is also the record of a wrong answer: read as "no class is citable" it
+    was wrong, because it covered ONE of the four sources this repository has
+    already read. So the constant is named for the corpus it searched, and
+    `why_it_is_kept` says that in the artifact rather than only here.
+    """
+    f = ts.SN_PRINTS_NO_TOLERANCE
+    assert f["citable_tolerance_class_in_this_source"] is None
+    assert f["source_sha256"] == ts.SN_PDF_SHA256
+    assert {1, 8, 13, 16} <= set(f["searched"])
+    for page, found in f["searched"].items():
+        assert isinstance(page, int) and isinstance(found, str) and found
+    assert "W14a" in f["conclusion"]
+
+
+def test_the_cited_tolerance_class_is_pinned_to_a_source_not_to_a_transcription():
+    """W14a section 11's sentence, with the URL and SHA-256 of the PDF it was
+    read from. `docs/tr808-reference.md` section 1.7 quotes the same sentence,
+    and quoting OUR quote would be the internal-consistency failure this
+    repository keeps making -- so the constant pins the paper."""
+    c = ts.TOLERANCE_CLASS
+    assert c["resistors_pct"] == 5.0 and c["capacitors_pct"] == 20.0
+    assert "+-20% capacitors" in c["quote"] and "+-5% resistors" in c["quote"]
+    assert c["url"].endswith(".pdf") and len(c["sha256"]) == 64
+    assert "W14a" in c["citation"]
+    # VR4 is NOT covered by it, and that is stated rather than assumed away
+    assert "VR4" in c["does_not_cover"]
+    assert ts.W14A_TOLERANCE_PCT["VR4_TOTAL"] is None
+    assert set(ts.W14A_TOLERANCE_PCT) == set(ts.COMPONENT_KIND)
+    for k, v in ts.W14A_TOLERANCE_PCT.items():
+        if k != "VR4_TOTAL":
+            assert v == (5.0 if ts.COMPONENT_KIND[k] == "R" else 20.0)
+
+
+def test_control_a_tolerance_bound_without_a_cited_class_is_refused():
+    """The failure this exists to prevent is a plausible tolerance picked
+    because it looked reasonable. The bound is computable -- it just may not be
+    computed from an uncited number, and REFUSED is not the same as absent."""
+    every = {k: 5.0 for k in ts.COMPONENT_KIND}
+    for citation in (None, "", "   "):
+        with pytest.raises(ts.ToleranceUncited):
+            ts.tolerance_bound_db(3175.0, "Ht1", tolerance_pct=every,
+                                  citation=citation)
+
+
+def test_control_a_tolerance_bound_missing_a_component_is_refused():
+    """A partial class would silently treat the rest as exact. An explicit
+    None must NOT refuse -- the two cases are different and the distinction is
+    load-bearing, because VR4 is genuinely uncited and the default class says
+    so out loud."""
+    partial = {k: 5.0 for k in ts.COMPONENT_KIND if k != "C90"}
+    with pytest.raises(ts.ToleranceUncited) as exc:
+        ts.tolerance_bound_db(3175.0, "Ht1", tolerance_pct=partial,
+                              citation="a hypothetical cited class")
+    assert "C90" in str(exc.value)
+
+    declared = {k: (None if k == "C90" else 5.0) for k in ts.COMPONENT_KIND}
+    got = ts.tolerance_bound_db(3175.0, "Ht1", tolerance_pct=declared,
+                                citation="a hypothetical cited class")
+    assert got["uncited"] == ["C90"]
+    assert "C90" in got["per_component_db"] or True
+    assert "C90" not in got["per_component_db"]
+    assert got["uncited_lever_db_per_pct"]["C90"] != 0.0
+
+
+def test_the_cited_class_produces_the_unit_to_unit_term_it_claims_to():
+    """The default path: W14a's class, applied to the twelve fixed parts, VR4
+    reported separately. The arithmetic is asserted against the sensitivity
+    table it is built from, so the number cannot drift from the levers."""
+    s = ts.sensitivity_db_per_pct(3175.0, "Ht1")
+    got = ts.tolerance_bound_db(3175.0, "Ht1")
+    cited = [k for k in s if k != "VR4_TOTAL"]
+    want = sum(abs(s[k]) * ts.W14A_TOLERANCE_PCT[k] for k in cited)
+    assert got["bound_db"] == pytest.approx(want, rel=1e-12)
+    assert got["rss_db"] == pytest.approx(
+        np.sqrt(sum((s[k] * ts.W14A_TOLERANCE_PCT[k]) ** 2 for k in cited)),
+        rel=1e-12)
+    assert got["uncited"] == ["VR4_TOTAL"]
+    assert got["citation"] == ts.TOLERANCE_CLASS["citation"]
+    # the adversarial corner is ~2x the independent one; quoting the wrong one
+    # is a factor-of-two error and the record carries both for that reason
+    assert 1.6 < got["bound_db"] / got["rss_db"] < 2.2
+
+
+def test_the_unit_term_dwarfs_the_solution_bound_and_the_ratio_shrinks_it():
+    """The two findings #425 exists to surface, as assertions.
+
+    1. The unit-to-unit term is THREE ORDERS above the half-width already
+       carried: 1.7-1.8 dB rss per band against 0.004-0.034 dB. A reader who
+       takes `bound_db` for the tone stage's total uncertainty is not slightly
+       wrong.
+    2. On the band RATIOS the balance actually reads it is smaller -- 0.90 and
+       1.07 dB -- because C90, the shunt every family shares and the largest
+       lever on each, mostly cancels in a difference. Quoting the per-band
+       number for an inter-band claim would over-state it by ~1.7x.
+    """
+    import cymbal_tone_realisation as ct  # noqa: PLC0415
+
+    per_band = {}
+    for band, name in ts.band_of().items():
+        t = ts.tolerance_bound_db(float(ct.CENTRE_HZ[band]), name)
+        per_band[band] = t["rss_db"]
+        assert 1.6 < t["rss_db"] < 1.9, (band, t["rss_db"])
+
+    ratios = ts.balance_tolerance_db()
+    assert set(ratios) == {"decay-low", "short-low"}
+    assert ratios["decay-low"]["rss_db"] == pytest.approx(0.901, abs=0.02)
+    assert ratios["short-low"]["rss_db"] == pytest.approx(1.071, abs=0.02)
+    for r in ratios.values():
+        assert r["rss_db"] < min(per_band.values())
+        assert r["uncited"] == ["VR4_TOTAL"]
+
+    # the cancellation is C90's, and that is asserted rather than described
+    c90_band = abs(ts.sensitivity_db_per_pct(10079.0, "Ht3")["C90"])
+    c90_ratio = abs(ratios["short-low"]["db_per_pct"]["C90"])
+    assert c90_ratio < 0.25 * c90_band
+
+
+def test_the_record_publishes_both_terms_and_keeps_them_apart(evidence):
+    """What the artifact gains: per-component levers and a cited unit-to-unit
+    term at every frequency the balance levels at, the ratio terms beside
+    them, and a top-level block that says which question each answers."""
+    data, _meta, _blob = evidence
+    rec = ts.balance_record(data)
+    ct_ = rec["component_tolerance"]
+    assert ct_["term_in_resolved_bound"] is False
+    assert ct_["class"]["sha256"] == ts.TOLERANCE_CLASS["sha256"]
+    assert set(ct_["on_the_balance"]) == {"decay-low", "short-low"}
+    assert ct_["service_notes_print_none"]["source_sha256"] == ts.SN_PDF_SHA256
+    for band in rec["bands"]:
+        for _f, entry in rec["bands"][band]["at_hz"].items():
+            sens = entry["sensitivity"]
+            assert set(sens["db_per_pct"]) == set(ts.COMPONENT_KIND)
+            assert sens["worst_case_db_per_pct"] > 0.0
+            assert sens["dominant"], "no dominant set computed"
+            assert set(sens["dominant"]) <= set(ts.COMPONENT_KIND)
+            unit = entry["unit_tolerance"]
+            # 45x (short band, whose own residual is the largest) to 619x
+            # (low band at 10079 Hz). The floor is what must not silently
+            # become 1x, which is what folding one into the other would look
+            # like from outside.
+            assert unit["rss_db"] > 40.0 * entry["bound_db"]
+            assert 1.5 < unit["rss_db"] < 2.4
+            assert unit["uncited"] == ["VR4_TOTAL"]
+
+
+def test_the_bound_itself_is_unchanged_by_this_issue(evidence):
+    """#425 changes the SIZE of nothing. The half-width is still exactly the
+    residual plus the alpha term -- publishing the sensitivity table must not
+    quietly add a third term to a number three orders of magnitude below the
+    one that binds the balance's refusal."""
+    data, _meta, _blob = evidence
+    stats = ts.residual_stats(data)
+    _, _, sigma, _ = ts.fit_alpha_k1_with_sigma(data)
+    rec = ts.balance_record(data)
+    for band in rec["bands"]:
+        name = rec["bands"][band]["family"]
+        for key, entry in rec["bands"][band]["at_hz"].items():
+            b = ts.resolved_bound_db(float(key), name, stats=stats,
+                                     sigma_alpha=sigma)
+            assert entry["bound_db"] == pytest.approx(b["bound_db"], abs=1e-12)
+            assert entry["bound_db"] == pytest.approx(
+                entry["residual_db"] + entry["alpha_db"], abs=1e-12)

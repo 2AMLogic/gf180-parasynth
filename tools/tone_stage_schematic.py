@@ -162,16 +162,54 @@ Both fall inside Figure 9's own extrapolation bounds (Ht1: [-54.5, -36.5] dB
 at 7.1 kHz; Ht2: [-31.1, -22.0] dB) -- an independent cross-check the
 schematic route did not need to pass to be usable, and did. See `--report`.
 
+UNIT-TO-UNIT TOLERANCE, WHICH `resolved_bound_db` STILL DOES NOT CARRY AND NOW
+QUANTIFIES (#425). That bound carries the solution's disagreement with Figure 9
+plus +-3 sigma on the one fitted parameter. It does NOT carry component
+tolerance, because it answers "is the network SN p.13 PRINTS solved?", and for
+that question the printed values are the definition of the thing rather than an
+uncertainty in it. "How much does a BUILT unit differ from that print?" is a
+second question, and it now has a cited answer:
+
+  * W14a section 11: "the voice circuits featured +-20% capacitors and +-5%
+    resistors" -- verified against the paper itself, not against this
+    repository's transcription of it (`TOLERANCE_CLASS`). It is the same
+    sentence `docs/tr808-reference.md` section 1.7 already turns into this
+    repository's +-10 % f0 and +-50 % Q tolerances, so it is the standard
+    already in force here.
+  * The service notes print no tolerance at all -- 16 pages, searched and
+    recorded in `SN_PRINTS_NO_TOLERANCE`. The first version of this section
+    concluded from that search alone that NO class was citable. That was
+    wrong, and the way it was wrong is the useful part: an absence is only as
+    strong as the corpus it was searched over, and the corpus was one source
+    of four.
+  * The numbers, at the frequencies the balance levels at: per band the spread
+    is 1.7-1.8 dB rss (2.4-3.3 dB adversarial), against a `bound_db` of
+    0.004-0.034 dB -- so this term is three orders of magnitude larger than
+    the one that was already carried. On the band RATIOS the balance actually
+    reads it is 0.90 dB (decay-low) and 1.07 dB (short-low), because C90, the
+    shunt every family shares, largely cancels in a difference.
+  * VR4's own tolerance is NOT covered by W14a's sentence (a pot is not a
+    fixed resistor) and is not printed anywhere, so it is carried as an
+    explicit None and reported with its lever rather than assumed into the
+    resistor class.
+
+`--sensitivity` prints the per-component table behind all of that, the two
+identities that check it (impedance scaling and frequency scaling, neither
+derived from anything in this module), and the controls that show neither
+identity is decorative.
+
 Usage:
     python3 tools/tone_stage_schematic.py --report   # the resolved numbers
     python3 tools/tone_stage_schematic.py --check     # the gate
     python3 tools/tone_stage_schematic.py --poles     # the shared pole set
+    python3 tools/tone_stage_schematic.py --sensitivity  # dB per % per part
     python3 tools/tone_stage_schematic.py --verify-source <sn.pdf>
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -615,11 +653,22 @@ def resolved_bound_db(f_hz, name, *, stats, sigma_alpha, k_sigma=ALPHA_K_SIGMA) 
         component value.
 
     WHAT IT DOES NOT COVER, said rather than left implied: those printed values
-    are taken as EXACT. A real board's resistors and capacitors carry tolerance,
-    and nothing in this repository measures a TR-808's actual VR4 network, so a
-    component-tolerance term would be invented rather than read. The bound below
-    is therefore "this network, at its nominal printed values, against the
-    evidence it was fitted to" -- not "a TR-808's tone stage, unit to unit".
+    are taken as EXACT. This bound is "this network, at its nominal printed
+    values, against the evidence it was fitted to" -- not "a TR-808's tone
+    stage, unit to unit".
+
+    #425 asked whether unit-to-unit tolerance should be added here. It should
+    not, and the reason is that it answers a different question: the printed
+    values are the DEFINITION of the network being solved, so their tolerance
+    is not an uncertainty in the solution. It is a real and much larger
+    uncertainty about which built 808 is meant, and it is now carried as its
+    own cited term -- `tolerance_bound_db` per family,
+    `balance_tolerance_db()` on the band ratios the balance reads, both from
+    W14a section 11 (`TOLERANCE_CLASS`). At the frequencies this record uses
+    that term is 0.90-1.07 dB on a ratio against the 0.004-0.034 dB half-width
+    below, so a reader who takes THIS number for the tone stage's total
+    uncertainty is wrong by two orders of magnitude, which is exactly what
+    #425 was filed to prevent.
     """
     f = float(f_hz)
     st = stats[name]
@@ -634,6 +683,476 @@ def resolved_bound_db(f_hz, name, *, stats, sigma_alpha, k_sigma=ALPHA_K_SIGMA) 
             "residual_db": st["max_db"], "alpha_db": spread,
             "k_sigma": float(k_sigma),
             "residual_measured_here": bool(st["window_hz"][0] <= f <= st["window_hz"][1])}
+
+
+# ---------------------------------------------------------------------------
+# Component sensitivity, and the unit-to-unit tolerance term (#425)
+#
+# THE TABLE COMES FIRST, AND ON PURPOSE. How much each printed value moves the
+# answer is computable with no tolerance figure at all, and it is the half that
+# survives whatever happens to the citation: a tolerance class is a number
+# somebody else read, while dB per % is a property of this network. It is
+# published for all thirteen parts at every frequency the record carries,
+# together with the lever sums a reader can multiply by their own class.
+#
+# The class this repository CAN cite is W14a section 11's "+-20% capacitors and
+# +-5% resistors" (`TOLERANCE_CLASS`, below `component_sensitivity`), and
+# `tolerance_bound_db` does the multiplication -- refusing rather than
+# answering when a part has no stated tolerance, so the capability cannot be
+# used to launder a number nobody read off anything.
+#
+# WHAT MAKES THE TABLE EVIDENCE RATHER THAN OUTPUT. Two exact identities, both
+# properties of any R-C network whose answer is a voltage RATIO, and neither
+# derived from anything in this module:
+#
+#   1. IMPEDANCE SCALING. R -> lambda*R together with C -> C/lambda leaves every
+#      impedance ratio -- and hence H -- exactly unchanged. So the resistors'
+#      log-sensitivities and the capacitors' must sum to the SAME number.
+#   2. FREQUENCY SCALING. H depends on the capacitors only through the products
+#      omega*C, so scaling every capacitor by lambda is identical to scaling the
+#      frequency by lambda: the capacitors' sensitivities must sum to
+#      d(dB)/d(ln f), which is computed by perturbing the FREQUENCY -- a
+#      quantity no component perturbation touches.
+#
+# They are not redundant, and `sensitivity_control_matrix` proves it rather
+# than arguing it: a table published per unit instead of per cent (a 100x units
+# bug that would inflate every number in the record) satisfies identity 1
+# exactly -- scaling every entry by a constant preserves sum(R) == sum(C) --
+# and is caught only by identity 2. A component missing from the table moves
+# both.
+# ---------------------------------------------------------------------------
+
+# The thirteen printed values, and whether each is a resistance or a
+# capacitance. `VR4_TOTAL` is a resistance: both halves of the pot scale with
+# it, and R125 sits in series with the bottom half.
+COMPONENT_KIND = {
+    "C55": "C", "R112": "R", "R119": "R", "VR4_TOTAL": "R", "R125": "R",
+    "R129": "R", "R120": "R", "C56": "C", "C58": "C", "R123": "R",
+    "C57": "C", "R121": "R", "C90": "C",
+}
+RESISTORS = tuple(k for k, v in COMPONENT_KIND.items() if v == "R")
+CAPACITORS = tuple(k for k, v in COMPONENT_KIND.items() if v == "C")
+
+# Central-difference step, as a fraction of each component's own value. Small
+# enough that the O(h^2) truncation error is far below the identities'
+# thresholds, large enough that double-precision round-off (~eps*|dB|/h) is
+# too. Both directions are checked by the identities at every frequency the
+# record carries, so this is a tuned constant with a live gate on it.
+SENS_REL_STEP = 1e-4
+
+
+@contextlib.contextmanager
+def scaled_components(factors):
+    """Temporarily multiply named component values by `factors`.
+
+    Perturbs the module-level constants the SHIPPING solver reads, rather than
+    a private copy of the network: a sensitivity measured against a second
+    spelling of the circuit would be a sensitivity of that spelling. Restores
+    every value on the way out, including on an exception.
+    """
+    unknown = sorted(set(factors) - set(COMPONENT_KIND))
+    if unknown:
+        raise ValueError(f"not components of this network: {unknown}")
+    saved = {k: globals()[k] for k in factors}
+    try:
+        for k, f in factors.items():
+            globals()[k] = saved[k] * float(f)
+        yield
+    finally:
+        globals().update(saved)
+
+
+def sensitivity_db_per_pct(f_hz, name, *, alpha=None, rel_step=SENS_REL_STEP):
+    """{component -> dB the response at `f_hz` moves per +1 % on that value}.
+
+    Central difference on `db_at`, i.e. on the same solver every number in the
+    emitted record comes from. The returned quantity is
+    `0.01 * d(dB)/d(ln x)`; it is signed, because which way a component pushes
+    is part of the answer.
+    """
+    a = ALPHA_K1 if alpha is None else alpha
+    f = np.array([float(f_hz)])
+    out = {}
+    for comp in COMPONENT_KIND:
+        with scaled_components({comp: 1.0 + rel_step}):
+            hi = float(db_at(f, a, name)[0])
+        with scaled_components({comp: 1.0 - rel_step}):
+            lo = float(db_at(f, a, name)[0])
+        out[comp] = (hi - lo) / (2.0 * rel_step) * 0.01
+    return out
+
+
+def frequency_sensitivity_db_per_pct(f_hz, name, *, alpha=None,
+                                     rel_step=SENS_REL_STEP):
+    """`0.01 * d(dB)/d(ln f)` at `f_hz` -- the right-hand side of identity 2.
+
+    Deliberately computed WITHOUT touching a component: it is the independent
+    quantity the capacitors' sensitivities are checked against.
+    """
+    a = ALPHA_K1 if alpha is None else alpha
+    f = float(f_hz)
+    hi = float(db_at(np.array([f * (1.0 + rel_step)]), a, name)[0])
+    lo = float(db_at(np.array([f * (1.0 - rel_step)]), a, name)[0])
+    return (hi - lo) / (2.0 * rel_step) * 0.01
+
+
+def sensitivity_checks(sens, freq_db_per_pct) -> dict:
+    """The two identities, as residuals that must be ~0 (see section header)."""
+    sum_r = float(sum(sens[k] for k in RESISTORS))
+    sum_c = float(sum(sens[k] for k in CAPACITORS))
+    return {
+        "sum_resistors_db_per_pct": sum_r,
+        "sum_capacitors_db_per_pct": sum_c,
+        "frequency_db_per_pct": float(freq_db_per_pct),
+        "impedance_scaling_residual_db_per_pct": sum_r - sum_c,
+        "frequency_scaling_residual_db_per_pct": sum_c - float(freq_db_per_pct),
+    }
+
+
+DOMINANCE_SHARE = 0.9
+
+
+def component_sensitivity(f_hz, name, *, alpha=None, rel_step=SENS_REL_STEP,
+                          share=DOMINANCE_SHARE) -> dict:
+    """The published per-component table at one frequency, with its checks.
+
+    `worst_case_db_per_pct` is `sum |S_i|`: the half-width a 1 % tolerance on
+    EVERY component would contribute if all thirteen moved adversarially at
+    once. Multiply it by a tolerance class in per cent to get that class's
+    first-order worst-case bound -- which is what `tolerance_bound_db` does,
+    once someone can cite one.
+
+    `rss_db_per_pct` is the root-sum-square of the same levers, published
+    BESIDE the worst case rather than instead of it because the two answer
+    different questions: the sum is what an adversarial corner gives, the RSS
+    is what independent parts give, and reading one where the other belongs is
+    a factor of ~2 here. Neither is a bound on its own: both are dB per 1 %,
+    waiting on a tolerance class (`TOLERANCE_CLASS`, `tolerance_bound_db`).
+
+    `dominant` is the shortest set of components accounting for `share` of that
+    worst case, i.e. the #425 question "if two components dominate, a tolerance
+    claim only has to be defensible about those two". Measured: four parts
+    (C90, R112, R119, VR4) carry 99 % of Ht3's lever at 10079 Hz, while Ht1 at
+    3175 Hz needs seven to reach 95 % -- so the answer is per family, not one
+    number, and C90 is in all three sets.
+    """
+    sens = sensitivity_db_per_pct(f_hz, name, alpha=alpha, rel_step=rel_step)
+    checks = sensitivity_checks(
+        sens, frequency_sensitivity_db_per_pct(f_hz, name, alpha=alpha,
+                                               rel_step=rel_step))
+    total = sum(abs(v) for v in sens.values())
+    ranked = sorted(sens, key=lambda k: abs(sens[k]), reverse=True)
+    dominant, acc = [], 0.0
+    for comp in ranked:
+        if acc >= share * total:
+            break
+        dominant.append(comp)
+        acc += abs(sens[comp])
+    return {
+        "hz": float(f_hz),
+        "db_per_pct": {k: float(v) for k, v in sens.items()},
+        "worst_case_db_per_pct": float(total),
+        "rss_db_per_pct": float(math.sqrt(sum(v * v for v in sens.values()))),
+        "dominant": dominant,
+        "dominant_share": float(acc / total) if total else 0.0,
+        "checks": checks,
+    }
+
+
+# The controls for the two identities above, as a properties x defects matrix
+# (verification rule 4). Both defects are realistic rather than decorative: a
+# component silently absent from the table, and the per-cent conversion
+# omitted.
+SENSITIVITY_DEFECTS = {
+    "DROP_C90": "C90 missing from the table -- its lever silently excluded",
+    "PER_UNIT_NOT_PER_PCT": "log-sensitivity published without the per-cent "
+                            "conversion (every entry 100x too large)",
+}
+SENSITIVITY_PROPERTIES = ("impedance_scaling", "frequency_scaling")
+
+
+def _sensitivity_with_defect(f_hz, name, defect=None):
+    sens = sensitivity_db_per_pct(f_hz, name)
+    freq = frequency_sensitivity_db_per_pct(f_hz, name)
+    if defect == "DROP_C90":
+        sens = {k: v for k, v in sens.items() if k != "C90"}
+    elif defect == "PER_UNIT_NOT_PER_PCT":
+        sens = {k: v * 100.0 for k, v in sens.items()}
+    elif defect is not None:
+        raise ValueError(f"unknown sensitivity defect {defect!r}")
+    sum_r = sum(sens.get(k, 0.0) for k in RESISTORS)
+    sum_c = sum(sens.get(k, 0.0) for k in CAPACITORS)
+    return {"impedance_scaling": sum_r - sum_c,
+            "frequency_scaling": sum_c - freq}
+
+
+SENSITIVITY_CONTROL_TOL = 1e-4
+
+
+def sensitivity_control_matrix(f_hz=3175.0, name="Ht1", *,
+                               tol=SENSITIVITY_CONTROL_TOL,
+                               margins=False) -> dict:
+    """{defect -> {property -> MOVED | BLIND}} for the identities above.
+
+    `tol` is relative to the response's own d(dB)/d(ln f) scale, and it is
+    DELIBERATELY looser than the threshold the identities themselves are gated
+    at (1e-6 relative, in `test_the_sensitivity_table_obeys_*`). The two answer
+    different questions, and one defect here makes that concrete:
+    `PER_UNIT_NOT_PER_PCT` multiplies every entry by 100, which also multiplies
+    the clean run's ~3e-9 round-off floor by 100. At 1e-6 that stays BLIND only
+    by a factor of ~3; at 1e-4 it is BLIND by ~300x while `DROP_C90` is MOVED
+    by ~1e4. A verdict that depends on a threshold within 3x of the noise is
+    not a verdict.
+
+    `margins=True` returns each cell's |moved| / (tol * scale) instead of the
+    label, so the separation can be asserted rather than trusted.
+    """
+    clean = _sensitivity_with_defect(f_hz, name)
+    scale = max(abs(frequency_sensitivity_db_per_pct(f_hz, name)), 1e-12)
+    out = {}
+    for defect in SENSITIVITY_DEFECTS:
+        got = _sensitivity_with_defect(f_hz, name, defect)
+        if margins:
+            out[defect] = {p: abs(got[p] - clean[p]) / (tol * scale)
+                           for p in SENSITIVITY_PROPERTIES}
+        else:
+            out[defect] = {
+                p: ("MOVED" if abs(got[p] - clean[p]) > tol * scale else "BLIND")
+                for p in SENSITIVITY_PROPERTIES}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# The tolerance class -- where it is NOT (the service notes) and where it IS
+# (W14a), and the refusal that keeps an uncited one from being invented
+#
+# WRONG BEFORE IT WAS RIGHT, AND THIS IS THE MORE USEFUL HALF. The first
+# version of this section concluded "no tolerance class is citable" and shipped
+# a sensitivity table with that finding attached. The search behind it was
+# genuine -- all 16 pages of the pinned scan, recorded below -- and its
+# CONCLUSION was still wrong, because it searched the wrong corpus: the scan is
+# one source of four this repository has already read, and
+# `docs/tr808-reference.md` section 1.7 has carried a cited class the whole
+# time. Checking it took one grep.
+#
+# The lesson generalises past this module: an absence is only as strong as the
+# set you searched, so a "nothing found" finding has to NAME that set. The
+# service-notes search below is kept for exactly that reason -- it is still
+# true, still worth having, and on its own it was still the wrong answer.
+# ---------------------------------------------------------------------------
+
+class ToleranceUncited(Refused):
+    """A tolerance bound was asked for without a citable tolerance class.
+
+    A distinct type because it is a refusal about PROVENANCE, not about
+    machinery: the arithmetic is right there and would answer. What is missing
+    is a reading that says what tolerance the parts were built to.
+
+    Raised when a component is ABSENT from the tolerance class -- silently
+    forgotten. An explicit `None` is a different thing: a declared "no
+    tolerance is citable for this part", which is reported beside the bound
+    rather than refused (`VR4_TOTAL`, below).
+    """
+
+
+# The tolerance class, cited. W14a is the DAFx-14 bass-drum paper, read in full
+# (`docs/tr808-reference.md` section 0), and this sentence is in its RESULTS
+# section, verified against the PDF itself on 2026-09-28 rather than against
+# this repository's transcription of it.
+#
+# SCOPE, SAID RATHER THAN GLOSSED: the sentence is about "the voice circuits"
+# of the TR-808, in a paper analysing the bass drum. The CY TONE network is on
+# the voicing board and is a voice circuit, so applying it here is a reading
+# rather than a leap -- but W14a cites no source for the figures themselves,
+# and the same class is what `docs/tr808-reference.md` section 1.7 already
+# propagates into this repository's +-10 % f0 and +-50 % Q tolerances. It is
+# the standard already in force here, not a new one invented for this bound.
+TOLERANCE_CLASS = {
+    "resistors_pct": 5.0,
+    "capacitors_pct": 20.0,
+    "quote": "the voice circuits featured +-20% capacitors and +-5% resistors",
+    "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. "
+                "Smith, 'A Physically-Informed, Circuit-Bendable, Digital "
+                "Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+    "url": "https://www.dafx.de/paper-archive/2014/"
+           "dafx14_kurt_james_werner_a_physically_informed,_ci.pdf",
+    "sha256": "3c4a685dd805c536f19cb721151e435a7d699b367052ab2c7632deb77787e901",
+    "verified_on": "2026-09-28",
+    "also_used_by": "docs/tr808-reference.md section 1.7, which turns the same "
+                    "sentence into this repository's +-10 % f0 and +-50 % Q "
+                    "tolerances (docs/scorecard/README.md)",
+    "does_not_cover": "VR4's total resistance. It is a potentiometer, not a "
+                      "fixed resistor, and no tolerance for it is citable "
+                      "from W14a, from SN p.13, or from SN p.16's parts list "
+                      "(which prints 'EVH-LWAD25B24 20K (B)' and no "
+                      "tolerance). Carried as an explicit None and reported "
+                      "separately rather than assumed into the resistor class.",
+}
+
+# The class as a per-component map. `None` for VR4_TOTAL is a DECLARATION, not
+# an omission -- see ToleranceUncited.
+W14A_TOLERANCE_PCT = {
+    k: (None if k == "VR4_TOTAL"
+        else (TOLERANCE_CLASS["resistors_pct"] if v == "R"
+              else TOLERANCE_CLASS["capacitors_pct"]))
+    for k, v in COMPONENT_KIND.items()
+}
+
+
+# The service-notes search, recorded so the absence is repeatable. Every page of
+# the pinned scan (SN_PDF_SHA256, 16 pages) was rendered and read on
+# 2026-09-28; the entries below are the four that could plausibly have carried a
+# tolerance and what each actually says. This is why the class above has to come
+# from W14a: the document the component VALUES were read off prints none.
+SN_PRINTS_NO_TOLERANCE = {
+    "citable_tolerance_class_in_this_source": None,
+    "source_sha256": SN_PDF_SHA256,
+    "searched_on": "2026-09-28",
+    "searched": {
+        1: "CAUTION: parts are 'designated in abridged number or numberless "
+           "in this limited space, they are fully numbered on the Parts "
+           "List' -- that full parts list is a SEPARATE document, not one of "
+           "these 16 pages",
+        8: "the document's only 'NOTE: UNLESS OTHERWISE SPECIFIED' legend, "
+           "and it covers semiconductors alone (NPN 2SC945(P), PNP "
+           "2SA733(P), Q23~Q26 2SA1015(GR), diodes 1S2473, op-amps "
+           "uPC4558C). No resistor or capacitor tolerance, and no wattage or "
+           "dielectric either",
+        13: "the page every component value here was read off. Values and "
+            "reference designators only; the one tolerance-adjacent "
+            "annotation on it is a POWER SUPPLY note ('FRNB 10 ohm 1/4W "
+            "(fusing resistor)'), which is a wattage, not a tolerance, and "
+            "is not in this network",
+        16: "PARTS LIST. Its RESISTOR section has ONE entry (ERSC23CS61, "
+            "560 ohm) and its CAPACITOR section THREE (a 10uF 25V non-polar "
+            "and two 0.047uF polypropylene mains parts); none of the "
+            "thirteen appears. VR4 is listed as '13219314 EVH-LWAD25B24 "
+            "20K (B) CY tone' -- resistance and taper, no tolerance",
+    },
+    "conclusion": "No tolerance class for C55/C56/C57/C58/C90 or R112/R119/"
+                  "R125/R129/R120/R123/R121/VR4 is printed in THIS source. "
+                  "E24 5 % resistors and 5-10 % film capacitors would be a "
+                  "plausible 1981 Roland build, and a bound built on that "
+                  "would be invention. The class that IS carried comes from "
+                  "W14a instead -- see TOLERANCE_CLASS.",
+    "why_it_is_kept": "an absence is only as strong as the corpus it was "
+                      "searched over. Reading this record WITHOUT that caveat "
+                      "produced the wrong answer once already (see this "
+                      "section's header), so the corpus is named here.",
+}
+
+
+def _tolerance_from_sens(sens, tolerance_pct, citation) -> dict:
+    """The arithmetic shared by the per-band and per-ratio terms below."""
+    if citation is None or not str(citation).strip():
+        raise ToleranceUncited(
+            "a component-tolerance bound needs a CITED tolerance class; "
+            "tone_stage_schematic.TOLERANCE_CLASS is the one this repository "
+            "can cite (W14a section 11), and "
+            "tone_stage_schematic.SN_PRINTS_NO_TOLERANCE records why it "
+            "cannot come from the service notes")
+    missing = sorted(set(sens) - set(tolerance_pct))
+    if missing:
+        raise ToleranceUncited(
+            f"no tolerance stated for {', '.join(missing)}; a partial class "
+            "treats the rest as exact, which is the invention this refusal "
+            "exists to prevent. State None for a part whose tolerance is "
+            "genuinely uncited -- that is reported, not silently dropped")
+    cited = {k: v for k, v in sens.items() if tolerance_pct[k] is not None}
+    per = {k: abs(cited[k]) * float(tolerance_pct[k]) for k in cited}
+    return {
+        "bound_db": float(sum(per.values())),
+        "rss_db": float(math.sqrt(sum(v * v for v in per.values()))),
+        "per_component_db": per,
+        "tolerance_pct": {k: (None if tolerance_pct[k] is None
+                              else float(tolerance_pct[k])) for k in sens},
+        "uncited": sorted(k for k in sens if tolerance_pct[k] is None),
+        "uncited_lever_db_per_pct": {k: float(sens[k]) for k in sens
+                                     if tolerance_pct[k] is None},
+        "citation": citation,
+    }
+
+
+def tolerance_bound_db(f_hz, name, *, tolerance_pct=None, citation=None,
+                       alpha=None, rel_step=SENS_REL_STEP) -> dict:
+    """Unit-to-unit half-width on THIS family at `f_hz`, from a cited class.
+
+    Defaults to `W14A_TOLERANCE_PCT` / `TOLERANCE_CLASS`. The refusals are the
+    point of the signature:
+
+      * no citation (or a blank one) -> `ToleranceUncited`.
+      * a component ABSENT from the class -> `ToleranceUncited`. A partial
+        class silently treats the rest as exact.
+      * a component explicitly `None` -> reported under `uncited`, with its
+        lever, so a reader can add it if they can cite one. VR4 is the only
+        one today.
+
+    `bound_db` is sum |dB per %| * tolerance -- every part at its own adverse
+    extreme at once. `rss_db` is the same levers in quadrature, which is what
+    INDEPENDENT parts give and is the one to quote for a tolerance class
+    describing manufacturing spread. They differ by ~2x here, so which one is
+    being read matters.
+
+    THIS IS NOT A TERM OF `resolved_bound_db`, deliberately. That bound asks
+    "how well is the network SN p.13 PRINTS solved?" -- for which the printed
+    values are the definition of the thing, not an uncertainty in it. This asks
+    the different question "how much does that answer vary across real units
+    built to that print?". Summing them would make the balance's verdict depend
+    on which physical 808 is meant; `balance_record` carries both, named.
+
+    FIRST ORDER IS NOT A CEILING, and the sign of the error is the opposite of
+    the comfortable one. Re-solving the network exactly at the gradient-sign
+    corner gives 1.0002-1.0017x the linear sum at 1 % and 1.0012-1.0092x at
+    5 %: the linearisation UNDER-states. That was measured, not assumed -- the
+    first version of `test_the_first_order_table_predicts_an_exact_corner`
+    asserted the exact corner was the smaller of the two and went red.
+    """
+    if tolerance_pct is None:
+        tolerance_pct = W14A_TOLERANCE_PCT
+        if citation is None:
+            citation = TOLERANCE_CLASS["citation"]
+    sens = sensitivity_db_per_pct(f_hz, name, alpha=alpha, rel_step=rel_step)
+    return {"hz": float(f_hz), "family": name,
+            **_tolerance_from_sens(sens, tolerance_pct, citation)}
+
+
+def balance_tolerance_db(*, tolerance_pct=None, citation=None,
+                         rel_step=SENS_REL_STEP) -> dict:
+    """The same cited class, propagated to what the balance actually reads.
+
+    `tools/cymbal_band_balance.py` compares each band to the LOW band, so its
+    tone term is a DIFFERENCE of two transmissions -- and a difference is not
+    two independent draws. C90 is the shunt at the node all three families
+    share, so it is the largest lever on every band and largely CANCELS in the
+    ratio (1.70 dB of the low band's own spread becomes 0.26 dB of the
+    decay-low spread). Quoting a per-band tolerance as if it were the balance's
+    would therefore over-state it, and quoting nothing would under-state it.
+
+    Returns {ratio -> term}, one per non-reference band, each evaluated at the
+    two frequencies the balance levels at (its own, and the low band's).
+    """
+    if tolerance_pct is None:
+        tolerance_pct = W14A_TOLERANCE_PCT
+        if citation is None:
+            citation = TOLERANCE_CLASS["citation"]
+    import cymbal_tone_realisation as ct          # noqa: PLC0415
+    bands = band_of()
+    ref = "low"
+    ref_sens = sensitivity_db_per_pct(ct.CENTRE_HZ[ref], bands[ref],
+                                      rel_step=rel_step)
+    out = {}
+    for band, name in bands.items():
+        if band == ref:
+            continue
+        s = sensitivity_db_per_pct(ct.CENTRE_HZ[band], name, rel_step=rel_step)
+        diff = {k: s[k] - ref_sens[k] for k in s}
+        out[f"{band}-{ref}"] = {
+            "family": f"{name}-{bands[ref]}",
+            "hz": [float(ct.CENTRE_HZ[band]), float(ct.CENTRE_HZ[ref])],
+            "db_per_pct": {k: float(v) for k, v in diff.items()},
+            **_tolerance_from_sens(diff, tolerance_pct, citation),
+        }
+    return out
 
 
 # The frequencies this artifact solves the network at. They are the ones
@@ -689,8 +1208,14 @@ def balance_record(data, *, fig9_path=None) -> dict:
         bands[band] = {
             "family": name,
             "drive": DRIVE_OF[name],
-            "at_hz": {f"{f:.1f}": resolved_bound_db(
-                f, name, stats=stats, sigma_alpha=sigma) for f in freqs},
+            "at_hz": {f"{f:.1f}": {
+                **resolved_bound_db(f, name, stats=stats, sigma_alpha=sigma),
+                # NEITHER is a term of bound_db, and the reason is in
+                # tolerance_bound_db's docstring: they answer the unit-to-unit
+                # question, not the is-the-network-solved question (#425).
+                "sensitivity": component_sensitivity(f, name),
+                "unit_tolerance": tolerance_bound_db(f, name),
+            } for f in freqs},
         }
 
     return {
@@ -717,8 +1242,33 @@ def balance_record(data, *, fig9_path=None) -> dict:
             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()},
         "poles_hz": [float(v) for v in poles_hz()],
         "bands": bands,
-        "bound_excludes": "component tolerance -- the printed nominal values "
-                          "are taken as exact; see resolved_bound_db",
+        "bound_excludes": "component tolerance -- bound_db solves the network "
+                          "SN p.13 PRINTS, for which the printed values are "
+                          "the definition rather than an uncertainty. The "
+                          "unit-to-unit spread is carried instead as a "
+                          "separate CITED term: see component_tolerance and "
+                          "each band's at_hz.<f>.unit_tolerance (#425)",
+        "component_tolerance": {
+            "term_in_resolved_bound": False,
+            "why_not": "bound_db answers 'is the printed network solved'; "
+                       "this answers 'how much does a built unit differ'. "
+                       "Summing them would make the balance's verdict depend "
+                       "on which physical 808 is meant",
+            "class": TOLERANCE_CLASS,
+            "per_component_pct": W14A_TOLERANCE_PCT,
+            "per_band": "bands.<band>.at_hz.<f>.unit_tolerance -- bound_db is "
+                        "the adversarial corner, rss_db is what independent "
+                        "parts give; they differ by ~2x, so say which",
+            "on_the_balance": balance_tolerance_db(),
+            "on_the_balance_note": "the balance reads band-to-band "
+                                   "DIFFERENCES, and C90 -- the largest lever "
+                                   "on every band -- mostly cancels in one. "
+                                   "Quote these, not the per-band numbers, "
+                                   "for an inter-band claim",
+            "sensitivity_tables": "bands.<band>.at_hz.<f>.sensitivity, with "
+                                  "the two identities that check them",
+            "service_notes_print_none": SN_PRINTS_NO_TOLERANCE,
+        },
     }
 
 
@@ -817,6 +1367,78 @@ def report(data) -> list[str]:
     return lines
 
 
+def sensitivity_report() -> list[str]:
+    """The #425 deliverable in human-readable form: which of the thirteen
+    printed values the answer at each band's own frequency is sensitive to,
+    the two identities that check the table, and the controls that show those
+    identities are not vacuous."""
+    lines = ["component sensitivity of the CY TONE network (SN p.13), "
+             f"alpha = {ALPHA_K1:.4f}",
+             "dB per +1 % on each printed value, at the frequencies "
+             "sn-p13-vr4.json records:",
+             ""]
+    bands = band_of()
+    freqs = record_frequencies_hz()
+    for band, name in bands.items():
+        for f in freqs:
+            cs = component_sensitivity(f, name)
+            s = cs["db_per_pct"]
+            ranked = sorted(s, key=lambda k: abs(s[k]), reverse=True)
+            lines.append(f"{band:6s} ({name}) @ {f:.1f} Hz   worst-case lever "
+                         f"{cs['worst_case_db_per_pct']:.5f} dB per 1 % on all 13")
+            lines.append("    " + "  ".join(
+                f"{k}={s[k]:+.5f}" for k in ranked[:5]))
+            lines.append(f"    dominant ({cs['dominant_share'] * 100:.0f} % of "
+                         f"the lever): {', '.join(cs['dominant'])}")
+            lines.append(
+                "    identities: impedance-scaling residual "
+                f"{cs['checks']['impedance_scaling_residual_db_per_pct']:+.2e}, "
+                "frequency-scaling residual "
+                f"{cs['checks']['frequency_scaling_residual_db_per_pct']:+.2e} "
+                f"(vs d(dB)/dln f = {cs['checks']['frequency_db_per_pct']:+.5f})")
+            lines.append("")
+
+    lines.append("controls (verification rule 4 -- properties x defects):")
+    matrix = sensitivity_control_matrix()
+    header = f"  {'defect':24s}" + "".join(
+        f"{p:>22s}" for p in SENSITIVITY_PROPERTIES)
+    lines.append(header)
+    for defect, row in matrix.items():
+        lines.append(f"  {defect:24s}" + "".join(
+            f"{row[p]:>22s}" for p in SENSITIVITY_PROPERTIES))
+    lines.append("")
+    lines.append("unit-to-unit tolerance, from the ONE class this repository "
+                 "can cite:")
+    lines.append(f"  {TOLERANCE_CLASS['citation']}")
+    lines.append(f"    \"{TOLERANCE_CLASS['quote']}\"  "
+                 f"(sha256 {TOLERANCE_CLASS['sha256'][:16]}..., verified "
+                 f"{TOLERANCE_CLASS['verified_on']})")
+    lines.append(f"  NOT covered: {TOLERANCE_CLASS['does_not_cover']}")
+    lines.append("")
+    import cymbal_tone_realisation as ct          # noqa: PLC0415
+    for band, name in bands.items():
+        t = tolerance_bound_db(float(ct.CENTRE_HZ[band]), name)
+        lines.append(f"  {band:6s} ({name}) @ {t['hz']:.1f} Hz   "
+                     f"rss {t['rss_db']:.3f} dB   adversarial "
+                     f"{t['bound_db']:.3f} dB   uncited: "
+                     + ", ".join(f"{k} (lever {v:+.5f}/%)"
+                                 for k, v in t["uncited_lever_db_per_pct"].items()))
+    lines.append("")
+    lines.append("  on the band RATIOS the balance actually reads (C90 "
+                 "largely cancels in a difference):")
+    for ratio, t in balance_tolerance_db().items():
+        lines.append(f"  {ratio:12s} rss {t['rss_db']:.3f} dB   adversarial "
+                     f"{t['bound_db']:.3f} dB")
+    lines.append("")
+    lines.append("the service notes themselves print no tolerance -- all 16 "
+                 "pages, which is why the class above comes from W14a:")
+    for page in sorted(SN_PRINTS_NO_TOLERANCE["searched"]):
+        lines.append(f"  p.{page:<3d} "
+                     f"{SN_PRINTS_NO_TOLERANCE['searched'][page]}")
+    lines.append(f"  => {SN_PRINTS_NO_TOLERANCE['conclusion']}")
+    return lines
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--artifact", default=str(w9.ARTIFACT))
@@ -824,6 +1446,10 @@ def main(argv=None) -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--poles", action="store_true",
                     help="the shared pole set, from the numpy-only formulation")
+    ap.add_argument("--sensitivity", action="store_true",
+                    help="dB per %% per printed component, its two identity "
+                         "checks and their controls -- the term the bound "
+                         "does NOT carry, quantified (#425)")
     ap.add_argument("--emit", nargs="?", const=str(ARTIFACT), default=None,
                     metavar="PATH",
                     help="write the resolved record the inter-band balance "
@@ -854,7 +1480,14 @@ def main(argv=None) -> int:
               f"alpha = {ALPHA_K1:.4f} (Hz):")
         for f in p:
             print(f"  {f:10.2f}")
-        if not (a.check or a.report):
+        if not (a.check or a.report or a.sensitivity):
+            return 0
+        print()
+
+    if a.sensitivity:
+        for line in sensitivity_report():
+            print(line)
+        if not (a.check or a.report or a.emit):
             return 0
         print()
 
