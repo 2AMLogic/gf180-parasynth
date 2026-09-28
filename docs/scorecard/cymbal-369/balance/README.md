@@ -122,6 +122,21 @@ the recorded commit hash the only difference** — `preservation` for RS and CL 
 registers did move and which move on both the shipped and the candidate side. So the record still describes the tree
 that ships, and `"commit": "cf2741e8…"` is left as rendered.
 
+**`main` moved a second time, for #410, and that one is checked too rather than waved past.** #410 (cymbal step 6)
+merged while this PR was in review, so `main` was brought in with a **second merge** for the same reason — `cf2741e8`
+has to stay reachable, and `git merge-base --is-ancestor cf2741e8 HEAD` still says it is. #410's diff is five files:
+`mid-band/README.md`, `mid-band/mid-band.json`, `../README.md`, `tools/cymbal_mid.py` and
+`tools/test_cymbal_mid.py`. None of them is an input this step reads — `cymbal_band_balance` reads
+`werner-fig4.json`, `werner-fig9.json`, `sn-p13-vr4.json` and `candidate3/candidate3.json` plus
+`model/cymbal_candidate.py`, and the ablation renders through `model/drums_fx.py`; `cymbal_mid` is a *measurement*
+module that nothing in this step imports. But "I read the diff and it looked unrelated" is the cheap internal check
+`CLAUDE.md` names, so the same probe was run across this merge as across #412's:
+`tools/probes/balance_input_invariance.py --baseline-rev ce80871` reports **0 register addresses moved** in the whole
+image — no sound owns a moved address, no address is unattributed, no CY envelope-peak register moves, and
+`cy_render_inputs_identical: true`. The ablation was therefore **not** re-rendered for #410: there is nothing for it
+to have changed, and re-rendering to produce a hash that differs only in its own commit field would be the opposite
+of evidence. `"commit": "cf2741e8…"` stands.
+
 The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
 short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
 binds. The ratios are the claim; that common scale is not — **except in one respect the CY path makes, recorded here
