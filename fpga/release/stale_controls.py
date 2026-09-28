@@ -145,6 +145,13 @@ def _binding_files() -> tuple[list[str], list[str]]:
     # but since #421 it reports the file's coverage state alongside the
     # verdict, and an isolated copy missing it can only report ABSENT
     files |= {rel(build_arty.XDC)}
+    # ...and since #436 that state is read from the CONSTRAINT record, not
+    # from the digital one. An isolated copy without it reports
+    # `[ABSENT]` -- honest, but not a faithful replica of the tree this
+    # control is about, so copy it and its transcript too.
+    import verify_xdc_binding
+    for record in verify_xdc_binding.CONSTRAINT_BY_WRAPPER.values():
+        files |= {rel(record), rel(Path(record).with_name(verify_xdc_binding.TRANSCRIPT))}
     files |= {rel(p) for p in (ROOT / "rtl-sketch").glob("*.hex")}
     return sorted(files | set(records)), records
 
