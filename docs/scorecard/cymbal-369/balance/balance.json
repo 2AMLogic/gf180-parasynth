@@ -1,0 +1,167 @@
+{
+ "tool": "tools/cymbal_band_balance.py",
+ "sources": {
+  "tone": "docs/scorecard/cymbal-369/werner-fig9.json",
+  "filters": "docs/scorecard/cymbal-369/werner-fig4.json",
+  "shipped_rule": "docs/scorecard/cymbal-369/candidate3/candidate3.json"
+ },
+ "level_corner_hz": 18972.042954650304,
+ "balance_bound_db": 3.0,
+ "centre_hz": {
+  "low": 3175.0,
+  "decay": 10079.0,
+  "short": 10079.0
+ },
+ "bands": {
+  "low": {
+   "band": "low",
+   "centre_hz": 3175.0,
+   "bp_peak_db": 22.95,
+   "bp_shape_db": -3.0,
+   "hp_pass_db": 0.0,
+   "chain_db": 20.9,
+   "tone": {
+    "hz": 3175.0,
+    "db": -39.52138286019339,
+    "lo_db": -42.63305881675875,
+    "hi_db": -35.27698591950132,
+    "width_db": 7.356072897257427,
+    "measured": false,
+    "n_alternatives": 37
+   },
+   "level_db": -15.65,
+   "total_db": -34.27
+  },
+  "decay": {
+   "band": "decay",
+   "centre_hz": 10079.0,
+   "bp_peak_db": 24.1,
+   "bp_shape_db": -12.88,
+   "hp_pass_db": 6.03,
+   "chain_db": 18.1,
+   "tone": {
+    "hz": 10079.0,
+    "db": -28.61672172565364,
+    "lo_db": -36.60983334173615,
+    "hi_db": -22.705058277644923,
+    "width_db": 13.904775064091226,
+    "measured": false,
+    "n_alternatives": 41
+   },
+   "level_db": -6.57,
+   "total_db": -17.09
+  },
+  "short": {
+   "band": "short",
+   "centre_hz": 10079.0,
+   "bp_peak_db": 24.1,
+   "bp_shape_db": -12.88,
+   "hp_pass_db": 8.86,
+   "chain_db": 33.57,
+   "tone": {
+    "hz": 10079.0,
+    "db": -36.61091244709994,
+    "lo_db": -36.631873512609104,
+    "hi_db": -36.59047792422355,
+    "width_db": 0.041395588385555016,
+    "measured": true,
+    "n_alternatives": 30
+   },
+   "level_db": -6.57,
+   "total_db": -9.62
+  }
+ },
+ "relative_db": {
+  "low": {
+   "db": 0.0,
+   "lo_db": -7.36,
+   "hi_db": 7.36,
+   "width_db": 14.71
+  },
+  "decay": {
+   "db": 17.18,
+   "lo_db": 4.94,
+   "hi_db": 26.2,
+   "width_db": 21.26
+  },
+  "short": {
+   "db": 24.65,
+   "lo_db": 20.38,
+   "hi_db": 27.78,
+   "width_db": 7.4
+  }
+ },
+ "shipped_rule_db": {
+  "low": 0.0,
+  "decay": 7.33,
+  "short": -13.58
+ },
+ "gap_db": {
+  "low": {
+   "circuit_db": 0.0,
+   "rule_db": 0.0,
+   "gap_db": 0.0,
+   "bound_db": 14.71
+  },
+  "decay": {
+   "circuit_db": 17.18,
+   "rule_db": 7.33,
+   "gap_db": 9.85,
+   "bound_db": 21.26
+  },
+  "short": {
+   "circuit_db": 24.65,
+   "rule_db": -13.58,
+   "gap_db": 38.23,
+   "bound_db": 7.4
+  }
+ },
+ "preconditions": [
+  {
+   "name": "tone-figure",
+   "path": "docs/scorecard/cymbal-369/werner-fig9.json",
+   "needed_for": "the tone stage's transmission per band (W14b Fig. 9)",
+   "present": true
+  },
+  {
+   "name": "filter-figure",
+   "path": "docs/scorecard/cymbal-369/werner-fig4.json",
+   "needed_for": "the band-pass peaks and high-pass pass bands (W14b Figs. 4, 10)",
+   "present": true
+  },
+  {
+   "name": "schematic-vr4",
+   "path": "docs/scorecard/cymbal-369/sn-p13-vr4.json",
+   "needed_for": "SN p.13's R/C values around VR4, as circuit values rather than a figure fit -- #396's preferred route, and reference \u00a718's first",
+   "present": false
+  },
+  {
+   "name": "vca-drive",
+   "path": "docs/scorecard/cymbal-369/vca-drive.json",
+   "needed_for": "the three envelope generators' and swing VCAs' peak drive (Q16/Q17/Q18), which no W14b figure plots",
+   "present": false
+  }
+ ],
+ "applied": null,
+ "refused": "the inter-band balance is not applicable: schematic-vr4 absent (docs/scorecard/cymbal-369/sn-p13-vr4.json) -- needed for SN p.13's R/C values around VR4, as circuit values rather than a figure fit -- #396's preferred route, and reference \u00a718's first; vca-drive absent (docs/scorecard/cymbal-369/vca-drive.json) -- needed for the three envelope generators' and swing VCAs' peak drive (Q16/Q17/Q18), which no W14b figure plots",
+ "gate": {
+  "pass": true,
+  "lines": [
+   "  PASS  chain-normalisation  max 0.0000 dB at each band's own band-pass peak (n/a), bound 0.01",
+   "  PASS  tone-bound           low +0.0 +-7.4  decay +17.2 +-10.6  short +24.6 +-3.7  dB re low; 3 band(s) outside 3.0 dB",
+   "  PASS  centre-bound-tighter low band tone term 7.4 dB wide at its own 3175 Hz centre vs 18.0 dB at 7.1 kHz",
+   "  PASS  rule-bind            registers vs energies 0.00000 dB (n/a, bound 0.002); gaps low +0.0  decay +9.8  short +38.2 dB re low; worst |gap| 38.2 vs widest tone bound 21.3",
+   "  PASS  refusal-live         refuses on this tree, answers on a complete precondition set, and the excluded figure route refuses on its bound",
+   "",
+   "  defect                  chain-normalisation           tone-bound centre-bound-tighter            rule-bind         refusal-live",
+   "  SWAP_PEAKS                            MOVED                BLIND                BLIND                BLIND                BLIND",
+   "  NO_TONE_TERM                          BLIND                MOVED                MOVED                BLIND                MOVED",
+   "  TONE_AT_7100_FOR_ALL                  BLIND                BLIND                MOVED                BLIND                BLIND",
+   "  SHIPPED_RULE_IS_FLAT                  BLIND                BLIND                BLIND                MOVED                BLIND",
+   "  PRECOND_ALWAYS_OK                     BLIND                BLIND                BLIND                BLIND                MOVED",
+   "  UNIFORM_6DB_ALL_BANDS                 BLIND                BLIND                BLIND                BLIND                BLIND   (must be BLIND everywhere)",
+   "",
+   "  5/5 controls turned at least one property red; 1/1 blind-by-construction controls stayed blind"
+  ]
+ }
+}

@@ -166,6 +166,23 @@ def tone_db(band, hz, fig9):
     return fit["gain_db"] + bandpass_db(hz, fit["f0"], fit["q"])
 
 
+# `werner_fig9.extrapolation_bound` refits 50 alternative sections per call, and
+# the gate below asks for the same (band, frequency) pair dozens of times over
+# one run. The cache is keyed on the CURVE's bytes, not on the band name, so a
+# different digitisation cannot silently reuse another's bound.
+_BOUND_CACHE: dict = {}
+
+
+def _bound_cached(band, hz, db, f):
+    import hashlib
+    key = (band, round(float(f), 6),
+           hashlib.sha1(np.ascontiguousarray(hz).tobytes()
+                        + np.ascontiguousarray(db).tobytes()).hexdigest())
+    if key not in _BOUND_CACHE:
+        _BOUND_CACHE[key] = w9.extrapolation_bound(hz, db, f)
+    return _BOUND_CACHE[key]
+
+
 def tone_term(band, fig9, *, at_hz=None, defect=None):
     """The tone stage's contribution to this band's level, with its bound.
 
@@ -179,7 +196,7 @@ def tone_term(band, fig9, *, at_hz=None, defect=None):
     if defect == "TONE_AT_7100_FOR_ALL":
         f = 7100.0
     hz, db, _ = tone_fit(band, fig9)
-    b = w9.extrapolation_bound(hz, db, f)
+    b = _bound_cached(band, hz, db, f)
     nominal = float(tone_db(band, np.array([f]), fig9)[0])
     if defect == "NO_TONE_TERM":
         return {"hz": f, "db": 0.0, "lo_db": 0.0, "hi_db": 0.0, "width_db": 0.0,
