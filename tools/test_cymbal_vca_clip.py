@@ -174,6 +174,27 @@ def test_the_documented_source_tilts_the_low_band_towards_the_machine():
     assert st["low"]["tilt_M_db"] > 2.0
 
 
+def test_no_linear_balance_lands_inside_both_808_boxes_at_once():
+    """The joint constraint, which is what the next increment needs and what
+    neither this step's energy bound nor step 7's decay finding says on its own.
+    rho and M re Ln are not independent: the balances that raise rho are the ones
+    that starve M. Run at a coarse grid so this is a test and not the experiment.
+    """
+    for kind in ("white", "staircase"):
+        rb = v.rendered_bound(kind=kind, step=6.0)
+        assert rb["n_balances_in_808_box"] == 0, \
+            f"{kind}: a linear balance now matches -- {rb['balances_in_808_box']}"
+
+
+def test_the_linear_balance_sweep_does_clear_the_skirt_baseline():
+    """Step 7's §5 says a linear mix's rho_M(-10) "stays between 0.89 and 0.97 --
+    it never even clears the skirt baseline". Rendered through the time-domain
+    chain it reaches 1.24-1.35, above the 808's own top of 1.139. What survives
+    is the joint statement above, not that one."""
+    rb = v.rendered_bound(kind="staircase", step=6.0)
+    assert rb["max_rho_M_-10"] > v.T_RHO_BASELINE_MAX
+
+
 def test_the_correction_does_not_close_the_gap_entirely():
     """The honest other side: the corrections shrink step 7's 9.4 dB, they do
     not erase it. If this ever fails the claim in the docstring has to change,

@@ -105,11 +105,33 @@ corrections. It does mean "a missing mechanism supplies 9-17 dB" overstates the
 case by most of its size, and the two things that were missing were in the
 apparatus, not in the machine.
 
-The decay finding survives and in fact sharpens: rendered from the documented
-staircase the LINEAR chain reads rho_M(-10) = 0.9917 and rho_Mn(-10) = 1.0966,
-against the 808's 1.048-1.139 and 0.949-1.097. Mn is inside the machine's range
-already; M is 0.06 below the bottom of it. Our shipped kit reads 0.871 and
-0.878. **The defect is in our realisation of the chain, not in the chain.**
+The decay finding changes shape rather than surviving intact. Rendered from the
+documented staircase the LINEAR chain at §10's own balance reads rho_M(-10) =
+0.9917 and rho_Mn(-10) = 1.0966, against the 808's 1.048-1.139 and 0.949-1.097
+-- Mn already inside the machine's range, M 0.06 below the bottom of it, where
+our shipped kit reads 0.871 and 0.878. And step 7's "sweeping the balance ...
+rho_M(-10) stays between 0.89 and 0.97, it never even clears the skirt
+baseline" does not hold for the rendered chain: over the 64 balances
+`rendered_bound()` sweeps it reaches **1.2413** (staircase) and **1.2643**
+(white), past the 808's own top of 1.139.
+
+WHAT REPLACES BOTH: A JOINT CONSTRAINT
+---------------------------------------
+Neither quantity is the finding on its own, because they are not independent.
+The balances that raise rho are the balances that starve M:
+
+    linear chain, staircase, 64 balances       M re Ln    rho_M(-10)
+      best M re Ln                              -5.07      (lower)
+      best rho_M                                -7.70        1.2413
+      the 808 needs BOTH                  -5.00..-3.45   1.048..1.139
+
+**`rendered_bound()` reports `n_balances_in_808_box` and it is 0** for both
+sources, and it is 0 for the clipper at every position, drive and asymmetry too.
+That is the durable statement: the documented chain traces a locus in the
+(energy, decay) plane that does not pass through the machine's box, and neither
+the inter-band balance nor §10's nonlinearity moves it onto one. It is a
+sharper claim than either step 7's or this step's halves, and it is the one the
+next increment has to break.
 
 WHAT IT MEASURES, AND AGAINST WHAT
 -----------------------------------
@@ -648,7 +670,7 @@ def band_records(*, kind="white", taus=None, dur=3.6, seed=3, sr=SR, defect=None
     """Each band's own contribution to the strike, rendered once, at its
     `CHAIN_DB` level. The linear chain is linear, so a balance sweep is a
     weighted sum of these three rather than a re-render each time -- which is
-    what makes `rendered_bound`'s 225-point sweep cheap. The first version
+    what makes `rendered_bound`'s balance sweep cheap. The first version
     re-rendered every balance and did not finish inside two minutes."""
     taus = dict(taus or TAU_S)
     n = int(dur * sr)
@@ -695,9 +717,21 @@ def rendered_bound(*, kind="white", lo=-12.0, hi=30.0, step=6.0, taus=None,
                 if rows[-1][f"{name}_re_Ln"] > best[name][0]:
                     best[name] = (rows[-1][f"{name}_re_Ln"], (float(d), float(s)))
     rg = [r["rho_M_-10"] for r in rows if r.get("rho_M_-10") is not None]
+    # The JOINT question, which neither this step's bound nor step 7's answers on
+    # its own: does any LINEAR balance land inside the 808's measured range on
+    # BOTH quantities at once? The two are not independent -- the balances that
+    # raise rho are the ones that starve M -- so a bound on each separately does
+    # not say whether the pair is reachable.
+    box = [r for r in rows if r.get("rho_M_-10") is not None
+           and RHO_M_808_RANGE[0] <= r["rho_M_-10"] <= RHO_M_808_RANGE[1]
+           and M_RE_LN_808_RANGE[0] <= r["M_re_Ln"] <= M_RE_LN_808_RANGE[1]]
     return {"source": kind, "n_balances": len(rows),
             "max_rho_M_-10": max(rg) if rg else None,
             "n_rho_answered": len(rg),
+            "n_balances_in_808_box": len(box),
+            "balances_in_808_box": box[:8],
+            "at_max_rho": max((r for r in rows if r.get("rho_M_-10") is not None),
+                              key=lambda r: r["rho_M_-10"], default=None),
             **{name: {"rendered_bound_db": round(best[name][0], 2),
                       "at_decay_short_db": best[name][1],
                       "analytic_bound_db": max(analytic_band_db(b)[name]
