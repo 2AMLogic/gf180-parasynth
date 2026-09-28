@@ -550,7 +550,19 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # chart's proportions on 0.56-0.62 x the exciter. Nothing but the six tom/conga
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
-PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
+# RE-BALANCED for #388's RS_LO_X_ATT, by `drums_fx_render.py --balance`
+# unchanged -- again the procedure did not move, its input did. Attenuating the
+# excitation into the 455 Hz network takes 7.05 dB off the whole rimshot,
+# because that mode was setting the voice's peak; the gate peak puts it back.
+# PEAK_RSG is the LAST thing in the RS path (`frame`: nonlinearity, then
+# envelope, then att), so this is a pure gain and moves neither the distortion
+# nor the two modes' ratio. `--balance` reports x2.2532 for RS and x1.00 +- 0.08
+# for the other fifteen, i.e. nothing else moved.
+PEAK_RSG, PEAK_CLG, PEAK_MA = 0.7728, 0.5, 0.5395
+# The gate peak revisions 10 to 14 shipped -- what the PUBLISHED R0 and R1 Arty
+# images were verified with -- kept so `kit_808_rev14()` can undo the re-balance
+# above (see its `undo`), and through it `kit_808_rev11()`.
+PEAK_RSG_REV14 = 0.343
 # ---- the clap, contract revision 14 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
@@ -721,6 +733,53 @@ TOM_HW_TAU = {"LT": 0.0876, "LC": 0.0769, "MT": 0.0577, "MC": 0.0387,
 RS_LO_HZ, RS_LO_Q = 455.0, 6.7
 RS_HI_HZ, RS_HI_Q = 1786.0, 13.5
 CL_HZ, CL_Q = 2500.0, 200.0
+# THE TWO NETWORKS' RELATIVE DRIVE (#388). Exciting both bridged-T bodies with
+# the SAME pulse -- which is what the circuit does -- does NOT give the two
+# modes the circuit's relative level, because the bank's RAW numerator is
+# all-pole and the circuit's networks are band-pass. The two impulse responses
+# are normalised differently, and the difference is a pure function of f0 and Q:
+#
+#   bank, y[n] = x[n] + a1 y[n-1] + a2 y[n-2]:  peak ~ 1 / sin(w0)
+#   circuit, H(s) = H0 (w0/Q) s / (s^2 + (w0/Q) s + w0^2):  peak ~ H0 w0 / Q
+#
+# High re low, from the shipping constants above at 48 kHz:
+#   bank     20 log10( sin(w_lo) / sin(w_hi) )        = -11.80 dB
+#   circuit  20 log10( (f_hi/Q_hi) / (f_lo/Q_lo) )    =  +5.79 dB
+# so an equal pulse into both modes puts our high mode 17.60 dB below where the
+# same pulse into the same two networks puts the circuit's. That is a property
+# of the DISCRETISATION, not of the rimshot: it is the same 1/sin(w0) that any
+# all-pole mode carries, and it only becomes audible where one voice sums two
+# modes an octave and a half apart.
+#
+# HARDWARE-MEASURED [Fischer s/n 103852, rs8/RS.WAV; tools/probes/rs_guard_band.py
+# compare]: the machine's 1711 Hz mode sits +6.5 dB ABOVE its 457 Hz mode. The
+# CIRCUIT's closed form above predicts +5.79 dB with no recording in it at all.
+# The two agree to 0.7 dB, and rev 14 shipped -12.1 dB -- so the 18.7 dB defect
+# #388 scored is the discretisation's, and the circuit's own transfer function
+# names the correction before the reference is consulted.
+#
+# The correction is applied where the circuit applies its own summing weights:
+# on the excitation into the LOW network, as a right shift on its path word.
+# `att` is 3 bits of 6.02 dB, so 3 (18.06 dB) is the nearest step to 17.60 and
+# is 0.46 dB from it -- inside the +-2.4 dB the balance estimator declares for
+# itself. Attenuating the low mode rather than lifting the high one is not a
+# free choice: PEAK_RSX 0.06 already puts the low mode's tap at ~1.0 x full
+# scale (0.06 x 1/sin(w_lo) = 1.008), so the 8x has to come off the loud mode
+# or the tap saturates. CL disconnects P_RS1X entirely, so this reaches the
+# rimshot and nothing else.
+#
+# IT MOVES THE VOICE'S LEVEL, AND THAT IS REPAIRED SEPARATELY. The 455 Hz mode
+# was setting the rimshot's peak, so attenuating it takes 7.05 dB off the whole
+# voice: `drums_fx_render.py --balance` reports RS at 0.190 FS against its
+# 0.4286 share of Roland's chart. PEAK_RSG carries the x2.2532 back (see it);
+# separating the two is the point, because the balance estimator level-matches
+# and would have scored a rimshot 7 dB too quiet as fixed.
+#
+# 18.06 dB OF DRIVE BUYS 10.1 dB OF BALANCE, not 18: both taps go through the
+# swing VCA's tanh, and the low tap was sitting in its compression, so a 18 dB
+# smaller tap comes out only ~8 dB smaller. Measured, not argued -- `confirm`
+# reads the high mode at -12.14 dB re the low at att 0 and -2.04 dB at att 3.
+RS_LO_X_ATT = 3
 # VERIFIED IN A SOURCE [SN "this switching is provided to eliminate noise
 # leaking from IC20"]: both voices are gated by JFET Q74 through C112 0.022 uF
 # / R305 1 MOhm, a ~22 ms window. It is what stops the claves, whose resonator
@@ -983,6 +1042,24 @@ _PROVENANCE_TABLE = (
         holdout=HOLDOUT_NONE, date="2026-09-18",
         notes="one file and one knob: the level was chosen against the same recording "
               "that defines the target, so nothing checks it out of sample"),),
+    (("RS_LO_X_ATT",), Provenance(
+        status=PROV_DERIVED, prose_tag="HARDWARE-MEASURED",
+        source="the two impulse responses' closed forms at RS_LO_HZ/Q and "
+               "RS_HI_HZ/Q -- bank 1/sin(w0) against circuit H0 w0/Q -- derived and "
+               "swept by tools/probes/rs_mode_drive.py",
+        justification="18.06 dB (att 3) on the pulse into the 455 Hz network, the "
+                      "nearest of the path word's 6.02 dB steps to the +17.60 dB the "
+                      "closed forms require; without it an equal pulse into both "
+                      "bridged-T bodies puts our high mode 11.80 dB below the low "
+                      "where the circuit's sits 5.79 dB above",
+        docs=("docs/scorecard/results/D10A.json",),
+        notes="DERIVED, and the comment above it carries HARDWARE-MEASURED: the +5.79 "
+              "dB the circuit's own transfer functions predict is CONFIRMED by the "
+              "Fischer s/n 103852 recording's +6.6 dB (rs8/RS.WAV), two independent "
+              "routes agreeing to 0.7 dB -- but the recording is the check, not the "
+              "source, and no value was fitted to it. Corrects a DISCRETISATION error, "
+              "not a rimshot parameter: 1/sin(w0) is carried by every all-pole mode and "
+              "only becomes audible where one voice sums two modes 1.5 octaves apart"),),
     (("PEAK_CLX",), Provenance(
         status=PROV_FITTED,
         source="model/drums_fx_render.py --balance against CHART_VPP (reference 1.6)",
@@ -1611,7 +1688,7 @@ def kit_808() -> list:
         # 5's Q62 -- "the distortion is the sound; do not skip it". The two
         # taps are distorted SEPARATELY where the circuit distorts their sum;
         # the cost of that is measured in test_808_acceptance.
-        path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+        path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT, dest=M_RS1),
         path_word(SRC_PULSE, E_RSX, dest=M_RS2),
         path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
         path_word(SRC_TAP + M_RS2, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
@@ -1657,11 +1734,14 @@ def _kit_sha256(kit: list) -> str:
 
 
 def kit_808_rev11() -> list:
-    """The reference kit a revision-11 image plays: `kit_808()` with revision
-    13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
-    480, no ENV_FRATE[8] write at all (the register does not exist there), and
-    ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
-    its order.
+    """The reference kit a revision-11 image plays: `kit_808_rev14()` with
+    revision 14's three clap writes undone -- ENV_CTL[8] back to three strikes
+    at period 480, no ENV_FRATE[8] write at all (the register does not exist
+    there), and ENV_RATE[9] back to the 47 ms tail. Every other write is
+    revision 14's, in its order. It starts from revision 14 rather than the live
+    kit because revision 15 (#388) moved two rimshot writes the revision-11
+    image also never had: undoing one revision's changes at a time is what keeps
+    each `KitRefused` message pointing at the revision that actually moved.
 
     FROZEN BY HASH, CHECKED AT THE POINT OF USE: the result must hash to
     KIT808_REV11_SHA256, or this REFUSES (KitRefused). A later change to any
@@ -1673,7 +1753,7 @@ def kit_808_rev11() -> list:
     tail = A_ENV + E_CPTAIL * ENV_STRIDE
     undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
             tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
-    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
+    kit = [(a, undo.get(a, v)) for a, v in kit_808_rev14() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
         raise KitRefused(f"kit_808_rev11() hashes to {got[:12]}, not revision 11's "
@@ -1683,9 +1763,44 @@ def kit_808_rev11() -> list:
     return kit
 
 
+# ...and as revision 14 stated it, the kit the PUBLISHED R1 player preview was
+# built and measured with (fpga/release/r1-kit.json holds the same writes by
+# value). Revision 15 is #388's two rimshot writes; see `kit_808_rev14`.
+KIT808_REV14_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def kit_808_rev14() -> list:
+    """The reference kit a revision-14 image plays: `kit_808()` with revision
+    15's TWO rimshot writes undone (#388) -- PATH[15] back to an UNATTENUATED
+    pulse into the 455 Hz network, and ENV_PEAK[14] back to the gate peak that
+    went with it. Revision 15 adds and removes no write, so the address list and
+    the order are `kit_808()`'s exactly.
+
+    The two go together and neither may be undone alone: RS_LO_X_ATT without
+    PEAK_RSG's x2.2532 is a rimshot 7.05 dB below its share of Roland's chart,
+    which is a kit no release ever had. Both register fields exist in revision
+    14 and both new words would be ACCEPTED by that image -- which is exactly
+    why they have to be undone here rather than left to work by accident: a host
+    driving the published image gets the rimshot that image was measured with.
+
+    FROZEN BY HASH, CHECKED AT THE POINT OF USE, on the same contract as
+    `kit_808_rev11`: the result must hash to KIT808_REV14_SHA256 or this
+    REFUSES (KitRefused)."""
+    undo = {A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+            A_ENV + E_RSG * ENV_STRIDE + 1: peak_reg(PEAK_RSG_REV14)}
+    kit = [(a, undo.get(a, v)) for a, v in kit_808()]
+    got = _kit_sha256(kit)
+    if got != KIT808_REV14_SHA256:
+        raise KitRefused(f"kit_808_rev14() hashes to {got[:12]}, not revision 14's "
+                         f"KIT808 {KIT808_REV14_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-14 image was verified with; freeze the literal "
+                         "image or cut a new release")
+    return kit
+
+
 # The kit each supported image revision plays. A host names the image it
 # drives; it does not assume the tree's.
-KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808}
+KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808_rev14, 15: kit_808}
 
 
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:
@@ -1717,7 +1832,8 @@ def preset_writes(sound: str) -> list:
     if n == "RS":
         return (mode_writes(M_RS1, RS_LO_HZ, RS_LO_Q, 0.0, RAW)
                 + mode_writes(M_RS2, RS_HI_HZ, RS_HI_Q, 0.0, RAW)
-                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, dest=M_RS1)),
+                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT,
+                                               dest=M_RS1)),
                    (A_PATH + P_RS2X, path_word(SRC_PULSE, E_RSX, dest=M_RS2)),
                    (A_PATH + P_RS1OUT, path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING,
                                                  att=RS_ATT, dest=DEST_MIX)),

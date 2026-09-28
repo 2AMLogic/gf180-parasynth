@@ -42,8 +42,15 @@ def _setup(argv):
 
 
 def test_frozen_kit_is_revision_14_with_a_nonzero_final_strike():
+    """R1's kit is revision 14's, which is NO LONGER the tree's: contract
+    revision 15 (#388) moved the rimshot's drive and gate peak. It is compared
+    against `kit_808_rev14()`, the tree's own reconstruction of revision 14 --
+    so the frozen copy and the model still have to agree about revision 14 --
+    and NOT against `kit_808()`, which is free to move and did."""
     kit = r1c.frozen_kit()
-    assert len(kit) == r1c.KIT_R14_WRITES and kit == [tuple(w) for w in dx.kit_808()]
+    assert len(kit) == r1c.KIT_R14_WRITES
+    assert kit == [tuple(w) for w in dx.kit_808_rev14()]
+    assert kit != [tuple(w) for w in dx.kit_808()], "revision 15 did not reach the tree"
     addr, val = r1c.clap_final_strike()
     assert addr == FRATE == 0x63 and val != 0
     assert FRATE not in dict(dx.kit_808_rev11())
@@ -69,10 +76,23 @@ def test_frozen_kit_is_by_value_and_a_tampered_copy_refuses(monkeypatch, tmp_pat
 
 @pytest.mark.parametrize("fixture", ["demo", "bar808-full"])
 def test_r1_fixture_setup_is_the_frozen_target(fixture):
-    ws, kit = _setup(["run", "--fixture", fixture, "--image", "tree"])
+    """`--image r1`, not `--image tree`. These were the same sender until
+    contract revision 15 (#388) moved the tree's rimshot; the frozen target is
+    R1's, so the selector that claims to send it is the one under test."""
+    ws, kit = _setup(["run", "--fixture", fixture, "--image", "r1"])
     assert kit and r1c.check_init(ws, kit_expected=True) == []
     assert tuple(ws[:2]) == r1c.PREAMBLE
     assert [d for f, s, a, d in ws if s == 1 and a == FRATE] == [r1c.clap_final_strike()[1]]
+
+
+@pytest.mark.parametrize("fixture", ["demo", "bar808-full"])
+def test_control_the_tree_sender_now_fails_the_r1_target(fixture):
+    """The control the change above needs: since revision 15 the TREE sender no
+    longer satisfies R1's frozen target, and it must fail loudly rather than be
+    quietly close enough. The reason must name the kit, not something else."""
+    ws, kit = _setup(["run", "--fixture", fixture, "--image", "tree"])
+    probs = r1c.check_init(ws, kit_expected=True)
+    assert probs and any("kit" in p for p in probs), probs
 
 
 @pytest.mark.parametrize("fixture", ["demo", "bar808-full"])
