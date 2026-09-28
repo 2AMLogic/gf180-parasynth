@@ -104,12 +104,17 @@ module tb_pads_top;
     // ---- the frame budget --------------------------------------------------
     integer n_strobe = 0, n_nostrobe = 0, worst_cyc = 0, busy_at_tick = 0;
     reg got = 0;
-    always @(posedge clk) if (rst_n === 1'b1 && seg >= 0) begin
+    // A reset cuts the frame in flight short, so that frame is not a missed
+    // sample. `got` is cleared while reset is held, and a frame is judged only
+    // at a cyc-0 tick that closes a frame the core ran from its start since
+    // the release (frame >= 1: audio frame 0 of every segment is still judged).
+    always @(posedge clk) if (rst_n !== 1'b1) got <= 1'b0;
+    else if (seg >= 0) begin
         if (board.u_synth.sample_valid) begin
             got <= 1'b1; n_strobe = n_strobe + 1;
             if (board.u_synth.cyc > worst_cyc) worst_cyc = board.u_synth.cyc;
         end
-        if (board.u_synth.cyc == 8'd0 && g > 256) begin
+        if (board.u_synth.cyc == 8'd0 && board.u_synth.frame >= 16'd1) begin
             if (board.u_synth.voice_busy || board.u_synth.drum_busy)
                 busy_at_tick = busy_at_tick + 1;
             if (!got) n_nostrobe = n_nostrobe + 1;

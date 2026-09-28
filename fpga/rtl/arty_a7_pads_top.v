@@ -15,8 +15,9 @@
 //              ready (kit loaded), led[3] a press was accepted (~170 ms).
 //
 // Clocking and the core reset release are arty_a7_top's, line for line; only
-// the reset REQUEST differs (the SW3 toggle, not BTN0). SPI and the FTDI TX are
-// kept as they were, so host mode is the full arty_a7_top link.
+// the reset REQUEST differs (the SW3 toggle, not BTN0), and the MMCM's RST is
+// tied off rather than wired to a pad. SPI and the FTDI TX are kept as they
+// were, so host mode is the full arty_a7_top link.
 module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
                           parameter RST_HOLD_BITS=20,
                           parameter UART_BAUD=115200, parameter UART_EVQ_DEPTH=64,
@@ -27,20 +28,6 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
     input wire uart_rxd, output wire uart_txd,
     output wire i2s_bclk, i2s_lrclk, i2s_sdata
 );
-    // ---- SW3: a toggle is a reset request, in the always-running 100 MHz domain
-    (* ASYNC_REG = "TRUE" *) reg [1:0] swr_q = 2'b00;
-    reg swr_last = 1'b0;
-    reg [RST_HOLD_BITS-1:0] swr_hold = {RST_HOLD_BITS{1'b0}};
-    reg sw_reset_req = 1'b0;
-    always @(posedge clk_100mhz) begin
-        swr_q <= {swr_q[0], sw_reset};
-        swr_last <= swr_q[1];
-        // a bouncing slide switch re-arms the hold; release waits for it to settle
-        if (swr_q[1] != swr_last) swr_hold <= {RST_HOLD_BITS{1'b1}};
-        else if (swr_hold != 0) swr_hold <= swr_hold - 1'b1;
-        sw_reset_req <= (swr_hold != 0);
-    end
-
     wire core_clk, clock_locked;
     generate if (SIM_NO_MMCM) begin: simulation_clock
         // Testbench supplies 12.288 MHz here. Never select for a bitstream.
@@ -61,6 +48,24 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
         BUFG feedback_buffer (.I(feedback_raw), .O(feedback));
         BUFG core_buffer (.I(clock_raw), .O(core_clk));
     end endgenerate
+
+    // ---- SW3: a toggle is a reset request. On the CORE clock, deliberately:
+    // the request clears core-clock flops asynchronously, and a 100 MHz source
+    // would make that a clk100 -> core_clk recovery arc between two MMCM-related
+    // clocks. These flops take no reset (they make it); before lock the
+    // request is ~clock_locked anyway. At 12.288 MHz the hold is 2^20 cycles
+    // (85 ms), re-armed by every bounce of the slide switch.
+    (* ASYNC_REG = "TRUE" *) reg [1:0] swr_q = 2'b00;
+    reg swr_last = 1'b0;
+    reg [RST_HOLD_BITS-1:0] swr_hold = {RST_HOLD_BITS{1'b0}};
+    reg sw_reset_req = 1'b0;
+    always @(posedge core_clk) begin
+        swr_q <= {swr_q[0], sw_reset};
+        swr_last <= swr_q[1];
+        if (swr_q[1] != swr_last) swr_hold <= {RST_HOLD_BITS{1'b1}};
+        else if (swr_hold != 0) swr_hold <= swr_hold - 1'b1;
+        sw_reset_req <= (swr_hold != 0);
+    end
     wire reset_request = sw_reset_req | ~clock_locked;
     // Asynchronous assertion; deassertion waits for lock and two core clocks.
     (* ASYNC_REG = "TRUE" *) reg [1:0] ready_sync = 0;
