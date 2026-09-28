@@ -41,7 +41,9 @@ three bands' levels relative to one another — where it was. #396 then asked fo
   because 10079 Hz is inside Ht3's plotted range.
 - It is now the wrong **quantity** as well. #390/#417 solved the network instead of bounding it, so the tone term
   is a circuit value and its uncertainty is that solution's own residual: **0.008 / 0.008 / 0.067 dB**, three
-  orders of magnitude inside the 3.0 dB tolerance a band split has to be known to.
+  orders of magnitude inside the 3.0 dB tolerance a band split has to be known to. *That number is the
+  **solution's** uncertainty, not the tone stage's — §1's tolerance paragraph carries the unit-to-unit term
+  separately, and it is 45–619× larger. Do not quote one for the other (#425).*
 - What is actually blocking the balance is a factor **neither figure carries**: the three swing VCAs' drive levels.
   Against the shipped-kit level rule the model currently uses, the filters-plus-tone balance alone demands
   **+10.1 dB on the decay band and +39.8 dB on the short band**. A 39.8 dB residual is not a 9–18 dB figure
@@ -67,7 +69,70 @@ Each band's level, **at the frequency its level is set** (`cymbal_candidate_eval
 Figure 9's own digitised k = 1.0 curve (0.0035 / 0.0040 / 0.0324 dB) plus the move over ±3σ on the one parameter
 the solution fits (σ(α) = 3.3 × 10⁻⁵, worth 0.0003–0.0013 dB). It does **not** carry component tolerance: SN p.13's
 printed nominal values are taken as exact, because nothing in this repository measures a real TR-808's VR4 network
-and an invented tolerance would be a claim rather than a reading. Filed as **#425**.
+and an invented tolerance would be a claim rather than a reading.
+
+**#425 asked whether that exclusion could be closed. It is now measured, it stays out of `tone ±` on purpose, and
+it is three orders of magnitude larger than the column it is not in.** The two are answers to different questions:
+`tone ±` asks *"is the network SN p.13 prints solved?"*, for which the printed values are the **definition** of the
+thing rather than an uncertainty in it; component tolerance asks *"how far does a built unit sit from that
+print?"*. Summing them would make this table's verdict depend on which physical 808 is meant, so the second is
+carried beside the first, named, and cited.
+
+**The class, and where it is not.** The pinned service-notes scan prints no tolerance anywhere in its 16 pages —
+p.1 says the full parts list is a *separate* document; p.8 carries the only "UNLESS OTHERWISE SPECIFIED" legend
+and it covers semiconductors alone; p.13, the page the values were read off, prints values and designators only;
+p.16's PARTS LIST enumerates **one** resistor and **three** capacitors, none of them in this network, and lists
+VR4 as `EVH-LWAD25B24 20K (B) CY tone`, resistance and taper only. That search is committed
+(`tone_stage_schematic.SN_PRINTS_NO_TOLERANCE`) and is why the class cannot come from there. The class that **is**
+citable is **W14a §11: "the voice circuits featured ±20% capacitors and ±5% resistors"** — verified against the
+DAFx-14 PDF itself rather than against this repository's transcription of it, and already the source of
+`docs/tr808-reference.md` §1.7's ±10 % f0 and ±50 % Q. **VR4's own tolerance is not covered by it** (a pot is not
+a fixed resistor) and is printed nowhere, so it is carried as an explicit `None` with its lever reported beside
+the bound, not folded into the resistor class.
+
+| what | low (Ht1 @ 3175) | decay (Ht2 @ 10079) | short (Ht3 @ 10079) |
+|---|---:|---:|---:|
+| `tone ±` (this network, solved) | 0.0038 | 0.0042 | 0.0336 dB |
+| lever: 1 % on all 13, in quadrature | 0.134 | 0.126 | 0.138 dB |
+| **W14a class, unit to unit, rss** | **1.697** | **1.763** | **1.765 dB** |
+| same, every part adversarial at once | 3.289 | 2.605 | 2.399 dB |
+| VR4, uncited (lever per 1 %) | 0.019 | 0.016 | 0.050 dB |
+
+Four things follow, and the first is the reason this was worth its own issue:
+
+- **The excluded term dwarfs the carried one — by 45× to 619×, depending on the band.** `tone ±` is *not* the tone
+  stage's total uncertainty, and a reader who treats 0.0038 dB as "the tone term is exact" is wrong by more than
+  two orders of magnitude. **It still changes no verdict**: §2's refusal is bound by the +39.79 dB VCA-drive gap,
+  an order of magnitude above even the unit term, which is why this column collapsing did not and could not
+  unblock the balance.
+- **On the band *ratios* this table actually reads, the term is smaller than any per-band number**: **0.90 dB**
+  (decay − low) and **1.07 dB** (short − low), rss half-widths. A ratio is not two independent draws — C90, the
+  shunt at the node all three families share, is the largest lever on each and largely cancels in a difference
+  (1.70 dB of the low band's own spread becomes 0.26 dB of decay − low). The propagation has to be done on the
+  *difference*, not on the two bands separately: `relative_db` adds the two bands' widths, which for this term
+  would give 6.9 dB where the correlated answer is 2.1 dB — a 3× over-statement. As widths, the way the 3.0 dB a
+  band split must be known to is stated: **1.80 dB and 2.14 dB, inside it by 1.4–1.7×** — not the 45–400× that
+  `tone ±` alone suggests.
+- **A tolerance claim only has to be defensible about a few parts.** C90 is in all three dominant sets; four parts
+  (C90, R112, R119, VR4) carry 99 % of Ht3's lever at 10079 Hz, and the low band needs seven for 95 %.
+- **The lever is a first-order quantity, not a ceiling.** Re-solving the network exactly at the gradient-sign
+  corner gives 1.0002–1.0017× the linear sum at 1 % and 1.0012–1.0092× at 5 %: curvature puts the exact corner
+  *above* it. The first version of the test asserted the comfortable direction and went red.
+
+`tools/tone_stage_schematic.py --sensitivity` prints the per-component table (`../sn-p13-vr4.json` →
+`bands.<band>.at_hz.<f>.sensitivity`), the cited term beside it, both identities that check the table (impedance
+scaling: R → kR with C → C/k leaves the answer exactly unchanged, so the resistors' and capacitors'
+log-sensitivities must sum to the same number; frequency scaling: the capacitors' sum must equal d(dB)/d(ln f),
+computed by perturbing the *frequency*), and a two-defect control matrix showing neither identity is decorative —
+a 100× units bug satisfies the first exactly and is caught only by the second. `tolerance_bound_db` REFUSES
+(`ToleranceUncited`) for a part silently absent from a class, and reports one explicitly declared uncited.
+
+> **Wrong before it was right, twice, and both are recorded where the numbers are.** (1) The first version of this
+> paragraph concluded *no* tolerance class was citable, on the strength of the 16-page service-notes search above.
+> The search was real and its conclusion was still wrong: it covered **one** of the four sources this repository
+> has already read, and §1.7 of `docs/tr808-reference.md` had carried the class the whole time. An absence is only
+> as strong as the corpus it was searched over, and a "nothing found" finding has to name that corpus. (2) The
+> first-order lever was asserted to be a ceiling; it is not.
 
 Two things that should be said rather than smoothed over now the column has collapsed:
 
