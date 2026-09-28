@@ -415,6 +415,20 @@ release, the note-only command above was **silent**. Its image carried no
 mixer weights, and a replay of those bytes through the wrapper decodes an I2S
 peak of 0. The note-only image now writes them.
 
+**A SONG.** `fpga/play_song.py` plays a tune over the same link, with the same
+device-scheduled events: the patch goes first as live writes, then every
+note-on and note-off is stamped with its audio frame and fired by the FPGA.
+Long songs roll through the 64-deep queue in batches. A note the patch cannot
+play in the qualified range is refused, never re-pitched. Built-in songs are
+`ode` and `twinkle`; `--notes "C3:1 E3:1 G3:2 R:1"` and `--song-file` take
+any other. `--render out.wav` plays the same writes through the integer model,
+so you can hear it without a board.
+
+```text
+python3 fpga/play_song.py --port /dev/cu.usbserial-XXXX --song ode
+python3 fpga/play_song.py --song twinkle --render twinkle.wav
+```
+
 `run` loads the patch image, starts the note, holds it, releases it and —
 with `--fixture m5a` — replays the scripted phrase, all as device-scheduled
 events, no host-side sleeps in the timing path (host sleeps pace BYTES onto
