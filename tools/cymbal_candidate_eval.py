@@ -122,12 +122,23 @@ def main(argv=None):
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--wavs", type=pathlib.Path, default=None, help="write shipped/candidate CY renders here")
-    ap.add_argument("--variant", choices=("full", "notilt"), default="full")
+    ap.add_argument("--variant", choices=("full", "notilt", "balance"), default="full")
     a = ap.parse_args(argv)
     global VARIANT
     VARIANT = a.variant
     refs = pathlib.Path(a.refs)
     cal = calibrate()
+    if VARIANT == "balance":
+        # Diagnostic ablation (#396), NOT a candidate: the band-pass peaks and
+        # high-pass pass bands from W14b Fig. 4 and the tone stage's nominal
+        # transmission from Fig. 9, applied as the relative band levels with
+        # the three VCA drives held equal. The equal-drive assumption is what
+        # the render tests -- see tools/cymbal_band_balance.py.
+        import cymbal_band_balance as cbb          # noqa: PLC0415
+        import cymbal_tone_realisation as ctr      # noqa: PLC0415
+        import werner_fig9 as w9                   # noqa: PLC0415
+        cal = cbb.rebalance(cal, w9.from_artifact()[0], ctr.level_corner_hz())
+        print("ablation:", json.dumps(cal["ablation"]))
     print("levels:", json.dumps({k: {kk: round(vv, 5) for kk, vv in v.items()} for k, v in cal["per_band"].items()}))
     pres = preservation(cal["amps"])
     print("preservation (bit-identical to shipped):", pres)

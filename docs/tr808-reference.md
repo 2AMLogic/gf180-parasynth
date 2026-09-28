@@ -879,6 +879,23 @@ VCAs' asymmetric clipping is what makes the sum "sizzle"; a linear VCA gives a
 flat, chorus-like tone. Applying this balance into a candidate is #396's job,
 not this section's — see §18.
 
+**The filter chain is not the whole band balance, and the missing factor is the
+larger one [measured: `tools/cymbal_band_balance.py`,
+`docs/scorecard/cymbal-369/balance/`].** Including the tone stage, and
+evaluated at the frequency each band's level is actually set (3175 Hz for the
+low band, 10079 Hz for both high bands), the circuit puts the DECAY band
+**+17.2 dB** and the short band **+24.7 dB** above the low band. But **three
+separate envelope generators and three separate swing VCAs (Q16/Q17/Q18) sit
+between the band-passes and the high-passes, and no W14b figure plots them.**
+Against the model's own shipped-kit level rule that leaves a gap of +9.9 dB
+(DECAY) and **+38.2 dB (short)** unaccounted for, an order of magnitude more
+than the tone stage's own figure-reading bound at those frequencies (7.4 /
+13.9 / 0.04 dB). Applying the resolved factors with the VCA drives held equal
+was rendered and measured: H−L 24.38 dB against the 808 CY5025's 8.16, where
+the level rule it replaced reads 12.09. **So the band balance needs the VCA
+drives from the schematic as well as VR4's network; VR4 alone does not resolve
+it.**
+
 **Do not implement the level stage without the tone stage.** They are the same
 size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
 the rising slope and no tone stage is *further* from the machine than one with
@@ -1321,6 +1338,27 @@ envelopes.
   map from W14b's own `k` parameter to this pot's physical rotation. That
   stays the knob-law repair named in `docs/scorecard/cymbal-369/README.md`
   §4.
+
+  **Also still open, and NOT resolved by #390: the per-band VCA drive levels,
+  which are the larger term in the inter-band balance** [`#396`,
+  `tools/cymbal_band_balance.py`, `docs/scorecard/cymbal-369/balance/`]. #396's
+  own step measured the balance's decomposition before #390 landed, and its
+  finding is untouched by #390's success: the unresolved factor is one **no
+  W14b figure carries at all** — the three envelope generators' and swing VCAs'
+  drive levels (Q16/Q17/Q18, §10). Against the model's shipped-kit level rule,
+  the filters-plus-tone balance alone leaves a +9.9 dB (DECAY) and **+38.2 dB
+  (short)** gap, and applying it with the VCA drives held equal was rendered
+  and lands 16.2 dB from the 808's band split where the rule it replaced is
+  3.9 dB from it. That step also said, **before #390 was done, that VR4's
+  network alone would not unblock the balance** — #390 resolved VR4 and the
+  38.2 dB VCA term remains, so the prediction held. What #396's record still
+  states as *bounded* rather than resolved (Ht1 7.4 dB / Ht2 13.9 dB / Ht3
+  0.04 dB at each band's own calibration third, read off Figure 9) is
+  **superseded by the nodal solution above** and needs re-deriving from
+  `tools/tone_stage_schematic.py`; that re-derivation is **#420**, not done in
+  #396's step. The VCA-drive half of route 1 — the
+  envelope generator and swing VCA drive networks from SN p.13 — is what is
+  still missing.
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6

@@ -112,6 +112,11 @@ That map is **not** a measurement of the instrument. Its knob laws need their ow
 claim can be made. Wrong-then-right 2: I rendered through `kit_at` first and nearly reported a 10 dB band error that
 the shipped instrument does not have.
 
+**This blocker was cited four times as "#371" and #371 is a merged pull request, not an open issue** — step 1 of
+this chain. So the thing gating acceptance item 3 of #396, the listening pack's other 24 settings and `gate-379`'s
+§2 selection argument was tracked by nothing. It now has its own issue, **#413**; `balance/README.md` §6 lists the
+four citations that need correcting to point at it.
+
 > **Where this went.** Step 2 is `candidate/README.md` (the §10 candidate, negative); step 3 is
 > `candidate2/README.md` (Hh2, Hh3 and the level stage read off W14b Figures 4 and 10 by
 > `tools/werner_fig4.py`, and a second negative that eliminates the filter values as the cause).
@@ -134,7 +139,7 @@ the shipped instrument does not have.
 > tolerance. What it qualifies instead is a **level** difference — the shipped kit has ~6 dB more
 > independent 1–1.8 kHz content than the machine and candidate 3 has ~4 dB less — which is where the
 > omitted Hh1 acts.
-
+>
 > **Step 6/7 is `low-tail/README.md`** — the qualified 1–2.5 kHz decay #400 asked for, and the answer to
 > step 5's unqualified finding. The within-record ratio rho(d) = T_M(d)/T_Ln(d) at six depths, with eight
 > named properties, six injected defects, a measured zero point (rho is **not** 1.0 on a skirt-only
@@ -150,6 +155,19 @@ the shipped instrument does not have.
 > the bound — nor its decay (rho_M tops out at 0.97 over a −12…+30 dB balance sweep). The tone stage's
 > shape, the obvious suspect, is worth 0.80 dB. §10 names one element it describes and does not quantify:
 > the VCAs' asymmetric clipping. Wrong-then-right rate of that step: **7**.
+>
+> **Alongside steps 6 and 7 rather than after them, the inter-band balance is `balance/README.md`** — the half
+> #396 left open, now **REFUSED with the blocking factor measured** rather than deferred. It carries no step
+> number because it was measured in parallel with them, using neither's result and used by neither. Its obstacle
+> is not the 9–18 dB of Figure 9 window this file and reference §18 blamed; it is the three swing VCAs' drive
+> levels, which no W14b figure plots — a +38.2 dB gap in the short band against the shipped-kit level rule.
+> Applying every resolved factor with the drives held equal was rendered and lands H−L at 24.38 dB against the
+> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it** — a prediction
+> #390/#417 has since tested by resolving VR4, after which the 38.2 dB VCA term is still there. Its own Figure 9
+> *bounds* for the tone term (7.4 / 13.9 / 0.04 dB) are **superseded** by #390's nodal solution and need
+> re-deriving from `tools/tone_stage_schematic.py` (**#420**); the refusal itself does not, because the VCA drives are the
+> binding term and #390 does not carry them. Step 7's finding is the sharper statement of the same limit: no
+> inter-band balance at all reaches the 808's 1–2.5 kHz energy.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
