@@ -1,0 +1,212 @@
+{
+ "alpha_k1": 0.3977174262519643,
+ "alpha_k_sigma": 3.0,
+ "alpha_sigma": 3.2904235184332684e-05,
+ "artifact": "sn-p13-vr4",
+ "bands": {
+  "decay": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.0002580164185594924,
+     "bound_db": 0.004228712050981187,
+     "db": -29.857892287477977,
+     "hi_db": -29.853663575426996,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -29.86212099952896,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false
+    },
+    "3175.0": {
+     "alpha_db": 0.0002844370163970211,
+     "bound_db": 0.004255132648818716,
+     "db": -19.83254117450289,
+     "hi_db": -19.82828604185407,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -19.836796307151708,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false
+    },
+    "7100.0": {
+     "alpha_db": 0.0002634817608466733,
+     "bound_db": 0.004234177393268368,
+     "db": -26.681204428168904,
+     "hi_db": -26.676970250775636,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -26.685438605562172,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false
+    }
+   },
+   "drive": "bottom",
+   "family": "Ht2"
+  },
+  "low": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.00025801641856304514,
+     "bound_db": 0.003798415630878793,
+     "db": -57.2214212707796,
+     "hi_db": -57.21762285514872,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -57.22521968641048,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false
+    },
+    "3175.0": {
+     "alpha_db": 0.00028443701640412655,
+     "bound_db": 0.0038248362287198745,
+     "db": -41.04327946019974,
+     "hi_db": -41.039454623971025,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -41.04710429642846,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false
+    },
+    "7100.0": {
+     "alpha_db": 0.0002634817608466733,
+     "bound_db": 0.0038038809731624212,
+     "db": -51.764406551535814,
+     "hi_db": -51.76060267056265,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -51.76821043250898,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false
+    }
+   },
+   "drive": "hh1",
+   "family": "Ht1"
+  },
+  "short": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.0012555296072278566,
+     "bound_db": 0.03364580059921707,
+     "db": -36.574565057314146,
+     "hi_db": -36.54091925671493,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -36.60821085791336,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true
+    },
+    "3175.0": {
+     "alpha_db": 0.001283666997078825,
+     "bound_db": 0.03367393798906804,
+     "db": -27.498486696753154,
+     "hi_db": -27.464812758764086,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -27.532160634742223,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true
+    },
+    "7100.0": {
+     "alpha_db": 0.0012594410883792762,
+     "bound_db": 0.03364971208036849,
+     "db": -33.656341172680165,
+     "hi_db": -33.622691460599796,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -33.68999088476053,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true
+    }
+   },
+   "drive": "top",
+   "family": "Ht3"
+  }
+ },
+ "bound_excludes": "component tolerance -- the printed nominal values are taken as exact; see resolved_bound_db",
+ "components": {
+  "C55": 1e-08,
+  "C56": 1e-08,
+  "C57": 3.3e-09,
+  "C58": 1e-08,
+  "C90": 1e-08,
+  "R112": 22000.0,
+  "R119": 22000.0,
+  "R120": 10000.0,
+  "R121": 10000.0,
+  "R123": 100000.0,
+  "R125": 2200.0,
+  "R129": 15000.0,
+  "VR4_TOTAL": 20000.0
+ },
+ "emit": "python3 tools/tone_stage_schematic.py --emit",
+ "fit": {
+  "alpha": 0.39771742625327927,
+  "free_per_path_gain": false,
+  "joint_rms_db": 0.010491043921917876,
+  "n_points": 707,
+  "per_family": {
+   "Ht1": {
+    "max_db": 0.003540399212315748,
+    "n_points": 150,
+    "rms_db": 0.0014219853218361558,
+    "window_hz": [
+     121.0457,
+     563.8392
+    ]
+   },
+   "Ht2": {
+    "max_db": 0.003970695632421695,
+    "n_points": 107,
+    "rms_db": 0.0014273158417747102,
+    "window_hz": [
+     561.6,
+     1640.0729
+    ]
+   },
+   "Ht3": {
+    "max_db": 0.03239027099198921,
+    "n_points": 450,
+    "rms_db": 0.013105770214765002,
+    "window_hz": [
+     20.011,
+     19905.3794
+    ]
+   }
+  }
+ },
+ "fitted_against": {
+  "path": "docs/scorecard/cymbal-369/werner-fig9.json",
+  "sha256": "c5621f78202a7be18df80e423b70f136d8df5875f3b51111e373c79f764f1e70"
+ },
+ "poles_hz": [
+  128.3083557438152,
+  509.0924897529268,
+  681.3665043667827,
+  1635.7471939445015,
+  4191.5121351793405
+ ],
+ "source": {
+  "board": "VG 3116-140",
+  "crops": {
+   "q25": {
+    "dpi": 500,
+    "h": 900,
+    "w": 1500,
+    "x": 2500,
+    "y": 4700
+   },
+   "tone": {
+    "dpi": 400,
+    "h": 1300,
+    "w": 1600,
+    "x": 2480,
+    "y": 3040
+   }
+  },
+  "page": 13,
+  "sha256": "d3239b51e2eb5523ff7247528667dc753f9db84a8d29b62cf763cbc51d4aad74",
+  "url": "https://archive.org/download/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf"
+ },
+ "tool": "tools/tone_stage_schematic.py",
+ "what": "the CY TONE network around VR4 (SN p.13, voicing board VG 3116-140), solved by nodal analysis -- the resolved inter-band tone term, not a bound on it"
+}

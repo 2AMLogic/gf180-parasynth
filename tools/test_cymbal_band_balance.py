@@ -36,6 +36,7 @@ sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import cymbal_candidate as cc                  # noqa: E402
 import cymbal_band_balance as bb               # noqa: E402
 import cymbal_tone_realisation as ct           # noqa: E402
+import tone_stage_schematic as ts              # noqa: E402
 import werner_fig9 as w9                       # noqa: E402
 
 ABLATION = bb.SCORECARD / "balance" / "balance-ablation.json"
@@ -104,7 +105,11 @@ def test_the_chain_at_its_own_peak_is_the_recorded_constants():
 def test_the_tone_term_matches_figure_9s_own_digitised_curve(figs):
     """Not the 2-pole fit -- the DIGITISED POINTS. Ht3 is plotted across the
     whole band, so its value at the short band's 10079 Hz calibration third is
-    read off the figure and owes nothing to this tool's model of it."""
+    read off the figure and owes nothing to this tool's model of it.
+
+    Both routes are checked against it, which is the point: the short band is
+    the ONE place where the figure and the solved network can be compared at
+    the frequency the balance actually uses, and they must agree there."""
     fig9, _ = figs
     hz, db, _ = bb.tone_fit("short", fig9)
     f = bb.CENTRE_HZ["short"]
@@ -112,6 +117,8 @@ def test_the_tone_term_matches_figure_9s_own_digitised_curve(figs):
     truth = float(np.interp(math.log10(f), np.log10(hz), db))
     ours = float(bb.tone_db("short", np.array([f]), fig9)[0])
     assert ours == pytest.approx(truth, abs=0.2), (ours, truth)
+    nodal = bb.schematic_tone_term("short")["db"]
+    assert nodal == pytest.approx(truth, abs=0.2), (nodal, truth)
 
 
 def test_the_tone_terms_shape_reproduces_werner_fig9s_tilt_table(figs):
@@ -138,16 +145,126 @@ def test_the_models_recorded_peak_db_literals_are_the_artifacts(figs):
 
 
 def test_the_models_recorded_bounds_and_gap_are_the_tools(figs):
-    """`TONE_BOUND_AT_CENTRE_DB` and `BALANCE_GAP_DB` are the numbers the
-    model's docstring argues from. A literal that drifts from the tool that
-    produced it is failure-modes.md's "claims outliving their evidence"."""
+    """`TONE_BOUND_AT_CENTRE_DB`, `FIGURE_TONE_BOUND_AT_CENTRE_DB` and
+    `BALANCE_GAP_DB` are the numbers the model's docstring argues from. A
+    literal that drifts from the tool that produced it is failure-modes.md's
+    "claims outliving their evidence"."""
     fig9, corner = figs
     for band in bb.BANDS:
         got = bb.tone_term(band, fig9)["width_db"]
-        assert got == pytest.approx(cc.TONE_BOUND_AT_CENTRE_DB[band], abs=0.01), band
+        assert got == pytest.approx(cc.TONE_BOUND_AT_CENTRE_DB[band], abs=1e-3), band
+        fig = bb.figure_tone_term(band, fig9)["width_db"]
+        assert fig == pytest.approx(cc.FIGURE_TONE_BOUND_AT_CENTRE_DB[band], abs=0.01), band
     g = bb.gap_db(fig9, corner)
     for band in bb.BANDS:
         assert g[band]["gap_db"] == pytest.approx(cc.BALANCE_GAP_DB[band], abs=0.01), band
+
+
+# ---- the tone term is #390's nodal solution, pinned to it (#420) ----------
+
+
+def test_the_tone_term_is_tone_stage_schematics_own_nodal_solution(figs):
+    """THE binding test for #420. Every `tone` value the balance uses must be
+    `tone_stage_schematic.db_at` at the fitted wiper fraction, at the frequency
+    that band's level is set at -- not a transcription of it, and not a number
+    that can drift the way #410's four prose figures did.
+
+    Exact equality to 1e-9 dB, not a tolerance: one side is read from the
+    committed record and the other is recomputed from the module that wrote it,
+    so any difference at all means the record has gone stale.
+    """
+    fig9, _ = figs
+    for band, name in ct.BAND_OF.items():
+        f = bb.CENTRE_HZ[band]
+        want = float(ts.db_at(np.array([f]), ts.ALPHA_K1, name)[0])
+        got = bb.tone_term(band, fig9)
+        assert got["db"] == pytest.approx(want, abs=1e-9), (band, name)
+        assert got["hz"] == pytest.approx(f, abs=1e-9), band
+        assert got["family"] == name
+        assert got["route"] == bb.ROUTE_SCHEMATIC
+
+
+def test_the_committed_schematic_artifact_is_the_modules_own_solution(figs):
+    """`sn-p13-vr4.json` is the `schematic-vr4` precondition, so it must be the
+    nodal solution rather than a snapshot of one. Re-emitted from the module
+    and compared field by field: an artifact that could drift from its emitter
+    would be a precondition satisfied by a stale file."""
+    fig9, _ = figs
+    assert bb.SCHEMATIC_ARTIFACT.exists()
+    committed = json.loads(bb.SCHEMATIC_ARTIFACT.read_text())
+    fresh = ts.balance_record(fig9)
+    assert committed["alpha_k1"] == pytest.approx(ts.ALPHA_K1, abs=1e-12)
+    assert committed["source"]["sha256"] == ts.SN_PDF_SHA256
+    for band, name in ct.BAND_OF.items():
+        assert committed["bands"][band]["family"] == name
+        for key, entry in fresh["bands"][band]["at_hz"].items():
+            got = committed["bands"][band]["at_hz"][key]
+            for field in ("db", "bound_db", "lo_db", "hi_db", "residual_db"):
+                assert got[field] == pytest.approx(entry[field], abs=1e-9), (band, key, field)
+
+
+def test_the_tone_bound_collapsed_to_the_solutions_own_residual(figs):
+    """#420's second deliverable. The `tone ±` column was 7.4 / 13.9 / 0.04 dB
+    of Figure 9 extrapolation spread; resolving the network replaces it with
+    that solution's largest disagreement with Figure 9's digitised curves plus
+    3 sigma on its one fitted parameter. It must COLLAPSE -- and it must not
+    collapse to zero, which would mean the bound had been dropped rather than
+    re-derived."""
+    fig9, _ = figs
+    stats = ts.residual_stats(fig9)
+    _, _, sigma, _ = ts.fit_alpha_k1_with_sigma(fig9)
+    for band, name in ct.BAND_OF.items():
+        t = bb.tone_term(band, fig9)
+        want = ts.resolved_bound_db(bb.CENTRE_HZ[band], name,
+                                    stats=stats, sigma_alpha=sigma)
+        assert t["width_db"] == pytest.approx(2.0 * want["bound_db"], abs=1e-9), band
+        assert 0.0 < t["width_db"] < 0.1, band
+        assert t["width_db"] < bb.figure_tone_term(band, fig9)["width_db"] \
+            or band == "short", band
+    # ...and the whole point of the collapse: the propagated balance is now
+    # inside the tolerance that the figure route is outside of.
+    rel = bb.relative_db(fig9, ct.level_corner_hz())
+    assert all(v["width_db"] < bb.BALANCE_BOUND_DB for v in rel.values()), rel
+
+
+def test_the_short_bands_bound_is_the_one_place_both_routes_can_be_compared(figs):
+    """Stated rather than smoothed over. 10079 Hz is inside Ht3's plotted
+    window, so the short band is the only band where Figure 9's bound and the
+    nodal solution meet at the frequency the balance uses -- and the nodal
+    value lands just OUTSIDE Figure 9's 0.041 dB-wide bound there.
+
+    That is a bound marginally too tight, not a disagreement between methods:
+    the excursion is 0.02 dB, smaller than the solution's own residual against
+    the same digitised curve, and three orders of magnitude below the
+    applicability bound. Asserted with both a floor and a ceiling so it cannot
+    grow silently in either direction."""
+    fig9, _ = figs
+    fig = bb.figure_tone_term("short", fig9)
+    nodal = bb.schematic_tone_term("short")
+    assert fig["measured"] is True and nodal["measured"] is True
+    assert fig["width_db"] < 0.05
+    outside = max(fig["lo_db"] - nodal["db"], nodal["db"] - fig["hi_db"])
+    assert 0.0 < outside < 0.05, (outside, fig, nodal)
+    assert outside < nodal["residual_db"] + nodal["alpha_db"]
+
+
+def test_the_schematic_tone_term_refuses_a_frequency_it_never_solved(figs):
+    """The record answers at the frequencies it was emitted for and REFUSES
+    elsewhere rather than interpolating. A tool that answers where it cannot is
+    worse than one that is absent, because its output looks like data."""
+    with pytest.raises(bb.Refused) as e:
+        bb.schematic_tone_term("low", at_hz=1234.0)
+    assert "1234.0" in str(e.value)
+
+
+def test_the_schematic_record_refuses_when_absent_or_malformed(tmp_path):
+    with pytest.raises(bb.Refused) as e:
+        bb.schematic_record(tmp_path / "nope.json")
+    assert "--emit" in str(e.value)
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"artifact": "something-else"}))
+    with pytest.raises(bb.Refused):
+        bb.schematic_record(bad)
 
 
 # ---- the bound, evaluated where the levels are actually set ---------------
@@ -155,43 +272,57 @@ def test_the_models_recorded_bounds_and_gap_are_the_tools(figs):
 
 def test_the_low_bands_bound_is_tighter_at_its_own_centre_than_at_7100(figs):
     """The headline correction. #396 and reference §18 quote 18 dB for Ht1; that
-    is the bound at 7.1 kHz, and the low band is levelled at 3175 Hz."""
+    is the bound at 7.1 kHz, and the low band is levelled at 3175 Hz. It is a
+    statement about FIGURE 9's window, so it stays on the figure route after
+    #420 moved the balance itself onto the solved network."""
     fig9, _ = figs
-    here = bb.tone_term("low", fig9)["width_db"]
-    there = bb.tone_term("low", fig9, at_hz=7100.0)["width_db"]
+    here = bb.figure_tone_term("low", fig9)["width_db"]
+    there = bb.figure_tone_term("low", fig9, at_hz=7100.0)["width_db"]
     assert here < there
     assert there > 15.0        # the figure #396 quotes is reproduced...
     assert here < 10.0         # ...and is not the number that applies
 
 
-def test_the_short_bands_tone_term_is_measured_not_extrapolated(figs):
+def test_the_short_bands_figure_tone_term_is_measured_not_extrapolated(figs):
     fig9, _ = figs
-    t = bb.tone_term("short", fig9)
+    t = bb.figure_tone_term("short", fig9)
     assert t["measured"] is True
     assert t["width_db"] < 1.0
     for band in ("low", "decay"):
-        assert bb.tone_term(band, fig9)["measured"] is False
+        assert bb.figure_tone_term(band, fig9)["measured"] is False
 
 
-def test_the_bound_is_wider_than_the_applicability_bound_in_some_band(figs):
-    """If this ever became false the balance should simply be applied, and this
-    tool's refusal would be unearned. Asserted so that stays visible."""
+def test_the_figure_route_is_wide_and_the_schematic_route_is_not(figs):
+    """The gate's `tone-bound` property as a standalone assertion, in both
+    halves. If the first ever became false, #396's exclusion of the figure
+    route would be unearned; if the second ever became false, #390's solution
+    would not have resolved the term #420 says it resolved."""
     fig9, corner = figs
-    rel = bb.relative_db(fig9, corner)
-    assert any(v["width_db"] > bb.BALANCE_BOUND_DB for v in rel.values()), rel
+    fig = bb.relative_db(fig9, corner, route=bb.ROUTE_FIGURE)
+    nodal = bb.relative_db(fig9, corner, route=bb.ROUTE_SCHEMATIC)
+    assert any(v["width_db"] > bb.BALANCE_BOUND_DB for v in fig.values()), fig
+    assert all(v["width_db"] <= bb.BALANCE_BOUND_DB for v in nodal.values()), nodal
 
 
 # ---- the refusal, in both directions -------------------------------------
 
 
-def test_the_schematic_route_refuses_on_this_tree(figs):
+def test_the_vca_drive_precondition_refuses_on_this_tree_and_schematic_vr4_no_longer_does(figs):
+    """The refusal, asserted in the direction #420 changed. `schematic-vr4` was
+    absent when #396's step was written and #390/#417 supplied it, so the
+    refusal must now name `vca-drive` and NOT `schematic-vr4` -- a refusal that
+    went on naming a resolved input would be reporting a state of the
+    repository that stopped being true."""
     fig9, corner = figs
-    assert not bb.SCHEMATIC_ARTIFACT.exists()
+    assert bb.SCHEMATIC_ARTIFACT.exists()
     assert not bb.VCA_ARTIFACT.exists()
+    by_name = {p["name"]: p for p in bb.preconditions()}
+    assert by_name["schematic-vr4"]["present"] is True
+    assert by_name["vca-drive"]["present"] is False
     with pytest.raises(bb.Refused) as e:
         bb.balance_gains(fig9, corner)
-    assert "schematic-vr4" in str(e.value)
     assert "vca-drive" in str(e.value)
+    assert "schematic-vr4" not in str(e.value)
 
 
 def test_the_refusal_is_not_vacuous(figs):
@@ -250,12 +381,32 @@ def test_the_shipped_rule_relative_levels_bind_to_the_registers_it_wrote():
 
 def test_the_gap_is_larger_than_the_figure_bound_it_was_blamed_on(figs):
     """The finding. If the 9-18 dB figure uncertainty were what blocks the
-    balance, the gap would be of that size. It is 38 dB in the short band."""
+    balance, the gap would be of that size. It is 39.8 dB in the short band,
+    against the widest bound the FIGURE route ever offered (21.3 dB) -- the
+    comparison is made against that one, not against the resolved bound, because
+    "39.8 exceeds 0.07" asserts nothing."""
     fig9, corner = figs
     g = bb.gap_db(fig9, corner)
+    figg = bb.gap_db(fig9, corner, route=bb.ROUTE_FIGURE)
     assert g["low"]["gap_db"] == pytest.approx(0.0, abs=1e-9)
-    assert max(abs(v["gap_db"]) for v in g.values()) > max(v["bound_db"] for v in g.values())
+    assert max(abs(v["gap_db"]) for v in g.values()) \
+        > max(v["bound_db"] for v in figg.values())
     assert g["short"]["gap_db"] > 30.0
+
+
+def test_resolving_the_tone_term_made_the_gaps_bigger_not_smaller(figs):
+    """#420's item 3, as an assertion rather than a sentence. If VR4's network
+    had been the missing explanation for the 38 dB residual, resolving it would
+    have shrunk the gaps. It grew them: +0.28 dB (decay) and +1.56 dB (short).
+    The refusal's rationale therefore survives its own re-derivation, and the
+    direction is the one that would have falsified it."""
+    fig9, corner = figs
+    g = bb.gap_db(fig9, corner)
+    figg = bb.gap_db(fig9, corner, route=bb.ROUTE_FIGURE)
+    moved = {b: g[b]["gap_db"] - figg[b]["gap_db"] for b in bb.BANDS}
+    assert moved["low"] == pytest.approx(0.0, abs=1e-9)
+    assert moved["decay"] == pytest.approx(0.28, abs=0.02), moved
+    assert moved["short"] == pytest.approx(1.56, abs=0.02), moved
 
 
 # ---- the ablation's level solver ------------------------------------------
@@ -329,9 +480,9 @@ def test_the_committed_ablation_used_the_gaps_this_tool_computes(figs):
 # window. A table in a document is not a fact: these are re-derived from the
 # record on every run, so a scorecard number that drifts from its render breaks
 # the suite instead of quietly outliving its evidence.
-ABLATION_SUMMARY = {"0-50ms": (8.4, 17.1, 8),
-                    "50-300ms": (19.6, 17.0, 9),
-                    "300-1000ms": (21.6, 14.8, 10)}
+ABLATION_SUMMARY = {"0-50ms": (9.0, 18.0, 8),
+                    "50-300ms": (19.3, 17.3, 9),
+                    "300-1000ms": (21.3, 14.5, 10)}
 
 
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")
@@ -343,9 +494,9 @@ def test_the_scorecard_summary_table_is_the_records_own_numbers():
         assert r[keys[-1]] - r[keys[0]] == pytest.approx(tilt, abs=0.05), window
         assert max(abs(v) for v in r.values()) == pytest.approx(worst, abs=0.05), window
         assert sum(1 for v in r.values() if abs(v) > 6.0) == n, window
-    assert blob["bands"]["candidate"]["H_minus_L_db"] == pytest.approx(24.38, abs=0.01)
-    assert blob["bands"]["candidate"]["H"]["edt10_ms"] == pytest.approx(69.9, abs=0.1)
-    assert blob["levels"]["ablation"]["common_scale_db"] == pytest.approx(-33.82, abs=0.01)
+    assert blob["bands"]["candidate"]["H_minus_L_db"] == pytest.approx(25.07, abs=0.01)
+    assert blob["bands"]["candidate"]["H"]["edt10_ms"] == pytest.approx(58.8, abs=0.1)
+    assert blob["levels"]["ablation"]["common_scale_db"] == pytest.approx(-35.38, abs=0.01)
 
 
 @pytest.mark.skipif(not ABLATION.exists(), reason="ablation record not present")

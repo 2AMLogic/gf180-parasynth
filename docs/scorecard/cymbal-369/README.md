@@ -166,13 +166,14 @@ four citations that need correcting to point at it.
 > #396 left open, now **REFUSED with the blocking factor measured** rather than deferred. It carries no step
 > number because it was measured in parallel with them, using neither's result and used by neither. Its obstacle
 > is not the 9–18 dB of Figure 9 window this file and reference §18 blamed; it is the three swing VCAs' drive
-> levels, which no W14b figure plots — a +38.2 dB gap in the short band against the shipped-kit level rule.
-> Applying every resolved factor with the drives held equal was rendered and lands H−L at 24.38 dB against the
-> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it** — a prediction
-> #390/#417 has since tested by resolving VR4, after which the 38.2 dB VCA term is still there. Its own Figure 9
-> *bounds* for the tone term (7.4 / 13.9 / 0.04 dB) are **superseded** by #390's nodal solution and need
-> re-deriving from `tools/tone_stage_schematic.py` (**#420**); the refusal itself does not, because the VCA drives are the
-> binding term and #390 does not carry them. Step 7's finding is the sharper statement of the same limit: no
+> levels, which no W14b figure plots — a **+39.8 dB** gap in the short band against the shipped-kit level rule.
+> Applying every resolved factor with the drives held equal was rendered and lands H−L at 25.07 dB against the
+> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it**. That was a
+> prediction, and #390/#417 plus #420 have now tested it end to end: the tone term is no longer bounded from
+> Figure 9 (7.4 / 13.9 / 0.04 dB) but **resolved** from `tools/tone_stage_schematic.py`'s nodal solution, emitted
+> as `sn-p13-vr4.json`, with a bound of **0.008 / 0.008 / 0.067 dB** — and the short-band gap **grew** from 38.2
+> to 39.8 dB rather than closing. The refusal therefore stands on `vca-drive` alone, and it stands on evidence
+> that could have overturned it. Step 7's finding is the sharper statement of the same limit: no
 > inter-band balance at all reaches the 808's 1–2.5 kHz energy.
 >
 > **Both of those two sentences are corrected by step 8 below, and the gap is 1.3 dB rather than 9.4.**

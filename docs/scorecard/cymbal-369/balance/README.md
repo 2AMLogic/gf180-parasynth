@@ -13,18 +13,21 @@
 > those four values is quoted anywhere in this directory or in `../README.md`**, so nothing here restates them and
 > the merge reverts none of them. §4 records what each merge did — and did not do — to this step's record.
 
-> **SUPERSEDED IN ONE PART, by #390/#417, which merged after this was written and after it was approved.** This
-> step bounds the tone term from W14b Figure 9 (§1's `tone ±` column: 3.68 / 6.95 / 0.02 dB at each band's own
-> calibration third, 7.4 / 13.9 / 0.04 dB wide). **#390 resolved that network instead of bounding it** — SN p.13's
-> R/C values around VR4 solved by nodal analysis, `tools/tone_stage_schematic.py`, reproducing Figure 9's own
-> digitised k = 1.0 curves to 0.001–0.013 dB rms. So §1's tone bounds and §5's second bullet (*"no other artifact
-> here carries VR4's R/C values"*) are **stale as of `aded99a`** and are flagged in place below rather than
-> silently rewritten, because re-deriving the decomposition from the nodal solution is a new measurement with its
-> own record, not a prose edit — **filed as #420**, not left as "follow-up" citing nothing (§6 is this chain's own
-> incident report on exactly that). **The verdict is not superseded.** This step's binding factor is the **VCA
-> drives** — a +38.2 dB gap in the short band, against a widest tone bound of 21.3 dB — and it predicted, before
-> #390 was finished, that *VR4's network alone would not unblock item 1*. #390 resolved VR4 and the VCA-drive term
-> is untouched by it, so the prediction held and the refusal stands.
+> **THE TONE TERM IS NOW RESOLVED, AND THIS FILE CARRIES THE RE-DERIVED NUMBERS (#420).** As approved, this step
+> *bounded* the tone term from W14b Figure 9 (§1's `tone ±` column read 3.68 / 6.95 / 0.02 dB at each band's own
+> calibration third, 7.4 / 13.9 / 0.04 dB wide). **#390/#417 resolved that network instead of bounding it** — SN
+> p.13's R/C values around VR4 solved by nodal analysis, `tools/tone_stage_schematic.py`, reproducing Figure 9's
+> own digitised k = 1.0 curves to 0.001–0.013 dB rms with one shared free parameter. #420 emitted that solution as
+> `../sn-p13-vr4.json`, pointed the `schematic-vr4` precondition at it, and re-derived §1 from it. Everything
+> below is the re-derived version; what the figure route said is kept beside it, because #396 *excludes* that
+> route and an exclusion has to stay a measurement.
+>
+> **The verdict is not superseded, and the re-derivation is the strongest test it has had.** This step's binding
+> factor is the **VCA drives**, and it predicted — before #390 was finished — that *VR4's network alone would not
+> unblock item 1*. Resolving VR4 could have falsified that by shrinking the gap. It **grew** it: +9.85 → **+10.13
+> dB** (decay) and +38.23 → **+39.79 dB** (short), against a tone bound that fell from 21.3 dB to **0.07 dB**. So
+> the prediction held in the direction that could have broken it, and the refusal stands on one remaining absent
+> input rather than two.
 
 Step 5 (`../candidate3/README.md`, PR #402) applied the tone stage's measured **tilt** and left the **balance** — the
 three bands' levels relative to one another — where it was. #396 then asked for the balance, preferring
@@ -33,12 +36,16 @@ three bands' levels relative to one another — where it was. #396 then asked fo
 **This step does not resolve the balance. It measures why not, and the answer is not the one the issue expected.**
 
 - #396 (and reference §18) put the obstacle at **9–18 dB of figure-reading uncertainty** on Ht1 and Ht2.
-- Evaluated where each band's level is actually set, that uncertainty is **smaller** than quoted — the low band's
-  tone term is **7.4 dB** wide at its own 3175 Hz calibration third, not 18.0 dB, and the short band's is
-  **0.04 dB** because 10079 Hz is inside Ht3's plotted range.
+- That was the wrong **frequency**: evaluated where each band's level is actually set, Figure 9's own bound is
+  **7.4 dB** on the low band at its 3175 Hz calibration third, not 18.0 dB, and **0.04 dB** on the short band
+  because 10079 Hz is inside Ht3's plotted range.
+- It is now the wrong **quantity** as well. #390/#417 solved the network instead of bounding it, so the tone term
+  is a circuit value and its uncertainty is that solution's own residual: **0.008 / 0.008 / 0.067 dB**, three
+  orders of magnitude inside the 3.0 dB tolerance a band split has to be known to.
 - What is actually blocking the balance is a factor **neither figure carries**: the three swing VCAs' drive levels.
   Against the shipped-kit level rule the model currently uses, the filters-plus-tone balance alone demands
-  **+9.9 dB on the decay band and +38.2 dB on the short band**. A 38 dB residual is not a 9–18 dB figure problem.
+  **+10.1 dB on the decay band and +39.8 dB on the short band**. A 39.8 dB residual is not a 9–18 dB figure
+  problem, and resolving the figure's half **grew** it rather than shrinking it.
 
 `tools/cymbal_band_balance.py` is the instrument; `tools/test_cymbal_band_balance.py` is its known answers and the
 controls that must fail. `--check` passes with 5/5 injected controls turning a named property red and one control
@@ -47,49 +54,93 @@ asserted blind-by-construction and verified blind.
 ## 1. The decomposition
 
 Each band's level, **at the frequency its level is set** (`cymbal_candidate_eval.CENTRE`: the low band's third at
-3175 Hz, both high bands' at 10079 Hz), with the LEVEL differentiator's corner at 18972 Hz (W14b Fig. 10):
+3175 Hz, both high bands' at 10079 Hz), with the LEVEL differentiator's corner at 18972 Hz (W14b Fig. 10). The
+`tone` column is the **solved** VR4 network (`../sn-p13-vr4.json`), not Figure 9's extrapolated fit:
 
 | band | centre | BP peak | BP shape | HP pass | tone | tone ± | LEVEL | total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| low | 3175 Hz | +22.95 | −3.00 | +0.00 | −39.52 | 3.68 | −15.65 | **−34.27** |
-| decay | 10079 Hz | +24.10 | −12.88 | +6.03 | −28.62 | 6.95 | −6.57 | **−17.09** |
-| short | 10079 Hz | +24.10 | −12.88 | +8.86 | −36.61 | 0.02 | −6.57 | **−9.62** |
+| low | 3175 Hz | +22.95 | −3.00 | +0.00 | −41.04 | 0.0038 | −15.65 | **−35.79** |
+| decay | 10079 Hz | +24.10 | −12.88 | +6.03 | −29.86 | 0.0042 | −6.57 | **−18.33** |
+| short | 10079 Hz | +24.10 | −12.88 | +8.86 | −36.57 | 0.0336 | −6.57 | **−9.58** |
+
+**What the `tone ±` column is made of, and what it is not.** Half-width = this family's *largest* disagreement with
+Figure 9's own digitised k = 1.0 curve (0.0035 / 0.0040 / 0.0324 dB) plus the move over ±3σ on the one parameter
+the solution fits (σ(α) = 3.3 × 10⁻⁵, worth 0.0003–0.0013 dB). It does **not** carry component tolerance: SN p.13's
+printed nominal values are taken as exact, because nothing in this repository measures a real TR-808's VR4 network
+and an invented tolerance would be a claim rather than a reading. Filed as **#425**.
+
+Two things that should be said rather than smoothed over now the column has collapsed:
+
+- For the low and decay bands the residual is **carried outward**. Figure 9 plots Ht1 only to 564 Hz and Ht2 only
+  to 1.64 kHz, so their agreement is measured there and used at 3175 / 10079 Hz. What *is* independently checkable
+  at those frequencies is the weaker statement that both nodal values fall inside Figure 9's own (7.4 / 13.9 dB
+  wide) extrapolation bounds, which they do.
+- The short band is the one place the two routes meet at the frequency the balance uses, and there the nodal value
+  lands **0.016 dB outside** Figure 9's 0.041 dB-wide bound. That reads as a bound marginally too tight rather than
+  a disagreement between methods — the excursion is smaller than the solution's own 0.032 dB residual against the
+  same digitised curve — but it is asserted with a floor *and* a ceiling in
+  `test_the_short_bands_bound_is_the_one_place_both_routes_can_be_compared`, so it cannot grow either way in silence.
+
+For comparison, the route #396 excludes, at the same three frequencies:
+
+| band | figure tone | figure tone ± | solved − figure |
+|---|---:|---:|---:|
+| low | −39.52 | 3.68 | −1.52 |
+| decay | −28.62 | 6.95 | −1.24 |
+| short | −36.61 | 0.02 | +0.04 |
 
 | factor | where it comes from |
 |---|---|
 | band-pass peak | W14b Fig. 4 (`tools/werner_fig4.py`), whose digitiser is gated on SN p.13's R56–R59, C13–C16 — **resolved** |
 | high-pass pass band | W14b Fig. 4, same gate — **resolved** |
-| tone stage | W14b Fig. 9 (`tools/werner_fig9.py`) — **bounded**, per-band widths above. **Stale as of `aded99a`:** #390/#417 *resolved* this network from SN p.13 by nodal analysis (`tools/tone_stage_schematic.py`), so these bounds are superseded and want re-deriving — **#420**, and the supersession note at the top. It does not move the verdict: the tone term's widest bound is 21.3 dB against the VCA drives' 38.2 dB gap |
+| tone stage | SN p.13's VR4 network solved by nodal analysis (`tools/tone_stage_schematic.py`, emitted as `../sn-p13-vr4.json`) — **resolved** (#390/#417, applied by #420). `tone ±` above is that solution's own residual, not an extrapolation spread. Figure 9's bounded reading is kept beside it as the route #396 excludes, and `figure_route_gains()` still refuses on it |
 | LEVEL differentiator | W14b Fig. 10 — common to all three bands, so it cancels in a ratio; its *frequency dependence* does not, because the bands are levelled at different frequencies |
 | **VCA drive** | **ABSENT.** Three envelope generators and three swing VCAs (Q16/Q17/Q18, reference §10) sit between the band-passes and the high-passes. No W14b figure plots them and no artifact in this repository carries them. |
 
 Relative to the low band:
 
-| band | circuit | bound | shipped-kit rule (candidate 3) | gap |
-|---|---:|---|---:|---:|
-| low | +0.00 | [−7.36, +7.36] | +0.00 | +0.00 |
-| decay | **+17.18** | [+4.94, +26.20] | +7.33 | **+9.85** |
-| short | **+24.65** | [+20.38, +27.78] | −13.58 | **+38.23** |
+| band | circuit | bound | shipped-kit rule (candidate 3) | gap | gap on the figure route |
+|---|---:|---|---:|---:|---:|
+| low | +0.00 | [−0.0077, +0.0077] | +0.00 | +0.00 | +0.00 |
+| decay | **+17.46** | [+17.45, +17.47] | +7.33 | **+10.13** | +9.85 |
+| short | **+26.21** | [+26.17, +26.25] | −13.58 | **+39.79** | +38.23 |
 
-The gap is what the two absent preconditions have to account for: the VCA drive ratios, **and** the shipped kit's own
-band-gain errors (it has no Hh1 at all and routes the short band through the closed hat's 11.7 kHz high-pass).
-Nothing available here separates those two — saying which is which is exactly what the schematic would do.
+**The short-band gap is +39.79 dB, and the refusal's rationale survives it.** The argument this step's verdict
+rests on is "38 dB is not a 9–18 dB figure problem". Re-deriving it from the resolved network moved it to 39.8 dB
+— *away* from the tone term, not towards it — and simultaneously collapsed the tone term's own uncertainty from a
+21.3 dB widest propagated bound to 0.07 dB. Both movements are in the conservative direction for a refusal, and
+the falsifying outcome was available: had VR4's network carried the missing 38 dB, this table would show it.
+
+The gap is what the **one** remaining absent precondition has to account for: the VCA drive ratios, **and** the
+shipped kit's own band-gain errors (it has no Hh1 at all and routes the short band through the closed hat's
+11.7 kHz high-pass). Nothing available here separates those two — saying which is which is exactly what the VCA
+half of the schematic would do.
 
 ## 2. The refusal, and why it is not a decree
 
-`balance_gains()` REFUSES on this tree and names both missing preconditions with the path each would live at:
+`balance_gains()` REFUSES on this tree and names the missing precondition with the path it would live at. As
+approved it named **two**; #390/#417 supplied the first and #420 wired it in, so today it names exactly one:
 
 ```
-REFUSED: the inter-band balance is not applicable: schematic-vr4 absent
-(docs/scorecard/cymbal-369/sn-p13-vr4.json) -- needed for SN p.13's R/C values around VR4 …;
-vca-drive absent (docs/scorecard/cymbal-369/vca-drive.json) -- needed for the three envelope
+REFUSED: the inter-band balance is not applicable: vca-drive absent
+(docs/scorecard/cymbal-369/vca-drive.json) -- needed for the three envelope
 generators' and swing VCAs' peak drive (Q16/Q17/Q18), which no W14b figure plots
 ```
 
-Two things keep that from being an opinion compiled into a function:
+That the message *shrank* is itself asserted, not just observed:
+`test_the_vca_drive_precondition_refuses_on_this_tree_and_schematic_vr4_no_longer_does` requires the refusal to
+name `vca-drive` and **not** to name `schematic-vr4`, and the gate's `refusal-live` property carries the same
+clause. A refusal that went on naming a resolved input would be reporting a state of the repository that had
+stopped being true — which is the failure mode this whole file exists to avoid, one level up.
+
+Three things keep that from being an opinion compiled into a function:
 
 - **It lifts.** Hand the tool a complete precondition set and it answers. `refusal-live` asserts both directions on
   every run, and the control `PRECOND_ALWAYS_OK` turns it red. An unsatisfiable gate is worse than no gate.
+- **It has now lifted once for real, on one of its four preconditions.** `schematic-vr4` went from ABSENT to
+  PRESENT the moment `../sn-p13-vr4.json` appeared, exactly as this section said it would, with no change to the
+  refusal machinery. That is the strongest available evidence that the remaining refusal is a state rather than a
+  decree: the same code reported a different answer when the repository changed under it.
 - **The excluded route refuses for its own, different reason.** `figure_route_gains()` is the route #396 excludes —
   take Figure 9's fitted `peak_db` values and apply them — and it refuses because the propagated bound is ±7.4 dB
   (low), ±10.6 dB (decay) and ±3.7 dB (short) against the **3.0 dB** board tolerance for a band split
@@ -117,7 +168,13 @@ filters-plus-tone balance and **holds the three VCA drives equal**, that last be
 
 The external reference is the Fischer CY5025 recording, and H−L is `cymbal_bands.measure()`'s qualified band split
 (eight known-answer tests, its own refusals). It was **not** used to derive any number in §1 — the balance comes
-from Figures 4, 9 and 10 — so it is a genuine independent check rather than a fit being scored against itself.
+from Figures 4 and 10, from SN p.13's solved VR4 network, and (for the excluded route) from Figure 9 — so it is a
+genuine independent check rather than a fit being scored against itself.
+
+**The prediction above is quoted exactly as it was committed, with the figure-route gaps it was made from
+(+9.85 / +38.23).** #420 re-derived those to +10.13 / +39.79 and the ablation was re-rendered on them (§4's fourth
+merge paragraph). Restating the prediction in the new numbers after the fact would destroy the only thing a
+prediction is for, so it is left alone and the re-render is scored against it as written.
 
 ## 4. Result — the prediction holds, and the assumption is refuted
 
@@ -162,52 +219,78 @@ So the ablation is not re-rendered for these either. **What #417 *does* change i
 resolves the tone term this step only bounded, which is flagged at the top of this file, in §1's factor table and
 in §5's second bullet, and left for **#420** rather than back-fitted here.
 
-The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
-short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
-binds. The ratios are the claim; that common scale is not — **except in one respect the CY path makes, recorded here
-rather than left implied.** The anchor leaves `env_gain` at 1.0 for the low and decay bands but **3.0864** for the
-short band: its amp register is already at the Q0.16 ceiling, so the rest of that band's gain lands on its envelope
-peak (0.324 → the 1.0 ceiling), which is **+9.79 dB more excitation into `NL_SWING`** for that band alone. The swing
-VCA is not linear, so the ablation moved the short band's operating point inside that nonlinearity as well as the
-three band ratios. It does not change the verdict — the direction is conservative for a refusal — but it is the same
-class of confound as the sibling one §5 discloses (H's internal mix moved, EDT10 147 → 70 ms), and a sentence that
-claimed neutrality for a common scale on a nonlinear path would be claiming more than the path allows.
+**And a fourth time, for #420 — where the rule finally said re-render, and the probe is the reason we know why.**
+Applying #390's nodal solution moves §1's tone column, which moves `gap_db`, which is an input to `rebalance()` and
+therefore to the ablation's own amp registers. So the same question as the three merges above got the opposite
+answer, and the important part is that the two answers come from two different instruments looking at two different
+things:
+
+- `balance_input_invariance.py --baseline-rev fb638f4` again reports **0 register addresses moved** — correctly.
+  Its question is whether *another commit's `model/drums_fx.py`* changes a render input, and #420 touches no
+  `model/` render code at all.
+- The input that moved is **upstream of `drums_fx`**, in the amps `rebalance()` computes, which that probe does not
+  and cannot see. Measured directly instead of inferred: `M_CYH1` 0.014140 → **0.011815**, `M_CYHI` 0.126937 →
+  **0.109543** (−1.56 and −1.28 dB), `M_CYH3B` unchanged at the Q0.16 ceiling, `E_short` unchanged at the envelope
+  peak ceiling. `test_the_committed_ablation_used_the_gaps_this_tool_computes` went red on exactly this, which is
+  what it is for.
+
+So the ablation **was** re-rendered, from a clean tree (`sources_dirty: false`) at `82d03b1`, and the tables below
+are the new render. `cf2741e8` remains reachable — this was a merge, never a rebase — but the record's `"commit"`
+now names the tree it actually describes, because a record pinned to a commit whose amps it no longer uses would be
+precisely the drift this file keeps warning about. The verdict did not move: H−L went from 24.38 to **25.07**,
+i.e. **further** from the 808's 8.16, which is the direction resolving the tone term predicted.
+
+The solver's anchor came out at **−35.38 dB** (was −33.82): the low band drops 35.4 dB and the decay band 25.3 dB,
+while the short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the
+ceiling that binds. The ratios are the claim; that common scale is not — **except in one respect the CY path makes,
+recorded here rather than left implied.** The anchor leaves `env_gain` at 1.0 for the low and decay bands but
+**3.0864** for the short band: its amp register is already at the Q0.16 ceiling, so the rest of that band's gain
+lands on its envelope peak (0.324 → the 1.0 ceiling), which is **+9.79 dB more excitation into `NL_SWING`** for that
+band alone. The swing VCA is not linear, so the ablation moved the short band's operating point inside that
+nonlinearity as well as the three band ratios. It does not change the verdict — the direction is conservative for a
+refusal — but it is the same class of confound as the sibling one §5 discloses (H's internal mix moved, EDT10
+147 → 59 ms), and a sentence that claimed neutrality for a common scale on a nonlinear path would be claiming more
+than the path allows.
 
 | | 808 CY5025 | shipped | candidate 3 | **balance ablation** |
 |---|---:|---:|---:|---:|
-| H − L | **8.16 dB** | 10.82 | 12.09 | **24.38** |
-| H EDT10 | **147.8 ms** | 151.3 | 147.2 | **69.9** |
-| H late T20 | **432 ms** | *refused* | 363 | 328 |
-| Ln EDT10 | **591 ms** | 598 | 578 | 620 |
+| H − L | **8.16 dB** | 10.82 | 12.09 | **25.07** |
+| H EDT10 | **147.8 ms** | 151.3 | 147.2 | **58.8** |
+| H late T20 | **432 ms** | *refused* | 363 | 326 |
+| Ln EDT10 | **591 ms** | 598 | 578 | 644 |
 
 1/3-octave residual against the 808 (dB; positive = we have more), summarised the same three ways
 `../candidate3/README.md` §4 uses:
 
 | window | | shipped | candidate 3 | **balance ablation** |
 |---|---|---:|---:|---:|
-| 0–50 ms | tilt | −22.5 | **+6.6** | +8.4 |
-| | worst | 15.4 | **5.7** | **17.1** |
+| 0–50 ms | tilt | −22.5 | **+6.6** | +9.0 |
+| | worst | 15.4 | **5.7** | **18.0** |
 | | n>6 dB | 6/14 | **0/14** | **8/14** |
-| 50–300 ms | tilt | −17.3 | +14.3 | +19.6 |
-| | worst | **9.4** | 11.6 | 17.0 |
+| 50–300 ms | tilt | −17.3 | +14.3 | +19.3 |
+| | worst | **9.4** | 11.6 | 17.3 |
 | | n>6 dB | **2/14** | 7/14 | 9/14 |
-| 300–1000 ms | tilt | −9.9 | +16.2 | +21.6 |
-| | worst | **8.8** | 10.5 | 14.8 |
+| 300–1000 ms | tilt | −9.9 | +16.2 | +21.3 |
+| | worst | **8.8** | 10.5 | 14.5 |
 | | n>6 dB | **1/14** | 6/14 | 10/14 |
 
 **Preservation still passes.** All 15 non-CY sounds render bit-identically to the shipped kit on the 19-mode
 layout, hats included (`balance-ablation.json` → `preservation`, all `true`). The ablation moves only the three CY
 band levels, and the record proves it.
 
-**The prediction was right in sign and order, and 5.7 dB steep.** It said H−L would go from 12.09 to *roughly*
-+30 dB; it went to **24.38**. That is the same direction and about the same size of over-prediction as candidate 3's
+**The prediction was right in sign and order, and 4.9 dB steep.** It said H−L would go from 12.09 to *roughly*
++30 dB; it went to **25.07**. That is the same direction and about the same size of over-prediction as candidate 3's
 per-band arithmetic (which was 6 dB steep), and for the same reason: three re-levelled bands summing into one
-measure do not move by the per-band figure.
+measure do not move by the per-band figure. On the figure-route gaps it was made from, the same prediction scored
+5.7 dB steep (H−L 24.38); re-deriving the tone term moved the outcome 0.69 dB **towards** the prediction, which
+the prediction did not claim and which is worth exactly as much as that.
 
 **Wrong-then-right, recorded because that is the rate a reader calibrates on:** this step's predicted-then-measured
-pair is 1 of 1 — the prediction's *direction* was confirmed and its *magnitude* was 5.7 dB out, caught by the render
-rather than by inspection. No measurement in this step was wrong before it was right; the ablation was rendered
-once.
+pair is 1 of 1 — the prediction's *direction* was confirmed and its *magnitude* was 4.9 dB out, caught by the render
+rather than by inspection. No measurement in this step was wrong before it was right. The ablation has now been
+rendered **twice**: once on the figure-route gaps as approved, and once on #420's re-derived gaps. That second
+render was not a correction of a wrong number — the first was right for the inputs it had — it is a re-measurement
+forced by an input that genuinely moved, and both are reported rather than the second quietly replacing the first.
 
 ## 5. Verdict
 
@@ -216,30 +299,26 @@ once.
 
 - **#396's item 1 (apply the balance) cannot be done honestly, and the reason is not the one the issue names.**
   Applying every factor that IS resolved, with the only unmeasured factor held at unity, puts the band split
-  **16.2 dB from the 808** where the rule it replaced is 3.9 dB from it, and turns candidate 3's clean strike
+  **16.9 dB from the 808** where the rule it replaced is 3.9 dB from it, and turns candidate 3's clean strike
   window (0 of 14 thirds outside ±6 dB, the chain's one clear win over the shipped kit) into 8 of 14. Every
   summary measure gets worse in every window.
-- **#396's item 2 (derive it from the schematic) is the only route, and it is REFUSED for a missing input**, not
-  declined. `docs/scorecard/cymbal-369/sn-p13-vr4.json` does not exist in this repository.
-  `tools/cymbal_band_balance.py` names that path, refuses on it, and lifts the refusal the moment it appears.
-  **Stale as of `aded99a`:** this bullet also said *"and no other artifact here carries VR4's R/C values"*, which
-  was true when it was written and is not any more — **#390/#417 landed `tools/tone_stage_schematic.py`**, which
-  carries those values and solves the network. The named JSON is still absent, so the tool's refusal is still
-  correct as written; what has changed is that the tone half of route 1 is now *available* rather than missing, and
-  wiring this precondition to the nodal solution (and re-deriving §1's tone column from it) is **#420**, not
-  something to assert here.
-- **The schematic needs to supply two things, not one.** VR4's network resolves the tone term. It does **not**
-  resolve the VCA drives, and this step's measurement says those are the larger term: the gap is 38.2 dB in the
-  short band against a widest tone bound of 21.3 dB, and the ablation's 16.2 dB H−L error is what remains after
-  every resolved factor has been applied. So a digitisation of VR4 alone would not unblock item 1. **That
-  prediction has since been tested rather than left standing: #390/#417 digitised and solved VR4's network
-  (`tools/tone_stage_schematic.py`), and item 1 is still blocked — the VCA drives are still absent from every
-  artifact here.** It is the kind of confirmation worth recording precisely because it could have gone the other
-  way: had VR4 turned out to carry the 38 dB, this bullet would have been wrong.
-- **An indication, not a measurement, for whoever digitises the schematic:** with H dominated by the short band
-  after the ablation, an H−L error of +16.2 dB is consistent with the short band's VCA drive sitting **roughly
-  16–22 dB below** what equal drive assumes, relative to the low band. It is stated as an indication because H−L
-  is a two-band energy ratio and the ablation also moved the *mix within* H (H EDT10 collapsed from 147 to 70 ms
+- **#396's item 2 (derive it from the schematic) is the only route, and HALF OF IT IS NOW DONE.**
+  `docs/scorecard/cymbal-369/sn-p13-vr4.json` exists: #390/#417 landed `tools/tone_stage_schematic.py`, which reads
+  VR4's R/C values off a SHA-256-pinned scan of SN p.13 and solves the network, and #420 emitted that solution as
+  the named artifact and re-derived §1's tone column from it. The precondition the tool named went from ABSENT to
+  PRESENT with no change to the refusal machinery, which is what §2's "it lifts the moment it appears" claimed and
+  is now the one place in this chain where that claim has been tested against reality rather than against a
+  synthetic precondition set. The remaining refusal is on `vca-drive` alone.
+- **The schematic needed to supply two things, not one — and that is now confirmed, not predicted.** VR4's network
+  resolves the tone term. It does **not** resolve the VCA drives, and this step's measurement said those were the
+  larger term. Re-deriving on the solved network is the test of that claim, and the claim passed in the direction
+  that could have broken it: the short-band gap **grew** from 38.2 to **39.8 dB** while the tone term's own widest
+  propagated bound **fell** from 21.3 dB to **0.07 dB**, and the ablation's H−L error went from 16.2 to 16.9 dB.
+  Had VR4 turned out to carry the 38 dB, this bullet would have been wrong and the gap would have closed.
+- **An indication, not a measurement, for whoever digitises the VCA half:** with H dominated by the short band
+  after the ablation, an H−L error of +16.9 dB is consistent with the short band's VCA drive sitting **roughly
+  17–23 dB below** what equal drive assumes, relative to the low band. It is stated as an indication because H−L
+  is a two-band energy ratio and the ablation also moved the *mix within* H (H EDT10 collapsed from 147 to 59 ms
   as the short band took over from the decay band), so the number confounds a level with a mix. It is a sanity
   check to run against a real schematic value, not a substitute for one.
 - **#396's item 3 (the TONE knob law) is deferred, and its blocker did not exist as an issue until now: #413.**
@@ -271,14 +350,21 @@ sub-plots the marked curve is not the topmost one).
 ## Files
 
 - `tools/cymbal_band_balance.py` — the decomposition, the bounds, the preconditions, the refusal, and the ablation's
-  level solver. `--report` / `--check` / `--json`.
-- `tools/test_cymbal_band_balance.py` — 32 tests: closed-form normalisation known answers, cross-checks against
-  Figure 9's *digitised points* rather than its fit, the refusal asserted in both directions, the level solver's
-  ratios and its register refusal, and the 5-control properties × defects matrix with one control blind by
+  level solver. `--report` / `--check` / `--json`. Both tone routes live here side by side: `schematic_tone_term`
+  (the solved network, what the balance uses) and `figure_tone_term` (Figure 9, the route #396 excludes).
+- `tools/tone_stage_schematic.py` — #390/#417's nodal solution, and `--emit` writes `../sn-p13-vr4.json` from it.
+- `../sn-p13-vr4.json` — the `schematic-vr4` precondition: the solved transmission per band at the frequencies the
+  balance evaluates, with the pinned scan's SHA-256, the fitted wiper fraction and its σ, the per-family residuals,
+  the five shared poles, and the SHA-256 of the Figure 9 artifact α was fitted against.
+- `tools/test_cymbal_band_balance.py` — 39 tests: closed-form normalisation known answers, cross-checks against
+  Figure 9's *digitised points* rather than its fit, the tone term pinned to `tone_stage_schematic`'s own output
+  and the committed artifact pinned to the module that emits it, the refusal asserted in both directions, the level
+  solver's ratios and its register refusal, and the 5-control properties × defects matrix with one control blind by
   construction.
-- `balance.json` — the decomposition, the bounds, the preconditions and the gate's own output.
+- `balance.json` — the decomposition, both routes' bounds, the preconditions and the gate's own output.
 - `balance-ablation.json` — the render: levels, preservation, band measures and 1/3 octaves, with commit and dirty
   flag.
-- Reproduce: `python3 tools/cymbal_band_balance.py --check --json docs/scorecard/cymbal-369/balance/balance.json`
+- Reproduce: `python3 tools/tone_stage_schematic.py --emit` (≈10 s), then
+  `python3 tools/cymbal_band_balance.py --check --json docs/scorecard/cymbal-369/balance/balance.json`
   (≈2 s), then `python3 tools/cymbal_candidate_eval.py --variant balance --out
   docs/scorecard/cymbal-369/balance/balance-ablation.json` (≈4.5 min).
