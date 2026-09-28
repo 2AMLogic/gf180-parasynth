@@ -47,6 +47,19 @@ rather than reports.** The reference corpus must be present, the named file
 must exist, the sound must be in the kit, and the reference clip must not be
 silent. Each failure produces a stated no-verdict, never a number.
 
+**A `Holdout`-split case is REFUSED unless its settings were committed before
+this render.** `docs/scorecard/cases.csv` marks twenty cases `Holdout` and
+`docs/scorecard/README.md` states the policy they exist for; until `tools/
+holdout.py` there was nothing between that policy and an agent picking a
+setting, rendering it and reading the error in one pass -- with, as this file's
+own `NOT_RUN` table put it, "no way to tell afterwards which it was". The gate is
+in `run_case` rather than in each family's runner so a future scorer cannot route
+around it: the seal must be tracked and clean in git, the record carries what it
+was measured against (`holdout.seal_commit`, `holdout.seal_core_sha256`), the
+read is appended to `docs/scorecard/holdout/LEDGER.json`, and a SECOND read taken
+after the model moved is refused until the transition is recorded. A holdout with
+no seal is a stated no-verdict naming the missing seal, never a score.
+
 **And it asserts the premise of the BATCH before any of it runs.** An earlier
 run of this file returned eight honest per-case refusals -- "the eight-stop kit
 does not implement LC / MT / MC / HC / CL / RS / MA / CY" -- from a worktree
@@ -124,6 +137,7 @@ from scipy.signal import butter, sosfiltfilt                         # noqa: E40
 
 import audio_measure as am                                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
+import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
@@ -1751,6 +1765,62 @@ _CUTOFF_RESPONSE_PLAN = [
 
 FILTER_PLAN = {cid: _CUTOFF_RESPONSE_PLAN for cid in FILTER_CASES}
 
+#: What a filter case needs stated before it can be measured. `FILTER_CASES`
+#: above holds the DEVELOPMENT cases, written in this file; a Holdout case's
+#: entries are the same keys read out of its committed seal
+#: (`docs/scorecard/holdout/<case>.json`) instead, which is the whole point --
+#: the party tuning the model cannot edit a setting and read its error in one
+#: pass, because `tools/holdout.py` refuses a seal that is not committed and
+#: clean. `tools/probes/hihat/hh_probe5.py`'s module-level `HOLDOUT` dict is the
+#: pattern this generalises; a dict inside one probe cannot be checked from
+#: outside it, and a file in the repository can.
+FILTER_SPEC_KEYS = ("ref_clip", "ref_open_clip", "cut_hz", "open_hz",
+                    "res_ref", "res_ours")
+
+
+def sealed_settings(case_id: str) -> dict | None:
+    """The committed settings for a sealed Holdout case, or None.
+
+    A seal that does not load at all (absent, malformed, wrong schema) returns
+    None here on purpose: `run_case` then REFUSES the case with the seal's OWN
+    reason, which is more use than this function guessing a plan from a seal the
+    gate is about to reject."""
+    try:
+        return holdout.load_seal(case_id).get("settings") or None
+    except holdout.Refused:
+        return None
+
+
+def sealed_plans() -> dict:
+    """case id -> the plan its seal says it takes ('filter', ...). Only cases
+    whose seal names a plan this runner implements can leave `NOT_RUN`."""
+    out = {}
+    if not holdout.SEAL_DIR.is_dir():
+        return out
+    for path in sorted(holdout.SEAL_DIR.glob("*.json")):
+        if path.name == holdout.LEDGER.name:
+            continue
+        settings = sealed_settings(path.stem) or {}
+        if settings.get("plan"):
+            out[path.stem] = settings["plan"]
+    return out
+
+
+def filter_spec(case_id: str) -> dict:
+    """The frozen clips and control values one filter case is measured at --
+    from `FILTER_CASES` for a development case, from the committed seal for a
+    holdout one. REFUSES a seal that does not state the whole spec: a partially
+    specified holdout would be completed by a default nobody sealed."""
+    if case_id in FILTER_CASES:
+        return FILTER_CASES[case_id]
+    settings = sealed_settings(case_id) or {}
+    missing = [k for k in FILTER_SPEC_KEYS if k not in settings]
+    if missing:
+        raise Refused(f"the seal for {case_id} takes the filter plan but does not "
+                      f"state {', '.join(missing)}; a holdout completed by a default "
+                      f"is not a sealed setting")
+    return {k: settings[k] for k in FILTER_SPEC_KEYS}
+
 
 def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     """The frozen reference response curve, derived from cached audio whose
@@ -1866,7 +1936,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                       "combined: the control would not say which side moved")
     record_engine = engine or ENGINE
     cid = case["case_id"]
-    spec = FILTER_CASES[cid]
+    spec = filter_spec(cid)
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
     cut, amp = spec["cut_hz"], rp.PROBE_AMP
 
@@ -1903,7 +1973,10 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
         "rolloff": (filt_rolloff(cut), filt_rolloff(cut)),
     }
     metrics = {}
-    for name, units, key, tol_rule in FILTER_PLAN[cid]:
+    # A sealed holdout case takes the family's plan (`_CUTOFF_RESPONSE_PLAN`);
+    # anything it requires that the plan does not measure is marked invalid by
+    # the `required` loop below, never dropped from the maximum.
+    for name, units, key, tol_rule in FILTER_PLAN.get(cid, _CUTOFF_RESPONSE_PLAN):
         e_ours, e_ref = ests[key]
         metrics[name] = measure_pair(name, units, e_ours, (dut_f, ours_g),
                                      (ref_f, ref_g), tol_rule, {}, est_ref=e_ref)
@@ -2030,19 +2103,51 @@ NOT_RUN = {}
 # profile froze from the start. Nothing about that case was ever out of scope
 # for the cutoff reason it was given.
 
-#: The holdout trajectories. Not a tooling gap -- a sequencing rule.
-for _c in ("F1D", "F2D", "F3D", "F5D"):
-    NOT_RUN[_c] = (
-        "a Holdout-20 case whose settings are not sealed yet. Its stimulus is "
-        "'seal an unseen cutoff/resonance/drive trajectory', and the sealing is "
-        "the measurement's whole value: docs/scorecard/README.md, 'once a holdout "
-        "case's detailed errors have guided a change, it has become development "
-        "data'. An agent that picks the setting, freezes the clip and reads the "
-        "error in one pass has produced a development case wearing a holdout's "
-        "label, and there is no way to tell afterwards which it was. The rig, the "
-        "profile and the estimators are all ready -- what is missing is somebody "
-        "OTHER than the party tuning the model choosing the trajectory and "
-        "committing it before it is rendered.")
+#: The holdout trajectories. The SEQUENCING rule these four were held on is now
+#: a mechanism rather than a sentence: `tools/holdout.py` refuses a Holdout-split
+#: case whose settings are not committed and clean, records every read, and
+#: refuses a second read taken after the model moved. F1D is sealed
+#: (docs/scorecard/holdout/F1D.json) and therefore out of this table -- it is
+#: attempted, and it is a stated no-verdict until its reference clip is rendered.
+#:
+#: The other three stay here, AND THE REASON THEY STAY IS NOT SEALING. The
+#: sentence this entry used to carry -- "the rig, the profile and the estimators
+#: are all ready" -- was one plausible line covering four cases, which is exactly
+#: what the comment at the top of this table says a not-run table exists to
+#: prevent. It was false for three of them: F2D, F3D and F5D are blocked on the
+#: same things their A/B/C rungs are blocked on, none of which is a sequencing
+#: rule. Sealing them now would produce three seals nothing can read.
+NOT_RUN["F2D"] = (
+    "blocked on exactly what F2A/F2B/F2C are blocked on, and NOT on sealing: the "
+    "case requires 'Bass loss; Playing weight; peak frequency; peak gain', and a "
+    "peak gain quoted at a fixed input level is a statement about that level "
+    "because Surge Type 2 is level-independent over the whole probed range and "
+    "our fixed-point ladder is not (+32.1 dB at -60 dBFS against +10.0 at -12, at "
+    "res 1.20). See NOT_RUN['F2A'] for the measurement and for why "
+    "reference_compare.stage_peakdrive's matched-drive answer is not available to "
+    "us. A holdout needs a setting whose reading MEANS something; sealing a "
+    "resonance trajectory before that definition exists would seal a number "
+    "nobody can interpret. The sealing mechanism it will use when the definition "
+    "lands is tools/holdout.py, and docs/scorecard/holdout/F1D.json is its "
+    "worked example.")
+NOT_RUN["F3D"] = (
+    "blocked on exactly what F3A/F3B/F3C are blocked on, and NOT on sealing: the "
+    "case requires separating MIXER DRIVE from output gain, Surge's mixer drive is "
+    "Pre-Filter Gain (parameter 316), and the qualified rig PINS it at '0.00 dB' "
+    "as a setting that is not the thing under test. Making 316 the thing under "
+    "test is a change to reference_rigs.SurgeRig and to what 'the qualified rig' "
+    "means, and it has to be re-qualified after -- not a clip this profile can "
+    "render, and not a setting a seal can conjure. Seal it (tools/holdout.py) "
+    "once the rig can drive it.")
+NOT_RUN["F5D"] = (
+    "blocked on exactly what F5A/F5B/F5C are blocked on, and NOT on sealing: no "
+    "clip in this profile automates a parameter, deliberately, and our side has no "
+    "swept-cutoff render at all -- reference_rigs.OurLadder answers three "
+    "questions (tone_gain_db, ring, drive_tone) and a sweep is not one of them. "
+    "'Stepping' also cannot be attributed between plugin and host without the "
+    "host's automation block size pinned (docs/failure-modes.md: all three plugins "
+    "appeared to step at 94 Hz because that was the host's block rate). A sealed "
+    "cutoff-motion trajectory would be a setting neither side can produce.")
 
 #: The resonance family. Unblocked on audio since this commit; still blocked on
 #: the same definition F2A is.
@@ -2203,6 +2308,14 @@ def plan_for(case_id: str) -> str:
         return "mono"
     if case_id in NOT_RUN:
         return "not-run"
+    # A Holdout case with a committed seal is ATTEMPTED, under the plan its seal
+    # names. Whether it produces a number is then a question about the apparatus
+    # (F1D's reference clip is not frozen yet, so it is a stated no-verdict) and
+    # no longer a question about sequencing, which is what `NOT_RUN` was holding
+    # these four cases on.
+    sealed = sealed_plans().get(case_id)
+    if sealed:
+        return sealed
     if case_id in DRUM_CASE_VOICE:
         return "drum"
     if case_id in ENSEMBLE_CASES:
@@ -2778,18 +2891,84 @@ def run_ensemble_case(case: dict, keep_audio: bool) -> dict:
     }
 
 
-def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
-             keep_audio: bool = True) -> dict | None:
-    """One case's result dict, or None when the case is deliberately not run."""
+def is_holdout(case: dict) -> bool:
+    return (case.get("split") or "").strip().lower() == "holdout"
+
+
+def _empty_record(case: dict, refdir: pathlib.Path, inject: str) -> dict:
     cid = case["case_id"]
-    kind = plan_for(cid)
-    if kind == "not-run":
-        return None
-    base = {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
+    return {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
             "source_commit": source_commit(), "analysis_run": analysis_run(),
             "reference_profile": "", "render_run": "", "audio": "",
             "provenance": provenance(model_input_hashes(), {},
                                      dict(refs=str(refdir), inject=inject or None))}
+
+
+def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
+             keep_audio: bool = True, *, record_reads: bool = True,
+             results_dir: str = "") -> dict | None:
+    """One case's result dict, or None when the case is deliberately not run.
+
+    **A `Holdout`-split case is REFUSED unless its settings are already
+    committed.** That gate is here rather than in each family's runner so no
+    future scorer can route around it: `tools/holdout.py` asserts that the seal
+    is tracked and clean, puts what it was measured against on the record, and
+    records the read. A holdout scored like an ordinary development case is the
+    failure this repository could not detect after the fact -- "there is no way
+    to tell afterwards which it was" -- and it costs one function call to make
+    impossible."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    block = None
+    if is_holdout(case):
+        model_state = holdout.model_state_sha256(model_input_hashes())
+        try:
+            block = holdout.assert_readable(cid, model_state=model_state)
+        except holdout.Refused as e:
+            required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
+                        if m.strip()]
+            res = _empty_record(case, refdir, inject)
+            res["note"] = f"REFUSED: {e}"
+            res["holdout"] = {"state": "unsealed", "holdout_claim": False,
+                              "why": str(e), "how_to_check": holdout.HOW_TO_CHECK}
+            res["metrics"] = {m: invalid_metric("", f"holdout not sealed: {e}")
+                              for m in required}
+            if inject:
+                res["INJECTED_CONTROL"] = inject
+            return res
+    res = _measure_case(case, refdir, inject, keep_audio)
+    if res is None:
+        return None
+    if block is not None:
+        res["holdout"] = block
+        if record_reads and not inject and holdout.was_read(res):
+            # A number was taken off a sealed holdout. THAT is the act the policy
+            # is about, so it goes in the ledger before anybody reads the record:
+            # a second reading at a different model state is refused from here on
+            # until the transition is recorded.
+            state, worst, _why = verdict_of(case, res)
+            entry = holdout.record_read(
+                cid, block, engine=res.get("engine", ENGINE), state=state,
+                worst=worst, result_path=results_dir or "(not stated by the caller)",
+                command=" ".join([os.path.relpath(sys.argv[0], ROOT)] + sys.argv[1:])
+                        if sys.argv and sys.argv[0] else "(imported)")
+            res["holdout"]["ledger_read"] = entry["n"]
+            res["holdout"]["ledger"] = str(holdout.LEDGER.relative_to(ROOT)) \
+                if ROOT in holdout.LEDGER.parents else str(holdout.LEDGER)
+    return res
+
+
+def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
+                  keep_audio: bool = True) -> dict | None:
+    """The measurement itself. `run_case` is the entry point: it holds the
+    holdout gate, which must not be reachable around."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    base = _empty_record(case, refdir, inject)
     required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
                 if m.strip()]
     try:
@@ -3012,13 +3191,21 @@ def cmd_list(cases: list[dict]) -> int:
             p, d = ENSEMBLE_CASES[c["case_id"]]
             why = f"{p}, {'dense' if d else 'sparse'} 808 groove, stems vs final output"
         elif kind == "filter":
-            f = FILTER_CASES[c["case_id"]]
-            why = (f"selected 2x path + surge-type2-clean-v1 vs frozen {f['ref_clip']} "
-                   f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            try:
+                f = filter_spec(c["case_id"])
+                why = (f"selected 2x path + surge-type2-clean-v1 vs frozen "
+                       f"{f['ref_clip']} (cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            except Refused as e:
+                why = f"REFUSED: {e}"
+            if is_holdout(c):
+                why = f"[sealed holdout] {why}"
         elif kind == "mono":
             why = ("fixed integer-model phrase vs frozen Mini V3; " +
                    ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
                     else "model-only; no integrated RTL claim"))
+        elif is_holdout(c):
+            why = ("Holdout with no committed seal: REFUSED rather than scored "
+                   "(tools/holdout.py)")
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")
@@ -3133,7 +3320,9 @@ def main(argv=None) -> int:
             return 2
         print("CONTROL BASELINE: measuring the same cases without the injection")
         for c in chosen:
-            clean = run_case(c, refdir, "", keep_audio=False)
+            # A control's baseline is not evidence about the instrument, so it
+            # does not consume a sealed holdout's reading either.
+            clean = run_case(c, refdir, "", keep_audio=False, record_reads=False)
             clean_verdicts[c["case_id"]] = (*verdict_of(c, clean), clean.get("note", ""))
         print("CONTROL BASELINE: complete\n")
     injected_verdicts = {}
@@ -3144,7 +3333,8 @@ def main(argv=None) -> int:
             code = max(code, OUTCOME_CODE["not run"])
             print(f"{cid:<7}{'not run':<12}{'--':>7}  {NOT_RUN[cid][:60]}")
             continue
-        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio)
+        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio,
+                       record_reads=not a.dry_run, results_dir=str(outdir))
         # Judge BEFORE writing, so the outcome code on the record is the board's
         # verdict and not this runner's opinion of it.
         state, worst, why = verdict_of(c, res)
