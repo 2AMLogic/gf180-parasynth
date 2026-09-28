@@ -37,6 +37,7 @@ import cymbal_candidate as cc                  # noqa: E402
 import cymbal_band_balance as bb               # noqa: E402
 import cymbal_tone_realisation as ct           # noqa: E402
 import tone_stage_schematic as ts              # noqa: E402
+import werner_fig4 as wf                       # noqa: E402
 import werner_fig9 as w9                       # noqa: E402
 
 ABLATION = bb.SCORECARD / "balance" / "balance-ablation.json"
@@ -265,6 +266,119 @@ def test_the_schematic_record_refuses_when_absent_or_malformed(tmp_path):
     bad.write_text(json.dumps({"artifact": "something-else"}))
     with pytest.raises(bb.Refused):
         bb.schematic_record(bad)
+
+
+# ---- #431: `filter-figure` and `vca-drive` used to gate on `path.exists()` -
+# and never read the file. An empty file at either path lifted the refusal
+# without a single number reaching the balance; these mirror the schematic
+# control above, which already got this right.
+
+
+def test_the_filter_record_refuses_when_absent_or_malformed(tmp_path):
+    with pytest.raises(bb.Refused) as e:
+        bb.filter_record(tmp_path / "nope.json")
+    assert "werner_fig4.py" in str(e.value)
+
+    empty = tmp_path / "empty.json"
+    empty.write_text("")
+    with pytest.raises(bb.Refused):
+        bb.filter_record(empty)
+
+    no_curves = tmp_path / "no-curves.json"
+    no_curves.write_text(json.dumps({"source": {}}))
+    with pytest.raises(bb.Refused):
+        bb.filter_record(no_curves)
+
+    missing_curve = tmp_path / "missing-curve.json"
+    missing_curve.write_text(json.dumps({"curves": {"Hbp1": {"hz": [1, 2, 3, 4, 5],
+                                                              "db": [1, 2, 3, 4, 5]}}}))
+    with pytest.raises(bb.Refused) as e:
+        bb.filter_record(missing_curve)
+    assert "Hbp2" in str(e.value)
+
+
+def test_the_filter_record_refuses_a_curve_that_disagrees_with_the_pinned_constants(tmp_path):
+    """A well-formed artifact carrying an obviously wrong peak must move the
+    gate, not just a missing one -- the control CLAUDE.md asks for: hand it a
+    wrong drive term and require the computed answer to move."""
+    curves, blob = wf.from_artifact()
+    moved = {k: {"hz": [round(float(v), 4) for v in h], "db": [round(float(v), 4) for v in d]}
+             for k, (h, d) in curves.items()}
+    moved["Hbp1"] = {k: [v + 6.0 if k == "db" else v for v in vv]
+                     for k, vv in moved["Hbp1"].items()}
+    bad = tmp_path / "moved-peak.json"
+    bad.write_text(json.dumps({"curves": moved}))
+    with pytest.raises(bb.Refused) as e:
+        bb.filter_record(bad)
+    assert "BP_PEAK_DB[low]" in str(e.value)
+
+
+def test_an_empty_file_at_the_filter_figure_path_does_not_lift_the_refusal(monkeypatch):
+    """`preconditions()` reports each path relative to the repo root, so the
+    substitute has to live under it too -- this is the real configured path
+    (`werner_fig4.ARTIFACT`), monkeypatched to an empty sibling file and
+    cleaned up unconditionally."""
+    empty = bb.wf.ARTIFACT.parent / "_test_431_empty_werner-fig4.json"
+    empty.write_text("")
+    monkeypatch.setattr(bb.wf, "ARTIFACT", empty)
+    try:
+        by_name = {p["name"]: p for p in bb.preconditions()}
+        assert by_name["filter-figure"]["present"] is False
+    finally:
+        empty.unlink()
+
+
+def test_the_vca_drive_record_refuses_when_absent_or_malformed(tmp_path):
+    with pytest.raises(bb.Refused) as e:
+        bb.vca_drive_record(tmp_path / "nope.json")
+    assert "#432" in str(e.value) or "PR #433" in str(e.value)
+
+    empty = tmp_path / "empty.json"
+    empty.write_text("")
+    with pytest.raises(bb.Refused):
+        bb.vca_drive_record(empty)
+
+    no_term = tmp_path / "no-term.json"
+    no_term.write_text(json.dumps({"tool": "tools/cymbal_vca_drive.py"}))
+    with pytest.raises(bb.Refused):
+        bb.vca_drive_record(no_term)
+
+    partial = tmp_path / "partial.json"
+    partial.write_text(json.dumps({"vca_term_db": {"chain_db": {"low": 0.0}}}))
+    with pytest.raises(bb.Refused):
+        bb.vca_drive_record(partial)
+
+
+def test_a_well_formed_vca_drive_record_is_read_but_not_a_reason_to_answer(tmp_path):
+    """A complete, well-formed `vca-drive.json` satisfies the precondition --
+    but `balance_gains` still does not fold its term into the arithmetic
+    (#432/PR #433 is not settled); this is the decision stated explicitly,
+    not a silent gap."""
+    ok = tmp_path / "vca-drive.json"
+    ok.write_text(json.dumps({"vca_term_db": {
+        "chain_db": {"low": 0.0, "decay": 3.52, "short": 4.97},
+        "bound_db": {"low": 0.0, "decay": 7.26, "short": 8.72},
+    }}))
+    rec = bb.vca_drive_record(ok)
+    assert rec["chain_db"]["short"] == pytest.approx(4.97)
+
+
+def test_an_empty_file_at_the_vca_drive_path_does_not_lift_the_refusal(monkeypatch, figs):
+    """The acceptance test #431 asks for directly: drop a content-free file at
+    the REAL `vca-drive.json` path and confirm `balance_gains` still refuses,
+    naming `vca-drive`, rather than answering because a file happens to exist."""
+    fig9, corner = figs
+    empty = bb.VCA_ARTIFACT.parent / "_test_431_empty_vca-drive.json"
+    empty.write_text("")
+    monkeypatch.setattr(bb, "VCA_ARTIFACT", empty)
+    try:
+        by_name = {p["name"]: p for p in bb.preconditions()}
+        assert by_name["vca-drive"]["present"] is False
+        with pytest.raises(bb.Refused) as e:
+            bb.balance_gains(fig9, corner)
+        assert "vca-drive" in str(e.value)
+    finally:
+        empty.unlink()
 
 
 # ---- the bound, evaluated where the levels are actually set ---------------

@@ -176,6 +176,86 @@ def band_filter_db(band, hz, *, defect=None):
     return out
 
 
+# ---------------------------------------------------------------------------
+# The `filter-figure` precondition: read and validated, not merely checked to
+# exist (#431). `band_filter_db` above applies `cc.BP_PEAK_DB` / `HH*_PASS_DB`
+# -- literals pinned from W14b Figure 4 and marked "recorded, not applied" at
+# their definition (model/cymbal_candidate.py). Before #431 the `filter-figure`
+# precondition was `werner_fig4.ARTIFACT.exists()` and nothing ever opened the
+# file: an empty file at that path satisfied it. `filter_record` opens it,
+# re-derives each peak and pass band from the digitised curves the same way
+# `tools/werner_fig4.py --fit` does, and REFUSES if the file is absent,
+# unreadable, missing a curve, or if what it says disagrees with the pinned
+# constants `band_filter_db` actually applies -- a schema-mismatched or
+# drifted artifact is a REFUSAL, not a pass.
+# ---------------------------------------------------------------------------
+
+_FILTER_CACHE: dict = {}
+
+# How far a live read of `werner_fig4.ARTIFACT` may disagree with the pinned
+# `cc.BP_PEAK_DB` / `HH*_PASS_DB` literals before `filter-figure` refuses.
+# `docs/tr808-reference.md` records this fit's own residual at 0.007-0.008 dB
+# rms; this is an order of magnitude looser, tight enough to catch a swapped
+# or stale literal and loose enough not to flag the fit's own noise floor.
+FILTER_TOL_DB = 0.05
+
+
+def filter_record(path: pathlib.Path | None = None) -> dict:
+    """`werner-fig4.json`'s band-pass peaks and high-pass pass bands, read and
+    cross-checked against the pinned constants `band_filter_db` applies -- or a
+    REFUSAL naming the command that writes the artifact, or the value that
+    disagrees with it.
+    """
+    p = path or wf.ARTIFACT
+    key = str(p)
+    if key not in _FILTER_CACHE:
+        if not p.exists():
+            raise Refused(f"{p} is absent; run tools/werner_fig4.py --json {p}")
+        try:
+            curves, _blob = wf.from_artifact(p)
+        except wf.Refused as exc:
+            raise Refused(f"{p} is not a readable werner_fig4 record: {exc}") from None
+        except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError,
+               AttributeError) as exc:
+            raise Refused(f"{p} is not a readable werner_fig4 record "
+                          f"({type(exc).__name__}: {exc})") from None
+        need = {"Hbp1", "Hbp2", "Hh1", "Hh2", "Hh3"}
+        missing = need - set(curves)
+        if missing:
+            raise Refused(f"{p} carries no curve(s) for {sorted(missing)}")
+        for k in need:
+            hz, db = curves[k]
+            if len(hz) < 5 or len(db) < 5 or len(hz) != len(db):
+                raise Refused(
+                    f"{p} curve {k!r} has {len(hz)} hz / {len(db)} db points; "
+                    "too few (or mismatched) to read a peak or pass band from")
+        try:
+            peak_db = {"low": wf.peak(*curves["Hbp1"])[1],
+                      "high": wf.peak(*curves["Hbp2"])[1]}
+            pass_db = {"low": wf.fit_structure(*curves["Hh1"], "hp2")["gain_db"],
+                      "decay": wf.fit_structure(*curves["Hh2"], "hp2")["gain_db"],
+                      "short": wf.fit_structure(*curves["Hh3"], "hp3")["gain_db"]}
+        except Exception as exc:                       # noqa: BLE001
+            raise Refused(f"{p}'s curves could not be read as band-pass peaks "
+                          f"/ high-pass pass bands: {exc}") from None
+        want_peak = dict(cc.BP_PEAK_DB)
+        want_pass = {"low": cc.HH1_PASS_DB, "decay": cc.HH2_PASS_DB,
+                    "short": cc.HH3_PASS_DB}
+        mismatch = [
+            f"BP_PEAK_DB[{k}] pinned {want_peak[k]:+.3f} vs artifact {v:+.3f} dB"
+            for k, v in peak_db.items() if abs(v - want_peak[k]) > FILTER_TOL_DB
+        ] + [
+            f"{k} pass band pinned {want_pass[k]:+.3f} vs artifact {v:+.3f} dB"
+            for k, v in pass_db.items() if abs(v - want_pass[k]) > FILTER_TOL_DB
+        ]
+        if mismatch:
+            raise Refused(
+                f"{p} disagrees with the pinned band_filter_db constants by "
+                f"more than {FILTER_TOL_DB} dB: " + "; ".join(mismatch))
+        _FILTER_CACHE[key] = {"peak_db": peak_db, "pass_db": pass_db}
+    return _FILTER_CACHE[key]
+
+
 def tone_fit(band, fig9):
     v = fig9[BAND_OF[band]]
     hz, db = v["curves"][v["k1_index"]]
@@ -471,13 +551,83 @@ def gap_db(fig9, corner_hz, *, defect=None, path=None, route=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# The `vca-drive` precondition: read and validated, not merely checked to
+# exist (#431). `docs/scorecard/cymbal-369/vca-drive/vca-drive.json` (#432, PR
+# #433) MEASURED the three swing VCAs' per-band collector-load term -- +4.97 dB
+# (short) and +3.52 dB (DECAY) relative to the low band -- but wrote it to a
+# sibling path, deliberately NOT to `VCA_ARTIFACT` (the path below), because
+# that measurement does not settle the question `balance_gains` needs: the
+# DECAY band's own upper bound (+7.26 dB) sits within 2.6 dB of its gap
+# (+9.85 dB), and the supply-side term (the three envelope generators' peak
+# collector voltages, #432) is still open. `vca_drive_record` reads and
+# schema-validates whatever DOES land at `VCA_ARTIFACT` -- a present-but-empty
+# or malformed file no longer satisfies the precondition -- but its `chain_db`
+# is deliberately NOT folded into `balance_gains` below: applying a
+# per-band term that is not yet resolved would be exactly the "one factor of a
+# product, called the product" mistake this module's own top docstring warns
+# against for the VCA drive as a whole.
+# ---------------------------------------------------------------------------
+
+_VCA_CACHE: dict = {}
+
+
+def vca_drive_record(path: pathlib.Path | None = None) -> dict:
+    """`vca-drive.json`'s per-band VCA term (`vca_term_db.chain_db` /
+    `.bound_db`, the shape `tools/cymbal_vca_drive.py` emits), read and
+    schema-validated -- or a REFUSAL naming why. Read, not applied: see the
+    section comment above for why `balance_gains` does not fold this in yet.
+    """
+    p = path or VCA_ARTIFACT
+    key = str(p)
+    if key not in _VCA_CACHE:
+        if not p.exists():
+            raise Refused(
+                f"{p} is absent; the three swing VCAs' drive levels have not "
+                "been measured at this path (see #432, PR #433)")
+        try:
+            blob = json.loads(p.read_text())
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise Refused(f"{p} is not valid JSON ({exc})") from None
+        try:
+            term = blob["vca_term_db"]
+            chain_db = {b: float(term["chain_db"][b]) for b in BANDS}
+            bound_db = {b: float(term["bound_db"][b]) for b in BANDS}
+        except (KeyError, TypeError, ValueError) as exc:
+            raise Refused(
+                f"{p} carries no readable vca_term_db.chain_db/bound_db per "
+                f"band ({type(exc).__name__}: {exc})") from None
+        _VCA_CACHE[key] = {"chain_db": chain_db, "bound_db": bound_db}
+    return _VCA_CACHE[key]
+
+
+# ---------------------------------------------------------------------------
 # Preconditions -- asserted at the point of use, and REFUSED when unmet
 # ---------------------------------------------------------------------------
 
 
+def _content_checked(fn) -> bool:
+    """True if `fn()` (a `*_record` reader) resolves without REFUSING."""
+    try:
+        fn()
+        return True
+    except Refused:
+        return False
+
+
 def preconditions(*, present=None) -> list[dict]:
     """What an applicable balance needs. `present` overrides the on-disk answer
-    and exists only so the refusal can be shown to be non-vacuous."""
+    and exists only so the refusal can be shown to be non-vacuous.
+
+    `filter-figure` and `vca-drive` are answered by actually reading and
+    validating their artifact (`filter_record` / `vca_drive_record`), not by
+    `path.exists()` alone (#431: any file at either path used to lift the
+    refusal without a single number from it reaching the balance). `tone-figure`
+    and `schematic-vr4` stay on `path.exists()` here because their content is
+    already read and validated downstream, at the point `balance_gains` actually
+    uses them -- `main()`'s own load of `fig9`, and `schematic_tone_term`'s call
+    to `schematic_record` -- so a bad file there already REFUSES independently
+    of this table.
+    """
     want = [
         ("tone-figure", w9.ARTIFACT,
          "the tone stage's transmission per band (W14b Fig. 9)"),
@@ -492,9 +642,15 @@ def preconditions(*, present=None) -> list[dict]:
          "the three envelope generators' and swing VCAs' peak drive "
          "(Q16/Q17/Q18), which no W14b figure plots"),
     ]
+    content_checked = {"filter-figure": filter_record, "vca-drive": vca_drive_record}
     out = []
     for name, path, why in want:
-        ok = path.exists() if present is None else bool(present.get(name, False))
+        if present is not None:
+            ok = bool(present.get(name, False))
+        elif name in content_checked:
+            ok = _content_checked(content_checked[name])
+        else:
+            ok = path.exists()
         out.append({"name": name, "path": str(path.relative_to(ROOT)),
                     "needed_for": why, "present": bool(ok)})
     return out
@@ -510,6 +666,11 @@ def balance_gains(fig9, corner_hz, *, present=None) -> dict:
     set and it answers: that is `test_the_refusal_is_not_vacuous`, and it is
     why the remaining refusal is an assertion rather than an opinion compiled
     into a function.
+
+    `filter-figure` and `vca-drive` (#431) are gated by `preconditions()`
+    actually reading and validating their artifact via `filter_record` /
+    `vca_drive_record` -- a present-but-empty or schema-mismatched file no
+    longer satisfies either.
     """
     missing = [p for p in preconditions(present=present) if not p["present"]]
     if missing:
