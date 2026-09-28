@@ -140,14 +140,34 @@ four citations that need correcting to point at it.
 > independent 1–1.8 kHz content than the machine and candidate 3 has ~4 dB less — which is where the
 > omitted Hh1 acts.
 >
-> **Alongside step 6, not after it, the inter-band balance is `balance/README.md`** — the half #396 left open,
-> now **REFUSED with the reason measured** rather than deferred. It carries no step number because it and step 6
-> were measured in parallel, neither using the other's result (`balance/README.md`'s own note says so). The
-> obstacle is not the 9–18 dB of Figure 9 window this file and reference §18 blamed: at the frequency each band's
-> level is actually set, those bounds are 7.4 / 13.9 / 0.04 dB. The obstacle is the three swing VCAs' drive
+> **Step 6/7 is `low-tail/README.md`** — the qualified 1–2.5 kHz decay #400 asked for, and the answer to
+> step 5's unqualified finding. The within-record ratio rho(d) = T_M(d)/T_Ln(d) at six depths, with eight
+> named properties, six injected defects, a measured zero point (rho is **not** 1.0 on a skirt-only
+> record: Mn's zero is 0.89–0.99), three frozen windows whose union covers all 25 settings, and both
+> confounds bounded rather than assumed. **The 808's 1–2.5 kHz outlasts its own low band at every one of
+> the 25 settings (rho_M(−10) 1.021–1.139); ours dies first at every setting (0.866–0.894), and candidate
+> 3 is worse than shipped in the leakage-proof band.** The recordings' noise floor is excluded (ours is
+> 27 dB the *noisier*; adding our floor to the 808's record moves its rho by 0.0015 of a 0.249 gap) and
+> the onset bounds at most a quarter of our deficit.
+>
+> And the cause is not a filter: the three-band chain §10 documents cannot reach the 808's 1–2.5 kHz
+> **energy** at any inter-band balance — short by 9.4 dB in M and 16.6 dB in Mn, 20 of 20 settings above
+> the bound — nor its decay (rho_M tops out at 0.97 over a −12…+30 dB balance sweep). The tone stage's
+> shape, the obvious suspect, is worth 0.80 dB. §10 names one element it describes and does not quantify:
+> the VCAs' asymmetric clipping. Wrong-then-right rate of that step: **7**.
+>
+> **Alongside steps 6 and 7 rather than after them, the inter-band balance is `balance/README.md`** — the half
+> #396 left open, now **REFUSED with the blocking factor measured** rather than deferred. It carries no step
+> number because it was measured in parallel with them, using neither's result and used by neither. Its obstacle
+> is not the 9–18 dB of Figure 9 window this file and reference §18 blamed; it is the three swing VCAs' drive
 > levels, which no W14b figure plots — a +38.2 dB gap in the short band against the shipped-kit level rule.
 > Applying every resolved factor with the drives held equal was rendered and lands H−L at 24.38 dB against the
-> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it.**
+> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it** — a prediction
+> #390/#417 has since tested by resolving VR4, after which the 38.2 dB VCA term is still there. Its own Figure 9
+> *bounds* for the tone term (7.4 / 13.9 / 0.04 dB) are **superseded** by #390's nodal solution and need
+> re-deriving from `tools/tone_stage_schematic.py`; the refusal itself does not, because the VCA drives are the
+> binding term and #390 does not carry them. Step 7's finding is the sharper statement of the same limit: no
+> inter-band balance at all reaches the 808's 1–2.5 kHz energy.
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 

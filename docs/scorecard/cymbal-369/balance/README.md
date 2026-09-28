@@ -1,15 +1,29 @@
 # #369 cymbal, the inter-band balance (#396) — decomposed, bounded, and REFUSED, with the blocking factor measured
 
 > **Step numbering.** PR #410 ("step 6: the 1–2.5 kHz decay qualified") was open and unmerged while this was
-> written and **has since merged ahead of it** (`f3797ad2`, 2026-09-28), so `../README.md` now carries step 6 and
-> this file still deliberately carries no step number. The reason is no longer that #410 is open — it is that the
-> two were measured **in parallel**: neither uses the other's result, so numbering this one 7 would assert a
-> sequence that does not exist. They agree: #410/#411 name *"its level rule anchoring each band to the shipped
-> kit's energy in one 1/3 octave"* as the prime suspect for the mid band, and §1 below measures that rule against
-> the circuit for all three bands. #410's own Judge-driven correction of four prose numbers is confined to
-> `mid-band/README.md` and `tools/cymbal_mid.py`'s docstrings; **none of those four values is quoted anywhere in
-> this directory or in `../README.md`**, so nothing here restates them and the merge reverts none of them. §4
-> records what the merge did — and did not do — to this step's record.
+> written; it and #418 ("step 6/7", `low-tail/`) have both **since merged ahead of it** (`f3797ad2` and `8fc1c6d`,
+> 2026-09-28), so `../README.md` carries steps 6 and 6/7 and this file still deliberately carries no step number.
+> The reason is no longer that #410 is open — it is that all three were measured **in parallel**: none uses
+> another's result, so numbering this one 7 or 8 would assert a sequence that does not exist. They agree.
+> #410/#411 name *"its level rule anchoring each band to the shipped kit's energy in one 1/3 octave"* as the prime
+> suspect for the mid band, and §1 below measures that rule against the circuit for all three bands; #418 goes
+> further in the same direction, finding that **no** inter-band balance reaches the 808's 1–2.5 kHz energy, which
+> is a sharper form of this step's refusal rather than a contradiction of it. #410's own Judge-driven correction
+> of four prose numbers is confined to `mid-band/README.md` and `tools/cymbal_mid.py`'s docstrings; **none of
+> those four values is quoted anywhere in this directory or in `../README.md`**, so nothing here restates them and
+> the merge reverts none of them. §4 records what each merge did — and did not do — to this step's record.
+
+> **SUPERSEDED IN ONE PART, by #390/#417, which merged after this was written and after it was approved.** This
+> step bounds the tone term from W14b Figure 9 (§1's `tone ±` column: 3.68 / 6.95 / 0.02 dB at each band's own
+> calibration third, 7.4 / 13.9 / 0.04 dB wide). **#390 resolved that network instead of bounding it** — SN p.13's
+> R/C values around VR4 solved by nodal analysis, `tools/tone_stage_schematic.py`, reproducing Figure 9's own
+> digitised k = 1.0 curves to 0.001–0.013 dB rms. So §1's tone bounds and §5's second bullet (*"no other artifact
+> here carries VR4's R/C values"*) are **stale as of `aded99a`** and are flagged in place below rather than
+> silently rewritten, because re-deriving the decomposition from the nodal solution is a new measurement with its
+> own record, not a prose edit. **The verdict is not superseded.** This step's binding factor is the **VCA
+> drives** — a +38.2 dB gap in the short band, against a widest tone bound of 21.3 dB — and it predicted, before
+> #390 was finished, that *VR4's network alone would not unblock item 1*. #390 resolved VR4 and the VCA-drive term
+> is untouched by it, so the prediction held and the refusal stands.
 
 Step 5 (`../candidate3/README.md`, PR #402) applied the tone stage's measured **tilt** and left the **balance** — the
 three bands' levels relative to one another — where it was. #396 then asked for the balance, preferring
@@ -44,7 +58,7 @@ Each band's level, **at the frequency its level is set** (`cymbal_candidate_eval
 |---|---|
 | band-pass peak | W14b Fig. 4 (`tools/werner_fig4.py`), whose digitiser is gated on SN p.13's R56–R59, C13–C16 — **resolved** |
 | high-pass pass band | W14b Fig. 4, same gate — **resolved** |
-| tone stage | W14b Fig. 9 (`tools/werner_fig9.py`) — **bounded**, per-band widths above |
+| tone stage | W14b Fig. 9 (`tools/werner_fig9.py`) — **bounded**, per-band widths above. **Stale as of `aded99a`:** #390/#417 *resolved* this network from SN p.13 by nodal analysis (`tools/tone_stage_schematic.py`), so these bounds are superseded and want re-deriving — see the supersession note at the top. It does not move the verdict: the tone term's widest bound is 21.3 dB against the VCA drives' 38.2 dB gap |
 | LEVEL differentiator | W14b Fig. 10 — common to all three bands, so it cancels in a ratio; its *frequency dependence* does not, because the bands are levelled at different frequencies |
 | **VCA drive** | **ABSENT.** Three envelope generators and three swing VCAs (Q16/Q17/Q18, reference §10) sit between the band-passes and the high-passes. No W14b figure plots them and no artifact in this repository carries them. |
 
@@ -137,6 +151,16 @@ image — no sound owns a moved address, no address is unattributed, no CY envel
 to have changed, and re-rendering to produce a hash that differs only in its own commit field would be the opposite
 of evidence. `"commit": "cf2741e8…"` stands.
 
+**And a third time, for #417 (#390, the tone-stage schematic) and #418 (#369 step 7, the low tail), by the same
+rule.** A third merge, again not a rebase. Between them those two PRs add `tools/tone_stage_schematic.py`,
+`tools/cymbal_low_tail.py`, `tools/cymbal_m_origin.py`, their tests, `low-tail/`, `m-origin.json` and prose in
+`tone-stage/README.md`, `../README.md` and `docs/tr808-reference.md` — no `model/` file at all, so no render input.
+Measured rather than asserted again: `balance_input_invariance.py --baseline-rev 5281540` reports **0 register
+addresses moved**, nothing unattributed, no CY envelope-peak register moved, `cy_render_inputs_identical: true`.
+So the ablation is not re-rendered for these either. **What #417 *does* change is the prose, not the render:** it
+resolves the tone term this step only bounded, which is flagged at the top of this file, in §1's factor table and
+in §5's second bullet, and left for its own follow-up rather than back-fitted here.
+
 The solver's anchor came out at **−33.82 dB**: the low band drops 33.8 dB and the decay band 24.0 dB, while the
 short band rises 4.4 dB against candidate 3, because the short band's envelope peak register is the ceiling that
 binds. The ratios are the claim; that common scale is not — **except in one respect the CY path makes, recorded here
@@ -195,13 +219,22 @@ once.
   window (0 of 14 thirds outside ±6 dB, the chain's one clear win over the shipped kit) into 8 of 14. Every
   summary measure gets worse in every window.
 - **#396's item 2 (derive it from the schematic) is the only route, and it is REFUSED for a missing input**, not
-  declined. `docs/scorecard/cymbal-369/sn-p13-vr4.json` does not exist in this repository and no other artifact
-  here carries VR4's R/C values. `tools/cymbal_band_balance.py` names that path, refuses on it, and lifts the
-  refusal the moment it appears.
+  declined. `docs/scorecard/cymbal-369/sn-p13-vr4.json` does not exist in this repository.
+  `tools/cymbal_band_balance.py` names that path, refuses on it, and lifts the refusal the moment it appears.
+  **Stale as of `aded99a`:** this bullet also said *"and no other artifact here carries VR4's R/C values"*, which
+  was true when it was written and is not any more — **#390/#417 landed `tools/tone_stage_schematic.py`**, which
+  carries those values and solves the network. The named JSON is still absent, so the tool's refusal is still
+  correct as written; what has changed is that the tone half of route 1 is now *available* rather than missing, and
+  wiring this precondition to the nodal solution (and re-deriving §1's tone column from it) is follow-up work with
+  its own record, not something to assert here.
 - **The schematic needs to supply two things, not one.** VR4's network resolves the tone term. It does **not**
   resolve the VCA drives, and this step's measurement says those are the larger term: the gap is 38.2 dB in the
   short band against a widest tone bound of 21.3 dB, and the ablation's 16.2 dB H−L error is what remains after
-  every resolved factor has been applied. So a digitisation of VR4 alone would not unblock item 1.
+  every resolved factor has been applied. So a digitisation of VR4 alone would not unblock item 1. **That
+  prediction has since been tested rather than left standing: #390/#417 digitised and solved VR4's network
+  (`tools/tone_stage_schematic.py`), and item 1 is still blocked — the VCA drives are still absent from every
+  artifact here.** It is the kind of confirmation worth recording precisely because it could have gone the other
+  way: had VR4 turned out to carry the 38 dB, this bullet would have been wrong.
 - **An indication, not a measurement, for whoever digitises the schematic:** with H dominated by the short band
   after the ablation, an H−L error of +16.2 dB is consistent with the short band's VCA drive sitting **roughly
   16–22 dB below** what equal drive assumes, relative to the low band. It is stated as an indication because H−L
