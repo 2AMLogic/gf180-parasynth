@@ -397,6 +397,71 @@ def figure_route_gains(fig9, corner_hz, *, defect=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# The ablation: what applying the resolved factors ALONE does
+# ---------------------------------------------------------------------------
+
+
+# `cymbal_candidate_eval`'s Q0.16 amp ceiling and the envelope peak's, restated
+# so the arithmetic below cannot drift from the registers it has to fit.
+AMP_MAX = 65535 / 65536
+ENV_PEAK_MAX = 1.0
+ENV_OF = {"low": "E_CYL", "decay": "E_CYD", "short": "E_CYS"}
+
+
+def _env_base_peak(band: str) -> float:
+    import drums_fx as _dx
+    e = {"low": _dx.E_CYL, "decay": _dx.E_CYD, "short": _dx.E_CYS}[band]
+    return dict(_dx.kit_808())[_dx.A_ENV + e * _dx.ENV_STRIDE + 1] / _dx.FULL24
+
+
+def rebalance(cal: dict, fig9, corner_hz) -> dict:
+    """`cymbal_candidate_eval.calibrate()`'s levels, moved onto the circuit's
+    relative balance -- a DIAGNOSTIC ABLATION, not a candidate.
+
+    It applies exactly the factors that ARE resolved (the band-pass peaks and
+    the high-pass pass bands from Figure 4, and the tone stage's nominal
+    transmission from Figure 9) and holds the three VCA drives equal, because
+    nothing here measures them. That last assumption is the thing under test:
+    if it were right, the render's band balance would land near the 808's.
+
+    The anchor is the largest common scale that keeps every band inside its
+    registers -- the ratios are the claim, the absolute level is not.
+    """
+    gaps = gap_db(fig9, corner_hz)
+    per = cal["per_band"]
+    want, ceiling = {}, {}
+    for b in BANDS:
+        base_gain = math.sqrt(per[b]["shipped_abs"] / per[b]["unit_abs"])
+        want[b] = base_gain * 10.0 ** (gaps[b]["gap_db"] / 20.0)
+        ceiling[b] = (AMP_MAX / UNIT_AMP) * (ENV_PEAK_MAX / _env_base_peak(b))
+    k = min(ceiling[b] / want[b] for b in BANDS)
+    out = {"per_band": {}, "amps": {}, "ablation": {
+        "kind": "circuit-balance-equal-vca-drive",
+        "gap_db": {b: gaps[b]["gap_db"] for b in BANDS},
+        "common_scale_db": round(20.0 * math.log10(k), 2)}}
+    for b in BANDS:
+        gain = want[b] * k
+        amp, env_gain = UNIT_AMP * gain, 1.0
+        if amp > AMP_MAX:
+            env_gain, amp = amp / AMP_MAX, AMP_MAX
+        peak = _env_base_peak(b) * env_gain
+        if peak > ENV_PEAK_MAX + 1e-9:
+            raise Refused(f"{b} band needs envelope peak {peak:.3f} > {ENV_PEAK_MAX}")
+        out["per_band"][b] = {**per[b], "amp": amp, "env_gain": env_gain,
+                              "rebalanced_db": round(20.0 * math.log10(gain / (
+                                  math.sqrt(per[b]["shipped_abs"] / per[b]["unit_abs"]))), 2)}
+        out["amps"][LEVEL_MODE_OF[b]] = amp
+        if env_gain != 1.0:
+            out["amps"][f"E_{b}"] = peak
+    return out
+
+
+# Imported lazily by name to avoid a circular import: cymbal_candidate_eval
+# imports this module.
+LEVEL_MODE_OF = {"low": cc.M_CYH1, "decay": dx.M_CYHI, "short": cc.M_CYH3B}
+
+
+# ---------------------------------------------------------------------------
 # The gate
 # ---------------------------------------------------------------------------
 
