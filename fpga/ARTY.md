@@ -53,6 +53,31 @@ Until that happens, the digital evidence in this document is current with the
 tree and **the routed/hardware evidence is not**. `python3
 tools/check_arty_evidence_binding.py --list-historical` prints the split.
 
+That split is by *compiled source*, and **the constraint file is in neither
+comparison set by default** (#421). The digital bench drives no physical pin,
+so the default `verification` scope is `sources() + roms()` — what
+`build_arty.validate_verification` checks — and no verification record this
+repository has produced hashes `boards/arty-a7-100.xdc` at all. Ask the
+publication question explicitly:
+
+```text
+python3 tools/check_arty_evidence_binding.py --scope publication
+```
+
+On the current tree that **REFUSES** (exit 2, `NOT COVERED`) rather than
+reporting a verdict: the bound record never read those bytes, and "never
+hashed" is not the same finding as "hashed and moved". What the wider scope
+*can* answer is the published images — R1 (`r1-player-preview-2025.1`) was
+built on a branch that did not carry `383f10b`, so **its only divergence from
+this tree is the XDC**, which the default scope reports as no divergence at
+all.
+<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_the_newest_published_image_moved_only_its_constraints -->
+<!-- claim: test=tools/test_check_arty_evidence_binding.py::test_publication_scope_refuses_rather_than_calling_an_unhashed_xdc_drift -->
+
+Making publication scope *answerable* needs a record that covers the
+constraints, which is a change to the bench's evidence semantics and is not
+this gate's to make.
+
 Since 2026-09-22 the publisher additionally binds, at publication time and
 refusing drift (regression-tested in `fpga/test_publish_binding.py`):
 

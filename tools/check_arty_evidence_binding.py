@@ -226,7 +226,10 @@ def main(argv=None) -> int:
         try:
             states = coverage(path, args.scope)
         except ValueError as exc:
-            print(f"REFUSED: {wrapper} binds {rel}, which is unreadable: {exc}")
+            # an unreadable record, or an in-scope file this tree does not
+            # have: either way the question cannot be answered, not answered no
+            print(f"REFUSED: {wrapper} binds {rel}, and the check cannot be "
+                  f"made: {exc}")
             return 2
         missing = [k for k, s in states if s == NOT_COVERED]
         if states:
