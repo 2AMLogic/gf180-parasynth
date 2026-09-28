@@ -43,17 +43,17 @@ Bitstream SHA-256 `95a4f92ffa1135b08fa1591220fb384c9ac1229d53cdb298376540010bb10
 Load it with `openFPGALoader -b arty_a7_100t fpga/reports/arty/sd-demo-2025.1/arty.bit`
 (SRAM), or add `-f` (flash). The routed checkpoint stays on the build box.
 
-The `.rpt` files here have their `| Host :` line removed, and `report.json` and
-`build.tcl` have the box's home path replaced by `<box>/`. `report.json`'s
+The `.rpt` files here have their `| Host :` line removed, and every file has the box's home path
+replaced by `<box>/`. `report.json`'s
 `artifact_sha256` therefore names the ORIGINAL files:
 
 | File | Original SHA-256 (in report.json) | Committed |
 |---|---|---|
 | `arty.bit` | `95a4f92ffa1135b0…` | `95a4f92ffa1135b0…` |
-| `clocks.rpt` | `816bf22fd49d7d0d…` | `9ccee0174e4749ab…` |
+| `clocks.rpt` | `816bf22fd49d7d0d…` | `c3366e7436c53ac5…` |
 | `constraint_matches.rpt` | `f54d170efa349074…` | `f54d170efa349074…` |
-| `drc.rpt` | `c0b23ed9a310f3ed…` | `e42e9a3d73214cb3…` |
-| `exceptions.rpt` | `b4678b756ad3f351…` | `7ad1280b2821503d…` |
-| `io.rpt` | `b86dea742c562a05…` | `4e6a2b5cb8e3cd1a…` |
-| `timing.rpt` | `7261ab2fcc331de0…` | `0a2c3d60e573ba99…` |
-| `utilization.rpt` | `d0c147daa23dee67…` | `e903208d7a463164…` |
+| `drc.rpt` | `c0b23ed9a310f3ed…` | `92742f226e14c83f…` |
+| `exceptions.rpt` | `b4678b756ad3f351…` | `ec0f402b602223f8…` |
+| `io.rpt` | `b86dea742c562a05…` | `dde7c702f807e9b7…` |
+| `timing.rpt` | `7261ab2fcc331de0…` | `1ebf61c35830985d…` |
+| `utilization.rpt` | `d0c147daa23dee67…` | `9638b5e8ae8bc5cf…` |

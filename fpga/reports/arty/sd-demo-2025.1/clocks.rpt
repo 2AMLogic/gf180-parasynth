@@ -2,7 +2,7 @@ Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanc
 ---------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
 | Date         : Mon Sep 28 23:27:00 2026
-| Command      : report_clocks -file /home/ubuntu/sd406/build/arty-sd/clocks.rpt
+| Command      : report_clocks -file <box>/build/arty-sd/clocks.rpt
 | Design       : arty_a7_sd_top
 | Device       : 7a100t-csg324
 | Speed File   : -1  PRODUCTION 1.23 2018-06-13
