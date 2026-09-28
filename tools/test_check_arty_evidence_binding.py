@@ -7,6 +7,7 @@ fpga/test_build_arty.py, fpga/test_publish_arty.py and
 fpga/test_publish_binding.py, 39 minutes into the broad pytest job.
 """
 import importlib.util
+import json
 from pathlib import Path
 import sys
 
@@ -242,11 +243,14 @@ R1 = "fpga/reports/arty/r1-player-preview-2025.1/publication.json"
 
 def _bound_record_plus_xdc(tmp_path, xdc_sha):
     """The live bound record with the one key a verification record never
-    carries: the constraint file. No bench in this repository emits such a
-    record (the UART bench hashes sources()+roms() only), so publication scope
-    can only be exercised against a synthesised one -- which is itself the
-    finding in #421, and is why publication scope REFUSES on the real tree
-    rather than reporting a verdict it cannot support."""
+    carries: the constraint file.
+
+    Still synthesised, and still nothing any bench emits -- the UART bench
+    hashes sources()+roms() only. Since #436 it has exactly ONE remaining
+    user, test_coverage_separates_the_two_states_where_drift_cannot, which is
+    a unit test of coverage()'s two states and needs a record that DIFFERS on
+    the XDC rather than one that never hashed it. The gate-level arms no
+    longer use it: they run against the real committed constraint record."""
     import json
     source = gate.bound_bindings()[0][1]
     record = json.loads(source.read_text())
@@ -268,25 +272,110 @@ def _restore(saved):
     publish_arty.VERIFICATION_BY_WRAPPER.update(saved)
 
 
-def test_publication_scope_refuses_rather_than_calling_an_unhashed_xdc_drift(capsys):
-    """#421 point 3. The bound record has no source_sha256 entry for the XDC
-    AT ALL, and that is a different state from "the bytes moved": the bench
-    never read those bytes. It must be named, and it must REFUSE (2) rather
-    than report STALE (1), because a record cannot disagree about a file it
-    never saw."""
+def test_the_digital_record_still_does_not_cover_the_xdc_and_never_will(capsys):
+    """#421 point 3, unchanged by #436 and deliberately so. The UART bench
+    hashes sources()+roms(); it never opens a constraint file, so its record
+    says NOTHING about the XDC -- a different state from "the bytes moved".
+
+    #436 did not widen this record. It bound a SECOND one, from a bench that
+    does read the XDC, so the answer now comes from evidence rather than from
+    a record claiming coverage of bytes it never read."""
     assert gate.coverage(gate.bound_bindings()[0][1], gate.PUBLICATION_SCOPE) == \
         [(XDC_REL, gate.NOT_COVERED)]
+    # ... and in publication scope that record is asked only about the files
+    # its own bench read, which is why the gate as a whole can now answer
+    import build_arty as build
+    digital = [e for e in gate.bound_evidence(gate.PUBLICATION_SCOPE)
+               if e.validate is None]
+    assert len(digital) == 1
+    assert gate.coverage(digital[0].record, gate.PUBLICATION_SCOPE,
+                         digital[0].files) == []
+    assert build.XDC not in digital[0].files, \
+        "the digital bench must never be asked to answer for the constraints"
+
+
+def test_publication_scope_is_satisfied_against_the_current_tree(capsys):
+    """The acceptance shape of #436, and the state #421 could not reach: exit
+    0, from a record that covers the XDC's LIVE bytes rather than from a
+    widened default that stopped checking."""
+    import build_arty as build
+    assert gate.main(["--scope", "publication"]) == 0
+    out = capsys.readouterr().out
+    assert gate.NOT_COVERED not in out and gate.DIFFERS not in out
+    assert XDC_REL in out, "a green must name the file it covers"
+    assert "xdc-binding" in out, "and the record that covers it"
+    # the 0 is a hash comparison against the tree's bytes, not an absence of
+    # one: the record's XDC entry IS the live sha256
+    constraint = [e for e in gate.bound_evidence(gate.PUBLICATION_SCOPE)
+                  if e.validate is not None]
+    assert len(constraint) == 1
+    recorded = json.loads(Path(constraint[0].record).read_text())["source_sha256"]
+    assert recorded[XDC_REL] == build.sha(build.XDC)
+
+
+def test_the_constraint_record_is_exactly_what_its_own_bench_accepts():
+    """The mirror of test_the_bound_record_is_exactly_what_build_arty_accepts:
+    the gate must answer the same question fpga/verify_xdc_binding asks, not a
+    re-implementation that could drift from it."""
+    import verify_xdc_binding as vxb
+    for item in gate.bound_evidence(gate.PUBLICATION_SCOPE):
+        if item.validate is None:
+            continue
+        item.validate(item.record)
+        assert vxb.validate_record(item.record)["state"] == "PASS"
+        assert gate.coverage(item.record, gate.PUBLICATION_SCOPE,
+                             item.files) == []
+
+
+def test_control_a_constraint_record_that_is_not_evidence_refuses(tmp_path, capsys):
+    """Controls for the record's own preconditions, driven through the gate's
+    exit code. A record carrying the right hashes but produced by an INJECTED
+    run, or against other constraint bytes, must REFUSE -- otherwise the one
+    thing a consumer cannot re-derive is exactly the thing it trusts."""
+    import verify_xdc_binding as vxb
+    real = Path(vxb.CONSTRAINT_BY_WRAPPER[vxb.WRAPPER])
+    base = json.loads(real.read_text())
+    saved = dict(vxb.CONSTRAINT_BY_WRAPPER)
+    try:
+        for index, (needle, changes) in enumerate((
+                ("INJECTED", {"inject": "UART_SLASH_JOIN"}),
+                ("not the tree's constraint file",
+                 {"xdc_override": "/tmp/pre315.xdc"}),
+                ("property with problems",
+                 {"properties": dict(base["properties"],
+                                     hier_separators=["edited in by hand"])}))):
+            directory = tmp_path / f"arm{index}"
+            directory.mkdir()
+            path = directory / vxb.RECORD
+            path.write_text(json.dumps(dict(base, **changes), indent=2) + "\n")
+            (directory / vxb.TRANSCRIPT).write_bytes(
+                real.with_name(vxb.TRANSCRIPT).read_bytes())
+            vxb.CONSTRAINT_BY_WRAPPER[vxb.WRAPPER] = path
+            assert gate.main(["--scope", "publication"]) == 2
+            out = capsys.readouterr().out
+            assert "REFUSED" in out and needle in out
+    finally:
+        vxb.CONSTRAINT_BY_WRAPPER.clear()
+        vxb.CONSTRAINT_BY_WRAPPER.update(saved)
+
+
+def test_control_a_file_no_record_answers_for_refuses_rather_than_passing(monkeypatch, capsys):
+    """The direction a coverage check must never move in. If a bench narrows
+    its read set, the files it dropped are not covered -- they are UNASKED,
+    and a gate that quietly stops asking gets greener as its evidence gets
+    thinner."""
+    real = gate.bound_evidence
+
+    def narrowed(scope=gate.VERIFICATION_SCOPE):
+        return [item if item.validate is not None else
+                item._replace(files=[f for f in item.files if f.suffix != ".hex"])
+                for item in real(scope)]
+
+    monkeypatch.setattr(gate, "bound_evidence", narrowed)
     assert gate.main(["--scope", "publication"]) == 2
     out = capsys.readouterr().out
-    assert "REFUSED" in out
-    assert XDC_REL in out
-    assert gate.NOT_COVERED in out
-    assert gate.DIFFERS not in out, \
-        "an unhashed file must never be reported as drift"
-    # and the same binding in the default scope is clean -- the two scopes
-    # disagree, which is the whole point of having two.
-    capsys.readouterr()
-    assert gate.main([]) == 0
+    assert "no bound record answers" in out
+    assert ".hex" in out and gate.NOT_COVERED in out
 
 
 def test_verification_scope_names_the_question_it_does_not_answer(capsys):
@@ -298,7 +387,8 @@ def test_verification_scope_names_the_question_it_does_not_answer(capsys):
     out = capsys.readouterr().out
     assert "BOUND: arty_a7_top" in out
     assert XDC_REL in out, "the rung must name the file it does not check"
-    assert gate.NOT_COVERED in out
+    assert "xdc-binding" in out, \
+        "#436: and, now that one exists, the record that DOES answer for it"
     assert "--scope publication" in out
     assert "STALE" not in out
 
@@ -310,64 +400,66 @@ def test_control_a_reverted_xdc_turns_the_publication_gate_red(tmp_path, monkeyp
     matcher.
 
     Arm 1 proves the mode is not red by construction; arm 2 reverts the XDC to
-    the bytes R0 was published with and requires a red that NAMES the file."""
-    import build_arty as build
-    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
-    saved = _bind(record)
-    try:
-        assert gate.main(["--scope", "publication"]) == 0, \
-            "a record that does cover the live XDC must be BOUND"
-        assert "BOUND: arty_a7_top" in capsys.readouterr().out
+    the bytes R0 was published with and requires a red that NAMES the file.
 
-        _revert_to_r0(XDC_REL, monkeypatch)
-        code = gate.main(["--scope", "publication"])
-        out = capsys.readouterr().out
-        assert code == 1, ("the XDC moved and publication scope stayed green: "
-                           "the constraint file is not in its comparison set")
-        assert "STALE" in out
-        assert XDC_REL in out, "a red must name the file, not just a count"
-        assert gate.DIFFERS in out
-    finally:
-        _restore(saved)
+    #436: both arms now run against the REAL committed records. Arm 1 used to
+    bind a record this test had just written, which made "the mode is not red
+    by construction" a statement about the test rather than the repository."""
+    assert gate.main(["--scope", "publication"]) == 0, \
+        "the committed constraint record must cover the live XDC"
+    assert "BOUND: arty_a7_top" in capsys.readouterr().out
+
+    _revert_to_r0(XDC_REL, monkeypatch)
+    code = gate.main(["--scope", "publication"])
+    out = capsys.readouterr().out
+    assert code == 1, ("the XDC moved and publication scope stayed green: "
+                       "the constraint file is not in its comparison set")
+    assert "STALE" in out
+    assert XDC_REL in out, "a red must name the file, not just a count"
+    assert gate.DIFFERS in out
 
 
-def test_the_same_reverted_xdc_stays_invisible_to_the_default_rung(tmp_path, monkeypatch, capsys):
+def test_the_same_reverted_xdc_stays_invisible_to_the_default_rung(monkeypatch, capsys):
     """The other half of the decision, pinned so it cannot be widened by
     accident: verification scope still does not look at the constraints, so
-    Makefile:73 cannot go red for a question no committed record can answer.
-    If this ever fails, the default was widened and
+    the Makefile rung cannot go red for a question the DIGITAL record cannot
+    answer. If this ever fails, the default was widened and
     test_the_bound_record_is_exactly_what_build_arty_accepts is now checking a
     different question from build_arty.validate_verification."""
+    _revert_to_r0(XDC_REL, monkeypatch)
+    assert gate.main([]) == 0
+    out = capsys.readouterr().out
+    assert "BOUND: arty_a7_top" in out
+    assert gate.DIFFERS in out, \
+        "invisible to the VERDICT is not invisible to the READER: the " \
+        "constraint line must still report the reverted state"
+    assert "xdc-binding" in out, "and say which record saw it"
+
+
+def test_the_default_rung_consults_one_record_and_never_the_constraint_one():
+    """The #436 boundary, as data rather than as prose. Verification scope
+    must resolve to exactly the digital record over exactly
+    build_arty.validate_verification's file set: a second record appearing
+    here would make the Makefile rung depend on evidence build_arty does not
+    check, which is a different question wearing the same name."""
     import build_arty as build
-    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
-    saved = _bind(record)
-    try:
-        _revert_to_r0(XDC_REL, monkeypatch)
-        assert gate.main([]) == 0
-        out = capsys.readouterr().out
-        assert "BOUND: arty_a7_top" in out
-        assert gate.DIFFERS in out, \
-            "invisible to the VERDICT is not invisible to the READER: the " \
-            "constraint line must still report the reverted state"
-    finally:
-        _restore(saved)
+    evidence = gate.bound_evidence()
+    assert [item.record for item in evidence] == [p for _, p in gate.bound_bindings()]
+    assert all(item.validate is None for item in evidence)
+    for item in evidence:
+        assert item.files == build.sources() + build.roms()
+    assert len(gate.bound_evidence(gate.PUBLICATION_SCOPE)) == len(evidence) + 1
 
 
-def test_control_a_moved_source_is_not_reported_as_constraint_drift(tmp_path, monkeypatch, capsys):
+def test_control_a_moved_source_is_not_reported_as_constraint_drift(monkeypatch, capsys):
     """False-positive control. Publication scope must go red for voice_dp.v
     and say nothing about the XDC -- otherwise "red when the XDC moves" is
     just "red", and the mode carries no constraint information."""
-    import build_arty as build
-    record = _bound_record_plus_xdc(tmp_path, build.sha(build.XDC))
-    saved = _bind(record)
-    try:
-        _revert_to_r0("rtl-sketch/voice_dp.v", monkeypatch)
-        assert gate.main(["--scope", "publication"]) == 1
-        out = capsys.readouterr().out
-        assert "rtl-sketch/voice_dp.v" in out
-        assert XDC_REL not in out
-    finally:
-        _restore(saved)
+    _revert_to_r0("rtl-sketch/voice_dp.v", monkeypatch)
+    assert gate.main(["--scope", "publication"]) == 1
+    out = capsys.readouterr().out
+    assert "rtl-sketch/voice_dp.v" in out
+    assert XDC_REL not in out
 
 
 def test_coverage_separates_the_two_states_where_drift_cannot(tmp_path):

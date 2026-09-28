@@ -249,6 +249,30 @@ def constraint_state(record_path: Path) -> str:
     return "matches" if recorded[key] == build.sha(build.XDC) else DIFFERS
 
 
+def constraint_note() -> str:
+    """What the default rung says about the file it does not check.
+
+    Since #436 it names the record that DOES answer for the XDC and that
+    record's state, so the reader learns where the question is answered rather
+    than only that this rung does not answer it. A constraint record that
+    cannot be reached is reported as such and never as the digital record's
+    silence -- fpga/release/stale_controls.py runs this gate in an isolated
+    copy, and 'absent' must not read like 'fine'."""
+    build, _ = _load()
+    xdc = str(build.XDC.relative_to(build.ROOT))
+    try:
+        bindings = sorted(_load_constraint().CONSTRAINT_BY_WRAPPER.items())
+    except ImportError as exc:
+        return f"constraint scope: {xdc} [NO RECORD REACHABLE: {exc}]"
+    parts = []
+    for _wrapper, path in bindings:
+        path = Path(path)
+        rel = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
+        parts.append(f"{rel} [{constraint_state(path) if path.is_file() else 'ABSENT'}]")
+    return (f"constraint scope: {xdc} is answered by "
+            + (", ".join(parts) if parts else "NO BOUND RECORD"))
+
+
 def drift(record_path: Path, scope: str = VERIFICATION_SCOPE) -> list[str]:
     """Repo-relative sources whose live bytes differ from the record's, or
     that the record does not cover at all. Empty means bound.
@@ -363,7 +387,7 @@ def main(argv=None) -> int:
             # "covers every compiled source" is never read as "covers the
             # constraints". The verdict above deliberately does not depend
             # on this line.
-            print(f"       constraint scope: {xdc} [{constraint_state(path)}] -- not part of "
+            print(f"       {constraint_note()} -- not part of "
                   f"{VERIFICATION_SCOPE} scope, which is what this rung "
                   f"checks. Use --scope {PUBLICATION_SCOPE} to ask.")
 
