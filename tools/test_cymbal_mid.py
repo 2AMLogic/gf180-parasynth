@@ -38,14 +38,18 @@ def edt10_of(tau):
 
 
 @functools.lru_cache(maxsize=64)
-def _measured(items, bands):
-    return cm.measure_mid(strike(**dict(items)), SR, bands=bands)
+def _measured(items, bands, hh1):
+    return cm.measure_mid(strike(**dict(items)), SR, hh1, bands=bands)
 
 
-def measured(_bands=("M",), **kw):
+def measured(_bands=("M",), _hh1=False, **kw):
     """`measure_mid` of a planted strike, memoised, and by default only the M band: the same
-    planted case is asked for by several tests and a 6 s record's envelopes are not free."""
-    return _measured(tuple(sorted(kw.items())), _bands)
+    planted case is asked for by several tests and a 6 s record's envelopes are not free.
+
+    `_hh1=False` by default because `strike`'s planted low band is the bare 3.45 kHz Q6 band-pass
+    with no Hh1 after it -- declaring otherwise would tell the instrument the planted signal has
+    a rejection it does not have."""
+    return _measured(tuple(sorted(kw.items())), _bands, _hh1)
 
 
 def decaying_tone(tau, f=1300.0, dur=4.0, pad_s=0.05):
@@ -114,17 +118,39 @@ def test_skirt_at_the_band_edges_is_what_the_docstring_claims():
     the same argument `cymbal_bands.BANDS` makes for Ln. Pin the numbers so the prose cannot
     drift from the filter (#383: a docstring once claimed 4x the precision the filter had)."""
     lo, hi = cm.MID["M"]
-    assert float(cm.skirt_db(lo)) == pytest.approx(-26.73, abs=0.05)
-    assert float(cm.skirt_db(hi)) == pytest.approx(-18.67, abs=0.05)
-    assert float(cm.skirt_db(cm.MID["M25"][1])) == pytest.approx(-8.44, abs=0.05)
+    assert float(cm.skirt_db(lo, False)) == pytest.approx(-26.73, abs=0.05)
+    assert float(cm.skirt_db(hi, False)) == pytest.approx(-18.67, abs=0.05)
+    assert float(cm.skirt_db(cm.MID["M25"][1], False)) == pytest.approx(-8.44, abs=0.05)
     # M25's top edge is ~10 dB less separated than M's: which is why M25 is reported, not qualified
-    assert float(cm.skirt_db(hi)) - float(cm.skirt_db(cm.MID["M25"][1])) < -5.0
+    assert float(cm.skirt_db(hi, False)) - float(cm.skirt_db(cm.MID["M25"][1], False)) < -5.0
 
 
 def test_predicted_leak_is_larger_for_the_wider_band_and_both_are_well_below_L():
-    lm, lm25 = cm.skirt_leak_db(cm.MID["M"]), cm.skirt_leak_db(cm.MID["M25"])
+    lm, lm25 = cm.skirt_leak_db(cm.MID["M"], False), cm.skirt_leak_db(cm.MID["M25"], False)
     assert lm < lm25 < 0.0
     assert -30.0 < lm < -15.0, lm
+
+
+def test_hh1_changes_the_leak_prediction_by_about_ten_db_and_must_be_declared():
+    """The declaration that decided this module's answer. Hh1 (2.5 kHz, Q 0.97, reference §10's
+    "low" row) sits after the low band's VCA in the machine, and its extra rejection over
+    0.9-1.8 kHz is what makes the 808's own mid band separable: with the band-pass alone all 25
+    recordings refuse. So the two predictions must differ by about 10 dB, and `low_has_hh1` must
+    have NO default -- a silently-chosen one would silently decide the result."""
+    assert cm.skirt_leak_db(cm.MID["M"], False) - cm.skirt_leak_db(cm.MID["M"], True) == \
+        pytest.approx(10.0, abs=2.0)
+    # a 2-pole high-pass: -12 dB/octave asymptote, and -3 dB at its corner for Q ~ 0.71..1
+    assert 20 * math.log10(float(cm.hp2_mag(2500.0))) == pytest.approx(20 * math.log10(0.97), abs=0.01)
+    assert (20 * math.log10(float(cm.hp2_mag(100.0))) - 20 * math.log10(float(cm.hp2_mag(200.0)))) == \
+        pytest.approx(-12.0, abs=0.1)
+    # ...and only 12.6 dB/octave one octave below the corner, which is why the leak prediction
+    # integrates the response over the band instead of using an asymptote.
+    assert (20 * math.log10(float(cm.hp2_mag(625.0))) - 20 * math.log10(float(cm.hp2_mag(1250.0)))) == \
+        pytest.approx(-12.62, abs=0.05)
+    with pytest.raises(TypeError):
+        cm.skirt_leak_db(cm.MID["M"])                 # the argument is required, deliberately
+    with pytest.raises(TypeError):
+        cm.measure_mid(np.zeros(4096), SR)
 
 
 def test_bp_mag_is_unity_at_the_centre_and_half_power_at_the_q_edges():
@@ -187,10 +213,10 @@ def test_a_planted_level_change_reads_as_that_many_db():
 
 def test_invariance_to_scale_and_to_prepended_silence():
     base = strike()
-    a = cm.measure_mid(base, SR, bands=("M",))["M"]
-    b = cm.measure_mid(0.25 * base, SR, bands=("M",))["M"]
+    a = cm.measure_mid(base, SR, False, bands=("M",))["M"]
+    b = cm.measure_mid(0.25 * base, SR, False, bands=("M",))["M"]
     c = cm.measure_mid(cb.rc.prepare(np.concatenate([np.zeros(SR // 3), base]), SR, side="pad"),
-                       SR, bands=("M",))["M"]
+                       SR, False, bands=("M",))["M"]
     for k in ("energy_share_db", "t20_late_ms", "edt10_ms"):
         assert b[k] == pytest.approx(a[k], rel=1e-6, abs=1e-6), k
         assert c[k] == pytest.approx(a[k], rel=0.02, abs=0.1), k
@@ -211,7 +237,7 @@ def test_m_follows_its_own_planted_decay_over_a_four_fold_range():
 def test_a_truncated_record_refuses_rather_than_answering():
     y = strike(tau_m=0.60)
     cut = y[: cb.rc.required_lead_samples(SR) + int(0.30 * SR)]
-    r = cm.measure_mid(cut, SR)              # the default: both bands, as every report runs it
+    r = cm.measure_mid(cut, SR, False)              # the default: both bands, as every report runs it
     assert set(r) >= set(cm.MID), r
     assert r["M"]["t20_late_ms"] is None
     assert r["M"].get("t20_refused") or "refused" in r["M"], r

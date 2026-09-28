@@ -47,12 +47,19 @@ TWO PRECONDITIONS, ASSERTED PER RECORD, THAT REFUSE RATHER THAN ANSWER.
      planted signal whose late T20 it then read 40 % high, reporting the low band's decay under
      M's name. So: leakage may contribute at most ~25 %
      of the band's power in the window being read. The leak is predicted from the L band's OWN
-     measured energy in that same window times the
-     analytic skirt ratio (`skirt_db`), using the band-pass alone and NOT Hh1 -- deliberately
-     the worst case, because the shipped kit omits Hh1 (`../README.md` §3) while the 808 has it,
-     so the bound must hold for the render with the most leakage.
+     measured energy in that same window times the analytic response of the low path -- the
+     3.45 kHz Q 6 band-pass, THEN Hh1 (2.5 kHz Q 0.97) if the record under test has Hh1. Which
+     applies is a required argument, `low_has_hh1`, not a default: the 808 and any candidate that
+     restores Hh1 have it, the shipped kit does not, and it moves the prediction by ~10 dB over
+     0.9-1.8 kHz. Both numbers are reported for every record.
      6 dB rather than the 3 dB "energy ratio" convention: 3 dB is the threshold for calling two
      energies different, and here the neighbour must be not merely smaller but subordinate.
+
+     THIS IS THE PRECONDITION THAT DECIDED THE ANSWER. Run with the band-pass alone, all 25 808
+     recordings REFUSE: their 1-1.8 kHz sits only 4.1-5.5 dB above what the band-pass skirt alone
+     predicts. The machine's actual path has Hh1's extra rejection in it, and then they clear the
+     margin. The shipped kit, which omits Hh1, is 10.5 dB clear either way -- it has independent
+     content at 1-1.8 kHz that the 808 does not.
 
 A SECOND ESTIMATOR, ON DIFFERENT ARITHMETIC (`two_window_t20`). Two adjacent equal windows of
 the floor-subtracted power, anchored where the smoothed envelope has fallen 10 dB from its peak
@@ -123,6 +130,7 @@ import cymbal_bands as cb  # noqa: E402
 MID = {"M": (891.0, 1782.0), "M25": (891.0, 2818.0)}
 L_BAND = cb.BANDS["L"]                  # the neighbour whose skirt is the threat
 LOW_BP = (3450.0, 6.0)                  # docs/tr808-reference.md §10: the low band's band-pass
+HH1 = (2500.0, 0.97)                    # ...and the 2-pole high-pass after its VCA, same table
 FLOOR_MARGIN_DB = 10.0
 LEAK_MARGIN_DB = 6.0
 XCHECK_DROP_DB = 10.0                   # where the second estimator's first window starts
@@ -140,21 +148,42 @@ def bp_mag(f, f0=LOW_BP[0], q=LOW_BP[1]):
     return (r / q) / np.sqrt((1.0 - r * r) ** 2 + (r / q) ** 2)
 
 
-def skirt_db(f):
-    """The low band's band-pass response at `f`, dB relative to its 3.45 kHz peak."""
-    return 20.0 * np.log10(bp_mag(f))
+def hp2_mag(f, f0=HH1[0], q=HH1[1]):
+    """Magnitude of an analog 2-pole high-pass: Hh1, the 2.5 kHz Q 0.97 Sallen-Key that sits
+    after the low band's VCA (docs/tr808-reference.md §10, table row "low")."""
+    r = np.asarray(f, dtype=np.float64) / f0
+    return (r * r) / np.sqrt((1.0 - r * r) ** 2 + (r / q) ** 2)
 
 
-def skirt_leak_db(band, n=4001):
+def low_path_mag(f, with_hh1):
+    """The whole low band's response at `f`: the 3.45 kHz band-pass, and Hh1 after it if the
+    record under test HAS Hh1. The shipped kit omits it (`../README.md` §3); the 808 and the
+    candidate have it. Which one applies is declared by the caller, never guessed."""
+    return bp_mag(f) * (hp2_mag(f) if with_hh1 else 1.0)
+
+
+def skirt_db(f, with_hh1=False):
+    """The low band's response at `f`, dB relative to its 3.45 kHz peak."""
+    return 20.0 * np.log10(low_path_mag(f, with_hh1) / low_path_mag(LOW_BP[0], with_hh1))
+
+
+def skirt_leak_db(band, with_hh1, n=4001):
     """How much of the low band's energy lands in `band`, dB, relative to how much lands in
     L (2-5 kHz) -- i.e. what to expect in `band` from a measured L energy. Power-integrated
-    over the analytic skirt on a log-frequency grid, band-pass only (no Hh1: worst case).
-    Assumes the source driving the band-pass is flat in frequency over 0.9-5 kHz, which six
-    beating squares at ~500 Hz and up are to within the skirt's own 15 dB of tilt."""
+    over the analytic response on a log-frequency grid.
+
+    `with_hh1` is REQUIRED, not defaulted, because getting it wrong is the difference between a
+    measurement and a refusal: with the band-pass alone the 808's own M band sits only 4.1-5.5 dB
+    above this prediction and every one of the 25 recordings REFUSES, while the machine's actual
+    low path -- band-pass THEN Hh1 -- puts Hh1's ~10 dB of extra rejection over 0.9-1.8 kHz into
+    the prediction and the same records clear the margin. A default here would silently pick one.
+
+    Assumes the source driving the path is flat in frequency over 0.9-5 kHz, which six beating
+    squares at ~500 Hz and up are to within the skirt's own 15 dB of tilt."""
     def e(lo, hi):
         u = np.linspace(math.log(lo), math.log(hi), n)
         f = np.exp(u)
-        g = bp_mag(f) ** 2 * f                      # dE/du = |H|^2 * f  (flat source, du = df/f)
+        g = low_path_mag(f, with_hh1) ** 2 * f      # dE/du = |H|^2 * f  (flat source, du = df/f)
         return float(np.sum(0.5 * (g[1:] + g[:-1]) * np.diff(u)))
     return 10.0 * math.log10(e(*band) / e(*L_BAND))
 
@@ -210,7 +239,7 @@ def floor_margins(x, sr) -> dict:
     return out
 
 
-def leak_dominance_db(xm, xl, band, a, b) -> float:
+def leak_dominance_db(xm, xl, band, a, b, with_hh1) -> float:
     """How far the mid band's energy in samples [a, b) exceeds what the 3.45 kHz low band would
     leak into it OVER THE SAME SAMPLES, in dB.
 
@@ -222,7 +251,7 @@ def leak_dominance_db(xm, xl, band, a, b) -> float:
     catch (`docs/scorecard/cymbal-369/mid-band/README.md`, wrong-then-right 1)."""
     em = float(np.sum(np.asarray(xm[a:b], dtype=np.float64) ** 2))
     el = float(np.sum(np.asarray(xl[a:b], dtype=np.float64) ** 2))
-    leak = el * 10.0 ** (skirt_leak_db(band) / 10.0)
+    leak = el * 10.0 ** (skirt_leak_db(band, with_hh1) / 10.0)
     return 10.0 * math.log10(max(em, 1e-30) / max(leak, 1e-30))
 
 
@@ -318,9 +347,18 @@ def two_window_t20(x, sr, drop_db=XCHECK_DROP_DB, span_db=XCHECK_SPAN_DB) -> dic
     return {**out, "t20_ms": round(1e3 * math.log(10.0) * 2.0 * win_s / ln_r, 2)}
 
 
-def measure_mid(y, sr, bands=None) -> dict:
-    """`y` must come through run_case.prepare (the guaranteed lead, #101). `bands` restricts the
-    work to some of MID (the known-answer tests ask only for M; every report uses all of it).
+def measure_mid(y, sr, low_has_hh1, bands=None) -> dict:
+    """`y` must come through run_case.prepare (the guaranteed lead, #101).
+
+    `low_has_hh1` DECLARES whether the record's low band has Hh1 (the 2.5 kHz Q 0.97 high-pass
+    after its VCA) behind its 3.45 kHz band-pass -- True for the 808 and for any candidate that
+    restores Hh1, False for the shipped kit, which omits it. It has no default on purpose: it
+    changes the leakage prediction by ~10 dB over 0.9-1.8 kHz, which is the difference between
+    measuring the 808's mid band and refusing it. Both values are reported per band
+    (`over_leak_*_db` under the declaration, `*_bp_only_db` with the band-pass alone) so a reader
+    can see the effect of the declaration rather than take it on trust.
+
+    `bands` restricts the work to some of MID (the known-answer tests ask only for M).
 
     Per mid band: energy share (dB re 200 Hz-20 kHz over the strike's first second, the same
     convention as `cymbal_bands.measure`), the Schroeder EDT10/late T20, the independent
@@ -335,17 +373,20 @@ def measure_mid(y, sr, bands=None) -> dict:
         raise cb.Refused("silent")
     xl = cb._bp(y, sr, *L_BAND)
     e_l = float(np.sum(xl[:n_e] ** 2))
-    res = {"sr": sr, "record_s": round((len(y) - o) / sr, 3),
+    res = {"sr": sr, "record_s": round((len(y) - o) / sr, 3), "low_has_hh1": bool(low_has_hh1),
            "L_energy_share_db": round(10 * math.log10(max(e_l, 1e-30) / e_tot), 3)}
     for name, band in ((k, v) for k, v in MID.items() if bands is None or k in bands):
         xb = cb._bp(y, sr, *band)
         eb = float(np.sum(xb[:n_e] ** 2))
-        leak = skirt_leak_db(band)
+        leak = skirt_leak_db(band, low_has_hh1)
         r = {"band_hz": list(band),
              "energy_share_db": round(10 * math.log10(max(eb, 1e-30) / e_tot), 3),
-             "skirt_db_at_edges": [round(float(skirt_db(band[0])), 2), round(float(skirt_db(band[1])), 2)],
+             "skirt_db_at_edges": [round(float(skirt_db(band[0], low_has_hh1)), 2),
+                                   round(float(skirt_db(band[1], low_has_hh1)), 2)],
              "predicted_leak_db_re_L": round(leak, 2),
-             "over_leak_1s_db": round(leak_dominance_db(xb, xl, band, 0, n_e), 2)}
+             "predicted_leak_db_re_L_bp_only": round(skirt_leak_db(band, False), 2),
+             "over_leak_1s_db": round(leak_dominance_db(xb, xl, band, 0, n_e, low_has_hh1), 2),
+             "over_leak_1s_bp_only_db": round(leak_dominance_db(xb, xl, band, 0, n_e, False), 2)}
         r.update(cb.band_decay(xb, sr))
         r.update(floor_margins(xb, sr))
         r["xcheck"] = two_window_t20(xb, sr)
@@ -356,9 +397,13 @@ def measure_mid(y, sr, bands=None) -> dict:
         # Each quantity is gated over ITS OWN window: EDT10 over [0, -10 dB), the late T20 over
         # [-10 dB, -30 dB). A leak that is subordinate during the strike can dominate the tail.
         r["over_leak_edt_db"] = (None if i10 is None else
-                                 round(leak_dominance_db(xb, xl, band, 0, i10), 2))
+                                 round(leak_dominance_db(xb, xl, band, 0, i10, low_has_hh1), 2))
         r["over_leak_late_db"] = (None if i10 is None or i30 is None else
-                                  round(leak_dominance_db(xb, xl, band, i10, i30), 2))
+                                  round(leak_dominance_db(xb, xl, band, i10, i30, low_has_hh1), 2))
+        r["over_leak_edt_bp_only_db"] = (None if i10 is None else
+                                         round(leak_dominance_db(xb, xl, band, 0, i10, False), 2))
+        r["over_leak_late_bp_only_db"] = (None if i10 is None or i30 is None else
+                                          round(leak_dominance_db(xb, xl, band, i10, i30, False), 2))
         refusals = []
         m10 = r["margin10_db"]
         if m10 is None or m10 < FLOOR_MARGIN_DB:
@@ -412,30 +457,35 @@ def measure_mid(y, sr, bands=None) -> dict:
 # --------------------------------------------------------------------------- corpus and renders
 
 def fischer(refs: pathlib.Path) -> dict:
+    """Every Fischer CY recording. `low_has_hh1=True`: the machine has Hh1 (reference §10)."""
     out = {}
     for tone in cb.CODES:
         for decay in cb.CODES:
             p = refs / "cy8" / f"CY{tone}{decay}.WAV"
             x, sr = cb._load(p)
-            out[f"CY{tone}{decay}"] = measure_mid(rc.prepare(x, sr, side=p.name), sr)
+            out[f"CY{tone}{decay}"] = measure_mid(rc.prepare(x, sr, side=p.name), sr, True)
     return out
 
 
 def renders(refs: pathlib.Path, candidate: bool = True) -> dict:
     """The shipped kit's CY, the 808's CY5025, and (optionally) candidate 3 -- the three records
-    §6's table is about, measured by this module instead of by an energy ratio."""
+    §6's table is about, measured by this module instead of by an energy ratio.
+
+    Each declares its own low path: the 808 HAS Hh1; the SHIPPED kit omits it (`../README.md` §3,
+    the omission that leaves 9-15 dB of excess below 2.5 kHz); candidate 3 restores it
+    (`model/cymbal_candidate.py` revision 3, mode M_CYH1)."""
     out = {}
     rx, rsr = cb._load(refs / "cy8" / "CY5025.WAV")
-    out["fischer_CY5025"] = measure_mid(rc.prepare(rx, rsr, side="CY5025"), rsr)
+    out["fischer_CY5025"] = measure_mid(rc.prepare(rx, rsr, side="CY5025"), rsr, True)
     ys, sr = rc.render_drum_solo("CY")
-    out["shipped"] = measure_mid(rc.prepare(ys, sr, side="shipped CY"), sr)
+    out["shipped"] = measure_mid(rc.prepare(ys, sr, side="shipped CY"), sr, False)
     if candidate:
         import cymbal_candidate as cc
         import cymbal_candidate_eval as ce
         ce.VARIANT = "full"
         cal = ce.calibrate()
         yc, _ = cc.render(ce.kit_with_levels(cal["amps"]), "CY")
-        out["candidate3"] = measure_mid(rc.prepare(yc, sr, side="candidate3 CY"), sr)
+        out["candidate3"] = measure_mid(rc.prepare(yc, sr, side="candidate3 CY"), sr, True)
     return out
 
 
@@ -466,7 +516,8 @@ def main(argv=None) -> int:
     res = {"bands": {k: list(v) for k, v in MID.items()},
            "preconditions": {"floor_margin_db": FLOOR_MARGIN_DB, "leak_margin_db": LEAK_MARGIN_DB,
                              "xcheck_tol": XCHECK_TOL},
-           "skirt": {k: round(skirt_leak_db(v), 2) for k, v in MID.items()}}
+           "skirt": {k: {"with_hh1": round(skirt_leak_db(v, True), 2),
+                         "bp_only": round(skirt_leak_db(v, False), 2)} for k, v in MID.items()}}
     if a.renders:
         res["renders"] = renders(refs, candidate=not a.no_candidate)
         for k, v in res["renders"].items():
