@@ -221,7 +221,7 @@ four citations that need correcting to point at it.
 > so the two corpus-gated controls were documented as enforced and were enforced nowhere. The flag is now
 > wired, `make reference-integration` is the gate that passes it, and it is the one of the seven that no
 > control caught.
-
+>
 > **Step 10 is `tone-render/README.md`** — step 9's own next question, asked on a rendered candidate: *does a
 > candidate driven by VR4's wiper law track the 808 as TONE moves?* **No, and the law is not why.** It carries a
 > repair, a negative and a blocker with a number.
@@ -257,6 +257,27 @@ four citations that need correcting to point at it.
 > Preservation passes completely, including **OH and CH bit-identical at every one of the five TONE positions**.
 > Wrong-then-right rate of step 10: **4**, one of them a 130 Hz pole that would have shipped with a better error
 > figure and no circuit behind it.
+>
+> **Step 11 is `candidate4/README.md`** (#411) — the mid band's *level*, named by step 6 as the prime
+> suspect: candidate 3's own amp register for Hh1 is matched to the *shipped kit's* mid band, not to the
+> circuit's stated unity gain (`HH1_PASS_DB = 0.0`). Restoring the circuit value alone is **REFUSED**: the
+> qualified over-skirt residual `tools/cymbal_mid.py` measures moves the *wrong* way (+0.04 → **−0.55 dB**,
+> away from the 808's +4.41), and the strike-window guard step 5 uniquely held (0 thirds outside ±6 dB)
+> gains one violation at 2.5 kHz (+8.3 dB). The tail *does* improve on the frozen `thirds()` instrument
+> (50–300 ms worst case −11.6 → −9.0 dB, 7 → 4 of 14 thirds outside bound) — the two instruments disagree
+> about direction, and both are reported rather than one being preferred. The reason is structural, not a
+> render bug: Hh1's amp is a flat scalar on its *entire* post-filter output, and the over-skirt metric
+> compares M against a prediction built from the *same render's* L band, so a flat gain on Hh1 alone is
+> close to powerless to move that ratio — confirmed, not merely reasoned, by ruling out clipping directly
+> (`tools/probes/cymbal_candidate4_gain_invariance.py`: 0 of 25,152,000 saturations in either render, ~11 dB
+> of headroom in both). Not promoted; `--variant candidate4` stays a diagnostic ablation beside `notilt` and
+> `balance`, and the shipped default is still candidate 3. **A distinct limit from steps 7, 8 and 10's VCA-drive
+> finding, not the same one restated**: it holds regardless of the drives, because a flat scalar on Hh1's own
+> output cannot move a ratio measured against a leak prediction built from that same output. A fix needs either
+> a frequency-shaped correction to Hh1 (not a single register) or the inter-band balance itself — which does
+> still route through the unresolved VCA drives. Wrong-then-right rate of step 11: **1** (clipping was the
+> first-considered explanation for the wrong-direction result; ruled out by direct measurement before being
+> reported as fact).
 
 ## 5. Where the structure stands after step 10, and the one question that is left
 
