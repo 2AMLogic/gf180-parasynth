@@ -1,9 +1,15 @@
 # #369 cymbal, the inter-band balance (#396) — decomposed, bounded, and REFUSED, with the blocking factor measured
 
 > **Step numbering.** PR #410 ("step 6: the 1–2.5 kHz decay qualified") was open and unmerged while this was
-> written, so this file deliberately carries no step number. The two are parallel, not sequential, and they agree:
-> #410/#411 name *"its level rule anchoring each band to the shipped kit's energy in one 1/3 octave"* as the prime
-> suspect for the mid band, and §1 below measures that rule against the circuit for all three bands.
+> written and **has since merged ahead of it** (`f3797ad2`, 2026-09-28), so `../README.md` now carries step 6 and
+> this file still deliberately carries no step number. The reason is no longer that #410 is open — it is that the
+> two were measured **in parallel**: neither uses the other's result, so numbering this one 7 would assert a
+> sequence that does not exist. They agree: #410/#411 name *"its level rule anchoring each band to the shipped
+> kit's energy in one 1/3 octave"* as the prime suspect for the mid band, and §1 below measures that rule against
+> the circuit for all three bands. #410's own Judge-driven correction of four prose numbers is confined to
+> `mid-band/README.md` and `tools/cymbal_mid.py`'s docstrings; **none of those four values is quoted anywhere in
+> this directory or in `../README.md`**, so nothing here restates them and the merge reverts none of them. §4
+> records what the merge did — and did not do — to this step's record.
 
 Step 5 (`../candidate3/README.md`, PR #402) applied the tone stage's measured **tilt** and left the **balance** — the
 three bands' levels relative to one another — where it was. #396 then asked for the balance, preferring

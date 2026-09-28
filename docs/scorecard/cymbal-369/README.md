@@ -125,7 +125,6 @@ four citations that need correcting to point at it.
 > about −20 dB from 1 kHz to 20 kHz, which nearly cancels the LEVEL stage's +16.6 dB that the candidate
 > applies on its own. That is the right sign and size for candidate 2's +24.0 dB excess tilt. No candidate
 > is built there, because the same figure shows it does not determine the inter-band balance.
->
 > **Step 5 is `candidate3/README.md`** — the tilt applied, and the chain's first candidate that beats the
 > shipped kit on the defect the operator's A/B named: during the strike, no 1/3 octave is more than 5.7 dB
 > from the 808 (shipped 15.4, candidate 2 15.3), and the residual tilt closes from +24.0 to +6.6 dB.
@@ -134,12 +133,21 @@ four citations that need correcting to point at it.
 > more than the 808's between the strike and 50–300 ms, a figure identical in the shipped kit, candidate 2
 > and candidate 3), so no filter magnitude and no inter-band balance can be the answer to it.
 >
-> **The inter-band balance is `balance/README.md`** — the half #396 left open, now **REFUSED with the reason
-> measured** rather than deferred. The obstacle is not the 9–18 dB of Figure 9 window this file and reference §18
-> blamed: at the frequency each band's level is actually set, those bounds are 7.4 / 13.9 / 0.04 dB. The obstacle is
-> the three swing VCAs' drive levels, which no W14b figure plots — a +38.2 dB gap in the short band against the
-> shipped-kit level rule. Applying every resolved factor with the drives held equal was rendered and lands H−L at
-> 24.38 dB against the 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it.**
+> **Step 6 is `mid-band/README.md`** — the qualified 1–2.5 kHz decay that §6's own evidence-strength note
+> said was missing (`tools/cymbal_mid.py`). It **refutes** the decay reading of §6: at CY5025 the 808's
+> mid band decays 632 ms against the shipped kit's 528 ms, a 16 % difference inside the repo's ±50 % time
+> tolerance. What it qualifies instead is a **level** difference — the shipped kit has ~6 dB more
+> independent 1–1.8 kHz content than the machine and candidate 3 has ~4 dB less — which is where the
+> omitted Hh1 acts.
+>
+> **Alongside step 6, not after it, the inter-band balance is `balance/README.md`** — the half #396 left open,
+> now **REFUSED with the reason measured** rather than deferred. It carries no step number because it and step 6
+> were measured in parallel, neither using the other's result (`balance/README.md`'s own note says so). The
+> obstacle is not the 9–18 dB of Figure 9 window this file and reference §18 blamed: at the frequency each band's
+> level is actually set, those bounds are 7.4 / 13.9 / 0.04 dB. The obstacle is the three swing VCAs' drive
+> levels, which no W14b figure plots — a +38.2 dB gap in the short band against the shipped-kit level rule.
+> Applying every resolved factor with the drives held equal was rendered and lands H−L at 24.38 dB against the
+> 808's 8.16 (the rule it replaced reads 12.09), so **VR4's network alone would not unblock it.**
 
 ## 5. Next step: one structural candidate, fixed before it is rendered
 
