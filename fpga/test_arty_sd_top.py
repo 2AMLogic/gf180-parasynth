@@ -81,6 +81,43 @@ def test_direct_plug_table_is_the_breakout_header_order():
         {k: v for k, v in sd.DIRECT_PLUG_PINS.items() if k in port_for.values()}
 
 
+def test_effective_pins_refuses_a_dict_form_package_pin_line():
+    # #471: Vivado's -dict form (`set_property -dict { PACKAGE_PIN ... }`) is
+    # not one of the forms the single-line regex parses. Silently dropping
+    # the assignment would leave an incomplete pin map with no error; this
+    # must REFUSE instead (docs/verification-rules.md: loud over silent).
+    dict_form = ("set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } "
+                "[get_ports clk_100mhz]\n")
+    with pytest.raises(ValueError, match="unparseable PACKAGE_PIN"):
+        sd.effective_pins([dict_form])
+
+
+def test_effective_pins_refuses_any_unparseable_package_pin_line():
+    # a made-up malformed form, distinct from -dict, to confirm the refusal
+    # is general (any set_property line naming PACKAGE_PIN it cannot parse)
+    # rather than special-cased to -dict specifically
+    malformed = "set_property PACKAGE_PIN[E3] [get_ports clk_100mhz]\n"
+    with pytest.raises(ValueError, match="unparseable PACKAGE_PIN"):
+        sd.effective_pins([malformed])
+
+
+def test_effective_pins_ignores_non_package_pin_set_property_lines():
+    # lines that set other properties (IOSTANDARD, PULLUP, ...) are not
+    # PACKAGE_PIN assignments and must not trip the new refusal
+    text = ("set_property PACKAGE_PIN D9 [get_ports btn_reset]\n"
+           "set_property IOSTANDARD LVCMOS33 [get_ports btn_reset]\n"
+           "set_property CONFIG_VOLTAGE 3.3 [current_design]\n")
+    assert sd.effective_pins([text]) == {"btn_reset": "D9"}
+
+
+def test_no_xdc_this_project_reads_uses_the_dict_form():
+    # scope check from #471: confirm this is hardening, not an active bug --
+    # if any XDC this build reads ever grows a -dict PACKAGE_PIN line, this
+    # test (not just effective_pins) goes red first
+    for path in (build.XDC, sd.SD_XDC):
+        assert "-dict" not in path.read_text(), path
+
+
 def test_an_override_onto_an_occupied_site_is_refused():
     bad = sd.SD_XDC.read_text().replace(
         "set_property PACKAGE_PIN D12 [get_ports i2s_lrclk]\n"

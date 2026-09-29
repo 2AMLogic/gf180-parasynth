@@ -149,14 +149,30 @@ def check_implementation(directory: Path) -> dict:
 IO_REPORT = "io.rpt"
 
 
+_PACKAGE_PIN_RE = re.compile(r"^set_property PACKAGE_PIN (\w+) "
+                             r"\[get_ports \{?([\w\[\]]+)\}?\]")
+
+
 def effective_pins(xdc_texts: list) -> dict:
     """port -> PACKAGE_PIN after the XDCs apply in order (a later set wins).
     Raises if any assignment moves a port onto a site another port holds at
-    that moment -- the order the demo XDC's overrides must respect."""
+    that moment -- the order the demo XDC's overrides must respect.
+    Also raises on any `set_property` line that names PACKAGE_PIN but does
+    not match the single-line form above (e.g. Vivado's `-dict { PACKAGE_PIN
+    ... }` form) instead of silently dropping it from the map -- an
+    unsupported form must fail loud, not vanish (#471)."""
     pins = {}
     for text in xdc_texts:
-        for site, port in re.findall(r"^set_property PACKAGE_PIN (\w+) "
-                                     r"\[get_ports \{?([\w\[\]]+)\}?\]", text, re.M):
+        for line in text.splitlines():
+            if not line.startswith("set_property") or "PACKAGE_PIN" not in line:
+                continue
+            match = _PACKAGE_PIN_RE.match(line)
+            if match is None:
+                raise ValueError(
+                    "unparseable PACKAGE_PIN assignment -- only the single-line "
+                    "'set_property PACKAGE_PIN <site> [get_ports <port>]' form "
+                    f"is understood (e.g. Vivado's -dict form is not): {line!r}")
+            site, port = match.group(1), match.group(2)
             holder = next((p for p, s_ in pins.items() if s_ == site and p != port), None)
             if holder:
                 raise ValueError(f"{port} moved onto {site} while {holder} holds it")
