@@ -60,13 +60,31 @@ set_property PACKAGE_PIN T9 [get_ports {led[2]}]
 set_property PACKAGE_PIN T10 [get_ports {led[3]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[*]}]
 
-# JA1/2/3 -> PCM5102 BCLK/WSEL/DIN. JA5 or JA11 -> GND; JA6 or JA12 -> VIN.
-set_property PACKAGE_PIN G13 [get_ports i2s_bclk]
-set_property PACKAGE_PIN B11 [get_ports i2s_lrclk]
+# JA laid out for a PCM5102 breakout plugged STRAIGHT into JA's top row, the
+# same layout as fpga/boards/arty-a7-100-sd.xdc (#408). The breakout's header,
+# read from its VIN end, is VIN GND LCK DIN BCK SCK; plugged into JA's top row
+# (VCC and GND at positions 6 and 5) that is JA6..JA1, so:
+#
+#   JA1 G13 dac_sck (constant 0)   JA2 B11 BCK   JA3 A11 DIN   JA4 D12 LCK
+#   JA5 GND                        JA6 3.3 V
+#
+# NOT the shared XDC's jumper layout (JA1/2/3 -> BCLK/WSEL/DIN), which leaves
+# JA4 unassigned and so delivers NO word clock to a directly-plugged breakout.
+# That produces total silence while every digital check passes: on 2026-09-28
+# R0 was flashed onto this bench and made no sound while held_note_audible.py
+# reported a decoded I2S peak of 12,760 LSB on the same bytes. Since #449's
+# acceptance includes a by-ear check, the layout has to match the bench.
+#
+# This file is standalone (it assigns every port once) rather than an override
+# read after the shared XDC, so #408's careful port-move ordering is not needed
+# here: no port is ever reassigned off a site another port already holds.
+set_property PACKAGE_PIN B11 [get_ports i2s_bclk]
+set_property PACKAGE_PIN D12 [get_ports i2s_lrclk]
 set_property PACKAGE_PIN A11 [get_ports i2s_sdata]
-set_property IOSTANDARD LVCMOS33 [get_ports {i2s_bclk i2s_lrclk i2s_sdata}]
-set_property DRIVE 4 [get_ports {i2s_bclk i2s_lrclk i2s_sdata}]
-set_property SLEW SLOW [get_ports {i2s_bclk i2s_lrclk i2s_sdata}]
+set_property PACKAGE_PIN G13 [get_ports dac_sck]
+set_property IOSTANDARD LVCMOS33 [get_ports {i2s_bclk i2s_lrclk i2s_sdata dac_sck}]
+set_property DRIVE 4 [get_ports {i2s_bclk i2s_lrclk i2s_sdata dac_sck}]
+set_property SLEW SLOW [get_ports {i2s_bclk i2s_lrclk i2s_sdata dac_sck}]
 
 # JB1/2/3/4 -> external controller SCK/MOSI/MISO/CS_N, all 3.3 V.
 set_property PACKAGE_PIN E15 [get_ports spi_sck]

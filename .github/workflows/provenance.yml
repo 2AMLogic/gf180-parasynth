@@ -14,10 +14,11 @@
 #   4. the raw WAVs and numerical traces are actually uploaded, with a reference
 #      fixture outliving a smoke render.
 #
-# NO PATH FILTER. A promise conditioned on which directory you edited is not a
-# promise, and this one depends on model/drums_fx.py, model/drum_verify.py,
+# NO DIRECTORY FILTER. A promise conditioned on which directory you edited is
+# not a promise, and this one depends on model/drums_fx.py, model/drum_verify.py,
 # model/audio_measure.py and model/sound_report.py at least as much as on
-# tools/. It is a couple of minutes of rendering; that is not worth a filter.
+# tools/. The only skip is tools/ci_changes.py's (issue #457): a change made
+# ENTIRELY of agent tooling or of prose no suite names; anything else runs.
 #
 # The retention NUMBERS below are not authored here. They are in
 # tools/provenance_retention.py's RETENTION_DAYS, which marks each record at the
@@ -29,7 +30,24 @@ name: provenance
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  # Which suites this change can affect: tools/ci_changes.py. Every job below
+  # needs it and skips only on an explicit `none` or `docs`, so a failure here
+  # (no output) runs everything. A job skipped by its `if:` reports success,
+  # so a required check is never left waiting.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.classify.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: classify
+        run: python3 tools/ci_changes.py
+
   stages-and-controls:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

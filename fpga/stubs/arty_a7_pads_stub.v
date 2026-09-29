@@ -10,7 +10,7 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
     input wire sw_reset, output wire [3:0] led,
     input wire spi_sck, spi_mosi, spi_cs_n, output wire spi_miso,
     input wire uart_rxd, output wire uart_txd,
-    output wire i2s_bclk, i2s_lrclk, i2s_sdata
+    output wire i2s_bclk, i2s_lrclk, i2s_sdata, output wire dac_sck
 );
     reg [POR_BITS-1:0] por_count = 0;
     always @(posedge clk_100mhz) if (!(&por_count)) por_count <= por_count + 1'b1;
@@ -21,4 +21,13 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
         .sck(spi_sck), .mosi(spi_mosi), .cs_n(spi_cs_n), .miso(spi_miso),
         .uart_rxd(uart_rxd), .uart_txd(uart_txd),
         .bclk(i2s_bclk), .lrclk(i2s_lrclk), .sdata(i2s_sdata));
+
+    // The purple PCM5102 breakout plugs straight into JA's top row, whose
+    // first position is the board's SCK. The part runs from its own internal
+    // PLL with SCK held LOW, so this is a constant 0 rather than a clock.
+    // Synthesis ties it off (Synth 8-3917) and Vivado times no path to it, so
+    // it deliberately carries NO set_false_path -- #408 had a build refused for
+    // exactly that inert exception.
+    assign dac_sck = 1'b0;
+
 endmodule

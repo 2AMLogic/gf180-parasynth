@@ -26,7 +26,7 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
     input wire sw_reset, output wire [3:0] led,
     input wire spi_sck, spi_mosi, spi_cs_n, output wire spi_miso,
     input wire uart_rxd, output wire uart_txd,
-    output wire i2s_bclk, i2s_lrclk, i2s_sdata
+    output wire i2s_bclk, i2s_lrclk, i2s_sdata, output wire dac_sck
 );
     wire core_clk, clock_locked;
     generate if (SIM_NO_MMCM) begin: simulation_clock
@@ -92,4 +92,13 @@ module arty_a7_pads_top #(parameter SIM_NO_MMCM=0, parameter POR_BITS=12,
         .uart_rxd(core_rxd), .uart_txd(uart_txd),
         .bclk(i2s_bclk), .lrclk(i2s_lrclk), .sdata(i2s_sdata));
     assign led = {pads_active, pads_ready, core_rst_n, clock_locked};
+
+    // The purple PCM5102 breakout plugs straight into JA's top row, whose
+    // first position is the board's SCK. The part runs from its own internal
+    // PLL with SCK held LOW, so this is a constant 0 rather than a clock.
+    // Synthesis ties it off (Synth 8-3917) and Vivado times no path to it, so
+    // it deliberately carries NO set_false_path -- #408 had a build refused for
+    // exactly that inert exception.
+    assign dac_sck = 1'b0;
+
 endmodule

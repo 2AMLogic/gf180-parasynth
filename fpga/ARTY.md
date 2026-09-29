@@ -384,6 +384,126 @@ unqualified rather than inventing a DAC timing guarantee.
 BTN0 (D9) resets the design. LEDs 0/1 show clock lock/reset release, LED2 is a
 heartbeat, and LED3 carries LRCLK. These lights do not prove correct audio.
 
+## No-DAC demo output (sigma-delta on JD)
+
+**A demo path, not a measurement path.** To *hear* the board without the
+PCM5102 breakout, build `fpga/rtl/arty_a7_sd_top.v` instead of
+`arty_a7_top.v` (#406). It is `arty_a7_top` unchanged, with the I2S output
+still on JA. It also decodes that I2S wire back into samples
+(`fpga/rtl/i2s_rx.v`) and drives a second-order, one-bit sigma-delta
+modulator (`fpga/rtl/sd_dac.v`) at the 12.288 MHz core clock, which is
+256x the 48 kHz frame rate. A resistor and a capacitor turn that stream into
+audio. Recordings for #208 and every R0/R1 figure stay on the I2S/PCM5102 path.
+An RC-filtered one-bit stream has a worse floor than the DAC, and its tone
+depends on the driver's rise/fall symmetry and the supply. The digital SNR
+below says nothing about either.
+
+**Mono, on two pins.** The core's sample is mono by contract, because both I2S
+slots carry the same word. One modulator therefore drives both JD1 and JD2.
+Either pin alone carries the whole signal, and both pins give a stereo input
+the same signal in each channel.
+
+| Arty position | FPGA pin | Connection |
+|---|---|---|
+| JD1 | D4 | `sd_left`: RC filter, left (or mono) |
+| JD2 | D3 | `sd_right`: RC filter, right (the same stream) |
+| JD5 or JD11 | ground | filter and line-input ground |
+
+Per channel, from the pin (JD's on-board 200 Ω series resistor is in addition
+to R1):
+
+```text
+JD1 --[R1 1 kΩ]--+--[R2 1 kΩ]--+--[C3 10 µF +]--+--[R3 10 kΩ]--+---> line in (tip)
+                 |             |                |              |
+               [C1 10 nF]    [C2 10 nF]        (DC block)    [R4 4.7 kΩ]
+                 |             |                               |
+GND -------------+-------------+-------------------------------+---> line in (sleeve)
+```
+
+- **One RC stage** (R1/C1 only) is about 13 kHz with the 200 Ω, which is enough
+  to hear the synth. **Two stages** (add R2/C2) are recommended: the modulator
+  pushes its noise up into the MHz range, and a single pole leaves much of it
+  in the signal. The line input's own anti-alias filter removes the rest.
+- **Level.** Before the divider the swing is up to **3.3 V peak-to-peak on a
+  1.65 V DC offset**. Full scale is 7/8 of that, about 2.9 V p-p, because the
+  modulator scales its input by 7/8 for stability. C3 blocks the DC, with the
+  + side toward the FPGA. R3/R4 divide by about 3, to roughly 0.9 V p-p, which
+  is consumer line level. **Do not connect this straight to headphones or a
+  headphone amplifier.** Feed powered speakers or a line input.
+- Power off while wiring; share the ground.
+
+**Pins and timing.** The pins are set in `fpga/boards/arty-a7-100-sd.xdc`,
+which is read after the shared XDC. The shared XDC is not edited, because its
+text is bound by hash to published evidence. A PDM stream into an RC filter
+has no receiving clock, so each port gets an explicit `set_false_path -to`
+with the reason written beside it, not a token output delay.
+
+**Never published.** The release gate requires
+`output_delay_exceptions == ["i2s_bclk"]` and binds evidence by wrapper
+(`VERIFICATION_BY_WRAPPER`). #406 decided that this wrapper is never a release
+image, rather than scoping the gate per wrapper. `publish_arty.py` refuses it
+because it has no entry, and `fpga/test_arty_sd_top.py` asserts that absence.
+<!-- claim: test=fpga/test_arty_sd_top.py::test_never_published_as_a_release_image -->
+Its build gate is `fpga/build_arty_sd.py`. It requires internal timing to pass
+(WNS ≥ 0, zero failing endpoints) and every XDC query to bind. The routed
+report's output ports must be classified as exactly: nothing unconstrained,
+`sd_left` and `sd_right` as user false paths, and `i2s_bclk` as the forwarded
+clock. Before Vivado runs, it also binds two digital proofs to the live tree:
+the core wrapper's proof, as `build_arty.py` does, and a PASS from
+`fpga/verify_sd_dac.py`.
+
+**Verification before hardware** (`python3 fpga/verify_sd_dac.py`, part of
+`make verify`, about 15 s). The bench runs the chip's `i2s_tx` into `i2s_rx`
+into `sd_dac`. The script decimates the one-bit stream with an exact integer
+CIC (order 4, ÷64) and a Kaiser FIR low-pass (20.5 kHz, ÷4). It then compares
+the result against the source file, zero-order held and put through the same
+decimator. Before it reports any RTL figure, the estimator must read a
+reference with a known −70 dB in-band tone as 70.0 ± 0.5 dB and reject a
+full-scale 1.5 MHz tone. If either check fails, the run is REFUSED.
+
+| Case | In-band SNR, RTL | Bound | 1st-order control |
+|---|---|---|---|
+| sine, −6 dBFS, ~1 kHz | 103.9 dB | ≥ 95 dB | red (~70 dB) |
+| model held note (A2, fixed patch) | 99.5 dB | ≥ 90 dB | red (~62 dB) |
+| full-scale square (overload) | 84.3 dB | ≥ 75 dB | red when the integrator clamp is removed |
+| silence | exactly zero in-band error | ≤ −110 dBFS | — |
+
+It also asserts the wire latency (324 core clocks from frame start to the
+modulator), and three injected defects must each turn their cases red:
+first-order quantisation, wrapping integrators, and a receiver one bit early.
+Wrong-then-right, from making it: a float64 CIC read 72 dB for the held note.
+At order 4 the integrator sums pass 2^53, and at orders 5 and 6 the same
+estimator read the known −70 dB tone as 30 dB and −4 dB. The known-answer
+check caught it, and the CIC is now exact integer arithmetic. A derived
+latency of 323 was also wrong: it missed the output register, and the
+measurement was 324.
+
+**Built.** On 2026-09-28, Vivado 2025.1 built it in 242 s with state
+`BUILT_DEMO_TIMING_PASS`. WNS was +15.085 ns and WHS +0.037 ns, with zero failing
+endpoints and zero critical warnings, and the DRC census matched R0's. Every
+port sits where `report_io` on the routed design says it should. The record and
+bitstream (`95a4f92f…`) are in
+[reports/arty/sd-demo-2025.1](reports/arty/sd-demo-2025.1/README.md): a build
+record, not a publication.
+
+**This image's JA is laid out for the purple PCM5102 breakout plugged straight
+in.** The breakout's header (SCK BCK DIN LCK GND VIN) sits in JA's top row:
+JA1 (G13) is driven low for SCK, BCK is on JA2 (B11), DIN on JA3 (A11), LCK
+on JA4 (D12), GND on JA5 and VIN on JA6. The published R0/R1 images keep the
+jumper layout in §Wiring (BCK on JA1, LCK on JA2, DIN on JA3), so **do not
+plug the breakout straight into an R0/R1 image**. The power pins line up, so
+nothing is damaged, but the signals are wrong. The breakout's back jumpers
+must set XSMT high (unmuted) and FMT low (I2S).
+
+**On the bench.** Rebuild with `python fpga/build_arty_sd.py` on a Vivado 2025.1
+host. Load with `openFPGALoader -b arty_a7_100t
+fpga/reports/arty/sd-demo-2025.1/arty.bit` (SRAM) or `-f` (flash). Then play with the same `fpga/uart_host.py run` that
+#208 uses. The operator confirms by ear.
+
+**Reuse.** `sd_dac.v` is PDK- and board-independent, and this file is its
+**master**. A sibling synth takes a stamped copy (the file unmodified, plus
+the commit it came from) rather than writing its own.
+
 ## USB and timed controls
 
 Arty's USB programming/UART connector is now a control link. The reserved
@@ -626,35 +746,42 @@ USB-connected host is another programming route.
 
 ## Remote build status
 
-The official AMD Vivado 2025.1 Marketplace subscription is enabled. An
-8-vCPU/32-GB Ubuntu 22.04 runner completed the build using Vivado
-2025.1, SW Build 6140274. Its catalog recognizes `xc7a100tcsg324-1`, and
-synthesis successfully checked out the device license. The artifacts have
-been collected and AWS confirms the runner is **stopped**. Its disk is retained
-for future builds; storage charges continue. The idle guard remains set to
-120 minutes for subsequent runs.
-Private cloud/access details stay in local operator state, outside git.
+**The Vivado host is documented once, in 2am's Arty note:**
+[2am `hardware/arty-a7/README.md`, §Build remote, program local](https://github.com/2AMLogic/2am/blob/main/hardware/arty-a7/README.md#build-remote-program-local).
+That note covers the instance and its `.env` (AMD Vivado ML 2025.1 AMI,
+`m7a.2xlarge`, 60-minute idle stop), Vivado's install path, the moving
+SSH-egress trap, and the `--ftdi-serial 210319C088B7` needed whenever the
+CJMCU-2232HL is also plugged in. Update the facts there, not here. Its J8
+pinout is measured, and its first-edge pin is **TMS**, not VREF.
 
-The earlier empty Ubuntu fallback was terminated. The initial readiness probe
-returned before the new guest accepted SSH; bounded retries succeeded without
-changing ingress or credentials. This is tracked in
-[Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
+**What is specific to this repository:**
 
-The first real build refused `read_verilog -define` outside compile-unit mode.
-The script now passes both macros explicitly to `synth_design`, following
-[AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
-This was a build-script error, not an RTL sound change. The corrected retry
-produced the published fit, timing and bitstream evidence above.
+- **Builds run through the checked build scripts**, never a bare
+  `vivado -source`: `fpga/build_arty.py` for the release wrapper. It
+  binds its digital proofs before Vivado runs and gates the routed reports
+  afterwards.
+- **Ship the tree as a `git bundle`** and run the script on the box inside
+  a venv with numpy and scipy, with `settings64.sh` sourced. Copy results
+  back with `tar` over ssh; `scp` with `{a,b}` braces does not expand on
+  current OpenSSH.
+- **Start and stop the box only with `repo-remote.sh`**, run from a
+  directory whose basename is the box's name (`arty-blink`) and whose
+  `.env` pins `REPO_REMOTE_INSTANCE_ID`. Stop it after fetching the
+  artifacts, never before.
 
-2026-09-22: the runner came back **re-imaged** — fresh boot with no
-`/tools/Xilinx` and no retained volume attached (`lsblk` shows only the
-100 GB root device), while the "retained disk" note above is what the
-external-I/O session relied on. One full build and publication with the
-committed external constraints completed before the image swap; its numbers
-are captured in the External I/O timing section. Regenerating the published
-bitstream, reports and `publication.json` requires the operator to restore
-Vivado 2025.1 (or attach the retained volume); no code change is needed, and
-hand-editing the publication is not an option.
+**History, kept because published evidence cites it:**
+
+- The first real build refused `read_verilog -define` outside compile-unit
+  mode. The script now passes both macros to `synth_design`, following
+  [AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
+  This was a build-script error, not an RTL change.
+- On 2026-09-22 the runner of that time came back re-imaged, without
+  `/tools/Xilinx`. The external-I/O numbers above were captured before
+  that. The readiness-probe race seen then is
+  [Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
+- Superseded since 2026-09-27: the 2am note's box has Vivado 2025.1 at
+  `/tools/Xilinx/2025.1`, and the note records a successful `blink` build
+  there on 2026-09-27.
 
 ## Pads demo (#449)
 
@@ -675,8 +802,17 @@ published evidence moves. It is never a release image.
 | LD4..LD7 | H5 J5 T9 T10 | clock locked, core out of reset, pads ready (kit loaded), a press accepted (~170 ms) |
 
 The pins are cited line by line in the XDC from the Digilent master XDC this
-file's Wiring section already uses. They have **not** been checked against a
-physical board. The DAC wiring is the Wiring section's.
+file's Wiring section already uses. The button, switch and LED pins have
+**not** been checked against a physical board.
+
+**The DAC wiring is the direct-plug layout, not the Wiring section's jumper
+layout.** `arty-a7-100-pads.xdc` follows `arty-a7-100-sd.xdc` (#408):
+`JA1 dac_sck` held at 0, `JA2 BCK`, `JA3 DIN`, `JA4 LRCLK`, so a PCM5102
+breakout whose header reads `SCK BCK DIN LCK GND VIN` plugs straight into JA's
+top row. The jumper layout would leave JA4 unassigned and deliver no word
+clock, which is silence with every digital check still passing -- measured on
+this bench on 2026-09-28. The breakout's own control pins must also be tied:
+**XSMT high** (it hard-mutes floating) and **FMT low** for I2S; see #460.
 
 **How it works.** The wrapper sends the core the same UART packets
 `fpga/uart_host.py` would send, on `synth_top`'s own `uart_rxd`. No core port

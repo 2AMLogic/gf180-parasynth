@@ -1,0 +1,157 @@
+{
+  "state": "BUILT_DEMO_TIMING_PASS",
+  "top": "arty_a7_sd_top",
+  "part": "xc7a100tcsg324-1",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "published": false,
+  "source_sha256": {
+    "fpga/rtl/arty_a7_sd_top.v": "8dd41381eb36ca9c1375c99882148f8efed8aacfafe96bd38685d224c5dc253d",
+    "fpga/rtl/i2s_rx.v": "3753160399e6f6aa33626539d156ed0c43be282395f8b0c9461569547bf5c87e",
+    "fpga/rtl/sd_dac.v": "eefb66b891dda59fbdee31445523cf755425043673cefa63423d417afe5e5791",
+    "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
+    "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+    "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+    "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+    "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+    "fpga/boards/arty-a7-100.xdc": "b594cc1545a73cdfd7753f578f03de51758ee962fff723273bece33ec3e48715",
+    "fpga/boards/arty-a7-100-sd.xdc": "601f30244cec31335d13714d1119ae2bb87b197bcf4ba039bb1a9cb3e2b866ff"
+  },
+  "verification": {
+    "record_sha256": "ccc7ba037ba4f9afcdb7c17cadbac59f2c59d7a2f578a20b4fa5750ce82e72ed",
+    "transcript_sha256": "4fbbbb8744d064143b366a86664bfcb9ece9b94d2598df026fadeadb0c96734b",
+    "periods": 6734,
+    "scope": "Arty wrapper UART-bridge digital check: device-scheduled events and live writes through the reserved UART pins vs the device contract and the integer model; MMCM bypassed; no physical timing claim"
+  },
+  "sd_verification": {
+    "record_sha256": "d4f7066184442705ebadc11a9f8566dd4f9c4c7a16f182b85927ce8f67d55c2b",
+    "snr_db": {
+      "sine-6": 103.86,
+      "held": 99.46,
+      "square": 84.27,
+      "silence": null
+    }
+  },
+  "script_sha256": "ab6b4e4b9eb367717605530b0fd9b87056cfaf6aa83279398b2834203778757a",
+  "vivado_version": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
+  "command": [
+    "/tools/Xilinx/2025.1/Vivado/bin/vivado",
+    "-mode",
+    "batch",
+    "-source",
+    "<box>/build/arty-sd/build.tcl",
+    "-log",
+    "<box>/build/arty-sd/vivado.log",
+    "-journal",
+    "<box>/build/arty-sd/vivado.jou"
+  ],
+  "exit_code": 0,
+  "seconds": 242.453,
+  "artifact_sha256": {
+    "arty.bit": "95a4f92ffa1135b08fa1591220fb384c9ac1229d53cdb298376540010bb10a22",
+    "utilization.rpt": "d0c147daa23dee67e05c013d2e647f8a42a7cee1c0d1eef2b3d0254d359023a0",
+    "timing.rpt": "7261ab2fcc331de017518a8c2e8648f91691ae004cdea49a121b8a6987a33c3a",
+    "clocks.rpt": "816bf22fd49d7d0d60739cb8c0d241f1919d9e36bf8959636d9f266ff101f672",
+    "drc.rpt": "c0b23ed9a310f3ed49b8488a581963c11a75f165231de01ea482efc8250762f3",
+    "routed.dcp": "8126c1b3d074cddf8bffdd226292d28dfd83e3975742e73b065ea7ad36485412",
+    "constraint_matches.rpt": "f54d170efa3490742e934488aae33686c4b1afa6284f91eb464137f20bce0945",
+    "exceptions.rpt": "b4678b756ad3f351f404433f695efe7440e39ef3fbf5055c5aa6080cf4b11ebf",
+    "io.rpt": "b86dea742c562a054288a564ba5b541bbd90238cc680eb5426af566506cef743"
+  },
+  "implementation": {
+    "timing": {
+      "wns_ns": 15.085,
+      "tns_ns": 0.0,
+      "setup_failing": 0.0,
+      "setup_endpoints": 43340.0,
+      "whs_ns": 0.037,
+      "ths_ns": 0.0,
+      "hold_failing": 0.0,
+      "hold_endpoints": 43340.0,
+      "wpws_ns": 3.0,
+      "tpws_ns": 0.0,
+      "pulse_failing": 0.0,
+      "pulse_endpoints": 13828.0
+    },
+    "resources": {
+      "Slice LUTs": {
+        "used": 14132.0,
+        "available": 63400.0
+      },
+      "Slice Registers": {
+        "used": 13574.0,
+        "available": 126800.0
+      },
+      "DSPs": {
+        "used": 100.0,
+        "available": 240.0
+      },
+      "Block RAM Tile": {
+        "used": 0.0,
+        "available": 135.0
+      },
+      "Bonded IOB": {
+        "used": 18.0,
+        "available": 210.0
+      }
+    },
+    "drc": {
+      "DPIP-1": {
+        "severity": "Warning",
+        "count": 64
+      },
+      "DPOP-1": {
+        "severity": "Warning",
+        "count": 97
+      },
+      "DPOP-2": {
+        "severity": "Warning",
+        "count": 94
+      },
+      "DPREG-4": {
+        "severity": "Warning",
+        "count": 13
+      }
+    },
+    "output_disposition": {
+      "unconstrained": [],
+      "false_path": [
+        "sd_left",
+        "sd_right"
+      ],
+      "forwarded_clock": [
+        "i2s_bclk"
+      ]
+    },
+    "placed_pins": {
+      "i2s_sdata": "A11",
+      "i2s_bclk": "B11",
+      "sd_right": "D3",
+      "sd_left": "D4",
+      "i2s_lrclk": "D12",
+      "dac_sck": "G13"
+    }
+  }
+}

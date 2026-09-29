@@ -4,19 +4,15 @@
     .venv/bin/python tools/deadline_recapture_l2.py
 
 WHY THIS EXISTS. `tools/test_verify_deadline.py::_capture` refuses to judge a
-committed capture that was not driven by this tree's stimulus -- it compares
-the capture's `top_bx_cmds.txt` byte for byte against what
-`verify_deadline.SPI_SCENARIOS["stress-saw"]` + `verify_synth_top.write_cmds`
-build now. That precondition is correct and must not be relaxed: judging
-historical evidence against current source is how a false green happens.
-
-The consequence is that the capture goes stale whenever the stimulus moves,
-and it has done so twice inside 24 h (#426, and contract revision 14 before
-it). Both times the fix was the same two simulator runs plus a gzip, and both
-times the recipe had to be reconstructed by reading a months-old commit's
-`--stat` output and its message. That reconstruction is the thing this file
-removes. It does NOT change what the capture binds to, which is the actual
-cause of the staleness -- that is #443.
+committed capture that was not driven by this tree's stimulus. Since #443 it
+binds to the schedule-relevant projection (`verify_deadline.stimulus_binding`:
+every byte except drum parameter values, under asserted preconditions), so a
+drum value that moves no longer stales the capture; a changed write count,
+landing frame, address, voice value or strike mask still does, and so does a
+drum value change once the drum RTL has moved away from the RTL the latency
+argument was made on. Then the fix is the same two simulator runs plus a gzip,
+and this file is that recipe, so it does not have to be reconstructed from a
+months-old commit's `--stat` output.
 
 WHAT IT DOES, in the order `8c3de22` did it by hand:
 

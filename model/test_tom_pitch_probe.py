@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import tom_pitch_probe as P
+import audio_measure as am
 
 SR = 44100
 VOICES = [("LT", 90.0, 25.0), ("MT", 135.0, 24.0), ("HT", 185.0, 25.0)]
@@ -182,6 +183,23 @@ def test_refuses_what_it_cannot_measure():
     clipped = np.clip(y * 6.0, -1.0, 1.0)
     assert P.measure(clipped, SR)["verdict"] == "REFUSED"        # level-crushed
     assert P.measure(y[:200], SR)["verdict"] == "REFUSED"        # too short
+
+
+def test_pitch_drop_domain_is_inspectable_without_synthesizing_a_signal():
+    """#115: the third of the three ad-hoc validation measurements the issue
+    names (0.41 %) relocated into `PITCH_DROP_DOMAIN`, as data a test can
+    assert against directly rather than a docstring paragraph or a row of
+    `docs/tom-pitch-drop-measurement.md`. `measure()`'s own gates
+    (`MIN_SETTLED`, `SETTLED_XCHECK`) are the source of truth -- the
+    declaration must match them, not restate them independently."""
+    snr = P.PITCH_DROP_DOMAIN.axis(am.AXIS_SNR)
+    assert snr.lo == P.SETTLED_HEADROOM_DB
+    record_length = P.PITCH_DROP_DOMAIN.axis(am.AXIS_RECORD_LENGTH)
+    assert record_length.lo == float(P.MIN_SETTLED)
+    detuning = P.PITCH_DROP_DOMAIN.axis(am.AXIS_DETUNING)
+    assert detuning.hi == P.SETTLED_XCHECK
+    assert am.DOMAINS["tom_pitch_probe.measure"] is P.PITCH_DROP_DOMAIN
+    assert "0.41" in P.PITCH_DROP_DOMAIN.worst_error
 
 
 def main() -> int:

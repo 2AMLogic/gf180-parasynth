@@ -47,6 +47,19 @@ rather than reports.** The reference corpus must be present, the named file
 must exist, the sound must be in the kit, and the reference clip must not be
 silent. Each failure produces a stated no-verdict, never a number.
 
+**A `Holdout`-split case is REFUSED unless its settings were committed before
+this render.** `docs/scorecard/cases.csv` marks twenty cases `Holdout` and
+`docs/scorecard/README.md` states the policy they exist for; until `tools/
+holdout.py` there was nothing between that policy and an agent picking a
+setting, rendering it and reading the error in one pass -- with, as this file's
+own `NOT_RUN` table put it, "no way to tell afterwards which it was". The gate is
+in `run_case` rather than in each family's runner so a future scorer cannot route
+around it: the seal must be tracked and clean in git, the record carries what it
+was measured against (`holdout.seal_commit`, `holdout.seal_core_sha256`), the
+read is appended to `docs/scorecard/holdout/LEDGER.json`, and a SECOND read taken
+after the model moved is refused until the transition is recorded. A holdout with
+no seal is a stated no-verdict naming the missing seal, never a score.
+
 **And it asserts the premise of the BATCH before any of it runs.** An earlier
 run of this file returned eight honest per-case refusals -- "the eight-stop kit
 does not implement LC / MT / MC / HC / CL / RS / MA / CY" -- from a worktree
@@ -124,6 +137,7 @@ from scipy.signal import butter, sosfiltfilt                         # noqa: E40
 
 import audio_measure as am                                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
+import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
@@ -239,6 +253,17 @@ def metric_purpose(name: str) -> str:
 # written, and an estimator that has never met a signal with a known answer is
 # not a measurement.
 # ===========================================================================
+#: How far either side of a NOMINAL partial frequency a real one is looked for.
+#: 10 % is the TR-808's own component tolerance on an oscillator's f0
+#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
+#: the search covers exactly the range a unit is allowed to sit in.
+LINE_SEARCH_FRAC = 0.10
+
+#: How far above its own measured floor a reading has to sit before it is a
+#: measurement rather than the estimator. 6 dB, which is the margin
+#: `audio_measure.harmonic_signature` already uses for the same decision.
+FLOOR_MARGIN_DB = 6.0
+
 def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
                   hi: float | None = None, *, floor_db: float = -80.0) -> am.Estimate:
     """10*log10(energy above `split_hz` / energy below it), both inside
@@ -273,21 +298,280 @@ def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
     return am.Estimate(r, True, "", dict(e_lo=e_lo, e_hi=e_hi))
 
 
-def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0) -> am.Estimate:
+#: How much of the fixed-window band ratio may be the DECAY rather than the
+#: balance before the answer is refused. DERIVED: a matched-decay pair already
+#: costs 0.41 dB at rimshot speed (`tools/probes/estimator_domains.py` 2, with
+#: the pre-onset lead `band_energy` requires), which is the irreducible cost of
+#: handing a fixed-window integral a decaying signal at all. A decay-rate
+#: mismatch adds 10*log10(tau_a/tau_b) on top of that, so the bound is the
+#: mismatch that adds no more than the matched pair already costs -- 0.5 dB,
+#: i.e. a tau ratio of 1.12. Above it the number is mostly the decay, and
+#: `balance_trajectory_db` is the estimator that has no window to fold in.
+BAND_PAIR_MAX_DECAY_BIAS_DB = 0.5
+
+#: How far inside its band a partial must sit. The TR-808's own component
+#: tolerance, +-10 % (docs/tr808-reference.md 1.7), the same figure
+#: `LINE_SEARCH_FRAC` and `tol_frequency` use: a band that does not hold the
+#: partial with that much margin cannot hold it for a DIFFERENT unit of the
+#: same machine. Measured cost at exactly that margin: 0.011 dB; at 2 % of the
+#: band's half-width from the edge, 5.3 dB.
+BAND_PAIR_EDGE_MARGIN = LINE_SEARCH_FRAC
+
+BAND_PAIR_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="band_pair_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="stationary is where it is exact (0.032 dB worst over "
+                            "a 54 dB range); decaying is inside the domain only "
+                            "with the decay-rate axis below satisfied, and costs "
+                            "0.41 dB even then"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, lo=-BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      hi=BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      units="dB of A^2*tau bias the record's own two bands imply",
+                      basis="a fixed-window band ratio is A^2*tau, not A^2 (#109), "
+                            "so unequal decay puts 10*log10(tau_a/tau_b) into the "
+                            "answer. Measured -6.0 dB of bias at a 4:1 tau ratio "
+                            "and -11.4 dB at 10:1, against a truth of 0 dB "
+                            "(tools/probes/estimator_domains.py 2). The bound is "
+                            "the mismatch that adds no more than the 0.41 dB a "
+                            "MATCHED decaying pair already costs"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=BAND_PAIR_EDGE_MARGIN, hi=None,
+                      units="fraction of the band edge a resolved line must clear",
+                      basis="the TR-808's own +-10 % component tolerance. A 4th-order "
+                            "Butterworth is -3 dB AT its edge: measured 0.011 dB of "
+                            "loss with 10 % of margin, 1.3 dB at 0.2 of the band's "
+                            "half-width and 6.0 dB sitting on the edge "
+                            "(tools/probes/estimator_domains.py 3). Enforced only "
+                            "when the band holds a resolvable line -- a cymbal band "
+                            "holds broadband content and has nothing to be detuned"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=0.0, units="Hz of overlap between "
+                      "the two bands",
+                      basis="two overlapping bands share energy, so the ratio counts "
+                            "the same partial on both sides; refused outright"),
+        am.DomainAxis(am.AXIS_SNR, lo=-80.0, hi=80.0, units="dB of band ratio",
+                      basis="the pre-existing `floor_db` gate: a ratio past it is an "
+                            "absence rather than a balance"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=0.050, units="s", enforced=False,
+                      basis="band_energy's own docstring: it filters rather than "
+                            "summing bins, and below about 50 ms a rectangular-FFT "
+                            "Parseval split is the better instrument. Declared, not "
+                            "enforced, because the caller windows the record"),
+    ),
+    worst_error="0.032 dB over a 54 dB range on stationary two-sine signals; "
+                "0.41 dB on a matched-decay pair at rimshot speed",
+    evidence=("tools/probes/estimator_domains.py sections 1-3",
+              "tools/test_run_case.py::test_band_pair_db_of_two_sines_is_their_amplitude_ratio",
+              "docs/conga-body-spectrum-spread.md section 2 -- the band-split "
+              "family's original closed-form validation, worst 0.088 dB over a "
+              "30 dB range, re-run against band_pair_db itself in section 1"),
+    notes="#115 relocated docs/conga-body-spectrum-spread.md's 0.088 dB check "
+          "onto this estimator and re-measured it here (0.032 dB on these "
+          "bands). The issue's own 'holds to 1.4 dB over +-10 % detuning' was "
+          "carried forward unverified by its curation pass and is NOT encoded: "
+          "the measured cost at +-10 % of band-edge margin is 0.011 dB, and "
+          "the 1.4 dB figure does not correspond to anything measured here.",
+))
+
+
+def _centroid_s(p, sr: int) -> float:
+    p = np.asarray(p, dtype=np.float64)
+    total = float(p.sum())
+    if total <= 0.0:
+        return 0.0
+    return float((np.arange(len(p)) / sr * p).sum()) / total
+
+
+def _band_ring_centroid_s(sr: int, band, n: int) -> float:
+    """The centroid of the BAND-PASS'S OWN power impulse response.
+
+    A 4th-order Butterworth of bandwidth B rings for about 1/B, so a narrow
+    band's filtered power lasts materially longer than a wide one's for the
+    same input. Measured on the two bands this file uses for the rimshot, that
+    alone put -1.03 dB of apparent decay mismatch into a signal whose two
+    partials decay at exactly the same rate. Centroids add under convolution,
+    so subtracting the filter's own is the correction -- and it is MEASURED
+    from the filter rather than derived from its bandwidth, so it stays right
+    if the order or the band edges change."""
+    from scipy.signal import sosfiltfilt
+    sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+    m = max(n, 8 * _sosfiltfilt_padlen(sos))
+    imp = np.zeros(m)
+    imp[0] = 1.0
+    return _centroid_s(sosfiltfilt(sos, imp) ** 2, sr)
+
+
+def _effective_span_s(p, sr: int, *, centroid_s: float | None = None) -> float:
+    """The EFFECTIVE integration length of one band's instantaneous power `p`,
+    in seconds: `E / p(0)` for a decaying band, the record length for a
+    stationary one, and the right thing in between.
+
+    For p(t) = P*exp(-t/theta) on [0, L] -- theta = tau/2, because power decays
+    twice as fast as amplitude -- the two things a fixed window can see are
+
+        g = E/P        = theta*(1 - exp(-L/theta))
+        c = centroid   = theta - L*exp(-L/theta)/(1 - exp(-L/theta))
+
+    and both are strictly monotone in theta/L, so measuring `c` and inverting
+    gives `g` without ever needing P. **The centroid is the estimator that
+    works at both ends**, which is why it is here rather than the obvious
+    first-half/second-half energy ratio: with tau = 6 ms in a 260 ms record the
+    second half holds nothing but the filter's own numerical floor, and the
+    ratio estimator saturates there -- measured, it read -0.8 dB of bias where
+    the truth was -6.0 dB. This one reads -6.0.
+
+    `c/L` is bounded by 1/2 (a stationary band), which is the degenerate case
+    the bisection is clamped to."""
+    p = np.asarray(p, dtype=np.float64)
+    n = len(p)
+    total = float(p.sum())
+    if n < 2 or total <= 0.0:
+        return n / sr
+    length_s = n / sr
+    c = _centroid_s(p, sr) if centroid_s is None else centroid_s
+    frac = c / length_s
+    if frac >= 0.5 - 1e-9:
+        return length_s
+    if frac <= 1e-9:
+        return 0.0
+
+    def centroid_frac(u):                        # u = theta / L
+        if u > 1e6:
+            return 0.5
+        e = math.exp(-1.0 / u)
+        return u - e / max(1.0 - e, 1e-300)
+
+    lo, hi = 1e-9, 1e6
+    for _ in range(200):
+        mid = math.sqrt(lo * hi)
+        if centroid_frac(mid) < frac:
+            lo = mid
+        else:
+            hi = mid
+    u = math.sqrt(lo * hi)
+    return length_s * u * (1.0 - math.exp(-1.0 / u))
+
+
+def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
+    """How much of a fixed-window `band_pair_db` is the DECAY rather than the
+    balance, estimated from the record itself.
+
+    A fixed-window band ratio is A^2*tau, not A^2 (#109): what it integrates is
+    each band's own effective span, so the answer carries
+    10*log10(span_a/span_b) on top of the amplitude ratio it is read as.
+    `_effective_span_s` measures each span from the band-filtered power, so
+    subtracting the returned bias from the reported ratio recovers the
+    amplitude ratio.
+
+    Both spans are measured FROM THE RECORD'S OWN ONSET (`_onset_index`), not
+    from sample zero: a record that arrives with the pre-onset lead
+    `band_energy` requires would otherwise charge that lead to both bands and
+    pull every span towards the record length.
+
+    Validated against known tau pairs in `tools/probes/estimator_domains.py` 2."""
+    from scipy.signal import sosfiltfilt
+    x = np.asarray(x, dtype=np.float64)
+    if len(x) < 8:
+        return 0.0
+    i0 = _onset_index(x)
+    seg = x[i0:]
+    if len(seg) < 8:
+        return 0.0
+    spans = []
+    for band in (band_a, band_b):
+        sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+        if len(seg) <= _sosfiltfilt_padlen(sos):
+            return 0.0
+        p = sosfiltfilt(sos, seg) ** 2
+        c = _centroid_s(p, sr) - _band_ring_centroid_s(sr, band, len(seg))
+        spans.append(_effective_span_s(p, sr, centroid_s=max(c, 0.0)))
+    return 10.0 * math.log10(max(spans[0], 1e-300) / max(spans[1], 1e-300))
+
+
+def _line_edge_margin(x, sr: int, band) -> tuple:
+    """(fractional margin of the band's strongest line from the nearer edge,
+    the line's frequency), or (None, None) when the band holds no resolvable
+    line -- which is not a failure: a cymbal band holds broadband content and
+    has no line to be detuned."""
+    lo, hi = float(band[0]), float(band[1])
+    e = am.dominant_frequency(x, lo, hi, sr, min_prominence_db=6.0)
+    if not e.ok or e.value is None:
+        return None, None
+    f = float(e.value)
+    return min(f / lo - 1.0, hi / f - 1.0), f
+
+
+def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0,
+                 min_decay_bias_db: float | None = BAND_PAIR_MAX_DECAY_BIAS_DB,
+                 edge_margin: float | None = BAND_PAIR_EDGE_MARGIN) -> am.Estimate:
     """10*log10(energy in `band_a` / energy in `band_b`), for a voice whose
     balance is between two named partials rather than either side of one
     split -- the rimshot's two bridged-T modes, the cymbal's bands.
 
-    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio."""
+    IT DECLARES A DOMAIN AND REFUSES OUTSIDE IT (#115)
+    --------------------------------------------------
+    `BAND_PAIR_DOMAIN` is this function's validated envelope as data, and the
+    two axes it enforces are the two ways this measure is read as something it
+    is not:
+
+      * **decay rate.** A fixed-window band ratio is A^2*tau, not A^2 -- the
+        thing `balance_trajectory_db`'s docstring has said since #109 and
+        which nothing checked. `band_pair_decay_bias_db` estimates that term
+        FROM THE RECORD, and a record whose two bands decay far enough apart
+        to put more than `min_decay_bias_db` into the answer is refused
+        rather than reported: measured bias reaches -6.0 dB at a 4:1 tau ratio
+        and -11.4 dB at 10:1, against a 3 dB energy-ratio tolerance.
+      * **detuning.** A 4th-order Butterworth is -3 dB at its own edge, so a
+        partial that has drifted towards one reads low -- 6.0 dB low sitting
+        on the edge. A band whose strongest line does not clear both edges by
+        `edge_margin` (the TR-808's own +-10 %) is refused. A band with no
+        resolvable line is not checked, because broadband content has nothing
+        to detune.
+
+    Pass `min_decay_bias_db=None` / `edge_margin=None` to measure the
+    out-of-domain case deliberately -- which is what
+    `tools/probes/estimator_domains.py` does to produce the numbers above, and
+    the only honest way to ask an estimator what it does where it is wrong.
+
+    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio,
+    test_band_pair_db_refuses_partials_that_decay_at_different_rates,
+    test_band_pair_db_refuses_a_partial_sitting_on_a_band_edge."""
+    lo_a, hi_a = float(band_a[0]), float(band_a[1])
+    lo_b, hi_b = float(band_b[0]), float(band_b[1])
+    overlap = min(hi_a, hi_b) - max(lo_a, lo_b)
+    if overlap > 0.0:
+        return BAND_PAIR_DOMAIN.refuse(am.AXIS_PARTIAL_SEPARATION, -overlap,
+                                       band_a=(lo_a, hi_a), band_b=(lo_b, hi_b))
     e_a, e_b = am.band_energy(x, (tuple(band_a), tuple(band_b)), sr)
     if e_a <= 0.0 or e_b <= 0.0:
         return am.Estimate(None, False, "one of the two bands holds no energy",
-                           dict(e_a=e_a, e_b=e_b))
+                           dict(e_a=e_a, e_b=e_b), BAND_PAIR_DOMAIN)
     r = 10.0 * math.log10(e_a / e_b)
     if r < floor_db or r > -floor_db:
         return am.Estimate(None, False, "band ratio past the stated floor",
-                           dict(ratio_db=r, floor_db=floor_db))
-    return am.Estimate(r, True, "", dict(e_a=e_a, e_b=e_b))
+                           dict(ratio_db=r, floor_db=floor_db), BAND_PAIR_DOMAIN)
+    detail = dict(e_a=e_a, e_b=e_b)
+    if edge_margin is not None:
+        for tag, band in (("a", band_a), ("b", band_b)):
+            margin, f = _line_edge_margin(x, sr, band)
+            if margin is None:
+                continue
+            detail[f"line_{tag}_hz"], detail[f"edge_margin_{tag}"] = f, margin
+            if margin < edge_margin:
+                return BAND_PAIR_DOMAIN.refuse(
+                    am.AXIS_DETUNING, margin, lo=edge_margin, ratio_db=r,
+                    band=tag, line_hz=f, band_lo=float(band[0]), band_hi=float(band[1]),
+                    **detail)
+    if min_decay_bias_db is not None:
+        bias = band_pair_decay_bias_db(x, sr, band_a, band_b)
+        detail["decay_bias_db"] = bias
+        if abs(bias) > min_decay_bias_db:
+            return BAND_PAIR_DOMAIN.refuse(
+                am.AXIS_DECAY_RATE, bias, lo=-min_decay_bias_db, hi=min_decay_bias_db,
+                ratio_db=r, balance_db=r - bias, **detail)
+    else:
+        detail["decay_bias_db"] = band_pair_decay_bias_db(x, sr, band_a, band_b)
+    return am.Estimate(r, True, "", detail, BAND_PAIR_DOMAIN)
 
 
 def _joint_headroom(al, ah, floor_lo, floor_hi):
@@ -297,6 +581,58 @@ def _joint_headroom(al, ah, floor_lo, floor_hi):
     la = 20.0 * np.log10(np.clip(al, 1e-300, None) / np.clip(floor_lo, 1e-300, None))
     lh = 20.0 * np.log10(np.clip(ah, 1e-300, None) / np.clip(floor_hi, 1e-300, None))
     return np.minimum(la, lh), la, lh
+
+
+BALANCE_TRAJECTORY_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="balance_trajectory_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="both, and that is the point of it: a ratio at ONE "
+                            "INSTANT has no duration to fold a decay into, where "
+                            "band_pair_db's fixed window has"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="UNBOUNDED, by construction rather than by permission. "
+                            "This is the axis band_pair_db has to refuse on -- "
+                            "A^2*tau, not A^2 (#109) -- and it is the reason this "
+                            "estimator exists"),
+        am.DomainAxis(am.AXIS_SNR, lo=FLOOR_MARGIN_DB,
+                      units="dB above the record's own floor, on BOTH partials at "
+                            "once",
+                      basis="the joint-headroom gate. The floor is measured on the "
+                            "same record at guard frequencies known to hold neither "
+                            "partial (#92), never quoted"),
+        am.DomainAxis(am.AXIS_DETUNING, enforced=True,
+                      units="the caller's own f_lo_range / f_hi_range",
+                      basis="the lines are FOUND (partial_trajectory.find_partial) "
+                            "inside the ranges the operating point declares, not "
+                            "probed at a nominal; a range holding no line refuses"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, enforced=True,
+                      basis="line_is_resolved (#389): find_partial returns the "
+                            "STRONGEST line in its range, which on a record holding "
+                            "no partial is the pick's own selection bias -- white "
+                            "noise cleared the floor gate at both shipping "
+                            "operating points before this was added. The "
+                            "precondition is on the line's SHAPE, where that bias "
+                            "divides out"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, enforced=True,
+                      units="the caller's own t_end, in s",
+                      basis="t_end is an outer bound on the SEARCH, not a span that "
+                            "gets integrated, so a reference swap to a longer or "
+                            "shorter take does not change how much floor is "
+                            "averaged in -- there is no averaging"),
+    ),
+    worst_error="2.4 dB for RS and 1.1 dB for CB against known two-partial "
+                "signals at the shipping operating points; 2.37 dB worst over "
+                "true balances 0 to -24 dB at the shipped (1000, 1100) guard set",
+    evidence=("tools/measure_partial_balance.py `cmd_validate`",
+              "tools/probes/rs_guard_band.py",
+              "tools/test_run_case.py::test_balance_trajectory_db_* (six cases)"),
+    notes="#115 asked for the three ad-hoc validation measurements sitting "
+          "BESIDE the estimators to be relocated INTO them. This is one of the "
+          "three: the 2.4 dB figure was a comment in this file's "
+          "RS_BALANCE_OP block, reachable only by reading the comment.",
+))
 
 
 def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
@@ -363,7 +699,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
     f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
     if f_lo is None or f_hi is None:
         return am.Estimate(None, False, "no line found for one of the two partials",
-                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range))
+                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range),
+                           BALANCE_TRAJECTORY_DOMAIN)
     ts, al = PT.trajectory(x, sr, f_lo, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     _, ah = PT.trajectory(x, sr, f_hi, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     fl_lo = PT.floor_at(x, sr, f_lo, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
@@ -379,7 +716,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                            f"(best joint headroom {headroom[i]:.1f} dB at t={ts[i]*1e3:.1f} ms: "
                            f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
                            dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
-                                best_headroom_db=float(headroom[i])))
+                                best_headroom_db=float(headroom[i])),
+                           BALANCE_TRAJECTORY_DOMAIN)
     shapes = {}
     for tag, f in (("low", f_lo), ("high", f_hi)):
         shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
@@ -391,7 +729,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                                     unresolved_hz=float(f),
                                     line_resid_db=shape["resid_db"],
                                     line_tau_ms=shape["tau_ms"],
-                                    line_drop1_db=shape["drop1_db"]))
+                                    line_drop1_db=shape["drop1_db"]),
+                               BALANCE_TRAJECTORY_DOMAIN)
         shapes[tag] = shape
     i1 = int(idxs[0])
     balance1 = 20.0 * math.log10(ah[i1] / al[i1])
@@ -423,7 +762,7 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
         detail.update(t2_ms=float(ts[i2] * 1e3), balance2_db=balance2,
                      headroom2_db=float(headroom[i2]),
                      slope_db_per_ms=(balance2 - balance1) / dt_ms)
-    return am.Estimate(balance1, True, "", detail)
+    return am.Estimate(balance1, True, "", detail, BALANCE_TRAJECTORY_DOMAIN)
 
 
 def pitch_drop_hz(x, sr: int, band, *, early=(0.004, 0.018), late=(0.060, 0.150),
@@ -509,17 +848,6 @@ def attack_ms(x, sr: int, *, window_ms: float = 4.0,
     return am.Estimate(ms, True, "", dict(peak_index=pk, window_ms=window_ms))
 
 
-#: How far either side of a NOMINAL partial frequency a real one is looked for.
-#: 10 % is the TR-808's own component tolerance on an oscillator's f0
-#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
-#: the search covers exactly the range a unit is allowed to sit in.
-LINE_SEARCH_FRAC = 0.10
-
-#: How far above its own measured floor a reading has to sit before it is a
-#: measurement rather than the estimator. 6 dB, which is the margin
-#: `audio_measure.harmonic_signature` already uses for the same decision.
-FLOOR_MARGIN_DB = 6.0
-
 
 def find_line(x, sr: int, hz_nominal: float, *,
               search: float = LINE_SEARCH_FRAC) -> am.Estimate:
@@ -566,8 +894,79 @@ def _amplitude_at(x, sr: int, hz: float, label: str) -> am.Estimate:
     return e
 
 
+#: How many FFT bins apart the two lines must sit. MEASURED, against the
+#: 8-bin figure `windowed_tone_amplitude`'s docstring states for itself: over a
+#: full sweep of relative phase the ratio is exact to 0.0000 dB at 4 bins,
+#: costs 0.22 dB at 3 and 3.45 dB at 2 (tools/probes/estimator_domains.py 4b).
+#: So the docstring's bound is conservative by 2x and 4 bins is where the
+#: measurement puts the last exact point -- encoding 8 would refuse readings
+#: that are exact, which is the over-aggressive half of this failure.
+TONE_RATIO_MIN_SEPARATION_BINS = 4.0
+
+TONE_RATIO_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="tone_ratio_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary",), enforced=False,
+                      basis="a coherent projection over one fixed window. On a "
+                            "DECAYING pair at rimshot speed (tau ~ 6 ms) the lines "
+                            "are too broad for find_line to resolve and this "
+                            "refuses -- measured, both for matched and for 4:1 "
+                            "mismatched decay (tools/probes/estimator_domains.py 4d "
+                            "and tools/probes/verify_109_claims.py 1b). It does not "
+                            "report a biased ratio, which is the pre-#108 behaviour "
+                            "the issue that asked for this file withdrew"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=-LINE_SEARCH_FRAC, hi=LINE_SEARCH_FRAC,
+                      units="fraction off the nominal frequency",
+                      basis="the TR-808's own +-10 % component tolerance, which is "
+                            "find_line's search band. Measured EXACT to 0.0008 dB "
+                            "at 0/1/5/9/9.9 % off nominal, and a REFUSAL at 15 % "
+                            "(tools/probes/estimator_domains.py 4a). This is the "
+                            "post-#108 behaviour; the pre-#108 losses of 7.3 dB at "
+                            "1 % and 16.0 dB at 5 % are withdrawn and are NOT what "
+                            "this domain describes"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=TONE_RATIO_MIN_SEPARATION_BINS,
+                      units="FFT bins between the two found lines",
+                      basis="measured over a full sweep of relative phase: 0.0000 dB "
+                            "of error at 4 bins and wider, 0.22 dB at 3, 3.45 dB at "
+                            "2, 5.24 dB at 1 (tools/probes/estimator_domains.py 4b). "
+                            "windowed_tone_amplitude's docstring claims 8 bins; the "
+                            "measurement says that is conservative by 2x"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=4.0,
+                      units="FFT bins the +-search band spans",
+                      basis="what binds is find_line's search band holding a "
+                            "resolvable peak, not windowed_tone_amplitude's 12 "
+                            "periods: measured exact at 4.3 bins of search band "
+                            "(40 ms at 540 Hz) and REFUSED at 3.2 "
+                            "(tools/probes/estimator_domains.py 4c)"),
+        am.DomainAxis(am.AXIS_SNR, lo=6.0, units="dB of peak prominence in the "
+                      "search band",
+                      basis="dominant_frequency's own min_prominence_db, which is "
+                            "what find_line refuses on"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="not separately bounded: differential decay shows up "
+                            "here as lines too broad to resolve, and the "
+                            "signal_class axis above is where that is recorded"),
+    ),
+    worst_error="0.0008 dB over +-10 % of detuning on stationary two-tone "
+                "signals, at 4 bins of separation and wider",
+    evidence=("tools/probes/estimator_domains.py section 4",
+              "tools/probes/verify_109_claims.py section 1",
+              "tools/test_run_case.py::test_tone_ratio_db_of_two_known_sines",
+              "tools/test_run_case.py::"
+              "test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses"),
+    notes="#108 replaced the nominal-probe estimator with this find_line-based "
+          "one. The figures in #115's own table (-7.3 dB at 1 % detuning, "
+          "-16.0 at 5 %, -8.7 on differential decay) describe the ESTIMATOR "
+          "THAT WAS REPLACED and were withdrawn by that issue's own verified "
+          "corrections; verify_109_claims.py is the regression guard against "
+          "them being reinstated as a baseline.",
+))
+
+
 def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
-                  search: float = LINE_SEARCH_FRAC) -> am.Estimate:
+                  search: float = LINE_SEARCH_FRAC,
+                  min_separation_bins: float | None = TONE_RATIO_MIN_SEPARATION_BINS
+                  ) -> am.Estimate:
     """Level of the partial NEAR `hz_num` over the partial NEAR `hz_den`, in
     dB: both lines are found in the record and then measured between (#108).
 
@@ -576,28 +975,55 @@ def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
     now, while it is a no-op, rather than after a reference swap makes it a
     mystery.
 
+    ITS DOMAIN IS `TONE_RATIO_DOMAIN`, AND IT REFUSES OUTSIDE IT (#115)
+    -------------------------------------------------------------------
+    Three of its four axes were already enforced, by machinery that did not
+    say what it was enforcing: detuning past +-10 % and a search band too
+    narrow to hold a peak both come back from `find_line`, and a record too
+    short to project comes back from `windowed_tone_amplitude`. The one that
+    was NOT checked is PARTIAL SEPARATION -- two nominal frequencies close
+    enough that both searches land on the SAME line return 0.0 dB, a number
+    with no refusal anywhere in it. That is now refused, at the separation
+    measurement puts the last exact reading at rather than the one the window's
+    docstring claims.
+
+    Pass `min_separation_bins=None` to measure the unresolved case on purpose.
+
     Ground truth: test_tone_ratio_db_of_two_known_sines,
-    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses."""
+    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses,
+    test_tone_ratio_db_refuses_two_lines_inside_one_main_lobe."""
     fn, fd = find_line(x, sr, hz_num, search=search), find_line(x, sr, hz_den, search=search)
     if not fn.ok:
-        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail)
+        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail,
+                           TONE_RATIO_DOMAIN)
     if not fd.ok:
-        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail)
+        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail,
+                           TONE_RATIO_DOMAIN)
+    if min_separation_bins is not None and len(x):
+        bins = abs(fn.value - fd.value) * len(x) / sr
+        if bins < min_separation_bins:
+            return TONE_RATIO_DOMAIN.refuse(
+                am.AXIS_PARTIAL_SEPARATION, bins, lo=min_separation_bins,
+                num_hz=fn.value, den_hz=fd.value,
+                num_nominal_hz=hz_num, den_nominal_hz=hz_den,
+                bin_hz=sr / len(x))
     a = _amplitude_at(x, sr, fn.value, "numerator")
     b = _amplitude_at(x, sr, fd.value, "denominator")
     if not a.ok:
-        return a
+        return am.Estimate(None, False, a.reason, a.detail, TONE_RATIO_DOMAIN)
     if not b.ok:
-        return b
+        return am.Estimate(None, False, b.reason, b.detail, TONE_RATIO_DOMAIN)
     if a.value <= 0 or b.value <= 0:
         return am.Estimate(None, False, "a line measured at zero amplitude",
-                           dict(num=a.value, den=b.value))
+                           dict(num=a.value, den=b.value), TONE_RATIO_DOMAIN)
     return am.Estimate(20.0 * math.log10(a.value / b.value), True, "",
                        dict(num=a.value, den=b.value,
                             num_hz=fn.value, den_hz=fd.value,
                             num_nominal_hz=hz_num, den_nominal_hz=hz_den,
                             num_offset_pct=fn.detail["offset_pct"],
-                            den_offset_pct=fd.detail["offset_pct"]))
+                            den_offset_pct=fd.detail["offset_pct"],
+                            separation_bins=abs(fn.value - fd.value) * len(x) / sr),
+                       TONE_RATIO_DOMAIN)
 
 
 def difference_tone_db(x, sr: int, hz_hi: float, hz_lo: float, *,
@@ -1751,6 +2177,62 @@ _CUTOFF_RESPONSE_PLAN = [
 
 FILTER_PLAN = {cid: _CUTOFF_RESPONSE_PLAN for cid in FILTER_CASES}
 
+#: What a filter case needs stated before it can be measured. `FILTER_CASES`
+#: above holds the DEVELOPMENT cases, written in this file; a Holdout case's
+#: entries are the same keys read out of its committed seal
+#: (`docs/scorecard/holdout/<case>.json`) instead, which is the whole point --
+#: the party tuning the model cannot edit a setting and read its error in one
+#: pass, because `tools/holdout.py` refuses a seal that is not committed and
+#: clean. `tools/probes/hihat/hh_probe5.py`'s module-level `HOLDOUT` dict is the
+#: pattern this generalises; a dict inside one probe cannot be checked from
+#: outside it, and a file in the repository can.
+FILTER_SPEC_KEYS = ("ref_clip", "ref_open_clip", "cut_hz", "open_hz",
+                    "res_ref", "res_ours")
+
+
+def sealed_settings(case_id: str) -> dict | None:
+    """The committed settings for a sealed Holdout case, or None.
+
+    A seal that does not load at all (absent, malformed, wrong schema) returns
+    None here on purpose: `run_case` then REFUSES the case with the seal's OWN
+    reason, which is more use than this function guessing a plan from a seal the
+    gate is about to reject."""
+    try:
+        return holdout.load_seal(case_id).get("settings") or None
+    except holdout.Refused:
+        return None
+
+
+def sealed_plans() -> dict:
+    """case id -> the plan its seal says it takes ('filter', ...). Only cases
+    whose seal names a plan this runner implements can leave `NOT_RUN`."""
+    out = {}
+    if not holdout.SEAL_DIR.is_dir():
+        return out
+    for path in sorted(holdout.SEAL_DIR.glob("*.json")):
+        if path.name == holdout.LEDGER.name:
+            continue
+        settings = sealed_settings(path.stem) or {}
+        if settings.get("plan"):
+            out[path.stem] = settings["plan"]
+    return out
+
+
+def filter_spec(case_id: str) -> dict:
+    """The frozen clips and control values one filter case is measured at --
+    from `FILTER_CASES` for a development case, from the committed seal for a
+    holdout one. REFUSES a seal that does not state the whole spec: a partially
+    specified holdout would be completed by a default nobody sealed."""
+    if case_id in FILTER_CASES:
+        return FILTER_CASES[case_id]
+    settings = sealed_settings(case_id) or {}
+    missing = [k for k in FILTER_SPEC_KEYS if k not in settings]
+    if missing:
+        raise Refused(f"the seal for {case_id} takes the filter plan but does not "
+                      f"state {', '.join(missing)}; a holdout completed by a default "
+                      f"is not a sealed setting")
+    return {k: settings[k] for k in FILTER_SPEC_KEYS}
+
 
 def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     """The frozen reference response curve, derived from cached audio whose
@@ -1866,7 +2348,7 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
                       "combined: the control would not say which side moved")
     record_engine = engine or ENGINE
     cid = case["case_id"]
-    spec = FILTER_CASES[cid]
+    spec = filter_spec(cid)
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
     cut, amp = spec["cut_hz"], rp.PROBE_AMP
 
@@ -1903,7 +2385,10 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
         "rolloff": (filt_rolloff(cut), filt_rolloff(cut)),
     }
     metrics = {}
-    for name, units, key, tol_rule in FILTER_PLAN[cid]:
+    # A sealed holdout case takes the family's plan (`_CUTOFF_RESPONSE_PLAN`);
+    # anything it requires that the plan does not measure is marked invalid by
+    # the `required` loop below, never dropped from the maximum.
+    for name, units, key, tol_rule in FILTER_PLAN.get(cid, _CUTOFF_RESPONSE_PLAN):
         e_ours, e_ref = ests[key]
         metrics[name] = measure_pair(name, units, e_ours, (dut_f, ours_g),
                                      (ref_f, ref_g), tol_rule, {}, est_ref=e_ref)
@@ -2030,19 +2515,51 @@ NOT_RUN = {}
 # profile froze from the start. Nothing about that case was ever out of scope
 # for the cutoff reason it was given.
 
-#: The holdout trajectories. Not a tooling gap -- a sequencing rule.
-for _c in ("F1D", "F2D", "F3D", "F5D"):
-    NOT_RUN[_c] = (
-        "a Holdout-20 case whose settings are not sealed yet. Its stimulus is "
-        "'seal an unseen cutoff/resonance/drive trajectory', and the sealing is "
-        "the measurement's whole value: docs/scorecard/README.md, 'once a holdout "
-        "case's detailed errors have guided a change, it has become development "
-        "data'. An agent that picks the setting, freezes the clip and reads the "
-        "error in one pass has produced a development case wearing a holdout's "
-        "label, and there is no way to tell afterwards which it was. The rig, the "
-        "profile and the estimators are all ready -- what is missing is somebody "
-        "OTHER than the party tuning the model choosing the trajectory and "
-        "committing it before it is rendered.")
+#: The holdout trajectories. The SEQUENCING rule these four were held on is now
+#: a mechanism rather than a sentence: `tools/holdout.py` refuses a Holdout-split
+#: case whose settings are not committed and clean, records every read, and
+#: refuses a second read taken after the model moved. F1D is sealed
+#: (docs/scorecard/holdout/F1D.json) and therefore out of this table -- it is
+#: attempted, and it is a stated no-verdict until its reference clip is rendered.
+#:
+#: The other three stay here, AND THE REASON THEY STAY IS NOT SEALING. The
+#: sentence this entry used to carry -- "the rig, the profile and the estimators
+#: are all ready" -- was one plausible line covering four cases, which is exactly
+#: what the comment at the top of this table says a not-run table exists to
+#: prevent. It was false for three of them: F2D, F3D and F5D are blocked on the
+#: same things their A/B/C rungs are blocked on, none of which is a sequencing
+#: rule. Sealing them now would produce three seals nothing can read.
+NOT_RUN["F2D"] = (
+    "blocked on exactly what F2A/F2B/F2C are blocked on, and NOT on sealing: the "
+    "case requires 'Bass loss; Playing weight; peak frequency; peak gain', and a "
+    "peak gain quoted at a fixed input level is a statement about that level "
+    "because Surge Type 2 is level-independent over the whole probed range and "
+    "our fixed-point ladder is not (+32.1 dB at -60 dBFS against +10.0 at -12, at "
+    "res 1.20). See NOT_RUN['F2A'] for the measurement and for why "
+    "reference_compare.stage_peakdrive's matched-drive answer is not available to "
+    "us. A holdout needs a setting whose reading MEANS something; sealing a "
+    "resonance trajectory before that definition exists would seal a number "
+    "nobody can interpret. The sealing mechanism it will use when the definition "
+    "lands is tools/holdout.py, and docs/scorecard/holdout/F1D.json is its "
+    "worked example.")
+NOT_RUN["F3D"] = (
+    "blocked on exactly what F3A/F3B/F3C are blocked on, and NOT on sealing: the "
+    "case requires separating MIXER DRIVE from output gain, Surge's mixer drive is "
+    "Pre-Filter Gain (parameter 316), and the qualified rig PINS it at '0.00 dB' "
+    "as a setting that is not the thing under test. Making 316 the thing under "
+    "test is a change to reference_rigs.SurgeRig and to what 'the qualified rig' "
+    "means, and it has to be re-qualified after -- not a clip this profile can "
+    "render, and not a setting a seal can conjure. Seal it (tools/holdout.py) "
+    "once the rig can drive it.")
+NOT_RUN["F5D"] = (
+    "blocked on exactly what F5A/F5B/F5C are blocked on, and NOT on sealing: no "
+    "clip in this profile automates a parameter, deliberately, and our side has no "
+    "swept-cutoff render at all -- reference_rigs.OurLadder answers three "
+    "questions (tone_gain_db, ring, drive_tone) and a sweep is not one of them. "
+    "'Stepping' also cannot be attributed between plugin and host without the "
+    "host's automation block size pinned (docs/failure-modes.md: all three plugins "
+    "appeared to step at 94 Hz because that was the host's block rate). A sealed "
+    "cutoff-motion trajectory would be a setting neither side can produce.")
 
 #: The resonance family. Unblocked on audio since this commit; still blocked on
 #: the same definition F2A is.
@@ -2203,6 +2720,14 @@ def plan_for(case_id: str) -> str:
         return "mono"
     if case_id in NOT_RUN:
         return "not-run"
+    # A Holdout case with a committed seal is ATTEMPTED, under the plan its seal
+    # names. Whether it produces a number is then a question about the apparatus
+    # (F1D's reference clip is not frozen yet, so it is a stated no-verdict) and
+    # no longer a question about sequencing, which is what `NOT_RUN` was holding
+    # these four cases on.
+    sealed = sealed_plans().get(case_id)
+    if sealed:
+        return sealed
     if case_id in DRUM_CASE_VOICE:
         return "drum"
     if case_id in ENSEMBLE_CASES:
@@ -2778,18 +3303,84 @@ def run_ensemble_case(case: dict, keep_audio: bool) -> dict:
     }
 
 
-def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
-             keep_audio: bool = True) -> dict | None:
-    """One case's result dict, or None when the case is deliberately not run."""
+def is_holdout(case: dict) -> bool:
+    return (case.get("split") or "").strip().lower() == "holdout"
+
+
+def _empty_record(case: dict, refdir: pathlib.Path, inject: str) -> dict:
     cid = case["case_id"]
-    kind = plan_for(cid)
-    if kind == "not-run":
-        return None
-    base = {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
+    return {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
             "source_commit": source_commit(), "analysis_run": analysis_run(),
             "reference_profile": "", "render_run": "", "audio": "",
             "provenance": provenance(model_input_hashes(), {},
                                      dict(refs=str(refdir), inject=inject or None))}
+
+
+def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
+             keep_audio: bool = True, *, record_reads: bool = True,
+             results_dir: str = "") -> dict | None:
+    """One case's result dict, or None when the case is deliberately not run.
+
+    **A `Holdout`-split case is REFUSED unless its settings are already
+    committed.** That gate is here rather than in each family's runner so no
+    future scorer can route around it: `tools/holdout.py` asserts that the seal
+    is tracked and clean, puts what it was measured against on the record, and
+    records the read. A holdout scored like an ordinary development case is the
+    failure this repository could not detect after the fact -- "there is no way
+    to tell afterwards which it was" -- and it costs one function call to make
+    impossible."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    block = None
+    if is_holdout(case):
+        model_state = holdout.model_state_sha256(model_input_hashes())
+        try:
+            block = holdout.assert_readable(cid, model_state=model_state)
+        except holdout.Refused as e:
+            required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
+                        if m.strip()]
+            res = _empty_record(case, refdir, inject)
+            res["note"] = f"REFUSED: {e}"
+            res["holdout"] = {"state": "unsealed", "holdout_claim": False,
+                              "why": str(e), "how_to_check": holdout.HOW_TO_CHECK}
+            res["metrics"] = {m: invalid_metric("", f"holdout not sealed: {e}")
+                              for m in required}
+            if inject:
+                res["INJECTED_CONTROL"] = inject
+            return res
+    res = _measure_case(case, refdir, inject, keep_audio)
+    if res is None:
+        return None
+    if block is not None:
+        res["holdout"] = block
+        if record_reads and not inject and holdout.was_read(res):
+            # A number was taken off a sealed holdout. THAT is the act the policy
+            # is about, so it goes in the ledger before anybody reads the record:
+            # a second reading at a different model state is refused from here on
+            # until the transition is recorded.
+            state, worst, _why = verdict_of(case, res)
+            entry = holdout.record_read(
+                cid, block, engine=res.get("engine", ENGINE), state=state,
+                worst=worst, result_path=results_dir or "(not stated by the caller)",
+                command=" ".join([os.path.relpath(sys.argv[0], ROOT)] + sys.argv[1:])
+                        if sys.argv and sys.argv[0] else "(imported)")
+            res["holdout"]["ledger_read"] = entry["n"]
+            res["holdout"]["ledger"] = str(holdout.LEDGER.relative_to(ROOT)) \
+                if ROOT in holdout.LEDGER.parents else str(holdout.LEDGER)
+    return res
+
+
+def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
+                  keep_audio: bool = True) -> dict | None:
+    """The measurement itself. `run_case` is the entry point: it holds the
+    holdout gate, which must not be reachable around."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    base = _empty_record(case, refdir, inject)
     required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
                 if m.strip()]
     try:
@@ -3012,13 +3603,21 @@ def cmd_list(cases: list[dict]) -> int:
             p, d = ENSEMBLE_CASES[c["case_id"]]
             why = f"{p}, {'dense' if d else 'sparse'} 808 groove, stems vs final output"
         elif kind == "filter":
-            f = FILTER_CASES[c["case_id"]]
-            why = (f"selected 2x path + surge-type2-clean-v1 vs frozen {f['ref_clip']} "
-                   f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            try:
+                f = filter_spec(c["case_id"])
+                why = (f"selected 2x path + surge-type2-clean-v1 vs frozen "
+                       f"{f['ref_clip']} (cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            except Refused as e:
+                why = f"REFUSED: {e}"
+            if is_holdout(c):
+                why = f"[sealed holdout] {why}"
         elif kind == "mono":
             why = ("fixed integer-model phrase vs frozen Mini V3; " +
                    ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
                     else "model-only; no integrated RTL claim"))
+        elif is_holdout(c):
+            why = ("Holdout with no committed seal: REFUSED rather than scored "
+                   "(tools/holdout.py)")
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")
@@ -3133,7 +3732,9 @@ def main(argv=None) -> int:
             return 2
         print("CONTROL BASELINE: measuring the same cases without the injection")
         for c in chosen:
-            clean = run_case(c, refdir, "", keep_audio=False)
+            # A control's baseline is not evidence about the instrument, so it
+            # does not consume a sealed holdout's reading either.
+            clean = run_case(c, refdir, "", keep_audio=False, record_reads=False)
             clean_verdicts[c["case_id"]] = (*verdict_of(c, clean), clean.get("note", ""))
         print("CONTROL BASELINE: complete\n")
     injected_verdicts = {}
@@ -3144,7 +3745,8 @@ def main(argv=None) -> int:
             code = max(code, OUTCOME_CODE["not run"])
             print(f"{cid:<7}{'not run':<12}{'--':>7}  {NOT_RUN[cid][:60]}")
             continue
-        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio)
+        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio,
+                       record_reads=not a.dry_run, results_dir=str(outdir))
         # Judge BEFORE writing, so the outcome code on the record is the board's
         # verdict and not this runner's opinion of it.
         state, worst, why = verdict_of(c, res)

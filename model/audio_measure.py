@@ -79,22 +79,234 @@ class InsufficientEvidence(AssertionError):
     """An estimator was asked for a number it cannot honestly supply."""
 
 
+# ---------------------------------------------------------------------------
+# VALIDATED DOMAINS (#115): where an estimator was SHOWN to be right
+#
+# Every estimator here has been validated by somebody, on some signal, and
+# until #115 none of them carried that validation to the point of use. A
+# docstring cannot be compared against the signal in front of the estimator;
+# a `ValidatedDomain` can, and an axis it does not contain is a refusal rather
+# than a number with a caveat.
+#
+# The distinction that matters: `ok=False` already meant "this estimator's own
+# machinery could not produce an answer" (silent input, a fit that would not
+# converge). An `OUTSIDE_DOMAIN_PREFIX` refusal means something stronger --
+# the machinery WOULD have produced a number, and that number is outside where
+# anybody ever measured it to be right. Those are different findings and the
+# reason string says which.
+#
+# The bounds below are MEASURED, by `tools/probes/estimator_domains.py`, and
+# that script exits non-zero when one stops holding. A bound that was quoted
+# rather than measured says so in its own `basis`.
+# ---------------------------------------------------------------------------
+
+#: The axes a domain may constrain. Frozen, so a domain cannot invent an axis
+#: name a caller does not know how to supply; the first five are the ones
+#: issue #115 names, in its words.
+AXIS_SIGNAL_CLASS = "signal_class"            # stationary vs decaying
+AXIS_DETUNING = "detuning"                    # how far off nominal a line may sit
+AXIS_SNR = "snr"                              # level above the record's own floor
+AXIS_RECORD_LENGTH = "record_length"          # minimum record the answer needs
+AXIS_PARTIAL_SEPARATION = "partial_separation"  # how close two lines may be
+AXIS_DECAY_RATE = "decay_rate"                # matched-decay requirement (#109's A^2 tau)
+
+DOMAIN_AXES = (AXIS_SIGNAL_CLASS, AXIS_DETUNING, AXIS_SNR, AXIS_RECORD_LENGTH,
+               AXIS_PARTIAL_SEPARATION, AXIS_DECAY_RATE)
+
+#: Every domain refusal's reason begins with this, so a caller can tell
+#: "outside where this was validated" from "this signal defeated the fit".
+OUTSIDE_DOMAIN_PREFIX = "outside validated domain"
+
+
+@dataclass(frozen=True)
+class DomainAxis:
+    """One axis of a validated domain.
+
+    Numeric axes carry `lo`/`hi` (either may be None for unbounded);
+    categorical axes carry `values` (the signal classes the estimator was
+    validated on). `basis` is how the bound was arrived at and is not
+    optional: an axis whose bound nobody can trace is the quoted constant #92
+    was about. `enforced` is False for an axis that is declared but NOT
+    checked at call time -- declaring one is honest, and pretending it is
+    checked would not be."""
+    name: str
+    lo: float | None = None
+    hi: float | None = None
+    units: str = ""
+    values: tuple[str, ...] = ()
+    basis: str = ""
+    enforced: bool = True
+
+    def __post_init__(self):
+        if self.name not in DOMAIN_AXES:
+            raise ValueError(f"unknown domain axis {self.name!r}; "
+                             f"the vocabulary is {DOMAIN_AXES}")
+        if not self.basis:
+            raise ValueError(f"axis {self.name!r} has no basis: a bound without a "
+                             "derivation is a quoted constant (#92)")
+
+    @property
+    def bounded(self) -> bool:
+        return self.lo is not None or self.hi is not None or bool(self.values)
+
+    def violation(self, value, *, lo: float | None = None,
+                  hi: float | None = None) -> str | None:
+        """The reason this value is outside the axis, or None if it is inside.
+        An unbounded axis never refuses -- it is a declaration, not a gate.
+
+        `lo`/`hi` let a CALLER tighten the bound for its own call (a metric
+        with a tighter tolerance than the estimator's envelope). They may only
+        tighten: a looser bound would report outside the validated domain,
+        which is the thing this class exists to stop."""
+        if lo is not None and self.lo is not None and lo < self.lo:
+            raise ValueError(f"{self.name}: lo={lo} is looser than the validated "
+                             f"minimum {self.lo}")
+        if hi is not None and self.hi is not None and hi > self.hi:
+            raise ValueError(f"{self.name}: hi={hi} is looser than the validated "
+                             f"maximum {self.hi}")
+        lo = self.lo if lo is None else lo
+        hi = self.hi if hi is None else hi
+        if isinstance(value, str):
+            if self.values and value not in self.values:
+                return (f"{self.name} = {value!r}, validated on "
+                        f"{'/'.join(self.values)}")
+            return None
+        if value is None:
+            return None
+        v = float(value)
+        if lo is not None and v < lo:
+            return (f"{self.name} = {v:.4g} {self.units}, below the validated "
+                    f"minimum {lo:.4g} {self.units}".rstrip())
+        if hi is not None and v > hi:
+            return (f"{self.name} = {v:.4g} {self.units}, above the validated "
+                    f"maximum {hi:.4g} {self.units}".rstrip())
+        return None
+
+    def as_dict(self) -> dict:
+        return dict(name=self.name, lo=self.lo, hi=self.hi, units=self.units,
+                    values=list(self.values), basis=self.basis,
+                    enforced=self.enforced)
+
+
+@dataclass(frozen=True)
+class ValidatedDomain:
+    """Where one estimator was validated, as data.
+
+    `worst_error` is the error it achieved inside this domain, so a caller can
+    compare it against its own tolerance instead of assuming the estimator is
+    not the limiting factor. `evidence` names the committed scripts and tests
+    that produced the numbers -- a domain whose evidence is a docstring is the
+    thing #115 exists to replace."""
+    estimator: str
+    axes: tuple[DomainAxis, ...]
+    worst_error: str
+    evidence: tuple[str, ...] = ()
+    notes: str = ""
+
+    def axis(self, name: str) -> DomainAxis:
+        for a in self.axes:
+            if a.name == name:
+                return a
+        raise KeyError(f"{self.estimator} declares no {name!r} axis "
+                       f"(it declares {[a.name for a in self.axes]})")
+
+    def violation(self, name: str, value, **bounds) -> str | None:
+        return self.axis(name).violation(value, **bounds)
+
+    def refuse(self, name: str, value, *, lo: float | None = None,
+               hi: float | None = None, **detail) -> Estimate:
+        """The refusal an out-of-domain signal earns: `ok=False`, a reason that
+        names the axis violated, and the domain itself attached."""
+        why = self.violation(name, value, lo=lo, hi=hi)
+        if why is None:
+            raise ValueError(f"{self.estimator}: {name} = {value!r} is INSIDE the "
+                             "declared domain; refusing it would be a lie")
+        return Estimate(None, False, f"{OUTSIDE_DOMAIN_PREFIX}: {why}",
+                        dict(detail, estimator=self.estimator, axis=name,
+                             axis_value=value), self)
+
+    def check(self, **values) -> Estimate | None:
+        """The first violated axis as a refusal, or None if every named value
+        is inside. Axis order is declaration order, so the cheapest / most
+        fundamental precondition is the one a caller is told about first."""
+        for a in self.axes:
+            if a.name in values:
+                if a.violation(values[a.name]) is not None:
+                    return self.refuse(a.name, values[a.name])
+        return None
+
+    def as_dict(self) -> dict:
+        return dict(estimator=self.estimator, worst_error=self.worst_error,
+                    evidence=list(self.evidence), notes=self.notes,
+                    axes=[a.as_dict() for a in self.axes])
+
+
+#: Every declared domain, by estimator name. Machine-inspectable without
+#: synthesising a signal: a test can ask "does tone_ratio_db's domain include
+#: 5 % detuning" and get an answer from the declaration itself.
+DOMAINS: dict[str, ValidatedDomain] = {}
+
+
+def register_domain(domain: ValidatedDomain) -> ValidatedDomain:
+    """Record one estimator's validated domain, idempotently.
+
+    **Re-declaring the EXACT same domain is a no-op, not a conflict.** A module
+    that registers at import time can legitimately have its body executed twice
+    in one process: `tools/run_case.py` runs as `__main__` *and* is separately
+    imported as `run_case` by `tools/probes/f1_selected_path.py`, so its
+    module-level registrations run once per module identity. A second
+    declaration that compares equal to the first carries no new information, so
+    the already-registered instance is returned unchanged (identity, not just
+    equality, so `x is DOMAINS[name]` holds for whichever copy ran first).
+
+    **A genuinely DIFFERENT domain under the same estimator name still
+    raises.** That is a real collision -- two disagreeing statements about where
+    one estimator was validated -- and silently keeping either one would make
+    the registry lie about what was measured. `ValidatedDomain`/`DomainAxis` are
+    frozen dataclasses, so the comparison is structural over every bound, basis,
+    unit, `enforced` flag, `worst_error` and evidence entry: changing any of
+    them is a mismatch, not a repeat.
+    """
+    existing = DOMAINS.get(domain.estimator)
+    if existing is not None:
+        if existing == domain:
+            return existing
+        raise ValueError(
+            f"{domain.estimator} already declares a DIFFERENT domain -- "
+            f"two disagreeing statements about where one estimator was "
+            f"validated. Registered: {existing.as_dict()!r}. "
+            f"Offered: {domain.as_dict()!r}")
+    DOMAINS[domain.estimator] = domain
+    return domain
+
+
 @dataclass(frozen=True)
 class Estimate:
     """One measured quantity, or a refusal to measure it.
 
     `value` is meaningless unless `ok`. `detail` carries the diagnostics that
-    decided it, so a failing test can print why."""
+    decided it, so a failing test can print why. `domain` is the estimator's
+    `ValidatedDomain` when it has one, so the envelope travels with the
+    answer AND with the refusal (#115) instead of living in a docstring the
+    caller has to go and read."""
     value: float | None
     ok: bool = True
     reason: str = ""
     detail: dict = field(default_factory=dict)
+    domain: "ValidatedDomain | None" = None
 
     def require(self, what: str = "") -> float:
         if not self.ok or self.value is None:
             raise InsufficientEvidence(
                 f"{what or 'estimate'}: insufficient evidence -- {self.reason} {self.detail}")
         return float(self.value)
+
+    @property
+    def outside_domain(self) -> bool:
+        """True when this is a refusal because the SIGNAL was outside the
+        estimator's validated domain, rather than because the estimator's own
+        machinery could not produce a number."""
+        return (not self.ok) and self.reason.startswith(OUTSIDE_DOMAIN_PREFIX)
 
     def __repr__(self) -> str:
         if not self.ok:
@@ -281,12 +493,93 @@ def tau_from_t20(t20_s: float) -> float:
     return t20_s / TAU_TO_T20
 
 
+#: How many carrier cycles per tau the envelope fit needs. **RAISED from 0.8
+#: to 1.5 by #115's re-measurement**, not chosen: 0.8 is where the analytic
+#: envelope's two frequency halves start to overlap, but measured on damped
+#: sinusoids at 56 Hz nothing between 0.8 and 1.5 is ever accepted anyway --
+#: the single-exponential residual gate refuses 0.80, 1.12 and 1.40 first, and
+#: the first accepted reading is at 1.50 (tools/probes/estimator_domains.py 5a).
+#: So the old constant declared a region this estimator does not serve, and
+#: raising it makes the gate and the declaration the same number. Below it,
+#: `damped_sinusoid` is exact and is what the refusal names.
+DECAY_TAU_MIN_CYCLES_PER_TAU = 1.5
+
+DECAY_TAU_DOMAIN = register_domain(ValidatedDomain(
+    estimator="decay_tau",
+    axes=(
+        DomainAxis(AXIS_SIGNAL_CLASS, values=("decaying",),
+                   basis="enforced twice over: `min_range_db` of fall is required "
+                         "inside the window, and a non-negative slope is refused. "
+                         "Stationary noise has no decay time and "
+                         "test_decay_tau_refuses_stationary_noise is the control"),
+        DomainAxis(AXIS_PARTIAL_SEPARATION, lo=1.5, units="carrier cycles per tau",
+                   basis="**RE-MEASURED, and the code's own constant is not the "
+                         "boundary.** The explicit gate is at 0.8 cycles/tau -- "
+                         "below that the analytic envelope's two frequency halves "
+                         "overlap -- but it is never the gate that fires first: "
+                         "measured on damped sinusoids at 56 Hz the "
+                         "single-exponential RESIDUAL refuses 0.28, 0.67, 0.80, "
+                         "1.12 and 1.40 cycles/tau, and the first accepted reading "
+                         "is at 1.50 (tools/probes/estimator_domains.py 5a). 1.5 is "
+                         "therefore the honest lower bound; 0.8 would declare a "
+                         "region this estimator does not actually serve"),
+        DomainAxis(AXIS_RECORD_LENGTH, lo=12.0, units="dB of envelope fall inside "
+                   "the analysed window",
+                   basis="the enforced `min_range_db` gate. Measured across 12-40 dB "
+                         "of fall on a 30 ms ring, ACCEPTANCE is not monotone -- "
+                         "15, 20, 30 and 40 dB are accepted and 18, 22 and 25 are "
+                         "refused as 'not a single exponential', because abruptly "
+                         "truncating a decay puts an end artefact into the analytic "
+                         "envelope that the residual gate sees. **Every accepted "
+                         "reading in that range was within 0.1 %**, so the erratic "
+                         "half is the refusing, not the answering, and raising this "
+                         "bound would refuse accurate readings "
+                         "(tools/probes/estimator_domains.py 5c)"),
+        DomainAxis(AXIS_SNR, lo=34.0, units="dB of signal over additive white noise",
+                   basis="measured: 34 dB reports to 0.13 % and 30 dB refuses, on "
+                         "all three seeds, via the same residual gate "
+                         "(tools/probes/estimator_domains.py 5d). There is no "
+                         "explicit SNR gate -- the residual is the mechanism -- but "
+                         "the refusal is real and conservative, so this axis is "
+                         "enforced in effect"),
+        DomainAxis(AXIS_DETUNING, enforced=False,
+                   basis="not applicable: nothing here assumes a nominal frequency. "
+                         "The carrier is MEASURED (dominant_frequency) and only to "
+                         "decide the cycles-per-tau precondition"),
+        DomainAxis(AXIS_DECAY_RATE, enforced=True,
+                   basis="a single exponential, enforced by max_residual_db: two "
+                         "exponentials (a strong attack over a weak long tail) are "
+                         "refused rather than averaged "
+                         "(test_decay_tau_refuses_two_exponentials_..._when_told_where)"),
+    ),
+    worst_error="4.6 % over the nine (f, tau) pairs test_audio_measure.py "
+                "ground-truths plus the cycles-per-tau sweep; worst case is the "
+                "56 Hz / 26.8 ms corner right at the lower separation bound",
+    evidence=("tools/probes/estimator_domains.py section 5",
+              "model/test_audio_measure.py::test_decay_tau_recovers_a_known_time_constant",
+              "model/test_audio_measure.py::"
+              "test_decay_tau_refuses_when_the_carrier_is_too_low_to_have_an_envelope",
+              "model/test_audio_measure.py::test_decay_tau_refuses_stationary_noise"),
+    notes="#115 cites 'refused on five of eight references'. That is a claim "
+          "about the Fischer TR-808 corpus, which is not on the host this "
+          "domain was measured on (GF180_TR808_REFS unset, /tmp/tr808-ref "
+          "absent), and its own curation pass recorded it as NOT independently "
+          "re-verified. It is therefore neither reproduced nor encoded here: "
+          "every bound above comes from closed-form signals instead, which is "
+          "the part that can be re-measured anywhere. A refusal RATE is in any "
+          "case a property of a corpus and not of an estimator -- the domain is "
+          "the thing that travels.",
+))
+
+
 def decay_tau(x, sr: int = SR_DEFAULT, *, start_s: float | None = None,
               end_s: float | None = None, skip_ms: float = 1.0,
               floor_db: float = -35.0, min_range_db: float = 12.0,
               max_residual_db: float = 4.0, min_samples: int = 64,
               is_envelope: bool = False, envelope: str = "analytic",
-              rms_window_ms: float = 5.0) -> Estimate:
+              rms_window_ms: float = 5.0,
+              min_cycles_per_tau: float | None = DECAY_TAU_MIN_CYCLES_PER_TAU
+              ) -> Estimate:
     """Amplitude time constant to 1/e, in seconds, of a decaying signal.
 
     `envelope` selects how the envelope is formed: "analytic" (default, right
@@ -312,12 +605,20 @@ def decay_tau(x, sr: int = SR_DEFAULT, *, start_s: float | None = None,
         log-linear fit exceeds `max_residual_db`. A strong attack over a weak
         long tail is two exponentials, and this is what stops a plausible
         average of the two being returned. Fit the tail with `start_s`.
+      * the carrier holds fewer than `min_cycles_per_tau` cycles per tau, where
+        there is no envelope to fit at all and `damped_sinusoid` is exact.
+
+    ITS DOMAIN IS `DECAY_TAU_DOMAIN` (#115). Two of the bounds above were
+    RE-MEASURED to write it and one of them moved: `min_cycles_per_tau` was
+    0.8 and is 1.5, because nothing between the two is ever accepted -- see
+    `DECAY_TAU_MIN_CYCLES_PER_TAU`. Pass `min_cycles_per_tau=None` to measure
+    that region deliberately, which is what the probe does.
 
     `detail` carries `residual_db`, `range_db`, `n`, `t0`, so a refusal says
     which check failed."""
     x = _as_float(x)
     if is_silent(x):
-        return _fail("silent", peak=peak(x))
+        return Estimate(None, False, "silent", dict(peak=peak(x)), DECAY_TAU_DOMAIN)
     if is_envelope:
         env = np.abs(_as_float(x))
     elif envelope == "rms":
@@ -329,24 +630,27 @@ def decay_tau(x, sr: int = SR_DEFAULT, *, start_s: float | None = None,
     i0 = 0 if start_s is None else int(start_s * sr)
     i1 = len(env) if end_s is None else min(len(env), int(end_s * sr))
     if i1 - i0 < min_samples:
-        return _fail("window too short", n=i1 - i0)
+        return Estimate(None, False, "window too short", dict(n=i1 - i0), DECAY_TAU_DOMAIN)
     seg = env[i0:i1]
     p = int(np.argmax(seg))
     pk = float(seg[p])
     if pk <= 0:
-        return _fail("no envelope peak")
+        return Estimate(None, False, "no envelope peak", {}, DECAY_TAU_DOMAIN)
     p += max(0, int(round(skip_ms * 1e-3 * sr)))
     if p >= len(seg) - min_samples:
-        return _fail("peak too close to the end", n=len(seg) - p)
+        return Estimate(None, False, "peak too close to the end",
+                        dict(n=len(seg) - p), DECAY_TAU_DOMAIN)
     tail = seg[p:]
     below = np.where(tail < pk * 10 ** (floor_db / 20.0))[0]
     end = int(below[0]) if len(below) else len(tail)
     if end < min_samples:
-        return _fail("too few samples above the floor", n=end)
+        return Estimate(None, False, "too few samples above the floor",
+                        dict(n=end), DECAY_TAU_DOMAIN)
     fit = tail[:end]
     range_db = db(fit[0], fit[-1])
     if range_db < min_range_db:
-        return _fail("envelope does not decay far enough", range_db=range_db)
+        return DECAY_TAU_DOMAIN.refuse(AXIS_RECORD_LENGTH, range_db, lo=min_range_db,
+                                       range_db=range_db)
     t = np.arange(len(fit)) / sr
     y = np.log(np.maximum(fit, pk * 1e-9))
     w = fit / fit.max()                      # amplitude weighting: the loud part decides
@@ -354,27 +658,28 @@ def decay_tau(x, sr: int = SR_DEFAULT, *, start_s: float | None = None,
     sol, *_ = np.linalg.lstsq(A * w[:, None], y * w, rcond=None)
     slope = float(sol[0])
     if slope >= 0:
-        return _fail("envelope does not decay", slope=slope)
+        return DECAY_TAU_DOMAIN.refuse(AXIS_SIGNAL_CLASS, "stationary", slope=slope)
     resid_db = float(np.max(np.abs(y - (A @ sol))) * 20.0 / math.log(10))
     tau = -1.0 / slope
     detail = dict(residual_db=resid_db, range_db=range_db, n=len(fit), t0=(i0 + p) / sr)
     if resid_db > max_residual_db:
-        return Estimate(None, False, "not a single exponential", detail)
+        return Estimate(None, False, "not a single exponential", detail, DECAY_TAU_DOMAIN)
     # An analytic envelope is only an envelope when the carrier is well above
     # the decay's own bandwidth (1/pi tau). Below about one cycle per tau the
     # positive and negative frequency halves overlap and the "envelope" ripples
     # at twice the carrier -- so refuse and send the caller to
     # `damped_sinusoid`, which is exact there.
-    fe = _fail("skipped") if (is_envelope or envelope == "rms") else \
+    fe = _fail("skipped") if (is_envelope or envelope == "rms"
+                              or min_cycles_per_tau is None) else \
         dominant_frequency(x[i0:i1], 10.0, 0.45 * sr, sr, min_prominence_db=6.0)
     if fe.ok:
         cycles = fe.value * tau
         detail["carrier_hz"] = fe.value
         detail["cycles_per_tau"] = cycles
-        if cycles < 0.8:
-            return Estimate(None, False,
-                            "fewer than one carrier cycle per tau: use damped_sinusoid", detail)
-    return Estimate(tau, True, "", detail)
+        if cycles < min_cycles_per_tau:
+            return DECAY_TAU_DOMAIN.refuse(AXIS_PARTIAL_SEPARATION, cycles,
+                                           lo=min_cycles_per_tau, **detail)
+    return Estimate(tau, True, "", detail, DECAY_TAU_DOMAIN)
 
 
 # ---------------------------------------------------------------------------
@@ -1000,7 +1305,75 @@ def _harmonic_mask(n: int, f0: float, sr: int, guard: int) -> np.ndarray:
     return m
 
 
-def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5) -> Estimate:
+#: How far a reading has to sit above the leakage floor the estimator measures
+#: for itself before it is a measurement of the SIGNAL. DERIVED, not chosen:
+#: the floor is leakage that ADDS to the inharmonic energy, so a reading h dB
+#: above it is biased upward by exactly 10*log10(1 + 10^(-h/10)) -- 0.97 dB at
+#: 6 dB, 3.0 dB at 0 dB, 0.41 dB at 10 dB. 6 dB is where that bias falls below
+#: 1 dB, and it is the same margin `harmonic_signature` and
+#: `run_case.FLOOR_MARGIN_DB` already use for the same decision, so the three
+#: agree rather than each carrying its own number. The closed form is checked
+#: against planted-share signals in `tools/probes/estimator_domains.py` 6.
+INHARMONIC_MIN_HEADROOM_DB = 6.0
+
+INHARMONIC_DOMAIN = register_domain(ValidatedDomain(
+    estimator="inharmonic_fraction_db",
+    axes=(
+        DomainAxis(AXIS_SIGNAL_CLASS, values=("stationary",), enforced=False,
+                   basis="one spectrum of the whole record: a record whose "
+                         "content changes inside it gets the average, and "
+                         "nothing here can see that it did. Window the record "
+                         "first. Declared, not enforced."),
+        DomainAxis(AXIS_SNR, lo=INHARMONIC_MIN_HEADROOM_DB, units="dB above the "
+                   "record's own measured leakage floor",
+                   basis="the floor adds in power, so the bias is "
+                         "10*log10(1+10^(-h/10)) exactly: 0.97 dB at 6 dB of "
+                         "headroom. Measured against planted shares from -10 to "
+                         "-88 dB in tools/probes/estimator_domains.py 6, which "
+                         "tracks the closed form to 0.30 dB"),
+        DomainAxis(AXIS_DETUNING, lo=-1.0, hi=1.0, units="guard widths of f0 error",
+                   enforced=False,
+                   basis="the +-5-bin guards swallow an f0 error under one guard "
+                         "width (5*sr/n Hz, 7.3 Hz on a 32768-point record at "
+                         "48 kHz); past that a harmonic walks out of its own "
+                         "guard and is counted as inharmonic. Not enforced "
+                         "because the true f0 is exactly what this cannot see -- "
+                         "measure it with refine_f0 first"),
+        DomainAxis(AXIS_RECORD_LENGTH, lo=2.0, hi=None, units="guard widths per f0",
+                   basis="f0*n/sr must span more than 2*guard+1 bins or "
+                         "neighbouring guards touch; enforced as the "
+                         "'harmonic guards cover the spectrum' refusal, which "
+                         "fires when the mask covers more than half the "
+                         "spectrum"),
+        DomainAxis(AXIS_PARTIAL_SEPARATION, lo=2.0 * 5 + 1, units="bins between harmonics",
+                   enforced=False,
+                   basis="same 2*guard+1 bins harmonic_powers refuses below; the "
+                         "coverage refusal above is the enforced form of it"),
+        DomainAxis(AXIS_DECAY_RATE, basis="not applicable: a fraction of TOTAL "
+                   "energy is invariant to a common decay, and "
+                   "test_inharmonic_fraction_db_is_unchanged_by_scaling shows "
+                   "it is invariant to gain", enforced=False),
+    ),
+    worst_error="0.6 dB on planted inharmonic shares of 1 % and 10 % "
+                "(test_inharmonic_fraction_recovers_a_planted_inharmonic_tone); "
+                "0.30 dB against the closed-form floor bias down to 6 dB of "
+                "headroom",
+    evidence=("model/test_audio_measure.py::"
+              "test_inharmonic_fraction_recovers_a_planted_inharmonic_tone",
+              "model/test_audio_measure.py::"
+              "test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor",
+              "tools/probes/estimator_domains.py section 6"),
+    notes="#92 made the floor a per-call measurement; #115 makes it a refusal. "
+          "A caller that WANTS the floor reading -- the alias-free control, the "
+          "'is this signal clean' question -- asks for it explicitly with "
+          "min_headroom_db=None, which is the whole difference between "
+          "measuring the floor on purpose and reporting it by accident.",
+))
+
+
+def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5,
+                           min_headroom_db: float | None = INHARMONIC_MIN_HEADROOM_DB
+                           ) -> Estimate:
     """Energy OUTSIDE +-`guard` bins of every harmonic of `f0`, as a fraction
     of total, in dB. DR 0001's aliasing measure, so its numbers compare
     directly with that record's table.
@@ -1026,8 +1399,25 @@ def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5
     is applied to it. Whatever that reads is leakage, because the synthetic
     signal has nothing else in it. `detail['headroom_db']` is the value above
     that floor -- a reading with little headroom is reporting the estimator
-    and not the signal. It is reported rather than refused on, because the
-    caller knows whether a floor reading is the answer it wanted.
+    and not the signal.
+
+    AND IT IS NOW REFUSED ON, NOT REPORTED (#115)
+    ---------------------------------------------
+    This used to end "it is reported rather than refused on, because the caller
+    knows whether a floor reading is the answer it wanted." Every caller
+    knowing is exactly the arrangement #115 was filed about: the number goes
+    into a table and the headroom does not. A reading `h` dB above its own
+    floor is biased upward by 10*log10(1 + 10^(-h/10)) -- 3.0 dB at zero
+    headroom -- so below `min_headroom_db` (default
+    `INHARMONIC_MIN_HEADROOM_DB` = 6 dB, where that bias is 0.97 dB) this
+    REFUSES, naming the SNR axis of `INHARMONIC_DOMAIN`, and carries the
+    reading it declined to return in `detail['value_db']`.
+
+    **`min_headroom_db=None` turns the gate off**, which is how a caller asks
+    for the floor ON PURPOSE -- the alias-free control whose whole point is
+    that the reading IS the floor, `alias_probe`'s floor rows, the "is this
+    signal clean" question. That is a different question from "how much
+    aliasing is there", and it now looks different at the call site.
 
     Refuses when the guards would cover more than half the spectrum, which is
     where this measure stops meaning anything and `foldback_alias_db` (or a
@@ -1035,16 +1425,18 @@ def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5
 
     Ground truth: test_inharmonic_fraction_db_floor_is_measured_not_quoted,
     test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor,
-    test_inharmonic_fraction_db_is_unchanged_by_scaling."""
+    test_inharmonic_fraction_db_is_unchanged_by_scaling,
+    test_inharmonic_fraction_db_refuses_a_reading_inside_its_own_floor."""
     x = _as_float(x)
     if is_silent(x):
-        return _fail("silent")
+        return Estimate(None, False, "silent", {}, INHARMONIC_DOMAIN)
     n = len(x)
     w = _bh4(n)
     p = np.abs(np.fft.rfft(x * w)) ** 2
     harm = _harmonic_mask(n, f0, sr, guard)
     if harm.mean() > 0.5:
-        return _fail("harmonic guards cover the spectrum", covered=float(harm.mean()))
+        return Estimate(None, False, "harmonic guards cover the spectrum",
+                        dict(covered=float(harm.mean())), INHARMONIC_DOMAIN)
     total = p.sum()
     value = 10.0 * math.log10(max(p[~harm].sum(), 1e-300) / total)
 
@@ -1070,10 +1462,19 @@ def inharmonic_fraction_db(x, f0: float, sr: int = SR_DEFAULT, *, guard: int = 5
     else:
         pr = np.abs(np.fft.rfft(ref * w)) ** 2
         floor_db = 10.0 * math.log10(max(pr[~harm].sum(), 1e-300) / pr.sum())
-    return Estimate(value, True, "",
-                    dict(covered=float(harm.mean()), floor_db=floor_db,
-                         headroom_db=value - floor_db, window="blackman-harris-4",
-                         guard_bins=guard))
+    headroom_db = value - floor_db
+    detail = dict(covered=float(harm.mean()), floor_db=floor_db,
+                  headroom_db=headroom_db, window="blackman-harris-4",
+                  guard_bins=guard, min_headroom_db=min_headroom_db)
+    if min_headroom_db is not None and headroom_db < min_headroom_db:
+        # The reading is declined, not discarded: `value_db` is what it would
+        # have been, so a caller reading the refusal can see how far inside its
+        # own floor the answer sat instead of re-running with the gate off.
+        return INHARMONIC_DOMAIN.refuse(
+            AXIS_SNR, headroom_db, lo=min_headroom_db, value_db=value,
+            bias_db=10.0 * math.log10(1.0 + 10 ** (-max(headroom_db, -60.0) / 10.0)),
+            **detail)
+    return Estimate(value, True, "", detail, INHARMONIC_DOMAIN)
 
 
 def fold_frequency(hz: float, sr: int = SR_DEFAULT) -> float:
