@@ -632,6 +632,81 @@ def test_decay_tau_on_an_already_made_envelope():
 
 
 # ===========================================================================
+# #115 -- the registry itself
+# ===========================================================================
+def _throwaway_domain(estimator: str, lo: float = 6.0) -> am.ValidatedDomain:
+    return am.ValidatedDomain(
+        estimator=estimator,
+        axes=(am.DomainAxis(am.AXIS_SNR, lo=lo, units="dB",
+                            basis="a fixture, not a measurement"),),
+        worst_error="n/a -- test fixture")
+
+
+def test_register_domain_tolerates_an_exact_repeat_registration():
+    """A module that registers at import time can have its body executed twice
+    in ONE process, and that must not be a conflict.
+
+    This is not hypothetical: `tools/run_case.py` runs as `__main__` while
+    `tools/probes/f1_selected_path.py` separately does `import run_case as rc`,
+    so its three module-level `register_domain` calls run once per module
+    identity. The unconditional raise this replaces turned every
+    `python tools/run_case.py F1<x>` into `no verdict` with
+    `ValueError: band_pair_db already declares a domain` -- green under pytest
+    (which imports consistently) and broken at the entry point CI drives.
+
+    The repeat returns the ALREADY-REGISTERED instance, so `is` comparisons
+    against `DOMAINS[name]` hold for whichever copy ran first."""
+    name = "test_only_exact_repeat"
+    assert name not in am.DOMAINS
+    try:
+        first = am.register_domain(_throwaway_domain(name))
+        second = am.register_domain(_throwaway_domain(name))
+        assert second is first
+        assert am.DOMAINS[name] is first
+        assert len([k for k in am.DOMAINS if k == name]) == 1
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+def test_register_domain_still_refuses_a_genuinely_different_domain():
+    """The idempotence above must not swallow a REAL collision: two disagreeing
+    statements about where one estimator was validated. Keeping either one
+    silently would make the registry lie about what was measured, which is the
+    whole thing #115 exists to prevent."""
+    name = "test_only_real_conflict"
+    assert name not in am.DOMAINS
+    try:
+        am.register_domain(_throwaway_domain(name, lo=6.0))
+        with pytest.raises(ValueError, match="DIFFERENT domain"):
+            am.register_domain(_throwaway_domain(name, lo=12.0))
+        assert am.DOMAINS[name].axis(am.AXIS_SNR).lo == 6.0, \
+            "the first (registered) domain must survive a rejected conflict"
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+def test_register_domain_conflict_is_structural_not_just_by_name():
+    """Equality is over every field of the frozen dataclasses -- bound, basis,
+    units, `enforced`, `worst_error`, evidence. A domain that differs only in
+    its BASIS (the same number, a different derivation) is still a conflict: a
+    bound whose derivation changed is a different claim."""
+    name = "test_only_basis_differs"
+    assert name not in am.DOMAINS
+    base = _throwaway_domain(name)
+    other = am.ValidatedDomain(
+        estimator=name,
+        axes=(am.DomainAxis(am.AXIS_SNR, lo=6.0, units="dB",
+                            basis="a DIFFERENT derivation of the same bound"),),
+        worst_error="n/a -- test fixture")
+    try:
+        am.register_domain(base)
+        with pytest.raises(ValueError, match="DIFFERENT domain"):
+            am.register_domain(other)
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+# ===========================================================================
 # #115 -- `decay_tau`'s validated domain, as data
 # ===========================================================================
 def test_decay_tau_domain_is_inspectable_without_synthesizing_a_signal():

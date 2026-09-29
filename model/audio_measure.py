@@ -248,8 +248,34 @@ DOMAINS: dict[str, ValidatedDomain] = {}
 
 
 def register_domain(domain: ValidatedDomain) -> ValidatedDomain:
-    if domain.estimator in DOMAINS:
-        raise ValueError(f"{domain.estimator} already declares a domain")
+    """Record one estimator's validated domain, idempotently.
+
+    **Re-declaring the EXACT same domain is a no-op, not a conflict.** A module
+    that registers at import time can legitimately have its body executed twice
+    in one process: `tools/run_case.py` runs as `__main__` *and* is separately
+    imported as `run_case` by `tools/probes/f1_selected_path.py`, so its
+    module-level registrations run once per module identity. A second
+    declaration that compares equal to the first carries no new information, so
+    the already-registered instance is returned unchanged (identity, not just
+    equality, so `x is DOMAINS[name]` holds for whichever copy ran first).
+
+    **A genuinely DIFFERENT domain under the same estimator name still
+    raises.** That is a real collision -- two disagreeing statements about where
+    one estimator was validated -- and silently keeping either one would make
+    the registry lie about what was measured. `ValidatedDomain`/`DomainAxis` are
+    frozen dataclasses, so the comparison is structural over every bound, basis,
+    unit, `enforced` flag, `worst_error` and evidence entry: changing any of
+    them is a mismatch, not a repeat.
+    """
+    existing = DOMAINS.get(domain.estimator)
+    if existing is not None:
+        if existing == domain:
+            return existing
+        raise ValueError(
+            f"{domain.estimator} already declares a DIFFERENT domain -- "
+            f"two disagreeing statements about where one estimator was "
+            f"validated. Registered: {existing.as_dict()!r}. "
+            f"Offered: {domain.as_dict()!r}")
     DOMAINS[domain.estimator] = domain
     return domain
 

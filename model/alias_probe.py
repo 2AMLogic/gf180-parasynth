@@ -122,8 +122,28 @@ def frac(x: np.ndarray, f0: float, sr: int, what: str = "") -> float:
     """`inharmonic_fraction_db` at MEASURE's guard, at the rate `x` is at.
 
     `.require()` so an estimator refusal is a REFUSED outcome and not a
-    plausible number."""
-    return am.inharmonic_fraction_db(x, f0, sr, guard=GUARD).require(what)
+    plausible number.
+
+    `min_headroom_db=None` (#115): this probe's whole discipline is that it
+    measures the estimator's own floor per f0/rate/length and prints every
+    reading beside it -- "a reading that is not clear of its floor is not a
+    measurement" (module docstring), and `validate_estimator` goes further and
+    adds the floor back in closed form (`want = 10log10(s + floor*(1-s))`),
+    which is the same additive bias `INHARMONIC_MIN_HEADROOM_DB` was derived
+    from. So the floor-clearance check lives HERE, in the probe, not in the
+    estimator's default gate.
+
+    It has to be applied at this one chokepoint rather than per-row, for a
+    reason: the floor rows (`floor_lo`, `floor_hi`, `floor_fir`, `floor`) are
+    alias-free by construction, so their reading IS the floor at ~0 dB
+    headroom, and under the default gate they refuse outright. A floor row and
+    the reading it bounds must come from the IDENTICAL instrument or the
+    comparison means nothing -- gating one and not the other would silently
+    change what the tables compare. The estimator's refusal machinery is still
+    live for every other axis; only the SNR-vs-own-floor gate is deferred to
+    the probe that already measures it."""
+    return am.inharmonic_fraction_db(x, f0, sr, guard=GUARD,
+                                     min_headroom_db=None).require(what)
 
 
 def rms_db(x: np.ndarray) -> float:

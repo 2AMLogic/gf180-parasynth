@@ -2044,3 +2044,71 @@ def test_the_tests_read_the_same_corpus_location_as_the_runner(monkeypatch, tmp_
     assert rc.configured_refs() == tmp_path
     monkeypatch.delenv(rc.REFS_ENV)
     assert rc.configured_refs() == pathlib.Path(rc.REFS_DEFAULT)
+
+
+# ===========================================================================
+# the runner as a SCRIPT -- the thing that ships, not the thing pytest imports
+# ===========================================================================
+# Every test above reaches `run_case.py` through `import run_case as rc`, so its
+# module body executes exactly once under exactly one name. CI does not: it runs
+# `python tools/run_case.py <case>`, where the body executes as `__main__` AND
+# again as `run_case` via the pre-existing self-import at
+# `tools/probes/f1_selected_path.py:68`. #115 put three `register_domain` calls
+# in that body, and the registry's unconditional duplicate-raise turned every
+# F1 case into `no verdict: ValueError: band_pair_db already declares a domain`
+# -- with this file's 356 tests still green, because they never split the two
+# module identities. These two tests close that gap: the first is the cheap
+# mechanism, the second is the actual entry point.
+def _run_script(args: list[str], timeout: int = 600) -> "subprocess.CompletedProcess":
+    import subprocess
+    return subprocess.run([sys.executable, *args], cwd=ROOT,
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def test_run_case_module_body_survives_executing_twice_in_one_process():
+    """The mechanism, in ~2 s: load `run_case.py` a second time under a second
+    module name, which is what `__main__` + `import run_case` amounts to. Both
+    copies must declare the same domains without raising, and the registry must
+    hold ONE entry per estimator."""
+    prog = (
+        "import importlib.util, pathlib, sys\n"
+        "root = pathlib.Path.cwd()\n"
+        "sys.path.insert(0, str(root / 'tools'))\n"
+        "sys.path.insert(0, str(root / 'model'))\n"
+        "import audio_measure as am\n"
+        "import run_case as first\n"                      # body execution #1
+        "before = dict(am.DOMAINS)\n"
+        "path = root / 'tools' / 'run_case.py'\n"
+        "spec = importlib.util.spec_from_file_location('run_case_second_copy', path)\n"
+        "second = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(second)\n"               # body execution #2
+        "assert set(am.DOMAINS) == set(before), (set(am.DOMAINS) ^ set(before))\n"
+        "for name, d in before.items():\n"
+        "    assert am.DOMAINS[name] is d, name\n"
+        "for n in ('band_pair_db', 'balance_trajectory_db', 'tone_ratio_db'):\n"
+        "    assert n in am.DOMAINS, n\n"
+        "    assert getattr(second, 'BAND_PAIR_DOMAIN', None) is not None\n"
+        "print('TWICE OK')\n")
+    got = _run_script(["-c", prog], timeout=300)
+    assert got.returncode == 0, (got.stdout + got.stderr)[-3000:]
+    assert "TWICE OK" in got.stdout, got.stdout[-2000:]
+
+
+def test_run_case_script_reaches_a_verdict_on_a_filter_case(tmp_path):
+    """The entry point CI actually drives, for real, on the case family that
+    broke: `python tools/run_case.py F1A --results <dir>` must reach a MEASURED
+    verdict. Deliberately not asserting `pass` -- that is the scorecard's call
+    and may legitimately change. What must never come back is `no verdict`
+    caused by an exception in the runner's own import path."""
+    got = _run_script(["tools/run_case.py", "F1A", "--results", str(tmp_path)])
+    out = got.stdout + got.stderr
+    assert "already declares a domain" not in out, out[-3000:]
+    assert "Traceback" not in out, out[-3000:]
+    assert got.returncode in (0, 1), f"exit {got.returncode}\n{out[-3000:]}"
+    assert "no verdict" not in got.stdout, (
+        "F1A reached no measured verdict as a SCRIPT while the imported-module "
+        f"tests above are green -- the #115 regression's exact shape:\n{out[-3000:]}")
+    payload = json.loads((tmp_path / "F1A.json").read_text())
+    whys = [m.get("why", "") for m in payload.get("metrics", {}).values()
+            if isinstance(m, dict)]
+    assert not any("already declares a domain" in (w or "") for w in whys), whys
