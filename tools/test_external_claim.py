@@ -1,12 +1,16 @@
 import copy
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 import external_claim as ec
 
-ENV = dict(host="dawdreamer", host_version="0.9.0", binary_sha256="ab" * 32, block_size=512,
-           sample_rate=48000, licence_state="licensed", preset="init")
+ENV = dict(host="dawdreamer", host_version="0.9.0", loader="vst3", machine="mac-a",
+           binary_sha256="ab" * 32, block_size=512, sample_rate=48000,
+           licence_state="licensed", preset="init")
 
 
 def neg():
@@ -48,3 +52,57 @@ def test_readback_octave_down_and_silence_and_pin():
 
 def test_committed_data_passes():
     assert ec.main() == 0
+
+
+def _write(tmp_path, data):
+    p = tmp_path / "claims.json"
+    p.write_text(json.dumps(data))
+    return p
+
+
+def test_main_fails_on_bad_committed_record(tmp_path):
+    # Control for the data gate: the same main() that passes the committed
+    # file must go red on a judgeable but non-compliant record.
+    c = neg(); del c["second_route"]
+    assert ec.main(_write(tmp_path, {"claims": [c]})) == 1
+    c = dict(id="p", polarity="positive", environment={k: v for k, v in ENV.items() if k != "preset"})
+    assert ec.main(_write(tmp_path, {"claims": [c]})) == 1
+    assert ec.main(_write(tmp_path, {"claims": [neg()]})) == 0
+
+
+def test_main_refuses_record_without_polarity_or_environment(tmp_path):
+    for drop in ("polarity", "environment"):
+        c = {k: v for k, v in neg().items() if k != drop}
+        assert ec.main(_write(tmp_path, {"claims": [c]})) == 2, drop
+    assert ec.main(_write(tmp_path, {"claims": ["not a record"]})) == 2
+    assert ec.main(tmp_path / "absent.json") == 2
+
+
+def test_route_differing_only_by_omission_refused():
+    for k in ("loader", "machine"):
+        c = neg()
+        c["second_route"]["environment"] = {a: b for a, b in ENV.items() if a != k}
+        assert any(f"environment.{k}" in p for p in ec.check_claim(c)), k
+
+
+def test_host_table_unbacked_fact_fails_and_consumer_refuses(tmp_path):
+    table = {"Model D": {"dawdreamer 0.9.0": {"observed": "silent", "status": "verified",
+                                              "claim": "missing"}}}
+    p = _write(tmp_path, {"claims": [], "host_per_plugin": table})
+    assert ec.main(p) == 1
+    table["Model D"]["dawdreamer 0.9.0"] = {"observed": "silent"}  # no status
+    assert ec.main(_write(tmp_path, {"claims": [], "host_per_plugin": table})) == 1
+    table["Model D"]["dawdreamer 0.9.0"] = {"observed": "silent", "status": "unverified"}
+    p = _write(tmp_path, {"claims": [], "host_per_plugin": table})
+    assert ec.main(p) == 0
+    with pytest.raises(ec.Unverified):
+        ec.host_result("Model D", "dawdreamer 0.9.0", p)
+    table["Model D"]["dawdreamer 0.9.0"] = {"observed": "silent", "status": "verified", "claim": "x"}
+    p = _write(tmp_path, {"claims": [neg()], "host_per_plugin": table})
+    assert ec.main(p) == 0
+    assert ec.host_result("Model D", "dawdreamer 0.9.0", p) == "silent"
+
+
+def test_committed_host_table_is_not_consumable_as_fact():
+    with pytest.raises(ec.Unverified):
+        ec.host_result("Model D", "dawdreamer 0.9.0")
