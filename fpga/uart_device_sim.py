@@ -127,6 +127,15 @@ class UartDeviceSim:
         self.booted = False
         # observation, the harness's ground truth
         self.writes: list = []                  # (frame, flag, sec, addr, data, src)
+        # ... and the same writes' frames UNWRAPPED, one per entry in `writes`.
+        # The device's 16-bit log cannot show a gap of g frames apart from
+        # g - 2^16, so a harness that unwraps it is asserting a precondition it
+        # cannot check from the log alone (#474). This is the sim's own
+        # absolute timeline, known independently of any unwrap, so a harness
+        # can check its answer instead of assuming it. It is OBSERVATION, not
+        # contract: a board has no such log, which is why the unwrap must still
+        # refuse an unsafe schedule rather than lean on this.
+        self.write_frames: list = []
         self.received: list = []                # ("write"|"event"|"status"|"abort", detail)
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
@@ -328,12 +337,17 @@ class UartDeviceSim:
         """A device frame as frames-since-start (unwrapped)."""
         return (frame - self.epoch) & 0xFFFF
 
-    def _frame_at(self, t: float) -> int:
+    def _abs_frame_at(self, t: float) -> int:
+        """The device frame at `t`, NOT wrapped to 16 bits: the counter the
+        hardware would have if it were wide enough. Observation only."""
         if self.frame_freeze_t is not None:
             # the audio clock stopped (the counter and the queue with it);
             # the UART parser runs on its own clock and still answers
             t = min(t, self.frame_freeze_t)
-        return (self.epoch + int((t - self._t0) * SR)) & 0xFFFF
+        return self.epoch + int((t - self._t0) * SR)
+
+    def _frame_at(self, t: float) -> int:
+        return self._abs_frame_at(t) & 0xFFFF
 
     def _mono_of_frame(self, frame: int, *, mid: bool = True) -> float:
         """The wall-clock instant a device frame occurs. A half-frame offset
@@ -380,7 +394,8 @@ class UartDeviceSim:
         not (#329). Wall-clock jitter around that instant is apparatus noise
         below the device's frame resolution and must not smear into the
         recorded schedule."""
-        f = self._frame_at(self._cursor)
+        f_abs = self._abs_frame_at(self._cursor)
+        f = f_abs & 0xFFFF
         ev_ready = bool(self.evq_count) and (((f - self.evq[0][0]) & 0xFFFF) < 0x8000)
         wr_ready = (bool(self.wrq_count) and not ev_ready
                     and (((f - self.wrq[0][0] - 1) & 0xFFFF) < 0x8000))
@@ -400,6 +415,7 @@ class UartDeviceSim:
             stamp, flag, sec, addr, data = self.wrq.pop(0)
             self.wrq_count -= 1
             self.writes.append((logged, flag, sec, addr, data, "live"))
+        self.write_frames.append(f_abs)          # logged, unwrapped (#474)
         self._fires_this_frame += 1
         return True
 

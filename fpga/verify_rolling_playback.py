@@ -37,6 +37,8 @@ CONTROLS (each must turn the run red for its recorded reason):
   WATERMARK_PRELOAD   watermark verdict sent unthrottled -> device drops, FAIL
   corrupt-byte        one payload bit flipped on the wire -> checksum ERR, FAIL
   reset-mid           device reset mid-phrase -> host REFUSES, never continues
+  UNWRAP_LONG_REST    a 1 s rest between bars -> writes further apart than a
+                      16-bit frame log can step -> REFUSED, not measured
 
 Exit 0 when every clean case passes and every control is caught for its
 reason, 1 otherwise, 2 refused (apparatus precondition failed).
@@ -167,8 +169,45 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
             "h": h, "want": want}
 
 
-def _unwrap(frames16: list, start: int) -> list:
-    """16-bit device frames as a monotone timeline beginning near `start`."""
+class UnwrapRefused(RuntimeError):
+    """The 16-bit frame log cannot be unwrapped unambiguously here."""
+
+
+UNWRAP_GAP_BOUND = 0x8000
+"""The largest step `_unwrap` can read. Its own branch is `d < 0x8000 ->
+forward, else backward`, so a TRUE forward gap of 0x8000 or more is read as a
+backward one: the bound is 0x8000, not the 0x10000 of the forward-only
+`naive_unwrap` in fpga/test_play_song.py. Same ambiguity, a different half of
+it, because this unwrap admits backward steps (the link can log two writes out
+of frame order) and that one does not."""
+
+
+def _unwrap(frames16: list, start: int, expected: list) -> list:
+    """16-bit device frames as a monotone timeline beginning near `start`.
+
+    PRECONDITION, ASSERTED HERE RATHER THAN ASSUMED (#474): consecutive
+    writes are less than UNWRAP_GAP_BOUND frames apart. A modulo-2^16 step
+    cannot show a longer gap -- g and g - 2^16 are the same 16-bit step -- and
+    the log itself cannot say which happened, so `expected` (the schedule the
+    run is checked against, in frames from `start`) is checked instead and an
+    unmeasurable one REFUSES rather than being silently mis-unwrapped.
+
+    WHAT THE PRECONDITION DOES NOT COVER, because the expected schedule cannot
+    say it: a write DELIVERED an exact multiple of 2^16 frames off its due
+    frame is unwrapped straight back onto it, and one delivered further than
+    0x8000 off is aliased to the wrong size and possibly the wrong sign. The
+    first is undetectable from the log; the second is still reported (as a
+    write off its frame) but with a wrong number attached. `check()` closes
+    both against the sim's own unwrapped log, which a board does not have --
+    see `_unwrap_offsets`."""
+    gaps = [b - a for a, b in zip(expected, expected[1:])]
+    worst = max((abs(g) for g in gaps), default=0)
+    if worst >= UNWRAP_GAP_BOUND:
+        raise UnwrapRefused(
+            f"the expected schedule steps {worst} frames between consecutive "
+            f"writes; a 16-bit frame log cannot tell that from "
+            f"{worst - 0x10000}, so this run cannot be unwrapped (bound "
+            f"{UNWRAP_GAP_BOUND})")
     out, prev, acc = [], start & 0xFFFF, start
     for f in frames16:
         d = (f - prev) & 0xFFFF
@@ -178,13 +217,28 @@ def _unwrap(frames16: list, start: int) -> list:
     return out
 
 
+def _unwrap_offsets(got_frames: list, truth: list) -> list:
+    """How far `_unwrap`'s answer sits from the device's own UNWRAPPED log,
+    which the sim keeps (`UartDeviceSim.write_frames`) and a board does not.
+
+    Every unambiguous step moves both timelines by the same amount, so a
+    correct unwrap is a SINGLE constant offset -- `start` is a 16-bit value and
+    the truth is not, so the constant is whatever whole wraps separate them.
+    Two or more offsets means some step was read as its alias: the answer is
+    wrong from that write on, and the harness must refuse rather than report
+    it. This is the one check here whose reference is independent of the thing
+    being measured."""
+    return sorted({g - t for g, t in zip(got_frames, truth)})
+
+
 def check(run: dict) -> dict:
     """Compare what the device executed with the fixture's intent."""
     h, want = run["h"], run["want"]
     sim, bridge = h.sim, h.bridge
     res = {"rc": run["rc"], "reasons": []}
+    ev_i = [i for i, w in enumerate(sim.writes) if w[5] == "event"]
     live = [w for w in sim.writes if w[5] == "live"]
-    ev = [w for w in sim.writes if w[5] == "event"]
+    ev = [sim.writes[i] for i in ev_i]
     res["static_executed"] = len(live)
     res["static_intended"] = len(want["static"])
     res["timed_executed"] = len(ev)
@@ -218,7 +272,38 @@ def check(run: dict) -> dict:
     if live and ((p0 - live[-1][0]) & 0xFFFF) >= 0x8000:
         res["reasons"].append(f"t=0 f{p0} precedes the last static write "
                               f"f{live[-1][0]}")
-    got_frames = _unwrap([w[0] for w in ev], p0)
+    # The device logs 16-bit frames. Unwrapping them is only unambiguous while
+    # consecutive writes stay inside UNWRAP_GAP_BOUND, which the log cannot
+    # show -- so the EXPECTED schedule is checked and an unmeasurable one
+    # REFUSES (#474). t=0 leads it: the first timed write is unwrapped from
+    # `p0`, so its own distance from t=0 is a step like any other. A held
+    # note's gate-off IS t=0 and the phrase behind it is placed by the host,
+    # so that one step is not in the expectation -- `_unwrap_offsets` below is
+    # what covers it.
+    try:
+        got_frames = _unwrap([w[0] for w in ev], p0,
+                             [0] + [e[0] for e in want["timed"]])
+    except UnwrapRefused as exc:
+        res["refused"] = str(exc)
+        res["reasons"].append(f"REFUSED: {exc}")
+        res["ok"] = False
+        return res
+    # ... and then the answer is checked against the sim's own unwrapped log,
+    # which is not derived from it. Skipped after a reset: the device's frame
+    # counter (and the sim's absolute timeline with it) restarts at 0, so the
+    # two sides have no common origin to be constant about.
+    truth = [sim.write_frames[i] for i in ev_i]
+    if not sim.resets and len(truth) == len(got_frames):
+        offs = _unwrap_offsets(got_frames, truth)
+        res["unwrap_offsets"] = offs
+        if len(offs) > 1:
+            res["refused"] = (f"the frame log unwrapped to {len(offs)} different "
+                              f"offsets from the device's own unwrapped log "
+                              f"{offs}: at least one write is further than "
+                              f"{UNWRAP_GAP_BOUND} frames from the one before it")
+            res["reasons"].append(f"REFUSED: {res['refused']}")
+            res["ok"] = False
+            return res
     got = [(f - p0, w[1], w[2], w[3], w[4]) for f, w in zip(got_frames, ev)]
     exp = list(want["timed"])
     if want["held"]:
@@ -463,6 +548,12 @@ CONTROLS = {
                              for x in r["reasons"]),
                      "checksum ERR; the host sees the missing event at its "
                      "next window and REFUSES rather than play on with a hole"),
+    "UNWRAP_LONG_REST": ("bar808-rest", {},
+                         lambda r: bool(r.get("refused"))
+                         and "16-bit frame log" in r["refused"],
+                         "consecutive writes 0x8000 frames or more apart: the "
+                         "device's 16-bit log cannot be unwrapped, so the run "
+                         "is REFUSED rather than mis-measured"),
     "reset-mid": ("demo", {"reset_after_events": 100},
                   lambda r: r["rc"] == 2 and r["resets"] == 1
                   and r["timed_executed"] < r["timed_intended"],
@@ -559,6 +650,18 @@ def main(argv=None) -> int:
     ident = {"sender": image, "target": target,
              "target_contract_revision": uh.IMAGE_REVISION[target],
              "target_kit_sha256": (r1c.KIT_R14_SHA256 if target == r1c.HOST_IMAGE else None)}
+    refused = {k: r["refused"] for k, r in clean.items() if r.get("refused")}
+    if refused:
+        # the apparatus could not measure these runs. That is not a FAIL about
+        # the host, and must not be reported as one (#474).
+        record = {"tool": "fpga/verify_rolling_playback.py", "image": ident,
+                  "clean": clean, "controls": {}, "state": "REFUSED",
+                  "refused": refused}
+        (a.outdir / "verification.json").write_text(
+            json.dumps(record, indent=2, default=str) + "\n")
+        for k, why in refused.items():
+            print(f"verify_rolling_playback: REFUSED [{k}] -- {why}")
+        return 2
     if a.expect_fail:
         fails = {k: r.get("init_check") for k, r in clean.items()}
         caught = bool(clean) and all((not r["ok"]) and r.get("init_check")
