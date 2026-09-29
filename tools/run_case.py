@@ -245,6 +245,11 @@ def metric_purpose(name: str) -> str:
 #: the search covers exactly the range a unit is allowed to sit in.
 LINE_SEARCH_FRAC = 0.10
 
+#: How far above its own measured floor a reading has to sit before it is a
+#: measurement rather than the estimator. 6 dB, which is the margin
+#: `audio_measure.harmonic_signature` already uses for the same decision.
+FLOOR_MARGIN_DB = 6.0
+
 def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
                   hi: float | None = None, *, floor_db: float = -80.0) -> am.Estimate:
     """10*log10(energy above `split_hz` / energy below it), both inside
@@ -564,6 +569,58 @@ def _joint_headroom(al, ah, floor_lo, floor_hi):
     return np.minimum(la, lh), la, lh
 
 
+BALANCE_TRAJECTORY_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="balance_trajectory_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="both, and that is the point of it: a ratio at ONE "
+                            "INSTANT has no duration to fold a decay into, where "
+                            "band_pair_db's fixed window has"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="UNBOUNDED, by construction rather than by permission. "
+                            "This is the axis band_pair_db has to refuse on -- "
+                            "A^2*tau, not A^2 (#109) -- and it is the reason this "
+                            "estimator exists"),
+        am.DomainAxis(am.AXIS_SNR, lo=FLOOR_MARGIN_DB,
+                      units="dB above the record's own floor, on BOTH partials at "
+                            "once",
+                      basis="the joint-headroom gate. The floor is measured on the "
+                            "same record at guard frequencies known to hold neither "
+                            "partial (#92), never quoted"),
+        am.DomainAxis(am.AXIS_DETUNING, enforced=True,
+                      units="the caller's own f_lo_range / f_hi_range",
+                      basis="the lines are FOUND (partial_trajectory.find_partial) "
+                            "inside the ranges the operating point declares, not "
+                            "probed at a nominal; a range holding no line refuses"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, enforced=True,
+                      basis="line_is_resolved (#389): find_partial returns the "
+                            "STRONGEST line in its range, which on a record holding "
+                            "no partial is the pick's own selection bias -- white "
+                            "noise cleared the floor gate at both shipping "
+                            "operating points before this was added. The "
+                            "precondition is on the line's SHAPE, where that bias "
+                            "divides out"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, enforced=True,
+                      units="the caller's own t_end, in s",
+                      basis="t_end is an outer bound on the SEARCH, not a span that "
+                            "gets integrated, so a reference swap to a longer or "
+                            "shorter take does not change how much floor is "
+                            "averaged in -- there is no averaging"),
+    ),
+    worst_error="2.4 dB for RS and 1.1 dB for CB against known two-partial "
+                "signals at the shipping operating points; 2.37 dB worst over "
+                "true balances 0 to -24 dB at the shipped (1000, 1100) guard set",
+    evidence=("tools/measure_partial_balance.py `cmd_validate`",
+              "tools/probes/rs_guard_band.py",
+              "tools/test_run_case.py::test_balance_trajectory_db_* (six cases)"),
+    notes="#115 asked for the three ad-hoc validation measurements sitting "
+          "BESIDE the estimators to be relocated INTO them. This is one of the "
+          "three: the 2.4 dB figure was a comment in this file's "
+          "RS_BALANCE_OP block, reachable only by reading the comment.",
+))
+
+
 def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                           hop_ms: float, t_end: float, guards, min_gap_ms: float,
                           floor_margin_db: float = 6.0) -> am.Estimate:
@@ -628,7 +685,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
     f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
     if f_lo is None or f_hi is None:
         return am.Estimate(None, False, "no line found for one of the two partials",
-                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range))
+                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range),
+                           BALANCE_TRAJECTORY_DOMAIN)
     ts, al = PT.trajectory(x, sr, f_lo, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     _, ah = PT.trajectory(x, sr, f_hi, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     fl_lo = PT.floor_at(x, sr, f_lo, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
@@ -644,7 +702,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                            f"(best joint headroom {headroom[i]:.1f} dB at t={ts[i]*1e3:.1f} ms: "
                            f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
                            dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
-                                best_headroom_db=float(headroom[i])))
+                                best_headroom_db=float(headroom[i])),
+                           BALANCE_TRAJECTORY_DOMAIN)
     shapes = {}
     for tag, f in (("low", f_lo), ("high", f_hi)):
         shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
@@ -656,7 +715,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                                     unresolved_hz=float(f),
                                     line_resid_db=shape["resid_db"],
                                     line_tau_ms=shape["tau_ms"],
-                                    line_drop1_db=shape["drop1_db"]))
+                                    line_drop1_db=shape["drop1_db"]),
+                               BALANCE_TRAJECTORY_DOMAIN)
         shapes[tag] = shape
     i1 = int(idxs[0])
     balance1 = 20.0 * math.log10(ah[i1] / al[i1])
@@ -688,7 +748,7 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
         detail.update(t2_ms=float(ts[i2] * 1e3), balance2_db=balance2,
                      headroom2_db=float(headroom[i2]),
                      slope_db_per_ms=(balance2 - balance1) / dt_ms)
-    return am.Estimate(balance1, True, "", detail)
+    return am.Estimate(balance1, True, "", detail, BALANCE_TRAJECTORY_DOMAIN)
 
 
 def pitch_drop_hz(x, sr: int, band, *, early=(0.004, 0.018), late=(0.060, 0.150),
@@ -773,11 +833,6 @@ def attack_ms(x, sr: int, *, window_ms: float = 4.0,
         return am.Estimate(None, False, "no measurable rise", dict(ms=ms))
     return am.Estimate(ms, True, "", dict(peak_index=pk, window_ms=window_ms))
 
-
-#: How far above its own measured floor a reading has to sit before it is a
-#: measurement rather than the estimator. 6 dB, which is the margin
-#: `audio_measure.harmonic_signature` already uses for the same decision.
-FLOOR_MARGIN_DB = 6.0
 
 
 def find_line(x, sr: int, hz_nominal: float, *,

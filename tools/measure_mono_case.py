@@ -93,7 +93,14 @@ def _measure(x: np.ndarray, f0_cmd: float) -> dict:
     bad = [k for k in range(2, 13) if sig.get(f"h{k}") is not None and sig[f"h{k}"] > 0]
     if bad:
         raise Refused(f"harmonic qualification failed: harmonics above fundamental {bad}")
-    alias = am.inharmonic_fraction_db(x, f.value, SR)
+    # `min_headroom_db=None`: this report already carries the estimator's own
+    # `floor_db`/`headroom_db` in `estimator` below, so a caller reading the
+    # JSON can see when `inharmonic_db` is floor-limited rather than real
+    # content. #115's default SNR gate exists to stop a low-headroom reading
+    # being copied into a table AS IF it were trustworthy with no caveat
+    # attached; here the caveat travels with the number instead, which is the
+    # explicit opt-out the gate's own docstring names.
+    alias = am.inharmonic_fraction_db(x, f.value, SR, min_headroom_db=None)
     if not alias.ok:
         raise Refused(f"alias estimator refused: {alias.reason}")
     rms = float(np.sqrt(np.mean(x * x)))

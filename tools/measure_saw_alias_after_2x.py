@@ -70,6 +70,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
 import json
 import math
 import os
@@ -258,10 +259,24 @@ def load_report_estimator(commit: str = REPORT_COMMIT):
 def _report_read(mod, y: np.ndarray, f0_cmd: float) -> float:
     """One reading through the frozen table's own pipeline: refine f0 from the
     signal (the report does; assuming it was #87's third apparatus fault), then
-    the Hann-windowed inharmonic fraction."""
+    the Hann-windowed inharmonic fraction.
+
+    `min_headroom_db=None` where `mod` supports it (#115): this function
+    compares TWO INSTRUMENTS (the report's reconstructed one and, in the
+    injected-defect controls, today's) on the SAME signal, at 55 Hz where the
+    table's own rows sit at the estimator's floor by construction. A domain
+    refusal here would hide the very Hann-vs-Blackman-Harris disagreement this
+    check exists to catch, not protect against a low-confidence number -- the
+    comparison to the frozen table is what decides trustworthiness, not this
+    one reading in isolation. `mod` may be a historical `audio_measure.py`
+    loaded from before #115 added the parameter, so it is only passed when the
+    module accepts it."""
     fe = mod.refine_f0(y, f0_cmd, SR)
     f0 = fe.value if fe.ok else f0_cmd
-    est = mod.inharmonic_fraction_db(y, f0, SR)
+    kwargs = {}
+    if "min_headroom_db" in inspect.signature(mod.inharmonic_fraction_db).parameters:
+        kwargs["min_headroom_db"] = None
+    est = mod.inharmonic_fraction_db(y, f0, SR, **kwargs)
     if not est.ok:
         raise Refused(f"the report's own estimator refused at f0={f0_cmd:.1f}: {est.reason}")
     return float(est.value)
@@ -413,7 +428,12 @@ def reading(y: np.ndarray, f0: float, what: str) -> dict:
     it. `floor_limited` is the only honest answer when headroom is small: the
     number is then a property of the estimator, which is how this issue's whole
     55 Hz column came to be withdrawn."""
-    est = am.inharmonic_fraction_db(y, f0, SR)
+    # `min_headroom_db=None`: this function computes its OWN `floor_limited`
+    # label below, at this file's own `MIN_HEADROOM_DB` (3 dB) rather than the
+    # estimator's default domain gate (6 dB, #115) -- so it needs the raw
+    # value+headroom back even when headroom is small, not a refusal in place
+    # of the data its own gate is about to look at.
+    est = am.inharmonic_fraction_db(y, f0, SR, min_headroom_db=None)
     if not est.ok:
         return dict(what=what, value=None, refused=est.reason)
     hd = float(est.detail["headroom_db"])
