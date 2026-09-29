@@ -262,7 +262,11 @@ def test_an_ideal_waveform_has_less_inharmonic_energy_than_ours():
     """Sanity on the direction of the measure: the closed-form band-limited
     saw must read lower than any real oscillator at the same pitch."""
     f0 = vf.note_hz(88)
-    a = am.inharmonic_fraction_db(ideal("saw", f0, int(0.3 * SR)), f0, SR).require("ideal")
+    # `ideal` is the closed-form band-limited saw: alias-free by construction,
+    # so this reading IS the estimator's own floor and is requested on
+    # purpose with `min_headroom_db=None` (#115).
+    a = am.inharmonic_fraction_db(ideal("saw", f0, int(0.3 * SR)), f0, SR,
+                                  min_headroom_db=None).require("ideal")
     b = am.inharmonic_fraction_db(_osc("saw", 88), f0, SR).require("ours")
     assert a < b, (a, b)
 

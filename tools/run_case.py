@@ -253,6 +253,17 @@ def metric_purpose(name: str) -> str:
 # written, and an estimator that has never met a signal with a known answer is
 # not a measurement.
 # ===========================================================================
+#: How far either side of a NOMINAL partial frequency a real one is looked for.
+#: 10 % is the TR-808's own component tolerance on an oscillator's f0
+#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
+#: the search covers exactly the range a unit is allowed to sit in.
+LINE_SEARCH_FRAC = 0.10
+
+#: How far above its own measured floor a reading has to sit before it is a
+#: measurement rather than the estimator. 6 dB, which is the margin
+#: `audio_measure.harmonic_signature` already uses for the same decision.
+FLOOR_MARGIN_DB = 6.0
+
 def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
                   hi: float | None = None, *, floor_db: float = -80.0) -> am.Estimate:
     """10*log10(energy above `split_hz` / energy below it), both inside
@@ -287,21 +298,280 @@ def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
     return am.Estimate(r, True, "", dict(e_lo=e_lo, e_hi=e_hi))
 
 
-def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0) -> am.Estimate:
+#: How much of the fixed-window band ratio may be the DECAY rather than the
+#: balance before the answer is refused. DERIVED: a matched-decay pair already
+#: costs 0.41 dB at rimshot speed (`tools/probes/estimator_domains.py` 2, with
+#: the pre-onset lead `band_energy` requires), which is the irreducible cost of
+#: handing a fixed-window integral a decaying signal at all. A decay-rate
+#: mismatch adds 10*log10(tau_a/tau_b) on top of that, so the bound is the
+#: mismatch that adds no more than the matched pair already costs -- 0.5 dB,
+#: i.e. a tau ratio of 1.12. Above it the number is mostly the decay, and
+#: `balance_trajectory_db` is the estimator that has no window to fold in.
+BAND_PAIR_MAX_DECAY_BIAS_DB = 0.5
+
+#: How far inside its band a partial must sit. The TR-808's own component
+#: tolerance, +-10 % (docs/tr808-reference.md 1.7), the same figure
+#: `LINE_SEARCH_FRAC` and `tol_frequency` use: a band that does not hold the
+#: partial with that much margin cannot hold it for a DIFFERENT unit of the
+#: same machine. Measured cost at exactly that margin: 0.011 dB; at 2 % of the
+#: band's half-width from the edge, 5.3 dB.
+BAND_PAIR_EDGE_MARGIN = LINE_SEARCH_FRAC
+
+BAND_PAIR_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="band_pair_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="stationary is where it is exact (0.032 dB worst over "
+                            "a 54 dB range); decaying is inside the domain only "
+                            "with the decay-rate axis below satisfied, and costs "
+                            "0.41 dB even then"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, lo=-BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      hi=BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      units="dB of A^2*tau bias the record's own two bands imply",
+                      basis="a fixed-window band ratio is A^2*tau, not A^2 (#109), "
+                            "so unequal decay puts 10*log10(tau_a/tau_b) into the "
+                            "answer. Measured -6.0 dB of bias at a 4:1 tau ratio "
+                            "and -11.4 dB at 10:1, against a truth of 0 dB "
+                            "(tools/probes/estimator_domains.py 2). The bound is "
+                            "the mismatch that adds no more than the 0.41 dB a "
+                            "MATCHED decaying pair already costs"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=BAND_PAIR_EDGE_MARGIN, hi=None,
+                      units="fraction of the band edge a resolved line must clear",
+                      basis="the TR-808's own +-10 % component tolerance. A 4th-order "
+                            "Butterworth is -3 dB AT its edge: measured 0.011 dB of "
+                            "loss with 10 % of margin, 1.3 dB at 0.2 of the band's "
+                            "half-width and 6.0 dB sitting on the edge "
+                            "(tools/probes/estimator_domains.py 3). Enforced only "
+                            "when the band holds a resolvable line -- a cymbal band "
+                            "holds broadband content and has nothing to be detuned"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=0.0, units="Hz of overlap between "
+                      "the two bands",
+                      basis="two overlapping bands share energy, so the ratio counts "
+                            "the same partial on both sides; refused outright"),
+        am.DomainAxis(am.AXIS_SNR, lo=-80.0, hi=80.0, units="dB of band ratio",
+                      basis="the pre-existing `floor_db` gate: a ratio past it is an "
+                            "absence rather than a balance"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=0.050, units="s", enforced=False,
+                      basis="band_energy's own docstring: it filters rather than "
+                            "summing bins, and below about 50 ms a rectangular-FFT "
+                            "Parseval split is the better instrument. Declared, not "
+                            "enforced, because the caller windows the record"),
+    ),
+    worst_error="0.032 dB over a 54 dB range on stationary two-sine signals; "
+                "0.41 dB on a matched-decay pair at rimshot speed",
+    evidence=("tools/probes/estimator_domains.py sections 1-3",
+              "tools/test_run_case.py::test_band_pair_db_of_two_sines_is_their_amplitude_ratio",
+              "docs/conga-body-spectrum-spread.md section 2 -- the band-split "
+              "family's original closed-form validation, worst 0.088 dB over a "
+              "30 dB range, re-run against band_pair_db itself in section 1"),
+    notes="#115 relocated docs/conga-body-spectrum-spread.md's 0.088 dB check "
+          "onto this estimator and re-measured it here (0.032 dB on these "
+          "bands). The issue's own 'holds to 1.4 dB over +-10 % detuning' was "
+          "carried forward unverified by its curation pass and is NOT encoded: "
+          "the measured cost at +-10 % of band-edge margin is 0.011 dB, and "
+          "the 1.4 dB figure does not correspond to anything measured here.",
+))
+
+
+def _centroid_s(p, sr: int) -> float:
+    p = np.asarray(p, dtype=np.float64)
+    total = float(p.sum())
+    if total <= 0.0:
+        return 0.0
+    return float((np.arange(len(p)) / sr * p).sum()) / total
+
+
+def _band_ring_centroid_s(sr: int, band, n: int) -> float:
+    """The centroid of the BAND-PASS'S OWN power impulse response.
+
+    A 4th-order Butterworth of bandwidth B rings for about 1/B, so a narrow
+    band's filtered power lasts materially longer than a wide one's for the
+    same input. Measured on the two bands this file uses for the rimshot, that
+    alone put -1.03 dB of apparent decay mismatch into a signal whose two
+    partials decay at exactly the same rate. Centroids add under convolution,
+    so subtracting the filter's own is the correction -- and it is MEASURED
+    from the filter rather than derived from its bandwidth, so it stays right
+    if the order or the band edges change."""
+    from scipy.signal import sosfiltfilt
+    sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+    m = max(n, 8 * _sosfiltfilt_padlen(sos))
+    imp = np.zeros(m)
+    imp[0] = 1.0
+    return _centroid_s(sosfiltfilt(sos, imp) ** 2, sr)
+
+
+def _effective_span_s(p, sr: int, *, centroid_s: float | None = None) -> float:
+    """The EFFECTIVE integration length of one band's instantaneous power `p`,
+    in seconds: `E / p(0)` for a decaying band, the record length for a
+    stationary one, and the right thing in between.
+
+    For p(t) = P*exp(-t/theta) on [0, L] -- theta = tau/2, because power decays
+    twice as fast as amplitude -- the two things a fixed window can see are
+
+        g = E/P        = theta*(1 - exp(-L/theta))
+        c = centroid   = theta - L*exp(-L/theta)/(1 - exp(-L/theta))
+
+    and both are strictly monotone in theta/L, so measuring `c` and inverting
+    gives `g` without ever needing P. **The centroid is the estimator that
+    works at both ends**, which is why it is here rather than the obvious
+    first-half/second-half energy ratio: with tau = 6 ms in a 260 ms record the
+    second half holds nothing but the filter's own numerical floor, and the
+    ratio estimator saturates there -- measured, it read -0.8 dB of bias where
+    the truth was -6.0 dB. This one reads -6.0.
+
+    `c/L` is bounded by 1/2 (a stationary band), which is the degenerate case
+    the bisection is clamped to."""
+    p = np.asarray(p, dtype=np.float64)
+    n = len(p)
+    total = float(p.sum())
+    if n < 2 or total <= 0.0:
+        return n / sr
+    length_s = n / sr
+    c = _centroid_s(p, sr) if centroid_s is None else centroid_s
+    frac = c / length_s
+    if frac >= 0.5 - 1e-9:
+        return length_s
+    if frac <= 1e-9:
+        return 0.0
+
+    def centroid_frac(u):                        # u = theta / L
+        if u > 1e6:
+            return 0.5
+        e = math.exp(-1.0 / u)
+        return u - e / max(1.0 - e, 1e-300)
+
+    lo, hi = 1e-9, 1e6
+    for _ in range(200):
+        mid = math.sqrt(lo * hi)
+        if centroid_frac(mid) < frac:
+            lo = mid
+        else:
+            hi = mid
+    u = math.sqrt(lo * hi)
+    return length_s * u * (1.0 - math.exp(-1.0 / u))
+
+
+def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
+    """How much of a fixed-window `band_pair_db` is the DECAY rather than the
+    balance, estimated from the record itself.
+
+    A fixed-window band ratio is A^2*tau, not A^2 (#109): what it integrates is
+    each band's own effective span, so the answer carries
+    10*log10(span_a/span_b) on top of the amplitude ratio it is read as.
+    `_effective_span_s` measures each span from the band-filtered power, so
+    subtracting the returned bias from the reported ratio recovers the
+    amplitude ratio.
+
+    Both spans are measured FROM THE RECORD'S OWN ONSET (`_onset_index`), not
+    from sample zero: a record that arrives with the pre-onset lead
+    `band_energy` requires would otherwise charge that lead to both bands and
+    pull every span towards the record length.
+
+    Validated against known tau pairs in `tools/probes/estimator_domains.py` 2."""
+    from scipy.signal import sosfiltfilt
+    x = np.asarray(x, dtype=np.float64)
+    if len(x) < 8:
+        return 0.0
+    i0 = _onset_index(x)
+    seg = x[i0:]
+    if len(seg) < 8:
+        return 0.0
+    spans = []
+    for band in (band_a, band_b):
+        sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+        if len(seg) <= _sosfiltfilt_padlen(sos):
+            return 0.0
+        p = sosfiltfilt(sos, seg) ** 2
+        c = _centroid_s(p, sr) - _band_ring_centroid_s(sr, band, len(seg))
+        spans.append(_effective_span_s(p, sr, centroid_s=max(c, 0.0)))
+    return 10.0 * math.log10(max(spans[0], 1e-300) / max(spans[1], 1e-300))
+
+
+def _line_edge_margin(x, sr: int, band) -> tuple:
+    """(fractional margin of the band's strongest line from the nearer edge,
+    the line's frequency), or (None, None) when the band holds no resolvable
+    line -- which is not a failure: a cymbal band holds broadband content and
+    has no line to be detuned."""
+    lo, hi = float(band[0]), float(band[1])
+    e = am.dominant_frequency(x, lo, hi, sr, min_prominence_db=6.0)
+    if not e.ok or e.value is None:
+        return None, None
+    f = float(e.value)
+    return min(f / lo - 1.0, hi / f - 1.0), f
+
+
+def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0,
+                 min_decay_bias_db: float | None = BAND_PAIR_MAX_DECAY_BIAS_DB,
+                 edge_margin: float | None = BAND_PAIR_EDGE_MARGIN) -> am.Estimate:
     """10*log10(energy in `band_a` / energy in `band_b`), for a voice whose
     balance is between two named partials rather than either side of one
     split -- the rimshot's two bridged-T modes, the cymbal's bands.
 
-    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio."""
+    IT DECLARES A DOMAIN AND REFUSES OUTSIDE IT (#115)
+    --------------------------------------------------
+    `BAND_PAIR_DOMAIN` is this function's validated envelope as data, and the
+    two axes it enforces are the two ways this measure is read as something it
+    is not:
+
+      * **decay rate.** A fixed-window band ratio is A^2*tau, not A^2 -- the
+        thing `balance_trajectory_db`'s docstring has said since #109 and
+        which nothing checked. `band_pair_decay_bias_db` estimates that term
+        FROM THE RECORD, and a record whose two bands decay far enough apart
+        to put more than `min_decay_bias_db` into the answer is refused
+        rather than reported: measured bias reaches -6.0 dB at a 4:1 tau ratio
+        and -11.4 dB at 10:1, against a 3 dB energy-ratio tolerance.
+      * **detuning.** A 4th-order Butterworth is -3 dB at its own edge, so a
+        partial that has drifted towards one reads low -- 6.0 dB low sitting
+        on the edge. A band whose strongest line does not clear both edges by
+        `edge_margin` (the TR-808's own +-10 %) is refused. A band with no
+        resolvable line is not checked, because broadband content has nothing
+        to detune.
+
+    Pass `min_decay_bias_db=None` / `edge_margin=None` to measure the
+    out-of-domain case deliberately -- which is what
+    `tools/probes/estimator_domains.py` does to produce the numbers above, and
+    the only honest way to ask an estimator what it does where it is wrong.
+
+    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio,
+    test_band_pair_db_refuses_partials_that_decay_at_different_rates,
+    test_band_pair_db_refuses_a_partial_sitting_on_a_band_edge."""
+    lo_a, hi_a = float(band_a[0]), float(band_a[1])
+    lo_b, hi_b = float(band_b[0]), float(band_b[1])
+    overlap = min(hi_a, hi_b) - max(lo_a, lo_b)
+    if overlap > 0.0:
+        return BAND_PAIR_DOMAIN.refuse(am.AXIS_PARTIAL_SEPARATION, -overlap,
+                                       band_a=(lo_a, hi_a), band_b=(lo_b, hi_b))
     e_a, e_b = am.band_energy(x, (tuple(band_a), tuple(band_b)), sr)
     if e_a <= 0.0 or e_b <= 0.0:
         return am.Estimate(None, False, "one of the two bands holds no energy",
-                           dict(e_a=e_a, e_b=e_b))
+                           dict(e_a=e_a, e_b=e_b), BAND_PAIR_DOMAIN)
     r = 10.0 * math.log10(e_a / e_b)
     if r < floor_db or r > -floor_db:
         return am.Estimate(None, False, "band ratio past the stated floor",
-                           dict(ratio_db=r, floor_db=floor_db))
-    return am.Estimate(r, True, "", dict(e_a=e_a, e_b=e_b))
+                           dict(ratio_db=r, floor_db=floor_db), BAND_PAIR_DOMAIN)
+    detail = dict(e_a=e_a, e_b=e_b)
+    if edge_margin is not None:
+        for tag, band in (("a", band_a), ("b", band_b)):
+            margin, f = _line_edge_margin(x, sr, band)
+            if margin is None:
+                continue
+            detail[f"line_{tag}_hz"], detail[f"edge_margin_{tag}"] = f, margin
+            if margin < edge_margin:
+                return BAND_PAIR_DOMAIN.refuse(
+                    am.AXIS_DETUNING, margin, lo=edge_margin, ratio_db=r,
+                    band=tag, line_hz=f, band_lo=float(band[0]), band_hi=float(band[1]),
+                    **detail)
+    if min_decay_bias_db is not None:
+        bias = band_pair_decay_bias_db(x, sr, band_a, band_b)
+        detail["decay_bias_db"] = bias
+        if abs(bias) > min_decay_bias_db:
+            return BAND_PAIR_DOMAIN.refuse(
+                am.AXIS_DECAY_RATE, bias, lo=-min_decay_bias_db, hi=min_decay_bias_db,
+                ratio_db=r, balance_db=r - bias, **detail)
+    else:
+        detail["decay_bias_db"] = band_pair_decay_bias_db(x, sr, band_a, band_b)
+    return am.Estimate(r, True, "", detail, BAND_PAIR_DOMAIN)
 
 
 def _joint_headroom(al, ah, floor_lo, floor_hi):
@@ -311,6 +581,58 @@ def _joint_headroom(al, ah, floor_lo, floor_hi):
     la = 20.0 * np.log10(np.clip(al, 1e-300, None) / np.clip(floor_lo, 1e-300, None))
     lh = 20.0 * np.log10(np.clip(ah, 1e-300, None) / np.clip(floor_hi, 1e-300, None))
     return np.minimum(la, lh), la, lh
+
+
+BALANCE_TRAJECTORY_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="balance_trajectory_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="both, and that is the point of it: a ratio at ONE "
+                            "INSTANT has no duration to fold a decay into, where "
+                            "band_pair_db's fixed window has"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="UNBOUNDED, by construction rather than by permission. "
+                            "This is the axis band_pair_db has to refuse on -- "
+                            "A^2*tau, not A^2 (#109) -- and it is the reason this "
+                            "estimator exists"),
+        am.DomainAxis(am.AXIS_SNR, lo=FLOOR_MARGIN_DB,
+                      units="dB above the record's own floor, on BOTH partials at "
+                            "once",
+                      basis="the joint-headroom gate. The floor is measured on the "
+                            "same record at guard frequencies known to hold neither "
+                            "partial (#92), never quoted"),
+        am.DomainAxis(am.AXIS_DETUNING, enforced=True,
+                      units="the caller's own f_lo_range / f_hi_range",
+                      basis="the lines are FOUND (partial_trajectory.find_partial) "
+                            "inside the ranges the operating point declares, not "
+                            "probed at a nominal; a range holding no line refuses"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, enforced=True,
+                      basis="line_is_resolved (#389): find_partial returns the "
+                            "STRONGEST line in its range, which on a record holding "
+                            "no partial is the pick's own selection bias -- white "
+                            "noise cleared the floor gate at both shipping "
+                            "operating points before this was added. The "
+                            "precondition is on the line's SHAPE, where that bias "
+                            "divides out"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, enforced=True,
+                      units="the caller's own t_end, in s",
+                      basis="t_end is an outer bound on the SEARCH, not a span that "
+                            "gets integrated, so a reference swap to a longer or "
+                            "shorter take does not change how much floor is "
+                            "averaged in -- there is no averaging"),
+    ),
+    worst_error="2.4 dB for RS and 1.1 dB for CB against known two-partial "
+                "signals at the shipping operating points; 2.37 dB worst over "
+                "true balances 0 to -24 dB at the shipped (1000, 1100) guard set",
+    evidence=("tools/measure_partial_balance.py `cmd_validate`",
+              "tools/probes/rs_guard_band.py",
+              "tools/test_run_case.py::test_balance_trajectory_db_* (six cases)"),
+    notes="#115 asked for the three ad-hoc validation measurements sitting "
+          "BESIDE the estimators to be relocated INTO them. This is one of the "
+          "three: the 2.4 dB figure was a comment in this file's "
+          "RS_BALANCE_OP block, reachable only by reading the comment.",
+))
 
 
 def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
@@ -377,7 +699,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
     f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
     if f_lo is None or f_hi is None:
         return am.Estimate(None, False, "no line found for one of the two partials",
-                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range))
+                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range),
+                           BALANCE_TRAJECTORY_DOMAIN)
     ts, al = PT.trajectory(x, sr, f_lo, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     _, ah = PT.trajectory(x, sr, f_hi, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
     fl_lo = PT.floor_at(x, sr, f_lo, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
@@ -393,7 +716,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                            f"(best joint headroom {headroom[i]:.1f} dB at t={ts[i]*1e3:.1f} ms: "
                            f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
                            dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
-                                best_headroom_db=float(headroom[i])))
+                                best_headroom_db=float(headroom[i])),
+                           BALANCE_TRAJECTORY_DOMAIN)
     shapes = {}
     for tag, f in (("low", f_lo), ("high", f_hi)):
         shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
@@ -405,7 +729,8 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
                                     unresolved_hz=float(f),
                                     line_resid_db=shape["resid_db"],
                                     line_tau_ms=shape["tau_ms"],
-                                    line_drop1_db=shape["drop1_db"]))
+                                    line_drop1_db=shape["drop1_db"]),
+                               BALANCE_TRAJECTORY_DOMAIN)
         shapes[tag] = shape
     i1 = int(idxs[0])
     balance1 = 20.0 * math.log10(ah[i1] / al[i1])
@@ -437,7 +762,7 @@ def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
         detail.update(t2_ms=float(ts[i2] * 1e3), balance2_db=balance2,
                      headroom2_db=float(headroom[i2]),
                      slope_db_per_ms=(balance2 - balance1) / dt_ms)
-    return am.Estimate(balance1, True, "", detail)
+    return am.Estimate(balance1, True, "", detail, BALANCE_TRAJECTORY_DOMAIN)
 
 
 def pitch_drop_hz(x, sr: int, band, *, early=(0.004, 0.018), late=(0.060, 0.150),
@@ -523,17 +848,6 @@ def attack_ms(x, sr: int, *, window_ms: float = 4.0,
     return am.Estimate(ms, True, "", dict(peak_index=pk, window_ms=window_ms))
 
 
-#: How far either side of a NOMINAL partial frequency a real one is looked for.
-#: 10 % is the TR-808's own component tolerance on an oscillator's f0
-#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
-#: the search covers exactly the range a unit is allowed to sit in.
-LINE_SEARCH_FRAC = 0.10
-
-#: How far above its own measured floor a reading has to sit before it is a
-#: measurement rather than the estimator. 6 dB, which is the margin
-#: `audio_measure.harmonic_signature` already uses for the same decision.
-FLOOR_MARGIN_DB = 6.0
-
 
 def find_line(x, sr: int, hz_nominal: float, *,
               search: float = LINE_SEARCH_FRAC) -> am.Estimate:
@@ -580,8 +894,79 @@ def _amplitude_at(x, sr: int, hz: float, label: str) -> am.Estimate:
     return e
 
 
+#: How many FFT bins apart the two lines must sit. MEASURED, against the
+#: 8-bin figure `windowed_tone_amplitude`'s docstring states for itself: over a
+#: full sweep of relative phase the ratio is exact to 0.0000 dB at 4 bins,
+#: costs 0.22 dB at 3 and 3.45 dB at 2 (tools/probes/estimator_domains.py 4b).
+#: So the docstring's bound is conservative by 2x and 4 bins is where the
+#: measurement puts the last exact point -- encoding 8 would refuse readings
+#: that are exact, which is the over-aggressive half of this failure.
+TONE_RATIO_MIN_SEPARATION_BINS = 4.0
+
+TONE_RATIO_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="tone_ratio_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary",), enforced=False,
+                      basis="a coherent projection over one fixed window. On a "
+                            "DECAYING pair at rimshot speed (tau ~ 6 ms) the lines "
+                            "are too broad for find_line to resolve and this "
+                            "refuses -- measured, both for matched and for 4:1 "
+                            "mismatched decay (tools/probes/estimator_domains.py 4d "
+                            "and tools/probes/verify_109_claims.py 1b). It does not "
+                            "report a biased ratio, which is the pre-#108 behaviour "
+                            "the issue that asked for this file withdrew"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=-LINE_SEARCH_FRAC, hi=LINE_SEARCH_FRAC,
+                      units="fraction off the nominal frequency",
+                      basis="the TR-808's own +-10 % component tolerance, which is "
+                            "find_line's search band. Measured EXACT to 0.0008 dB "
+                            "at 0/1/5/9/9.9 % off nominal, and a REFUSAL at 15 % "
+                            "(tools/probes/estimator_domains.py 4a). This is the "
+                            "post-#108 behaviour; the pre-#108 losses of 7.3 dB at "
+                            "1 % and 16.0 dB at 5 % are withdrawn and are NOT what "
+                            "this domain describes"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=TONE_RATIO_MIN_SEPARATION_BINS,
+                      units="FFT bins between the two found lines",
+                      basis="measured over a full sweep of relative phase: 0.0000 dB "
+                            "of error at 4 bins and wider, 0.22 dB at 3, 3.45 dB at "
+                            "2, 5.24 dB at 1 (tools/probes/estimator_domains.py 4b). "
+                            "windowed_tone_amplitude's docstring claims 8 bins; the "
+                            "measurement says that is conservative by 2x"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=4.0,
+                      units="FFT bins the +-search band spans",
+                      basis="what binds is find_line's search band holding a "
+                            "resolvable peak, not windowed_tone_amplitude's 12 "
+                            "periods: measured exact at 4.3 bins of search band "
+                            "(40 ms at 540 Hz) and REFUSED at 3.2 "
+                            "(tools/probes/estimator_domains.py 4c)"),
+        am.DomainAxis(am.AXIS_SNR, lo=6.0, units="dB of peak prominence in the "
+                      "search band",
+                      basis="dominant_frequency's own min_prominence_db, which is "
+                            "what find_line refuses on"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="not separately bounded: differential decay shows up "
+                            "here as lines too broad to resolve, and the "
+                            "signal_class axis above is where that is recorded"),
+    ),
+    worst_error="0.0008 dB over +-10 % of detuning on stationary two-tone "
+                "signals, at 4 bins of separation and wider",
+    evidence=("tools/probes/estimator_domains.py section 4",
+              "tools/probes/verify_109_claims.py section 1",
+              "tools/test_run_case.py::test_tone_ratio_db_of_two_known_sines",
+              "tools/test_run_case.py::"
+              "test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses"),
+    notes="#108 replaced the nominal-probe estimator with this find_line-based "
+          "one. The figures in #115's own table (-7.3 dB at 1 % detuning, "
+          "-16.0 at 5 %, -8.7 on differential decay) describe the ESTIMATOR "
+          "THAT WAS REPLACED and were withdrawn by that issue's own verified "
+          "corrections; verify_109_claims.py is the regression guard against "
+          "them being reinstated as a baseline.",
+))
+
+
 def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
-                  search: float = LINE_SEARCH_FRAC) -> am.Estimate:
+                  search: float = LINE_SEARCH_FRAC,
+                  min_separation_bins: float | None = TONE_RATIO_MIN_SEPARATION_BINS
+                  ) -> am.Estimate:
     """Level of the partial NEAR `hz_num` over the partial NEAR `hz_den`, in
     dB: both lines are found in the record and then measured between (#108).
 
@@ -590,28 +975,55 @@ def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
     now, while it is a no-op, rather than after a reference swap makes it a
     mystery.
 
+    ITS DOMAIN IS `TONE_RATIO_DOMAIN`, AND IT REFUSES OUTSIDE IT (#115)
+    -------------------------------------------------------------------
+    Three of its four axes were already enforced, by machinery that did not
+    say what it was enforcing: detuning past +-10 % and a search band too
+    narrow to hold a peak both come back from `find_line`, and a record too
+    short to project comes back from `windowed_tone_amplitude`. The one that
+    was NOT checked is PARTIAL SEPARATION -- two nominal frequencies close
+    enough that both searches land on the SAME line return 0.0 dB, a number
+    with no refusal anywhere in it. That is now refused, at the separation
+    measurement puts the last exact reading at rather than the one the window's
+    docstring claims.
+
+    Pass `min_separation_bins=None` to measure the unresolved case on purpose.
+
     Ground truth: test_tone_ratio_db_of_two_known_sines,
-    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses."""
+    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses,
+    test_tone_ratio_db_refuses_two_lines_inside_one_main_lobe."""
     fn, fd = find_line(x, sr, hz_num, search=search), find_line(x, sr, hz_den, search=search)
     if not fn.ok:
-        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail)
+        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail,
+                           TONE_RATIO_DOMAIN)
     if not fd.ok:
-        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail)
+        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail,
+                           TONE_RATIO_DOMAIN)
+    if min_separation_bins is not None and len(x):
+        bins = abs(fn.value - fd.value) * len(x) / sr
+        if bins < min_separation_bins:
+            return TONE_RATIO_DOMAIN.refuse(
+                am.AXIS_PARTIAL_SEPARATION, bins, lo=min_separation_bins,
+                num_hz=fn.value, den_hz=fd.value,
+                num_nominal_hz=hz_num, den_nominal_hz=hz_den,
+                bin_hz=sr / len(x))
     a = _amplitude_at(x, sr, fn.value, "numerator")
     b = _amplitude_at(x, sr, fd.value, "denominator")
     if not a.ok:
-        return a
+        return am.Estimate(None, False, a.reason, a.detail, TONE_RATIO_DOMAIN)
     if not b.ok:
-        return b
+        return am.Estimate(None, False, b.reason, b.detail, TONE_RATIO_DOMAIN)
     if a.value <= 0 or b.value <= 0:
         return am.Estimate(None, False, "a line measured at zero amplitude",
-                           dict(num=a.value, den=b.value))
+                           dict(num=a.value, den=b.value), TONE_RATIO_DOMAIN)
     return am.Estimate(20.0 * math.log10(a.value / b.value), True, "",
                        dict(num=a.value, den=b.value,
                             num_hz=fn.value, den_hz=fd.value,
                             num_nominal_hz=hz_num, den_nominal_hz=hz_den,
                             num_offset_pct=fn.detail["offset_pct"],
-                            den_offset_pct=fd.detail["offset_pct"]))
+                            den_offset_pct=fd.detail["offset_pct"],
+                            separation_bins=abs(fn.value - fd.value) * len(x) / sr),
+                       TONE_RATIO_DOMAIN)
 
 
 def difference_tone_db(x, sr: int, hz_hi: float, hz_lo: float, *,
