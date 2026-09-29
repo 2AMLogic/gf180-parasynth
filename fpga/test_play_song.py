@@ -65,7 +65,7 @@ def test_every_song_is_deliverable():
         assert "preflight FEASIBLE" in out
 
 
-LONG_REST = (120, "C3:1 R:4 E3:1 R:6 G3:1")      # gaps of ~99600 frames > 2^16
+LONG_REST = (120, "C3:1 R:4 E3:1 R:6 G3:1")      # write gaps of 99600 and 147600 frames > 2^16
 FIXTURES = {"twinkle": ps.SONGS["twinkle"], "long-rest": LONG_REST}
 
 
@@ -85,8 +85,18 @@ def naive_unwrap(frames16, want_frames, p0):
 
 def schedule_unwrap(frames16, want_frames, p0):
     """Unwrap each 16-bit log entry to the absolute frame nearest its expected
-    one. Safe for any gap; it can only place a write within +-0x8000 of where
-    it was due, so a wrong-by-a-wrap delivery is still visible in the result."""
+    one. Unlike the sequential unwrap it does not depend on the gap between
+    writes, but it is anchored to the answer, so it has a blind spot:
+
+    - a write delivered an exact multiple of 2^16 frames late (or early) is
+      unwrapped straight back onto its due frame -- UNDETECTABLE here;
+    - any other error beyond +-0x8000 frames is aliased to the wrong size and
+      possibly the wrong sign (40000 late reads as 25536 early).
+
+    Only errors within +-0x8000 are reported truthfully. That is inherent in
+    the device's 16-bit frame log, and acceptable only because the harness has
+    no other timeline; test_schedule_unwrap_cannot_see_a_whole_wrap_error pins
+    the limitation so it is not mistaken for coverage."""
     out = []
     for f, due in zip(frames16, want_frames):
         d = ((f - (p0 + due) + 0x8000) & 0xFFFF) - 0x8000
@@ -122,6 +132,26 @@ def test_naive_unwrap_refuses_the_long_rest_fixture():
     assert bad != [w[0] for w in want]
 
 
+def test_schedule_unwrap_cannot_see_a_whole_wrap_error():
+    # a recorded LIMITATION, not coverage: the anchored unwrap maps a write
+    # delivered exactly 2^16 frames late back onto its due frame
+    events, _ = ps.key_events(ps.parse_song(LONG_REST[1])[1], LONG_REST[0], gate=0.85)
+    due = [w[0] for w in ps.song_writes(events, None)]
+    p0 = 1000
+    for k in (len(due) - 1, len(due) // 2):
+        for shift in (0x10000, -0x10000, 2 * 0x10000):
+            late = [p0 + d for d in due]
+            late[k] += shift
+            assert schedule_unwrap([f & 0xFFFF for f in late], due, p0) == due
+    # control: an error inside +-0x8000 is seen at its true size and sign
+    late = [p0 + d for d in due]
+    late[-1] += 1000
+    assert schedule_unwrap([f & 0xFFFF for f in late], due, p0)[-1] == due[-1] + 1000
+    # and one beyond it aliases: 40000 frames late reads as 25536 early
+    late[-1] += 39000
+    assert schedule_unwrap([f & 0xFFFF for f in late], due, p0)[-1] == due[-1] - 25536
+
+
 @pytest.mark.parametrize("fixture", sorted(FIXTURES))
 @pytest.mark.parametrize("epoch", [0, 65000])
 def test_the_device_fires_every_song_write_in_its_frame(epoch, fixture):
@@ -144,7 +174,9 @@ def test_the_device_fires_every_song_write_in_its_frame(epoch, fixture):
     p0 = h.bridge.performance_origin
     assert len(ev) == len(want)
     # the device logs 16-bit frames and a song can outlast, and rest longer
-    # than, 2^16: unwrap each entry against its expected frame, not its neighbour
+    # than, 2^16: unwrap each entry against its expected frame, not its neighbour.
+    # Blind spot: a write off by exactly k*2^16 frames unwraps onto its due
+    # frame and passes; other errors beyond +-0x8000 alias (see schedule_unwrap)
     frames = schedule_unwrap([w[0] for w in ev], [w[0] for w in want], p0)
     got = [(f, w[1], w[2], w[3], w[4]) for f, w in zip(frames, ev)]
     assert got == want
