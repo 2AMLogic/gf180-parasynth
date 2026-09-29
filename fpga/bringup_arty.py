@@ -61,6 +61,7 @@ import time
 SR = 48000.0                      # audio frames per second
 WRAP = 0x10000                    # the device's frame counter is 16-bit
 HORIZON = 0x8000                  # past this, a 16-bit delta's sign is a guess
+MIN_SPAN_S = 1.0                  # below this the method cannot support a 1% gate
 
 
 class Refused(Exception):
@@ -70,8 +71,8 @@ class Refused(Exception):
 # --------------------------------------------------------------------------
 # pure helpers (tested in fpga/test_bringup_arty.py)
 # --------------------------------------------------------------------------
-def unwrap_forward(samples: list, *, horizon: int = HORIZON) -> int:
-    """Total forward progress of a 16-bit counter across `samples`
+def unwrap_cumulative(samples: list, *, horizon: int = HORIZON) -> list:
+    """Cumulative forward progress of a 16-bit counter across `samples`
     [(t, frame16), ...], assuming it only counts up.
 
     REFUSES an interval whose delta reaches `horizon`, because at that point
@@ -80,7 +81,7 @@ def unwrap_forward(samples: list, *, horizon: int = HORIZON) -> int:
     blames the device's clock (#459)."""
     if len(samples) < 2:
         raise Refused("need at least two samples to measure progress")
-    total = 0
+    cum, total = [0], 0
     for (t0, f0), (t1, f1) in zip(samples, samples[1:]):
         step = (f1 - f0) & 0xFFFF
         if step >= horizon:
@@ -90,17 +91,58 @@ def unwrap_forward(samples: list, *, horizon: int = HORIZON) -> int:
                 f"recoverable from these samples, so the rate is unknowable. "
                 f"Sample faster than {horizon / SR:.3f}s.")
         total += step
-    return total
+        cum.append(total)
+    return cum
 
 
-def frame_rate_hz(samples: list) -> float:
-    """Measured counter rate. The nominal answer, 48 kHz, is known
-    independently of anything this repo models, which is what makes it a
-    usable check on the design rather than on our own arithmetic."""
+def unwrap_forward(samples: list, *, horizon: int = HORIZON) -> int:
+    """Total forward progress. See unwrap_cumulative."""
+    return unwrap_cumulative(samples, horizon=horizon)[-1]
+
+
+def frame_rate_hz(samples: list) -> tuple:
+    """Measured counter rate as (hz, jitter_ms), by least squares over the
+    unwrapped progress. The nominal answer, 48 kHz, is known independently of
+    anything this repo models, which is what makes it a check on the design
+    rather than on our own arithmetic.
+
+    A TWO-POINT ESTIMATE IS NOT GOOD ENOUGH, and getting that wrong is the
+    reason this docstring exists. Each sample's frame value is read somewhere
+    inside a subprocess that takes ~80 ms, while its timestamp is a single
+    instant, so over a short span the systematic error is the same order as any
+    tolerance worth setting. The first version of this file gated at +-2% on a
+    0.39 s two-point estimate and REFUSED a clock that a proper fit then
+    measured at 47,977.8 Hz -- within 0.05%. That is an unsatisfiable gate, and
+    an unsatisfiable gate is worse than no gate: it trains the reader to ignore
+    gates, including the ones that work.
+
+    So: timestamps are midpoints of each read, the slope comes from a fit over
+    many samples, and the residual is returned so the caller can report the
+    method's own jitter instead of implying a precision it does not have."""
+    if len(samples) < 5:
+        raise Refused(f"need at least 5 samples for a rate fit, "
+                      f"got {len(samples)}")
     elapsed = samples[-1][0] - samples[0][0]
     if elapsed <= 0:
         raise Refused("samples are not ordered in time")
-    return unwrap_forward(samples) / elapsed
+    if elapsed < MIN_SPAN_S:
+        raise Refused(
+            f"span {elapsed:.2f}s is too short to support a 1% rate gate: with "
+            f"~{1.0:.0f} ms of per-sample timing jitter the slope error scales "
+            f"as jitter/span, so a short span produces confident wrong answers. "
+            f"The first version of this measurement used 0.39s and reported "
+            f"46,960 Hz for a clock that is 47,977.8 Hz. Sample for at least "
+            f"{MIN_SPAN_S:.1f}s.")
+    import numpy as np
+    cum = unwrap_cumulative(samples)
+    t = np.array([s[0] for s in samples], dtype=float)
+    t -= t[0]
+    y = np.array(cum, dtype=float)
+    slope, intercept = np.polyfit(t, y, 1)
+    if slope <= 0:
+        raise Refused(f"fitted rate {slope:,.0f} Hz is not positive")
+    resid = y - (slope * t + intercept)
+    return float(slope), float(resid.std() / slope * 1e3)
 
 
 def classify(rc: int, out: str) -> str:
@@ -202,19 +244,24 @@ def flash(bit: pathlib.Path, serial: str) -> None:
     print("flash: done 1")
 
 
-def status_samples(repo: pathlib.Path, port: str, n: int = 6) -> list:
+def status_samples(repo: pathlib.Path, port: str, n: int = 25) -> list:
     """Sample the device's own frame counter. This is the design telling us it
     is running; the LEDs and this agree or something is wrong."""
     samples = []
     for _ in range(n):
+        t0 = time.time()
         p = subprocess.run([sys.executable, "fpga/uart_host.py",
                             "--port", port, "status"],
                            capture_output=True, text=True, timeout=60, cwd=repo)
+        t1 = time.time()
         m = re.search(r"STATUS frame (\d+)", p.stdout + p.stderr)
         if not m:
             raise Refused("no STATUS reply from the device; the link is down "
                           "(check the bitstream, A9/D10 and the baud)")
-        samples.append((time.time(), int(m.group(1))))
+        # MIDPOINT: the device answered somewhere inside [t0, t1], and the
+        # subprocess is ~80 ms wide. Timestamping the end biased the first
+        # version of this measurement by about 2%.
+        samples.append(((t0 + t1) / 2.0, int(m.group(1))))
     return samples
 
 
@@ -273,11 +320,13 @@ def main(argv=None) -> int:
             time.sleep(1.5)
 
         samples = status_samples(a.repo, port)
-        rate = frame_rate_hz(samples)
-        print(f"frame counter: {rate:,.0f} Hz measured over "
-              f"{samples[-1][0] - samples[0][0]:.2f}s")
-        if not 0.98 * SR <= rate <= 1.02 * SR:
-            raise Refused(f"frame rate {rate:,.0f} Hz is not within 2% of "
+        rate, jitter_ms = frame_rate_hz(samples)
+        print(f"frame counter: {rate:,.1f} Hz from {len(samples)} samples over "
+              f"{samples[-1][0] - samples[0][0]:.2f}s "
+              f"({(rate - SR) / SR * 100:+.2f}% of nominal, "
+              f"method jitter {jitter_ms:.1f} ms)")
+        if not 0.99 * SR <= rate <= 1.01 * SR:
+            raise Refused(f"frame rate {rate:,.1f} Hz is not within 1% of "
                           f"{SR:,.0f} Hz; the audio clock is wrong")
     except Refused as exc:
         print(f"REFUSED -- {exc}")

@@ -12,6 +12,7 @@ import os
 import pathlib
 import sys
 
+import numpy as np
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -62,19 +63,68 @@ def test_unwrap_needs_two_samples():
 # ------------------------------------------------------------------ rate ----
 def test_frame_rate_reads_a_known_48_khz():
     """4800 frames per 0.1 s is 48 kHz by construction."""
-    s = [(i * 0.1, (i * 4800) & 0xFFFF) for i in range(7)]
-    assert ba.frame_rate_hz(s) == pytest.approx(48000.0, rel=1e-9)
+    s = [(i * 0.1, (i * 4800) & 0xFFFF) for i in range(25)]
+    hz, jitter = ba.frame_rate_hz(s)
+    assert hz == pytest.approx(48000.0, rel=1e-9)
+    assert jitter == pytest.approx(0.0, abs=1e-6)
 
 
 def test_frame_rate_reads_a_known_wrong_rate_as_wrong():
     """Control: a counter at half speed must not read as 48 kHz."""
-    s = [(i * 0.1, (i * 2400) & 0xFFFF) for i in range(7)]
-    assert ba.frame_rate_hz(s) == pytest.approx(24000.0, rel=1e-9)
+    hz, _ = ba.frame_rate_hz([(i * 0.1, (i * 2400) & 0xFFFF) for i in range(25)])
+    assert hz == pytest.approx(24000.0, rel=1e-9)
 
 
-def test_frame_rate_refuses_unordered_samples():
-    with pytest.raises(ba.Refused):
-        ba.frame_rate_hz([(1.0, 0), (1.0, 100)])
+def test_frame_rate_survives_realistic_timing_jitter():
+    """THE GATE'S SATISFIABILITY, AS A TEST.
+
+    main() refuses outside +-1% of 48 kHz. The measured method jitter on real
+    hardware was 1.0 ms, so inject twice that and require the fit to stay well
+    inside the gate. The first version of this file gated at +-2% on a 0.39 s
+    two-point estimate and refused a clock later measured at 47,977.8 Hz --
+    within 0.05%. This is the check that would have caught that, and it is the
+    reason a gate gets run against the real thing before it is committed."""
+    rng = np.random.default_rng(20260928)
+    s = [(i * 0.08 + rng.normal(0, 0.002), (i * 3840) & 0xFFFF) for i in range(25)]  # 1.92 s
+    hz, jitter = ba.frame_rate_hz(s)
+    assert hz == pytest.approx(48000.0, rel=0.01)
+    assert jitter < 5.0
+
+
+def test_frame_rate_refuses_a_span_too_short_to_gate_on():
+    """The regression for the wrong answer this file was born from: 6 samples
+    over 0.39 s. The method cannot support a 1% verdict there, so it must
+    withhold one rather than report 46,960 Hz for a 47,977.8 Hz clock."""
+    s = [(i * 0.078, (i * 3744) & 0xFFFF) for i in range(6)]
+    assert s[-1][0] - s[0][0] < 0.4
+    with pytest.raises(ba.Refused, match="too short"):
+        ba.frame_rate_hz(s)
+
+
+def test_frame_rate_accepts_the_span_the_hardware_run_used():
+    """1.90 s over 25 samples is what the real measurement used."""
+    s = [(i * 0.079, (i * 3792) & 0xFFFF) for i in range(25)]
+    assert s[-1][0] - s[0][0] == pytest.approx(1.896, abs=0.01)
+    hz, _ = ba.frame_rate_hz(s)
+    assert hz == pytest.approx(48000.0, rel=1e-6)
+
+
+def test_frame_rate_refuses_too_few_samples_for_a_fit():
+    with pytest.raises(ba.Refused, match="at least 5"):
+        ba.frame_rate_hz([(0.0, 0), (0.1, 4800)])
+
+
+def test_frame_rate_refuses_samples_with_no_elapsed_time():
+    with pytest.raises(ba.Refused, match="not ordered"):
+        ba.frame_rate_hz([(1.0, i * 10) for i in range(6)])
+
+
+def test_unwrap_cumulative_is_monotonic_and_agrees_with_the_total():
+    s = [(i * 0.1, (i * 4800) & 0xFFFF) for i in range(10)]
+    cum = ba.unwrap_cumulative(s)
+    assert len(cum) == len(s)
+    assert cum == sorted(cum)
+    assert cum[-1] == ba.unwrap_forward(s)
 
 
 # -------------------------------------------------------------- classify ----
