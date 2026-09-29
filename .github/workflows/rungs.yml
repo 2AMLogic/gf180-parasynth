@@ -1,15 +1,38 @@
 # The capability DAG's permanent regression gate -- docs/capability-dag.md.
 #
-# Every stamped node's test set runs here, on every push, with NO path filter.
+# Every stamped node's test set runs here on every push that could affect it.
 # The `moog-acceptance` workflow is path-filtered to model/, audition/ and
 # spec/, so an RTL or flow change cannot turn it red. A promise conditioned on
-# which directory you edited is not a promise.
+# which directory you edited is not a promise -- so the condition here is the
+# other way round (issue #457): tools/ci_changes.py skips the suite ONLY when
+# every changed path is positively recognised as agent tooling or as prose no
+# suite names, and anything it does not recognise, including a path that did
+# not exist when it was written, runs everything. A push to main always runs
+# everything. No workflow-level `paths:` either: a path-skipped workflow never
+# reports, which would leave a required check waiting forever (#287).
 name: nodes
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  # Which suites this change can affect: tools/ci_changes.py. Every job below
+  # needs it and skips only on an explicit `none` or `docs`, so a failure here
+  # (no output) runs everything. A job skipped by its `if:` reports success,
+  # so a required check is never left waiting.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.classify.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: classify
+        run: python3 tools/ci_changes.py
+
   pulse2x-rtl:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     concurrency:
@@ -53,6 +76,8 @@ jobs:
             build/pulse-evidence/
 
   reference-controls:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -78,6 +103,8 @@ jobs:
           path: build/reference-controls.json
 
   m5a-fast:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     # The explicitly scoped sound-development gate stays independent of the
     # broad model suite below, so a long repository run cannot hide its result.
     runs-on: ubuntu-latest
@@ -95,6 +122,8 @@ jobs:
         run: make verify-fast
 
   python:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     # 30 was already marginal before the claim-checker steps below: the two
     # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
@@ -259,6 +288,12 @@ jobs:
       - name: documented claims match the evidence
         run: python tools/check_doc_claims.py
 
+      # The classifier that decides whether this job runs at all. It can only
+      # change through tools/, which is always `full`, so this job is where
+      # its controls are guaranteed to run.
+      - name: the CI change classifier and its wiring
+        run: python -m pytest tools/test_ci_changes.py -q
+
       # Same argument, one file over: the oscillator-1 Shape/Width table in
       # model/reference_rigs.py is a hand transcription of
       # docs/surge-waveform-mapping.txt, and that comment now says outright that
@@ -384,9 +419,32 @@ jobs:
           print("negative control OK -- wrong arithmetic turns the suite red")
           PY
 
+  # A prose-only change still carries claim markers backed by real tests
+  # (docs/claim-markers.md), so it runs the claim checker -- the whole default
+  # document set, not just the changed files, because the checker's own
+  # include-list control only runs in default mode. Under `full` the python
+  # job runs the same two steps.
+  doc-claims:
+    needs: changes
+    if: ${{ needs.changes.outputs.scope == 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      - name: the claim checker's controls
+        run: python -m pytest tools/test_check_doc_claims.py -q
+      - name: documented claims match the evidence
+        run: python tools/check_doc_claims.py
+
   # RTL bit-exactness. Separate job because iverilog is slow: the ladder is
   # ~1 min, the full voice is ~20 and does not belong on every push.
   rtl:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 25
     steps:
