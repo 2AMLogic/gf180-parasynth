@@ -2099,16 +2099,35 @@ def test_run_case_script_reaches_a_verdict_on_a_filter_case(tmp_path):
     broke: `python tools/run_case.py F1A --results <dir>` must reach a MEASURED
     verdict. Deliberately not asserting `pass` -- that is the scorecard's call
     and may legitimately change. What must never come back is `no verdict`
-    caused by an exception in the runner's own import path."""
+    caused by an exception in the runner's own import path.
+
+    ASSERT THE PRECONDITION, do not assume it. F1A measures against the frozen
+    Surge clip `surge-type2/lp-cut250-res0.00`, and a checkout has no
+    `refprofile/cache/` -- `reference-controls` restores it as a setup step but
+    `m5a-fast`, which runs this file, does not. Without the restore this test
+    reads `no verdict` for a reason that has nothing to do with the runner's
+    import path, and the first version of it did exactly that: green here on a
+    warm worktree, red in CI on a cold one. `refprofile_restore.py` is 0.23 s,
+    idempotent, hash-verified against `refprofile/profile.json`, and writes only
+    into the gitignored cache, so the fix is to RUN it rather than to skip --
+    and to REFUSE loudly if it cannot."""
+    restore = _run_script(["tools/refprofile_restore.py"], timeout=300)
+    assert restore.returncode == 0, (
+        "REFUSED: cannot restore the frozen reference audio F1A measures "
+        f"against, so this test cannot tell a runner crash from a missing "
+        f"clip:\n{(restore.stdout + restore.stderr)[-2000:]}")
+
     got = _run_script(["tools/run_case.py", "F1A", "--results", str(tmp_path)])
     out = got.stdout + got.stderr
     assert "already declares a domain" not in out, out[-3000:]
     assert "Traceback" not in out, out[-3000:]
+    payload = json.loads((tmp_path / "F1A.json").read_text())
+    whys = [m.get("why", "") or "" for m in payload.get("metrics", {}).values()
+            if isinstance(m, dict)]
+    assert not any("already declares a domain" in w for w in whys), whys
+    assert not any("not in the cache" in w for w in whys), (
+        f"the restore above reported success yet the clip is still missing: {whys}")
     assert got.returncode in (0, 1), f"exit {got.returncode}\n{out[-3000:]}"
     assert "no verdict" not in got.stdout, (
         "F1A reached no measured verdict as a SCRIPT while the imported-module "
         f"tests above are green -- the #115 regression's exact shape:\n{out[-3000:]}")
-    payload = json.loads((tmp_path / "F1A.json").read_text())
-    whys = [m.get("why", "") for m in payload.get("metrics", {}).values()
-            if isinstance(m, dict)]
-    assert not any("already declares a domain" in (w or "") for w in whys), whys
