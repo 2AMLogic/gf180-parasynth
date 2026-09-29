@@ -108,6 +108,16 @@ def output_disposition(timing: str) -> dict:
     return classes
 
 
+def constant_port_evidence(log_text: str, port: str) -> bool:
+    """True iff Vivado's own Synth 8-3917 warning says `port` is tied to a
+    constant. The single source of truth for this pattern -- check_implementation
+    (the build gate) and its test both call this function, so a change or
+    breakage in the pattern shows up in one place, not two independently
+    written copies that can drift apart."""
+    return re.search(r"Synth 8-3917\].* port " + re.escape(port) + r" driven by constant 0",
+                     log_text) is not None
+
+
 def check_implementation(directory: Path) -> dict:
     summary = publish.inspect_reports(directory, design=TOP)
     # the constraints this build COMPILED (its snapshot), never the live tree's
@@ -125,8 +135,7 @@ def check_implementation(directory: Path) -> dict:
     # synthesis log must say so, and no timing class may hold it
     log = (directory / "vivado.log").read_text(errors="replace")
     for port in CONSTANT_PORTS:
-        if not re.search(r"Synth 8-3917\].* port " + re.escape(port) + r" driven by constant 0",
-                         log):
+        if not constant_port_evidence(log, port):
             problems.append(f"{port} is not shown constant by the synthesis log")
     pins = placed_pins((directory / IO_REPORT).read_text(), DIRECT_PLUG_PINS)
     if pins != DIRECT_PLUG_PINS:

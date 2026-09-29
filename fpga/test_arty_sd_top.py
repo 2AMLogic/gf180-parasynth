@@ -205,9 +205,38 @@ endmodule
 
 
 def test_constant_port_evidence_matches_vivados_own_warning():
+    # this calls sd.constant_port_evidence -- the SAME function check_implementation
+    # (the build gate) calls -- so a change to the gate's pattern is exercised
+    # here too. A regex re-written inside this test would go stale silently;
+    # see the control below for what that failure mode looks like.
+    #
     # the line Vivado 2025.1 printed for this port on the first direct-plug build
-    import re
     line = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
-    assert re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0", line)
-    assert not re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0",
-                         line.replace("dac_sck", "sd_left"))
+    assert sd.constant_port_evidence(line, "dac_sck")
+    # the same line, naming a port that was never asked about
+    assert not sd.constant_port_evidence(line, "sd_left")
+    # a different message ID entirely must not be mistaken for this evidence
+    other_id = line.replace("Synth 8-3917", "Synth 8-7080")
+    assert not sd.constant_port_evidence(other_id, "dac_sck")
+
+
+def test_constant_port_evidence_control_catches_a_broken_gate_pattern(monkeypatch):
+    # injected-bug control (docs/verification-rules.md: start red, carry
+    # injected-bug controls). Break the gate's pattern the way a plausible
+    # bad edit would -- requiring "constant 1" instead of "constant 0" -- and
+    # confirm that the assertion the test above makes on the real Vivado
+    # warning line now goes red.
+    #
+    # Before this issue, test_constant_port_evidence_matches_vivados_own_warning
+    # asserted a regex written independently inside the test, so this exact
+    # break in build_arty_sd.check_implementation's pattern would NOT have
+    # been caught: the test's own copy would keep matching regardless of what
+    # the gate's copy did. Now both call constant_port_evidence, so breaking
+    # it here breaks the real evidence check too.
+    def broken_evidence(log_text: str, port: str) -> bool:
+        return re.search(r"Synth 8-3917\].* port " + re.escape(port) + r" driven by constant 1",
+                         log_text) is not None
+    monkeypatch.setattr(sd, "constant_port_evidence", broken_evidence)
+    real_warning = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
+    with pytest.raises(AssertionError):
+        assert sd.constant_port_evidence(real_warning, "dac_sck")
