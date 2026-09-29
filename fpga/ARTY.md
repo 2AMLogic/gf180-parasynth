@@ -626,32 +626,39 @@ USB-connected host is another programming route.
 
 ## Remote build status
 
-The official AMD Vivado 2025.1 Marketplace subscription is enabled. An
-8-vCPU/32-GB Ubuntu 22.04 runner completed the build using Vivado
-2025.1, SW Build 6140274. Its catalog recognizes `xc7a100tcsg324-1`, and
-synthesis successfully checked out the device license. The artifacts have
-been collected and AWS confirms the runner is **stopped**. Its disk is retained
-for future builds; storage charges continue. The idle guard remains set to
-120 minutes for subsequent runs.
-Private cloud/access details stay in local operator state, outside git.
+**The Vivado host is documented once, in 2am's Arty note:**
+[2am `hardware/arty-a7/README.md`, §Build remote, program local](https://github.com/2AMLogic/2am/blob/main/hardware/arty-a7/README.md#build-remote-program-local).
+That note covers the instance and its `.env` (AMD Vivado ML 2025.1 AMI,
+`m7a.2xlarge`, 60-minute idle stop), Vivado's install path, the moving
+SSH-egress trap, and the `--ftdi-serial 210319C088B7` needed whenever the
+CJMCU-2232HL is also plugged in. Update the facts there, not here. Its J8
+pinout is measured, and its first-edge pin is **TMS**, not VREF.
 
-The earlier empty Ubuntu fallback was terminated. The initial readiness probe
-returned before the new guest accepted SSH; bounded retries succeeded without
-changing ingress or credentials. This is tracked in
-[Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
+**What is specific to this repository:**
 
-The first real build refused `read_verilog -define` outside compile-unit mode.
-The script now passes both macros explicitly to `synth_design`, following
-[AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
-This was a build-script error, not an RTL sound change. The corrected retry
-produced the published fit, timing and bitstream evidence above.
+- **Builds run through the checked build scripts**, never a bare
+  `vivado -source`: `fpga/build_arty.py` for the release wrapper. It
+  binds its digital proofs before Vivado runs and gates the routed reports
+  afterwards.
+- **Ship the tree as a `git bundle`** and run the script on the box inside
+  a venv with numpy and scipy, with `settings64.sh` sourced. Copy results
+  back with `tar` over ssh; `scp` with `{a,b}` braces does not expand on
+  current OpenSSH.
+- **Start and stop the box only with `repo-remote.sh`**, run from a
+  directory whose basename is the box's name (`arty-blink`) and whose
+  `.env` pins `REPO_REMOTE_INSTANCE_ID`. Stop it after fetching the
+  artifacts, never before.
 
-2026-09-22: the runner came back **re-imaged** — fresh boot with no
-`/tools/Xilinx` and no retained volume attached (`lsblk` shows only the
-100 GB root device), while the "retained disk" note above is what the
-external-I/O session relied on. One full build and publication with the
-committed external constraints completed before the image swap; its numbers
-are captured in the External I/O timing section. Regenerating the published
-bitstream, reports and `publication.json` requires the operator to restore
-Vivado 2025.1 (or attach the retained volume); no code change is needed, and
-hand-editing the publication is not an option.
+**History, kept because published evidence cites it:**
+
+- The first real build refused `read_verilog -define` outside compile-unit
+  mode. The script now passes both macros to `synth_design`, following
+  [AMD UG904](https://docs.amd.com/r/2025.1-English/ug904-vivado-implementation/synth_design).
+  This was a build-script error, not an RTL change.
+- On 2026-09-22 the runner of that time came back re-imaged, without
+  `/tools/Xilinx`. The external-I/O numbers above were captured before
+  that. The readiness-probe race seen then is
+  [Repo Remote #449](https://github.com/rjwalters/repo/issues/449).
+- Superseded since 2026-09-27: the 2am note's box has Vivado 2025.1 at
+  `/tools/Xilinx/2025.1`, and the note records a successful `blink` build
+  there on 2026-09-27.
