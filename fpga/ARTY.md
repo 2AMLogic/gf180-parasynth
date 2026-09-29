@@ -466,11 +466,16 @@ full-scale 1.5 MHz tone. If either check fails, the run is REFUSED.
 | sine, −6 dBFS, ~1 kHz | 103.9 dB | ≥ 95 dB | red (~70 dB) |
 | model held note (A2, fixed patch) | 99.5 dB | ≥ 90 dB | red (~62 dB) |
 | full-scale square (overload) | 84.3 dB | ≥ 75 dB | red when the integrator clamp is removed |
-| silence | exactly zero in-band error | ≤ −110 dBFS | — |
+| silence | exactly zero in-band error | ≤ −110 dBFS | red (−104.7 dBFS) when one LSB of DC is added to the loop input |
 
 It also asserts the wire latency (324 core clocks from frame start to the
-modulator), and three injected defects must each turn their cases red:
-first-order quantisation, wrapping integrators, and a receiver one bit early.
+modulator), and four injected defects must each turn their cases red:
+first-order quantisation, wrapping integrators, a receiver one bit early, and
+one LSB of DC at the modulator's loop input. The last exists because the other
+three cannot reach the silence case — a shifted receiver bit is the same bit on
+a constant-zero sample, the clamp never engages near zero, and a first-order
+quantiser still idles on a mean-zero pattern — so silence was the one case
+measured with nothing able to prove the measurement could fail (#472).
 Wrong-then-right, from making it: a float64 CIC read 72 dB for the held note.
 At order 4 the integrator sums pass 2^53, and at orders 5 and 6 the same
 estimator read the known −70 dB tone as 30 dB and −4 dB. The known-answer

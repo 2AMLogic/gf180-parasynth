@@ -94,7 +94,7 @@ help:
 ## half is always answerable. It is green on a tree with no seals at all, which
 ## is the state every Holdout case but F1D is in.
 ##
-## verify_sd_dac.py (#406) carries its own three injected-defect controls and
+## verify_sd_dac.py (#406) carries its own four injected-defect controls and
 ## runs them every time, so it is here and not in `controls`: ~15 s, 4 vvp
 ## workers. Its PASS record in build/sd-dac is what fpga/build_arty_sd.py binds.
 ##
