@@ -369,6 +369,60 @@ def verdict_word(qualified) -> str:
         else "?"
 
 
+#: The LEVEL a clip must clear to be frozen, and to be read back afterwards.
+#: Issue #481.
+#:
+#: This is deliberately NOT `rig_qualification.SILENCE_FLOOR` (1e-9,
+#: `audio_measure.is_silent`'s default), which answers a different question:
+#: "did the host hand back zeros". A clip peaking at 1e-7 answers that with
+#: *no* -- and is still 140 dB below `PROBE_LEVEL_DBFS`, the level every
+#: consumer of this profile reads these clips at. It hashes correctly, so the
+#: profile describes it exactly; it is not silent; and every number measured
+#: off it would be the path's own truncation noise, carrying this profile's
+#: provenance block. Unusable is not the same as absent, and until #481 the
+#: only gate here answered the absent question.
+#:
+#: The value is the prior art's corpus gate, `max_val_05 < 1e-6` (quoted from
+#: issue #125 -- second-hand, see `model/rig_qualification.py`'s docstring for
+#: why). That comparison found our numbers stricter than the prior art's
+#: everywhere except here, and here the prior art is right, because here it is
+#: the same question: is this audio worth keeping at all?
+#:
+#: It is a flat floor and NOT `rig_qualification.check_level`'s window, which
+#: would be the richer check and is the wrong one. That window's `PEAK_MIN` is
+#: 0.05 and the quietest clip in the committed profile
+#: (`surge-type2/drive-100hz-cut250-res0.50-in-12dbfs`) peaks at 0.0357 BY
+#: DESIGN -- it is the clip driven at -12 dBFS. Gating on that window would
+#: refuse a clip the profile exists to hold, i.e. an unsatisfiable gate, which
+#: CLAUDE.md is explicit is worse than no gate at all.
+LEVEL_FLOOR = 1e-6
+
+#: `audio_measure.is_silent`'s default, and `rig_qualification.SILENCE_FLOOR`.
+#: `LEVEL_FLOOR` above subsumes it as a gate; this is kept so the refusal can
+#: still tell the two apart in words. `model/rig_qualification.py`'s docstring
+#: is written against exactly one confusion -- "a rig peaking at 1e-7 is not
+#: silent and is not usable, and collapsing those two into one threshold is how
+#: a level defect gets reported as an absence of signal" -- so the threshold is
+#: collapsed here (one gate) and the *report* is not (two sentences).
+SILENCE_FLOOR = 1e-9
+
+
+def level_refusal(what: str, pk: float) -> str:
+    """Why `what`, peaking at `pk`, is not usable as a reference.
+
+    One gate (`LEVEL_FLOOR`), two possible readings of it, and the caller does
+    not get to lose the second one: below `SILENCE_FLOOR` the finding is that
+    the host produced nothing at all, which is a fault of the apparatus, and
+    between the floors it is that the level is wrong, which is a fault of the
+    patch. Both refuse; they do not have the same cause."""
+    why = (f"{what} peaks at {pk:.3g}, at or below the level floor "
+           f"{LEVEL_FLOOR:.0g}: not usable as a reference")
+    if pk <= SILENCE_FLOOR:
+        why += (f" -- and at or below the silence floor {SILENCE_FLOOR:.0g} too, "
+                f"so it is silent and not merely too quiet")
+    return why
+
+
 #: The estimator floors this profile's clips are read through, stated here so a
 #: consumer can refuse a row inside one. Issue #92: a floor that is published
 #: and not actually constant is worse than none.
@@ -680,7 +734,8 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
         raise Refused(f"{clip_id!r} is at {sr} Hz, the profile says {meta['sr']}")
     if len(y) != meta["frames"]:
         raise Refused(f"{clip_id!r} holds {len(y)} frames, the profile says {meta['frames']}")
-    # BEFORE the silence test, because a non-finite sample DEFEATS it: NaN and
+    # BEFORE the level test below, because a non-finite sample DEFEATS it (it
+    # defeated the silence test this replaced, for the same reason): NaN and
     # Inf both compare False against the threshold, so `all NaN` and `all Inf`
     # audio passed every check here -- profile membership, byte count, sha256,
     # rate, frame count and silence -- and loaded as a reference.
@@ -694,8 +749,15 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
         raise Refused(f"{clip_id!r} holds {bad} non-finite samples "
                       f"(first at index {where}): the file hashes correctly, so "
                       f"this is what was frozen -- it is not usable as audio")
-    if float(np.abs(y).max()) <= 1e-9:
-        raise Refused(f"{clip_id!r} is silent")
+    # #481: this used to compare against a bare 1e-9, `is_silent`'s default,
+    # which is the "did the host hand back zeros" question, and refused only
+    # a buffer of zeros. A clip at 1e-7 passed it -- hashing correctly, 140 dB
+    # under the level every consumer reads it at, and unusable. The gate is a
+    # LEVEL floor now; `level_refusal` still names silence separately when that
+    # is what it is.
+    pk = float(np.abs(y).max())
+    if pk <= LEVEL_FLOOR:
+        raise Refused(level_refusal(f"{clip_id!r}", pk))
     return y, sr, meta
 
 
@@ -1002,8 +1064,15 @@ def render(probe_disqualified: bool = True) -> dict:
             raise Refused(f"{cid}: pinned settings did not hold after rendering this "
                           f"clip: {bad}")
         post_checks.setdefault(spec["rig"], []).append({"clip_id": cid, "aliased": aliased})
-        if float(np.abs(y).max()) <= 1e-9:
-            raise Refused(f"{cid}: the rig rendered silence -- refusing to freeze it")
+        # #481: the SAME floor as `load_clip`'s, and deliberately so. A
+        # freeze-time floor below the read-time one lets a clip at, say, 5e-7
+        # be written, hashed and committed by a `--render` that reports
+        # success, and then be refused by every consumer forever afterwards.
+        # The two gates are one number because they are one question.
+        pk = float(np.abs(y).max())
+        if pk <= LEVEL_FLOOR:
+            raise Refused(f"{cid}: refusing to freeze it -- "
+                          + level_refusal("the rig's output", pk))
         write_clip(dest, y)
         prof["clips"][cid] = {
             "rig": spec["rig"], "kind": spec["kind"], "why": spec["why"],

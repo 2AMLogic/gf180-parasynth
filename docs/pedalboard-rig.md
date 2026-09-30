@@ -174,20 +174,54 @@ against the rate at which they were wrong.
 
 ## The silence gate, against the prior art (#125)
 
-Three different numbers answering three different questions. They do **not**
+Four different numbers answering four different questions. They do **not**
 agree, and the divergence is deliberate:
 
 | floor | where | the question it answers |
 |---|---|---|
 | `1e-6` | `~/dev/generate-random-dexed-sounds/`, `max_val_05 < 1e-6` — **quoted from #125, not read** (see below) | *corpus filter*: is this draw worth keeping? A cheap reject-and-redraw, for which a floor three orders above true silence is exactly right |
 | `1e-9` | `rig_qualification.SILENCE_FLOOR` (`audio_measure.is_silent`'s default) | *is there anything at all?* The only question a floor can answer without knowing the level the rig was set to. At 1e-9 a refusal means the host returned zeros — which is precisely the Model-D-under-dawdreamer finding, peak exactly 0.0 |
+| `1e-6` | `refprofile.LEVEL_FLOOR`, at **both** ends of the freeze: the render loop that writes a clip and `load_clip` that reads it back (#481) | *is this frozen clip worth keeping at all?* The prior art's question, asked of a clip instead of a draw — so it takes the prior art's number. See below |
 | `−12.04 dBFS` | `refprofile.ESTIMATOR_FLOORS["probe level"]` | *at what input level is OUR fixed-point ladder inside its measured stability window?* A property of the thing being compared **against** the reference. Not a silence gate at all |
 
-The prior art's floor is the right answer to its question and the wrong answer
-to this one: `1e-7` is not silent and is not usable, and collapsing those into
-one threshold is how a level defect gets reported as an absence of signal.
+For **`rig_qualification`**, the prior art's floor is the right answer to its
+question and the wrong answer to this one: `1e-7` is not silent and is not
+usable, and collapsing those into one threshold is how a level defect gets
+reported as an absence of signal.
 `test_the_silence_floor_is_the_one_this_module_documents` asserts exactly that —
 a signal between the two floors is SOUNDING and FAILS the level check.
+
+For **`refprofile`**, it is the other way round, and #481 is where that was
+found. `load_clip` carried the `1e-9` floor and so refused only a buffer of
+zeros: a clip peaking at `1e-7` hashed correctly, was not silent, was 140 dB
+below the probe level every consumer reads it at, and was unusable — every
+number measured off it would have been the path's own truncation noise wearing
+the profile's provenance block. That is the corpus filter's question, not the
+apparatus's, so it now takes the corpus filter's number. This is the one place
+in the comparison where the prior art's floor is the better of the two.
+
+Three things about that change worth having in one place:
+
+- **Both floors moved, to the same constant.** A freeze-time floor *below* the
+  read-time one would let `--render` write, hash and commit a clip at, say,
+  `5e-7` — a render that reports success and is refused by every consumer
+  forever afterwards. `test_the_freeze_and_read_floors_are_the_same_number`
+  holds them together.
+- **It is a flat floor and not `check_level`'s window**, although a level
+  window is the richer check. `PEAK_MIN` is `0.05` and the committed profile's
+  quietest clip, `surge-type2/drive-100hz-cut250-res0.50-in-12dbfs`, peaks at
+  `0.0357` **by design** — it is the clip driven at −12 dBFS. Gating the
+  profile on that window would refuse a clip the profile exists to hold: an
+  unsatisfiable gate, which is worse than no gate.
+- **The refusal still distinguishes the two causes even though the gate does
+  not.** Under `1e-6` it reports a level defect; under `1e-9` as well it adds
+  that the clip is silent and not merely quiet. One threshold, two sentences.
+
+All sixteen committed clips clear `1e-6` by four orders of magnitude or more
+(`0.0357` is the minimum); `tools/refprofile.py` verifies 16/16 against the
+restored cache under the new floor, and
+`test_every_committed_clip_clears_the_level_floor` keeps that true for the next
+clip frozen here.
 
 ### The four prior-art scripts were NOT read, and that is an open item
 
