@@ -1,6 +1,6 @@
 # Matched attack context: unchanged model versus Mini V3
 
-All 12 model conditions completed in [Linux CI](https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724). The 36 frozen Mini V3 renders came from #193. MIDI timing, target note, envelope calibration and sound controls are fixed; only preceding-note history varies within each matched-time pair.
+All 12 model conditions completed in [Linux CI](https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724), and were re-rendered byte-for-byte in [Linux CI](https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540) when the evidence was re-bound (below). The 36 frozen Mini V3 renders came from #193. MIDI timing, target note, envelope calibration and sound controls are fixed; only preceding-note history varies within each matched-time pair.
 
 | Wave | History before target | Model attack change | Reference attack change |
 | --- | --- | ---: | ---: |
@@ -26,8 +26,10 @@ python3 -m pytest -q tools/test_verify_attack_context_model.py
 
 The verifier refuses a one-sample timing mutation, changed contrast, missing row, changed audio digest, and invalid timing. **Wrong-then-right: zero sound measurement corrections; one publication precondition corrected** (exact dictionary equality rejected the one-ulp RMS difference). The prior reference qualification record remains in the parent report.
 
-## Historical source identity after pulse 2× landed
+## Source identity: re-bound to a reachable commit
 
-These WAVs still belong to source `1ae5071b038d93df507efb50b76cb3c83eb6d228`, with pulse oversampling disabled. Merging #192 changes engine source files; it does not change these recordings or their original provenance. The verifier checks every recorded source hash against that historical Git commit and lists differences from today's checkout. It separately requires the actual audio-analysis modules to retain their recorded hashes; changed analysis refuses. It reproduces the audio measurements without rendering today's engine. Re-rendering the original experiment requires the recorded checkout.
+The WAVs were first rendered at `1ae5071b038d93df507efb50b76cb3c83eb6d228`, with pulse oversampling disabled. A later rebase orphaned that commit, so `git show` could not resolve it from any checkout, and the verifier's historical-hash check failed in CI (#403, root cause #215). The analysis module `model/audio_measure.py` had also changed since then (docstrings only), which the verifier correctly refuses.
 
-After the merge, the old current-file hash check failed as expected. Eight tests now pass, retaining the numerical controls and adding historical-source tampering and changed-analysis refusal. Original WAVs, source hashes, score values and report bytes remain unchanged.
+The evidence is now bound to `85f46ec7f0ce831d12c5a652643f57692af823f8`, a merge commit on this branch that stays reachable because the branch is updated by merge, not rebase. [Linux CI](https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540) re-ran `tools/compare_mono_attack_context.py` at that commit. It reproduced **all 12 WAVs byte-for-byte**, and every timing row and history contrast is identical to the original report. Only `source_commit` and `source_sha256` changed. Merging #192's engine changes did not change the selected baseline's audio: pulse 2× is still not selected. `ci-import.json` keeps the original run, commit and report hash under `rebound_from`.
+
+The verifier still checks every recorded source hash against the bound Git commit and lists differences from today's checkout. It separately requires the audio-analysis modules to keep their recorded hashes: changed analysis refuses. It reproduces the audio measurements without rendering. No verifier check was loosened for the re-bind.

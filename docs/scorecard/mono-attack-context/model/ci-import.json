@@ -1,8 +1,15 @@
 {
   "state": "reproduced",
-  "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724",
-  "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
-  "report_sha256": "a26768ca77798ee3e786a8f33cf15147166338e03ecaa086986d456a5cde363e",
+  "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540",
+  "source_commit": "85f46ec7f0ce831d12c5a652643f57692af823f8",
+  "report_sha256": "dc80f6207ab5056e93369f1bfae4d406543e59834b4ce66f1fb2277af9e673b2",
+  "rebound_from": {
+    "workflow_url": "https://github.com/2AMLogic/gf180-parasynth/actions/runs/35666927724",
+    "source_commit": "1ae5071b038d93df507efb50b76cb3c83eb6d228",
+    "report_sha256": "a26768ca77798ee3e786a8f33cf15147166338e03ecaa086986d456a5cde363e",
+    "reason": "source_commit was orphaned by a rebase, so no checkout could resolve it (#403, #215)",
+    "rebind": "re-rendered in Linux CI at the new source_commit; all 12 WAVs byte-identical and every row and history contrast identical to the original report; only source_commit and source_sha256 changed"
+  },
   "model_audio_files": 12,
   "reference_audio_files": 36,
   "exact_timing_rows": 12,
