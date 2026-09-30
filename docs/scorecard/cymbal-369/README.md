@@ -291,7 +291,7 @@ is the state, not a plan, and each row names the step that resolved it.
 | Short band: 7.1 kHz → VCA → **Hh3** | **in** and resolved: 2-pole 10323 Hz Q 5.64 **plus a 1-pole at 5195 Hz**, not at the same corner (step 3). No longer borrows the closed hat's 11.7 kHz high-pass |
 | The level stage's +6 dB/oct | **in**, as a 1-pole differentiator cornered at 18972 Hz, *with* the tone stage against it (steps 4/5 — alone it makes things worse, §10 says so) |
 | The **TONE knob** | **in**, from VR4's wiper with nothing fitted (steps 9/10). Rendered, and it moves H − L by 1.13 dB where the machine moves 7.3 |
-| The **inter-band balance** | **NOT in, and it is the whole remaining gap** — but step 11 removes the VCA drives as its explanation: the three stages are component-identical bar one resistor each, and the short band's +39.79 dB would need a 2.15 MΩ collector load where the schematic prints 39 kΩ |
+| The **inter-band balance** | **NOT in, and it is the whole remaining gap** — but steps 11 and 12 remove the entire swing-VCA section as its explanation, on both its signal side (component-identical stages bar one collector-load resistor each; the short band's +39.79 dB would need a 2.15 MΩ collector load where the schematic prints 39 kΩ) and its collector-supply side (the ceiling's own most favourable duty is still 31.5 dB short) |
 | The **DECAY knob's** own law | not started. VR2 is on the other rail and no step has read it |
 
 **Budget, exact.** 16 → **20 modes, 25 paths**, `N_NUMS` 11, no `HP3` decode. The operator's accepted padding to 32
@@ -323,19 +323,34 @@ there is no margin for a 21st, and any further section needs a register-map revi
 > voltages** (the last per-band freedom inside the VCA section, and the next question), and the high bands' own
 > high-pass input loading, which is why the second convention is reported as a bound rather than an estimate.
 
-**The one question that is left:**
+> **Step 12 is `vca-supply/README.md`** (#432) — step 11's own next question, off the same scan and the same
+> tool: *what are the three envelope generators' peak collector voltages?* **The hypothesis is half right.** The
+> three reservoirs (C38/C40/C41, all 1 µF) ARE equal at the peak — **0.009 V spread against a 0.252 V bound**
+> derived from the diodes' own forward-drop spread at their own load currents, which differ by two orders of
+> magnitude. The three **collector** ceilings are NOT: **12.79 / 4.94 / 3.97 V** (short/low/DECAY), **+8.26 and
+> −1.91 dB** re the low band, peaking **1 / 120 / 19 ms** apart, because only the short band's collector load
+> hangs on its own reservoir — the other two sit behind a smoothing network the trigger pulse never catches up
+> with. Even at its most favourable duty the short band's collector-supply advantage is **31.5 dB below**
+> #396's +39.79 dB gap, so **no element inside the swing VCA section — signal side or supply side — closes it.**
+>
+> The step also corrects §10 a second time: VR2 (2 MΩ(B)) is in **series** with R93 470 kΩ, not parallel as the
+> reference recorded, which makes the DECAY knob's timing resistance 470 k–2.47 MΩ and never zero (the
+> reference's parallel reading puts a dead short across C41 at DECAY minimum, which is not a design). That
+> correction **relocates the DECAY knob**: it reaches the **low** band's collector supply directly through Q20
+> and R105, and the middle (DECAY) band only through R92/R89/R91 — which is exactly what the Fischer
+> recordings already said and §10 denied (§1 above). The external known answer is the DECAY span against
+> Roland's own chart (SN p.14) and two independent Fischer-recording measurements, inside a bound derived from
+> those three sources' own mutual disagreement (not fitted), swept over duty 0.25–1.0 and beta 100–400.
+> Wrong-then-right rate of step 12: **2**.
 
-> **What are the three envelope generators' peak collector voltages?** All three reservoirs charge from Q19
-> through their own diode (D6/D7/D8), so the answer is plausibly "equal at the peak, different only in decay" —
-> but each sits behind a different smoothing network (R87+C37, R88+C39, R105+C45), and the collector's DC
-> operating point is what sets where each swing VCA clips. Same kind of read as step 11, same tool. Filed as
-> **#432**; the gate defect step 11 refused to satisfy by existence alone is **#431**.
+With step 12, the cymbal's VCA section is read completely — signal drive (step 11) and collector supply (this
+step) — and **neither closes the balance's gap.** The missing factor is confirmed to sit outside the VCA
+section entirely, which is where steps 8 and 10 each already pointed from a different direction.
 
-Until the balance is resolved, nothing about it or the knobs' tracking can be promoted, and steps 7, 8 and 10 each
-say so from a different direction — step 11 narrows *where* the answer can be, it does not supply it. What can be
-done meanwhile is what step 10 forbade itself: isolate why the **low band leaks into H 6 dB above the short band's
-own contribution** (analysis skirt, its own chain, or the swing VCA's clipping harmonics — measured, not
-isolated), and #400's tail question.
+Until the balance is resolved, nothing about it or the knobs' tracking can be promoted, and steps 7, 8, 10, 11 and
+12 each say so from a different direction. What remains is what step 10 forbade itself: isolate why the **low
+band leaks into H 6 dB above the short band's own contribution** (analysis skirt, its own chain, or the swing
+VCA's clipping harmonics — measured, not isolated), and #400's tail question.
 
 **Unchanged constraints for whatever comes next.**
 - Select on the 9 development settings; confirm on the 16 untouched ones, including CY2500; report all 25.
