@@ -50,7 +50,7 @@ None of these was measured on the R1 production path. Each row names its engine 
 
 | case | subject | state | properties | evidence level | measured at |
 |---|---|---|---|---|---|
-| D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.07; early/body energy 0.07 | fixed-point model | `7dd6337` |
+| D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.15; early/body energy 0.07 | fixed-point model | `4b560cb` |
 | D02A | Snare / anchor | pass | Body/noise balance 0.65; attack 0.02; noise decay 0.04 | integrated RTL (component bench) | `99637db` |
 | D03A | Low tom / anchor | fail | Pitch drop 0.06; body spectrum 6.04; decay 0.04 | fixed-point model | `7dd6337` |
 | D04A | Low conga / anchor | no verdict | Pitch 0.77; body spectrum 4.14 | fixed-point model | `7dd6337` |
