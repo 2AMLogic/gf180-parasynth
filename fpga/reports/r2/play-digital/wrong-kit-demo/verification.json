@@ -1,0 +1,312 @@
+{
+  "tool": "fpga/verify_rolling_playback.py",
+  "image": {
+    "sender": "release",
+    "target": "r2",
+    "target_contract_revision": 14,
+    "target_kit_sha256": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+  },
+  "clean": {
+    "bar808-full@0": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 15962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": false
+    },
+    "bar808-full@32000": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 47962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": false
+    },
+    "bar808-full@65300": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 192,
+      "timed_intended": 192,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 15726,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 55,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 9262,
+        "event_packets": 192,
+        "status_polls": 304,
+        "phrase_span_frames": 202333,
+        "phrase_span_s": 4.2153,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.571,
+        "spreading": {
+          "timed_writes": 192,
+          "moved": 133,
+          "anchors": 22,
+          "anchors_moved": 20,
+          "worst_anchor_shift_frames": 14,
+          "worst_anchor_shift_ms": 0.292
+        }
+      },
+      "ok": false
+    },
+    "demo@0": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 15962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": false
+    },
+    "demo@32000": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 47962,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": false
+    },
+    "demo@65300": {
+      "rc": 0,
+      "reasons": [
+        "init bytes: known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "init bytes: drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "init bytes: no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)",
+        "static image not executed exactly, in order"
+      ],
+      "static_executed": 202,
+      "static_intended": 205,
+      "timed_executed": 306,
+      "timed_intended": 306,
+      "device_errors": [],
+      "drops": 0,
+      "resets": 0,
+      "init_check": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "performance_origin": 15726,
+      "timing_bad": 0,
+      "value_bad": 0,
+      "metrics": {
+        "peak_queue": 60,
+        "queue_depth": 64,
+        "min_deadline_slack_frames": 8984,
+        "event_packets": 306,
+        "status_polls": 341,
+        "phrase_span_frames": 192823,
+        "phrase_span_s": 4.0171,
+        "counter_wraps_crossed": 3,
+        "host_sim_seconds": 5.362,
+        "spreading": {
+          "timed_writes": 306,
+          "moved": 228,
+          "anchors": 50,
+          "anchors_moved": 34,
+          "worst_anchor_shift_frames": 22,
+          "worst_anchor_shift_ms": 0.458
+        }
+      },
+      "ok": false
+    }
+  },
+  "controls": {},
+  "state": "FAIL",
+  "expect_fail": {
+    "caught": true,
+    "init_check": {
+      "bar808-full@0": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "bar808-full@32000": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "bar808-full@65300": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "demo@0": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "demo@32000": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ],
+      "demo@65300": [
+        "known-state preamble missing: first writes [(0, 0, 4, 0), (0, 0, 5, 0)], expected [(0, 0, 35, 0), (0, 1, 255, 0)] (voice RESET, drum RESET)",
+        "drum kit differs from the frozen revision-14 kit at kit write 97: sent 147 kit writes, expected 148; first difference sent (96, 125960438) vs frozen (96, 134152438)",
+        "no ENV_FRATE[8] (0x63) write: the clap's final strike is off (a revision-11 kit)"
+      ]
+    }
+  }
+}

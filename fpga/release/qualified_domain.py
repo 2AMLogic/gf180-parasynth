@@ -143,11 +143,22 @@ def mod_octaves(mroute: int, mwheel: int, mpd: int) -> float:
     return min(vf.OCT_SAT / (1 << vf.OCT_Q), amt * mpd / (1 << vf.OCT_Q))
 
 
-def check_patch(regs: dict, *, name: str = "patch", pulse2x: bool = False) -> dict:
+# The images whose bitstream is built with PULSE2X=1 (VOICE_PULSE_2X). R0 and R1
+# are PULSE2X=0 and keep refusing it; the R2 candidate (#333: pulse2x fixes the
+# M5A/M5B foldback, fpga/release/R2.md) admits it. An image is named here only
+# once its candidate record states PULSE2X=1 -- test_release_domain holds both.
+PULSE2X_IMAGES = frozenset({"r2"})
+
+
+def check_patch(regs: dict, *, name: str = "patch", pulse2x: bool = False,
+                image: str = "release") -> dict:
     """A control image (VoiceFx.patch_regs form). Returns a summary including
-    the playable MIDI range; raises Rejected."""
-    if pulse2x:
-        raise Rejected("PULSE2X", f"{name}: PULSE2X=1 is excluded from this release")
+    the playable MIDI range; raises Rejected. `image` is the image the patch
+    will play on: PULSE2X=1 is admitted only on a PULSE2X image."""
+    if pulse2x and image not in PULSE2X_IMAGES:
+        raise Rejected("PULSE2X", f"{name}: PULSE2X=1 is excluded from this release "
+                       f"({image!r} is built PULSE2X=0; it is admitted on "
+                       f"{sorted(PULSE2X_IMAGES)})")
     waves = audible(regs["waves"], regs["weights"])
     if waves not in SUPPORTED_WAVES:
         raise Rejected("WAVES", f"{name}: waveform set {waves} is not one of the release's "
@@ -260,7 +271,7 @@ def check_stream(writes, *, initial: str = "reset", mod_initial: str | None = No
             glide, waves, weights, mroute, mwheel, mpd = 0, ["saw"] * 3, [0] * 3, 0, 0, 0
             continue
         if addr == A_DRIFT:
-            if data & 0xFFFF and image in ("tree", "r1"):
+            if data & 0xFFFF and image in ("tree", "r1", "r2"):
                 raise Rejected("NOT_IN_IMAGE", "DRIFT (0x2D) is compiled into the R1 (tree) "
                                "image but is not in its qualified player domain (#279); use "
                                "the engineering interface", i)

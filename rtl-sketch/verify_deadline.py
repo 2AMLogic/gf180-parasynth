@@ -99,16 +99,16 @@ MUTANTS = {
              ("                S_IDLE: if (go) begin\n",
               "                    late_cnt <= 9'd0;                                  // MUTANT late\n"),
              ("                S_OUT2: begin\n", None)],
-    # the CANDIDATE correction (docs/deadline/README.md): an oscillator whose
-    # output comes from the 2x bank skips the scalar PolyBLEP window loop,
-    # whose c_pp/c_ps only feed the scalar path it does not use
-    "skip2xwin": [("                    if (!blep) state <= S_MIX;",
+    # R2 (#333): the skip2xwin correction is now IN voice_dp.v. `full2xwin`
+    # reinstates R1's behaviour (every oscillator runs the window loop), the
+    # reference the saving is measured against
+    "full2xwin": [("                    if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;",
                    None)],
-    # NEGATIVE CONTROL for skip2xwin (#333): skip the window loop for EVERY
-    # oscillator. A base-rate PolyBLEP oscillator (R1's square) then loses its
-    # edge correction, so the I2S comparison must fail; if it did not, the
-    # skip2xwin equivalence result could not have seen a needed computation
-    "skipallwin": [("                    if (!blep) state <= S_MIX;",
+    # NEGATIVE CONTROL (#333), re-anchored on the R2 line: skip the window loop
+    # for EVERY oscillator. A base-rate PolyBLEP oscillator then loses its edge
+    # correction, so the I2S comparison must fail; if it did not, the skip's
+    # equivalence result could not have seen a needed computation
+    "skipallwin": [("                    if (!blep || (use_osc2x && shape_osc2x)) state <= S_MIX;",
                     None)],
 }
 
@@ -125,9 +125,8 @@ def make_mutant(spec: str, outdir: str) -> str:
         if kind == "late" and anchor.strip() == "S_OUT2: begin":
             src = src.replace(anchor, f"                S_OUT2: if (late_cnt != 9'd{int(arg)}) "
                                       f"late_cnt <= late_cnt + 9'd1; else begin   // MUTANT late\n")
-        elif kind == "skip2xwin":
-            src = src.replace(anchor, "                    if (!blep || (use_osc2x && shape_osc2x)) "
-                                      "state <= S_MIX;   // MUTANT skip2xwin")
+        elif kind == "full2xwin":
+            src = src.replace(anchor, "                    if (!blep) state <= S_MIX;   // MUTANT full2xwin")
         elif kind == "skipallwin":
             src = src.replace(anchor, "                    if (1'b1) state <= S_MIX;   // MUTANT skipallwin")
         elif anchor.endswith("\n"):
@@ -840,13 +839,18 @@ def arty_items():
     return items, regs
 
 
-def run_arty(*, inject, outdir, rtl_dir=None):
+def run_arty(*, inject, outdir, rtl_dir=None, pulse2x=False):
     import verify_uart_bridge as vub
+    if pulse2x:
+        # R2 (#333): the Arty wrapper in the PULSE2X=1 configuration -- the
+        # bench's defines and its model both follow vub.CONFIG
+        with vub.with_config(PULSE2X=1):
+            return run_arty(inject=inject, outdir=outdir, rtl_dir=rtl_dir)
     items, regs = arty_items()
     vub.SCENARIOS["deadline-arty"] = lambda: (items, {"tail": 200})
     print(f"verify_deadline: arty-uart: {sum(1 for i in items if i[0] == 'write')} live writes, "
           f"{sum(1 for i in items if i[0] == 'event')} device-scheduled events over the UART pin; "
-          f"wrapper fpga/rtl/arty_a7_top.v, published configuration {vub.CONFIG}")
+          f"wrapper fpga/rtl/arty_a7_top.v, configuration {vub.CONFIG}")
     cwd = os.getcwd()
     os.chdir(HERE)                    # the monitor's `include resolves from rtl-sketch
     try:
@@ -990,8 +994,10 @@ def main(argv=None) -> int:
     ap.add_argument("--pulse2x", action="store_true")
     ap.add_argument("--inject", default=None, help="compile with -DINJECT_BUG_<NAME>")
     ap.add_argument("--mutant", default=None,
-                    help="late:N (the late-completion control: N stall cycles) or skip2xwin "
-                         "(the candidate correction); generated from voice_dp.v at run time")
+                    help="late:N (the late-completion control: N stall cycles), full2xwin "
+                         "(R1's window loop for 2x oscillators, the pre-#333 reference) or "
+                         "skipallwin (the negative control); generated from voice_dp.v at "
+                         "run time")
     ap.add_argument("--write-mutant", default=None, metavar="SPEC",
                     help="only write the mutant voice_dp.v under --outdir and print its path")
     ap.add_argument("--analyse-capture", default=None, metavar="DIR",
@@ -1028,11 +1034,11 @@ def main(argv=None) -> int:
         if res is None:
             return _exit(2, a)
     elif a.scenario == "arty-uart":
-        if a.pulse2x or a.no_osc2x or a.no_filter2x:
-            print("verify_deadline: REFUSED -- arty-uart runs the published Arty configuration "
-                  "(OSC2X=1 FILTER2X=1 PULSE2X=0) only"); return 2
+        if a.no_osc2x or a.no_filter2x:
+            print("verify_deadline: REFUSED -- arty-uart runs OSC2X=1 FILTER2X=1 (the Arty "
+                  "images), with PULSE2X=0 (R1) or --pulse2x (the R2 candidate)"); return 2
         rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
-        res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir)
+        res = run_arty(inject=a.inject, outdir=outdir, rtl_dir=rtl_dir, pulse2x=a.pulse2x)
     else:
         rtl_dir = make_mutant(a.mutant, outdir) if a.mutant else None
         res = run_spi(a.scenario, osc2x=osc2x, filter2x=filter2x, pulse2x=a.pulse2x,
@@ -1117,10 +1123,12 @@ def analyse_capture(d, record, a):
     def sha(f):
         return hashlib.sha256(open(f, "rb").read()).hexdigest()
     if a.scenario == "arty-uart":
+        import verify_uart_bridge as vub
         run, regs = arty_run_from_capture(d, a.inject)
         if run is None:
             print(f"verify_deadline: REFUSED -- {d}/uart_cmds.txt is not this scenario's plan"); return None
-        res = evaluate_arty(run, regs)
+        with vub.with_config(PULSE2X=int(a.pulse2x)):     # the capture's own configuration
+            res = evaluate_arty(run, regs)
         names = ["uart_cmds.txt", "transcript.txt", "uart_i2s.txt", "uart_wrs.txt", "uart_wrs.txt.sched",
                  "uart_txd.txt", "uart_samp.txt"]
     else:

@@ -42,8 +42,9 @@ def _bytes(argv):
 def test_the_defaults_do_not_move():
     assert uh.DEFAULT_IMAGE == "release"
     # `tree` moved to 15 with #388's rimshot writes; `r1` stays 14, which is the
-    # whole point of naming the image rather than assuming the tree's.
-    assert uh.IMAGE_REVISION == {"release": 11, "tree": 15, "r1": 14}
+    # whole point of naming the image rather than assuming the tree's -- and so
+    # does `r2`, which carries R1's drum RTL and contract revision.
+    assert uh.IMAGE_REVISION == {"release": 11, "tree": 15, "r1": 14, "r2": 14}
     assert ms.resolve_image("/dev/ttyUSB1", None) == "release"
     assert ms.resolve_image("sim", None) == "tree"
     assert ms.resolve_image("sim", "r1") == "r1"

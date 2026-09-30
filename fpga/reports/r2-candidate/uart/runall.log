@@ -1,0 +1,28 @@
+==============================================================================
+PASS            65.4s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --pulse2x --outdir build/r2u/dl-arty-uart-p2x --json build/r2u/dl-arty-uart-p2x.json
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'analysis_version': 2, 'formula': 'strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2', 'checked_frames': 3496, 'frames_without_strobe': 0, 'constant': 88, 'residuals': {88: 3496}, 'ywait_range': [5, 11], 'exceptions': 0, 'first_exceptions': [], 'explained': True}
+                worst frame 2398: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+PASS            61.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --outdir build/r2u/dl-arty-uart --json build/r2u/dl-arty-uart.json
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 1; cost model {'analysis_version': 2, 'formula': 'strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2', 'checked_frames': 3496, 'frames_without_strobe': 0, 'constant': 88, 'residuals': {88: 3496}, 'ywait_range': [5, 11], 'exceptions': 0, 'first_exceptions': [], 'explained': True}
+                worst frame 2398: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+FAIL(1)         52.7s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --pulse2x --inject VOICE_PULSE2X_RECT_HEADROOM --outdir build/r2u/dl-arty-uart-p2x-ctl --json build/r2u/dl-arty-uart-p2x-ctl.json
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 0; cost model {'analysis_version': 2, 'formula': 'strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2', 'checked_frames': 3496, 'frames_without_strobe': 0, 'constant': 88, 'residuals': {88: 3496}, 'ywait_range': [5, 11], 'exceptions': 0, 'first_exceptions': [], 'explained': True}
+                worst frame 2398: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 359 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 359; core_bad 359; UART contract check failed: seg 0 period 2523: model -4191, wire -4192, error -1 LSB; seg 0 period 2524: model -1659, wire -1658, error +1 LSB; seg 0 period 2529: model -2282, wire -2283, error -1 LSB
+PASS             5.2s  /home/ubuntu/work/venv/bin/python -m pytest -q fpga/test_uart_replay_reuse.py fpga/test_uart_host.py tools/test_verify_deadline.py
+              .............................................................            [100%]
+              61 passed in 4.72s
+==============================================================================
+3/4 passed  --  FAIL /home/ubuntu/work/venv/bin/python rtl-sketch
+runall_exit=1

@@ -1173,6 +1173,11 @@ _DECIM2_TAPS = np.array((39,54,-44,-138,34,323,72,-609,-397,957,1133,
                          -1296,-2819,1544,10175,14712,10175,1544,-2819,
                          -1296,1133,957,-397,-609,72,323,34,-138,-44,54,39), dtype=np.int64)
 _OS2_SUBSTEP_GAIN_Q15 = 27853  # 0.85 headroom keeps the Q1.15 FIR output below its rail.
+# R2 (#333, docs/deadline/recheck-333 item 5): rectangles saturated the Q1.15
+# decimator output at 0.85 near the top of the range; they get 0.74 (frozen
+# rule: zero clipped samples, >= 0.1 dB margin on a 1/8-semitone sweep). Saw
+# stays at 0.85, bit-identical to R1. RTL: polyblep_saw_pair.v RECT_GAIN_Q15.
+_OS2_RECT_GAIN_Q15 = 24248
 
 def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple[np.ndarray, np.ndarray, int]:
     """Render saw or a rectangular waveform at 2x, then decimate.
@@ -1211,7 +1216,8 @@ def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple
     o.phase = int((phase0 + int(inc_a.sum())) & PHASE_MASK)
     # The decimator's ringing can exceed full scale around a PolyBLEP edge.
     # Preserve headroom before the RTL's saturating Q1.15 output stage.
-    hi = (np.asarray(hi, dtype=np.int64) * _OS2_SUBSTEP_GAIN_Q15) >> 15
+    gain = _OS2_RECT_GAIN_Q15 if o.shape in TWO_EDGE else _OS2_SUBSTEP_GAIN_Q15
+    hi = (np.asarray(hi, dtype=np.int64) * gain) >> 15
     joined = np.concatenate((history, hi))
     y = np.convolve(joined, _DECIM2_TAPS, mode="full")
     filtered = y[len(history):len(history) + 2*n]

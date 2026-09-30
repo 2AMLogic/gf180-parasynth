@@ -82,7 +82,8 @@ def intended(fixture: str, preset: str | None = None,
     the hold, spacing intact.
 
     `image` is the TARGET the expectation is built for, never the sender's
-    selector. For R1 ("r1", the named release; #323) the expectation is checked against the frozen
+    selector. For R1 ("r1", the named release; #323) and R2 ("r2", which is sent R1's
+    kit and start) the expectation is checked against the frozen
     target (fpga/release/r1_candidate.py) before it is used: the known-state
     preamble and the revision-14 kit by digest, with its nonzero final
     strike. An expectation that is not that target REFUSES (Refused)."""
@@ -95,7 +96,7 @@ def intended(fixture: str, preset: str | None = None,
         static += [tuple(w) for w in uh.note_writes(note, True)]
         held = [tuple(w) for w in uh.note_writes(note, False)]
     timed = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed_w]
-    if image == r1c.HOST_IMAGE:
+    if image in uh.R1_KIT_IMAGES:           # r1, and r2 (R1's kit and start; R2.md)
         probs = r1c.check_init(static, kit_expected=True)
         if probs:
             raise r1c.Refused(f"the {fixture} expectation is not the frozen R1 target: {probs}")
@@ -253,8 +254,9 @@ def check(run: dict) -> dict:
         codes = sorted({e[0] for e in sim.errors})
         res["reasons"].append(f"device errors {codes}, drops {sim.drops}")
     executed = [(w[1], w[2], w[3], w[4]) for w in live]
-    if want.get("target") == r1c.HOST_IMAGE:
-        # the frozen R1 target, checked on what the device EXECUTED from the
+    if want.get("target") in uh.R1_KIT_IMAGES:
+        # the frozen R1 target (r1, and r2, which is sent R1's kit and start),
+        # checked on what the device EXECUTED from the
         # host's bytes: a wrong kit is a host-correctness failure, named
         res["init_check"] = r1c.check_init(executed, kit_expected=True)
         for p in res["init_check"]:
@@ -443,19 +445,23 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
     cap = write_rtl_capture(run, outdir / fixture)
     work = "rolling-rtl" if (image, target) == (uh.DEFAULT_IMAGE, uh.DEFAULT_IMAGE) \
         else f"rolling-rtl-{image}-for-{target}"
-    rr = vub.simulate_replay(str(outdir / fixture),
-                             ROOT / "build" / work / fixture,
-                             tail_frames=int(TAIL_S * SR),
-                             # ~258k frames of the full wrapper: 3600 s
-                             # reached 87% on a loaded machine (62 fr/s)
-                             timeout_s=RTL_TIMEOUT_S, reuse=reuse)
-    if rr is None:
-        return {"state": "REFUSED", "reason": "RTL replay did not run",
-                "capture": cap}
-    ok, comp, detail = vub.analyze(rr)
-    # completeness (#300 review): every period the stimulus requires, and a
-    # control showing the check can fail
-    trunc = vub.truncation_control(rr)
+    # the RTL defines and the model are the TARGET image's configuration
+    # (r2: PULSE2X=1; vub.image_config); the run identity records the defines,
+    # so a reuse can never cross configurations either
+    with vub.image_config(target):
+        rr = vub.simulate_replay(str(outdir / fixture),
+                                 ROOT / "build" / work / fixture,
+                                 tail_frames=int(TAIL_S * SR),
+                                 # ~258k frames of the full wrapper: 3600 s
+                                 # reached 87% on a loaded machine (62 fr/s)
+                                 timeout_s=RTL_TIMEOUT_S, reuse=reuse)
+        if rr is None:
+            return {"state": "REFUSED", "reason": "RTL replay did not run",
+                    "capture": cap}
+        ok, comp, detail = vub.analyze(rr)
+        # completeness (#300 review): every period the stimulus requires, and a
+        # control showing the check can fail
+        trunc = vub.truncation_control(rr)
     # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
     # digests) is published beside the result it produced
     receipt = Path(rr["outdir"]) / "run_identity.json"
@@ -469,7 +475,8 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
            "rtl_run": vub.rtl_run_report(rr),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
-    out["control"] = rtl_control(fixture, outdir, vub, work)
+    with vub.image_config(target):
+        out["control"] = rtl_control(fixture, outdir, vub, work)
     if not out["control"]["caught"] and out["state"] == "PASS":
         out["state"] = "FAIL"
     return out
@@ -576,11 +583,11 @@ def run_control(name: str, image: str = uh.DEFAULT_IMAGE, target: str | None = N
 
 
 def wrong_kit_control(fixture: str, target: str) -> dict:
-    """The sender plays the RELEASE (revision-11) kit under `--image r1`
-    (uart_host INJECT WRONG_KIT) while the expectation stays the frozen R1
-    target. Caught only if the check fails FOR THE KIT: the init-byte check
-    names the kit or the final strike (plan088)."""
-    r = check(run_cli(fixture, image=r1c.HOST_IMAGE, target=target, inject="WRONG_KIT"))
+    """The sender plays the RELEASE (revision-11) kit under `--image <target>`
+    (r1 or r2; uart_host INJECT WRONG_KIT) while the expectation stays the
+    frozen R1 target. Caught only if the check fails FOR THE KIT: the
+    init-byte check names the kit or the final strike (plan088)."""
+    r = check(run_cli(fixture, image=target, target=target, inject="WRONG_KIT"))
     init = r.get("init_check") or []
     kit_named = any("kit" in p or "ENV_FRATE" in p for p in init)
     return {"control": "WRONG_KIT", "fixture": fixture,
@@ -620,7 +627,7 @@ def main(argv=None) -> int:
     image = a.image or uh.DEFAULT_IMAGE
     target = a.expect_image or image
     try:
-        if target == r1c.HOST_IMAGE:
+        if target in uh.R1_KIT_IMAGES:
             r1c.frozen_kit()                    # the frozen target exists, or nothing runs
         for fx in FIXTURES:
             intended(fx, image=target)          # the expectation is the target, or REFUSED
@@ -649,7 +656,7 @@ def main(argv=None) -> int:
                   + ("" if r["ok"] else f" -- {r['reasons']}"))
     ident = {"sender": image, "target": target,
              "target_contract_revision": uh.IMAGE_REVISION[target],
-             "target_kit_sha256": (r1c.KIT_R14_SHA256 if target == r1c.HOST_IMAGE else None)}
+             "target_kit_sha256": (r1c.KIT_R14_SHA256 if target in uh.R1_KIT_IMAGES else None)}
     refused = {k: r["refused"] for k, r in clean.items() if r.get("refused")}
     if refused:
         # the apparatus could not measure these runs. That is not a FAIL about
@@ -681,7 +688,7 @@ def main(argv=None) -> int:
         ok &= c["caught"]
         print(f"rolling control {name}: {'CAUGHT' if c['caught'] else 'MISSED'} "
               f"-- {c['reasons'][:2]}")
-    if target == r1c.HOST_IMAGE:
+    if target in uh.R1_KIT_IMAGES:
         for fx in FIXTURES:
             c = wrong_kit_control(fx, target)
             controls[f"WRONG_KIT:{fx}"] = c

@@ -138,28 +138,86 @@ def classify(status: int) -> tuple[str, int | None, int | None]:
     return ERROR, code, None
 
 
+# ---- per-run peak RSS: why there is a launcher between us and pytest ----------
+#
+# `ru_maxrss` is NOT "the most memory this program used". On Linux the kernel
+# folds the OUTGOING address space's high-water mark into the process's maxrss
+# at execve() (fs/exec.c: exec_mmap -> setmax_mm_hiwater_rss), and a child made
+# by fork, vfork or posix_spawn starts life in the parent's address space (a
+# copy, or -- vfork/CLONE_VM -- the very same one). So a pytest spawned straight
+# from a big parent reports max(parent RSS at spawn, its own peak): under
+# `pytest tools/` the harness process is ~230 MB of collected modules, and every
+# run -- a two-line test included -- came back as ~230 MB. No choice of spawn
+# primitive avoids it, and "subtract a baseline" cannot undo a max().
+#
+# What does: the address space that is replaced at exec must be SMALL. A
+# `python -S` launcher is spawned from us (its own maxrss inherits our size, and
+# we never read it), forks, and the fork -- a copy of the launcher's few-MB
+# address space -- execs pytest. The launcher wait4()s that grandchild and hands
+# back its raw status and rusage on a dedicated pipe. We cannot read them via
+# our own wait4 on the launcher: Linux returns RUSAGE_BOTH there, which folds
+# the launcher's inherited maxrss straight back in.
+#
+# Units: ru_maxrss is kilobytes on Linux and BYTES on macOS; normalised to kB.
+_LAUNCHER = r"""
+import json, os, sys
+fd, argv = int(sys.argv[1]), sys.argv[2:]
+pid = os.fork()
+if pid == 0:
+    os.close(fd)
+    try:
+        os.execv(argv[0], argv)
+    finally:
+        os._exit(127)
+_, status, ru = os.wait4(pid, 0)
+os.write(fd, json.dumps({"status": status, "maxrss": ru.ru_maxrss,
+                         "minflt": ru.ru_minflt, "majflt": ru.ru_majflt}).encode())
+os.close(fd)
+"""
+_MAXRSS_TO_KB = 1024 if sys.platform == "darwin" else 1
+
+
 def run_once(target: str, extra_env: dict, timeout: float) -> dict:
-    """One child, its own rusage. `os.wait4` gives ru_maxrss for THIS child
-    rather than a running maximum over all of them, which is what makes a
-    per-run peak-RSS column possible at all."""
+    """One child, its own rusage, measured through a small launcher so the
+    peak-RSS column is THIS run's peak and not the harness's own size (see
+    `_LAUNCHER` above). The status classified is the pytest process's own raw
+    wait status, forwarded unaltered."""
     env = dict(os.environ, **extra_env)
     env.setdefault("PYTHONFAULTHANDLER", "1")   # the traceback we would need next time
     cmd = [sys.executable, "-X", "faulthandler", "-m", "pytest", target,
            "-q", "-p", "no:cacheprovider", "--no-header"]
     t0 = time.monotonic()
-    p = subprocess.Popen(cmd, cwd=ROOT, env=env, start_new_session=True,
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    rfd, wfd = os.pipe()
+    try:
+        p = subprocess.Popen([sys.executable, "-S", "-c", _LAUNCHER, str(wfd), *cmd],
+                             cwd=ROOT, env=env, start_new_session=True,
+                             pass_fds=(wfd,), stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True)
+    finally:
+        os.close(wfd)
     out, verdict, code, sig = "", None, None, None
     try:
         out = p.stdout.read()
-        _, status, ru = os.wait4(p.pid, 0)
-        verdict, code, sig = classify(status)
-        rss = ru.ru_maxrss
-        minflt, majflt = ru.ru_minflt, ru.ru_majflt
+        p.wait()
+        with os.fdopen(rfd, "rb") as fh:
+            rfd = None
+            raw = fh.read()
+        if not raw:
+            raise RuntimeError(f"launcher exited {p.returncode} without a report")
+        rep = json.loads(raw)
+        verdict, code, sig = classify(rep["status"])
+        rss = rep["maxrss"] // _MAXRSS_TO_KB
+        minflt, majflt = rep["minflt"], rep["majflt"]
     except Exception as exc:                                  # pragma: no cover
-        os.killpg(p.pid, signal.SIGKILL)
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
         verdict, code, sig, rss, minflt, majflt = ERROR, None, None, 0, 0, 0
         out += f"\n[crash_rate] harness error: {exc!r}"
+    finally:
+        if rfd is not None:
+            os.close(rfd)
     if time.monotonic() - t0 > timeout and verdict != PASS:
         verdict = TIMEOUT
     tail = "\n".join(out.strip().splitlines()[-12:])

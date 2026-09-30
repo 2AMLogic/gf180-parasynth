@@ -50,7 +50,7 @@ None of these was measured on the R1 production path. Each row names its engine 
 
 | case | subject | state | properties | evidence level | measured at |
 |---|---|---|---|---|---|
-| D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.07; early/body energy 0.07 | fixed-point model | `7dd6337` |
+| D01A | Bass drum / anchor | no verdict | Pitch trajectory 0.15; early/body energy 0.07 | fixed-point model | `4b560cb` |
 | D02A | Snare / anchor | pass | Body/noise balance 0.65; attack 0.02; noise decay 0.04 | integrated RTL (component bench) | `99637db` |
 | D03A | Low tom / anchor | fail | Pitch drop 0.06; body spectrum 6.04; decay 0.04 | fixed-point model | `7dd6337` |
 | D04A | Low conga / anchor | no verdict | Pitch 0.77; body spectrum 4.14 | fixed-point model | `7dd6337` |
@@ -70,7 +70,7 @@ None of these was measured on the R1 production path. Each row names its engine 
 | M1A | Round bass / anchor | no verdict | Fundamental/harmonics 19.82; bass level 0.35 | fixed-point model | `cea5525` |
 | M5A | Bright high lead / anchor | fail | Pitch 0.15; Harmonic shape 7.56; Foldback energy 3.42; Envelope attack 1.07; Envelope release 0.06; Gain 0.47; Clipping 0.0 | integrated RTL (component bench) | `746b2605` |
 | M5B | Bright high lead / lower / darker | fail | Pitch 0.15; Harmonic shape 5.96; Foldback energy 2.95; Envelope attack 1.21; Envelope release 0.24; Gain 0.9; Clipping 0.0 | fixed-point model | `746b260` |
-| F1A | Cutoff response / low | pass | Corner frequency 0.76; low-band gain 0.0; rolloff 0.6 | integrated RTL (component bench) | `62809b3` |
+| F1A | Cutoff response / low | pass | Corner frequency 0.76; low-band gain 0.0; rolloff 0.6 | integrated RTL (component bench) | `25d7efe1` |
 | F1B | Cutoff response / mid | pass | Corner frequency 0.42; low-band gain 0.04; rolloff 0.02 | fixed-point model | `e356498` |
 | F1C | Cutoff response / high | pass | Corner frequency 0.36; low-band gain 0.03; rolloff 0.09 | fixed-point model | `e356498` |
 | E1A | Bass and kit / sparse | pass | Event timing 0.2; bus balance 0.0; output artifacts 0.0 | integrated RTL (component bench) | `af8f8ef` |
