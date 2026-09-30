@@ -262,6 +262,49 @@ def test_an_unrun_rig_is_None_and_not_False():
     assert rp.qualified_rigs(host="pedalboard") == []
 
 
+def test_the_list_renderer_does_not_print_a_None_verdict_as_a_rejection(capsys,
+                                                                       tmp_path,
+                                                                       monkeypatch):
+    """**Wrong before it was right, and caught by review rather than by a
+    test.** `--list` rendered the column as `"yes" if r.get("qualified") else
+    "NO"`, so the first `qualified: None` entry to reach a profile would have
+    printed **NO** -- the tool announcing a rejection nobody measured, in the
+    one place a reader goes to find out what this profile rejects. That is the
+    whole point of host-scoped verdicts leaking straight back out through the
+    renderer.
+
+    Three words, three states, asserted through `cmd_list` itself rather than
+    through the helper, because the defect was in the renderer."""
+    assert rp.verdict_word(True) == "yes"
+    assert rp.verdict_word(False) == "NO"
+    assert rp.verdict_word(None) == "no verdict"
+    # Not one of the three states: `?`, never a verdict. A renderer that maps an
+    # unexpected value onto one of the three is how a verdict gets invented.
+    assert rp.verdict_word("probably") == "?"
+    assert rp.verdict_word(1) == "?"
+
+    prof = {"schema": rp.SCHEMA, "clips": {}, "built": {}, "rigs": {
+        "surge-type2": {"qualified": True, "host": "dawdreamer", "why": "open source"},
+        "modeld": {"qualified": False, "host": "dawdreamer", "why": "exact silence"},
+        "modeld-pedalboard": {"qualified": None, "host": "pedalboard",
+                              "why": "nobody has run it"}}}
+    p = tmp_path / "profile.json"
+    p.write_text(json.dumps(prof), encoding="utf-8")
+    monkeypatch.setattr(rp, "PROFILE_JSON", p)
+    assert rp.cmd_list() == rp.OK
+    out = capsys.readouterr().out
+    rows = {ln.split()[0]: ln for ln in out.splitlines()
+            if ln.split() and ln.split()[0] in prof["rigs"]}
+    assert "no verdict" in rows["modeld-pedalboard"]
+    assert "NO" not in rows["modeld-pedalboard"]
+    assert "NO" in rows["modeld"]
+    assert "yes" in rows["surge-type2"]
+    # And the host it was measured under is on the row, since that is what makes
+    # two rows for one bundle readable at all.
+    assert "pedalboard" in rows["modeld-pedalboard"]
+    assert "dawdreamer" in rows["modeld"]
+
+
 def test_a_verdict_asked_for_under_the_wrong_host_is_refused():
     """The accessor is the point: `RIG_VERDICTS['modeld']` used under whatever
     host happens to be loaded is the mistake #123 found."""

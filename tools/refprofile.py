@@ -348,6 +348,27 @@ def qualified_rigs(host: str | None = None) -> list:
                   if v.get("qualified") is True
                   and (host is None or v.get("host") == host))
 
+
+#: The three words `--list` may print in the `qualified` column, and there are
+#: THREE of them for the same reason `qualified_rigs` exists.
+#:
+#: **`--list` used to print `"yes" if r.get("qualified") else "NO"`**, so the
+#: moment a `qualified: None` entry existed the table would have announced
+#: "NO" -- the tool stating a rejection nobody measured, in the one place a
+#: reader goes to find out what this profile rejects. Found by review on the
+#: same change that introduced the `None`; it is the whole point of that change
+#: leaking straight back out through the renderer.
+VERDICT_WORDS = {True: "yes", False: "NO", None: "no verdict"}
+
+
+def verdict_word(qualified) -> str:
+    """The word for one `qualified` value. Anything that is not exactly True,
+    False or None is `?`, never one of the three: a renderer that maps an
+    unexpected value onto a verdict is how a verdict gets invented."""
+    return VERDICT_WORDS.get(qualified, "?") if isinstance(qualified, (bool, type(None))) \
+        else "?"
+
+
 #: The estimator floors this profile's clips are read through, stated here so a
 #: consumer can refuse a row inside one. Issue #92: a floor that is published
 #: and not actually constant is worse than none.
@@ -1052,13 +1073,18 @@ def cmd_list() -> int:
             print(f"pins      {name}: checked BEFORE rendering only. Its renderer "
                   f"predates #233 and wrote pins_held_after_render as a constant")
     print()
-    print(f"{'rig':<14}{'qualified':<11}why")
+    print(f"{'rig':<18}{'host':<12}{'qualified':<12}why")
     print("-" * 100)
     for name, r in sorted(prof.get("rigs", {}).items()):
-        q = "yes" if r.get("qualified") else "NO"
+        q = verdict_word(r.get("qualified"))
         pl = r.get("plugin", {})
         ver = f" [{pl.get('bundle_version')}]" if pl.get("bundle_version") else ""
-        print(f"{name:<14}{q:<11}{(r.get('why', '') + ver)[:74]}")
+        host = r.get("host")
+        # `host` is the #123 environment tuple for a rig that RENDERED clips and
+        # a bare name for one that only carries a verdict. Both are legitimate;
+        # what is not is printing a dict into a 12-column field.
+        host = host.get("host", "?") if isinstance(host, dict) else (host or "?")
+        print(f"{name:<18}{host:<12}{q:<12}{(r.get('why', '') + ver)[:58]}")
     print()
     print(f"{'clip':<46}{'frames':>9}{'sha256':>14}  what")
     print("-" * 100)

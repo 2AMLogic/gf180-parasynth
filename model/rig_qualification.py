@@ -64,6 +64,15 @@ THE SILENCE FLOOR, AND WHERE IT DIVERGES FROM THE PRIOR ART
 its job is to throw away a bad draw cheaply and draw again, so a floor three
 orders of magnitude above true silence is exactly right for it.
 
+**Where that gate came from, because it is not a first-hand reading.** That
+directory does not exist on the host this module was written on (a Linux
+dispatch worker; `~/dev` is the operator's macOS machine), so `max_val_05 <
+1e-6` is taken from the way issue #125 quotes it, and so is the comparison
+below. A quotation is weaker evidence than the source and is labelled as one
+here; `docs/pedalboard-rig.md` names it as the one thing an operator on that
+machine still has to confirm. What the comparison does NOT depend on is the
+quotation: both of the numbers on our side are read out of this repository.
+
 This module's `SILENCE_FLOOR` is `1e-9`, `audio_measure.is_silent`'s default,
 and the two do NOT agree. The divergence is deliberate and it is in the other
 direction from the one that would be dangerous:

@@ -169,7 +169,7 @@ agree, and the divergence is deliberate:
 
 | floor | where | the question it answers |
 |---|---|---|
-| `1e-6` | `~/dev/generate-random-dexed-sounds/`, `max_val_05 < 1e-6` | *corpus filter*: is this draw worth keeping? A cheap reject-and-redraw, for which a floor three orders above true silence is exactly right |
+| `1e-6` | `~/dev/generate-random-dexed-sounds/`, `max_val_05 < 1e-6` — **quoted from #125, not read** (see below) | *corpus filter*: is this draw worth keeping? A cheap reject-and-redraw, for which a floor three orders above true silence is exactly right |
 | `1e-9` | `rig_qualification.SILENCE_FLOOR` (`audio_measure.is_silent`'s default) | *is there anything at all?* The only question a floor can answer without knowing the level the rig was set to. At 1e-9 a refusal means the host returned zeros — which is precisely the Model-D-under-dawdreamer finding, peak exactly 0.0 |
 | `−12.04 dBFS` | `refprofile.ESTIMATOR_FLOORS["probe level"]` | *at what input level is OUR fixed-point ladder inside its measured stability window?* A property of the thing being compared **against** the reference. Not a silence gate at all |
 
@@ -179,10 +179,32 @@ one threshold is how a level defect gets reported as an absence of signal.
 `test_the_silence_floor_is_the_one_this_module_documents` asserts exactly that —
 a signal between the two floors is SOUNDING and FAILS the level check.
 
-**Read and adapted, not vendored.** What the prior art settled: the
-`(midi_bytes, timestamp)` tuple form of `pedalboard`'s `process` means no `mido`
-dependency is needed, and `load_plugin` → `_parameters` → `.index` is the route
-to index-addressable parameters. Both are used here. Nothing was copied.
+### The four prior-art scripts were NOT read, and that is an open item
+
+#124's acceptance criteria ask that
+`~/dev/generate-random-dexed-sounds/dawdreamer_synths.py`,
+`playdawdreamer-synth.py`, `dawdreamer-find-all-synth-parameters.py` and
+`~/dev/vst3synthpresets/modeld.py` be read before the rig is written.
+**They could not be: `~/dev` does not exist on the Linux dispatch worker this
+rig was built on** (`ls ~/dev` → `No such file or directory`), and neither does
+any plugin bundle. Saying otherwise would be the failure mode this whole
+document is written against, so:
+
+| claim | status |
+|---|---|
+| the `1e-6` corpus gate above | **quoted from issue #125**, which states it as `max_val_05 < 1e-6`. The two numbers it is compared against are read out of this repository, so only the prior-art column is second-hand |
+| `load_plugin` → `_parameters` → `.index` as the route to index-addressable parameters, and the `(midi_bytes, timestamp)` message form (so no `mido` dependency) | **from `pedalboard`'s public API**, not from the prior art. Neither is verified against an installed `pedalboard` either — see the caveat below |
+| anything else the four scripts may settle | **unknown.** Not read |
+
+**And the host API itself is unverified on this machine.** `pedalboard` is not
+installed here, so `_PedalboardParams` and `_PedalboardPlugin.render` are
+written against `pedalboard`'s documented interface and exercised against a
+*fake* of it (below). The first run of `tools/qualify_modeld_pedalboard.py` on
+the operator's machine is what tests that shape, and an `AttributeError` there
+is a finding about this adapter, not about the plugin. Reading the four scripts
+on that machine is the cheapest way to shorten that step, and it is still
+worth doing: they are a *working* pedalboard corpus generator, which is
+evidence about the API that a docstring is not.
 
 ## The two corrections, each measured
 
@@ -286,9 +308,13 @@ measurement.
 | `tools/test_qualify_modeld_pedalboard.py` | the shipping tool: exit codes, the record, the environment tuple, the verdict table | the same host |
 
 The fake's **default** state is the defect on record — peak 1.000, 8.57 % at the
-rail, 130.81 Hz for a commanded MIDI 60 — and that reproduction is asserted
-before anything is claimed about the rig. A test whose apparatus does not
-reproduce the defect proves nothing about the fix. The fake asserts the sample
+rail, 130.81 Hz for a commanded MIDI 60 — and it is asserted to be, before
+anything is claimed about the rig. A test whose apparatus does not reproduce the
+defect proves nothing about the fix. **This is the apparatus being *set* to the
+condition on record, not a second measurement of the plugin:** the fake's output
+gain is solved so its default patch lands on 8.57 %. What it establishes is that
+the rig corrects *that* condition, which is the only thing a test without the
+plugin can establish. The fake asserts the sample
 rate and the block size on **every** call, so a rig that left either to the host
 would fail every case in those files.
 
@@ -301,6 +327,11 @@ sounds the note or no master position clears the rail.
 - **No verdict for the real plugin.** Everything above is the instrument and its
   controls. `qualified: None` stands until somebody runs
   `tools/qualify_modeld_pedalboard.py` on a machine with the bundle.
+- **The `pedalboard` API shape is unverified against an installed
+  `pedalboard`**, and neither were the four prior-art scripts read — `~/dev` and
+  the plugin bundles are both on the operator's machine, and this was built on a
+  Linux dispatch worker. See "The four prior-art scripts were NOT read" above for
+  exactly which claims are second-hand and which are not.
 - **The 8 Mono family anchor cases are not built.** #124 gates them on the one
   clip qualifying, and it has not been run. `docs/scorecard/` is untouched.
 - **The readback column.** Empty by design until one qualifying run measures it.
