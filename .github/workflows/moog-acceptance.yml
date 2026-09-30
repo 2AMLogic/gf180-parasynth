@@ -50,7 +50,7 @@ name: acceptance
 #   - The cap is right where it should be. 20 minutes against a measured
 #     worst case of 12.3 is 1.6x headroom; raising it would only slow the
 #     signal from a genuinely hung test. (That was on Blacksmith. Since
-#     2026-09-30 the job is back on GitHub-hosted and the cap is 35 -- see
+#     2026-09-30 the job is back on GitHub-hosted and the cap is 40 -- see
 #     the comment on `timeout-minutes` below.)
 #
 # And the two triggers are not redundant in the first place: `push` verifies
@@ -85,13 +85,15 @@ jobs:
     # The header's measurement is why the cap moves with it: on the hosted
     # class this job ran 8.9 / 15.3 / 20.0 min (min/median/max, n=51) and 20%
     # of runs hit the old 20-minute cap, while the Blacksmith worst case was
-    # 12.3 min (n=49; 14 min over the last 40 runs). 35 minutes is ~1.75x the
-    # hosted observed max -- the same headroom ratio 20 gave over 12.3 on
-    # Blacksmith -- so a hosted run is not cancelled for being on a slower
-    # machine. Re-measure with tools/ci_acceptance_timing.py once hosted runs
-    # accumulate and tighten.
+    # 12.3 min (n=49; 14 min over the last 40 runs). The suite has grown
+    # since: the first two hosted runs after the move (PR #489, push +
+    # pull_request) both took 25.1 min, over the old cap on every run. 40
+    # minutes is ~1.6x that -- the headroom 20 gave over 12.3 on Blacksmith
+    # -- so a hosted run is not cancelled for being on a slower machine.
+    # Re-measure with tools/ci_acceptance_timing.py once hosted runs
+    # accumulate.
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -134,13 +134,13 @@ jobs:
     # the price of an intermittent red, which is the trade
     # docs/failure-modes.md says not to make.
     #
-    # 60, not 40, since the move to GitHub-hosted (2026-09-30): on Blacksmith
-    # this job measured 17-23 min over the last 34 runs, and
-    # moog-acceptance.yml's header records the same suite family running ~2x
-    # slower per step on a hosted runner (median 15.3 vs 11.1 min). 2 x 23 =
-    # 46 min would trip the old 40-minute cap; 60 keeps ~1.3x headroom over
-    # that estimate. Re-measure once hosted runs exist and tighten.
-    timeout-minutes: 60
+    # 70, not 40, since the move to GitHub-hosted (2026-09-30). On Blacksmith
+    # this job measured 17-23 min over 34 runs; the first two hosted runs
+    # (PR #489, push + pull_request) took 36.4 and 40.3 min -- the second
+    # would already have been cancelled at 40. 70 is ~1.75x the hosted max,
+    # the same headroom 40 gave over Blacksmith's 23. Re-measure once more
+    # hosted runs accumulate.
+    timeout-minutes: 70
 
     # Issue #422. On 2026-09-28 the `everything else` step below exited 139 --
     # SIGSEGV, core dumped -- 12m40s in, at 30 % collected, with the innermost
