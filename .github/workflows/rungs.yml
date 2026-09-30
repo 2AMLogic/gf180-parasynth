@@ -363,6 +363,19 @@ jobs:
       - name: the TONE knob gate itself, as the tool issues it
         run: python tools/cymbal_tone_knob.py --check
 
+      # Same argument a fourth time (#369 step 11, the Q16/Q17/Q18 read). Every
+      # number here comes from component values already committed in the module
+      # plus the committed docs/scorecard/cymbal-369/balance/balance.json, so
+      # all 46 tests and the gate run with NO network and NO scan: the ~6 MB SN
+      # p.13 download is not a test dependency, and the tests that concern it
+      # exercise the REFUSAL paths (absent file, wrong hash, --require-source
+      # reachable from the command line and refusing) rather than skipping.
+      # Measured on the 8-vCPU worker: 2.3 s + 2.4 s.
+      - name: the SN p.13 swing-VCA drive read and its controls
+        run: python -m pytest tools/test_cymbal_vca_drive.py -q
+      - name: the swing-VCA drive gate itself, as the tool issues it
+        run: python tools/cymbal_vca_drive.py --check
+
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
       # renamed a parameter into `def rms(_unused=None, x)`, which is a syntax
