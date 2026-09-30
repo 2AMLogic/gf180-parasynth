@@ -26,7 +26,10 @@ correction to `docs/tr808-reference.md` §10 and `tools/werner_fig4.py`.
 | **Correction** | §10's two band-pass rows carried each other's reference designators. No value or f0 moves; the label a reader would use to find the part on the board was wrong. Details in §5. |
 
 Everything here is arithmetic against a hash-pinned scan: `tools/cymbal_vca_drive.py` (2.4 s) with
-`tools/test_cymbal_vca_drive.py` (46 tests, 2.3 s). `vca-drive.json` is the record.
+`tools/test_cymbal_vca_drive.py`, which now carries 90 tests — step 12 (`../vca-supply/README.md`) extended
+this same module and this same test file rather than adding a new one, and its own defects/blindness
+assertions widen several of this step's own parametrized tests along with adding new ones, so the two step's
+test counts do not partition cleanly. `vca-drive.json` is the record.
 
 ## 1. The read
 
@@ -214,7 +217,11 @@ writes to `vca-drive/vca-drive.json`, asserts the mismatch in
 > (R87 22 k + C37 2.2 µF; R88 33 k + C39 0.47 µF; R105 33 k + C45 2.2 µF), and the collector's DC operating point
 > is what sets where a swing VCA clips. It is the same kind of read as this one and belongs in the same tool.
 
-That question is filed as **#432**, with the components for all three networks in its body.
+That question was filed as **#432** and is now answered in `../vca-supply/README.md` (step 12, same module,
+same hash-pinned scan): the reservoirs ARE equal at the peak (0.009 V against a 0.252 V bound), but the
+collector ceilings are not (+8.26 / −1.91 dB re the low band), and neither reaches #396's short-band gap
+either — so no element inside the swing VCA section closes it. That step also finds VR2/R93 in **series**, not
+parallel as §10 recorded, which relocates the DECAY knob onto the low band and matches the Fischer recordings.
 
 Still open and unchanged by this step: #396 (the inter-band balance — its `schematic-vr4` precondition artifact
 has still never been written, and its `vca-drive` precondition is now measured but deliberately not flipped),
@@ -227,9 +234,11 @@ balance's +39.79 dB gap now has one fewer place to live**, which is the whole po
   the gate, the commit and its dirty flag.
 - `../../../../tools/cymbal_vca_drive.py` — the instrument. `--report` / `--check` / `--json` /
   `--verify-source` / `--require-source`.
-- `../../../../tools/test_cymbal_vca_drive.py` — 46 tests: 6 known answers against artifacts this module did not
-  produce, 7 injected defects, 4 blindness assertions, 6 refusal paths, and the two designator gates.
-- Reproduce: `python3 tools/cymbal_vca_drive.py --check` (2.4 s). Add
+- `../../../../tools/test_cymbal_vca_drive.py` — this step's original 46 tests (6 known answers against
+  artifacts this module did not produce, 7 injected defects, 4 blindness assertions, 6 refusal paths, and the
+  two designator gates), now 90 in the same file after step 12 (`../vca-supply/README.md`) extended it.
+- Reproduce: `python3 tools/cymbal_vca_drive.py --check` (2.4 s; gates steps 11 and 12 together, one module, one
+  gate). Add
   `--require-source <sn.pdf>` on a host that has the scan; fetch it with
   `curl -sL -o sn.pdf https://ia801906.us.archive.org/9/items/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf`
   (the `archive.org/download/…` route `tone_stage_schematic.py` records returned HTTP 500 on 2026-09-28; the

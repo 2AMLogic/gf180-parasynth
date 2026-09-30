@@ -57,7 +57,7 @@
       "gain_db": 22.963431322693623
     }
   },
-  "commit": "9653c3444d9aaea3985d960c9458cc5ad64c987f",
+  "commit": "33b639d9641f2fbce440d002ea7c43bd1694e7cc",
   "defects": [
     "SWAP_BP_CAPS",
     "DROP_INPUT_NETWORK",
@@ -65,8 +65,732 @@
     "SPLIT_HIGH_FEED",
     "EQUAL_COLLECTOR_LOADS",
     "HUGE_SHORT_LOAD",
-    "HH1_WRONG_RATIO"
+    "HH1_WRONG_RATIO",
+    "VR2_PARALLEL_NOT_SERIES",
+    "WRONG_C41",
+    "FAST_SMOOTHING",
+    "NO_SMOOTHING_CAPS",
+    "MISMATCHED_D8",
+    "R89_OPEN"
   ],
+  "envelope": {
+    "drive": {
+      "beta": 200.0,
+      "duty_bracket": [
+        0.25,
+        0.5,
+        1.0
+      ],
+      "r_sat": 100.0,
+      "trigger_ms": 1.0,
+      "trigger_v": [
+        4.0,
+        14.0
+      ],
+      "v_be": 0.6,
+      "v_clamp": 0.7,
+      "v_f": {
+        "D6": 0.6,
+        "D7": 0.6,
+        "D8": 0.6
+      }
+    },
+    "external_spans": {
+      "chart": 3.4285714285714284,
+      "decay": 4.36,
+      "low": 3.2
+    },
+    "netlist": {
+      "bands": {
+        "decay": {
+          "load": "R90",
+          "out": "Z",
+          "reservoir": "P",
+          "supply": "Q"
+        },
+        "low": {
+          "load": "R104",
+          "out": "Y",
+          "reservoir": "F",
+          "supply": "W"
+        },
+        "short": {
+          "load": "R94",
+          "out": "S",
+          "reservoir": "A",
+          "supply": "A"
+        }
+      },
+      "capacitors": {
+        "A": [
+          1e-06,
+          "C38"
+        ],
+        "B": [
+          2.2e-06,
+          "C37"
+        ],
+        "F": [
+          1e-06,
+          "C41"
+        ],
+        "P": [
+          1e-06,
+          "C40"
+        ],
+        "Q": [
+          4.7e-07,
+          "C39"
+        ],
+        "S": [
+          4.8e-09,
+          "C47+C49"
+        ],
+        "W": [
+          2.2e-06,
+          "C45"
+        ],
+        "Y": [
+          1.5e-09,
+          "C48"
+        ],
+        "Z": [
+          2.5e-09,
+          "C50+C51"
+        ]
+      },
+      "diodes": [
+        [
+          "A",
+          "D6"
+        ],
+        [
+          "P",
+          "D7"
+        ],
+        [
+          "F",
+          "D8"
+        ]
+      ],
+      "pot": {
+        "designator": "VR2",
+        "in_series": true,
+        "node": "V",
+        "ohm": 2000000.0,
+        "series_with": "R93",
+        "taper": "B",
+        "wiper_strapped_to": "pin 3"
+      },
+      "resistors": [
+        [
+          "A",
+          "B",
+          22000.0,
+          "R87"
+        ],
+        [
+          "A",
+          "S",
+          39000.0,
+          "R94"
+        ],
+        [
+          "P",
+          "Q",
+          33000.0,
+          "R88"
+        ],
+        [
+          "Q",
+          "Z",
+          33000.0,
+          "R90"
+        ],
+        [
+          "Z",
+          "X",
+          33000.0,
+          "R91"
+        ],
+        [
+          "X",
+          "0",
+          10000.0,
+          "R89"
+        ],
+        [
+          "X",
+          "G",
+          33000.0,
+          "R92"
+        ],
+        [
+          "F",
+          "V",
+          470000.0,
+          "R93"
+        ],
+        [
+          "G",
+          "W",
+          33000.0,
+          "R105"
+        ],
+        [
+          "W",
+          "Y",
+          22000.0,
+          "R104"
+        ]
+      ]
+    },
+    "peaks_by_accent": {
+      "14.0": {
+        "decay": {
+          "collector_peak_db_re_low": -1.911,
+          "collector_peak_ms": 18.804999999999957,
+          "collector_peak_v": 3.966960613786597,
+          "reservoir_node": "P",
+          "reservoir_peak_v": 12.796364021088172,
+          "tau_ms": 722.0275468893798
+        },
+        "low": {
+          "collector_peak_db_re_low": 0.0,
+          "collector_peak_ms": 120.40500000000135,
+          "collector_peak_v": 4.943408756171077,
+          "reservoir_node": "F",
+          "reservoir_peak_v": 12.799920828200005,
+          "tau_ms": 785.6152763010487
+        },
+        "short": {
+          "collector_peak_db_re_low": 8.258,
+          "collector_peak_ms": 0.9950000000000022,
+          "collector_peak_v": 12.79120938063217,
+          "reservoir_node": "A",
+          "reservoir_peak_v": 12.79120938063217,
+          "tau_ms": 130.19941548246643
+        }
+      },
+      "4.0": {
+        "decay": {
+          "collector_peak_db_re_low": -1.959,
+          "collector_peak_ms": 22.204999999999938,
+          "collector_peak_v": 0.972867717001842,
+          "reservoir_node": "P",
+          "reservoir_peak_v": 2.799214447028956,
+          "tau_ms": 17.798809139237324
+        },
+        "low": {
+          "collector_peak_db_re_low": 0.0,
+          "collector_peak_ms": 123.80500000000146,
+          "collector_peak_v": 1.2190151067836765,
+          "reservoir_node": "F",
+          "reservoir_peak_v": 2.79998268116875,
+          "tau_ms": 195.4795450623634
+        },
+        "short": {
+          "collector_peak_db_re_low": 7.217,
+          "collector_peak_ms": 0.9950000000000022,
+          "collector_peak_v": 2.7982168197315125,
+          "reservoir_node": "A",
+          "reservoir_peak_v": 2.7982168197315125,
+          "tau_ms": 12.557874518832369
+        }
+      }
+    },
+    "peaks_by_duty_and_vr2": {
+      "0.25": {
+        "0.0": {
+          "decay": {
+            "collector_peak_db_re_low": -2.935,
+            "collector_peak_ms": 25.20499999999992,
+            "collector_peak_v": 4.79355201055534,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796374910253917,
+            "tau_ms": 140.10427298380336
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 124.80500000000148,
+            "collector_peak_v": 6.7207041696606815,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799700316743136,
+            "tau_ms": 184.70844569411673
+          },
+          "short": {
+            "collector_peak_db_re_low": 5.592,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.793523244436791,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.793523244436791,
+            "tau_ms": 522.5577664558518
+          }
+        },
+        "0.5": {
+          "decay": {
+            "collector_peak_db_re_low": -4.097,
+            "collector_peak_ms": 26.004999999999914,
+            "collector_peak_v": 4.848095784540762,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796374910533657,
+            "tau_ms": 431.5190347513156
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 168.2050000000027,
+            "collector_peak_v": 7.769647037003366,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799885575765607,
+            "tau_ms": 522.8036299849497
+          },
+          "short": {
+            "collector_peak_db_re_low": 4.332,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.793523244436791,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.793523244436791,
+            "tau_ms": 522.5577664558518
+          }
+        },
+        "1.0": {
+          "decay": {
+            "collector_peak_db_re_low": -4.392,
+            "collector_peak_ms": 26.204999999999913,
+            "collector_peak_v": 4.858931654682147,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796374910586888,
+            "tau_ms": 651.3015588342365
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 185.80500000000322,
+            "collector_peak_v": 8.056146882217927,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799920828200005,
+            "tau_ms": 769.3781394032593
+          },
+          "short": {
+            "collector_peak_db_re_low": 4.017,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.793523244436791,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.793523244436791,
+            "tau_ms": 522.5577664558518
+          }
+        }
+      },
+      "0.5": {
+        "0.0": {
+          "decay": {
+            "collector_peak_db_re_low": -1.922,
+            "collector_peak_ms": 23.00499999999993,
+            "collector_peak_v": 4.5396153427310075,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796372403269656,
+            "tau_ms": 139.53846839609594
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 107.20500000000098,
+            "collector_peak_v": 5.663809985327354,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799700316743136,
+            "tau_ms": 189.17896386426975
+          },
+          "short": {
+            "collector_peak_db_re_low": 7.077,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.792752633434583,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.792752633434583,
+            "tau_ms": 267.3222783696634
+          }
+        },
+        "0.5": {
+          "decay": {
+            "collector_peak_db_re_low": -2.902,
+            "collector_peak_ms": 23.60499999999993,
+            "collector_peak_v": 4.586658023580878,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.79637240348466,
+            "tau_ms": 448.4081080342165
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 142.20500000000197,
+            "collector_peak_v": 6.406356492975915,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799885575765607,
+            "tau_ms": 529.1875396182047
+          },
+          "short": {
+            "collector_peak_db_re_low": 6.007,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.792752633434583,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.792752633434583,
+            "tau_ms": 267.3222783696634
+          }
+        },
+        "1.0": {
+          "decay": {
+            "collector_peak_db_re_low": -3.148,
+            "collector_peak_ms": 23.80499999999993,
+            "collector_peak_v": 4.595958314920273,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796372403525575,
+            "tau_ms": 680.4960432779328
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 156.20500000000237,
+            "collector_peak_v": 6.603663316745816,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799920828200005,
+            "tau_ms": 777.1530600823627
+          },
+          "short": {
+            "collector_peak_db_re_low": 5.744,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.792752633434583,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.792752633434583,
+            "tau_ms": 267.3222783696634
+          }
+        }
+      },
+      "1.0": {
+        "0.0": {
+          "decay": {
+            "collector_peak_db_re_low": -0.97,
+            "collector_peak_ms": 18.40499999999996,
+            "collector_peak_v": 3.927876671134534,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796364021085965,
+            "tau_ms": 138.1915982771008
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 85.20500000000035,
+            "collector_peak_v": 4.392160617520445,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799700316743136,
+            "tau_ms": 194.5200978161849
+          },
+          "short": {
+            "collector_peak_db_re_low": 9.285,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.79120938063217,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.79120938063217,
+            "tau_ms": 130.19941548246643
+          }
+        },
+        "0.5": {
+          "decay": {
+            "collector_peak_db_re_low": -1.726,
+            "collector_peak_ms": 18.804999999999957,
+            "collector_peak_v": 3.9605772393105756,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796364021087818,
+            "tau_ms": 469.38136302897686
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 110.40500000000107,
+            "collector_peak_v": 4.8310055424667455,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799885575765607,
+            "tau_ms": 537.0858220605762
+          },
+          "short": {
+            "collector_peak_db_re_low": 8.457,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.79120938063217,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.79120938063217,
+            "tau_ms": 130.19941548246643
+          }
+        },
+        "1.0": {
+          "decay": {
+            "collector_peak_db_re_low": -1.911,
+            "collector_peak_ms": 18.804999999999957,
+            "collector_peak_v": 3.966960613786597,
+            "reservoir_node": "P",
+            "reservoir_peak_v": 12.796364021088172,
+            "tau_ms": 722.0275468893798
+          },
+          "low": {
+            "collector_peak_db_re_low": 0.0,
+            "collector_peak_ms": 120.40500000000135,
+            "collector_peak_v": 4.943408756171077,
+            "reservoir_node": "F",
+            "reservoir_peak_v": 12.799920828200005,
+            "tau_ms": 785.6152763010487
+          },
+          "short": {
+            "collector_peak_db_re_low": 8.258,
+            "collector_peak_ms": 0.9950000000000022,
+            "collector_peak_v": 12.79120938063217,
+            "reservoir_node": "A",
+            "reservoir_peak_v": 12.79120938063217,
+            "tau_ms": 130.19941548246643
+          }
+        }
+      }
+    },
+    "properties": {
+      "env-ceilings-peak-at-different-times": {
+        "bound": 20.0,
+        "low_over_short": 121.01,
+        "ok": true,
+        "peak_ms": {
+          "decay": 18.8,
+          "low": 120.41,
+          "short": 1.0
+        },
+        "what": "the low band's ceiling peaks >= 20x later than the short band's, because C45 is behind R105 and C38 is behind nothing"
+      },
+      "env-collector-ceiling-still-below-the-gap": {
+        "bound_db": 20.0,
+        "ceiling_db": 8.258,
+        "margin_db": 31.532,
+        "ok": true,
+        "what": "the short band's clip ceiling, at its most favourable duty, is still >= 20 dB below the balance's gap"
+      },
+      "env-collector-peaks-are-not-equal": {
+        "bound_db": 3.0,
+        "min_short_re_low_db": 4.017,
+        "ok": true,
+        "per_duty_db": {
+          "0.25": {
+            "decay": -4.392,
+            "low": 0.0,
+            "short": 4.017
+          },
+          "0.5": {
+            "decay": -3.148,
+            "low": 0.0,
+            "short": 5.744
+          },
+          "1.0": {
+            "decay": -1.911,
+            "low": 0.0,
+            "short": 8.258
+          }
+        },
+        "what": "the short band's collector ceiling is >= 3 dB above the low band's at every duty in the bracket"
+      },
+      "env-decay-band-ceiling-below-the-low-band": {
+        "bound_db": -1.0,
+        "max_decay_re_low_db": -1.911,
+        "ok": true,
+        "what": "the DECAY band's ceiling is below the low band's at every duty, although its collector load is 1.5x larger"
+      },
+      "env-decay-knob-span-chart": {
+        "bound": [
+          2.143,
+          5.486
+        ],
+        "external_span": 3.429,
+        "ok": true,
+        "span": 4.039,
+        "tau_ms": [
+          194.5,
+          537.1,
+          785.6
+        ],
+        "what": "DECAY moves the longest envelope's decay by the factor the machine moves it"
+      },
+      "env-decay-knob-span-decay": {
+        "bound": [
+          2.725,
+          6.976
+        ],
+        "external_span": 4.36,
+        "ok": true,
+        "span": 5.225,
+        "tau_ms": [
+          138.2,
+          469.4,
+          722.0
+        ],
+        "what": "DECAY moves the DECAY band's decay by the factor the machine moves it"
+      },
+      "env-decay-knob-span-low": {
+        "bound": [
+          2.0,
+          5.12
+        ],
+        "external_span": 3.2,
+        "ok": true,
+        "span": 4.039,
+        "tau_ms": [
+          194.5,
+          537.1,
+          785.6
+        ],
+        "what": "DECAY moves the low band's decay by the factor the machine moves it"
+      },
+      "env-reservoirs-equal-at-the-peak": {
+        "bound_v": 0.2521,
+        "ok": true,
+        "reservoir_peak_v": {
+          "decay": 12.7964,
+          "low": 12.7999,
+          "short": 12.7912
+        },
+        "spread_v": 0.0087,
+        "what": "C38/C40/C41 reach the same peak, to within the diodes' own forward-drop spread at their own load currents"
+      },
+      "env-short-band-blind-to-the-decay-knob": {
+        "bound": 0.01,
+        "ok": true,
+        "span": 1.0,
+        "what": "the short band's reservoir is not on VR2 at all, so its decay must not move with DECAY"
+      }
+    },
+    "reservoir_spread": {
+      "bound_v": 0.2521,
+      "load_current_a": {
+        "decay": 0.0003633653335104337,
+        "low": 7.786143703579055e-06,
+        "short": 0.0008789442881605074
+      },
+      "ok": true,
+      "reservoir_peak_v": {
+        "decay": 12.796364021088172,
+        "low": 12.799920828200005,
+        "short": 12.79120938063217
+      },
+      "spread_v": 0.0087
+    },
+    "span_bound_factor": 1.6,
+    "spans": {
+      "composite": {
+        "bands": [
+          "low",
+          "decay"
+        ],
+        "span": 4.039,
+        "tau_max_ms": 785.6,
+        "tau_mid_ms": 537.1,
+        "tau_min_ms": 194.5
+      },
+      "decay": {
+        "span": 5.225,
+        "tau_max_ms": 722.0,
+        "tau_mid_ms": 469.4,
+        "tau_min_ms": 138.2
+      },
+      "low": {
+        "span": 4.039,
+        "tau_max_ms": 785.6,
+        "tau_mid_ms": 537.1,
+        "tau_min_ms": 194.5
+      },
+      "short": {
+        "span": 1.0,
+        "tau_max_ms": 130.2,
+        "tau_mid_ms": 130.2,
+        "tau_min_ms": 130.2
+      }
+    },
+    "spans_by_beta": {
+      "100.0": {
+        "composite": {
+          "bands": [
+            "low",
+            "decay"
+          ],
+          "span": 3.269,
+          "tau_max_ms": 578.3,
+          "tau_mid_ms": 429.7,
+          "tau_min_ms": 176.9
+        },
+        "decay": {
+          "span": 4.108,
+          "tau_max_ms": 511.5,
+          "tau_mid_ms": 360.4,
+          "tau_min_ms": 124.5
+        },
+        "low": {
+          "span": 3.269,
+          "tau_max_ms": 578.3,
+          "tau_mid_ms": 429.7,
+          "tau_min_ms": 176.9
+        },
+        "short": {
+          "span": 1.0,
+          "tau_max_ms": 130.2,
+          "tau_mid_ms": 130.2,
+          "tau_min_ms": 130.2
+        }
+      },
+      "200.0": {
+        "composite": {
+          "bands": [
+            "low",
+            "decay"
+          ],
+          "span": 4.039,
+          "tau_max_ms": 785.6,
+          "tau_mid_ms": 537.1,
+          "tau_min_ms": 194.5
+        },
+        "decay": {
+          "span": 5.225,
+          "tau_max_ms": 722.0,
+          "tau_mid_ms": 469.4,
+          "tau_min_ms": 138.2
+        },
+        "low": {
+          "span": 4.039,
+          "tau_max_ms": 785.6,
+          "tau_mid_ms": 537.1,
+          "tau_min_ms": 194.5
+        },
+        "short": {
+          "span": 1.0,
+          "tau_max_ms": 130.2,
+          "tau_mid_ms": 130.2,
+          "tau_min_ms": 130.2
+        }
+      },
+      "400.0": {
+        "composite": {
+          "bands": [
+            "low",
+            "decay"
+          ],
+          "span": 4.757,
+          "tau_max_ms": 973.2,
+          "tau_mid_ms": 612.6,
+          "tau_min_ms": 204.6
+        },
+        "decay": {
+          "span": 6.072,
+          "tau_max_ms": 889.1,
+          "tau_mid_ms": 546.5,
+          "tau_min_ms": 146.4
+        },
+        "low": {
+          "span": 4.757,
+          "tau_max_ms": 973.2,
+          "tau_mid_ms": 612.6,
+          "tau_min_ms": 204.6
+        },
+        "short": {
+          "span": 1.0,
+          "tau_max_ms": 130.2,
+          "tau_mid_ms": 130.2,
+          "tau_min_ms": 130.2
+        }
+      }
+    }
+  },
   "gate": {
     "lines": [
       "  PASS  bp-peak-matches-figure4: band-pass peak gain from the schematic == W14b Fig. 4's digitised peak",
@@ -78,6 +802,15 @@
       "  PASS  vca-term-far-below-the-gap: the short band's whole VCA term is >= 20 dB below the balance's gap",
       "  PASS  required-load-not-printed: closing the short band's gap in the VCA needs a collector load >= 20 dB above the printed one",
       "  PASS  same-pinned-scan-as-vr4: this read and the VR4 read are pinned to the same printing and page",
+      "  PASS  env-reservoirs-equal-at-the-peak: C38/C40/C41 reach the same peak, to within the diodes' own forward-drop spread at their own load currents",
+      "  PASS  env-collector-peaks-are-not-equal: the short band's collector ceiling is >= 3 dB above the low band's at every duty in the bracket",
+      "  PASS  env-decay-band-ceiling-below-the-low-band: the DECAY band's ceiling is below the low band's at every duty, although its collector load is 1.5x larger",
+      "  PASS  env-ceilings-peak-at-different-times: the low band's ceiling peaks >= 20x later than the short band's, because C45 is behind R105 and C38 is behind nothing",
+      "  PASS  env-collector-ceiling-still-below-the-gap: the short band's clip ceiling, at its most favourable duty, is still >= 20 dB below the balance's gap",
+      "  PASS  env-decay-knob-span-low: DECAY moves the low band's decay by the factor the machine moves it",
+      "  PASS  env-decay-knob-span-decay: DECAY moves the DECAY band's decay by the factor the machine moves it",
+      "  PASS  env-decay-knob-span-chart: DECAY moves the longest envelope's decay by the factor the machine moves it",
+      "  PASS  env-short-band-blind-to-the-decay-knob: the short band's reservoir is not on VR2 at all, so its decay must not move with DECAY",
       "  -- injected defects, each must turn at least one property red --",
       "  PASS  SWAP_BP_CAPS: turns red ['bp-f0-matches-reference', 'bp-peak-matches-figure4']",
       "  PASS  DROP_INPUT_NETWORK: turns red ['bp-peak-matches-figure4']",
@@ -86,11 +819,20 @@
       "  PASS  EQUAL_COLLECTOR_LOADS: turns red ['only-collector-load-differs']",
       "  PASS  HUGE_SHORT_LOAD: turns red ['required-load-not-printed', 'vca-term-far-below-the-gap']",
       "  PASS  HH1_WRONG_RATIO: turns red ['hh1-matches-reference']",
+      "  PASS  VR2_PARALLEL_NOT_SERIES: turns red ['env-decay-band-ceiling-below-the-low-band', 'env-decay-knob-span-low']",
+      "  PASS  WRONG_C41: turns red ['env-decay-band-ceiling-below-the-low-band', 'env-decay-knob-span-chart', 'env-decay-knob-span-decay']",
+      "  PASS  FAST_SMOOTHING: turns red ['env-ceilings-peak-at-different-times', 'env-collector-peaks-are-not-equal']",
+      "  PASS  NO_SMOOTHING_CAPS: turns red ['env-ceilings-peak-at-different-times', 'env-decay-band-ceiling-below-the-low-band']",
+      "  PASS  MISMATCHED_D8: turns red ['env-reservoirs-equal-at-the-peak']",
+      "  PASS  R89_OPEN: turns red ['env-decay-band-ceiling-below-the-low-band']",
       "  -- blindness, asserted and verified blind --",
       "  PASS  DROP_INPUT_NETWORK leaves ['bp-f0-matches-reference', 'bp-q-matches-reference'] untouched",
       "  PASS  SPLIT_HIGH_FEED leaves ['bp-f0-matches-reference', 'bp-peak-matches-figure4', 'hh1-matches-reference'] untouched",
       "  PASS  UNEQUAL_EMITTER leaves ['bp-peak-matches-figure4', 'required-load-not-printed', 'vca-term-far-below-the-gap'] untouched",
-      "  PASS  SWAP_BP_CAPS leaves ['high-bands-share-one-node', 'only-collector-load-differs', 'vca-term-far-below-the-gap'] untouched"
+      "  PASS  SWAP_BP_CAPS leaves ['env-ceilings-peak-at-different-times', 'env-collector-peaks-are-not-equal', 'env-decay-band-ceiling-below-the-low-band', 'env-decay-knob-span-chart', 'env-decay-knob-span-low', 'env-reservoirs-equal-at-the-peak', 'high-bands-share-one-node', 'only-collector-load-differs', 'vca-term-far-below-the-gap'] untouched",
+      "  PASS  VR2_PARALLEL_NOT_SERIES leaves ['bp-peak-matches-figure4', 'env-reservoirs-equal-at-the-peak', 'env-short-band-blind-to-the-decay-knob', 'only-collector-load-differs'] untouched",
+      "  PASS  WRONG_C41 leaves ['bp-peak-matches-figure4', 'env-short-band-blind-to-the-decay-knob', 'hh1-matches-reference'] untouched",
+      "  PASS  FAST_SMOOTHING leaves ['bp-f0-matches-reference', 'bp-peak-matches-figure4', 'hh1-matches-reference', 'only-collector-load-differs'] untouched"
     ],
     "ok": true
   },
@@ -148,6 +890,115 @@
       "ok": true,
       "value_rel": 0.0084,
       "what": "both bridged-T Q are \u00a710's 6"
+    },
+    "env-ceilings-peak-at-different-times": {
+      "bound": 20.0,
+      "low_over_short": 121.01,
+      "ok": true,
+      "peak_ms": {
+        "decay": 18.8,
+        "low": 120.41,
+        "short": 1.0
+      },
+      "what": "the low band's ceiling peaks >= 20x later than the short band's, because C45 is behind R105 and C38 is behind nothing"
+    },
+    "env-collector-ceiling-still-below-the-gap": {
+      "bound_db": 20.0,
+      "ceiling_db": 8.258,
+      "margin_db": 31.532,
+      "ok": true,
+      "what": "the short band's clip ceiling, at its most favourable duty, is still >= 20 dB below the balance's gap"
+    },
+    "env-collector-peaks-are-not-equal": {
+      "bound_db": 3.0,
+      "min_short_re_low_db": 4.017,
+      "ok": true,
+      "per_duty_db": {
+        "0.25": {
+          "decay": -4.392,
+          "low": 0.0,
+          "short": 4.017
+        },
+        "0.5": {
+          "decay": -3.148,
+          "low": 0.0,
+          "short": 5.744
+        },
+        "1.0": {
+          "decay": -1.911,
+          "low": 0.0,
+          "short": 8.258
+        }
+      },
+      "what": "the short band's collector ceiling is >= 3 dB above the low band's at every duty in the bracket"
+    },
+    "env-decay-band-ceiling-below-the-low-band": {
+      "bound_db": -1.0,
+      "max_decay_re_low_db": -1.911,
+      "ok": true,
+      "what": "the DECAY band's ceiling is below the low band's at every duty, although its collector load is 1.5x larger"
+    },
+    "env-decay-knob-span-chart": {
+      "bound": [
+        2.143,
+        5.486
+      ],
+      "external_span": 3.429,
+      "ok": true,
+      "span": 4.039,
+      "tau_ms": [
+        194.5,
+        537.1,
+        785.6
+      ],
+      "what": "DECAY moves the longest envelope's decay by the factor the machine moves it"
+    },
+    "env-decay-knob-span-decay": {
+      "bound": [
+        2.725,
+        6.976
+      ],
+      "external_span": 4.36,
+      "ok": true,
+      "span": 5.225,
+      "tau_ms": [
+        138.2,
+        469.4,
+        722.0
+      ],
+      "what": "DECAY moves the DECAY band's decay by the factor the machine moves it"
+    },
+    "env-decay-knob-span-low": {
+      "bound": [
+        2.0,
+        5.12
+      ],
+      "external_span": 3.2,
+      "ok": true,
+      "span": 4.039,
+      "tau_ms": [
+        194.5,
+        537.1,
+        785.6
+      ],
+      "what": "DECAY moves the low band's decay by the factor the machine moves it"
+    },
+    "env-reservoirs-equal-at-the-peak": {
+      "bound_v": 0.2521,
+      "ok": true,
+      "reservoir_peak_v": {
+        "decay": 12.7964,
+        "low": 12.7999,
+        "short": 12.7912
+      },
+      "spread_v": 0.0087,
+      "what": "C38/C40/C41 reach the same peak, to within the diodes' own forward-drop spread at their own load currents"
+    },
+    "env-short-band-blind-to-the-decay-knob": {
+      "bound": 0.01,
+      "ok": true,
+      "span": 1.0,
+      "what": "the short band's reservoir is not on VR2 at all, so its decay must not move with DECAY"
     },
     "hh1-matches-reference": {
       "bound_rel": 0.05,
@@ -215,6 +1066,20 @@
         "x": 700,
         "y": 3250
       },
+      "env-q19": {
+        "dpi": 600,
+        "h": 950,
+        "w": 950,
+        "x": 3550,
+        "y": 4150
+      },
+      "env-q20": {
+        "dpi": 600,
+        "h": 1000,
+        "w": 1150,
+        "x": 2800,
+        "y": 5150
+      },
       "vca-hi": {
         "dpi": 600,
         "h": 1150,
@@ -235,7 +1100,7 @@
     "url": "https://archive.org/download/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf",
     "url_node": "https://ia801906.us.archive.org/9/items/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf"
   },
-  "sources_dirty": true,
+  "sources_dirty": false,
   "stage_differences": {
     "differing": [
       "load_ohm"

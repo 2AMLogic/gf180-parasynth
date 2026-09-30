@@ -558,14 +558,17 @@ def gap_db(fig9, corner_hz, *, defect=None, path=None, route=None) -> dict:
 # sibling path, deliberately NOT to `VCA_ARTIFACT` (the path below), because
 # that measurement does not settle the question `balance_gains` needs: the
 # DECAY band's own upper bound (+7.26 dB) sits within 2.6 dB of its gap
-# (+9.85 dB), and the supply-side term (the three envelope generators' peak
-# collector voltages, #432) is still open. `vca_drive_record` reads and
-# schema-validates whatever DOES land at `VCA_ARTIFACT` -- a present-but-empty
-# or malformed file no longer satisfies the precondition -- but its `chain_db`
-# is deliberately NOT folded into `balance_gains` below: applying a
-# per-band term that is not yet resolved would be exactly the "one factor of a
-# product, called the product" mistake this module's own top docstring warns
-# against for the VCA drive as a whole.
+# (+9.85 dB). The supply-side term (the three envelope generators' peak
+# collector voltages) is now ALSO measured -- `docs/scorecard/cymbal-369/
+# vca-supply/vca-supply.json`, #432 -- and it does not close the gap either
+# (the short band's ceiling is 31.5 dB short of it at its most favourable
+# duty); it is written to the same kind of sibling path for the same reason.
+# `vca_drive_record` reads and schema-validates whatever DOES land at
+# `VCA_ARTIFACT` -- a present-but-empty or malformed file no longer satisfies
+# the precondition -- but its `chain_db` is deliberately NOT folded into
+# `balance_gains` below: applying a per-band term that is not yet resolved
+# would be exactly the "one factor of a product, called the product" mistake
+# this module's own top docstring warns against for the VCA drive as a whole.
 # ---------------------------------------------------------------------------
 
 _VCA_CACHE: dict = {}

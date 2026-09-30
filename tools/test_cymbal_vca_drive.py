@@ -417,3 +417,302 @@ def test_the_record_round_trips(tmp_path):
     assert rec["gate"]["ok"] is True
     assert rec["vca_term_db"]["chain_db"]["short"] == pytest.approx(4.973, abs=0.005)
     assert rec["source"]["sha256"] == vd.SN_PDF_SHA256
+
+
+# ---------------------------------------------------------------------------
+# 7. #432 -- the three envelope generators' peak collector voltages
+#
+# The bounds every test below is judged against are module constants, and each
+# one is asserted to be what its stated derivation gives BEFORE it is used, so
+# a bound cannot be quietly widened to admit a number:
+#   ENV_SPAN_FACTOR      the three external sources' own disagreement, 1.36,
+#                        rounded up -- not a tolerance chosen after the fact
+#   ENV_SPAN_EXTERNAL    Roland SN p.14 and two Fischer measurements, verbatim
+# ---------------------------------------------------------------------------
+
+
+def test_the_span_bound_is_the_external_sources_own_disagreement():
+    """The bound is derived, not chosen. If this test is ever "fixed" by
+    raising ENV_SPAN_FACTOR, the known answer below stops being one."""
+    ext = vd.ENV_SPAN_EXTERNAL
+    assert ext["chart"] == pytest.approx(1200.0 / 350.0, abs=1e-9)
+    assert ext["low"] == pytest.approx(1280.0 / 400.0, abs=1e-9)
+    assert ext["decay"] == pytest.approx(1090.0 / 250.0, abs=1e-9)
+    disagreement = max(ext.values()) / min(ext.values())
+    assert disagreement == pytest.approx(1.3625, abs=0.001)
+    assert vd.ENV_SPAN_FACTOR == 1.6
+    assert vd.ENV_SPAN_FACTOR >= disagreement
+    assert vd.ENV_SPAN_FACTOR < 2.0, "a factor of 2 would admit almost anything"
+
+
+@pytest.mark.parametrize("key,band", [("low", "low"), ("decay", "decay"),
+                                      ("chart", "composite")])
+def test_the_decay_knob_span_reproduces_the_machine(key, band):
+    """THE EXTERNAL KNOWN ANSWER FOR #432.
+
+    How far the CY decay moves when DECAY is swept end to end is stated by
+    three artifacts none of which knew about this schematic read: Roland's own
+    chart (SN p.14, 350 -> 1200 ms) and two measurements off the Fischer 808
+    recordings (`docs/scorecard/cymbal-369/README.md` S1, made by
+    `tools/cymbal_bands.py` in an earlier step). This is a RATIO, so C41's
+    absolute value, the undefined meaning of the chart's "decay time" and an
+    EDT's amplitude calibration all cancel -- which is exactly why it is the
+    quantity worth gating on.
+    """
+    want = vd.ENV_SPAN_EXTERNAL[key]
+    got = vd.envelope_spans()[band]["span"]
+    assert want / vd.ENV_SPAN_FACTOR <= got <= want * vd.ENV_SPAN_FACTOR, (
+        f"{band}: predicted span {got:.3f}, external {want:.3f}")
+
+
+@pytest.mark.parametrize("duty", vd.ENV_DUTY)
+@pytest.mark.parametrize("beta", [100.0, 200.0, 400.0])
+def test_the_span_known_answer_survives_both_unknowns(duty, beta):
+    """...and it is not a coincidence at one operating point.
+
+    The two quantities the schematic does NOT print are the swing VCAs'
+    conduction duty and the transistors' beta. Every combination of the
+    bracketed values has to stay inside the same bound, otherwise the known
+    answer is really a statement about a chosen duty.
+    """
+    spans = vd.envelope_spans(vd.config(), duty, beta)
+    for key, band in (("low", "low"), ("decay", "decay"), ("chart", "composite")):
+        want = vd.ENV_SPAN_EXTERNAL[key]
+        got = spans[band]["span"]
+        assert want / vd.ENV_SPAN_FACTOR <= got <= want * vd.ENV_SPAN_FACTOR, (
+            f"duty={duty} beta={beta} {band}: {got:.3f} vs {want:.3f}")
+
+
+def test_the_reference_says_parallel_and_the_scan_says_series():
+    """The correction, as a computation rather than an assertion.
+
+    S10 records "VR2 2 MOhm || R93 470 kOhm". Read that way, the DECAY knob's
+    minimum is a SHORT to ground -- C41's tail becomes zero and the low band
+    stops existing. The span known answer above rejects it; this test states
+    the mechanism as well as the verdict.
+    """
+    bad = vd.config("VR2_PARALLEL_NOT_SERIES")
+    want = vd.ENV_SPAN_EXTERNAL["low"]
+    ok_span = vd.envelope_spans()["low"]["span"]
+    assert want / vd.ENV_SPAN_FACTOR <= ok_span <= want * vd.ENV_SPAN_FACTOR
+
+    # The mechanism: read in parallel, DECAY at minimum puts a short across
+    # C41, so the low band's reservoir never charges at all.
+    dead = vd.envelope_peaks(bad, 1.0, 0.0)["low"]["reservoir_peak_v"]
+    alive = vd.envelope_peaks(vd.config(), 1.0, 0.0)["low"]["reservoir_peak_v"]
+    assert alive > 12.0 and dead < 3.0, (alive, dead)
+
+    # ...and the verdict: the span property the recordings gate goes red.
+    props = vd.envelope_properties(bad)
+    assert not props["env-decay-knob-span-low"]["ok"], props["env-decay-knob-span-low"]
+
+    # the series pair is 470 k .. 2.47 M and never zero
+    lo = vd.env_resistors(vd.config(), 0.0)
+    hi = vd.env_resistors(vd.config(), 1.0)
+    assert sum(r[2] for r in lo if r[3] in ("R93", "VR2")) == pytest.approx(470e3, rel=1e-3)
+    assert sum(r[2] for r in hi if r[3] in ("R93", "VR2")) == pytest.approx(2.47e6, rel=1e-9)
+
+
+def test_the_reference_section_10_row_states_the_series_pair():
+    """Gated where a reader would look it up, not only in this module."""
+    text = (ROOT / "docs" / "tr808-reference.md").read_text()
+    rows = [ln for ln in text.splitlines()
+            if ln.startswith("|") and "VR2" in ln and "C41" in ln and "R93" in ln]
+    assert rows, "S10 has no row naming VR2 / R93 / C41"
+    for row in rows:
+        # A correction that records what it replaced is worth more than one
+        # that silently overwrites, so the superseded wording is allowed to
+        # survive INSIDE a `was "..."` quotation and nowhere else.
+        live = re.sub(r'was\s+"[^"]*"', "was <superseded>", row)
+        assert "series" in live.lower(), live
+        assert "‖" not in live and "||" not in live, live
+        assert "0.38" not in live, live
+
+
+def test_the_three_reservoirs_are_equal_at_the_peak():
+    """HALF the hypothesis #432 was filed with, and the half that holds.
+
+    C38, C40 and C41 are all 1 uF and all charged from Q19's emitter through
+    their own diode, and the 1 ms trigger is long against the charging path.
+    The bound is not a tolerance: it is n*Vt*ln(I_hi/I_lo) at the load currents
+    the transient reports, which differ by two orders of magnitude.
+    """
+    sp = vd.envelope_peak_spread()
+    assert sp["ok"], sp
+    assert sp["spread_v"] < 0.05, sp
+    assert sp["bound_v"] > 0.15, "the bound must be the real diode spread, not zero"
+    lo, hi = min(sp["load_current_a"].values()), max(sp["load_current_a"].values())
+    assert hi / lo > 50.0, "the bound is only interesting because the currents differ"
+
+
+def test_a_mismatched_diode_breaks_the_reservoir_equality():
+    """The paired negative. Equality nobody has seen fail is not a measurement."""
+    bad = vd.envelope_peak_spread(vd.config("MISMATCHED_D8"))
+    assert not bad["ok"], bad
+    assert bad["spread_v"] > bad["bound_v"]
+
+
+def test_the_collector_peaks_are_not_equal_at_any_duty():
+    """THE OTHER HALF, and it is refuted.
+
+    Only the short band's collector load hangs on its own reservoir. The DECAY
+    band's is behind R88/C39 and a divider, the low band's behind Q20 and
+    R105/C45 -- 10 to 70 ms of lag against a 1 ms trigger.
+    """
+    for duty in vd.ENV_DUTY:
+        pk = vd.envelope_peaks(vd.config(), duty)
+        assert pk["short"]["collector_peak_db_re_low"] >= vd.ENV_PEAK_UNEQUAL_DB
+        assert pk["decay"]["collector_peak_db_re_low"] <= vd.ENV_DECAY_BELOW_LOW_DB
+        # ...and the short band's ceiling IS its reservoir, which is what makes
+        # it the exception rather than merely the largest.
+        assert pk["short"]["collector_peak_v"] == pytest.approx(
+            pk["short"]["reservoir_peak_v"], rel=1e-6)
+
+
+@pytest.mark.parametrize("band,frac", [("decay", 0.45), ("low", 0.70)])
+def test_the_two_smoothed_bands_never_reach_their_reservoirs(band, frac):
+    """The mechanism behind the refutation, stated as a number per band."""
+    pk = vd.envelope_peaks()
+    ratio = pk[band]["collector_peak_v"] / pk[band]["reservoir_peak_v"]
+    assert ratio < frac, f"{band}: ceiling is {ratio:.3f} of its reservoir"
+
+
+def test_the_accent_range_scales_the_peaks_and_barely_moves_the_ratios():
+    """S1.1's 4-14 V trigger moves every peak by 4.6x and every inter-band
+    ratio by at most 1.1 dB.
+
+    The residual is not noise and is worth naming: the two V_BE / V_f offsets
+    Q19, Q20 and the diodes subtract are a fixed 0.6 V, which is 21 % of a
+    2.8 V reservoir and 4.7 % of a 12.8 V one. So the per-band asymmetry is
+    very nearly a property of the printed network rather than of how hard the
+    voice is hit -- but only very nearly, and the short band's advantage is
+    1.0 dB SMALLER at accent minimum.
+    """
+    lo = vd.envelope_peaks(vd.config(), 1.0, 1.0, vd.ENV_TRIG_V[0])
+    hi = vd.envelope_peaks(vd.config(), 1.0, 1.0, vd.ENV_TRIG_V[1])
+    assert hi["short"]["reservoir_peak_v"] / lo["short"]["reservoir_peak_v"] > 4.0
+    for band in vd.ENV_BAND:
+        assert lo[band]["collector_peak_db_re_low"] == pytest.approx(
+            hi[band]["collector_peak_db_re_low"], abs=1.2)
+    # the direction of that residual, stated rather than absorbed by the bound
+    assert (lo["short"]["collector_peak_db_re_low"]
+            < hi["short"]["collector_peak_db_re_low"])
+
+
+def test_the_transient_reproduces_the_closed_form_short_band_modes():
+    """The two formulations, on the sub-network that stands alone.
+
+    C38 touches only R87 and R94, so the SHORT band's envelope is a three-node
+    linear network whose modes are an eigenvalue problem a reader can check.
+    The MNA transient's deep tail must reproduce the slowest of them.
+    """
+    modes = vd.env_short_band_modes()
+    slowest = max(modes)
+    tr = vd.envelope_transient(vd.config(), 1.0, 1.0)
+    measured = vd.env_tau_ms(tr["t"], tr["clip"]["short"], -30.0, -50.0)
+    assert slowest == pytest.approx(161.8, rel=0.02), modes
+    assert measured == pytest.approx(slowest, rel=0.03), (measured, slowest)
+
+
+def test_control_the_two_formulations_would_notice_a_changed_resistor():
+    """...and that agreement is not two names for one code path."""
+    cfg = vd.config()
+    bad = json.loads(json.dumps(cfg["env"]))
+    for row in bad["res"]:
+        if row[3] == "R94":
+            row[2] = 390e3
+    perturbed = dict(cfg, env=bad)
+    assert max(vd.env_short_band_modes(perturbed)) > 2.0 * max(vd.env_short_band_modes(cfg))
+
+
+def test_the_short_band_is_blind_to_the_decay_knob_and_that_is_verified():
+    """The recordings say the LOW band tracks DECAY; S10 says only the middle
+    band does. The schematic says both of those bands move and the short one
+    does not, which is the ordering the recordings show."""
+    spans = vd.envelope_spans()
+    assert spans["short"]["span"] == pytest.approx(1.0, abs=vd.ENV_BLIND_SPAN_TOL)
+    assert spans["low"]["span"] > 2.0
+    assert spans["decay"]["span"] > 2.0
+    # and the low band moves at least as much as the DECAY band's own reservoir
+    # network would on its own -- VR2 reaches the low band directly and the
+    # DECAY band only through R92/R89/R91.
+    assert spans["low"]["tau_max_ms"] > spans["decay"]["tau_max_ms"]
+
+
+def test_the_ceilings_do_not_even_peak_at_the_same_time():
+    pk = vd.envelope_peaks()
+    assert pk["short"]["collector_peak_ms"] == pytest.approx(vd.ENV_TRIG_MS, abs=0.2)
+    assert pk["low"]["collector_peak_ms"] > vd.ENV_PEAK_TIME_RATIO * vd.ENV_TRIG_MS
+    assert pk["decay"]["collector_peak_ms"] > 5.0
+
+
+def test_the_clip_ceiling_still_cannot_close_396s_gap():
+    """Step 11's negative, restated for the large-signal case it could not reach.
+
+    The ceiling is an upper bound on what a band can deliver, so the LARGEST
+    admissible value is the one to argue against -- here the most favourable
+    duty in the bracket.
+    """
+    best = max(vd.envelope_peaks(vd.config(), d)["short"]["collector_peak_db_re_low"]
+               for d in vd.ENV_DUTY)
+    gap = vd.balance_targets()["gap_db"]["short"]
+    assert best < 12.0, best
+    assert gap - best >= vd.GAP_MARGIN_DB, (gap, best)
+
+
+@pytest.mark.parametrize("defect", ["VR2_PARALLEL_NOT_SERIES", "WRONG_C41",
+                                    "FAST_SMOOTHING", "NO_SMOOTHING_CAPS",
+                                    "MISMATCHED_D8", "R89_OPEN"])
+def test_every_envelope_defect_turns_an_envelope_property_red(defect):
+    """A stricter statement than the generic control: an envelope defect must
+    turn an ENVELOPE property red, not merely something somewhere."""
+    got = vd.envelope_properties(vd.config(defect))
+    red = [n for n, p in got.items() if not p["ok"]]
+    assert red, f"{defect} turned no envelope property red"
+
+
+def test_the_envelope_netlist_is_the_one_on_the_scan():
+    """Every component in the envelope section, pinned by designator and value.
+
+    This is the read itself; if a value here is wrong every number above is
+    wrong in the same way, so it is written down where it can be diffed.
+    """
+    want = {"R87": 22e3, "R94": 39e3, "R88": 33e3, "R90": 33e3, "R91": 33e3,
+            "R89": 10e3, "R92": 33e3, "R93": 470e3, "R105": 33e3, "R104": 22e3}
+    got = {r[3]: r[2] for r in vd.ENV_RES}
+    assert got == want
+    caps = {d: v for v, d in vd.ENV_CAP.values()}
+    assert caps["C38"] == pytest.approx(1e-6)
+    assert caps["C37"] == pytest.approx(2.2e-6)
+    assert caps["C40"] == pytest.approx(1e-6)
+    assert caps["C39"] == pytest.approx(0.47e-6)
+    assert caps["C41"] == pytest.approx(1e-6)
+    assert caps["C45"] == pytest.approx(2.2e-6)
+    assert vd.ENV_POT["ohm"] == pytest.approx(2e6)
+    assert vd.ENV_POT["taper"] == "B"
+    assert [d for _n, d in vd.ENV_DIODE] == ["D6", "D7", "D8"]
+    # the supply node is the reservoir for the short band only
+    assert vd.ENV_BAND["short"]["supply"] == vd.ENV_BAND["short"]["reservoir"] == "A"
+    assert vd.ENV_BAND["decay"]["supply"] != vd.ENV_BAND["decay"]["reservoir"]
+    assert vd.ENV_BAND["low"]["supply"] != vd.ENV_BAND["low"]["reservoir"]
+
+
+def test_the_envelope_crops_are_on_the_same_page_as_the_rest_of_the_read():
+    for name in ("env-q19", "env-q20"):
+        assert name in vd.SN_CROPS
+        assert vd.SN_CROPS[name]["dpi"] >= 600
+    assert vd.SN_PDF_PAGE == 13
+
+
+def test_the_supply_record_round_trips(tmp_path):
+    p = tmp_path / "vca-supply.json"
+    assert vd.main(["--json-supply", str(p)]) == 0
+    rec = json.loads(p.read_text())
+    assert rec["gate"]["ok"] is True
+    assert rec["source"]["sha256"] == vd.SN_PDF_SHA256
+    assert set(rec["source"]["crops"]) == {"env-q19", "env-q20"}
+    assert rec["reference_correction"]["document"].startswith("docs/tr808-reference.md")
+    peaks = rec["envelope"]["peaks_by_duty_and_vr2"]["1.0"]["1.0"]
+    assert peaks["short"]["collector_peak_v"] == pytest.approx(12.79, abs=0.05)
+    assert peaks["low"]["collector_peak_v"] == pytest.approx(4.94, abs=0.10)
+    assert peaks["decay"]["collector_peak_v"] == pytest.approx(3.97, abs=0.10)

@@ -124,14 +124,23 @@ jobs:
   python:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
+    # outage and the operator's move of every public repo off Blacksmith (D5).
+    runs-on: ubuntu-24.04
     # 30 was already marginal before the claim-checker steps below: the two
     # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
     # spends the cap on its own. The claim checker and its controls measured
     # 22s + 45s locally; adding them under a 30-minute cap would buy a gate at
     # the price of an intermittent red, which is the trade
     # docs/failure-modes.md says not to make.
-    timeout-minutes: 40
+    #
+    # 70, not 40, since the move to GitHub-hosted (2026-09-30). On Blacksmith
+    # this job measured 17-23 min over 34 runs; the first two hosted runs
+    # (PR #489, push + pull_request) took 36.4 and 40.3 min -- the second
+    # would already have been cancelled at 40. 70 is ~1.75x the hosted max,
+    # the same headroom 40 gave over Blacksmith's 23. Re-measure once more
+    # hosted runs accumulate.
+    timeout-minutes: 70
 
     # Issue #422. On 2026-09-28 the `everything else` step below exited 139 --
     # SIGSEGV, core dumped -- 12m40s in, at 30 % collected, with the innermost
@@ -458,7 +467,7 @@ jobs:
   rtl:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -506,7 +515,7 @@ jobs:
   # rather than per push.
   rtl-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
