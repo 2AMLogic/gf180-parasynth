@@ -95,12 +95,24 @@ def test_this_checker_is_invoked_by_a_ci_job_and_not_only_by_make():
         f"request -- the reference_rigs.py comment's drift guarantee has no "
         f"CI apparatus, and `make verify` is invoked by no workflow: {reason}")
 
+    # The CONTROLS are no longer named in rungs.yml, and that is the fix rather
+    # than the regression (#404). Naming test files in a workflow made the set
+    # CI runs and the set that exists two lists that could drift, and they had:
+    # 7 named against 90 present, so 83 files -- controls included -- ran only
+    # on a build box. The `tools` job now collects the whole directory, which is
+    # a strictly wider guarantee than this assertion used to make.
+    #
+    # What must still hold is the property this test was written for: something
+    # on the PULL REQUEST exercises these controls. So assert the directory run,
+    # with enough of the command to be specific -- `pytest tools/ -q` as one
+    # string does not match a single-file or a `-k`-narrowed invocation, which
+    # would collect these controls without running them.
     blocks, reason = cw.step_would_block_pull_request(
-        workflow, "python", "pytest tools/test_check_surge_waveform_comment.py")
+        workflow, "tools", "python -m pytest tools/ -q")
     assert blocks, (
-        "rungs.yml's `python` job no longer runs these controls in a way that "
-        f"can block a pull request -- an unexercised checker measures the "
-        f"checker, not the comment: {reason}")
+        "rungs.yml's `tools` job no longer collects tools/ as a directory in a "
+        "way that can block a pull request -- an unexercised checker measures "
+        f"the checker, not the comment: {reason}")
 
 
 # ---------------------------------------------------------------------------

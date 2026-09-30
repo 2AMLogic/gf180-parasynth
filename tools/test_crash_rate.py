@@ -174,4 +174,28 @@ def test_big():
     assert cr.main(["--target", small, "--runs", "1", "--json", str(out)]) == 0
     small_rss = json.loads(out.read_text())["summary"]["peak_rss_kb"]
     assert big_rss > 300 * 1024, big_rss
+    # kB, not bytes: macOS's ru_maxrss is in bytes and would read as ~400 GB here.
+    assert big_rss < 4 * 1024 * 1024, big_rss
     assert small_rss < big_rss / 2, (small_rss, big_rss)
+
+
+def test_peak_rss_excludes_the_harness_own_memory(tmp_path):
+    """On Linux a child's ru_maxrss absorbs the high-water mark of the address
+    space it exec'd out of -- which, for a child spawned straight from the
+    harness, is the HARNESS (fork/vfork/posix_spawn all start there). Under
+    `pytest tools/` that parent is a few hundred MB, and every run reported
+    that instead of its own peak. Make the parent large on purpose, with pages
+    actually touched, and require a trivial run to report a small number."""
+    small = _write(tmp_path, "test_small.py", """
+def test_small():
+    assert True
+""")
+    n = 600 * 1024 * 1024
+    ballast = bytearray(n)
+    ballast[::4096] = b"\x01" * len(range(0, n, 4096))   # resident, not just reserved
+    out = tmp_path / "r.json"
+    assert cr.main(["--target", small, "--runs", "1", "--json", str(out)]) == 0
+    small_rss = json.loads(out.read_text())["summary"]["peak_rss_kb"]
+    del ballast
+    # A bare pytest+numpy interpreter is well under 200 MB; the ballast alone is 600.
+    assert small_rss < 300 * 1024, small_rss
