@@ -113,32 +113,63 @@ jobs:
         with: { python-version: '3.12' }
       - run: python -m pip install --upgrade pip numpy scipy pytest
       - name: per-voice measurements against declared targets
+        id: report
         run: |
           if [ ! -f model/sound_report.py ]; then
-            echo "model/sound_report.py not present yet -- see issue #44"; exit 0
+            echo "model/sound_report.py not present yet -- see issue #44"
+            echo "rc=absent" >> "$GITHUB_OUTPUT"; exit 0
           fi
           mkdir -p nightly-report
-          python model/sound_report.py | tee nightly-report/sound-report.txt
+          # NOT `python ... | tee`: `$?` after a pipe is TEE's status, so the
+          # report's own exit code -- the thing the next step gates on -- would
+          # be thrown away before anything could read it. CLAUDE.md records
+          # three separate incidents of exactly that in this repository, each
+          # one reporting success for a command that had failed.
+          set +e
+          python model/sound_report.py > nightly-report/sound-report.txt 2>&1
+          rc=$?
+          set -e
+          cat nightly-report/sound-report.txt
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
 
       # The report distinguishes [target] -- a document says so -- from [lock]
       # -- this model at a named commit. A lock that moves is a regression; a
       # target that misses is a defect. They are never mixed in a verdict, and
       # this step exists so a lock moving cannot pass quietly.
       #
-      # KNOWN BROKEN, deliberately not fixed here (issue #242). This greps the
-      # report for "MOVED"/"REGRESS", words the plain (non-`--inject`) report
-      # never prints -- it prints "OUT ". So the step is an unconditional pass
-      # whatever the report says, and it stayed green while the report above
-      # already showed two out-of-tolerance properties. The fix is to read
-      # `main()`'s exit status (1 when anything is outside tolerance), but that
-      # turns this step red on the first night and stays red until the drift
-      # itself is resolved -- so gate and drift are fixed together, in #242,
-      # not separately here. An unsatisfiable gate is worse than no gate.
-      - name: no locked property may have moved
+      # Gated on `sound_report.py`'s OWN EXIT STATUS, not on the report text.
+      # Until #242 this grepped for "MOVED"/"REGRESS", words the plain
+      # (non-`--inject`) report never prints -- it prints "OUT " -- so the step
+      # was an unconditional pass whatever the report said, and it stayed green
+      # for nights on end while the report immediately above it already showed
+      # two out-of-tolerance properties. A gate that cannot go red is
+      # decoration; a gate keyed to a string the tool does not emit is worse,
+      # because it looks like one that works.
+      #
+      # Three outcomes, kept distinct: 0 pass, 1 a property is outside its
+      # tolerance (red), anything else the tool did not run at all -- NO
+      # VERDICT, which is also red but is not the same finding.
+      - name: no locked property may have moved (nor any target be missed)
         run: |
-          if grep -qiE "\b(MOVED|REGRESS)" nightly-report/sound-report.txt; then
-            echo "a locked property moved -- see the report"; exit 1
-          fi
+          rc='${{ steps.report.outputs.rc }}'
+          case "$rc" in
+            absent)
+              echo "model/sound_report.py not present -- nothing to gate" ;;
+            0)
+              echo "every declared property is inside its tolerance" ;;
+            1)
+              echo "::error::a declared property is outside its tolerance:"
+              grep -E "^ +OUT " nightly-report/sound-report.txt || true
+              echo "A [lock] outside tolerance means the model CHANGED -- fix it,"
+              echo "or re-lock it in model/sound_report.py's LOCKS and RELOCKS and"
+              echo "say in the commit message which commit changed the sound."
+              exit 1 ;;
+            *)
+              echo "::error::sound_report exited '$rc'; it did not run, so this gate"
+              echo "::error::has NO VERDICT -- that is not a pass."
+              tail -20 nightly-report/sound-report.txt || true
+              exit 1 ;;
+          esac
 
       # Spot-check that the report can still go red. The full eleven-injection
       # sweep is roughly half an hour; four here, rotated, keeps the nightly
