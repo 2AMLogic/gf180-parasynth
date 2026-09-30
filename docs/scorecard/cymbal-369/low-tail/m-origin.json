@@ -1,0 +1,245 @@
+{
+ "taus": {
+  "low": 0.1,
+  "decay": 0.38,
+  "short": 0.02
+ },
+ "energies": {
+  "low": {
+   "ref": {
+    "M": -54.795,
+    "Mn": -73.621,
+    "Ln": -41.697
+   },
+   "cand3": {
+    "M": 47.053,
+    "Mn": 28.541,
+    "Ln": 60.104
+   },
+   "ref_M_re_Ln": -13.098,
+   "ref_Mn_re_Ln": -31.924,
+   "cand3_M_re_Ln": -13.051,
+   "cand3_Mn_re_Ln": -31.563,
+   "tone_shape_moves_M_by": 0.047
+  },
+  "decay": {
+   "ref": {
+    "M": -91.963,
+    "Mn": -108.726,
+    "Ln": -78.423
+   },
+   "cand3": {
+    "M": 11.348,
+    "Mn": -3.575,
+    "Ln": 24.089
+   },
+   "ref_M_re_Ln": -13.54,
+   "ref_Mn_re_Ln": -30.303,
+   "cand3_M_re_Ln": -12.741,
+   "cand3_Mn_re_Ln": -27.664,
+   "tone_shape_moves_M_by": 0.799
+  },
+  "short": {
+   "ref": {
+    "M": -100.163,
+    "Mn": -120.256,
+    "Ln": -83.928
+   },
+   "cand3": {
+    "M": 2.398,
+    "Mn": -17.583,
+    "Ln": 18.662
+   },
+   "ref_M_re_Ln": -16.235,
+   "ref_Mn_re_Ln": -36.328,
+   "cand3_M_re_Ln": -16.264,
+   "cand3_Mn_re_Ln": -36.245,
+   "tone_shape_moves_M_by": -0.029
+  }
+ },
+ "bound": {
+  "M": {
+   "bound_db": -13.098,
+   "argmax_band": "low",
+   "per_band": {
+    "low": -13.098,
+    "decay": -13.54,
+    "short": -16.235
+   }
+  },
+  "Mn": {
+   "bound_db": -30.303,
+   "argmax_band": "decay",
+   "per_band": {
+    "low": -31.924,
+    "decay": -30.303,
+    "short": -36.328
+   }
+  }
+ },
+ "controls_pass": true,
+ "bound_grid": {
+  "M": {
+   "best_db": -13.098,
+   "at_levels": {
+    "low": 0.0,
+    "decay": -30.0,
+    "short": -30.0
+   }
+  },
+  "Mn": {
+   "best_db": -30.759,
+   "at_levels": {
+    "low": 0.0,
+    "decay": 40.0,
+    "short": -30.0
+   }
+  }
+ },
+ "gap": {
+  "window": "2.0s",
+  "n_808": 20,
+  "bands": {
+   "M": {
+    "chain_bound_db": -13.098,
+    "bound_from_band": "low",
+    "measured_min": -4.998,
+    "measured_max": -3.448,
+    "measured_median": -3.734,
+    "gap_median_db": 9.364,
+    "gap_min_db": 8.1,
+    "n_808_above_bound": 20,
+    "shipped": -3.285,
+    "candidate": -7.339
+   },
+   "Mn": {
+    "chain_bound_db": -30.303,
+    "bound_from_band": "decay",
+    "measured_min": -15.197,
+    "measured_max": -13.047,
+    "measured_median": -13.751,
+    "gap_median_db": 16.552,
+    "gap_min_db": 15.106,
+    "n_808_above_bound": 20,
+    "shipped": -8.909,
+    "candidate": -19.958
+   }
+  }
+ },
+ "sweep": [
+  {
+   "decay_rel_db": -12.0,
+   "refused": {
+    "Mn": "Mn is -30.5 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.62,
+   "rho_M_-10": 0.9492,
+   "Mn_re_Ln": -30.51,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": -6.0,
+   "refused": {
+    "Mn": "Mn is -30.5 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.63,
+   "rho_M_-10": 0.9513,
+   "Mn_re_Ln": -30.55,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 0.0,
+   "refused": {
+    "Mn": "Mn is -30.6 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.64,
+   "rho_M_-10": 0.9568,
+   "Mn_re_Ln": -30.62,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 6.0,
+   "refused": {
+    "Mn": "Mn is -30.8 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.65,
+   "rho_M_-10": 0.9616,
+   "Mn_re_Ln": -30.75,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 9.0,
+   "refused": {
+    "Mn": "Mn is -30.9 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.67,
+   "rho_M_-10": 0.95,
+   "Mn_re_Ln": -30.86,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 12.0,
+   "refused": {
+    "Mn": "Mn is -31.0 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.69,
+   "rho_M_-10": 0.9404,
+   "Mn_re_Ln": -31.01,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 15.0,
+   "refused": {
+    "Mn": "Mn is -31.2 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.72,
+   "rho_M_-10": 0.9475,
+   "Mn_re_Ln": -31.19,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 18.0,
+   "refused": {
+    "Mn": "Mn is -31.4 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.77,
+   "rho_M_-10": 0.9717,
+   "Mn_re_Ln": -31.42,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 24.0,
+   "refused": {
+    "Mn": "Mn is -31.7 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -12.96,
+   "rho_M_-10": 0.9127,
+   "Mn_re_Ln": -31.71,
+   "rho_Mn_-10": null
+  },
+  {
+   "decay_rel_db": 30.0,
+   "refused": {
+    "Mn": "Mn is -30.9 dB below Ln, under the -22 dB the instrument is qualified to"
+   },
+   "M_re_Ln": -13.26,
+   "rho_M_-10": 0.8919,
+   "Mn_re_Ln": -30.89,
+   "rho_Mn_-10": null
+  }
+ ],
+ "verdict": {
+  "target": 1.048,
+  "baseline_max": 1.017,
+  "n_rows": 10,
+  "n_answered": 10,
+  "n_refused_M": 0,
+  "n_refused_Mn": 10,
+  "max_rho_M_-10": 0.9717,
+  "n_above_baseline": 0,
+  "reaches_target_at_db": null,
+  "refused": "no swept DECAY level in -12..+30 dB reaches rho_M(-10) 1.048; the highest reached is 0.9717"
+ },
+ "commit": "2d4abdb11d92414fd8f702b453161d1e0eb2ae41",
+ "sources_dirty": false
+}

@@ -34,6 +34,7 @@ import drums_fx as dx  # noqa: E402
 import run_case as rc  # noqa: E402
 import cymbal_candidate as cc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+import cymbal_mid as cm  # noqa: E402
 
 CENTRE = {"low": "3175", "decay": "10079", "short": "10079"}
 LEVEL_MODE = {"low": cc.M_CYH1, "decay": dx.M_CYHI, "short": cc.M_CYH3B}
@@ -54,9 +55,18 @@ def calibrate() -> dict:
         gain = math.sqrt(es / ec)
         amp = 0.25 * gain
         env_gain = 1.0
-        if amp > AMP_MAX:
+        rule = "shipped-kit 1/3-octave match"
+        if band == "low" and VARIANT == "candidate4":
+            # #411 revision 4: Hh1's own gain is a stated circuit value
+            # (HH1_PASS_DB = 0.0, docs/tr808-reference.md Sec.10 "unity-gain on
+            # the low band"), not a number derived by matching the shipped kit
+            # -- see model/cymbal_candidate.py's REVISION 4 docstring for why.
+            # `es`/`ec`/`gain` above are still computed and kept in the record
+            # for comparison against revision 3's number, just not used here.
+            amp, rule = AMP_MAX, "circuit unity gain (HH1_PASS_DB = 0.0), no shipped-kit anchor"
+        elif amp > AMP_MAX:
             env_gain, amp = amp / AMP_MAX, AMP_MAX
-        out[band] = {"shipped_abs": es, "unit_abs": ec, "amp": amp, "env_gain": env_gain}
+        out[band] = {"shipped_abs": es, "unit_abs": ec, "amp": amp, "env_gain": env_gain, "rule": rule}
         amps[LEVEL_MODE[band]] = amp
         if env_gain != 1.0:
             base = dict(dx.kit_808())[dx.A_ENV + LEVEL_ENV[band] * dx.ENV_STRIDE + 1] / dx.FULL24
@@ -122,13 +132,25 @@ def main(argv=None):
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, required=True)
     ap.add_argument("--wavs", type=pathlib.Path, default=None, help="write shipped/candidate CY renders here")
-    ap.add_argument("--variant", choices=("full", "notilt"), default="full")
+    ap.add_argument("--variant", choices=("full", "notilt", "balance", "candidate4"), default="full")
     a = ap.parse_args(argv)
     global VARIANT
     VARIANT = a.variant
     refs = pathlib.Path(a.refs)
     cal = calibrate()
-    print("levels:", json.dumps({k: {kk: round(vv, 5) for kk, vv in v.items()} for k, v in cal["per_band"].items()}))
+    if VARIANT == "balance":
+        # Diagnostic ablation (#396), NOT a candidate: the band-pass peaks and
+        # high-pass pass bands from W14b Fig. 4 and the tone stage's nominal
+        # transmission from Fig. 9, applied as the relative band levels with
+        # the three VCA drives held equal. The equal-drive assumption is what
+        # the render tests -- see tools/cymbal_band_balance.py.
+        import cymbal_band_balance as cbb          # noqa: PLC0415
+        import cymbal_tone_realisation as ctr      # noqa: PLC0415
+        import werner_fig9 as w9                   # noqa: PLC0415
+        cal = cbb.rebalance(cal, w9.from_artifact()[0], ctr.level_corner_hz())
+        print("ablation:", json.dumps(cal["ablation"]))
+    _r = lambda vv: round(vv, 5) if isinstance(vv, (int, float)) else vv
+    print("levels:", json.dumps({k: {kk: _r(vv) for kk, vv in v.items()} for k, v in cal["per_band"].items()}))
     pres = preservation(cal["amps"])
     print("preservation (bit-identical to shipped):", pres)
     ys, sr = rc.render_drum_solo("CY")
@@ -149,6 +171,22 @@ def main(argv=None):
     for label, m in res["bands"].items():
         print(f"{label:16s} H-L {m['H_minus_L_db']:6.2f}  H EDT {m['H']['edt10_ms']}  Ln EDT {m['Ln']['edt10_ms']}  "
               f"H T20 {m['H']['t20_late_ms']}")
+    # The mid band (tools/cymbal_mid.py, #369 step 7/#411): M's level and decay,
+    # unmodified instrument, called directly rather than through its `renders()`
+    # convenience wrapper (which is hardwired to candidate 3). `low_has_hh1` is
+    # True for the 808 and for every render of this candidate (Hh1's mode is
+    # present in every VARIANT -- see model/cymbal_candidate.py), False for the
+    # shipped kit, which omits Hh1 entirely.
+    res["mid"] = {
+        "fischer_CY5025": cm.measure_mid(P(rx, rsr, "808"), rsr, True, bands=("M",)),
+        "shipped": cm.measure_mid(P(ys, sr, "shipped"), sr, False, bands=("M",)),
+        "candidate": cm.measure_mid(P(yc, sr, "candidate"), sr, True, bands=("M",)),
+    }
+    for label, m in res["mid"].items():
+        mm = m["M"]
+        print(f"mid {label:16s} M share {mm['energy_share_db']:7.2f}  over-skirt {mm['over_leak_edt_bp_only_db']}  "
+              f"EDT10 qual {mm['edt10_qualified_ms']}  T20 qual {mm['t20_qualified_ms']}"
+              + (f"  REFUSED: {mm['refused']}" if "refused" in mm else ""))
     if a.wavs:
         from scipy.io import wavfile
         a.wavs.mkdir(parents=True, exist_ok=True)

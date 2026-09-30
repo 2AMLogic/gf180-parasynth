@@ -170,6 +170,55 @@ tests repeatability; it is not evidence of generalisation to a new knob setting.
 And once a holdout case's detailed errors have guided a change, **it has become
 development data** — a fresh independent claim needs new holdout cases.
 
+### Both of those sentences are now a mechanism: [`holdout/`](holdout/) and `tools/holdout.py`
+
+They were prose for a year, and prose cannot answer the only question that
+matters about a holdout: *was this setting chosen before or after somebody saw
+the error?* On disk those two states look identical. `tools/run_case.py`'s own
+`NOT_RUN` table said so — an agent who "picks the setting, freezes the clip and
+reads the error in one pass has produced a development case wearing a holdout's
+label, and **there is no way to tell afterwards which it was**."
+
+A seal is a committed file, `docs/scorecard/holdout/<case>.json`, holding the
+settings, who chose them, what has already seen them, and why they are unseen —
+the same fields `tools/probes/hihat/hh_probe5.py` carries in its module-level
+`HOLDOUT` dict, moved to where **git** can check the ordering instead of a
+docstring asserting it. What the mechanism does, all of it refusal rather than
+report:
+<!-- claim: test=tools/test_holdout.py::test_an_unsealed_holdout_case_is_refused_and_carries_no_distance -->
+
+| | |
+|---|---|
+| a `Holdout`-split case with no seal | **REFUSED** — a stated no-verdict naming the missing seal, never a score |
+| a seal git has never seen, or one with uncommitted edits | **REFUSED** — otherwise "chosen before" and "chosen after" are the same state |
+| every reading | appended to [`holdout/LEDGER.json`](holdout/LEDGER.json) with the seal's hash and the *model state* it was read at |
+| a seal edited after it was read | **STALE** from `tools/holdout.py check` — the one failure the seal alone cannot catch |
+| a second reading after the model moved | **REFUSED** until `tools/holdout.py open` records the transition; after it, records carry `holdout_claim: false` |
+
+Every result for a holdout case carries a `holdout` block saying which seal it
+was measured against, and the ordering is re-derivable from git rather than
+believed:
+
+```
+git merge-base --is-ancestor <holdout.seal_commit> <provenance.worktree.commit>
+```
+
+**What it does not do.** It cannot say a setting was a *good* choice — `why` and
+`seen_by` are the author's argument and a reviewer still reads them. "The model
+moved" is a hash over `run_case.MODEL_INPUTS`, so a change outside that set is as
+invisible here as it is to every other result. And sealing does not make a case
+measurable: **F1D** is sealed at 500 Hz, resonance zero — the cutoff region no
+case, fit or tolerance here has read — and it is a stated no-verdict until
+somebody renders `surge-type2/lp-cut500-res0.00` on a host with the plugin, which
+is exactly the ordering the seal is for.
+
+**Nineteen of the twenty holdout cases have no seal, deliberately.** F2D, F3D and
+F5D are blocked on what their A/B/C rungs are blocked on — a matched-drive
+definition, a rig change, a stimulus neither side can produce — and sealing them
+now would freeze settings nothing can read. The other sixteen are not yet reached
+by the development-set work. Every one of them is REFUSED rather than scored
+today, which is the change: the absence is now enforced instead of assumed.
+
 ## Filling it
 
 `tools/run_case.py` writes the result files. It renders our side in-process

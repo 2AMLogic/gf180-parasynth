@@ -1,0 +1,13 @@
+tb_pads_top: SEG 0 periods 0
+tb_pads_top: READY seg 0 level 1 g 1308135
+tb_pads_top: PRESS seg 0 btn 1 g 1359124 frame 5309
+tb_pads_top: PRESS seg 0 btn 0 g 1589524 frame 6209
+tb_pads_top: READY seg 0 level 0 g 1615134
+tb_pads_top: SEG 1 periods 6309
+tb_pads_top: READY seg 1 level 1 g 1308122
+tb_pads_top: PRESS seg 1 btn 2 g 1359154 frame 5309
+tb_pads_top: ran 2 segments; 13121 I2S periods decoded
+tb_pads_top: writes drained 310, spi+uart slot collisions 0 (must be 0)
+tb_pads_top: sample strobed in 13122 frames, MISSING in 0, worst strobe cycle 155 of 256
+tb_pads_top: datapath busy at a tick: 0; core overrun 0
+tb_pads_top: TX bytes captured 626

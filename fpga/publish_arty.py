@@ -401,7 +401,7 @@ def publish(artifact, output):
     return summary
 
 
-def inspect_reports(directory):
+def inspect_reports(directory, design="arty_a7_top"):
     try:
         texts = {name: (directory / name).read_text() for name in
                  ("timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt")}
@@ -409,7 +409,7 @@ def inspect_reports(directory):
         raise ValueError("missing implementation report") from exc
     timing = texts["timing.rpt"]
     for content in texts.values():
-        if (not re.search(r"\| Design\s*: arty_a7_top\s*$", content, re.MULTILINE)
+        if (not re.search(r"\| Design\s*: " + re.escape(design) + r"\s*$", content, re.MULTILINE)
                 or not re.search(r"\| Design State\s*: (Fully )?Routed\s*$", content, re.MULTILINE)):
             raise ValueError("report is not the routed Arty design")
     try:

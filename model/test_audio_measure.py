@@ -632,6 +632,133 @@ def test_decay_tau_on_an_already_made_envelope():
 
 
 # ===========================================================================
+# #115 -- the registry itself
+# ===========================================================================
+def _throwaway_domain(estimator: str, lo: float = 6.0) -> am.ValidatedDomain:
+    return am.ValidatedDomain(
+        estimator=estimator,
+        axes=(am.DomainAxis(am.AXIS_SNR, lo=lo, units="dB",
+                            basis="a fixture, not a measurement"),),
+        worst_error="n/a -- test fixture")
+
+
+def test_register_domain_tolerates_an_exact_repeat_registration():
+    """A module that registers at import time can have its body executed twice
+    in ONE process, and that must not be a conflict.
+
+    This is not hypothetical: `tools/run_case.py` runs as `__main__` while
+    `tools/probes/f1_selected_path.py` separately does `import run_case as rc`,
+    so its three module-level `register_domain` calls run once per module
+    identity. The unconditional raise this replaces turned every
+    `python tools/run_case.py F1<x>` into `no verdict` with
+    `ValueError: band_pair_db already declares a domain` -- green under pytest
+    (which imports consistently) and broken at the entry point CI drives.
+
+    The repeat returns the ALREADY-REGISTERED instance, so `is` comparisons
+    against `DOMAINS[name]` hold for whichever copy ran first."""
+    name = "test_only_exact_repeat"
+    assert name not in am.DOMAINS
+    try:
+        first = am.register_domain(_throwaway_domain(name))
+        second = am.register_domain(_throwaway_domain(name))
+        assert second is first
+        assert am.DOMAINS[name] is first
+        assert len([k for k in am.DOMAINS if k == name]) == 1
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+def test_register_domain_still_refuses_a_genuinely_different_domain():
+    """The idempotence above must not swallow a REAL collision: two disagreeing
+    statements about where one estimator was validated. Keeping either one
+    silently would make the registry lie about what was measured, which is the
+    whole thing #115 exists to prevent."""
+    name = "test_only_real_conflict"
+    assert name not in am.DOMAINS
+    try:
+        am.register_domain(_throwaway_domain(name, lo=6.0))
+        with pytest.raises(ValueError, match="DIFFERENT domain"):
+            am.register_domain(_throwaway_domain(name, lo=12.0))
+        assert am.DOMAINS[name].axis(am.AXIS_SNR).lo == 6.0, \
+            "the first (registered) domain must survive a rejected conflict"
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+def test_register_domain_conflict_is_structural_not_just_by_name():
+    """Equality is over every field of the frozen dataclasses -- bound, basis,
+    units, `enforced`, `worst_error`, evidence. A domain that differs only in
+    its BASIS (the same number, a different derivation) is still a conflict: a
+    bound whose derivation changed is a different claim."""
+    name = "test_only_basis_differs"
+    assert name not in am.DOMAINS
+    base = _throwaway_domain(name)
+    other = am.ValidatedDomain(
+        estimator=name,
+        axes=(am.DomainAxis(am.AXIS_SNR, lo=6.0, units="dB",
+                            basis="a DIFFERENT derivation of the same bound"),),
+        worst_error="n/a -- test fixture")
+    try:
+        am.register_domain(base)
+        with pytest.raises(ValueError, match="DIFFERENT domain"):
+            am.register_domain(other)
+    finally:
+        am.DOMAINS.pop(name, None)
+
+
+# ===========================================================================
+# #115 -- `decay_tau`'s validated domain, as data
+# ===========================================================================
+def test_decay_tau_domain_is_inspectable_without_synthesizing_a_signal():
+    """The whole point of a `ValidatedDomain`: a test (or a caller) can ask
+    what the estimator was validated on from the declaration itself, with no
+    signal in sight. `DECAY_TAU_MIN_CYCLES_PER_TAU` and the domain's own axis
+    bound must be the SAME number, or the declaration and the gate have
+    drifted apart."""
+    axis = am.DECAY_TAU_DOMAIN.axis(am.AXIS_PARTIAL_SEPARATION)
+    assert axis.lo == am.DECAY_TAU_MIN_CYCLES_PER_TAU == 1.5
+    assert axis.basis, "a bound with no basis is the quoted constant #92 was about"
+    assert am.DOMAINS["decay_tau"] is am.DECAY_TAU_DOMAIN
+
+
+def test_decay_tau_domain_partial_separation_boundary_does_not_flap():
+    """Exactly at the validated minimum is INSIDE the domain (a caller must
+    not be refused for landing precisely on the boundary this estimator was
+    shown to hold at); a hair below it is refused. Checked on the axis
+    directly, which is deterministic -- a signal-based check of an exact
+    cycles-per-tau is at the mercy of the carrier-frequency measurement's own
+    precision and would be testing that instead."""
+    axis = am.DECAY_TAU_DOMAIN.axis(am.AXIS_PARTIAL_SEPARATION)
+    assert axis.violation(1.5) is None
+    assert axis.violation(1.5 - 1e-9) is not None
+
+
+def test_decay_tau_refuses_when_a_caller_demands_more_separation_than_default():
+    """The partial-separation refusal exists in the code (`refuse`) but is
+    UNREACHABLE at the default 1.5-cycle bound in practice: the residual gate
+    always fires first below it (see `DECAY_TAU_MIN_CYCLES_PER_TAU`'s own
+    derivation). A caller may still tighten the requirement with
+    `min_cycles_per_tau`, and THAT is where this refusal path is exercised: a
+    56 Hz ring at 1.56 measured cycles/tau reports cleanly at the default
+    bound but is refused, by name, against a caller's stricter 2.0."""
+    x = damped(56.0, 0.029, seconds=0.3)
+    default = am.decay_tau(x, SR)
+    assert default.ok, default.reason
+    assert default.detail["cycles_per_tau"] < 2.0
+    tightened = am.decay_tau(x, SR, min_cycles_per_tau=2.0)
+    assert not tightened.ok
+    assert tightened.outside_domain
+    assert tightened.detail["axis"] == am.AXIS_PARTIAL_SEPARATION
+    assert tightened.domain is am.DECAY_TAU_DOMAIN
+
+
+def test_decay_tau_record_length_domain_boundary_does_not_flap():
+    axis = am.DECAY_TAU_DOMAIN.axis(am.AXIS_RECORD_LENGTH)
+    assert axis.violation(12.0) is None
+    assert axis.violation(12.0 - 1e-9) is not None
+
+
+# ===========================================================================
 # instantaneous frequency
 # ===========================================================================
 def test_instantaneous_frequency_tracks_a_known_glide():
@@ -766,15 +893,22 @@ def test_inharmonic_fraction_recovers_a_planted_inharmonic_tone(share):
 
 def test_inharmonic_fraction_reads_a_clean_series_at_the_window_floor():
     """With nothing inharmonic present the measure returns its own leakage
-    floor -- a refusal in all but name.
+    floor -- a refusal in all but name, and since #115 an ACTUAL refusal
+    unless the caller asks for the floor reading on purpose.
 
     **This test used to assert `-58 < got < -50`, the Hann figure the docstring
     quoted.** That is #92 in a test: it pinned a floor that is not a constant,
     and it would have had to be re-pinned by hand for any window or guard
     change. What is asserted now is the PROPERTY -- the reading is the floor,
     whatever the floor is -- against the floor the estimator measured for this
-    exact call. Blackman-Harris puts it near -88 dB rather than -54."""
-    e = am.inharmonic_fraction_db(_series(500.0, 1 << 15, 11), 500.0)
+    exact call. Blackman-Harris puts it near -88 dB rather than -54.
+
+    `min_headroom_db=None` is the explicit "I want the floor" request #115
+    added: this call sits at ~0 dB of its own headroom BY CONSTRUCTION (there
+    is nothing inharmonic to read), which is exactly what the default gate
+    refuses. Asking for the floor on purpose is not the failure mode #115 is
+    about; reporting it BY ACCIDENT to a caller who did not ask is."""
+    e = am.inharmonic_fraction_db(_series(500.0, 1 << 15, 11), 500.0, min_headroom_db=None)
     assert e.ok, e.reason
     assert abs(e.detail["headroom_db"]) < 1.0, \
         f"value {e.value:.2f} dB, measured floor {e.detail['floor_db']:.2f} dB"
@@ -1255,8 +1389,12 @@ def test_inharmonic_fraction_db_reading_of_an_alias_free_signal_is_its_floor(f0)
     """The property that makes the floor believable: on a signal with nothing
     inharmonic in it, the value and the measured floor must be the same
     number, because the value is entirely leakage. If the floor estimator were
-    wrong this is where it shows."""
-    e = am.inharmonic_fraction_db(_additive_saw(f0), f0, SR)
+    wrong this is where it shows.
+
+    `min_headroom_db=None`: this signal reads at ~0 dB of headroom above its
+    own floor by construction, which #115's default gate refuses on purpose --
+    asking for the floor explicitly is the documented way past it."""
+    e = am.inharmonic_fraction_db(_additive_saw(f0), f0, SR, min_headroom_db=None)
     assert e.ok, e.reason
     assert abs(e.detail["headroom_db"]) < 1.0, \
         f"f0 {f0}: value {e.value:.2f} dB but floor read {e.detail['floor_db']:.2f} dB"
@@ -1266,9 +1404,12 @@ def test_inharmonic_fraction_db_floor_is_not_a_constant():
     """#92's failure, in the estimator it was found in. The floor swings ~60 dB
     with f0 -- between an f0 that lands on a bin centre and one that does not --
     so a floor quoted in a docstring is wrong for almost every call. It must
-    come back in `detail`, measured."""
-    on_bin = am.inharmonic_fraction_db(_additive_saw(440.0), 440.0, SR)
-    off_bin = am.inharmonic_fraction_db(_additive_saw(441.0), 441.0, SR)
+    come back in `detail`, measured.
+
+    Both signals read at ~0 dB of their own headroom by construction, so both
+    calls ask for the floor explicitly with `min_headroom_db=None` (#115)."""
+    on_bin = am.inharmonic_fraction_db(_additive_saw(440.0), 440.0, SR, min_headroom_db=None)
+    off_bin = am.inharmonic_fraction_db(_additive_saw(441.0), 441.0, SR, min_headroom_db=None)
     assert on_bin.ok and off_bin.ok
     assert "floor_db" in on_bin.detail and "floor_db" in off_bin.detail
     assert on_bin.detail["floor_db"] < off_bin.detail["floor_db"] - 50.0, \
@@ -1290,7 +1431,9 @@ def test_inharmonic_fraction_db_window_is_blackman_harris_not_hann():
         return 10.0 * math.log10(p[~harm].sum() / p.sum())
 
     free, naive = _additive_saw(f0), _naive_saw(f0)
-    got_floor = am.inharmonic_fraction_db(free, f0, SR).require("floor")
+    # `free` reads at ~0 dB of its own headroom by construction (#115): this
+    # IS a floor reading, requested on purpose with `min_headroom_db=None`.
+    got_floor = am.inharmonic_fraction_db(free, f0, SR, min_headroom_db=None).require("floor")
     assert got_floor < hann_reading(free) - 30.0, \
         f"Blackman-Harris floor {got_floor:.2f} dB vs Hann {hann_reading(free):.2f} dB"
     got_answer = am.inharmonic_fraction_db(naive, f0, SR).require("answer")
@@ -1305,6 +1448,58 @@ def test_inharmonic_fraction_db_is_unchanged_by_scaling():
     a = am.inharmonic_fraction_db(x, 441.0, SR).require()
     b = am.inharmonic_fraction_db(x * 1e-3, 441.0, SR).require()
     assert abs(a - b) < 1e-9, f"{a:.6f} vs {b:.6f} dB"
+
+
+# ===========================================================================
+# #115 -- `inharmonic_fraction_db`'s validated domain, as data, and its
+# refusal on a low-headroom reading instead of reporting it
+# ===========================================================================
+def test_inharmonic_fraction_db_domain_is_inspectable_without_synthesizing_a_signal():
+    axis = am.INHARMONIC_DOMAIN.axis(am.AXIS_SNR)
+    assert axis.lo == am.INHARMONIC_MIN_HEADROOM_DB == 6.0
+    assert axis.basis, "a bound with no basis is the quoted constant #92 was about"
+    assert am.DOMAINS["inharmonic_fraction_db"] is am.INHARMONIC_DOMAIN
+
+
+def test_inharmonic_fraction_db_snr_domain_boundary_does_not_flap():
+    axis = am.INHARMONIC_DOMAIN.axis(am.AXIS_SNR)
+    assert axis.violation(6.0) is None
+    assert axis.violation(6.0 - 1e-9) is not None
+
+
+def test_inharmonic_fraction_db_refuses_a_reading_inside_its_own_floor():
+    """The failure #115 is actually about: nothing inharmonic present, so the
+    reading IS the estimator's own leakage floor at ~0 dB of headroom -- and by
+    DEFAULT that is now a refusal naming the SNR axis, not a number a caller
+    could copy into a table without the caveat attached.
+
+    `detail['value_db']` still carries the reading it declined to return, so a
+    caller reading the refusal (rather than the value) can see how far inside
+    its own floor the answer sat."""
+    e = am.inharmonic_fraction_db(_additive_saw(441.0), 441.0, SR)
+    assert not e.ok
+    assert e.outside_domain
+    assert e.detail["axis"] == am.AXIS_SNR
+    assert "value_db" in e.detail
+    assert e.domain is am.INHARMONIC_DOMAIN
+    # The explicit opt-out still returns the same value the refusal declined:
+    forced = am.inharmonic_fraction_db(_additive_saw(441.0), 441.0, SR, min_headroom_db=None)
+    assert forced.ok
+    assert forced.value == pytest.approx(e.detail["value_db"])
+
+
+def test_inharmonic_fraction_db_still_reports_normally_inside_its_domain():
+    """Guard against an overly aggressive refusal check: a reading with real
+    headroom above the floor -- planted inharmonic content, not leakage --
+    must still come back `ok=True` with the same value the estimator always
+    reported here."""
+    n = 1 << 15
+    harm = _series(500.0, n, 11)
+    a = math.sqrt(2 * 0.1 / (1 - 0.1) * (harm ** 2).sum() / n)
+    x = harm + _sine(1.5 * 500.0, n, a)
+    e = am.inharmonic_fraction_db(x, 500.0)
+    assert e.ok, e.reason
+    assert e.detail["headroom_db"] >= am.INHARMONIC_MIN_HEADROOM_DB
 
 
 # ---------------------------------------------------------------------------

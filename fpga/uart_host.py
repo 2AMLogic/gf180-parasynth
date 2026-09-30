@@ -138,12 +138,12 @@ UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
 #
 # `r2` (fpga/release/R2.md) is the NAMED R2 image: OSC2X=1 FILTER2X=1
 # PULSE2X=1 with the R2 RTL changes. Its drum RTL and contract revision are
-# R1's, and it has no preset or kit change, so it is sent R1's kit frozen by
-# value and R1's known-state start: its bytes equal `r1`'s, command for
-# command (fpga/test_named_r2.py). What differs is the image on the board and
+# R1's (14 -- not the tree's, which moved to 15 with #388), and it has no
+# preset or kit change, so it is sent R1's kit frozen by value and R1's
+# known-state start: its bytes equal `r1`'s, command for command (fpga/test_named_r2.py). What differs is the image on the board and
 # the qualified domain (qualified_domain.PULSE2X_IMAGES admits PULSE2X on r2).
 # The host cannot read the image back, so the name is declared, not verified.
-IMAGE_REVISION = {"release": 11, "tree": 14, "r1": 14, "r2": 14}
+IMAGE_REVISION = {"release": 11, "tree": 15, "r1": 14, "r2": 14}
 DEFAULT_IMAGE = "release"
 # the images whose sessions start from the known state (voice + drum RESET)
 KNOWN_STATE_IMAGES = ("tree", "r1", "r2")

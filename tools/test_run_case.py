@@ -26,6 +26,7 @@ runner thinks it said:
 """
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -241,6 +242,88 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
     assert e.value == pytest.approx(20 * math.log10(0.5), abs=0.3)
 
 
+# ---------------------------------------------------------------------------
+# #115 -- `band_pair_db`'s validated domain, as data, and its refusal outside
+# the decay-rate and detuning axes it declares
+# ---------------------------------------------------------------------------
+def _band_pair_two_tone_lead(f1, f2, tau1, tau2, a1, a2, seconds, *, lead_ms=10.0, sr=SR):
+    """Two damped partials, with a TRUE PRE-ONSET LEAD.
+
+    `band_energy` pads with `sosfiltfilt`'s odd extension through the first
+    sample, so a segment that begins at full amplitude manufactures an edge
+    worth several dB in a sparsely-occupied band -- the same precondition
+    `tools/probes/estimator_domains.py`'s `_two_tone` states and guarantees.
+    Without it this test would measure that edge and call it the estimator."""
+    n = int(seconds * sr)
+    t = np.arange(n) / sr
+    x = (a1 * np.exp(-t / tau1) * np.sin(2 * math.pi * f1 * t + 0.3)
+         + a2 * np.exp(-t / tau2) * np.sin(2 * math.pi * f2 * t + 1.9))
+    lead = np.zeros(int(lead_ms * 1e-3 * sr))
+    return np.concatenate([lead, x])
+
+
+def test_band_pair_db_domain_is_inspectable_without_synthesizing_a_signal():
+    """The domain's bounds are DATA a test can assert against directly --
+    the whole point of #115. `BAND_PAIR_EDGE_MARGIN` is the same +-10 % the
+    TR-808's own component tolerance uses elsewhere (`LINE_SEARCH_FRAC`)."""
+    detuning = rc.BAND_PAIR_DOMAIN.axis(am.AXIS_DETUNING)
+    assert detuning.lo == rc.BAND_PAIR_EDGE_MARGIN == rc.LINE_SEARCH_FRAC == pytest.approx(0.10)
+    decay = rc.BAND_PAIR_DOMAIN.axis(am.AXIS_DECAY_RATE)
+    assert decay.hi == rc.BAND_PAIR_MAX_DECAY_BIAS_DB == pytest.approx(0.5)
+    assert detuning.basis and decay.basis
+
+
+def test_band_pair_db_refuses_partials_that_decay_at_different_rates():
+    """The A^2*tau disease #109 named: a 4:1 tau mismatch between the two
+    bands' partials puts far more than `BAND_PAIR_MAX_DECAY_BIAS_DB` of bias
+    into a fixed-window ratio, and it must be refused rather than reported as
+    a balance."""
+    x = _band_pair_two_tone_lead(1800.0, 460.0, 0.006, 0.0015, 1.0, 1.0, 0.30)
+    e = rc.band_pair_db(x, SR, (1500, 2100), (380, 560))
+    assert not e.ok
+    assert e.outside_domain
+    assert e.detail["axis"] == am.AXIS_DECAY_RATE
+    assert abs(e.detail["decay_bias_db"]) > rc.BAND_PAIR_MAX_DECAY_BIAS_DB
+    assert e.domain is rc.BAND_PAIR_DOMAIN
+    # Explicitly asking for the out-of-domain case reports it instead:
+    forced = rc.band_pair_db(x, SR, (1500, 2100), (380, 560), min_decay_bias_db=None)
+    assert forced.ok
+
+
+def test_band_pair_db_a_matched_decay_pair_is_inside_the_domain():
+    """Guard against an overly aggressive refusal check: partials decaying at
+    the SAME rate are exactly the case `BAND_PAIR_MAX_DECAY_BIAS_DB` was set
+    to admit, and must still report."""
+    x = _band_pair_two_tone_lead(1800.0, 460.0, 0.006, 0.006, 1.0, 1.0, 0.30)
+    e = rc.band_pair_db(x, SR, (1500, 2100), (380, 560))
+    assert e.ok, e.reason
+    assert abs(e.detail["decay_bias_db"]) <= rc.BAND_PAIR_MAX_DECAY_BIAS_DB
+
+
+def test_band_pair_db_refuses_a_partial_sitting_on_a_band_edge():
+    """A 4th-order Butterworth is -3 dB at its own edge, so a partial that has
+    drifted close to the band edge reads low rather than absent -- a plausible
+    but biased number. `edge_margin` refuses it instead, by naming which band
+    the offending line sits in."""
+    a = sine(2080.0, 0.4, amp=0.5)   # 0.0096 of margin from band_a's 2100 Hz edge
+    b = sine(460.0, 0.4, amp=1.0)    # comfortably inside band_b
+    n = min(len(a), len(b))
+    e = rc.band_pair_db(a[:n] + b[:n], SR, (1500, 2100), (380, 560))
+    assert not e.ok
+    assert e.outside_domain
+    assert e.detail["axis"] == am.AXIS_DETUNING
+    assert e.detail["band"] == "a"
+    # Explicitly asking for the out-of-domain case reports it instead:
+    forced = rc.band_pair_db(a[:n] + b[:n], SR, (1500, 2100), (380, 560), edge_margin=None)
+    assert forced.ok
+
+
+def test_band_pair_db_edge_margin_boundary_does_not_flap():
+    axis = rc.BAND_PAIR_DOMAIN.axis(am.AXIS_DETUNING)
+    assert axis.violation(rc.BAND_PAIR_EDGE_MARGIN) is None
+    assert axis.violation(rc.BAND_PAIR_EDGE_MARGIN - 1e-9) is not None
+
+
 # ===========================================================================
 # Ground truth: balance_trajectory_db (#109)
 #
@@ -258,6 +341,10 @@ def test_band_pair_db_of_two_sines_is_their_amplitude_ratio():
 RS_TEST_OP = {k: v for k, v in rc.RS_BALANCE_OP.items()
               if k not in ("f_lo_range", "f_hi_range")}
 RS_TEST_RANGES = (rc.RS_BALANCE_OP["f_lo_range"], rc.RS_BALANCE_OP["f_hi_range"])
+# Also derived rather than copied: the floor margin is a DEFAULT of the estimator
+# rather than a member of the OP dict, so it has to be read off the signature.
+FLOOR_MARGIN_DB = inspect.signature(
+    rc.balance_trajectory_db).parameters["floor_margin_db"].default
 
 
 def _damped(f, tau, amp, n, sr, phase=0.0):
@@ -274,6 +361,17 @@ def _two_partial(f_lo, tau_lo, a_lo, f_hi, tau_hi, a_hi, seconds, sr):
 def _true_balance_db(t_s, tau_lo, a_lo, tau_hi, a_hi):
     return 20.0 * math.log10((a_hi * math.exp(-t_s / tau_hi))
                              / (a_lo * math.exp(-t_s / tau_lo)))
+
+
+def test_balance_trajectory_db_domain_is_inspectable_without_synthesizing_a_signal():
+    """#115: the second of the three ad-hoc validation measurements the issue
+    names (2.4 dB) relocated into `BALANCE_TRAJECTORY_DOMAIN` -- it used to be
+    a comment in this file's `RS_BALANCE_OP` block, reachable only by reading
+    the comment."""
+    snr = rc.BALANCE_TRAJECTORY_DOMAIN.axis(am.AXIS_SNR)
+    assert snr.lo == FLOOR_MARGIN_DB
+    assert "2.4 dB" in rc.BALANCE_TRAJECTORY_DOMAIN.worst_error
+    assert am.DOMAINS["balance_trajectory_db"] is rc.BALANCE_TRAJECTORY_DOMAIN
 
 
 def test_balance_trajectory_db_reports_two_points_not_one():
@@ -323,9 +421,58 @@ def test_balance_trajectory_db_a_flat_balance_reads_flat():
 
 def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     """#92's own pattern: a point measured to be inside the record's floor is
-    excluded, not integrated. A strong tone AT one of the guard frequencies
-    (neither partial) for the first 20 ms raises the floor there and nowhere
-    else; the earliest reported instant must move past it."""
+    excluded, not integrated. A tone AT one of the guard frequencies (neither
+    partial) for the first 20 ms raises the floor there and nowhere else; the
+    earliest reported instant must move past it.
+
+    THE FIXTURE NOW ASSERTS ITS OWN PREMISE, and the burst amplitude is 0.6
+    rather than the 5.0 it was written with (#389). "Raises the floor there and
+    nowhere else" was a claim this fixture made in prose and violated in fact: a
+    5x tone at 1000 Hz throws a 1/df skirt across the whole record, and at the
+    +-100 Hz offsets around the LOW partial that `line_is_resolved` reads, the
+    burst alone measured 13 to 21 dB BELOW that partial -- comparable to, and at
+    the outer offsets louder than, the partial's own skirt, which it scrambled by
+    up to 7 dB. #389's line-shape precondition saw that and refused the record,
+    correctly: the low partial's neighbourhood in the 5x fixture genuinely does
+    not look like an isolated mode, so there was nothing there to take a verdict
+    from.
+
+    So the premise is now assertions rather than a sentence, and the amplitude
+    was SWEPT rather than guessed -- `balance_line_shape.py fixture` is the
+    sweep, so this table is a command and not a transcription:
+
+        A      t1     spill onto 460 Hz   shape residual lo / hi
+        0.4   3.0 ms        -36.5 dB        1.09 dB   0.31 dB
+        0.6  21.0 ms        -33.0 dB        1.42 dB   0.32 dB
+        1.0  21.5 ms        -28.6 dB        2.07 dB   0.39 dB
+        5.0  REFUSED        -14.6 dB        3.72 dB   1.56 dB
+
+    0.4 is too quiet to raise the floor past the estimator's own 6 dB gate at
+    all, so the fixture stops testing anything; 1.0 leaves the shape residual
+    within 6 % of the gate's 2.2 dB tolerance, which is a flake waiting to
+    happen. 0.6 is 2.9 dB inside the floor gate and 1.55x inside the shape gate.
+    5.0 bought nothing this test asserts and cost the premise it claims.
+
+    WHERE THE PREMISE BAR COMES FROM, which is the review finding on PR #405 and
+    the reason this docstring changed. The first version of the assertion
+    compared the burst's spill onto each partial against -`FLOOR_MARGIN_DB`
+    (-6 dB) -- and EVERY row of that table clears -6 dB, including the 5.0 the
+    gate refuses. It was a precondition that read stronger than it was: it could
+    not fail on the drift it was written to catch, and what actually failed at
+    5.0 was `contaminated.ok`. The floor margin is the wrong scale because the
+    gate that notices this contamination is the LINE SHAPE, and the sweep above
+    puts its sensitivity about 20 dB below the floor margin: the largest spill
+    whose residual still fits inside 2.2 dB is near -28 dB (1.0 reads 2.07 at
+    -28.6 dB; interpolating the two rows either side puts the crossing at
+    -27.8 dB). `spill_bar_db = -30.0` is 2 dB inside that measured edge and
+    3.0 dB clear of the shipping fixture's -33.0, the 5.0 case is carried below
+    as the control that the bar is not vacuous, and "nowhere else" is asserted at
+    the HIGH partial as a residual rather than as a spill -- because 1000 and
+    1800 Hz are both whole numbers of cycles over the burst's own 20 ms, so a
+    projection of the burst at 1800 Hz is exactly orthogonal to it and reads
+    -316 dB whatever the amplitude. A spill assertion there would be vacuous by
+    construction; the residual is not (0.319 dB clean, 0.323 with the burst,
+    1.56 at 5.0)."""
     tau, a_lo, a_hi = 0.020, 1.0, 1.0
     x = _two_partial(460.0, tau, a_lo, 1800.0, tau, a_hi, 0.060, SR)
     clean = rc.balance_trajectory_db(x, SR, *RS_TEST_RANGES, **RS_TEST_OP)
@@ -333,11 +480,58 @@ def test_balance_trajectory_db_excludes_a_point_below_the_floor():
     t = np.arange(len(x)) / SR
     burst_end_s = 0.020
     guard_hz = RS_TEST_OP["guards"][0]
-    dirty = x + 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    burst = 0.6 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    dirty = x + burst
+
+    # THE PREMISE, ASSERTED, at the scale the SHAPE gate works on rather than at
+    # the floor margin -- see the docstring: a -6 dB bar here passes on the 5.0
+    # fixture it exists to reject, so it could not have caught the drift it was
+    # written for. -30 dB is 2 dB inside the measured edge of the shape gate's
+    # own sensitivity (`balance_line_shape.py fixture`).
+    spill_bar_db = -30.0
+    m = int(0.020 * SR)
+    partial_lo = pt.project(x[:m], 460.0, SR)
+    spill_lo_db = 20.0 * math.log10(pt.project(burst[:m], 460.0, SR) / partial_lo)
+    assert spill_lo_db < spill_bar_db, (
+        f"the burst spills onto the low partial at 460 Hz at {spill_lo_db:.1f} dB "
+        f"re that partial, past the {spill_bar_db:.0f} dB this fixture is allowed: "
+        f"it is then contaminating the partial, not only the guard")
+    # AND THE CONTROL THAT THE BAR IS NOT VACUOUS (verification-rules.md rule 2):
+    # the 5.0 burst this fixture was written with must FAIL it. The -6 dB bar this
+    # replaces passed at 5.0 -- an assertion that holds whatever the fixture does
+    # is documentation, not a precondition.
+    old_burst = 5.0 * np.sin(2 * math.pi * guard_hz * t) * (t < burst_end_s)
+    old_spill_db = 20.0 * math.log10(pt.project(old_burst[:m], 460.0, SR) / partial_lo)
+    assert old_spill_db > spill_bar_db, (
+        f"the 5.0 burst spills onto the low partial at {old_spill_db:.1f} dB and the "
+        f"bar is {spill_bar_db:.0f} dB: the bar no longer rejects the fixture this "
+        f"test spent its first life with, so it is not guarding anything")
+    assert old_spill_db < -FLOOR_MARGIN_DB, (
+        "and this is why the bar is NOT the floor margin, pinned as code rather "
+        "than left in prose: the 5.0 fixture clears -6 dB comfortably, so an "
+        "assertion set from the floor margin cannot fail on it (review of #405)")
+    at_guard = pt.project(burst[:m], guard_hz, SR)
+    assert at_guard > pt.project(x[:m], guard_hz, SR) * 10.0, \
+        "the burst must be what sets the floor at the guard, or this tests nothing"
+
     contaminated = rc.balance_trajectory_db(dirty, SR, *RS_TEST_RANGES, **RS_TEST_OP)
-    assert contaminated.ok
+    assert contaminated.ok, contaminated.reason
     assert contaminated.detail["t1_ms"] > clean.detail["t1_ms"]
     assert contaminated.detail["t1_ms"] >= burst_end_s * 1e3 - RS_TEST_OP["win_ms"] / 2.0
+    # "THERE, AND NOWHERE ELSE" AS A NUMBER: the burst moves the guard's floor by
+    # >20 dB (asserted above) and the LOW line's shape residual by ~0.95 dB, and
+    # leaves the HIGH line's alone to within 0.005 dB. Read off the accepted
+    # verdict's own detail, which is why those fields exist on this path.
+    assert contaminated.detail["hi_resid_db"] == pytest.approx(
+        clean.detail["hi_resid_db"], abs=0.05), (
+        "the burst was supposed to leave the high partial's line shape alone; it "
+        f"moved from {clean.detail['hi_resid_db']:.3f} to "
+        f"{contaminated.detail['hi_resid_db']:.3f} dB")
+    assert contaminated.detail["lo_resid_db"] > clean.detail["lo_resid_db"] + 0.5, (
+        "the burst must actually reach the low partial's neighbourhood, or the "
+        "spill bar above is satisfied by a fixture that does nothing")
+    assert (contaminated.detail["lo_resid_db"]
+            < contaminated.detail["line_max_resid_db"])
 
 
 def test_rs_guards_sit_clear_of_the_strikes_own_broadband_splash():
@@ -422,6 +616,195 @@ def test_rs_guards_still_refuse_mid_band_contamination_a_900hz_guard_caught():
             f"{new.value:+.2f} dB on a record contaminated at {hz:.0f} Hz by "
             f"{level_db:.0f} dB re the low partial, which (900, 1100) refused "
             "-- the retune traded contamination sensitivity for a verdict")
+
+
+def test_balance_trajectory_db_refuses_white_noise_at_both_operating_points():
+    """#389: a record made of NOISE has no partials, so it has no balance --
+    and the estimator must say so rather than report one.
+
+    THE BUG THIS PINS, as it shipped (verification-rules.md rule 5 -- the
+    control is the exact broken behaviour, not an imagined one). The 6 dB
+    joint-headroom gate compared two quantities measured in different ways:
+    the partials came from `find_partial`, the STRONGEST line over ~4800 and
+    ~14000 grid points -- on noise an upward-biased pick -- while the floor
+    came from `floor_at` at FIXED guard frequencies, an unbiased read of the
+    same noise. The headroom between them was therefore a selection artifact,
+    and on noise it cleared 6 dB at some instant out of the 240 the trajectory
+    visits. Every seed below REPORTED a balance at `RS_BALANCE_OP` before this
+    test existed -- seed 0 at +4.14 dB, seed 3 at -16.23 dB, seed 7 at
+    +5.74 dB -- and seeds 2, 5, 6 and 7 did at `CB_BALANCE_OP`.
+
+    BOTH shipping operating points, because the gate is shared: D10A scores
+    `RS_BALANCE_OP` and D13A scores `CB_BALANCE_OP`, and a fix that only knows
+    about the rimshot's window is not a fix to the gate.
+
+    The seeds that clear the floor gate must be refused by the NEW precondition
+    by name -- otherwise this test could go green on the old code's own floor
+    refusals (5 of 8 RS seeds and 4 of 8 CB seeds already refused that way) and
+    prove nothing about the hole it is here to close."""
+    for label, op, seconds, min_by_line_shape in (
+            ("RS_BALANCE_OP", rc.RS_BALANCE_OP, 0.25, 8),
+            ("CB_BALANCE_OP", rc.CB_BALANCE_OP, 0.75, 4)):
+        kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+        by_line_shape = 0
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(seconds * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            assert not e.ok and e.value is None, (
+                f"{label} seed {seed}: white noise has no partials, so it has no "
+                f"balance -- REPORTED {e.value} dB at t1 "
+                f"{e.detail.get('t1_ms')} ms instead of refusing")
+            assert ("is not a resolved line" in e.reason
+                    or "clears the record's own floor" in e.reason), (
+                f"{label} seed {seed}: a refusal must name the precondition that "
+                f"failed; got {e.reason!r}")
+            by_line_shape += "is not a resolved line" in e.reason
+        assert by_line_shape >= min_by_line_shape, (
+            f"{label}: only {by_line_shape} of 8 noise seeds were refused by the "
+            f"line-shape precondition; the rest went out through the floor gate, "
+            f"which already refused them before #389. This test is then green for "
+            f"the wrong reason.")
+
+
+def test_balance_trajectory_db_would_report_noise_again_with_the_gate_DISABLED():
+    """The injected-bug control for the test above (verification-rules.md rule 2).
+
+    A green refusal test proves nothing until something has been shown to turn
+    it red, and "white noise is refused" has a trivial wrong reason to be green:
+    the floor gate might be doing all the work, or the estimator might be
+    refusing for a reason that has nothing to do with #389. So RELAX the line
+    shape tolerance to infinity -- the one line of the fix, and nothing else --
+    and the old behaviour must come back."""
+    op = rc.RS_BALANCE_OP
+    kw = {k: v for k, v in op.items() if k not in ("f_lo_range", "f_hi_range")}
+    real = pt.line_is_resolved
+    reported = 0
+    try:
+        pt.line_is_resolved = lambda *a, **k: real(*a, **{**k, "max_resid_db": math.inf})
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(seed).standard_normal(int(0.25 * SR))
+            e = rc.balance_trajectory_db(x, SR, op["f_lo_range"], op["f_hi_range"], **kw)
+            reported += e.ok
+    finally:
+        pt.line_is_resolved = real
+    assert reported > 0, (
+        "with the line-shape tolerance relaxed to infinity, NO noise seed was "
+        "reported -- so the refusals the test above observes are not this gate's "
+        "doing and that test is green for some other reason")
+
+
+def test_line_is_resolved_passes_a_damped_mode_at_every_tau():
+    """The gate must accept a damped sinusoid across the whole range of decays a
+    drum voice presents, from a hat-fast 0.5 ms to two thirds of the window.
+
+    This is the external grounding, and it is the case a shape gate is most
+    likely to get wrong: the statistic's closed form is tau-free, so every row
+    here has the same right answer for a reason that comes from the DTFT of a
+    damped sinusoid and not from anything measured in this repository. An earlier
+    draft of this gate (#389, `balance_line_shape.py` wrong-then-right item 3)
+    refused the rows below 2 ms, which is where the rimshot's HIGH mode lives."""
+    T = RS_TEST_OP["t_end"]
+    for tau_ms in (0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0):
+        for f in (452.0, 1795.0):
+            x = _damped(f, tau_ms * 1e-3, 1.0, int(0.25 * SR), SR, 0.3)
+            r = pt.line_is_resolved(x, SR, f, seconds=T)
+            assert r["ok"], (f"tau {tau_ms} ms at {f} Hz is a damped mode and the "
+                            f"gate refused it: {r['reason']}")
+            assert r["tau_ms"] == pytest.approx(tau_ms, rel=0.15), (
+                f"the shape fit recovered tau {r['tau_ms']:.2f} ms from a mode "
+                f"built with {tau_ms} ms -- the gate passed, but not because it "
+                f"measured the right thing")
+
+
+def test_line_is_resolved_refuses_white_noise():
+    """The other side of the same gate, at the unit rather than the estimator.
+
+    8 seeds at both operating points' windows, because a precondition that
+    holds on most records is not a precondition. The reason must name the
+    statistic and its tolerance, so a reader of a REFUSED verdict can tell
+    whether the record was nearly a partial or nowhere near one.
+
+    WHY 8 AND NOT THE 16 THIS WAS WRITTEN WITH, and why the record is no longer
+    3x the window (review of PR #405 -- this test cost 81 s of a 600 s CI budget
+    and took `make verify-fast`'s first pytest bundle over it):
+
+      - The cost is `find_partial`, and it is grid x samples: 4800 grid points
+        (240 Hz at df=0.05) against `seconds` of record, twice per seed. At the
+        cowbell's 600 ms window that is 138 M complex projections per seed, and
+        it is ~90 % of this test's wall clock. Halving the seeds halves it;
+        measured 81.2 s -> 40.6 s on an 8-vCPU worker.
+      - The 3x record length was NOT where the time went, which is worth
+        recording because it was the first hypothesis. `find_partial` and
+        `line_offsets` both slice `x[: int(seconds * sr)]`, so the last two
+        thirds of the record were never read: dropping the multiplier leaves the
+        analysed samples BIT-IDENTICAL (asserted in this test) and saves only the
+        RNG draw, about 1 ms.
+      - Seeds 1000..1007 are the same eight records the 16-seed version tested
+        first, at the same two windows, so this is a strict subset of what was
+        green and not a re-roll onto easier draws. The estimator-level test keeps
+        its 8 seeds per operating point, which is where #389's acceptance
+        criterion put the >=8 requirement.
+
+    8 seeds x 2 windows is still 16 independent noise records, every one of which
+    must be refused; the gate's null distribution is characterised over 96
+    partials in `balance_line_shape.py margin`, not here."""
+    for seconds in (RS_TEST_OP["t_end"], rc.CB_BALANCE_OP["t_end"]):
+        n_read = int(seconds * SR)
+        for seed in range(8):
+            x = 0.01 * np.random.default_rng(1000 + seed).standard_normal(n_read)
+            # the slice both functions below actually read, so "shortening the
+            # record changed nothing" is asserted rather than reasoned about
+            assert len(x) == n_read
+            assert np.array_equal(x, 0.01 * np.random.default_rng(
+                1000 + seed).standard_normal(int(3.0 * seconds * SR))[:n_read])
+            f = pt.find_partial(x, SR, *RS_TEST_RANGES[0], seconds=seconds)
+            r = pt.line_is_resolved(x, SR, f, seconds=seconds)
+            assert not r["ok"], (
+                f"seed {seed} over {seconds*1e3:.0f} ms: the strongest line white "
+                f"noise happens to have at {f:.1f} Hz is not a partial, and the "
+                f"gate accepted it (residual {r['resid_db']:.2f} dB, fitted tau "
+                f"{r['tau_ms']:.1f} ms)")
+            assert "does not have the shape of one" in r["reason"]
+            assert "RMS" in r["reason"]
+
+
+def test_line_is_resolved_refuses_a_line_that_never_decays():
+    """A steady tone is a line, and a very clean one, but it is not a STRUCK
+    MODE -- so the second condition, that the fitted tau decays inside the
+    window, is what has to refuse it. The reason must say so by name rather than
+    blaming the shape, because those are different findings about the record."""
+    n = int(0.25 * SR)
+    x = np.sin(2 * math.pi * 452.0 * np.arange(n) / SR + 0.3)
+    r = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    assert not r["ok"]
+    assert "does not decay inside" in r["reason"], r["reason"]
+    assert r["tau_ms"] > RS_TEST_OP["t_end"] * 1e3
+
+
+def test_line_is_resolved_is_blind_to_the_lines_height():
+    """The whole reason this gate is on the SHAPE: `find_partial`'s upward bias
+    lives entirely in the line's height, so a statistic that moved with the
+    height would carry the bias it exists to defeat.
+
+    Scaling a record by 60 dB either way changes every projection and must
+    change neither the residual nor the fitted tau -- and must not change the
+    verdict on noise either, which is the direction that matters."""
+    x = _damped(452.0, 0.006, 1.0, int(0.25 * SR), SR, 0.3)
+    base = pt.line_is_resolved(x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+    noise = 0.01 * np.random.default_rng(7).standard_normal(int(0.25 * SR))
+    f_n = pt.find_partial(noise, SR, *RS_TEST_RANGES[0], seconds=RS_TEST_OP["t_end"])
+    base_n = pt.line_is_resolved(noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+    assert base["ok"] and not base_n["ok"]
+    for g in (1e-3, 1e3):
+        s = pt.line_is_resolved(g * x, SR, 452.0, seconds=RS_TEST_OP["t_end"])
+        assert s["ok"]
+        assert s["resid_db"] == pytest.approx(base["resid_db"], abs=1e-9), (
+            f"scaling by {g} moved the residual from {base['resid_db']:.6f} to "
+            f"{s['resid_db']:.6f} dB: the statistic is reading the height")
+        assert s["tau_ms"] == pytest.approx(base["tau_ms"], rel=1e-9)
+        sn = pt.line_is_resolved(g * noise, SR, f_n, seconds=RS_TEST_OP["t_end"])
+        assert not sn["ok"]
+        assert sn["resid_db"] == pytest.approx(base_n["resid_db"], abs=1e-9)
 
 
 def test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor():
@@ -602,6 +985,59 @@ def test_tone_ratio_db_refuses_a_record_too_short_to_project():
     refuses it rather than returning one."""
     e = rc.tone_ratio_db(sine(800.0, 0.003), SR, 800.0, 540.0)
     assert not e.ok
+
+
+# ---------------------------------------------------------------------------
+# #115 -- `tone_ratio_db`'s validated domain, as data, and the one axis of it
+# that was declared but never checked: partial separation
+# ---------------------------------------------------------------------------
+def test_tone_ratio_db_domain_is_inspectable_without_synthesizing_a_signal():
+    """`min_separation_bins` (4) is HALF of `windowed_tone_amplitude`'s own
+    docstring claim of 8 -- measured, not assumed (#115); a test can compare
+    the two directly from the declaration, with no signal in sight."""
+    detuning = rc.TONE_RATIO_DOMAIN.axis(am.AXIS_DETUNING)
+    assert (detuning.lo, detuning.hi) == (-rc.LINE_SEARCH_FRAC, rc.LINE_SEARCH_FRAC)
+    separation = rc.TONE_RATIO_DOMAIN.axis(am.AXIS_PARTIAL_SEPARATION)
+    assert separation.lo == rc.TONE_RATIO_MIN_SEPARATION_BINS == 4.0
+    assert am.DOMAINS["tone_ratio_db"] is rc.TONE_RATIO_DOMAIN
+
+
+def test_tone_ratio_db_refuses_two_lines_inside_one_main_lobe():
+    """Two NOMINAL frequencies close enough that both searches land on the
+    SAME real line -- one tone at 780 Hz is within +-10 % of both 800 and
+    810 Hz -- used to return 0.0 dB with nothing marking it as unresolved. It
+    is now refused: zero bins of separation is the extreme case of the
+    partial-separation axis, not a balance of two things."""
+    x = sine(780.0, 0.2, amp=1.0)
+    e = rc.tone_ratio_db(x, SR, 800.0, 810.0)
+    assert not e.ok
+    assert e.outside_domain
+    assert e.detail["axis"] == am.AXIS_PARTIAL_SEPARATION
+    assert e.detail["num_hz"] == e.detail["den_hz"]
+    assert e.domain is rc.TONE_RATIO_DOMAIN
+    # Explicitly asking for the out-of-domain case reports it instead, at 0 dB
+    # -- the two searches found the same line, so the "ratio" is of a line
+    # against itself:
+    forced = rc.tone_ratio_db(x, SR, 800.0, 810.0, min_separation_bins=None)
+    assert forced.ok
+    assert forced.value == pytest.approx(0.0, abs=1e-6)
+
+
+def test_tone_ratio_db_partial_separation_boundary_does_not_flap():
+    axis = rc.TONE_RATIO_DOMAIN.axis(am.AXIS_PARTIAL_SEPARATION)
+    assert axis.violation(rc.TONE_RATIO_MIN_SEPARATION_BINS) is None
+    assert axis.violation(rc.TONE_RATIO_MIN_SEPARATION_BINS - 1e-9) is not None
+
+
+def test_tone_ratio_db_two_resolvable_lines_are_inside_the_domain():
+    """Guard against an overly aggressive refusal check: the two known-sines
+    case above already covers this, at a separation of hundreds of bins; this
+    is the same check named explicitly against the domain."""
+    a, b = sine(800.0, 0.2, amp=1.0), sine(540.0, 0.2, amp=0.5)
+    n = min(len(a), len(b))
+    e = rc.tone_ratio_db(a[:n] + b[:n], SR, 800.0, 540.0)
+    assert e.ok, e.reason
+    assert e.detail["separation_bins"] >= rc.TONE_RATIO_MIN_SEPARATION_BINS
 
 
 # ===========================================================================
@@ -1608,3 +2044,90 @@ def test_the_tests_read_the_same_corpus_location_as_the_runner(monkeypatch, tmp_
     assert rc.configured_refs() == tmp_path
     monkeypatch.delenv(rc.REFS_ENV)
     assert rc.configured_refs() == pathlib.Path(rc.REFS_DEFAULT)
+
+
+# ===========================================================================
+# the runner as a SCRIPT -- the thing that ships, not the thing pytest imports
+# ===========================================================================
+# Every test above reaches `run_case.py` through `import run_case as rc`, so its
+# module body executes exactly once under exactly one name. CI does not: it runs
+# `python tools/run_case.py <case>`, where the body executes as `__main__` AND
+# again as `run_case` via the pre-existing self-import at
+# `tools/probes/f1_selected_path.py:68`. #115 put three `register_domain` calls
+# in that body, and the registry's unconditional duplicate-raise turned every
+# F1 case into `no verdict: ValueError: band_pair_db already declares a domain`
+# -- with this file's 356 tests still green, because they never split the two
+# module identities. These two tests close that gap: the first is the cheap
+# mechanism, the second is the actual entry point.
+def _run_script(args: list[str], timeout: int = 600) -> "subprocess.CompletedProcess":
+    import subprocess
+    return subprocess.run([sys.executable, *args], cwd=ROOT,
+                          capture_output=True, text=True, timeout=timeout)
+
+
+def test_run_case_module_body_survives_executing_twice_in_one_process():
+    """The mechanism, in ~2 s: load `run_case.py` a second time under a second
+    module name, which is what `__main__` + `import run_case` amounts to. Both
+    copies must declare the same domains without raising, and the registry must
+    hold ONE entry per estimator."""
+    prog = (
+        "import importlib.util, pathlib, sys\n"
+        "root = pathlib.Path.cwd()\n"
+        "sys.path.insert(0, str(root / 'tools'))\n"
+        "sys.path.insert(0, str(root / 'model'))\n"
+        "import audio_measure as am\n"
+        "import run_case as first\n"                      # body execution #1
+        "before = dict(am.DOMAINS)\n"
+        "path = root / 'tools' / 'run_case.py'\n"
+        "spec = importlib.util.spec_from_file_location('run_case_second_copy', path)\n"
+        "second = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(second)\n"               # body execution #2
+        "assert set(am.DOMAINS) == set(before), (set(am.DOMAINS) ^ set(before))\n"
+        "for name, d in before.items():\n"
+        "    assert am.DOMAINS[name] is d, name\n"
+        "for n in ('band_pair_db', 'balance_trajectory_db', 'tone_ratio_db'):\n"
+        "    assert n in am.DOMAINS, n\n"
+        "    assert getattr(second, 'BAND_PAIR_DOMAIN', None) is not None\n"
+        "print('TWICE OK')\n")
+    got = _run_script(["-c", prog], timeout=300)
+    assert got.returncode == 0, (got.stdout + got.stderr)[-3000:]
+    assert "TWICE OK" in got.stdout, got.stdout[-2000:]
+
+
+def test_run_case_script_reaches_a_verdict_on_a_filter_case(tmp_path):
+    """The entry point CI actually drives, for real, on the case family that
+    broke: `python tools/run_case.py F1A --results <dir>` must reach a MEASURED
+    verdict. Deliberately not asserting `pass` -- that is the scorecard's call
+    and may legitimately change. What must never come back is `no verdict`
+    caused by an exception in the runner's own import path.
+
+    ASSERT THE PRECONDITION, do not assume it. F1A measures against the frozen
+    Surge clip `surge-type2/lp-cut250-res0.00`, and a checkout has no
+    `refprofile/cache/` -- `reference-controls` restores it as a setup step but
+    `m5a-fast`, which runs this file, does not. Without the restore this test
+    reads `no verdict` for a reason that has nothing to do with the runner's
+    import path, and the first version of it did exactly that: green here on a
+    warm worktree, red in CI on a cold one. `refprofile_restore.py` is 0.23 s,
+    idempotent, hash-verified against `refprofile/profile.json`, and writes only
+    into the gitignored cache, so the fix is to RUN it rather than to skip --
+    and to REFUSE loudly if it cannot."""
+    restore = _run_script(["tools/refprofile_restore.py"], timeout=300)
+    assert restore.returncode == 0, (
+        "REFUSED: cannot restore the frozen reference audio F1A measures "
+        f"against, so this test cannot tell a runner crash from a missing "
+        f"clip:\n{(restore.stdout + restore.stderr)[-2000:]}")
+
+    got = _run_script(["tools/run_case.py", "F1A", "--results", str(tmp_path)])
+    out = got.stdout + got.stderr
+    assert "already declares a domain" not in out, out[-3000:]
+    assert "Traceback" not in out, out[-3000:]
+    payload = json.loads((tmp_path / "F1A.json").read_text())
+    whys = [m.get("why", "") or "" for m in payload.get("metrics", {}).values()
+            if isinstance(m, dict)]
+    assert not any("already declares a domain" in w for w in whys), whys
+    assert not any("not in the cache" in w for w in whys), (
+        f"the restore above reported success yet the clip is still missing: {whys}")
+    assert got.returncode in (0, 1), f"exit {got.returncode}\n{out[-3000:]}"
+    assert "no verdict" not in got.stdout, (
+        "F1A reached no measured verdict as a SCRIPT while the imported-module "
+        f"tests above are green -- the #115 regression's exact shape:\n{out[-3000:]}")

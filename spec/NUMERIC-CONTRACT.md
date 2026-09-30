@@ -1,11 +1,14 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 14 — 2026-09-26 — status: PROPOSED. Not ratified.**
+**Revision 15 — 2026-09-27 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
 its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
-Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Section 18 has both.
+Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Revision 15 changes
+no register and no arithmetic: it is two values in the reference kit (Appendix
+G), the rimshot's two bridged-T modes' relative drive and the level re-balance
+that follows it (#388). Section 18 has all three.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -15,7 +18,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 14,
+through the two-key process this fleet uses; until then it is revision 15,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -1793,9 +1796,10 @@ in the reference host (`drums_fx.hit_writes`, `bd_attack_writes`,
                                 · exp(G · (f0/f0_nominal − 1))
   ```
 
-  with `TOM_DROP_RATIO = 1.060` the measured onset ratio at a **stated**
+  with `TOM_DROP_RATIO = 1.060` the fitted law evaluated at a **stated**
   reference setting — accent 1.0, the TUNING pot at its centre, the TOM
-  position of the circuit. Three terms because the measurement found three
+  position of the circuit — against that setting's own measured median of
+  ×1.054. Three terms because the measurement found three
   separate faults in the inferred law: the magnitude; the accent **clamp**,
   which gave an unaccented hit the *full* sweep where the machine gives it
   ×1.06 (germanium diodes do not conduct below a drive, so a soft hit does not
@@ -2218,6 +2222,37 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 15 (2026-09-27)** — **the rimshot's two bridged-T modes' relative
+  drive** (15.5, Appendix G; #388). No register, no state, no arithmetic and no
+  write count changes: two values in the reference kit. The bank's RAW
+  numerator is all-pole and its impulse response peaks at ≈ 1/sin(ω₀), where
+  the bridged-T network it stands for is a band-pass peaking at ≈ H₀ω₀/Q — so
+  exciting both rimshot modes with the same pulse, which is what the circuit
+  does, put our 1786 Hz mode **11.80 dB below** the 455 Hz one where the
+  circuit's sits **5.79 dB above**. That 17.60 dB is a pure function of f₀ and
+  Q and contains no measurement; the Fischer s/n 103852 recording independently
+  measures +6.6 dB, agreeing with the closed form to 0.7 dB. `PATH[15]` at
+  0x9F, 14711203 → 15104419, sets `att` = 3 on the pulse into mode 14
+  (`M_RS1`, the 455 Hz body) — 18.06
+  dB, the nearest of the field's 6.02 dB steps. Because that mode was setting
+  the whole voice's peak, the rimshot then sat 7.05 dB under its share of
+  Roland's chart, so `ENV_PEAK[14]` at 0x79, 5754585 → 12965432, carries it
+  back (0.343 → 0.7728, `drums_fx_render.py --balance`, which reports ×1.00 ±
+  0.08 for the other fifteen voices). **KIT808 moves from `321a9354…` to
+  `3d239bf8…`, 148 writes → 148.** Exactly those two writes differ;
+  `test_revision_15_changes_only_the_rimshot_drive_and_gate_registers` rebuilds
+  revision 14's image from the live one by undoing them, requires revision 14's
+  hash, and asserts that the two modes' coefficients did not move — so a
+  coefficient change dressed up as a drive change cannot pass by updating the
+  pin. `test_revision_14_…` now starts from that rebuilt image.
+  **The published R0/R1 Arty images are unaffected**: they are sent frozen
+  kits by value (`drums_fx.kit_808_rev11()` for R0/R1's revision-11 RTL,
+  `fpga/release/r1-kit.json` for R1's), and `kit_808_rev11()` undoes both of
+  these writes explicitly. `--image tree` sends this revision's kit.
+  D10A's scored "Partial balance" error goes −15.52 dB → −8.53 dB (worst 5.17
+  → 2.85) and the 1300–2100 Hz band stops being a flat shelf; the residual gap
+  and what it points at are in `tools/probes/rs_mode_drive.py`.
 
 - **Rev 14 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
   "L2" level frozen and confirmed in `docs/scorecard/clap-d12a/README.md`
@@ -2847,7 +2882,7 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 | 0xD7 | 0x0 | MODE_NUM[9] | | 0x75 | 0xF5C29 | ? |
 | 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x76 | 0x3025 | ? |
 | 0xD9 | 0x3012282 | MODE_A2[10] | | 0x78 | 0xF9 | ? |
-| 0xDA | 0x245 | MODE_AMP[10] | | 0x79 | 0x57CED9 | ? |
+| 0xDA | 0x245 | MODE_AMP[10] | | 0x79 | 0xC5D638 | ? |
 | 0xDB | 0x0 | MODE_NUM[10] | | 0x7A | 0x3E | ? |
 | 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7C | 0xFA | ? |
 | 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7D | 0x52F1AA | ? |
@@ -2873,7 +2908,7 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 | 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9C | 0x1F12514 | PATH[12] |
 | 0xCA | 0x0 | MODE_AMP[6] | | 0x9D | 0x50AD49 | PATH[13] |
 | 0xCB | 0x1 | MODE_NUM[6] | | 0x9E | 0x50AD4A | PATH[14] |
-| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9F | 0xE079A3 | PATH[15] |
+| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9F | 0xE679A3 | PATH[15] |
 | 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA0 | 0xF079A3 | ? |
 | 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA1 | 0x1F0F9DE | ? |
 | 0xCF | 0x1 | MODE_NUM[7] | | 0xA2 | 0x1F0F9DF | ? |
@@ -2882,6 +2917,6 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 | 0x42 | 0x3025 | ENV_RATE[0] | | 0xA5 | 0x70FA10 | ? |
 | 0x44 | 0x30F0 | ENV_CTL[1] | | 0xA6 | 0x1F0FA36 | ? |
 
-SHA-256 of the 148 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683`
+SHA-256 of the 148 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `3d239bf8453635efcc0750d611c83529367961c1f7613dbb1d19d4047a90e458`
 
 <!-- END GENERATED APPENDICES -->

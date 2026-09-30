@@ -24,7 +24,9 @@ concurrency:
 
 jobs:
   regenerate:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
+    # outage and the operator's move of every public repo off Blacksmith (D5).
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Do not re-trigger on the bot's own commit. The push filter below is the
     # real guard; this is belt and braces, because a self-triggering workflow

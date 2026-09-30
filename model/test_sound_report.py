@@ -289,13 +289,15 @@ def test_a_changelog_entry_for_a_property_that_is_not_a_lock_is_flagged(monkeypa
     assert any("gone" in p for p in sr.check_lock_changelog())
 
 
-def test_the_changelog_records_the_two_commits_that_actually_moved_the_locks():
+def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
     """Recovered with `git log -L` on the LOCKS block, not from memory: 28dfd55
-    introduced the table (#51) and bf13fdd added the power-centroid lock (#251)
-    so that --inject sd-centroid-amp-weighted had something to turn red."""
+    introduced the table (#51), bf13fdd added the power-centroid lock (#251),
+    and 50d7aaf / 80b3756 are the two re-locks #242 traced with drift_probe.py."""
     by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
-    assert set(by) == {"28dfd55", "bf13fdd"}
+    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756"}
     assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
+    assert list(by["50d7aaf"]["locks"]) == [("LADDER", "corner ratio drift")]
+    assert list(by["80b3756"]["locks"]) == [("LT", "attack")]
     assert all(was is None for was, _ in by["28dfd55"]["locks"].values()), (
         "nothing was pinned before 28dfd55, so every entry there is a first lock")
 
@@ -304,3 +306,140 @@ def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
     assert sr.main(["--check-locks"]) == 0
     monkeypatch.setitem(sr.LOCKS, ("SD", "T20"), 1.0)
     assert sr.main(["--check-locks"]) == 1
+
+
+# ===========================================================================
+# the lock table's own provenance, and the gate that reads it (issue #242)
+#
+# Two locks drifted past tolerance and nobody noticed for nights, because the
+# nightly step that was supposed to catch them grepped the plain report for
+# "MOVED"/"REGRESS" -- words only the `--inject` report prints. Diagnosing it
+# then cost re-measuring 17 historical trees over a 44-commit range, because
+# `LOCK` named `ce400a6`, an object that does not exist in this repository. Both are mechanism failures, so both get
+# a mechanism here rather than a note.
+# ===========================================================================
+def _git(*args):
+    import subprocess
+    return subprocess.run(["git", "-C", os.path.dirname(HERE), *args],
+                          capture_output=True, text=True)
+
+
+def _in_a_git_checkout() -> bool:
+    return _git("rev-parse", "--git-dir").returncode == 0
+
+
+def _history_is_truncated() -> bool:
+    """A shallow clone has not fetched the ancestors these tests resolve, so
+    `git cat-file -t <real ancestor sha>` fails there with exactly the error a
+    dangling sha gives. That is the apparatus in a wrong state, not a finding:
+    the first CI run of these tests went red on `28dfd55`/`50d7aaf`, both of
+    which resolve fine in a full clone, because `moog-acceptance.yml` checked
+    out at the default depth of 1.
+
+    Report it as its own outcome -- named, and still red. Skipping instead
+    would hand back a green run for the one check #242 exists to install, which
+    is the blind spot rather than a fix for it."""
+    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+
+
+def _assert_history_reaches_the_shas():
+    assert not _history_is_truncated(), (
+        "REFUSED: this is a shallow clone, so the lock table's ancestor commits "
+        "were never fetched and `git cat-file` cannot answer whether they exist. "
+        "Not a provenance failure -- a checkout-depth one. Clone with full "
+        "history, or set `fetch-depth: 0` on the workflow's checkout step.")
+
+
+def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
+    """`LOCK = "ce400a6"` for months and `git cat-file -t ce400a6` fails: it
+    was a pre-squash commit on #51's branch. Every "locked at ..." line in the
+    report therefore cited nothing, and the bisect the report's own advice
+    recommends could not be started at all -- the concrete cost, in #242, was
+    re-measuring 17 historical trees to recover two answers the table should
+    have carried."""
+    if not _in_a_git_checkout():
+        import pytest
+        pytest.skip("not a git checkout")
+    _assert_history_reaches_the_shas()
+    r = _git("cat-file", "-t", sr.LOCK)
+    assert r.returncode == 0 and r.stdout.strip() == "commit", (
+        f'sound_report.LOCK = "{sr.LOCK}" is not a commit in this repository '
+        f'({r.stdout.strip() or r.stderr.strip()}). A lock table whose own '
+        "provenance is a dangling sha cannot be bisected against.")
+
+
+def test_every_relock_names_a_real_property_and_a_real_commit():
+    """A re-lock records WHICH commit changed the sound. If that key does not
+    match a property, or that sha does not resolve, the record is decoration."""
+    props = {(p.voice, p.name) for p in sr.build_properties()}
+    for key, (commit, was, why) in sr.RELOCKS.items():
+        assert key in props, f"RELOCKS names {key}, which build_properties() does not create"
+        assert key in sr.LOCKS, f"RELOCKS names {key}, which has no entry in LOCKS"
+        assert abs(sr.LOCKS[key] - was) > 0, (
+            f"RELOCKS says {key} moved away from {was}, but LOCKS still holds {was}")
+        assert len(why) > 40, f"{key}'s re-lock gives no reason"
+        if _in_a_git_checkout():
+            _assert_history_reaches_the_shas()
+            r = _git("cat-file", "-t", commit)
+            assert r.returncode == 0 and r.stdout.strip() == "commit", (
+                f"{key} is re-locked against '{commit}', which is not a commit here")
+
+
+def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints():
+    """The provenance has to be where the number is read. `Result.sentence()`
+    is the only text a reader sees when a lock goes OUT, so the re-lock record
+    is appended to `source`, which that sentence quotes."""
+    props = {(p.voice, p.name): p for p in sr.build_properties()}
+    for key, (commit, _, _) in sr.RELOCKS.items():
+        p = props[key]
+        assert f"RE-LOCKED at {commit}" in p.source, (
+            f"{key}'s re-lock provenance is not in its source line")
+        # build_properties() leaves a lock's value None; run() fills it from LOCKS
+        p.value = sr.LOCKS[key]
+        s = sr.Result(p, p.value + 10 * p.tol, False, "", 10 * p.tol).sentence()
+        assert commit in s, f"{key} going OUT would not print which commit re-locked it"
+
+
+def test_the_plain_report_never_prints_the_words_the_nightly_gate_used_to_grep_for():
+    """The root cause, asserted directly. `print_report` marks a failure `OUT`;
+    `MOVED` and `REGRESS` belong to `cmd_inject` and to nothing else. Any gate
+    keyed to those words over the plain report is an unconditional pass."""
+    import io
+    import contextlib
+    p = sr.Prop("X", "a property", "ms", "lock", 1.0, 0.1, "made up", lambda ctx: None)
+    bad = sr.Result(p, 99.0, False, "", 98.0)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        n = sr.print_report([bad], "test")
+    text = buf.getvalue()
+    assert n == 1, "print_report must count the failure, so main() can exit 1"
+    assert "OUT" in text, "the plain report marks a failing row OUT"
+    assert "MOVED" not in text.upper().replace("REMOVED", ""), (
+        "the plain report printed MOVED -- if that is intentional the nightly "
+        "gate's history in #242 needs re-reading first")
+    assert "REGRESS" not in text.upper()
+
+
+def test_the_nightly_gate_decides_on_the_reports_exit_status_not_on_its_text():
+    """#242's mechanism fix. The step may still grep the report to SHOW which
+    rows are out; what it may not do is decide by grep, which is how it stayed
+    green through two out-of-tolerance locks."""
+    import pathlib
+    wf = pathlib.Path(HERE).parent / ".github" / "workflows" / "nightly.yml"
+    if not wf.exists():
+        import pytest
+        pytest.skip("no nightly.yml in this checkout")
+    text = wf.read_text()
+    marker = "no locked property may have moved"
+    assert marker in text, "the nightly gate step has been renamed or removed"
+    # the step's body: from its `- name:` line to the next step at that indent
+    start = text.index("- name: " + marker)
+    rest = text[start + 1:]
+    end = rest.find("\n      - ")
+    step = rest[:end if end != -1 else len(rest)]
+    assert "steps.report.outputs.rc" in step, (
+        "the gate does not read sound_report.py's exit status; grepping the "
+        "report text is what failed silently in #242")
+    for decide_by_grep in ("grep -q", "grep -iq", "if grep", "if ! grep"):
+        assert decide_by_grep not in step, (
+            f"the gate decides with `{decide_by_grep}` over the report text")

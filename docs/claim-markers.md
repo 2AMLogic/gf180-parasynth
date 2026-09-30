@@ -135,18 +135,78 @@ than none.
   issue that commissioned this asked for one concrete case rather than a
   retrofit of thirty-six documents). An unmarked sentence is exactly as
   unchecked as it was before.
+- **A marker in an excluded tree is still silent.** The list below is short and
+  enumerated for that reason, but it is a real hole: put a claim under
+  `.loom/` and nothing will tell you it is unchecked.
+
+## Which documents are scanned
+
+**This is not a detail.** Until #435 the default set was `docs/*.md` — one
+directory, not even recursive — and eleven real markers sat outside it, in
+`docs/scorecard/README.md`, `docs/scorecard/ensemble-e1a/rtl/README.md` and
+decision record 0018. They were parsed by nothing, reported by nothing, and the
+summary read `51 claim(s) in 48 document(s): 51 ok, 0 stale, 0 refused`. A
+marker the scanner never reaches is **weaker than a skipped test**: a skip at
+least produces a `REFUSED`.
+
+The set is an explicit list in `tools/check_doc_claims.py`, not a bare glob.
+
+**Scanned** (`DEFAULT_INCLUDES`), recursively:
+
+| | |
+|---|---|
+| `CLAUDE.md`, `README.md` | the root documents. `AGENTS.md` is a symlink to `CLAUDE.md` and is counted once, not twice. |
+| `docs/**` | including `docs/scorecard/**`, one directory too deep for the old glob |
+| `fpga/**` | `ARTY.md`, `release/RELEASE.md`, `release/R1.md`, `reports/**/README.md` |
+| `pnr/**`, `model/**`, `rtl-sketch/**`, `spec/**`, `tools/**` | including `spec/decision-records/**` |
+| `refaudio/**`, `refprofile/**` | |
+
+**Not scanned** (`EXCLUDED_PREFIXES`): `.git/`, `.github/`, `.claude/`,
+`.loom/`, `.venv/`, `build/`, `node_modules/`. Every one is either vendored
+(installed by another tool and replaced wholesale on update) or generated.
+`.loom/` matters most: `.loom/worktrees/` holds whole second checkouts of this
+repository, so a `**/*.md` sweep would count every claim once per live worktree
+and report a stale one against a path that is not the tree you are looking at.
+
+**A marker outside the scanned set is `REFUSED`, by name.** An include list is
+just another thing that can silently fail to cover something, so the
+no-argument run also reads every git-tracked Markdown file *outside* the set and
+refuses on any that carries a marker, telling you to add its directory to
+`DEFAULT_INCLUDES` — or to `EXCLUDED_PREFIXES`, deliberately. Widening the scope
+without this would only move the boundary.
+
+Naming documents on the command line still narrows deliberately, and skips the
+audit: that is how fixture runs and one-off checks work. Only the no-argument
+run — the one `make verify` reads — audits.
+
+The red-first control for all of this is
+`tools/probes/check_doc_claims_scope_control.py`: it injects a stale marker into
+a file the old set did not reach, runs the checker at `origin/main` and in the
+working tree, and requires the first to be green and silent while the second is
+red and names the file. It refuses rather than reporting a result if the
+`before` arm was already red for some other reason.
 
 ## Running it
 
 ```bash
-make claims                                  # every docs/*.md
+make claims                                  # the whole scanned set, one run
 python3 tools/check_doc_claims.py            # the same thing
 python3 tools/check_doc_claims.py docs/failure-modes.md --quiet
+python3 tools/probes/check_doc_claims_scope_control.py   # the scope control
 ```
 
-`make claims` is also one of the jobs in `make verify`.
+`make claims` is also one of the jobs in `make verify`, and a job in
+`.github/workflows/rungs.yml`. A whole-tree run is about two minutes: it is
+dominated by the backing tests, which are deduplicated across claims (three
+claims citing one nodeid run it once), so adding a claim that cites a test
+already cited costs nothing.
 
 The checker's own tests are `tools/test_check_doc_claims.py`, which carry the
 three cases that matter — a valid backed claim, a claim naming a test that does
 not exist, and a claim whose backing test fails — as fixture documents with real
-pytest runs behind them, plus the skip/xfail rows of the table above.
+pytest runs behind them, plus the skip/xfail rows of the table above, and the
+document-set behaviour: that the include list reaches every directory that
+carries a claim today, that a marker outside it is `REFUSED` by name, that the
+audit refuses rather than reporting clean when git is unavailable, and — a live
+assertion rather than a fixture — that nothing in this tree is currently
+outside the scanned set.

@@ -1,0 +1,2538 @@
+{
+ "controls_pass": true,
+ "check_report": [
+  "property                        value    bound  verdict",
+  "tone-exact                     0.0044     0.05  pass",
+  "artifact-binds                 0.0009     0.01  pass",
+  "floor-margin                    46.91     15.0  pass",
+  "low-decay-tone-invariant        0.097      0.5  pass",
+  "h-edt-falls-with-tone            4.41      1.0  pass",
+  "alpha-law-1s                    0.328      3.0  pass",
+  "alpha-law-strike                1.793      3.0  pass",
+  "alpha-law-tail                  0.698      3.0  pass",
+  "orientation-decisive            5.475      3.0  pass",
+  "tone-load-bearing               5.458      3.0  pass",
+  "low-band-rail                   6.945      3.0  pass",
+  "family-selective                    5 machine reachable, < 8 of 8  pass",
+  "",
+  "injected defect            properties it turns red",
+  "NO_TONE_NETWORK            tone-exact, alpha-law-1s, alpha-law-strike, alpha-law-tail, tone-load-bearing, family-selective",
+  "ALPHA_INVERTED             alpha-law-1s, alpha-law-strike, alpha-law-tail, orientation-decisive, family-selective",
+  "RAIL_LOW_ON_TOP            tone-exact, alpha-law-1s, alpha-law-strike, alpha-law-tail, low-band-rail, family-selective",
+  "RAIL_SWAP_HT2_HT3          tone-exact, orientation-decisive, low-band-rail",
+  "                             blind-to alpha-law-1s: verified blind",
+  "                             blind-to alpha-law-strike: verified blind",
+  "                             blind-to alpha-law-tail: verified blind",
+  "                             blind-to tone-load-bearing: verified blind",
+  "EDT_BAND_SWAP              low-decay-tone-invariant, h-edt-falls-with-tone",
+  "WRONG_ANALYSIS_BANDS       artifact-binds",
+  "                             blind-to alpha-law-1s: verified blind",
+  "                             blind-to alpha-law-strike: verified blind",
+  "                             blind-to alpha-law-tail: verified blind",
+  "SHORT_RECORD               artifact-binds, floor-margin, alpha-law-tail",
+  "",
+  "SOURCE_FLAT                blind by construction -- verified blind"
+ ],
+ "properties": {
+  "tone-exact": {
+   "value": 0.0044,
+   "bound": 0.05,
+   "ok": true,
+   "at_alpha_k1_db": {
+    "low": [
+     -42.01,
+     -51.76
+    ],
+    "decay": [
+     -20.46,
+     -26.68
+    ],
+    "short": [
+     -28.08,
+     -33.66
+    ]
+   },
+   "reported_db": {
+    "low": [
+     -42.01,
+     -51.76
+    ],
+    "decay": [
+     -20.46,
+     -26.68
+    ],
+    "short": [
+     -28.08,
+     -33.66
+    ]
+   }
+  },
+  "artifact-binds": {
+   "value": 0.0009,
+   "bound": 0.01,
+   "ok": true,
+   "worst_at": "CY0000"
+  },
+  "floor-margin": {
+   "value": 46.91,
+   "bound": 15.0,
+   "n_refused": 0,
+   "ok": true
+  },
+  "low-decay-tone-invariant": {
+   "value": 0.097,
+   "bound": 0.5,
+   "ok": true,
+   "per_column": {
+    "00": 0.097,
+    "25": 0.057,
+    "50": 0.031,
+    "75": 0.025,
+    "10": 0.035
+   }
+  },
+  "h-edt-falls-with-tone": {
+   "value": 4.41,
+   "bound": 1.0,
+   "ok": true,
+   "n_columns_falling": 5,
+   "n_columns": 5,
+   "per_column_h_over_low": {
+    "00": 4.41,
+    "25": 11.44,
+    "50": 29.61,
+    "75": 46.24,
+    "10": 38.74
+   },
+   "per_column_h_ratio": {
+    "00": 1.428,
+    "25": 1.652,
+    "50": 1.918,
+    "75": 2.156,
+    "10": 2.356
+   },
+   "per_column_low_spread": {
+    "00": 0.097,
+    "25": 0.057,
+    "50": 0.031,
+    "75": 0.025,
+    "10": 0.035
+   }
+  },
+  "alpha-law-1s": {
+   "value": 0.328,
+   "bound": 3.0,
+   "ok": true,
+   "balance_db": {
+    "low": 0.0,
+    "decay": 10.0,
+    "short": 11.5
+   },
+   "n_settings": 25,
+   "min_measured_span_db": 7.143
+  },
+  "alpha-law-strike": {
+   "value": 1.793,
+   "bound": 3.0,
+   "ok": true,
+   "balance_db": {
+    "low": 0.0,
+    "decay": 15.0,
+    "short": 22.0
+   },
+   "n_settings": 25,
+   "min_measured_span_db": 6.729
+  },
+  "alpha-law-tail": {
+   "value": 0.698,
+   "bound": 3.0,
+   "ok": true,
+   "balance_db": {
+    "low": 0.0,
+    "decay": 36.0,
+    "short": 33.0
+   },
+   "n_settings": 25,
+   "min_measured_span_db": 3.896
+  },
+  "orientation-decisive": {
+   "value": 5.475,
+   "bound": 3.0,
+   "ok": true,
+   "margin_db": 2.475
+  },
+  "tone-load-bearing": {
+   "value": 5.458,
+   "bound": 3.0,
+   "ok": true,
+   "margin_db": 2.458
+  },
+  "low-band-rail": {
+   "value": 6.945,
+   "bound": 3.0,
+   "ok": true,
+   "margin_db": 3.945
+  },
+  "family-selective": {
+   "value": 5,
+   "bound": "machine reachable, < 8 of 8",
+   "ok": true,
+   "machine_worst_db": 0.196,
+   "unreachable": [
+    "machine-reversed",
+    "step",
+    "vee"
+   ],
+   "per_shape_db": {
+    "machine": 0.196,
+    "flat": 0.379,
+    "linear-ramp": 0.337,
+    "machine-reversed": 5.475,
+    "convex": 1.758,
+    "concave": 0.822,
+    "step": 4.513,
+    "vee": 7.751
+   }
+  }
+ },
+ "verdict": {
+  "mapping": "alpha = TONE / 100 (VR4 is 20K(B), a linear taper -- SN p.13)",
+  "rails": {
+   "low": "hh1",
+   "decay": "bottom",
+   "short": "top"
+  },
+  "bound_db": 3.0,
+  "headline": {
+   "worst_db": 0.328,
+   "balance_db": {
+    "low": 0.0,
+    "decay": 10.0,
+    "short": 11.5
+   },
+   "n_settings": 25,
+   "per_column": {
+    "00": {
+     "worst_db": 0.263,
+     "residual_db": [
+      -0.263,
+      0.027,
+      0.0,
+      0.023,
+      0.105
+     ],
+     "measured_db": [
+      -2.305,
+      -1.444,
+      0.0,
+      1.527,
+      5.025
+     ],
+     "predicted_db": [
+      -2.568,
+      -1.417,
+      0.0,
+      1.55,
+      5.13
+     ],
+     "measured_span_db": 7.33
+    },
+    "25": {
+     "worst_db": 0.238,
+     "residual_db": [
+      0.15,
+      -0.005,
+      0.0,
+      -0.151,
+      -0.238
+     ],
+     "measured_db": [
+      -2.718,
+      -1.412,
+      0.0,
+      1.701,
+      5.368
+     ],
+     "predicted_db": [
+      -2.568,
+      -1.417,
+      0.0,
+      1.55,
+      5.13
+     ],
+     "measured_span_db": 8.086
+    },
+    "50": {
+     "worst_db": 0.328,
+     "residual_db": [
+      -0.292,
+      0.149,
+      0.0,
+      0.173,
+      -0.328
+     ],
+     "measured_db": [
+      -2.276,
+      -1.566,
+      0.0,
+      1.377,
+      5.458
+     ],
+     "predicted_db": [
+      -2.568,
+      -1.417,
+      0.0,
+      1.55,
+      5.13
+     ],
+     "measured_span_db": 7.734
+    },
+    "75": {
+     "worst_db": 0.282,
+     "residual_db": [
+      -0.282,
+      -0.128,
+      0.0,
+      -0.05,
+      0.273
+     ],
+     "measured_db": [
+      -2.286,
+      -1.289,
+      0.0,
+      1.6,
+      4.857
+     ],
+     "predicted_db": [
+      -2.568,
+      -1.417,
+      0.0,
+      1.55,
+      5.13
+     ],
+     "measured_span_db": 7.143
+    },
+    "10": {
+     "worst_db": 0.3,
+     "residual_db": [
+      -0.3,
+      -0.067,
+      0.0,
+      -0.079,
+      0.118
+     ],
+     "measured_db": [
+      -2.268,
+      -1.35,
+      0.0,
+      1.629,
+      5.012
+     ],
+     "predicted_db": [
+      -2.568,
+      -1.417,
+      0.0,
+      1.55,
+      5.13
+     ],
+     "measured_span_db": 7.28
+    }
+   },
+   "n_inside_bound": 3485,
+   "n_balances": 17689
+  },
+  "region": {
+   "bound_db": 3.0,
+   "n_inside": 3485,
+   "n_balances": 17689,
+   "fraction_inside": 0.197,
+   "decay_db": [
+    -30.0,
+    36.0
+   ],
+   "short_db": [
+    -30.0,
+    36.0
+   ],
+   "short_minus_decay_db": [
+    -9.0,
+    8.0
+   ],
+   "grid_db": [
+    -30.0,
+    36.0
+   ]
+  },
+  "alternatives": {
+   "inverted": {
+    "worst_db": 5.475,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 36.0,
+     "short": -30.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 5.042,
+      "residual_db": [
+       2.684,
+       1.532,
+       0.0,
+       -1.556,
+       -5.042
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 5.385,
+      "residual_db": [
+       3.097,
+       1.5,
+       0.0,
+       -1.73,
+       -5.385
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 5.475,
+      "residual_db": [
+       2.655,
+       1.654,
+       0.0,
+       -1.406,
+       -5.475
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 4.874,
+      "residual_db": [
+       2.665,
+       1.377,
+       0.0,
+       -1.629,
+       -4.874
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 5.029,
+      "residual_db": [
+       2.647,
+       1.438,
+       0.0,
+       -1.658,
+       -5.029
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 0,
+    "n_balances": 17689
+   },
+   "no-tone-network": {
+    "worst_db": 5.458,
+    "balance_db": {
+     "low": 0.0,
+     "decay": -30.0,
+     "short": -30.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 5.025,
+      "residual_db": [
+       2.305,
+       1.444,
+       0.0,
+       -1.527,
+       -5.025
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 5.368,
+      "residual_db": [
+       2.718,
+       1.412,
+       0.0,
+       -1.701,
+       -5.368
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 5.458,
+      "residual_db": [
+       2.276,
+       1.566,
+       0.0,
+       -1.377,
+       -5.458
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 4.857,
+      "residual_db": [
+       2.286,
+       1.289,
+       0.0,
+       -1.6,
+       -4.857
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 5.012,
+      "residual_db": [
+       2.268,
+       1.35,
+       0.0,
+       -1.629,
+       -5.012
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 0,
+    "n_balances": 17689
+   },
+   "low-on-top-rail": {
+    "worst_db": 6.945,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 36.0,
+     "short": 36.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 6.512,
+      "residual_db": [
+       2.58,
+       1.598,
+       0.0,
+       -1.735,
+       -6.512
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       0.275,
+       0.154,
+       0.0,
+       -0.208,
+       -1.487
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 6.855,
+      "residual_db": [
+       2.993,
+       1.566,
+       0.0,
+       -1.909,
+       -6.855
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       0.275,
+       0.154,
+       0.0,
+       -0.208,
+       -1.487
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 6.945,
+      "residual_db": [
+       2.551,
+       1.72,
+       0.0,
+       -1.585,
+       -6.945
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       0.275,
+       0.154,
+       0.0,
+       -0.208,
+       -1.487
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 6.344,
+      "residual_db": [
+       2.561,
+       1.443,
+       0.0,
+       -1.808,
+       -6.344
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       0.275,
+       0.154,
+       0.0,
+       -0.208,
+       -1.487
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 6.499,
+      "residual_db": [
+       2.543,
+       1.504,
+       0.0,
+       -1.837,
+       -6.499
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       0.275,
+       0.154,
+       0.0,
+       -0.208,
+       -1.487
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 0,
+    "n_balances": 17689
+   },
+   "ht2-ht3-swapped": {
+    "worst_db": 0.307,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 3.5,
+     "short": -5.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.157,
+      "residual_db": [
+       -0.157,
+       0.065,
+       0.0,
+       0.021,
+       0.139
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -2.462,
+       -1.379,
+       0.0,
+       1.548,
+       5.164
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.256,
+      "residual_db": [
+       0.256,
+       0.033,
+       0.0,
+       -0.153,
+       -0.204
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.462,
+       -1.379,
+       0.0,
+       1.548,
+       5.164
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.294,
+      "residual_db": [
+       -0.186,
+       0.187,
+       0.0,
+       0.171,
+       -0.294
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -2.462,
+       -1.379,
+       0.0,
+       1.548,
+       5.164
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.307,
+      "residual_db": [
+       -0.176,
+       -0.09,
+       0.0,
+       -0.052,
+       0.307
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.462,
+       -1.379,
+       0.0,
+       1.548,
+       5.164
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 0.194,
+      "residual_db": [
+       -0.194,
+       -0.029,
+       0.0,
+       -0.081,
+       0.152
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -2.462,
+       -1.379,
+       0.0,
+       1.548,
+       5.164
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 1749,
+    "n_balances": 17689
+   }
+  },
+  "mapping_sweep": {
+   "linear": {
+    "worst_db": 0.328,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 10.0,
+     "short": 11.5
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.263,
+      "residual_db": [
+       -0.263,
+       0.027,
+       0.0,
+       0.023,
+       0.105
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.238,
+      "residual_db": [
+       0.15,
+       -0.005,
+       0.0,
+       -0.151,
+       -0.238
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.328,
+      "residual_db": [
+       -0.292,
+       0.149,
+       0.0,
+       0.173,
+       -0.328
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.282,
+      "residual_db": [
+       -0.282,
+       -0.128,
+       0.0,
+       -0.05,
+       0.273
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 0.3,
+      "residual_db": [
+       -0.3,
+       -0.067,
+       0.0,
+       -0.079,
+       0.118
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 3485,
+    "n_balances": 17689
+   },
+   "sqrt": {
+    "worst_db": 0.587,
+    "balance_db": {
+     "low": 0.0,
+     "decay": -24.0,
+     "short": -25.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.54,
+      "residual_db": [
+       -0.54,
+       0.347,
+       0.0,
+       -0.031,
+       -0.154
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -2.845,
+       -1.097,
+       0.0,
+       1.496,
+       4.871
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.497,
+      "residual_db": [
+       -0.127,
+       0.315,
+       0.0,
+       -0.205,
+       -0.497
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.845,
+       -1.097,
+       0.0,
+       1.496,
+       4.871
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.587,
+      "residual_db": [
+       -0.569,
+       0.469,
+       0.0,
+       0.119,
+       -0.587
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -2.845,
+       -1.097,
+       0.0,
+       1.496,
+       4.871
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.559,
+      "residual_db": [
+       -0.559,
+       0.192,
+       0.0,
+       -0.104,
+       0.014
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.845,
+       -1.097,
+       0.0,
+       1.496,
+       4.871
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 0.577,
+      "residual_db": [
+       -0.577,
+       0.253,
+       0.0,
+       -0.133,
+       -0.141
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -2.845,
+       -1.097,
+       0.0,
+       1.496,
+       4.871
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 2723,
+    "n_balances": 17689
+   },
+   "square": {
+    "worst_db": 0.75,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 31.0,
+     "short": 36.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.6,
+      "residual_db": [
+       0.274,
+       -0.32,
+       0.0,
+       0.6,
+       0.37
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -2.031,
+       -1.764,
+       0.0,
+       2.127,
+       5.395
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.687,
+      "residual_db": [
+       0.687,
+       -0.352,
+       0.0,
+       0.426,
+       0.027
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.031,
+       -1.764,
+       0.0,
+       2.127,
+       5.395
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.75,
+      "residual_db": [
+       0.245,
+       -0.198,
+       0.0,
+       0.75,
+       -0.063
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -2.031,
+       -1.764,
+       0.0,
+       2.127,
+       5.395
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.538,
+      "residual_db": [
+       0.255,
+       -0.475,
+       0.0,
+       0.527,
+       0.538
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.031,
+       -1.764,
+       0.0,
+       2.127,
+       5.395
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 0.498,
+      "residual_db": [
+       0.237,
+       -0.414,
+       0.0,
+       0.498,
+       0.383
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -2.031,
+       -1.764,
+       0.0,
+       2.127,
+       5.395
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 3450,
+    "n_balances": 17689
+   },
+   "upper-half": {
+    "worst_db": 0.378,
+    "balance_db": {
+     "low": 0.0,
+     "decay": -0.5,
+     "short": 5.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.225,
+      "residual_db": [
+       -0.035,
+       0.203,
+       0.0,
+       0.225,
+       0.091
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -2.34,
+       -1.241,
+       0.0,
+       1.752,
+       5.116
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.378,
+      "residual_db": [
+       0.378,
+       0.171,
+       0.0,
+       0.051,
+       -0.252
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.34,
+       -1.241,
+       0.0,
+       1.752,
+       5.116
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.375,
+      "residual_db": [
+       -0.064,
+       0.325,
+       0.0,
+       0.375,
+       -0.342
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -2.34,
+       -1.241,
+       0.0,
+       1.752,
+       5.116
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.259,
+      "residual_db": [
+       -0.054,
+       0.048,
+       0.0,
+       0.152,
+       0.259
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.34,
+       -1.241,
+       0.0,
+       1.752,
+       5.116
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 0.123,
+      "residual_db": [
+       -0.072,
+       0.109,
+       0.0,
+       0.123,
+       0.104
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -2.34,
+       -1.241,
+       0.0,
+       1.752,
+       5.116
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 6195,
+    "n_balances": 17689
+   },
+   "lower-half": {
+    "worst_db": 2.199,
+    "balance_db": {
+     "low": 0.0,
+     "decay": -24.0,
+     "short": -15.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 2.155,
+      "residual_db": [
+       -2.155,
+       -0.986,
+       0.0,
+       0.282,
+       -1.766
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       -4.46,
+       -2.43,
+       0.0,
+       1.809,
+       3.259
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 2.109,
+      "residual_db": [
+       -1.742,
+       -1.018,
+       0.0,
+       0.108,
+       -2.109
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -4.46,
+       -2.43,
+       0.0,
+       1.809,
+       3.259
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 2.199,
+      "residual_db": [
+       -2.184,
+       -0.864,
+       0.0,
+       0.432,
+       -2.199
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       -4.46,
+       -2.43,
+       0.0,
+       1.809,
+       3.259
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 2.174,
+      "residual_db": [
+       -2.174,
+       -1.141,
+       0.0,
+       0.209,
+       -1.598
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -4.46,
+       -2.43,
+       0.0,
+       1.809,
+       3.259
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 2.192,
+      "residual_db": [
+       -2.192,
+       -1.08,
+       0.0,
+       0.18,
+       -1.753
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       -4.46,
+       -2.43,
+       0.0,
+       1.809,
+       3.259
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 731,
+    "n_balances": 17689
+   },
+   "inverted": {
+    "worst_db": 5.475,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 36.0,
+     "short": -30.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 5.042,
+      "residual_db": [
+       2.684,
+       1.532,
+       0.0,
+       -1.556,
+       -5.042
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 5.385,
+      "residual_db": [
+       3.097,
+       1.5,
+       0.0,
+       -1.73,
+       -5.385
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 5.475,
+      "residual_db": [
+       2.655,
+       1.654,
+       0.0,
+       -1.406,
+       -5.475
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 4.874,
+      "residual_db": [
+       2.665,
+       1.377,
+       0.0,
+       -1.629,
+       -4.874
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 5.029,
+      "residual_db": [
+       2.647,
+       1.438,
+       0.0,
+       -1.658,
+       -5.029
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       0.379,
+       0.088,
+       0.0,
+       -0.029,
+       -0.017
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 0,
+    "n_balances": 17689
+   },
+   "fixed": {
+    "worst_db": 5.458,
+    "balance_db": {
+     "low": 0.0,
+     "decay": -30.0,
+     "short": -30.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 5.025,
+      "residual_db": [
+       2.305,
+       1.444,
+       0.0,
+       -1.527,
+       -5.025
+      ],
+      "measured_db": [
+       -2.305,
+       -1.444,
+       0.0,
+       1.527,
+       5.025
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 5.368,
+      "residual_db": [
+       2.718,
+       1.412,
+       0.0,
+       -1.701,
+       -5.368
+      ],
+      "measured_db": [
+       -2.718,
+       -1.412,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 5.458,
+      "residual_db": [
+       2.276,
+       1.566,
+       0.0,
+       -1.377,
+       -5.458
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.377,
+       5.458
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 4.857,
+      "residual_db": [
+       2.286,
+       1.289,
+       0.0,
+       -1.6,
+       -4.857
+      ],
+      "measured_db": [
+       -2.286,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.143
+     },
+     "10": {
+      "worst_db": 5.012,
+      "residual_db": [
+       2.268,
+       1.35,
+       0.0,
+       -1.629,
+       -5.012
+      ],
+      "measured_db": [
+       -2.268,
+       -1.35,
+       0.0,
+       1.629,
+       5.012
+      ],
+      "predicted_db": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 0,
+    "n_balances": 17689
+   }
+  },
+  "decay": {
+   "00": {
+    "h_edt10_ms": [
+     139.1,
+     143.2,
+     128.1,
+     121.2,
+     97.4
+    ],
+    "h_falls_end_to_end": true,
+    "h_ratio_first_over_last": 1.428,
+    "h_worst_local_rise": 0.029,
+    "low_edt10_ms": [
+     401.2,
+     390.7,
+     396.4,
+     387.8,
+     363.7
+    ],
+    "low_rel_spread": 0.097
+   },
+   "25": {
+    "h_edt10_ms": [
+     182.8,
+     166.2,
+     147.8,
+     138.7,
+     110.7
+    ],
+    "h_falls_end_to_end": true,
+    "h_ratio_first_over_last": 1.652,
+    "h_worst_local_rise": 0.0,
+    "low_edt10_ms": [
+     617.8,
+     615.4,
+     591.2,
+     599.8,
+     583.6
+    ],
+    "low_rel_spread": 0.057
+   },
+   "50": {
+    "h_edt10_ms": [
+     229.2,
+     212.9,
+     180.4,
+     164.7,
+     119.5
+    ],
+    "h_falls_end_to_end": true,
+    "h_ratio_first_over_last": 1.918,
+    "h_worst_local_rise": 0.0,
+    "low_edt10_ms": [
+     890.4,
+     908.3,
+     892.1,
+     886.5,
+     880.5
+    ],
+    "low_rel_spread": 0.031
+   },
+   "75": {
+    "h_edt10_ms": [
+     295.6,
+     253.8,
+     214.1,
+     184.0,
+     137.1
+    ],
+    "h_falls_end_to_end": true,
+    "h_ratio_first_over_last": 2.156,
+    "h_worst_local_rise": 0.0,
+    "low_edt10_ms": [
+     1142.7,
+     1147.1,
+     1118.5,
+     1145.2,
+     1123.4
+    ],
+    "low_rel_spread": 0.025
+   },
+   "10": {
+    "h_edt10_ms": [
+     320.9,
+     284.9,
+     235.7,
+     190.2,
+     136.2
+    ],
+    "h_falls_end_to_end": true,
+    "h_ratio_first_over_last": 2.356,
+    "h_worst_local_rise": 0.0,
+    "low_edt10_ms": [
+     1280.1,
+     1275.4,
+     1272.5,
+     1280.2,
+     1236.1
+    ],
+    "low_rel_spread": 0.035
+   }
+  },
+  "resolved": [
+   "the tone network's wiper law reproduces the 808's H - L versus TONE at all 25 settings to 0.328 dB worst case, against a 3.0 dB bound and a measured span of at least 7.14 dB per column",
+   "the orientation (alpha rises with TONE): the 'inverted' alternative reads 5.475 dB (outside the bound)",
+   "the tone network as the mechanism: the 'no-tone-network' alternative reads 5.458 dB (outside the bound)",
+   "the low band's rail (bottom, with Ht2): the 'low-on-top-rail' alternative reads 6.945 dB (outside the bound)"
+  ],
+  "not_resolved": [
+   "the exact shape of alpha(TONE): linear 0.328, upper-half 0.378, sqrt 0.587, square 0.75, lower-half 2.199 -- 5 of 7 candidate mappings are inside the bound, so the linear taper is the best of them and is what the component marking predicts, but it is not the only one the recordings admit",
+   "the Ht2/Ht3 rail assignment: 'ht2-ht3-swapped' reads 0.307 dB against the prediction's 0.328 dB -- blind by construction (both bands share the 7.1 kHz band-pass and both land in H, so the fitted balance absorbs the swap)",
+   "the inter-band balance: inside 3.0 dB the admitted region spans [-30.0, 36.0] dB on the decay band and [-30.0, 36.0] dB on the short band (the whole swept grid in both), and only their difference is constrained, to [-9.0, 8.0] dB. So this does NOT lift the balance refusal of #396"
+  ],
+  "windows": {
+   "strike": {
+    "worst_db": 1.793,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 15.0,
+     "short": 22.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 1.413,
+      "residual_db": [
+       -1.413,
+       0.627,
+       0.0,
+       0.219,
+       -0.174
+      ],
+      "measured_db": [
+       -3.579,
+       -2.716,
+       0.0,
+       1.295,
+       3.753
+      ],
+      "predicted_db": [
+       -4.991,
+       -2.089,
+       0.0,
+       1.514,
+       3.579
+      ],
+      "measured_span_db": 7.332
+     },
+     "25": {
+      "worst_db": 1.65,
+      "residual_db": [
+       -1.65,
+       0.183,
+       0.0,
+       0.944,
+       -0.076
+      ],
+      "measured_db": [
+       -3.341,
+       -2.272,
+       0.0,
+       0.57,
+       3.655
+      ],
+      "predicted_db": [
+       -4.991,
+       -2.089,
+       0.0,
+       1.514,
+       3.579
+      ],
+      "measured_span_db": 6.996
+     },
+     "50": {
+      "worst_db": 1.793,
+      "residual_db": [
+       1.139,
+       1.793,
+       0.0,
+       1.607,
+       0.088
+      ],
+      "measured_db": [
+       -6.13,
+       -3.883,
+       0.0,
+       -0.093,
+       3.492
+      ],
+      "predicted_db": [
+       -4.991,
+       -2.089,
+       0.0,
+       1.514,
+       3.579
+      ],
+      "measured_span_db": 9.622
+     },
+     "75": {
+      "worst_db": 1.21,
+      "residual_db": [
+       -0.812,
+       -0.24,
+       0.0,
+       1.21,
+       1.03
+      ],
+      "measured_db": [
+       -4.179,
+       -1.849,
+       0.0,
+       0.304,
+       2.549
+      ],
+      "predicted_db": [
+       -4.991,
+       -2.089,
+       0.0,
+       1.514,
+       3.579
+      ],
+      "measured_span_db": 6.729
+     },
+     "10": {
+      "worst_db": 1.74,
+      "residual_db": [
+       0.167,
+       0.818,
+       0.0,
+       0.578,
+       1.74
+      ],
+      "measured_db": [
+       -5.158,
+       -2.908,
+       0.0,
+       0.936,
+       1.84
+      ],
+      "predicted_db": [
+       -4.991,
+       -2.089,
+       0.0,
+       1.514,
+       3.579
+      ],
+      "measured_span_db": 6.997
+     }
+    },
+    "n_inside_bound": 550,
+    "n_balances": 17689
+   },
+   "tail": {
+    "worst_db": 0.698,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 36.0,
+     "short": 33.0
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.616,
+      "residual_db": [
+       0.616,
+       -0.1,
+       0.0,
+       -0.201,
+       -0.196
+      ],
+      "measured_db": [
+       -1.674,
+       -0.543,
+       0.0,
+       1.071,
+       3.758
+      ],
+      "predicted_db": [
+       -1.058,
+       -0.643,
+       0.0,
+       0.87,
+       3.562
+      ],
+      "measured_span_db": 5.433
+     },
+     "25": {
+      "worst_db": 0.448,
+      "residual_db": [
+       0.224,
+       -0.448,
+       0.0,
+       -0.416,
+       -0.414
+      ],
+      "measured_db": [
+       -1.282,
+       -0.195,
+       0.0,
+       1.286,
+       3.976
+      ],
+      "predicted_db": [
+       -1.058,
+       -0.643,
+       0.0,
+       0.87,
+       3.562
+      ],
+      "measured_span_db": 5.258
+     },
+     "50": {
+      "worst_db": 0.293,
+      "residual_db": [
+       0.223,
+       0.095,
+       0.0,
+       0.293,
+       0.091
+      ],
+      "measured_db": [
+       -1.281,
+       -0.738,
+       0.0,
+       0.577,
+       3.472
+      ],
+      "predicted_db": [
+       -1.058,
+       -0.643,
+       0.0,
+       0.87,
+       3.562
+      ],
+      "measured_span_db": 4.753
+     },
+     "75": {
+      "worst_db": 0.698,
+      "residual_db": [
+       -0.066,
+       0.388,
+       0.0,
+       0.143,
+       0.698
+      ],
+      "measured_db": [
+       -0.992,
+       -1.032,
+       0.0,
+       0.727,
+       2.864
+      ],
+      "predicted_db": [
+       -1.058,
+       -0.643,
+       0.0,
+       0.87,
+       3.562
+      ],
+      "measured_span_db": 3.896
+     },
+     "10": {
+      "worst_db": 0.527,
+      "residual_db": [
+       -0.186,
+       -0.22,
+       0.0,
+       -0.063,
+       0.527
+      ],
+      "measured_db": [
+       -0.872,
+       -0.424,
+       0.0,
+       0.933,
+       3.036
+      ],
+      "predicted_db": [
+       -1.058,
+       -0.643,
+       0.0,
+       0.87,
+       3.562
+      ],
+      "measured_span_db": 3.908
+     }
+    },
+    "n_inside_bound": 4063,
+    "n_balances": 17689
+   },
+   "1s": {
+    "worst_db": 0.328,
+    "balance_db": {
+     "low": 0.0,
+     "decay": 10.0,
+     "short": 11.5
+    },
+    "n_settings": 25,
+    "per_column": {
+     "00": {
+      "worst_db": 0.261,
+      "residual_db": [
+       -0.261,
+       0.028,
+       0.0,
+       0.023,
+       0.106
+      ],
+      "measured_db": [
+       -2.307,
+       -1.444,
+       0.0,
+       1.526,
+       5.024
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.33
+     },
+     "25": {
+      "worst_db": 0.238,
+      "residual_db": [
+       0.15,
+       -0.006,
+       0.0,
+       -0.151,
+       -0.238
+      ],
+      "measured_db": [
+       -2.718,
+       -1.411,
+       0.0,
+       1.701,
+       5.368
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 8.086
+     },
+     "50": {
+      "worst_db": 0.328,
+      "residual_db": [
+       -0.292,
+       0.149,
+       0.0,
+       0.172,
+       -0.328
+      ],
+      "measured_db": [
+       -2.276,
+       -1.566,
+       0.0,
+       1.378,
+       5.458
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.734
+     },
+     "75": {
+      "worst_db": 0.283,
+      "residual_db": [
+       -0.283,
+       -0.127,
+       0.0,
+       -0.051,
+       0.273
+      ],
+      "measured_db": [
+       -2.285,
+       -1.289,
+       0.0,
+       1.6,
+       4.857
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.142
+     },
+     "10": {
+      "worst_db": 0.301,
+      "residual_db": [
+       -0.301,
+       -0.067,
+       0.0,
+       -0.079,
+       0.118
+      ],
+      "measured_db": [
+       -2.267,
+       -1.35,
+       0.0,
+       1.629,
+       5.013
+      ],
+      "predicted_db": [
+       -2.568,
+       -1.417,
+       0.0,
+       1.55,
+       5.13
+      ],
+      "measured_span_db": 7.28
+     }
+    },
+    "n_inside_bound": 3483,
+    "n_balances": 17689
+   }
+  }
+ },
+ "windows_refused": null,
+ "measured_windows": {
+  "hml": {
+   "strike": {
+    "00": {
+     "00": 11.6601,
+     "25": 12.5223,
+     "50": 15.2387,
+     "75": 16.5336,
+     "10": 18.9921
+    },
+    "25": {
+     "00": 12.7427,
+     "25": 13.8114,
+     "50": 16.0836,
+     "75": 16.6538,
+     "10": 19.7391
+    },
+    "50": {
+     "00": 10.9173,
+     "25": 13.1652,
+     "50": 17.0478,
+     "75": 16.9545,
+     "10": 20.5396
+    },
+    "75": {
+     "00": 12.6886,
+     "25": 15.0187,
+     "50": 16.868,
+     "75": 17.1722,
+     "10": 19.4173
+    },
+    "10": {
+     "00": 11.445,
+     "25": 13.695,
+     "50": 16.6027,
+     "75": 17.5389,
+     "10": 18.4424
+    }
+   },
+   "tail": {
+    "00": {
+     "00": 3.2808,
+     "25": 4.4119,
+     "50": 4.9552,
+     "75": 6.0265,
+     "10": 8.7133
+    },
+    "25": {
+     "00": 3.2933,
+     "25": 4.3803,
+     "50": 4.5755,
+     "75": 5.8615,
+     "10": 8.5515
+    },
+    "50": {
+     "00": 3.3426,
+     "25": 3.8855,
+     "50": 4.6239,
+     "75": 5.2012,
+     "10": 8.0956
+    },
+    "75": {
+     "00": 3.7642,
+     "25": 3.7246,
+     "50": 4.7563,
+     "75": 5.4833,
+     "10": 7.6203
+    },
+    "10": {
+     "00": 3.5332,
+     "25": 3.9819,
+     "50": 4.4055,
+     "75": 5.3389,
+     "10": 7.4411
+    }
+   },
+   "1s": {
+    "00": {
+     "00": 7.2161,
+     "25": 8.0783,
+     "50": 9.5228,
+     "75": 11.0492,
+     "10": 14.5465
+    },
+    "25": {
+     "00": 5.4456,
+     "25": 6.7526,
+     "50": 8.1636,
+     "75": 9.8647,
+     "10": 13.5319
+    },
+    "50": {
+     "00": 4.7859,
+     "25": 5.4957,
+     "50": 7.0615,
+     "75": 8.4391,
+     "10": 12.5197
+    },
+    "75": {
+     "00": 4.2046,
+     "25": 5.2001,
+     "50": 6.4895,
+     "75": 8.0899,
+     "10": 11.347
+    },
+    "10": {
+     "00": 4.1287,
+     "25": 5.0459,
+     "50": 6.3959,
+     "75": 8.0245,
+     "10": 11.4084
+    }
+   }
+  },
+  "min_floor_margin_db": 46.91,
+  "n_refused": 0
+ },
+ "commit": "1916d36103267d8648445901e501dd5c99d814e4",
+ "sources_dirty": false
+}

@@ -19,7 +19,7 @@ help:
 	@echo "make verify-full  adds the hour-long runs (voice full set, drums)"
 	@echo "make controls     every injected defect that must turn something red"
 	@echo "make test         the Python suites only"
-	@echo "make claims       re-derive every marked prose claim in docs/ from evidence"
+	@echo "make claims       re-derive every marked prose claim in the tree from evidence"
 	@echo "make board        fill the scorecard's first batch and re-render the board"
 	@echo "make reference-integration  the Fischer-corpus tests as a REQUIRED gate (refuses if absent)"
 	@echo "make dag          re-run the evidence and regenerate the README diagram"
@@ -46,11 +46,67 @@ help:
 ## explains all 23 is buried in a traceback. The same question answered in
 ## 0.2s, naming the source file that moved, is worth a job slot.
 ##
+## check_arty_evidence_binding.py --scope publication is a SECOND rung on the
+## same tool asking a different question, and it could not be one until #436:
+## the constraint file had no committed evidence at all, so the mode could only
+## REFUSE and an unsatisfiable gate is worse than no gate. It is answered by two
+## records now, each covering what its own bench read -- the UART digital record
+## for sources()+roms(), fpga/reports/arty/xdc-binding/binding.json for the XDC
+## -- and it goes red when the constraint file moves without its bench being
+## re-run. That re-run is `fpga/verify_xdc_binding.py --outdir
+## fpga/reports/arty/xdc-binding` and takes 0.2 s, which is what makes the rung
+## satisfiable rather than merely strict. The default rung's question, verdict
+## and output are unchanged.
+##
+## verify_xdc_binding.py itself is here for the reason the publication rung is
+## not enough on its own: the gate compares hashes, and this is the thing that
+## decides whether the constraint file still BINDS -- every get_ports naming a
+## real port, every hierarchical path joining generate blocks with a dot and
+## instances with a slash (#315, which shipped dead in R0 and R1), every
+## output delay equal to the datasheet budget ext_io_timing derives. 0.2 s,
+## pure Python, no Vivado.
+##
+## check_doc_claims.py ran THREE TIMES until #435 and now runs once, which is a
+## widening rather than a saving. Its default set was docs/*.md -- one
+## directory, not even recursive -- so fpga/ARTY.md and
+## docs/scorecard/cymbal-369/tone-render/README.md had to be named here to be
+## checked at all, and that is exactly how #429's three transcribed figures sat
+## under a green 44/44 gate. Naming files kept the widening auditable but could
+## only ever cover the ones somebody remembered: eleven further markers
+## (docs/scorecard/README.md, docs/scorecard/ensemble-e1a/rtl/README.md,
+## decision record 0018) were evaluated by nothing under a green "51 ok".
+##
+## The default set is now an explicit include list in the tool
+## (DEFAULT_INCLUDES), and the no-argument run REFUSES by name on any marker in
+## a tracked Markdown file outside it -- so a document in a new corner of the
+## tree turns this red instead of being silently unchecked, and no Makefile
+## line has to be remembered. 167 documents, 69 claims, 116s measured against
+## the old 48/51/88s.
+##
+## holdout.py check is 0.2s and asks the one question a holdout's value rests
+## on: did the settings exist in the repository before the render that read
+## them, and have they moved since? The seal's own git state answers the first;
+## the ledger's record of WHAT was read answers the second, and that second half
+## is the failure the seal alone cannot catch -- settings genuinely committed
+## first, then edited once the error was known. Where a commit is missing from
+## the clone (squash merges do this) the ordering half reports a note rather
+## than a failure: an unsatisfiable gate is worse than no gate, and the seal-hash
+## half is always answerable. It is green on a tree with no seals at all, which
+## is the state every Holdout case but F1D is in.
+##
+## verify_sd_dac.py (#406) carries its own four injected-defect controls and
+## runs them every time, so it is here and not in `controls`: ~15 s, 4 vvp
+## workers. Its PASS record in build/sd-dac is what fpga/build_arty_sd.py binds.
+##
 ## check_decision_record_numbers.py is here because a DR number cannot be
 ## allocated correctly from one branch: two PRs each took 0017 within two
 ## minutes in September, on branches that never saw each other, and both merges
 ## were clean because the FILENAMES differ (#250). The directory is the only
 ## place the answer exists, so the directory is what gets read. 0.05s.
+##
+## tools/external_claim.py (#123) refuses external-tool claims without their
+## environment tuple and host_per_plugin entries that are neither 'unverified'
+## nor backed by a passing claim. Its test is also in verify-fast. <0.1s.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
@@ -68,12 +124,19 @@ verify:
 	  "$(PY) tools/verify_mono_case.py" \
 	  "$(PY) fpga/verify_fixture.py --outdir build/fx-base" \
 	  "$(PY) fpga/verify_uart_bridge.py --scenario all --outdir build/uart-controls" \
+	  "$(PY) fpga/verify_pads_top.py --scenario all --jobs 1 --outdir build/pads" \
+	  "$(PY) fpga/verify_pads_top.py --start-red --outdir build/pads" \
+	  "$(PY) fpga/verify_sd_dac.py --outdir build/sd-dac" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
+	  "$(PY) tools/check_arty_evidence_binding.py --scope publication" \
+	  "$(PY) fpga/verify_xdc_binding.py" \
 	  "$(PY) tools/check_doc_claims.py" \
 	  "$(PY) tools/check_f1_rtl_record.py" \
+	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
+	  "$(PY) tools/external_claim.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -99,10 +162,52 @@ verify:
 ## measured with iverilog removed from PATH -- so it costs the shared runner
 ## nothing and cannot go red on simulator noise. The rest of rtl-sketch's
 ## pytest files DO need iverilog and stay in `make verify` only.
+##
+## fpga/test_verify_xdc_binding.py and tools/test_check_arty_evidence_binding.py
+## are in the fpga bundle rather than only in `make verify` because THIS target
+## is what CI runs (rungs.yml `make verify-fast`) and #404 -- no CI job collects
+## tools/ or fpga/ wholesale -- is still open. Without them the constraint
+## bench's start-red on the pre-#315 file, and the publication rung's controls,
+## would be checks that only ever ran on a developer's machine. 2.5 s measured
+## together, against a 600 s cap.
+##
+## THE TIMEOUT IS PER JOB, SO THE SHAPE OF THE SPLIT IS THE GATE'S HEADROOM.
+## tools/test_run_case.py is its own job rather than a member of the big one
+## (review of PR #405). That bundle was one 292 s job on main against a 600 s
+## cap -- 49 % of it, which is 97 % of it on the 2x-slower runner this repo's own
+## logs show `ubuntu-latest` handing out (`measure_m5a_signal_path` 24.0 s vs
+## 48.2 s, `verify_mono_case` 43.5 s vs 76.2 s, the fpga bundle 13.9 s vs 22.5 s,
+## same commit-adjacent jobs) -- and #389's six new tests took it over the cap
+## twice, NO-VERDICT at 600.0 s. A NO-VERDICT is not a FAIL, which is exactly
+## why it must not be tolerated: it is the gate reporting nothing in the place a
+## result belongs.
+##
+## Measured on an 8-vCPU worker before choosing the split (serial, so the two
+## numbers are each job's own cost and not a scheduling artifact):
+##   tools/test_run_case.py alone   282.9 s   112 tests
+##   every other file in the bundle 278.7 s   424 tests
+## AND THEN MEASURED IN CI, WHICH DISAGREED ABOUT THE BALANCE -- worth leaving
+## here rather than quoting only the local numbers, because the runner's own
+## speed is the variable this gate keeps tripping over. Two m5a-fast runs of the
+## same commit, with `measure_m5a_signal_path` alongside as the runner's ruler
+## (main measured it at 24.0 s):
+##   ruler 49.5 s   test_run_case 274.6 s   other files 323.6 s   worst 54 % of cap
+##   ruler 74.1 s   test_run_case 335.8 s   other files 444.9 s   worst 74 % of cap
+## so the split is even to ~15 % rather than to 1.5 %, the OTHER-FILES job is now
+## the longer one, and a 3.1x runner still leaves a quarter of the cap spare --
+## against 97 % of it for main's single 292 s bundle on a 2x runner, and past the
+## cap entirely for the unsplit version. `run_all.py` runs jobs concurrently with
+## `min(len(cmds), cpu_count)` workers and these two are submitted FIRST, so they
+## both start at t=0 on the runner's two cores; the remaining jobs queue behind
+## whichever finishes first, so the target's own wall clock does not grow.
+## Adding a file to either job is fine; adding a 150 s test to one is the thing
+## that broke this, so put the next expensive file in whichever job is shorter --
+## which the CI rows above, not the local ones, say is tools/test_run_case.py.
 verify-fast:
 	@$(RUN) --timeout 600 --json build/verification/verify-fast.json \
-	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_check_workflows.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
- 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py -q" \
+	  "$(PY) -m pytest tools/test_run_case.py -q" \
+	  "$(PY) -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_score_drum_i2s.py tools/test_compare_drum_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_mono_artifact_probe.py tools/test_diagnose_tom_body.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_verify_attack_context_model.py tools/test_m5a_fast_workflow.py tools/test_score_ensemble_i2s.py tools/test_compare_ensemble_candidate.py tools/test_result_destination.py tools/test_run_all.py tools/test_manifest.py tools/test_external_claim.py tools/test_check_workflows.py tools/test_provenance_retention.py pnr/test_report_synth_area.py pnr/orfs/test_area_provenance.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q" \
+ 	  "$(PY) -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_xdc_bindings.py fpga/test_verify_xdc_binding.py tools/test_check_arty_evidence_binding.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py fpga/test_midi_session.py fpga/test_late_events.py fpga/test_coremidi_input.py fpga/test_measure_mac_midi_latency.py fpga/test_image_kit.py fpga/test_midi_image_kit.py fpga/test_pads_rom.py fpga/test_build_arty_pads.py -q" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi-fast" \
  	  "$(PY) -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q" \
 	  "$(PY) -m pytest model/test_audio_measure.py -q -k foldback" \
@@ -274,6 +379,19 @@ verify-full:
 ##   area_provenance UTILIZATION_TARGET summarize.py exit 2, ratio withheld
 ##   area_provenance CORE_UTILIZATION_SET  ditto, the ORFS spelling
 ##
+## THE CONSTRAINT-BINDING CONTROLS (#436) close rule 5 on #315: the UART-RX
+## synchroniser constraints joined their generate block with a slash, matched
+## nothing, and were DROPPED by Vivado from R0 and R1 while every text-level
+## gate passed. `--inject UART_SLASH_JOIN` is those exact bytes, and `--matrix`
+## runs all eight injections and prints the properties x defects matrix
+## (docs/verification-rules.md 4) -- it exits 1 if any injection moves NO
+## property, which is the only way a control can be a no-op and still look like
+## one. probe_arty_constraint_scope.py is the gate-level pair: ten arms, each
+## printing the gate's own exit code, including the arm that must stay GREEN
+## (the default rung, blind to the constraints on purpose) and a start-red that
+## runs the bench against the pre-#315 file from git history. All three are pure
+## Python, about 2 s together.
+##
 ## report_synth_area is THE ONLY JOB IN THIS FILE THAT NEEDS yosys (it also needs
 ## iverilog, which everything here already needs). It REFUSES rather than skips
 ## when either is absent, which is why it is not in the nightly's controls job:
@@ -328,6 +446,10 @@ controls:
 	  "$(PY) fpga/verify_fixture.py --wrong no-tom-bend --expect-fail --outdir build/fx-notom" \
 	  "$(PY) fpga/verify_fixture.py --wrong drop-tom-step --expect-fail --outdir build/fx-tomstep" \
 	  "$(PY) fpga/verify_fixture.py --wrong burst --expect-fail --outdir build/fx-burst" \
+	  "$(PY) fpga/verify_pads_top.py --inject PADS_DEBOUNCE_DOUBLE --outdir build/pads-controls" \
+	  "$(PY) fpga/verify_pads_top.py --inject PADS_TRIG_STUCK --outdir build/pads-controls" \
+	  "$(PY) fpga/verify_pads_top.py --inject PADS_SRC_STUCK --outdir build/pads-controls" \
+	  "$(PY) fpga/verify_pads_top.py --inject PADS_KIT_HASH --outdir build/pads-controls" \
 	  "$(PY) tools/run_case.py --inject REF_F0_20PCT D09A --results build/case-detune --expect fail" \
 	  "$(PY) tools/run_case.py --inject REF_MISSING D09A --results build/case-noref --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_run_case.py -q -k ref_corner_2x_control_moves_a_known_reference_corner" \
@@ -336,6 +458,8 @@ controls:
 	  "$(PY) tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail" \
 	  "$(PY) tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'" \
 	  "$(PY) -m pytest tools/test_check_surge_waveform_comment.py -q -k issue_271" \
+	  "$(PY) -m pytest model/test_rig_qualification.py -q -k discrimination_matrix" \
+	  "$(PY) -m pytest model/test_modeld_pedalboard_rig.py -q -k 'refuses or REFUS or uncorrectable'" \
 	  "$(PY) tools/check_decision_record_numbers.py --expect ok" \
 	  "$(PY) tools/check_decision_record_numbers.py --inject DUPLICATE_NUMBER --expect collision" \
 	  "$(PY) tools/check_decision_record_numbers.py --inject HEADER_MISMATCH --expect misnumbered" \
@@ -352,16 +476,23 @@ controls:
 	  "$(PY) pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular --outdir build/pnr-die-utilreq" \
 	  "$(PY) pnr/orfs/area_provenance.py --inject CORE_UTILIZATION_SET --expect refused-circular --outdir build/pnr-die-utilmk" \
 	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_SKIP_INTERP --expect-mismatch" \
-	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch"
+	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch" \
+	  "$(PY) fpga/verify_xdc_binding.py --matrix" \
+	  "$(PY) fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail" \
+	  "$(PY) tools/probe_arty_constraint_scope.py"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
 
-## Re-derive every marked prose claim in docs/ from the evidence it names.
+## Re-derive every marked prose claim in this tree from the evidence it names.
 ## Three outcomes, and the third is the point: OK, STALE (the tree contradicts
 ## the prose -- exit 1), REFUSED (the claim could not be evaluated at all --
 ## exit 2, this repository's "no evidence", not "no problem"). Both are red.
-## Convention: docs/claim-markers.md. Also a job in `verify`.
+##
+## One invocation, because the tool's own default set is now the whole authored
+## tree (#435) AND it refuses on any marker outside that set -- so a document
+## this line forgot to name is red rather than silent. Which directories are
+## scanned, and which are deliberately not: docs/claim-markers.md.
 claims:
 	@$(PY) tools/check_doc_claims.py
 
@@ -388,8 +519,14 @@ trial-bootstrap:
 ## they skip, marked OPTIONAL, when the corpus is absent; here a missing corpus
 ## is REFUSED (non-zero), because a required job green through skips checked
 ## nothing. Location: $GF180_TR808_REFS, else /tmp/tr808-ref.
+## #369 step 9's TONE knob law is here for the half of it CI cannot decide: its
+## two corpus-gated controls (WRONG_ANALYSIS_BANDS, SHORT_RECORD) report NO
+## VERDICT in the no-corpus job, and NO VERDICT is not a pass. `--require-corpus`
+## is what turns them into a failure, so this is the only place they are
+## actually enforced -- the claim its docstring makes, made true.
 reference-integration:
-	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py -q
+	GF180_REQUIRE_TR808_REFS=1 $(PY) -m pytest tools/test_run_case.py tools/test_metric_purpose.py tools/test_cymbal_tone_knob.py -q
+	GF180_REQUIRE_TR808_REFS=1 $(PY) tools/cymbal_tone_knob.py --check --require-corpus
 
 board:
 	-@$(PY) tools/run_case.py --batch "First 32"

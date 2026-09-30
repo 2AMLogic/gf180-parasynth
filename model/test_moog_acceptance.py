@@ -3011,7 +3011,11 @@ def test_the_aliasing_estimator_reproduces_a_known_alias_content():
     for note in (40, 64, 100):
         f0 = ap.base_inc(note) * SR / (1 << 24)
         clean = ap.bl_saw(f0, n, SR)
-        floor = am.inharmonic_fraction_db(clean, f0, SR).require(f"note {note} clean")
+        # `clean` is alias-free by construction, so this reading IS the
+        # estimator's own floor at ~0 dB of headroom -- requested on purpose
+        # with `min_headroom_db=None` (#115), not the accidental low-headroom
+        # report the default gate exists to refuse.
+        floor = am.inharmonic_fraction_db(clean, f0, SR, min_headroom_db=None).require(f"note {note} clean")
         assert floor < -50.0, f"note {note}: the floor is {floor:.1f} dB, too high to measure at"
         for share_db in (-20.0, -30.0, -40.0):
             share = 10 ** (share_db / 10.0)

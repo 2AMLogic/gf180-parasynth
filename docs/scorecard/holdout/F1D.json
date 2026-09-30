@@ -1,0 +1,43 @@
+{
+ "schema": "holdout-seal/1",
+ "case_id": "F1D",
+ "generation": 1,
+ "state": "sealed",
+ "sealed_by": "Loom Builder on issue #116 (the sealing mechanism's author; not the party tuning the filter -- see not_chosen_by)",
+ "sealed_utc": "2026-09-28T23:10:07Z",
+ "sealed_at_head": "b86b70902d17",
+ "why": "500 Hz, resonance zero, at the frozen probe level. Four criteria, all stated before any error at this setting could be read -- there is no frozen Surge clip at 500 Hz, so reading one is not yet possible for anybody. (1) UNSEEN: the only cutoff regions any case, fit, tolerance or trend argument in this repository has read are 250, 1000 and 4000 Hz (F1A/F1B/F1C, refprofile.CUT_HZ and CUT_REGIONS_HZ) plus the 20 kHz wide-open denominator; nothing has compared the two devices at 500 Hz. (2) INTERPOLATION, NOT EXTRAPOLATION: 500 Hz is inside the range the three anchors span, one octave from 250 and one from 1000 -- the largest log distance available inside the lowest unanchored gap. The same criterion tools/probes/hihat/hh_probe5.py used to pick D14B's holdout recording. (3) THE ESTIMATORS HAVE A NUMBER TO GIVE THERE, measured before sealing by tools/probes/holdout_f1d_preconditions.py: the plateau band is 40-125 Hz with 7 grid points, our own corner reads 216.4 Hz and the rolloff band 476-1515 Hz holds 6 points above the truncation floor, so corner, low-band gain and rolloff all return values rather than refusals. A sealed setting whose estimators can only REFUSE is a held-out refusal, and it would be indistinguishable from a finding about the filter. Both this setting and the 2000 Hz alternative pass that check; the choice between them is criterion (4), which was fixed first. (4) IT MATTERS TO THE INSTRUMENT: 500 Hz is in the low-mid region the mono bass and pluck patches sweep through and where DR 0005/0006's bass compensation operates, so a cutoff-mapping error there is audible in the milestone's own material. The 2000 Hz candidate is a defensible holdout and is not sealed here; a second holdout case would need a fresh case id, not a re-seal of this one.",
+ "seen_by": [
+  "F1A -- corner/low-band gain/rolloff at commanded 250 Hz, against surge-type2/lp-cut250-res0.00",
+  "F1B -- the same three at 1000 Hz, against surge-type2/lp-cut1000-res0.00",
+  "F1C -- the same three at 4000 Hz, against surge-type2/lp-cut4000-res0.00",
+  "#146/#150/#164's corner-trend arguments -- read along exactly those three cutoffs and no others",
+  "voice_fx.CUT_TRIM = 1.030 (DR 0011) -- one frequency-INDEPENDENT scale chosen on the free-ring probe at res 1.05 over 100 Hz..10 kHz, so it has seen the ring across the range; it has not seen the stepped-tone response at 500 Hz, and nothing about it was fitted per cutoff",
+  "voice_fx.fcr() -- Huovilainen's tuning polynomial, a closed form from sst-filters' published constants, fitted to nothing here"
+ ],
+ "settings": {
+  "plan": "filter",
+  "ref_clip": "surge-type2/lp-cut500-res0.00",
+  "ref_open_clip": "surge-type2/lp-open20k-res0.00",
+  "cut_hz": 500.0,
+  "open_hz": 20000.0,
+  "res_ref": 0.0,
+  "res_ours": 0.0
+ },
+ "not_chosen_by": "Chosen while adding the sealing mechanism itself (issue #116, tooling). No model, ROM, calibration, tolerance or estimator is changed by the same commit that writes this seal -- `git show --stat` on the seal's commit is the check. The party that later tunes the filter does not get to move it: tools/holdout.py refuses a seal that is not committed and clean, and `tools/holdout.py check` reports a seal whose settings changed after a read.",
+ "reference_render_request": {
+  "clip_id": "surge-type2/lp-cut500-res0.00",
+  "spec": {
+   "rig": "surge-type2",
+   "kind": "tone_train",
+   "cut_hz": 500.0,
+   "res": 0.0,
+   "amp": 0.25,
+   "freqs": "reference_compare.FREQS, as every other tone_train clip",
+   "why": "the cutoff-response reading F1D is sealed at"
+  },
+  "how": "add this spec to refprofile.clip_specs() and run `tools/refprofile.py --render` on a host that has Surge XT and dawdreamer; the qualified rig of #87 must build and its pins must hold. Until then F1D is a stated no-verdict naming this clip, which is the correct answer and not a hole in the instrument.",
+  "note": "No host in the Loom fleet has the plugins or dawdreamer, so this render is a separate, reviewable act on a qualified host -- which is exactly the property the seal is for: the settings are fixed before the reference exists."
+ },
+ "note": "F1D's required measurements in docs/scorecard/cases.csv are the same three the cutoff-response family states, so it takes run_case._CUTOFF_RESPONSE_PLAN unchanged. res_ours is 0.0 because k = 4*res in model/fixed.py's registers, so zero is our zero and the two zeros are the same physical setting -- the only resonance where the two devices' controls are commensurable at all."
+}

@@ -54,6 +54,14 @@ The **pure digital differentiator is what overshoots both ends**. The top octave
 without the tilt, which points at **Hh2's corner**: it is carried at 10.5 kHz and now a high-pass, and the reference
 does not resolve it.
 
+> **Answered, 2026-09-27 (#369 step 3): `../candidate2/README.md`.** Both values were read off W14b Figures 4
+> and 10 by `tools/werner_fig4.py`, gated on the three filters SN p.13 already fixes. Hh2 is 8.84 kHz Q 1.00 (not
+> 10.5 kHz Q 2.5); Hh3's third pole sits at 5.20 kHz, half its 10.32 kHz corner, and the 2-pole's Q is 5.64. The
+> level stage is a 1-pole differentiator cornered at 18.97 kHz, tilting +16.6 dB across 2-20 kHz against a discrete
+> `(1 - z^-1)`'s +17.4 dB. **Rebuilt on those values the candidate still overcorrects**, so the section below's
+> attribution of the overshoot to the differentiator is withdrawn: the remaining suspect is the tone stage, the one
+> block of §10 that is not modelled at all.
+
 ## Next decisive step
 
 The two remaining unknowns are circuit values, not tuning knobs:

@@ -550,7 +550,19 @@ AMP_TOM = {"LT": 0.0048081, "MT": 0.0061911, "HT": 0.0099312,
 # chart's proportions on 0.56-0.62 x the exciter. Nothing but the six tom/conga
 # positions moved (every other voice re-balances at x1.00 +- 0.01).
 AMP_CY_HI = 1.0
-PEAK_RSG, PEAK_CLG, PEAK_MA = 0.343, 0.5, 0.5395
+# RE-BALANCED for #388's RS_LO_X_ATT, by `drums_fx_render.py --balance`
+# unchanged -- again the procedure did not move, its input did. Attenuating the
+# excitation into the 455 Hz network takes 7.05 dB off the whole rimshot,
+# because that mode was setting the voice's peak; the gate peak puts it back.
+# PEAK_RSG is the LAST thing in the RS path (`frame`: nonlinearity, then
+# envelope, then att), so this is a pure gain and moves neither the distortion
+# nor the two modes' ratio. `--balance` reports x2.2532 for RS and x1.00 +- 0.08
+# for the other fifteen, i.e. nothing else moved.
+PEAK_RSG, PEAK_CLG, PEAK_MA = 0.7728, 0.5, 0.5395
+# The gate peak revisions 10 to 14 shipped -- what the PUBLISHED R0 and R1 Arty
+# images were verified with -- kept so `kit_808_rev14()` can undo the re-balance
+# above (see its `undo`), and through it `kit_808_rev11()`.
+PEAK_RSG_REV14 = 0.343
 # ---- the clap, contract revision 14 (plan081 C / plan084: "L2") ---------------
 # FROZEN from the confirmed experiment (docs/scorecard/clap-d12a/README.md
 # section 10; final-strike.json): four strikes at period 511 frames (0, 10.6,
@@ -609,7 +621,8 @@ BD_ATTACK_HZ, BD_ATTACK_Q, BD_ATTACK_MS = 130.0, 6.0, 4.0
 # not a stepped envelope", and "accent changes the pitch envelope". This is the
 # toms' "doom" sweep. The EXISTENCE of the drop, its accent dependence and its
 # gradual shape are the source's. The MAGNITUDE was marked [inferred] at x1.7
-# and is now measured.
+# and is now the fitted law evaluated at a stated reference setting, with a
+# measured value nearby (see below).
 #
 # HARDWARE-MEASURED [99 clean-digital tom files and 66 conga files of a real
 # TR-808, 808 From Mars; model/tom_pitch_probe.py behind its own gate;
@@ -627,10 +640,11 @@ BD_ATTACK_HZ, BD_ATTACK_Q, BD_ATTACK_MS = 130.0, 6.0, 4.0
 #
 # The measurement found THREE separate faults, which is why one constant became
 # four:
-#   1. THE MAGNITUDE, above. TOM_DROP_RATIO is now the measured onset ratio at
-#      one stated reference setting -- accent 1.0, the TUNING pot at its centre,
-#      the TOM position of the circuit -- and the law below scales it from
-#      there. It is still the single knob that sets the size of the sweep.
+#   1. THE MAGNITUDE, above. TOM_DROP_RATIO is now the fitted law (K (1 - A0))
+#      evaluated at one stated reference setting -- accent 1.0, the TUNING pot
+#      at its centre, the TOM position of the circuit -- x1.060, against that
+#      cell's own measured median of x1.054. It is still the single knob that
+#      sets the size of the sweep.
 #   2. THE CLAMP. The old law scaled the excess by min(max(accent, 0), 1),
 #      which hands the FULL drop to an unaccented hit, where the machine does
 #      x1.06. Correcting the magnitude alone would have left the accent curve
@@ -667,6 +681,23 @@ TOM_DROP_TUNING_SPAN = 0.10
 # reported deviation, not an oversight: docs/tom-pitch-drop-correction.md.
 TOM_DROP_MS, TOM_DROP_STEPS = 60.0, 6
 
+# ---- the snare, reference section 3 -------------------------------------------
+# SD snappy filter: the pole is VERIFIED IN A SOURCE (reference 3's 2.75 kHz /
+# Q 0.7); the NUMERATOR is MEASURED -- a band-pass, not the high-pass 3 calls it
+# (17.22). The amp is the SNAPPY knob's measured curve at 5.0.
+SD_NOISE_HZ, SD_NOISE_Q, SD_NOISE_AMP = 2750.0, 0.7, 0.2059
+# SD high; TONE = this pair's ratio, and the RATIO here is MEASURED (17.24): the
+# machine at TONE 5.0 puts the upper partial 1.42x the lower (+3.0 dB), on both
+# the SNAPPY-up and SNAPPY-down file. Rev 6 shipped 0.394 (-8.1 dB) -- 11 dB of
+# the snare's front end missing. The pair is then scaled together to the kit's
+# own peak, which is unchanged at 0.46 FS.
+SD_HI_HZ, SD_HI_Q, SD_HI_AMP = 336.0, 9.9, 0.008865
+# SNAPPY = this peak x M_SDN's amp, reference 3. The RATE is MEASURED (17.25):
+# the machine's snappy burst measures T20 63-78 ms over six files; reference
+# 3's 15 ms is R186 x C51, the CHARGE path, and gives 34 ms. The peak holds the
+# noise share at the machine's 27.7 % with the new rate.
+SD_NOISE_TAU, SD_NOISE_PEAK = 30e-3, 0.3046
+
 # ---- the toms and congas, reference section 4's component-value table ---------
 # VERIFIED IN A SOURCE [SN p.6 "Voices are switched by SW8"]: the tom and the
 # conga of each pair are ONE resonator with a capacitor switched in or out, so
@@ -702,6 +733,53 @@ TOM_HW_TAU = {"LT": 0.0876, "LC": 0.0769, "MT": 0.0577, "MC": 0.0387,
 RS_LO_HZ, RS_LO_Q = 455.0, 6.7
 RS_HI_HZ, RS_HI_Q = 1786.0, 13.5
 CL_HZ, CL_Q = 2500.0, 200.0
+# THE TWO NETWORKS' RELATIVE DRIVE (#388). Exciting both bridged-T bodies with
+# the SAME pulse -- which is what the circuit does -- does NOT give the two
+# modes the circuit's relative level, because the bank's RAW numerator is
+# all-pole and the circuit's networks are band-pass. The two impulse responses
+# are normalised differently, and the difference is a pure function of f0 and Q:
+#
+#   bank, y[n] = x[n] + a1 y[n-1] + a2 y[n-2]:  peak ~ 1 / sin(w0)
+#   circuit, H(s) = H0 (w0/Q) s / (s^2 + (w0/Q) s + w0^2):  peak ~ H0 w0 / Q
+#
+# High re low, from the shipping constants above at 48 kHz:
+#   bank     20 log10( sin(w_lo) / sin(w_hi) )        = -11.80 dB
+#   circuit  20 log10( (f_hi/Q_hi) / (f_lo/Q_lo) )    =  +5.79 dB
+# so an equal pulse into both modes puts our high mode 17.60 dB below where the
+# same pulse into the same two networks puts the circuit's. That is a property
+# of the DISCRETISATION, not of the rimshot: it is the same 1/sin(w0) that any
+# all-pole mode carries, and it only becomes audible where one voice sums two
+# modes an octave and a half apart.
+#
+# HARDWARE-MEASURED [Fischer s/n 103852, rs8/RS.WAV; tools/probes/rs_guard_band.py
+# compare]: the machine's 1711 Hz mode sits +6.5 dB ABOVE its 457 Hz mode. The
+# CIRCUIT's closed form above predicts +5.79 dB with no recording in it at all.
+# The two agree to 0.7 dB, and rev 14 shipped -12.1 dB -- so the 18.7 dB defect
+# #388 scored is the discretisation's, and the circuit's own transfer function
+# names the correction before the reference is consulted.
+#
+# The correction is applied where the circuit applies its own summing weights:
+# on the excitation into the LOW network, as a right shift on its path word.
+# `att` is 3 bits of 6.02 dB, so 3 (18.06 dB) is the nearest step to 17.60 and
+# is 0.46 dB from it -- inside the +-2.4 dB the balance estimator declares for
+# itself. Attenuating the low mode rather than lifting the high one is not a
+# free choice: PEAK_RSX 0.06 already puts the low mode's tap at ~1.0 x full
+# scale (0.06 x 1/sin(w_lo) = 1.008), so the 8x has to come off the loud mode
+# or the tap saturates. CL disconnects P_RS1X entirely, so this reaches the
+# rimshot and nothing else.
+#
+# IT MOVES THE VOICE'S LEVEL, AND THAT IS REPAIRED SEPARATELY. The 455 Hz mode
+# was setting the rimshot's peak, so attenuating it takes 7.05 dB off the whole
+# voice: `drums_fx_render.py --balance` reports RS at 0.190 FS against its
+# 0.4286 share of Roland's chart. PEAK_RSG carries the x2.2532 back (see it);
+# separating the two is the point, because the balance estimator level-matches
+# and would have scored a rimshot 7 dB too quiet as fixed.
+#
+# 18.06 dB OF DRIVE BUYS 10.1 dB OF BALANCE, not 18: both taps go through the
+# swing VCA's tanh, and the low tap was sitting in its compression, so a 18 dB
+# smaller tap comes out only ~8 dB smaller. Measured, not argued -- `confirm`
+# reads the high mode at -12.14 dB re the low at att 0 and -2.04 dB at att 3.
+RS_LO_X_ATT = 3
 # VERIFIED IN A SOURCE [SN "this switching is provided to eliminate noise
 # leaking from IC20"]: both voices are gated by JFET Q74 through C112 0.022 uF
 # / R305 1 MOhm, a ~22 ms window. It is what stops the claves, whose resonator
@@ -713,6 +791,12 @@ RS_GATE_TAU = 22e-3
 # is R341 470 k / C134 0.033 uF, ~15 ms; the chart's decay is 25-35 ms, so
 # tau 12 ms (T20 28 ms) is the value that satisfies both.
 MA_HP_HZ, MA_HP_Q, MA_TAU = 10600.0, 2.3, 12e-3
+# ---- the cowbell, reference section 9 ------------------------------------------
+# CB band-pass: MEASURED -- fitted to the reference unit's 16 partials, closing
+# reference 9's open item (DR 0010)
+CB_BP_HZ, CB_BP_Q, CB_BP_AMP = 1100.0, 2.8, 0.02176
+# MEASURED: the reference tail is tau 98 ms
+CB_TAU_B = 100e-3
 # ---- cymbal, reference section 10 -------------------------------------------
 # VERIFIED IN A SOURCE [W14b section 4, "around 3440 Hz" and "around 7100 Hz";
 # SN p.13 values R56/R57/C13/C14 and R58/R59/C15/C16]: the six-square sum is
@@ -958,6 +1042,24 @@ _PROVENANCE_TABLE = (
         holdout=HOLDOUT_NONE, date="2026-09-18",
         notes="one file and one knob: the level was chosen against the same recording "
               "that defines the target, so nothing checks it out of sample"),),
+    (("RS_LO_X_ATT",), Provenance(
+        status=PROV_DERIVED, prose_tag="HARDWARE-MEASURED",
+        source="the two impulse responses' closed forms at RS_LO_HZ/Q and "
+               "RS_HI_HZ/Q -- bank 1/sin(w0) against circuit H0 w0/Q -- derived and "
+               "swept by tools/probes/rs_mode_drive.py",
+        justification="18.06 dB (att 3) on the pulse into the 455 Hz network, the "
+                      "nearest of the path word's 6.02 dB steps to the +17.60 dB the "
+                      "closed forms require; without it an equal pulse into both "
+                      "bridged-T bodies puts our high mode 11.80 dB below the low "
+                      "where the circuit's sits 5.79 dB above",
+        docs=("docs/scorecard/results/D10A.json",),
+        notes="DERIVED, and the comment above it carries HARDWARE-MEASURED: the +5.79 "
+              "dB the circuit's own transfer functions predict is CONFIRMED by the "
+              "Fischer s/n 103852 recording's +6.6 dB (rs8/RS.WAV), two independent "
+              "routes agreeing to 0.7 dB -- but the recording is the check, not the "
+              "source, and no value was fitted to it. Corrects a DISCRETISATION error, "
+              "not a rimshot parameter: 1/sin(w0) is carried by every all-pole mode and "
+              "only becomes audible where one voice sums two modes 1.5 octaves apart"),),
     (("PEAK_CLX",), Provenance(
         status=PROV_FITTED,
         source="model/drums_fx_render.py --balance against CHART_VPP (reference 1.6)",
@@ -1066,6 +1168,64 @@ _PROVENANCE_TABLE = (
         notes="the machine's relaxation tau is accent-dependent (13 / 24.5 / 33 ms at "
               "the three levels) and this law is not -- a reported deviation, not an "
               "oversight"),),
+    # ---- the snare (#385) ----
+    (("SD_NOISE_HZ", "SD_NOISE_Q", "SD_NOISE_AMP"), Provenance(
+        status=PROV_FITTED, prose_tag="VERIFIED IN A SOURCE",
+        source="docs/tr808-reference.md section 3 ('2-pole HP 2.75 kHz Q 0.7') and "
+               "docs/drum-verification.md section 8.1",
+        justification="the snappy noise path's pole (2.75 kHz, Q 0.7, unchanged from the "
+                      "source) read as a BAND-PASS instead of the source's stated "
+                      "high-pass, plus the amp the mode is driven at",
+        fitted_on="section 8.1: the same pole read as a band-pass fits the machine's "
+                  "measured noise-band spectrum to 1.9 dB weighted rms, against the "
+                  "high-pass's 5.2 dB, matching the best unconstrained single mode "
+                  "(2938 Hz Q 0.75, 1.90 dB) and within 0.1 dB of a two-mode cascade; "
+                  "SD_NOISE_AMP is set by drums_fx_render.py --balance to the SNAPPY "
+                  "knob's measured transfer curve at its 5.0 point (noise/tone amplitude "
+                  "0.619, -4.2 dB, mean over 25 files x five TONE positions)",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="none of the four labels fits this whole entry cleanly. The pole's numbers "
+              "(2.75 kHz, Q 0.7) ARE VERIFIED IN A SOURCE and unchanged; what's fitted is "
+              "the TOPOLOGY reading the source leaves open -- spec/NUMERIC-CONTRACT.md's "
+              "17.22 records that the schematic reading behind it is still not settled -- "
+              "and the amp, which the balance procedure sets rather than a raw sample. "
+              "FITTED is the closer of the four because both the topology choice and the "
+              "amp are searches against data, not a transcription of one; the pole's own "
+              "exact match to source is recorded here in the justification instead of "
+              "under its own status so the whole mode_writes() call keeps one entry"),),
+    (("SD_HI_HZ", "SD_HI_Q", "SD_HI_AMP"), Provenance(
+        status=PROV_FITTED,
+        source="docs/drum-verification.md section 8.6 ('The balance')",
+        justification="SD's second body mode: TONE is this pair's amplitude ratio over "
+                      "SD_LO's, and rev 6 shipped 0.394 (-8.1 dB) -- 11 dB of the snare's "
+                      "front end missing",
+        fitted_on="a(336)/a(173) on the SNAPPY-up and SNAPPY-down files at TONE 5.0 "
+                  "(1.43x / 1.41x, mean 1.42x, +3.0 dB); the pair is then scaled together "
+                  "to the kit's own peak, unchanged at 0.46 FS",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="the comment's bare 'MEASURED (17.24)' names the machine's ratio, not this "
+              "register value directly: SD_HI_AMP is set so the pair REPRODUCES that "
+              "ratio in this model, which is a fit against a measured target rather than "
+              "a sample expressed in the same units -- the same shape as TOM_DROP_RATIO. "
+              "SD_HI_HZ/SD_HI_Q are the circuit's existing body-mode frequency and Q, "
+              "carried into this entry because they share the one mode_writes() call and "
+              "its one comment; nothing in this file additionally sources them"),),
+    (("SD_NOISE_TAU", "SD_NOISE_PEAK"), Provenance(
+        status=PROV_FITTED,
+        source="docs/drum-verification.md section 8.6 ('The burst')",
+        justification="the SD noise envelope's rate: reference 3 infers 15.5 ms from "
+                      "R186 x C51, the CHARGE path, but the machine's discharge burst "
+                      "measures 30-40 ms",
+        fitted_on="short-time-RMS T20 of the snappy burst over six files -- SD2550 "
+                  "63.2 ms, SD5050 69.3, SD5075 67.5, SD7550 67.6, SD1050 67.4, SD5010 "
+                  "77.9 ms -- with a damped-envelope tau fit on the three whose R^2 >= "
+                  "0.97 (29.1 / 30.0 / 34.2 ms); SD_NOISE_PEAK holds the noise share at "
+                  "the machine's measured 27.7 %, section 8.1's SNAPPY-5.0 point",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="one corpus supplies both the target and the check, so nothing here is "
+              "held out. Contract item 17.25 records that whether the discharge path is "
+              "a different resistance from reference 3's 15.5 ms charge estimate, or "
+              "Q48's VCA law stretches the envelope, is still open"),),
     # ---- the toms and congas themselves ----
     (("TOM_PRESET",), Provenance(
         status=PROV_INFERRED, prose_tag="INFERRED",
@@ -1123,6 +1283,30 @@ _PROVENANCE_TABLE = (
         source="docs/tr808-reference.md section 8: R341 470 k / C134 0.033 uF (~15 ms) "
                "against the chart's 25-35 ms decay",
         justification="tau 12 ms (T20 28 ms) is the value that satisfies both"),),
+    # ---- the cowbell (#385) ----
+    (("CB_BP_HZ", "CB_BP_Q", "CB_BP_AMP"), Provenance(
+        status=PROV_FITTED,
+        source="spec/decision-records/0010-one-gate-per-oscillator.md",
+        justification="the cowbell's band-pass, closing reference 9's open item -- "
+                      "reference 5's 900 Hz / Q 4 was a choice and Sound On Sound's "
+                      "2.64 kHz is refuted",
+        fitted_on="a 2-pole band-pass fit to 16 identified partials of the reference "
+                  "unit, with the duty cycle and the two gates' relative level free "
+                  "(rms residual 2.8 dB over 16 partials)",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="DR 0010 does not mention a held-out check: the fit and its 2.8 dB "
+              "residual are reported on the same 16 partials, the same shape as "
+              "PEAK_RSX / PEAK_CYL's single-record fits"),),
+    (("CB_TAU_B",), Provenance(
+        status=PROV_FITTED,
+        source="spec/decision-records/0010-one-gate-per-oscillator.md",
+        justification="the cowbell tail, replacing the previous 30 ms",
+        fitted_on="least-squares fit of the log envelope over -3..-30 dB (tau 98 ms; "
+                  "T20 = 2.303 tau ~= 226 ms)",
+        holdout=HOLDOUT_NONE, date="2026-09-18",
+        notes="DR 0010 does not mention a held-out check, so nothing here is held "
+              "out either -- one record, and the fit and its report are the same "
+              "file"),),
     # ---- cymbal ----
     (("CY_LO_HZ",), Provenance(
         status=PROV_DERIVED, prose_tag="VERIFIED IN A SOURCE",
@@ -1435,31 +1619,16 @@ def kit_808() -> list:
     w += mode_writes(M_HATBP, 7117.0, 6.0, 0.0, BP)          # hats' band-pass, reference 10/11; tapped only
     w += mode_writes(M_OHHP, 7800.0, 2.5, 0.45, HP)          # OH high-pass, reference 11
     w += mode_writes(M_CHHP, 11700.0, 2.5, 0.69, HP)         # CH high-pass, reference 11
-    w += mode_writes(M_SDN, 2750.0, 0.7, 0.2059, BP)         # SD snappy filter: the pole is VERIFIED
-                                                             # IN A SOURCE (reference 3's 2.75 kHz /
-                                                             # Q 0.7); the NUMERATOR is MEASURED -- a
-                                                             # band-pass, not the high-pass 3 calls it
-                                                             # (17.22). The amp is the SNAPPY knob's
-                                                             # measured curve at 5.0.
+    w += mode_writes(M_SDN, SD_NOISE_HZ, SD_NOISE_Q, SD_NOISE_AMP, BP)   # SD snappy filter, reference 3
     w += mode_writes(M_CPBP, 1071.0, 1.6, 0.0, BP)           # CP band-pass, reference 7; tapped only
-    w += mode_writes(M_CBBP, 1100.0, 2.8, 0.02176, BP)         # CB band-pass: MEASURED -- fitted to the
-                                                             # reference unit's 16 partials, closing
-                                                             # reference 9's open item (DR 0010)
+    w += mode_writes(M_CBBP, CB_BP_HZ, CB_BP_Q, CB_BP_AMP, BP)   # CB band-pass, reference 9 (DR 0010)
     w += mode_writes(M_BD, BD_HZ, bd_decay_q(5.0), 0.003309, RAW)   # BD at DECAY 5.0. f0 and Q are both
                                                              # VERIFIED IN A SOURCE (reference 2's
                                                              # component-value f0 and its own Q table),
                                                              # not the chart's 56 Hz -- DR 0009; two
                                                              # sample sets corroborate at 48.8-51.6 Hz
     w += mode_writes(M_SDLO, 173.0, 16.3, 0.002673, RAW)      # SD low, later units, reference 3
-    w += mode_writes(M_SDHI, 336.0, 9.9, 0.008865, RAW)        # SD high; TONE = this pair's ratio, and
-                                                             # the RATIO here is MEASURED (17.24): the
-                                                             # machine at TONE 5.0 puts the upper partial
-                                                             # 1.42x the lower (+3.0 dB), on both the
-                                                             # SNAPPY-up and SNAPPY-down file. Rev 6
-                                                             # shipped 0.394 (-8.1 dB) -- 11 dB of the
-                                                             # snare's front end missing. The pair is
-                                                             # then scaled together to the kit's own
-                                                             # peak, which is unchanged at 0.46 FS.
+    w += mode_writes(M_SDHI, SD_HI_HZ, SD_HI_Q, SD_HI_AMP, RAW)   # SD high; TONE = this pair's ratio
     w += mode_writes(M_LT, *TOM_PRESET["LT"][:2], AMP_TOM["LT"], RAW)   # LT, reference 4
     w += mode_writes(M_MT, *TOM_PRESET["MT"][:2], AMP_TOM["MT"], RAW)   # MT, reference 4
     w += mode_writes(M_HT, *TOM_PRESET["HT"][:2], AMP_TOM["HT"], RAW)   # HT, reference 4
@@ -1478,13 +1647,7 @@ def kit_808() -> list:
     w += env_writes(E_BDX, BD, 0.1e-3, 0.25)
     w += env_writes(E_BDCLICK, BD, 0.0, 0.06, hold=48)       # the 1 ms pulse leaking through, reference 2
     w += env_writes(E_SDX, SD, 0.1e-3, 0.25)
-    w += env_writes(E_SDN, SD, 30e-3, 0.3046)                # SNAPPY = this peak x M_SDN's amp, reference 3.
-                                                             # The RATE is MEASURED (17.25): the machine's
-                                                             # snappy burst measures T20 63-78 ms over six
-                                                             # files; reference 3's 15 ms is R186 x C51,
-                                                             # the CHARGE path, and gives 34 ms. The peak
-                                                             # holds the noise share at the machine's
-                                                             # 27.7 % with the new rate.
+    w += env_writes(E_SDN, SD, SD_NOISE_TAU, SD_NOISE_PEAK)   # SNAPPY = this peak x M_SDN's amp, reference 3
     w += env_writes(E_LTX, LT, 0.1e-3, 0.25)
     w += env_writes(E_MTX, MT, 0.1e-3, 0.25)
     w += env_writes(E_HTX, HT, 0.1e-3, 0.25)
@@ -1494,7 +1657,7 @@ def kit_808() -> list:
                     final_tau=CP_FINAL_TAU)                  # L2: four strikes, the last at the fire level
     w += env_writes(E_CPTAIL, CP, CP_TAIL_TAU, 0.22)         # the tail, tau MEASURED (plan084)
     w += env_writes(E_CBA, CB, 5e-3, 0.5)                    # two-slope envelope, reference 9
-    w += env_writes(E_CBB, CB, 100e-3, 0.5)                  # MEASURED: the reference tail is tau 98 ms
+    w += env_writes(E_CBB, CB, CB_TAU_B, 0.5)                # cowbell tail, reference 9 (DR 0010)
     w += env_writes(E_RSX, CL, 0.1e-3, PEAK_RSX)             # the RS/CL exciter pulse
     w += env_writes(E_RSG, CL, RS_GATE_TAU, PEAK_RSG)        # Q74's ~22 ms gate, reference 5
     w += env_writes(E_CYS, CY, CY_TAU_SHORT, PEAK_CYS)       # CY high band, short fixed
@@ -1525,7 +1688,7 @@ def kit_808() -> list:
         # 5's Q62 -- "the distortion is the sound; do not skip it". The two
         # taps are distorted SEPARATELY where the circuit distorts their sum;
         # the cost of that is measured in test_808_acceptance.
-        path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+        path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT, dest=M_RS1),
         path_word(SRC_PULSE, E_RSX, dest=M_RS2),
         path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
         path_word(SRC_TAP + M_RS2, E_RSG, nl=NL_SWING, att=RS_ATT, dest=DEST_MIX),
@@ -1571,11 +1734,14 @@ def _kit_sha256(kit: list) -> str:
 
 
 def kit_808_rev11() -> list:
-    """The reference kit a revision-11 image plays: `kit_808()` with revision
-    13's three clap writes undone -- ENV_CTL[8] back to three strikes at period
-    480, no ENV_FRATE[8] write at all (the register does not exist there), and
-    ENV_RATE[9] back to the 47 ms tail. Every other write is `kit_808()`'s, in
-    its order.
+    """The reference kit a revision-11 image plays: `kit_808_rev14()` with
+    revision 14's three clap writes undone -- ENV_CTL[8] back to three strikes
+    at period 480, no ENV_FRATE[8] write at all (the register does not exist
+    there), and ENV_RATE[9] back to the 47 ms tail. Every other write is
+    revision 14's, in its order. It starts from revision 14 rather than the live
+    kit because revision 15 (#388) moved two rimshot writes the revision-11
+    image also never had: undoing one revision's changes at a time is what keeps
+    each `KitRefused` message pointing at the revision that actually moved.
 
     FROZEN BY HASH, CHECKED AT THE POINT OF USE: the result must hash to
     KIT808_REV11_SHA256, or this REFUSES (KitRefused). A later change to any
@@ -1587,7 +1753,7 @@ def kit_808_rev11() -> list:
     tail = A_ENV + E_CPTAIL * ENV_STRIDE
     undo = {burst: env_ctl(CP, 15, 0, 2, 480),          # three strikes, 10 ms apart
             tail + 2: rate_reg(47e-3)}                   # the R348 x C138 tail
-    kit = [(a, undo.get(a, v)) for a, v in kit_808() if a != burst + 3]
+    kit = [(a, undo.get(a, v)) for a, v in kit_808_rev14() if a != burst + 3]
     got = _kit_sha256(kit)
     if got != KIT808_REV11_SHA256:
         raise KitRefused(f"kit_808_rev11() hashes to {got[:12]}, not revision 11's "
@@ -1597,9 +1763,44 @@ def kit_808_rev11() -> list:
     return kit
 
 
+# ...and as revision 14 stated it, the kit the PUBLISHED R1 player preview was
+# built and measured with (fpga/release/r1-kit.json holds the same writes by
+# value). Revision 15 is #388's two rimshot writes; see `kit_808_rev14`.
+KIT808_REV14_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def kit_808_rev14() -> list:
+    """The reference kit a revision-14 image plays: `kit_808()` with revision
+    15's TWO rimshot writes undone (#388) -- PATH[15] back to an UNATTENUATED
+    pulse into the 455 Hz network, and ENV_PEAK[14] back to the gate peak that
+    went with it. Revision 15 adds and removes no write, so the address list and
+    the order are `kit_808()`'s exactly.
+
+    The two go together and neither may be undone alone: RS_LO_X_ATT without
+    PEAK_RSG's x2.2532 is a rimshot 7.05 dB below its share of Roland's chart,
+    which is a kit no release ever had. Both register fields exist in revision
+    14 and both new words would be ACCEPTED by that image -- which is exactly
+    why they have to be undone here rather than left to work by accident: a host
+    driving the published image gets the rimshot that image was measured with.
+
+    FROZEN BY HASH, CHECKED AT THE POINT OF USE, on the same contract as
+    `kit_808_rev11`: the result must hash to KIT808_REV14_SHA256 or this
+    REFUSES (KitRefused)."""
+    undo = {A_PATH + P_RS1X: path_word(SRC_PULSE, E_RSX, dest=M_RS1),
+            A_ENV + E_RSG * ENV_STRIDE + 1: peak_reg(PEAK_RSG_REV14)}
+    kit = [(a, undo.get(a, v)) for a, v in kit_808()]
+    got = _kit_sha256(kit)
+    if got != KIT808_REV14_SHA256:
+        raise KitRefused(f"kit_808_rev14() hashes to {got[:12]}, not revision 14's "
+                         f"KIT808 {KIT808_REV14_SHA256[:12]}: kit_808() changed a write "
+                         "the revision-14 image was verified with; freeze the literal "
+                         "image or cut a new release")
+    return kit
+
+
 # The kit each supported image revision plays. A host names the image it
 # drives; it does not assume the tree's.
-KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808}
+KITS_BY_REVISION = {11: kit_808_rev11, 14: kit_808_rev14, 15: kit_808}
 
 
 def poles_from_regs(a1_reg: int, a2_reg: int, fs: int = SR) -> tuple[float, float]:
@@ -1631,7 +1832,8 @@ def preset_writes(sound: str) -> list:
     if n == "RS":
         return (mode_writes(M_RS1, RS_LO_HZ, RS_LO_Q, 0.0, RAW)
                 + mode_writes(M_RS2, RS_HI_HZ, RS_HI_Q, 0.0, RAW)
-                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, dest=M_RS1)),
+                + [(A_PATH + P_RS1X, path_word(SRC_PULSE, E_RSX, att=RS_LO_X_ATT,
+                                               dest=M_RS1)),
                    (A_PATH + P_RS2X, path_word(SRC_PULSE, E_RSX, dest=M_RS2)),
                    (A_PATH + P_RS1OUT, path_word(SRC_TAP + M_RS1, E_RSG, nl=NL_SWING,
                                                  att=RS_ATT, dest=DEST_MIX)),

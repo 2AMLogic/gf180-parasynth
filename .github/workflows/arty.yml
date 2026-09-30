@@ -1,7 +1,24 @@
 name: Arty digital wrapper
 on: [push, pull_request, workflow_dispatch]
 jobs:
+  # Which suites this change can affect: tools/ci_changes.py. Every job below
+  # needs it and skips only on an explicit `none` or `docs`, so a failure here
+  # (no output) runs everything. A job skipped by its `if:` reports success,
+  # so a required check is never left waiting.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.classify.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: classify
+        run: python3 tools/ci_changes.py
+
   spi-i2s:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
