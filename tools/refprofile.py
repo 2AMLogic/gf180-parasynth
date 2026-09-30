@@ -18,9 +18,19 @@ something nobody can reconstruct.
 So the reference side is rendered once and frozen:
 
   * the AUDIO is cached (`refprofile/cache/`, gitignored) and hashed
-  * the HASHES, the plugin identity, every parameter the rig set, the rig's own
-    qualification verdict and the commit it was built at live in
-    `refprofile/profile.json`, which IS committed
+  * the HASHES, the plugin identity, every parameter the rig set, and the
+    commit it was built at live in `refprofile/profile.json`, which IS
+    committed and IS a hashed input (`tools/run_case.py`'s `DEPENDENCIES` and
+    `MODEL_INPUTS`) -- editing anything in it is supposed to look like a new
+    reference
+  * the PROSE -- the rig's own qualification verdict, per-clip rationale,
+    boilerplate readback captions -- lives in the sibling
+    `refprofile/profile-notes.json`, which is committed and is deliberately
+    NOT a hashed input. #129: a verdict string sitting inside `profile.json`
+    meant correcting a factual error in it invalidated every measurement
+    checked against that file's hash. `load_profile` merges the two back into
+    one in-memory dict, so every reader still sees `why`/`verdict` where it
+    always did; only what a *measurement* depends on is gated
   * `load_clip` reads the cache and REFUSES if it is absent or if its content
     hash is not the one in the profile. It never renders. Re-rendering is
     `--render` and nothing else, so it always produces a diff somebody reviews
@@ -99,6 +109,7 @@ what the reference can be compared against -- not because the reference has it.
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
 import hashlib
 import json
@@ -116,8 +127,26 @@ sys.path.insert(0, str(ROOT / "audition"))
 
 PROFILE_DIR = ROOT / "refprofile"
 PROFILE_JSON = PROFILE_DIR / "profile.json"
+#: The prose sibling (#129). Never named in `tools/run_case.py`'s
+#: `DEPENDENCIES` or `MODEL_INPUTS` -- that absence IS the fix. Computed next
+#: to whatever `PROFILE_JSON` resolves to (not hardcoded off `PROFILE_DIR`), so
+#: a monkeypatched `PROFILE_JSON` in a test or a `--render --out` carries its
+#: notes sibling with it.
+def notes_path_for(profile_json: pathlib.Path) -> pathlib.Path:
+    return profile_json.with_name(profile_json.stem + "-notes.json")
+
+
 CACHE = PROFILE_DIR / "cache"
 SCHEMA = "refprofile/1"
+SCHEMA_NOTES = "refprofile-notes/1"
+
+#: Keys that are commentary, not evidence: correctable prose that explains or
+#: judges what the evidence next to it means. Never grown ad hoc -- a future
+#: free-text key belongs in one of these three tables, not as a fourth split
+#: point, so `split_profile`/`merge_notes` stay each other's exact inverse.
+RIG_PROSE_KEYS = ("why", "verdict_source")
+DISQUALIFIED_PROSE_KEYS = ("verdict",)
+CLIP_PROSE_KEYS = ("why", "readback_note", "stimulus", "parts_note")
 
 OK, FAIL, REFUSED = 0, 1, 2
 
@@ -254,10 +283,14 @@ def clip_specs() -> list[dict]:
 #: under the host the rest of this profile was built with.
 #:
 #: `why` text that predates host scoping said "renders exact silence headlessly"
-#: with no host named. The wording below is host-scoped; the SAME sentence is
-#: still in the committed `refprofile/profile.json` and in `tools/run_case.py`,
-#: both of which are hashed inputs, so correcting it there is #129 and #101's
-#: re-run and not this table's job.
+#: with no host named. The wording below is host-scoped, and so is
+#: `disqualification_probe`'s `modeld` verdict; `tools/run_case.py`'s own
+#: NOT_RUN prose already named the host. The committed `refprofile/profile.json`
+#: carried the unscoped sentence for a while after this table was fixed,
+#: because it was a hashed input and correcting a prose string there meant
+#: re-rendering or invalidating every measurement checked against its hash
+#: (#129). #129 split the prose into `refprofile/profile-notes.json`, which is
+#: not hashed, and corrected the stale sentence there.
 #:
 #: **Not a capability map, deliberately.** #136 asks for a per-(rig, host,
 #: capability) verdict -- "Mini V3's cutoff is answerable, its envelope timing
@@ -695,12 +728,71 @@ def read_clip_file(path: pathlib.Path) -> tuple[np.ndarray, int]:
 # ===========================================================================
 # 4. Reading the profile -- no plugin, no host, no render
 # ===========================================================================
+def split_profile(prof: dict) -> tuple[dict, dict]:
+    """Separate a combined profile dict -- the shape `render()` still builds --
+    into (evidence, notes) (#129).
+
+    EVIDENCE is what a measurement depends on: clip hashes, commanded and
+    read-back parameters, rig identity. NOTES is prose that explains or judges
+    that evidence -- a verdict, a why, a boilerplate readback caption -- and is
+    exactly what must NOT be a hashed input: correcting a sentence in it must
+    never invalidate a measurement or trip `run_case.base_check`'s refusal.
+
+    `merge_notes` is this function's exact inverse: `merge_notes(*split_profile(p))`
+    reproduces `p`, so the split can never silently drop or duplicate a field."""
+    evidence = copy.deepcopy(prof)
+    notes: dict = {
+        "schema": SCHEMA_NOTES,
+        "what": "Prose commentary on refprofile/profile.json's evidence -- rig "
+                "disqualification verdicts, per-clip rationale, boilerplate "
+                "readback captions. Deliberately NOT a hashed input: "
+                "tools/run_case.py's DEPENDENCIES and MODEL_INPUTS name only "
+                "profile.json, so editing a sentence here never trips "
+                "base_check's StaleBase refusal or changes a provenance "
+                "record's model_input_hashes (#129).",
+        "rigs": {}, "disqualified": {}, "clips": {},
+    }
+    for name, r in evidence.get("rigs", {}).items():
+        n = {k: r.pop(k) for k in RIG_PROSE_KEYS if k in r}
+        if n:
+            notes["rigs"][name] = n
+    for name, d in evidence.get("disqualified", {}).items():
+        n = {k: d.pop(k) for k in DISQUALIFIED_PROSE_KEYS if k in d}
+        if n:
+            notes["disqualified"][name] = n
+    for cid, c in evidence.get("clips", {}).items():
+        n = {k: c.pop(k) for k in CLIP_PROSE_KEYS if k in c}
+        if n:
+            notes["clips"][cid] = n
+    return evidence, notes
+
+
+def merge_notes(evidence: dict, notes: dict) -> dict:
+    """`split_profile`'s inverse: fold NOTES' prose back into a copy of
+    EVIDENCE, in memory only. This never touches a file, so a caller that reads
+    the merged result (`--list`, a rejection's `why`) still sees exactly what
+    it saw before #129, while what is written to and hashed from
+    `refprofile/profile.json` carries none of it."""
+    merged = copy.deepcopy(evidence)
+    for name, n in notes.get("rigs", {}).items():
+        merged.setdefault("rigs", {}).setdefault(name, {}).update(n)
+    for name, n in notes.get("disqualified", {}).items():
+        merged.setdefault("disqualified", {}).setdefault(name, {}).update(n)
+    for cid, n in notes.get("clips", {}).items():
+        merged.setdefault("clips", {}).setdefault(cid, {}).update(n)
+    return merged
+
+
 def load_profile() -> dict:
     if not PROFILE_JSON.exists():
         raise Refused(f"no frozen reference profile at {_rel(PROFILE_JSON)}")
     d = json.loads(PROFILE_JSON.read_text(encoding="utf-8"))
     if d.get("schema") != SCHEMA:
         raise Refused(f"profile schema is {d.get('schema')!r}, this tool reads {SCHEMA!r}")
+    notes_path = notes_path_for(PROFILE_JSON)
+    if notes_path.exists():
+        notes = json.loads(notes_path.read_text(encoding="utf-8"))
+        d = merge_notes(d, notes)
     return d
 
 
@@ -907,8 +999,11 @@ def disqualification_probe() -> dict:
             "osc1_on_note48_silent": bool(am.is_silent(y)),
             "self_oscillation_peak": float(np.abs(ring).max()),
             "self_oscillation_silent": bool(am.is_silent(ring)),
-            "verdict": "renders exact silence headlessly, with the oscillator on AND "
-                       "with the filter self-oscillating. Not usable as a reference.",
+            "verdict": "renders exact silence UNDER DAWDREAMER 0.9.0, with the "
+                       "oscillator on AND with the filter self-oscillating. This "
+                       "verdict is about the (plugin, host) pair and not about the "
+                       "plugin: see `modeld-pedalboard`, which is NOT silent under "
+                       "pedalboard. Not usable as a reference under this host.",
         }
         del md
     except Exception as e:                                       # pragma: no cover
@@ -1184,7 +1279,8 @@ def main(argv=None) -> int:
                         "plugins and dawdreamer; produces a diff on purpose")
     g.add_argument("--list", action="store_true", help="what the profile holds")
     ap.add_argument("--out", default=None,
-                    help="write the rendered profile here instead of refprofile/profile.json")
+                    help="write the rendered evidence here instead of "
+                         "refprofile/profile.json (notes go to its -notes.json sibling)")
     a = ap.parse_args(argv)
 
     if a.list:
@@ -1196,11 +1292,15 @@ def main(argv=None) -> int:
         except Refused as why:
             print(f"REFUSED  {why}")
             return REFUSED
+        evidence, notes = split_profile(prof)
         dest = pathlib.Path(a.out) if a.out else PROFILE_JSON
+        notes_dest = notes_path_for(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(json.dumps(prof, indent=1, sort_keys=False) + "\n", encoding="utf-8")
-        print(f"\nwrote {dest} -- {len(prof['clips'])} clips. "
-              f"Review the diff: this file IS the reference.")
+        dest.write_text(json.dumps(evidence, indent=1, sort_keys=False) + "\n", encoding="utf-8")
+        notes_dest.write_text(json.dumps(notes, indent=1, sort_keys=False) + "\n", encoding="utf-8")
+        print(f"\nwrote {dest} and {notes_dest} -- {len(evidence['clips'])} clips. "
+              f"Review the diff: {dest.name} IS the reference; {notes_dest.name} is "
+              f"commentary and is never a hashed input (#129).")
         return OK
 
     code, lines = verify()

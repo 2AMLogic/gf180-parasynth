@@ -435,14 +435,95 @@ def test_the_committed_profile_is_internally_consistent():
 
 
 def test_every_rig_the_profile_rejects_says_why():
+    """#129: `why` no longer lives in `profile.json` itself -- it is in the
+    `profile-notes.json` sibling, which `load_profile()` merges back in. Going
+    through the real accessor here, rather than a raw `json.loads`, is the
+    point: this test must keep passing however the two files are shaped
+    underneath it."""
     real = ROOT / "refprofile" / "profile.json"
     if not real.exists():
         pytest.skip("no committed profile in this tree")
-    prof = json.loads(real.read_text())
+    prof = rp.load_profile()
     for name, r in prof["rigs"].items():
         assert r.get("why"), f"{name} has a verdict and no reason"
         if not r["qualified"]:
             assert name not in {c["rig"] for c in prof["clips"].values()}
+
+
+def test_the_committed_profile_json_carries_no_prose_the_split_moved_out():
+    """The other half of #129: `profile.json` -- the file that is actually a
+    hashed input (`tools/run_case.py`'s `DEPENDENCIES`/`MODEL_INPUTS`) -- must
+    not have regrown a prose key the split removed, or correcting a sentence
+    silently starts invalidating measurements again."""
+    real = ROOT / "refprofile" / "profile.json"
+    if not real.exists():
+        pytest.skip("no committed profile in this tree")
+    prof = json.loads(real.read_text())
+    for name, r in prof.get("rigs", {}).items():
+        for k in rp.RIG_PROSE_KEYS:
+            assert k not in r, (name, k)
+    for name, d in prof.get("disqualified", {}).items():
+        for k in rp.DISQUALIFIED_PROSE_KEYS:
+            assert k not in d, (name, k)
+    for cid, c in prof.get("clips", {}).items():
+        for k in rp.CLIP_PROSE_KEYS:
+            assert k not in c, (cid, k)
+
+
+def test_the_committed_profile_notes_carries_the_prose_the_split_moved_out():
+    """The split's other direction: every rejected rig and every clip must have
+    SOMEWHERE its `why` lives, or the prose was dropped rather than moved."""
+    notes_path = ROOT / "refprofile" / "profile-notes.json"
+    real = ROOT / "refprofile" / "profile.json"
+    if not real.exists() or not notes_path.exists():
+        pytest.skip("no committed profile in this tree")
+    prof = json.loads(real.read_text())
+    notes = json.loads(notes_path.read_text())
+    assert notes["schema"] == rp.SCHEMA_NOTES
+    for name in prof.get("rigs", {}):
+        assert notes["rigs"].get(name, {}).get("why"), name
+    for cid in prof.get("clips", {}):
+        assert notes["clips"].get(cid, {}).get("why"), cid
+
+
+def test_split_profile_and_merge_notes_are_exact_inverses():
+    """The property the whole split depends on: separating evidence from prose
+    and folding the prose back must reproduce the original dict exactly, or
+    some field is quietly duplicated or lost on every `--render`."""
+    combined = {
+        "schema": rp.SCHEMA, "clips": {
+            "a/b": {"rig": "a", "why": "a reason", "readback_note": "a caption",
+                     "sha256": "deadbeef"}},
+        "rigs": {"a": {"qualified": True, "why": "a rig reason", "host": "x"}},
+        "disqualified": {"a": {"verdict": "not usable", "peak": 0.0}},
+    }
+    evidence, notes = rp.split_profile(combined)
+    assert "why" not in evidence["rigs"]["a"]
+    assert "why" not in evidence["clips"]["a/b"]
+    assert "readback_note" not in evidence["clips"]["a/b"]
+    assert "verdict" not in evidence["disqualified"]["a"]
+    assert evidence["rigs"]["a"]["host"] == "x"
+    assert evidence["clips"]["a/b"]["sha256"] == "deadbeef"
+    assert evidence["disqualified"]["a"]["peak"] == 0.0
+    assert notes["rigs"]["a"]["why"] == "a rig reason"
+    assert notes["clips"]["a/b"]["why"] == "a reason"
+    assert notes["clips"]["a/b"]["readback_note"] == "a caption"
+    assert notes["disqualified"]["a"]["verdict"] == "not usable"
+    assert rp.merge_notes(evidence, notes) == combined
+
+
+def test_merge_notes_is_read_only_and_never_touches_disk(profile):
+    """`load_profile()` merges in memory only. A hand-edited verdict in
+    `profile-notes.json` must never rewrite `profile.json`'s bytes as a side
+    effect of merely reading it."""
+    prof, _dest = profile
+    before = rp.PROFILE_JSON.read_bytes()
+    notes = {"schema": rp.SCHEMA_NOTES, "rigs": {"fake": {"why": "a stub reason"}},
+              "disqualified": {}, "clips": {}}
+    rp.notes_path_for(rp.PROFILE_JSON).write_text(json.dumps(notes), encoding="utf-8")
+    merged = rp.load_profile()
+    assert merged["rigs"]["fake"]["why"] == "a stub reason"
+    assert rp.PROFILE_JSON.read_bytes() == before
 
 
 def test_the_profile_records_what_produced_it():

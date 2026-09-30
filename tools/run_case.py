@@ -2674,6 +2674,12 @@ def _est_value(e):
 # Deliberately not run, with the reason. `--list` prints this table and the PR
 # carries it: a case nobody attempted has to say so, or "not run" and "we
 # forgot" become the same entry.
+#
+# This prose sits inside `tools/run_case.py`, itself a MODEL_INPUT -- editing
+# one of these strings changes this file's hash on every future provenance
+# record, same as any other source edit. It does NOT trip `base_check`'s
+# StaleBase refusal, because this file is not in DEPENDENCIES: see the
+# rationale on DEPENDENCIES above (#129).
 NOT_RUN = {}
 
 # These twenty entries used to read "out of scope for this reference profile,
@@ -2965,6 +2971,26 @@ class StaleBase(Exception):
 # branch that has to run the board -- and CLAUDE.md is explicit that an
 # unsatisfiable gate is worse than no gate. It is hashed onto every record
 # through MODEL_INPUTS instead, so a stale result is still detectable.
+#
+# `refprofile/profile.json` names the EVIDENCE-ONLY file (#129): clip hashes,
+# commanded and read-back parameters, rig identity. Its prose sibling,
+# `refprofile/profile-notes.json` (verdict/why/readback-caption text), is
+# deliberately NOT here and never will be -- that split is the fix for the
+# incident #129 opens with, where a verdict string living inside the hashed
+# file meant correcting a factual error in it refused every measurement
+# checked against that file's hash for the wrong reason. `refprofile.
+# load_profile()` merges the two back in memory for a reader; nothing here
+# reads the merged form, only the evidence file's bytes.
+#
+# `tools/run_case.py` (this file) is NOT here either, although its own
+# `NOT_RUN` table carries prose of the same shape (why a case is not run).
+# Unlike `profile.json`, this file's prose sits inside a MODEL_INPUT, not a
+# DEPENDENCY: editing a `NOT_RUN` string changes this file's hash in every
+# future provenance record, which is a CORRECT statement about a source file
+# that changed -- this is code, not frozen evidence, and every edit to it is
+# supposed to look like a new tool. It only becomes #129's problem if this
+# file is ever added to DEPENDENCIES, which would gate a batch's refusal on
+# a comment edit. Keep it out.
 DEPENDENCIES = ("model/drums_fx.py", "model/voice_fx.py", "model/audio_measure.py",
                 "model/drum_verify.py", "refprofile/profile.json",
                 "docs/scorecard/cases.csv")

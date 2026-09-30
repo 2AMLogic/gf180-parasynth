@@ -4,12 +4,27 @@ Reference audio rendered **once** through a qualified rig, cached, hashed, and
 described in a file that is committed.
 
 **The profile and frozen audio archive are committed.** `profile.json` holds the
-hashes, the plugin's identity, every parameter the rig set, the rig's own
-qualification verdict and the commit it was built at. The WAVs live in
-`cache/`, which is gitignored. `frozen-cache.zip` contains the exact sixteen
-previously frozen WAVs, recovered from the earlier verification worktree.
-Restoration checks every file's size and SHA-256 against `profile.json` before
-writing any clip. It needs no plugin and does not change the reference.
+hashes, the plugin's identity, every parameter the rig set, and the commit it
+was built at. The WAVs live in `cache/`, which is gitignored. `frozen-cache.zip`
+contains the exact sixteen previously frozen WAVs, recovered from the earlier
+verification worktree. Restoration checks every file's size and SHA-256 against
+`profile.json` before writing any clip. It needs no plugin and does not change
+the reference.
+
+**Evidence and commentary are split across two committed files (#129).**
+`profile.json` holds only what a measurement depends on — clip hashes,
+commanded and read-back parameters, rig identity — and is one of
+`tools/run_case.py`'s `DEPENDENCIES`/`MODEL_INPUTS` (a hashed input: a batch
+whose copy differs from `origin/main`'s refuses). The sibling
+`profile-notes.json` holds the prose: the rig's own qualification verdict,
+per-clip rationale, boilerplate readback captions. It is committed and it is
+**deliberately not named in either tuple**, so correcting a factual error in a
+verdict string never invalidates a measurement or forces a re-render.
+`refprofile.load_profile()` merges the two back into one in-memory dict, so
+every reader (`--list`, a rejection's `why`) still sees exactly what it saw
+before the split; only what is written to and hashed from `profile.json` itself
+carries none of it. `tools/refprofile.py --render` writes both files together,
+from one `split_profile()` call, so they cannot drift into different clip sets.
 
 ```sh
 python tools/refprofile_restore.py      # restore the committed exact audio
@@ -66,7 +81,7 @@ is the mistake #123 found.
 | rig | host | | why |
 |---|---|---|---|
 | **Surge XT 1.2.3** Type 2 | `dawdreamer` | ✅ | open source; its LP Vintage Ladder subtype Type 2 is `sst-filters`' `VintageLadder::Huov` — Huovilainen's DAFx-04 model, the same paper DR 0001 implements. The **only** reference here whose cutoff is commanded in Hz and reads back in Hz |
-| **Moog Model D** | `dawdreamer` | ❌ | **renders exact silence under `dawdreamer` 0.9.0.** Measured, not inherited: peak 0.0 with oscillator 1 on at full level and the filter wide open, and peak 0.0 with the filter self-oscillating. The rig builds and its pins hold. This verdict is about the (plugin, host) pair and **not** about the plugin — see the row below. `profile.json` and `tools/run_case.py` still carry the unscoped wording ("renders exact silence headlessly", no host named); both are hashed inputs, so correcting them there is #129 and #101's re-run |
+| **Moog Model D** | `dawdreamer` | ❌ | **renders exact silence under `dawdreamer` 0.9.0.** Measured, not inherited: peak 0.0 with oscillator 1 on at full level and the filter wide open, and peak 0.0 with the filter self-oscillating. The rig builds and its pins hold. This verdict is about the (plugin, host) pair and **not** about the plugin — see the row below. `profile-notes.json`'s `disqualified.modeld.verdict` and `rigs.modeld.why` now carry this same host-scoped wording (#129 corrected the unscoped "renders exact silence headlessly" that used to live in `profile.json` itself — a prose edit, and it no longer touches a hashed input) |
 | **Moog Model D** | `pedalboard` | ⏳ **no verdict yet** | **NOT silent under `pedalboard`** — peak 1.000, 8.57 % of samples at the rail, strongest partial 131.00 Hz for a commanded MIDI 60 (261.63 Hz, so an octave down — the same default as Mini V3, which is itself the exact reverse: it sounds under dawdreamer and is silent under pedalboard). Both of those disqualify the **default patch**, so `reference_rigs.ModelDPedalboardRig` (#124) exists to try to correct them through Model D's own parameters and measure whether it worked: it sweeps Osc 1 Range and selects the position that *sounds* the commanded note, and steps the master volume to the loudest setting with zero samples at the rail. `qualified` is **`None`, not `false`** — no operator has run it on a machine with the bundle. Run `python tools/qualify_modeld_pedalboard.py`; see [`docs/pedalboard-rig.md`](../docs/pedalboard-rig.md). **What is missing narrowed on 2026-09-30:** the *host* is no longer part of it — `pedalboard` 0.9.25 installs cleanly from a wheel on Linux / CPython 3.12 into an isolated venv, the rig's API surface has been read against that install and holds, and the refusal on this fleet is now `Moog Model D is not installed at …` rather than `no pedalboard on this machine`. The one remaining blocker is the **licensed Model D binary**, which no venv produces |
 | **Arturia Mini V3** | `dawdreamer` | ❌ | makes sound under this host (it is **silent** under `pedalboard`), and every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (`reference_compare.calibrate_knob`); its **envelope** knobs cannot, because nothing here maps a Mini V3 envelope knob to a time. Its Range control also defaults an octave down — note 48 reads 65.42 Hz until parameter 45 is written |
 | **u-he Diva** | `dawdreamer` | ❌ | found running unlicensed and inserting clicks (`docs/reference-integrity.md` §1), and is a general analogue-modelling synth rather than a Minimoog emulation |
@@ -224,10 +239,14 @@ constant withdrew a whole column of #61.)
   new capture audio must have a reviewed profile identity before replacing it.
 - **A result that used a clip names it**, by clip id and content hash.
   `tools/run_case.py` writes both into every record's `provenance.inputs`.
-- **`profile.json` is generated by `--render`, not edited by hand.** It is also
-  one of `tools/run_case.py`'s `DEPENDENCIES`: a batch whose profile differs
-  from `origin/main` refuses, because a result measured against a different
-  frozen reference is not comparable with one measured against this one.
+- **`profile.json` and `profile-notes.json` are generated together by
+  `--render`, not edited by hand.** Only `profile.json` is one of
+  `tools/run_case.py`'s `DEPENDENCIES`: a batch whose profile differs from
+  `origin/main` refuses, because a result measured against a different frozen
+  reference is not comparable with one measured against this one. `profile-
+  notes.json` is deliberately absent from `DEPENDENCIES` and `MODEL_INPUTS`
+  (#129): its prose is commentary, not evidence, and correcting it must never
+  refuse a batch or invalidate a measurement.
 - **Re-rendering is a decision, and its diff is the review.** If a clip's hash
   changes, something about the reference changed, and the diff says what.
 - **A verdict belongs to a (rig, host) pair and is never overwritten by the other
