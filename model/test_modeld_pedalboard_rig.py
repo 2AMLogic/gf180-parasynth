@@ -510,6 +510,55 @@ def test_a_missing_bundle_is_refused_before_the_host_is_asked(monkeypatch, tmp_p
         Rig()
 
 
+def test_a_bundle_that_exists_but_will_not_load_is_refused_not_raised(
+        monkeypatch, tmp_path):
+    """`os.path.exists` is TRUE for a `.vst3` directory holding one byte, so the
+    check above does not catch a stub. The load itself must therefore be the
+    precondition, and its failure must arrive as `RigRefusal` -- the outcome the
+    tool can report -- rather than as whatever the host chose to raise."""
+    Rig = install(monkeypatch, tmp_path)
+    import pedalboard                                          # the fake host
+    monkeypatch.setattr(pedalboard, "load_plugin",
+                        lambda *a, **kw: (_ for _ in ()).throw(
+                            ImportError("unsupported plugin format or scan "
+                                        "failure")))
+    with pytest.raises(rq.RigRefusal, match="could not load it") as e:
+        Rig()
+    assert "unsupported plugin format" in str(e.value), \
+        "the host's own message is the evidence and must not be swallowed"
+    assert e.value.qualification is None, \
+        "nothing was measured, so there is no qualification to attach -- which " \
+        "is what makes the tool print NO-VERDICT instead of reopening #122"
+
+
+def test_the_diagnosis_names_a_stub_bundle_and_the_wrong_platform_layout(
+        tmp_path, monkeypatch):
+    """The injected-defect control, reproducing the bundle actually found at
+    `/tmp/mdb/Model D.vst3`: one byte, macOS layout, read on Linux."""
+    b = tmp_path / "Model D.vst3"
+    (b / "Contents" / "MacOS").mkdir(parents=True)
+    (b / "Contents" / "MacOS" / "Model D").write_bytes(b"x")
+    monkeypatch.setattr(rr.sys, "platform", "linux")
+    d = rr.bundle_diagnosis(str(b))
+    assert "Contents/x86_64-linux/, which is ABSENT" in d
+    assert "Contents/MacOS/" in d and "ANOTHER PLATFORM" in d
+    assert "is 1 bytes" in d and "STUB" in d
+
+
+def test_the_diagnosis_does_not_cry_stub_over_a_plausible_bundle(
+        tmp_path, monkeypatch):
+    """The other direction, because a diagnosis that says STUB for every bundle
+    carries no information. A correctly-laid-out bundle with a real-sized binary
+    must trip neither the platform nor the size finding."""
+    b = tmp_path / "Model D.vst3"
+    (b / "Contents" / "x86_64-linux").mkdir(parents=True)
+    (b / "Contents" / "x86_64-linux" / "Model D.so").write_bytes(b"\0" * 200_000)
+    monkeypatch.setattr(rr.sys, "platform", "linux")
+    d = rr.bundle_diagnosis(str(b))
+    assert "STUB" not in d and "ANOTHER PLATFORM" not in d
+    assert "Contents/x86_64-linux/, which is present" in d
+
+
 def test_duplicate_parameter_indices_are_refused(monkeypatch, tmp_path):
     """An index-keyed pin table is meaningless if two parameters claim the same
     index: every pin at that index becomes a coin toss."""
