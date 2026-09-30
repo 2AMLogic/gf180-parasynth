@@ -49,7 +49,9 @@ name: acceptance
 #     of a slow machine, not of one test that grew.
 #   - The cap is right where it should be. 20 minutes against a measured
 #     worst case of 12.3 is 1.6x headroom; raising it would only slow the
-#     signal from a genuinely hung test.
+#     signal from a genuinely hung test. (That was on Blacksmith. Since
+#     2026-09-30 the job is back on GitHub-hosted and the cap is 35 -- see
+#     the comment on `timeout-minutes` below.)
 #
 # And the two triggers are not redundant in the first place: `push` verifies
 # the branch tip as committed, `pull_request` verifies it merged into the base.
@@ -78,14 +80,18 @@ on:
 
 jobs:
   acceptance:
-    # A branch that has not rebased past PR #186 still carries
-    # `runs-on: ubuntu-latest` in its own copy of this file and will keep
-    # hitting the 20-minute cap until it does -- the runner class comes from
-    # the branch's workflow file, not from main's.
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
-    # Measured worst case on this runner class is 12.3 min (n=49). See the
-    # header comment before changing this.
-    timeout-minutes: 20
+    # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
+    # outage and the operator's move of every public repo off Blacksmith (D5).
+    # The header's measurement is why the cap moves with it: on the hosted
+    # class this job ran 8.9 / 15.3 / 20.0 min (min/median/max, n=51) and 20%
+    # of runs hit the old 20-minute cap, while the Blacksmith worst case was
+    # 12.3 min (n=49; 14 min over the last 40 runs). 35 minutes is ~1.75x the
+    # hosted observed max -- the same headroom ratio 20 gave over 12.3 on
+    # Blacksmith -- so a hosted run is not cancelled for being on a slower
+    # machine. Re-measure with tools/ci_acceptance_timing.py once hosted runs
+    # accumulate and tighten.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
