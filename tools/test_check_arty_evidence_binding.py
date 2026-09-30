@@ -59,7 +59,8 @@ def test_the_bound_record_is_exactly_what_build_arty_accepts():
     import build_arty as build
     for wrapper, path in gate.bound_bindings():
         assert gate.drift(path) == []
-        build.validate_verification(path, build.sources() + build.roms())
+        build.validate_verification(path, build.sources() + build.roms(),
+                                    build.IMAGE_CONFIGS[build.TREE_IMAGE])
 
 
 def test_a_wrapper_with_no_bound_or_missing_record_refuses_rather_than_passes(tmp_path, capsys):
@@ -88,15 +89,21 @@ def test_superseded_records_are_data_and_never_a_failure(capsys):
     # exactly the latter.
     L2 = ["rtl-sketch/drum_dp.v", "rtl-sketch/drum_kit.v",
           "rtl-sketch/drum_regs.v", "rtl-sketch/synth_top.v"]
-    assert records["fpga/reports/arty/uart-clean/verification.json"] == sorted(
-        L2 + ["rtl-sketch/voice_dp.v"])
+    # R2's compiled changes (fpga/release/R2.md): the S_WIN skip, the rectangle
+    # headroom and the #354 ladder width. Every older record also lacks these.
+    R2 = ["rtl-sketch/ladder_dp_n.v", "rtl-sketch/polyblep_saw_pair.v", "rtl-sketch/voice_dp.v"]
+    u = lambda *xs: sorted(set().union(*xs))                           # noqa: E731
+    assert records["fpga/reports/arty/uart-clean/verification.json"] == u(
+        L2, ["rtl-sketch/voice_dp.v"], R2)
     V = ["rtl-sketch/voice_dp.v"]            # polyBLAMP (revision 13) since then
-    assert records["fpga/reports/arty/drift-clean/verification.json"] == sorted(L2 + V)
+    assert records["fpga/reports/arty/drift-clean/verification.json"] == u(L2, V, R2)
     # the two parents of the revision-14 tree: polyBLAMP without L2, and L2
     # without polyBLAMP (whose drum comments were renumbered 13 -> 14 after it)
-    assert records["fpga/reports/arty/shark-blamp-clean/verification.json"] == L2
-    assert records["fpga/reports/arty/l2-clean/verification.json"] == [
-        "rtl-sketch/drum_dp.v", "rtl-sketch/drum_regs.v", "rtl-sketch/voice_dp.v"]
+    assert records["fpga/reports/arty/shark-blamp-clean/verification.json"] == u(L2, R2)
+    assert records["fpga/reports/arty/l2-clean/verification.json"] == u(
+        ["rtl-sketch/drum_dp.v", "rtl-sketch/drum_regs.v", "rtl-sketch/voice_dp.v"], R2)
+    # R1's proof (revision 14) differs from the R2 tree in exactly R2's changes
+    assert records["fpga/reports/arty/rev14-clean/verification.json"] == R2
     bound = {str(p.relative_to(ROOT)) for _, p in gate.bound_bindings()}
     assert not (bound & set(records)), "the bound record is not history"
     assert gate.main(["--list-historical"]) == 0
@@ -125,6 +132,12 @@ R0_MOVED = {
     "rtl-sketch/drum_regs.v": "clap final strike, contract rev 14",
     "rtl-sketch/synth_top.v": "ENV_FRATE, contract rev 14",
     "rtl-sketch/voice_dp.v": "per-oscillator drift (6.11)",
+    # R2's compiled changes (fpga/release/R2.md), which postdate R0 as they
+    # postdate every older record: 2f11792 (#354, the ladder's x*gain held in
+    # 26 bits) and c6c9440 (the pulse2x rectangle headroom, 0.74). R2's third,
+    # the S_WIN skip in voice_dp.v, is a file already named above.
+    "rtl-sketch/ladder_dp_n.v": "#354 ladder x*gain in 26 bits (R2)",
+    "rtl-sketch/polyblep_saw_pair.v": "pulse2x rectangle headroom 0.74 (R2)",
     # publication scope only (see _check_r0_binding): 383f10b, #315, which
     # landed 2026-09-26, three days after 62392bd published R0
     "fpga/boards/arty-a7-100.xdc": "#315 UART-sync constraints bind g_uart.u_uart",

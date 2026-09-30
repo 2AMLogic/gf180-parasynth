@@ -99,17 +99,30 @@ def _git_blob_sha(commit: str, rel: str) -> str | None:
 
 
 # ---- the image ------------------------------------------------------------------
-def image_identity(pub_dir: Path | None = None) -> dict:
+def image_identity(pub_dir: Path | None = None, *, config: dict | None = None,
+                   verification: Path | None = None, frozen: dict | None = None,
+                   frozen_at: str | None = None, frozen_name: str = "R1 candidate") -> dict:
+    """The published image, every artifact agreeing. The keyword arguments
+    name ANOTHER image's configuration, digital proof and frozen sources
+    (fpga/release/r2_release.py); left out, they are R1's, read at call time."""
     import build_arty as ba
     import ext_io_timing as iot
     import publish_arty as pa
     import r1_candidate as rc
 
     pub_dir = Path(pub_dir or PUB_DIR)      # read at call time (tests substitute it)
+    config = config if config is not None else ba.CONFIG
+    verification = Path(verification or VERIFICATION)
+    if frozen is None:
+        cand = _json(CANDIDATE)
+        frozen = {**cand["rtl"]["sources"], **cand["rtl"]["roms"], **cand["rtl"]["constraints"]}
+        if cand["rtl"]["frozen_at"] != rc.RTL_FROZEN_AT:
+            raise Refused("r1-candidate.json names a different freeze commit than r1_candidate.py")
+    frozen_at = frozen_at or rc.RTL_FROZEN_AT
     pub = _json(pub_dir / "publication.json")
     rep = _json(pub_dir / "report.json")
-    if pub.get("configuration") != ba.CONFIG or rep.get("configuration") != ba.CONFIG:
-        raise Refused(f"publication configuration {pub.get('configuration')} is not {ba.CONFIG}")
+    if pub.get("configuration") != config or rep.get("configuration") != config:
+        raise Refused(f"publication configuration {pub.get('configuration')} is not {config}")
     if pub.get("part") != ba.PART:
         raise Refused(f"publication part {pub.get('part')} is not {ba.PART}")
     if pub.get("state") != "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED":
@@ -158,25 +171,22 @@ def image_identity(pub_dir: Path | None = None) -> dict:
                       f"{dsp.get('reason') or 'differs from publication.json'}")
 
     # the digital proof the publisher bound
-    if sha(_need(VERIFICATION)) != pub["verification"]["record_sha256"]:
-        raise Refused("the publication's verification record is not rev14-clean on disk")
+    if sha(_need(verification)) != pub["verification"]["record_sha256"]:
+        raise Refused(f"the publication's verification record is not {_rel(verification)} "
+                      "on disk")
 
-    # the sources: exactly the frozen R1 candidate's, verified at the freeze
-    cand = _json(CANDIDATE)
-    frozen = {**cand["rtl"]["sources"], **cand["rtl"]["roms"], **cand["rtl"]["constraints"]}
+    # the sources: exactly the frozen candidate's, verified at the freeze
     if pub["source_sha256"] != frozen:
         diff = sorted(k for k in set(frozen) | set(pub["source_sha256"])
                       if frozen.get(k) != pub["source_sha256"].get(k))
-        raise Refused(f"the image's compiled inputs are not the frozen R1 candidate's: {diff}")
-    if cand["rtl"]["frozen_at"] != rc.RTL_FROZEN_AT:
-        raise Refused("r1-candidate.json names a different freeze commit than r1_candidate.py")
+        raise Refused(f"the image's compiled inputs are not the frozen {frozen_name}'s: {diff}")
     for f, h in pub["source_sha256"].items():
-        got = _git_blob_sha(rc.RTL_FROZEN_AT, f)
+        got = _git_blob_sha(frozen_at, f)
         if got != h:
             raise Refused(f"{f}: the image was built from {h[:12]}, but the freeze commit "
-                          f"{rc.RTL_FROZEN_AT[:12]} holds {got[:12] if got else 'nothing'}")
+                          f"{frozen_at[:12]} holds {got[:12] if got else 'nothing'}")
     xdc = subprocess.run(["git", "-C", str(ROOT), "show",
-                          f"{rc.RTL_FROZEN_AT}:fpga/boards/arty-a7-100.xdc"],
+                          f"{frozen_at}:fpga/boards/arty-a7-100.xdc"],
                          capture_output=True, text=True).stdout
     drift = iot.xdc_contract_drift(xdc, exceptions=pub["output_delay_exceptions"]) \
         + iot.uart_gate_drift(xdc)
@@ -208,12 +218,12 @@ def image_identity(pub_dir: Path | None = None) -> dict:
         "dsp_feedback_review": {"complete": dsp["complete"], "verdict": dsp["verdict"],
                                 "targets": dsp["targets"],
                                 "routed_dcp_sha256": dsp["routed_dcp_sha256"]},
-        "digital_verification": {"record": _rel(VERIFICATION),
+        "digital_verification": {"record": _rel(verification),
                                  "record_sha256": pub["verification"]["record_sha256"],
                                  "periods": pub["verification"]["periods"]},
         "remaining_review": pub["remaining_review"],
         "source_sha256": pub["source_sha256"],
-        "source_commit": rc.RTL_FROZEN_AT,
+        "source_commit": frozen_at,
         "source_commit_verified": True,
     }
 
@@ -237,25 +247,27 @@ EXT_IO_INSTRUMENT_COMMIT = "e0dd32902dffa7005967954aa8f16cef01f655f9"
 _PINNED: dict = {}
 
 
-def ext_io_instrument(instrument_sha256: str):
-    """fpga/ext_io_extract.py as of EXT_IO_INSTRUMENT_COMMIT, with its own
-    ext_io_timing; REFUSED unless it is the instrument the record names."""
+def ext_io_instrument(instrument_sha256: str, commit: str | None = None):
+    """fpga/ext_io_extract.py as of `commit` (default EXT_IO_INSTRUMENT_COMMIT,
+    R1's), with its own ext_io_timing; REFUSED unless it is the instrument the
+    record names."""
     import importlib.util
     import tempfile
-    if instrument_sha256 in _PINNED:
-        return _PINNED[instrument_sha256]
+    commit = commit or EXT_IO_INSTRUMENT_COMMIT
+    if (commit, instrument_sha256) in _PINNED:
+        return _PINNED[(commit, instrument_sha256)]
 
     def blob(rel):
-        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{EXT_IO_INSTRUMENT_COMMIT}:{rel}"],
+        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{commit}:{rel}"],
                            capture_output=True)
         if r.returncode:
-            raise Refused(f"cannot read {rel} at {EXT_IO_INSTRUMENT_COMMIT[:12]} (a shallow "
+            raise Refused(f"cannot read {rel} at {commit[:12]} (a shallow "
                           "clone cannot verify the pinned ext-I/O instrument)")
         return r.stdout
     src = blob("fpga/ext_io_extract.py")
     if hashlib.sha256(src).hexdigest() != instrument_sha256:
         raise Refused(f"{EXT_IO} was produced by an fpga/ext_io_extract.py other than the one "
-                      f"pinned at {EXT_IO_INSTRUMENT_COMMIT[:12]}")
+                      f"pinned at {commit[:12]}")
     d = Path(tempfile.mkdtemp(prefix="ext-io-pinned-"))
     (d / "ext_io_timing.py").write_bytes(blob("fpga/ext_io_timing.py"))
     (d / "ext_io_extract.py").write_bytes(src)
@@ -275,17 +287,17 @@ def ext_io_instrument(instrument_sha256: str):
                 sys.modules.pop(k, None)
             else:
                 sys.modules[k] = v
-    _PINNED[instrument_sha256] = eie
+    _PINNED[(commit, instrument_sha256)] = eie
     return eie
 
 
-def rederive_ext_io(path: Path) -> dict:
+def rederive_ext_io(path: Path, commit: str | None = None) -> dict:
     """The per-port record's derived values, recomputed from the SHIPPED
     ext_io_paths.txt by the extractor's own parser and evaluator (the
     `--parse-only` path); REFUSED unless the record holds exactly these
     values and exactly these fields plus the extraction-only ones."""
     rec = _json(path)
-    eie = ext_io_instrument(rec.get("instrument_sha256"))
+    eie = ext_io_instrument(rec.get("instrument_sha256"), commit)
     paths = _need(path.parent / "ext_io_paths.txt")
     try:
         derived = json.loads(json.dumps(eie.evaluate(eie.parse(paths.read_text()))))
@@ -302,10 +314,11 @@ def rederive_ext_io(path: Path) -> dict:
     return derived
 
 
-def _ext_io_extraction_fields(path: Path, rec: dict, derived: dict) -> None:
+def _ext_io_extraction_fields(path: Path, rec: dict, derived: dict,
+                              commit: str | None = None) -> None:
     """The extraction-only fields, each against what the shipped run left."""
     import re
-    eie = ext_io_instrument(rec.get("instrument_sha256"))
+    eie = ext_io_instrument(rec.get("instrument_sha256"), commit)
     ext = path.parent
     if rec["schema"] != "ext-io-extract v1":
         raise Refused(f"{EXT_IO}: schema {rec['schema']!r}")
@@ -340,7 +353,7 @@ def _ext_io_extraction_fields(path: Path, rec: dict, derived: dict) -> None:
         raise Refused(f"{EXT_IO}: summary is not what the derived values say")
 
 
-def external_io(image: dict, pub_dir: Path | None = None) -> dict:
+def external_io(image: dict, pub_dir: Path | None = None, commit: str | None = None) -> dict:
     """The per-port extraction of the SAME routed.dcp (fpga/ext_io_extract.py),
     re-derived from its shipped raw paths (#319) -- never trusted as written."""
     path = Path(pub_dir or PUB_DIR) / EXT_IO
@@ -348,12 +361,12 @@ def external_io(image: dict, pub_dir: Path | None = None) -> dict:
     if rec.get("dcp_sha256") != image["routed_dcp_sha256"]:
         raise Refused(f"{EXT_IO} measured routed.dcp {str(rec.get('dcp_sha256'))[:12]}, the "
                       f"image's is {image['routed_dcp_sha256'][:12]}")
-    ext_io_instrument(rec.get("instrument_sha256"))     # pinned by version, not the tree
+    ext_io_instrument(rec.get("instrument_sha256"), commit)   # pinned by version, not the tree
     for name in ("ext_io_paths.txt",):
         if sha(_need(path.parent / name)) != rec.get("paths_sha256"):
             raise Refused(f"{EXT_IO}: {name} does not hash to the record's paths_sha256")
-    derived = rederive_ext_io(path)
-    _ext_io_extraction_fields(path, rec, derived)
+    derived = rederive_ext_io(path, commit)
+    _ext_io_extraction_fields(path, rec, derived, commit)
     if rec.get("state") != "PASS" or not rec.get("control", {}).get("caught"):
         raise Refused(f"{EXT_IO}: state {rec.get('state')}, control caught "
                       f"{rec.get('control', {}).get('caught')}")

@@ -53,10 +53,13 @@ ROOT = Path(__file__).resolve().parents[1]
 #                                 DR 0017), before the clap's final strike.
 #   reports/arty/l2-clean         the clap's final strike (revision 14,
 #                                 ENV_FRATE) before polyBLAMP merged.
-#   reports/arty/rev14-clean      this tree: revision 14, both of the above.
-#                                 See that directory's README.
+#   reports/arty/rev14-clean      revision 14, both of the above: R1's sources,
+#                                 frozen at r1_candidate.RTL_FROZEN_AT (R1 is
+#                                 published; build_arty.IMAGE_VERIFICATION["r1"]).
+#   reports/arty/r2-clean         this tree: R2 (PULSE2X=1 and R2's RTL set,
+#                                 fpga/release/R2.md). See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
+    "arty_a7_top": build.IMAGE_VERIFICATION[build.TREE_IMAGE],
 }
 
 
@@ -298,8 +301,13 @@ def publish(artifact, output):
     record = json.loads((artifact / "report.json").read_text())
     expected = {str(p.relative_to(ROOT)): build.sha(p)
                 for p in build.sources() + build.roms() + [build.XDC]}
+    # the image the build names (build_arty --image; a record without one is
+    # R1's): its configuration and its own digital proof, never another image's
+    image = record.get("image", "r1")
+    config = build.IMAGE_CONFIGS.get(image)
     if (record.get("state") != "BUILT_REQUIRES_TIMING_REVIEW" or record.get("exit_code") != 0
-            or record.get("part") != build.PART or record.get("configuration") != build.CONFIG
+            or record.get("part") != build.PART or config is None
+            or record.get("configuration") != config
             or record.get("source_sha256") != expected):
         raise ValueError("build is not a successful, current, selected Arty implementation")
     top, compiled_sources, compiled_xdc = compiled_inputs(
@@ -312,11 +320,11 @@ def publish(artifact, output):
     if sorted(compiled_sources + compiled_xdc) != non_rom:
         raise ValueError("compiled input set differs from the build record's "
                          "source_sha256")
-    ver_path = VERIFICATION_BY_WRAPPER.get(top)
+    ver_path = build.IMAGE_VERIFICATION.get(image) if top in VERIFICATION_BY_WRAPPER else None
     if ver_path is None:
         raise ValueError("no bound verification evidence for wrapper " + top)
     proof = build.validate_verification(ver_path,
-                                        build.sources() + build.roms())
+                                        build.sources() + build.roms(), config)
     if proof != record.get("verification"):
         raise ValueError("digital verification binding differs")
     required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp",
@@ -357,7 +365,8 @@ def publish(artifact, output):
                             "not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)")
     else:
         remaining.insert(0, "DAC/controller output timing")
-    summary.update(state="BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED", configuration=build.CONFIG,
+    summary.update(state="BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED", configuration=config,
+                   image=image,
                    part=build.PART, bitstream_sha256=record["artifact_sha256"]["arty.bit"],
                    source_sha256=expected, verification=proof,
                    tool=record["vivado_version"], build_seconds=record["seconds"],

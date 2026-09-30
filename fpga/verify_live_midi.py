@@ -89,7 +89,7 @@ REPORT_DIR = ROOT / "fpga/reports/live-midi"
 # frozen R1 target -- named, never MusicHost's silent fallback. The live CLI's
 # default on a serial port is the release image (#273).
 HARNESS_IMAGE = "r1"
-HARNESS_IMAGES = ("r1", "tree")    # `--image`: the two known-state images (#298)
+HARNESS_IMAGES = ("r1", "tree", "r2")   # `--image`: the known-state images (#298; r2 = R1's drums)
 
 
 def target_kit_and_presets(image: str) -> tuple:
@@ -97,7 +97,7 @@ def target_kit_and_presets(image: str) -> tuple:
     session under test uses: `r1` is R1's kit and sound table frozen BY VALUE
     (each refused unless it hashes to R1's digest); `tree` is this tree's model
     (drums_fx), read directly so an injected selector defect cannot reach it."""
-    if image == "r1":
+    if image in ("r1", "r2"):             # r2 is sent R1's frozen kit and positions
         return r1c.frozen_kit(), uh.image_sound_presets("r1")
     if image == "tree":
         return dx.kit_808(), {snd: dx.preset_writes(snd) for snd in dx.SOUND_NAMES}

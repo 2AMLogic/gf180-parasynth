@@ -1,0 +1,103 @@
+#-----------------------------------------------------------
+# Vivado v2025.1 (64-bit)
+# SW Build 6140274 on Wed May 21 22:58:25 MDT 2025
+# IP Build 6138677 on Thu May 22 03:10:11 MDT 2025
+# SharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025
+# Start of session at: Sun Sep 27 13:06:08 2026
+# Process ID         : 545984
+# Current directory  : /home/ubuntu/work/r2i/build/r2-extio
+# Command line       : vivado -mode batch -nojournal -source /home/ubuntu/work/r2i/build/r2-extio/ext_io_extract.tcl -log /home/ubuntu/work/r2i/build/r2-extio/vivado_ext_io.log
+# Log file           : /home/ubuntu/work/r2i/build/r2-extio/vivado_ext_io.log
+# Journal file       : 
+# Running On         : ip-172-31-72-198
+# Platform           : Ubuntu
+# Operating System   : Ubuntu 22.04.5 LTS
+# Processor Detail   : Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz
+# CPU Frequency      : 3099.865 MHz
+# CPU Physical cores : 4
+# CPU Logical cores  : 8
+# Host memory        : 33263 MB
+# Swap memory        : 0 MB
+# Total Virtual      : 33263 MB
+# Available Virtual  : 29764 MB
+#-----------------------------------------------------------
+source /home/ubuntu/work/r2i/build/r2-extio/ext_io_extract.tcl
+# if {![string match "2025.1*" [version -short]]} { puts "REFUSED_VERSION [version -short]"; exit 3 }
+# open_checkpoint {/home/ubuntu/work/r2i/build/r2-arty/routed.dcp}
+Command: open_checkpoint /home/ubuntu/work/r2i/build/r2-arty/routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.05 . Memory (MB): peak = 1481.723 ; gain = 0.000 ; free physical = 6837 ; free virtual = 27985
+INFO: [Device 21-403] Loading part xc7a100tcsg324-1
+Netlist sorting complete. Time (s): cpu = 00:00:00.12 ; elapsed = 00:00:00.12 . Memory (MB): peak = 1808.707 ; gain = 0.000 ; free physical = 6438 ; free virtual = 27586
+INFO: [Netlist 29-17] Analyzing 3556 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2025.1
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Read ShapeDB Complete: Time (s): cpu = 00:00:00.06 ; elapsed = 00:00:00.06 . Memory (MB): peak = 1901.582 ; gain = 6.250 ; free physical = 6332 ; free virtual = 27481
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Constraints 18-5170] The checkpoint was created with non-default parameter values which do not match the current Vivado settings.  Mismatching parameters are:
+  general.maxThreads
+INFO: [Project 1-853] Binary constraint restore complete.
+INFO: [Designutils 20-5722] Start Reading Physical Databases.
+Reading placement.
+Read Netlist Cache: Time (s): cpu = 00:00:00.04 ; elapsed = 00:00:00.04 . Memory (MB): peak = 2518.145 ; gain = 0.000 ; free physical = 5780 ; free virtual = 26928
+Reading placer database...
+Read Device Cache: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2518.145 ; gain = 0.000 ; free physical = 5772 ; free virtual = 26920
+Read PlaceDB: Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2543.215 ; gain = 25.070 ; free physical = 5743 ; free virtual = 26892
+Read PulsedLatchDB: Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2543.215 ; gain = 0.000 ; free physical = 5743 ; free virtual = 26892
+Reading routing.
+Read RouteStorage: Time (s): cpu = 00:00:00.96 ; elapsed = 00:00:00.38 . Memory (MB): peak = 2558.699 ; gain = 15.484 ; free physical = 5735 ; free virtual = 26884
+Read Physdb Files: Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 2558.699 ; gain = 40.555 ; free physical = 5735 ; free virtual = 26884
+Restored from archive | CPU: 2.710000 secs | Memory: 44.263252 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:03 ; elapsed = 00:00:02 . Memory (MB): peak = 2558.699 ; gain = 40.555 ; free physical = 5735 ; free virtual = 26884
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 2558.699 ; gain = 0.000 ; free physical = 5735 ; free virtual = 26884
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 34 instances were transformed.
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 12 instances
+  RAM32X1D => RAM32X1D (RAMD32(x2)): 2 instances
+  RAM64M => RAM64M (RAMD64E(x4)): 19 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 1 instance 
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2025.1 (64-bit) build 6140274
+open_checkpoint: Time (s): cpu = 00:00:36 ; elapsed = 00:00:23 . Memory (MB): peak = 2566.734 ; gain = 1085.012 ; free physical = 5734 ; free virtual = 26883
+# set fh [open {/home/ubuntu/work/r2i/build/r2-extio/ext_io_paths.txt} w]
+# proc measure {fh variant ports} {
+#   foreach p $ports {
+#     foreach kind {max min} {
+#       set tp [get_timing_paths -to [get_ports $p] -delay_type $kind -max_paths 1 -nworst 1]
+#       if {[llength $tp] == 0} { puts $fh "PATH\t$variant\t$p\t$kind\tNONE\t\t\t\t"; continue }
+#       puts $fh "PATH\t$variant\t$p\t$kind\t[get_property SLACK $tp]\t[get_property REQUIREMENT $tp]\t[get_property DATAPATH_DELAY $tp]\t[get_property STARTPOINT_CLOCK $tp]\t[get_property ENDPOINT_CLOCK $tp]"
+#     }
+#   }
+# }
+# set outs {{i2s_lrclk} {i2s_sdata} {spi_miso} {led[1]} {led[2]} {led[3]} {uart_txd}}
+# measure $fh clean $outs
+# foreach p {spi_sck spi_mosi spi_cs_n uart_rxd btn_reset} {
+#   set tp [get_timing_paths -from [get_ports $p] -delay_type max -max_paths 1 -nworst 1]
+#   if {[llength $tp] == 0} { puts $fh "INPUT\t$p\tNONE"; continue }
+#   puts $fh "INPUT\t$p\t[get_property SLACK $tp]\t[get_property ENDPOINT_PIN $tp]"
+# }
+# set objs [get_cells -quiet -hier -regexp {.*u_spi/(sck_q|mosi_q|csn_q)_reg\[[01]\]}]
+# puts $fh "SYNC\txdc:spi_async_reg\t[llength $objs]\t[join $objs ,]"
+# set objs [get_pins -quiet -hier -regexp {.*u_spi/(sck_q|mosi_q|csn_q)_reg\[0\]/D}]
+# puts $fh "SYNC\txdc:spi_false_path_d\t[llength $objs]\t[join $objs ,]"
+# set objs [get_cells -quiet -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[[01]\]}]
+# puts $fh "SYNC\txdc:uart_async_reg\t[llength $objs]\t[join $objs ,]"
+# set objs [get_pins -quiet -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[0\]/D}]
+# puts $fh "SYNC\txdc:uart_false_path_d\t[llength $objs]\t[join $objs ,]"
+# set objs [get_cells -quiet -hier -regexp {.*u_uart/rx_q_reg\[[01]\]}]
+# puts $fh "SYNC\tnetlist:uart_rx_q\t[llength $objs]\t[join $objs ,]"
+# foreach c [get_cells -quiet -hier -regexp {.*u_(uart|spi)/(rx_q|sck_q|mosi_q|csn_q)_reg\[[01]\]}] {
+#   puts $fh "ASYNC\t$c\t[get_property ASYNC_REG $c]"
+# }
+# set_output_delay -clock [get_clocks {hardware_clock.clock_raw}] -max 80.000 [get_ports spi_miso]
+# measure $fh IMPOSSIBLE_MISO $outs
+# close $fh
+# puts "EXTRACT_DONE"
+EXTRACT_DONE
+# exit
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 27 13:06:39 2026...

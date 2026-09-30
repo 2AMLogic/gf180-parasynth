@@ -57,18 +57,34 @@ def candidate(gain_q15: int | None, scope: str):
 
     def patched(o, *a, **kw):
         if scope == "all" or o.shape in vf.TWO_EDGE:
-            saved = vf._OS2_SUBSTEP_GAIN_Q15
-            vf._OS2_SUBSTEP_GAIN_Q15 = gain_q15
-            try:
+            with _gain(o.shape, gain_q15):
                 return orig(o, *a, **kw)
-            finally:
-                vf._OS2_SUBSTEP_GAIN_Q15 = saved
         return orig(o, *a, **kw)
     vf._render_2x = patched
     try:
         yield
     finally:
         vf._render_2x = orig
+
+
+def _gain_attr(shape: str) -> str:
+    """The model constant that scales `shape`'s 96 kHz substeps: a tree whose
+    model separates the rectangles' gain (_OS2_RECT_GAIN_Q15, R2's 0.74) is
+    patched there for rectangles; otherwise the one substep gain."""
+    if shape in vf.TWO_EDGE and hasattr(vf, "_OS2_RECT_GAIN_Q15"):
+        return "_OS2_RECT_GAIN_Q15"
+    return "_OS2_SUBSTEP_GAIN_Q15"
+
+
+@contextlib.contextmanager
+def _gain(shape: str, gain_q15: int):
+    attr = _gain_attr(shape)
+    saved = getattr(vf, attr)
+    setattr(vf, attr, gain_q15)
+    try:
+        yield
+    finally:
+        setattr(vf, attr, saved)
 
 
 def decimator_run(shape: str, note: float, gain_q15: int, n: int = 24_000) -> dict:
@@ -82,14 +98,12 @@ def decimator_run(shape: str, note: float, gain_q15: int, n: int = 24_000) -> di
         return orig_sat(v)
     o = vf.OscFx(shape)
     inc = vf.phase_inc(vf.note_hz(note))
-    saved = vf._OS2_SUBSTEP_GAIN_Q15
-    vf._OS2_SUBSTEP_GAIN_Q15 = gain_q15
     vf.sat16 = rec
     try:
-        y, _, _ = vf._render_2x(o, n, inc, np.zeros(30, dtype=np.int64), 0)
+        with _gain(o.shape, gain_q15):
+            y, _, _ = vf._render_2x(o, n, inc, np.zeros(30, dtype=np.int64), 0)
     finally:
         vf.sat16 = orig_sat
-        vf._OS2_SUBSTEP_GAIN_Q15 = saved
     u = np.asarray(seen[-1], dtype=np.float64)[240:]       # drop the FIR fill
     s = np.asarray(y, dtype=np.float64)[240:]
     if not np.array_equal(np.clip(u, -32768, 32767), s):

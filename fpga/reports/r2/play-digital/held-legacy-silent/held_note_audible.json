@@ -1,0 +1,31 @@
+{
+  "name": "default-legacy",
+  "preset": "default",
+  "note": 45,
+  "fixture": "none",
+  "image": "r2",
+  "legacy_image": true,
+  "command": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none",
+    "--image",
+    "r2"
+  ],
+  "init_problems": [],
+  "periods": 3480,
+  "periods_required": 3480,
+  "truncation_control": {
+    "caught": true,
+    "kept_rows": 1856,
+    "of_rows": 3712,
+    "periods": 1856,
+    "periods_required": 3480
+  },
+  "replay_status": 0,
+  "i2s_peak_lsb": 0,
+  "min_peak_lsb": 1024,
+  "verdict": "FAIL"
+}

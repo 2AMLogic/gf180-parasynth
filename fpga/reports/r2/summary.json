@@ -1,0 +1,34 @@
+{
+ "state": "PASS",
+ "source_commit": "9703817 (settled set; batch fpga/reports/r2/settled), 8a132ff (T-PLAY-DIGITAL r2, fpga/reports/r2/play-digital); image built at 3182638 (identical compiled sources)",
+ "host": "build box (ip-172-31-72-198), Icarus 14.0 devel, Vivado 2025.1 SW Build 6140274",
+ "settled": {
+  "verify_voice --set full --osc2x --filter2x --pulse2x": "PASS, 442596 frames, every sample and tap identical",
+  "control INJECT_BUG_LADDER_XG25 (--only extremes)": "CAUGHT: first mismatch frame 364 (model -58338, RTL -58341)",
+  "verify_voice quick waves3 pulse2x": "2880 frames identical; control PULSE2X_RECT_HEADROOM caught",
+  "deadline stress-pulse PULSE2X=1": "0 missed, slack 20, I2S 2158/2158 exact, writes 461/461",
+  "deadline stress-saw": "0 missed, slack 20, exact",
+  "deadline arty-uart --pulse2x": "0 missed, slack 20, I2S 3300/3300 exact, writes 71/71",
+  "deadline arty-uart (R1 config)": "0 missed, slack 20, exact",
+  "late:20 / late:21": "PASS at slack 0 / caught, 1364 missed",
+  "reference full2xwin": "slack 3",
+  "control skipallwin": "FAIL for its I2S reason: 358 of 2158 periods differ",
+  "control headroom at the UART pins": "FAIL as required: 359 of 3300 periods differ",
+  "uart bridge phrase --pulse2x / start-red": "87/87 writes, 6734 periods exact / 0 of 26 writes on the stub (fpga/reports/arty/r2-clean)",
+  "full kit pulse2x": "2851/2851 periods exact",
+  "M5A full phrase pulse2x": "1305533 periods exact; Foldback 2.208 dB",
+  "M5B full phrase pulse2x": "729533 periods exact; Foldback 1.915 dB"
+ },
+ "play_digital_r2": {
+  "receipt": "fpga/reports/r2/play-digital/receipt.json",
+  "verdict": "PASS",
+  "held-default": "3820/3820 periods bit-exact, peak 12143 LSB",
+  "held-m5a-saw": "3820/3820, peak 7345 LSB",
+  "held-m5a-pulse": "3820/3820, peak 8208 LSB (R1: 10376; the 0.74 rectangle headroom)",
+  "run-m5a": "8109/8109, peak 12143 LSB",
+  "phrase-demo": "257427/257427 periods, writes 511/511, worst strobe 209",
+  "phrase-bar808-full": "266937/266937 periods, writes 397/397, worst strobe 209",
+  "controls": "held-legacy-silent caught (silent); wrong-kit-demo caught at the init bytes"
+ },
+ "not_passed": {}
+}

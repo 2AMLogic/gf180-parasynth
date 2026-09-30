@@ -1,0 +1,46 @@
+PATH	clean	i2s_lrclk	max	70.748	81.380	11.012	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	clean	i2s_lrclk	min	154.117	0.000	5.524	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	clean	i2s_sdata	max	72.041	81.380	9.746	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	clean	i2s_sdata	min	153.302	0.000	8.667	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	clean	spi_miso	max	14.700	81.380	7.912	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	spi_miso	min	3.664	0.000	2.670	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[1]	max	67.342	81.380	10.343	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[1]	min	4.500	0.000	3.557	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[2]	max	70.913	81.380	6.770	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[2]	min	3.154	0.000	2.209	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[3]	max	70.470	81.380	7.108	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	led[3]	min	3.376	0.000	2.387	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	uart_txd	max	68.508	81.380	9.081	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	clean	uart_txd	min	4.043	0.000	3.060	hardware_clock.clock_raw	hardware_clock.clock_raw
+INPUT	spi_sck		u_synth/u_spi/sck_q_reg[0]/D
+INPUT	spi_mosi		u_synth/u_spi/mosi_q_reg[0]/D
+INPUT	spi_cs_n		u_synth/u_spi/csn_q_reg[0]/D
+INPUT	uart_rxd		u_synth/g_uart.u_uart/rx_q_reg[0]/D
+INPUT	btn_reset		por_count_reg[0]/CLR
+SYNC	xdc:spi_async_reg	6	u_synth/u_spi/csn_q_reg[0],u_synth/u_spi/csn_q_reg[1],u_synth/u_spi/mosi_q_reg[0],u_synth/u_spi/mosi_q_reg[1],u_synth/u_spi/sck_q_reg[0],u_synth/u_spi/sck_q_reg[1]
+SYNC	xdc:spi_false_path_d	3	u_synth/u_spi/csn_q_reg[0]/D,u_synth/u_spi/mosi_q_reg[0]/D,u_synth/u_spi/sck_q_reg[0]/D
+SYNC	xdc:uart_async_reg	2	u_synth/g_uart.u_uart/rx_q_reg[0],u_synth/g_uart.u_uart/rx_q_reg[1]
+SYNC	xdc:uart_false_path_d	1	u_synth/g_uart.u_uart/rx_q_reg[0]/D
+SYNC	netlist:uart_rx_q	2	u_synth/g_uart.u_uart/rx_q_reg[0],u_synth/g_uart.u_uart/rx_q_reg[1]
+ASYNC	u_synth/g_uart.u_uart/rx_q_reg[0]	1
+ASYNC	u_synth/g_uart.u_uart/rx_q_reg[1]	1
+ASYNC	u_synth/u_spi/csn_q_reg[0]	1
+ASYNC	u_synth/u_spi/csn_q_reg[1]	1
+ASYNC	u_synth/u_spi/mosi_q_reg[0]	1
+ASYNC	u_synth/u_spi/mosi_q_reg[1]	1
+ASYNC	u_synth/u_spi/sck_q_reg[0]	1
+ASYNC	u_synth/u_spi/sck_q_reg[1]	1
+PATH	IMPOSSIBLE_MISO	i2s_lrclk	max	70.748	81.380	11.012	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	IMPOSSIBLE_MISO	i2s_lrclk	min	154.117	0.000	5.524	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	IMPOSSIBLE_MISO	i2s_sdata	max	72.041	81.380	9.746	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	IMPOSSIBLE_MISO	i2s_sdata	min	153.302	0.000	8.667	hardware_clock.clock_raw	i2s_bclk_ext
+PATH	IMPOSSIBLE_MISO	spi_miso	max	-10.342	81.380	7.912	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	spi_miso	min	3.664	0.000	2.670	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[1]	max	67.342	81.380	10.343	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[1]	min	4.500	0.000	3.557	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[2]	max	70.913	81.380	6.770	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[2]	min	3.154	0.000	2.209	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[3]	max	70.470	81.380	7.108	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	led[3]	min	3.376	0.000	2.387	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	uart_txd	max	68.508	81.380	9.081	hardware_clock.clock_raw	hardware_clock.clock_raw
+PATH	IMPOSSIBLE_MISO	uart_txd	min	4.043	0.000	3.060	hardware_clock.clock_raw	hardware_clock.clock_raw

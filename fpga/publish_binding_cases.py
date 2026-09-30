@@ -81,11 +81,14 @@ def make_artifact(tmp):
     record["source_sha256"] = {str(p.relative_to(ROOT)): build.sha(p)
                                for p in build.sources() + build.roms()
                                + [build.XDC]}
-    # re-bind the wrapper proof to the CURRENT wrapper's evidence
+    # re-bind the wrapper proof to the CURRENT wrapper's evidence, in the
+    # configuration of the image the tree's sources are (build_arty.TREE_IMAGE)
     top = "arty_a7_top"
+    record["image"] = build.TREE_IMAGE
+    record["configuration"] = build.IMAGE_CONFIGS[build.TREE_IMAGE]
     record["verification"] = build.validate_verification(
         publish_arty.VERIFICATION_BY_WRAPPER[top],
-        build.sources() + build.roms())
+        build.sources() + build.roms(), record["configuration"])
     # the compiled set must show the CURRENT script's read_verilog list:
     # add the bridge to the snapshot list the same way build.tcl carries it
     tcl = (art / "build.tcl").read_text()
