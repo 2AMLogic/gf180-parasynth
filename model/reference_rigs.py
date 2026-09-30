@@ -1445,6 +1445,73 @@ class _PedalboardParams:
         return 1e-6
 
 
+#: Where a VST3 bundle keeps its binary, per platform. A `.vst3` bundle is a
+#: DIRECTORY, so `os.path.exists` is true for one that holds nothing a host can
+#: load -- which is why the check below is a layout check and not an existence
+#: check.
+VST3_BINARY_DIR = {
+    "darwin": "Contents/MacOS",
+    "linux": "Contents/x86_64-linux",
+    "win32": "Contents/x86_64-win",
+}
+
+
+def bundle_diagnosis(path: str) -> str:
+    """Why a `.vst3` bundle at `path` could not be loaded, in the terms an
+    operator can act on: which platform sub-directory this platform needs, which
+    one the bundle actually has, and how big the binary is.
+
+    THIS IS CALLED ONLY AFTER A LOAD HAS ALREADY FAILED. It is a diagnosis, not
+    a precondition, and it deliberately does not gate the happy path: a host can
+    legitimately load a layout this function does not know about, and a bundle
+    check that rejected such a plugin would be an unsatisfiable gate.
+
+    Written because of a bundle found on a Linux dispatch worker at
+    `/tmp/mdb/Model D.vst3` on 2026-09-30: correct name, plausible directory
+    tree, **one byte** of content (the single character `x`, mode 644), in the
+    *macOS* layout on a Linux host. `pathlib.Path(...).exists()` is True for it
+    and `pedalboard.load_plugin` answers only `unsupported plugin format or scan
+    failure`, which reads like a missing host rather than a bogus file. That
+    combination is how a stub gets mistaken for an uninstalled plugin, and the
+    reverse.
+    """
+    want = VST3_BINARY_DIR.get(sys.platform)
+    bits = [f"sys.platform is {sys.platform!r}"]
+    if want is None:
+        bits.append("no VST3 bundle layout is known for this platform, so the "
+                    "layout cannot be checked here")
+    else:
+        d = os.path.join(path, want)
+        bits.append(f"a VST3 bundle for it needs {want}/, which is "
+                    f"{'present' if os.path.isdir(d) else 'ABSENT'}")
+    present = sorted(
+        rel for rel in VST3_BINARY_DIR.values()
+        if os.path.isdir(os.path.join(path, rel)))
+    if present:
+        bits.append("the bundle carries " + ", ".join(f"{p}/" for p in present))
+        if want is not None and want not in present:
+            bits.append("so this bundle was built for ANOTHER PLATFORM and no "
+                        "host on this one can load it")
+    else:
+        bits.append("the bundle carries no platform binary directory at all")
+    sizes = []
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                sizes.append(os.path.getsize(os.path.join(root, f)))
+            except OSError:
+                pass
+    if not sizes:
+        bits.append("and contains NO FILES")
+    else:
+        big = max(sizes)
+        bits.append(f"its largest of {len(sizes)} file(s) is {big} bytes")
+        if big < 4096:
+            bits.append("which is far too small to be a plugin binary: this is a "
+                        "STUB or a truncated download, not an installed plugin")
+    return "; ".join(bits)
+
+
 class _PedalboardPlugin(_Plugin):
     """One `pedalboard`-hosted instrument plugin, driven by MIDI, with the pin
     discipline of `_Plugin` and the signal-side battery of
@@ -1487,7 +1554,24 @@ class _PedalboardPlugin(_Plugin):
         self.block, self.sr = int(block), int(sr)
         if not os.path.exists(self.path):
             raise rq.RigRefusal(f"{self.name}: no plugin bundle at {self.path}")
-        self.plugin = pedalboard.load_plugin(self.path)
+        # PRECONDITION: the bundle must actually LOAD. A `.vst3` bundle is a
+        # directory, so the existence check above passes for one that holds a
+        # single byte -- and `pedalboard.load_plugin` then raises `ImportError`,
+        # which escaped this constructor uncaught until 2026-09-30. Two things
+        # were wrong with that: a traceback is not one of this repository's three
+        # outcomes, so the caller could not report REFUSED; and the exception
+        # TYPE is the same one `import pedalboard` raises when the host is not
+        # installed at all, so "your bundle is a stub" and "you have no
+        # pedalboard" arrived indistinguishable. Both are refusals, and they are
+        # different refusals.
+        try:
+            self.plugin = pedalboard.load_plugin(self.path)
+        except Exception as e:
+            raise rq.RigRefusal(
+                f"{self.name}: a bundle exists at {self.path} but this host could "
+                f"not load it -- {type(e).__name__}: {e}. "
+                f"{bundle_diagnosis(self.path)}. Nothing was measured, so this "
+                f"says nothing about the plugin") from e
         # PRECONDITION: an INSTRUMENT. An effect plugin loaded here would be
         # handed MIDI, return its own silence, and every check downstream would
         # be measuring the absence of a synthesiser.

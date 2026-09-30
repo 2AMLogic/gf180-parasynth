@@ -294,7 +294,17 @@ RIG_VERDICTS = {
             "the bundle yet -- see docs/pedalboard-rig.md. None is NOT false: "
             "'this rig has no verdict' and 'this rig cannot be used' are "
             "different facts, and writing either one as the other is what #123 "
-            "was about. Run tools/qualify_modeld_pedalboard.py to fill it in.",
+            "was about. Run tools/qualify_modeld_pedalboard.py to fill it in. "
+            "WHAT IS MISSING NARROWED ON 2026-09-30: the HOST is no longer part "
+            "of it. `pedalboard` 0.9.25 installs cleanly from a wheel on Linux / "
+            "CPython 3.12 into an isolated venv, the rig's whole API surface has "
+            "been read against that install and holds, and both suites (117 "
+            "cases) pass with it importable. The refusal on this fleet is now "
+            "'Moog Model D is not installed at ...', not 'no pedalboard on this "
+            "machine'. The one remaining blocker is the licensed Model D binary, "
+            "which no venv produces -- so this stays None, and it stays None "
+            "rather than False for the same reason as before: nothing has "
+            "measured the plugin.",
         verdict_source="docs/pedalboard-rig.md"),
     "miniv3": dict(
         qualified=False, host="dawdreamer",

@@ -109,6 +109,71 @@ def test_a_missing_bundle_is_REFUSED_even_with_pedalboard_installed(
     assert "not installed at" in text and "REOPENS" not in text
 
 
+def test_a_bundle_that_exists_but_does_not_load_is_REFUSED_not_a_traceback(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The third refusal shape, and the one that was NOT handled until
+    2026-09-30: a `.vst3` **directory** that exists, so the existence check
+    passes, containing nothing a host can load.
+
+    This is not hypothetical. A bundle in exactly this state was found on a
+    Linux dispatch worker at `/tmp/mdb/Model D.vst3` -- one byte, macOS layout,
+    on Linux -- and real `pedalboard` 0.9.25 answers it with
+    `ImportError: ... unsupported plugin format or scan failure`. That escaped
+    the rig constructor uncaught, so the tool exited with a **traceback** rather
+    than one of its three documented outcomes, and the word `ImportError` in it
+    reads like the host being missing.
+
+    Exit 2, and the #122 note must NOT be printed: a bundle that never loaded
+    has concluded nothing about Model D."""
+    mod = types.ModuleType("pedalboard")
+    mod.__version__ = "0.9.25"
+
+    def wont_load(path, **_kw):
+        raise ImportError(
+            "Failed to load plugin as VST3Plugin. Errors were:\n\tVST3Plugin: "
+            f"Unable to scan plugin {path}: unsupported plugin format or scan "
+            "failure.")
+    mod.load_plugin = wont_load
+    monkeypatch.setitem(sys.modules, "pedalboard", mod)
+    monkeypatch.setattr(rr, "PATH_MODELD", str(bundle))
+    monkeypatch.setattr(rr.ModelDPedalboardRig, "path", str(bundle))
+
+    out = tmp_path / "rec.json"
+    code = qmp.main(["--json", str(out)])
+    text = capsys.readouterr().out
+    assert code == rp.REFUSED, "an unloadable bundle is a REFUSAL, not a FAIL"
+    assert "could not load it" in text
+    assert "unsupported plugin format" in text, \
+        "the host's own error must survive into the refusal, not be swallowed"
+    assert "REOPENS" not in text, "nothing was measured, so #122 does not reopen"
+    assert "stated NO-VERDICT" in text
+    rec = json.loads(out.read_text())
+    assert rec["outcome"] == "REFUSED"
+    assert "qualification" not in rec
+
+
+def test_an_unloadable_bundle_is_distinguishable_from_an_absent_host(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The control for the test above, and the reason it exists.
+
+    `import pedalboard` failing and `load_plugin` failing both raise
+    `ImportError`. If the two refusals read alike, an operator with a stub
+    bundle is told to install a host they already have -- so the two messages
+    are asserted to be DIFFERENT here, not merely each present."""
+    mod = types.ModuleType("pedalboard")
+    mod.__version__ = "0.9.25"
+    mod.load_plugin = lambda path, **_kw: (_ for _ in ()).throw(
+        ImportError("unsupported plugin format or scan failure"))
+    monkeypatch.setitem(sys.modules, "pedalboard", mod)
+    monkeypatch.setattr(rr, "PATH_MODELD", str(bundle))
+    monkeypatch.setattr(rr.ModelDPedalboardRig, "path", str(bundle))
+    assert qmp.main([]) == rp.REFUSED
+    text = capsys.readouterr().out
+    assert "no pedalboard on this machine" not in text, \
+        "an unloadable BUNDLE must not be reported as a missing HOST"
+    assert "could not load it" in text
+
+
 def test_a_qualifying_rig_exits_zero_and_records_the_whole_environment_tuple(
         monkeypatch, capsys, bundle, tmp_path):
     """Exit 0, and the record carries the #123 tuple in full: host and version,
