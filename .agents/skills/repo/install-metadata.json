@@ -1,9 +1,9 @@
 {
-  "version": "0.15.5",
-  "commit": "1fc68ae",
+  "version": "0.16.1",
+  "commit": "fcedd7b",
   "layout_version": 2,
   "dev": false,
   "filtered": false,
   "guardHookInstalled": false,
-  "commands": ["all","audit","branches","decide","deps","docs","followups","gitignore","handoff","help","host-optimize","links","org-policy","orphans","readme","release","remote","reset","scrub","sudo","tidy","update-tools"]
+  "commands": ["all","audit","branches","decide","deps","docs","followups","gitignore","handoff","help","host-optimize","links","optimize-ci","org-policy","orphans","readme","release","remote","reset","scrub","sudo","tidy","update-tools"]
 }
