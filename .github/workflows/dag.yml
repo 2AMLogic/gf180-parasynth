@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   regenerate:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 45
     # Do not re-trigger on the bot's own commit. The push filter below is the
     # real guard; this is belt and braces, because a self-triggering workflow
