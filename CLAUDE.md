@@ -244,6 +244,34 @@ verdict. The same work on the box has 8 dedicated cores.
   --json aws` / `down --yes` — see `~/.config/repo/README.md` for the rules
   (≤ 8 vCPU, no raw `aws ec2 run-instances`, never `Fleet=loom` hosts).
   **Stop it when the queued work is done.**
+- **Getting the box on a new host.** The box is the org's shared Vivado build
+  capability, not something this repo defines. Its recipe lives in the private
+  map repo, at `2AMLogic/2am` `runbooks/fpga-build-host.md` (pinned at
+  `7cb073c9ec218f98e5d4f5a440fbeae2e1566c62`). That runbook covers the image,
+  the sizing and cost, how a second host's key gets onto the box, and which
+  hosts are already provisioned. The gitignored `.env` at the root of the
+  **main checkout** holds these keys. The values below are placeholders, and
+  real ones never go in this public repo:
+
+  ```bash
+  REPO_REMOTE_PROVIDER=aws
+  REPO_REMOTE_INSTANCE_ID=i-XXXXXXXXXXXXXXXXX   # the pinned box; `up` writes it back
+  REPO_REMOTE_IMAGE=ami-XXXXXXXXXXXXXXXXX       # Vivado ML 2025.1 Developer AMI (see runbook)
+  REPO_REMOTE_INSTANCE_TYPE=m7a.2xlarge
+  REPO_REMOTE_DISK_GB=200
+  REPO_REMOTE_SSH_USER=ubuntu
+  REPO_REMOTE_IDLE_SHUTDOWN_MIN=60              # powers itself off after ~60–75 min idle
+  ```
+
+  Credentials come from the shared `~/.config/repo/remote.env`, never from this
+  file. Vivado is at `/tools/Xilinx/2025.1/Vivado` on the box. **Run
+  `repo-remote.sh` from the main checkout, never from a `.loom/worktrees/`
+  worktree.** The script names the instance after the checkout directory, so
+  from a worktree it finds no `.env`, and `up --yes` would launch a new box
+  named after the worktree. Ship the worktree's commits to the box as a
+  `git bundle` instead. A host with none of this set up cannot run the heavy
+  checks. Report that as a missing capability for an operator to provision.
+  Do not read it as a verdict on the change.
 - **Match CI, not your laptop:** Python 3.12 (`uv venv --python 3.12`, then
   `numpy scipy pytest pyyaml`, what the workflows install) and the pinned
   toolchain from `tools/setup_ci_oss_cad.py`. That script writes the tool
