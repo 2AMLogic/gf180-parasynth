@@ -132,6 +132,12 @@ R0_MOVED = {
     "rtl-sketch/drum_regs.v": "clap final strike, contract rev 14",
     "rtl-sketch/synth_top.v": "ENV_FRATE, contract rev 14",
     "rtl-sketch/voice_dp.v": "per-oscillator drift (6.11)",
+    # R2's compiled changes (fpga/release/R2.md), which postdate R0 as they
+    # postdate every older record: 2f11792 (#354, the ladder's x*gain held in
+    # 26 bits) and c6c9440 (the pulse2x rectangle headroom, 0.74). R2's third,
+    # the S_WIN skip in voice_dp.v, is a file already named above.
+    "rtl-sketch/ladder_dp_n.v": "#354 ladder x*gain in 26 bits (R2)",
+    "rtl-sketch/polyblep_saw_pair.v": "pulse2x rectangle headroom 0.74 (R2)",
     # publication scope only (see _check_r0_binding): 383f10b, #315, which
     # landed 2026-09-26, three days after 62392bd published R0
     "fpga/boards/arty-a7-100.xdc": "#315 UART-sync constraints bind g_uart.u_uart",

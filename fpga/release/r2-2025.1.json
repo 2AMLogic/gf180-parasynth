@@ -384,7 +384,7 @@
     "name": "R1",
     "release": "arty-a7-100t R1 player preview 2025.1",
     "manifest": "fpga/release/r1-2025.1.json",
-    "manifest_sha256": "1d41b9cb630ddf401a4bc70cf0d5d877a5155f0a94202dd983693e7c5396f84d",
+    "manifest_sha256": "4ec3a15768e5f09110bedba6873ddbac25774c23d1c2cd906746ada880b7635f",
     "bitstream": "fpga/reports/arty/r1-player-preview-2025.1/arty.bit",
     "bitstream_sha256": "544499e2c97061957004f999caf21d5caaf520f6b2682f84c6e6773e7d291d21",
     "routed_dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
@@ -392,7 +392,7 @@
     "check": "python fpga/release/r1_release.py (T-RELEASE-BOUND-R1)",
     "behind_it": {
       "name": "R0",
-      "manifest_sha256": "ad36b01c4f0eed45364637af949344063a4068563f115c2166895164757b71b1",
+      "manifest_sha256": "ac2050a37ef5183aa0a807a15f42e66260890287cd29ceef995f345d2f077596",
       "bitstream_sha256": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95"
     }
   },
