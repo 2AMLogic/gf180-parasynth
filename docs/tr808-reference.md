@@ -250,7 +250,9 @@ the model the whole population's variation as free credit against a single
 member of it. On the bass drum that was measured and it swallowed the
 instrument: 10 % is 5.06 Hz and everything the machine's own DECAY and TONE
 controls do to its f0 is 3.66 Hz, so no two settings of the voice could be told
-apart (`docs/bd-repeatability-measurement.md` §4). A tolerance against one
+apart (`docs/bd-repeatability-measurement.md` §4).
+<!-- claim: test=tools/test_run_case.py::test_POSITIVE_CONTROL_new_f0_check_separates_settings_the_old_one_could_not -->
+A tolerance against one
 recorded unit is bounded by how far *that* unit differs from itself and by how
 far its own knobs move — see `run_case.F0_DISCRIMINATION_BAND`. The ±10 % here
 is unchanged and still correctly sourced; only its use as a tolerance was
