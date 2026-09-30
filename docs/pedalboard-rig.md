@@ -487,6 +487,10 @@ sounds the note or no master position clears the rail.
   really two verdicts about one rig. Nothing here forecloses that change: the
   entries are keyed by a string and carry a `host` field, so a `capability`
   field is additive.
-- **`profile.json` and `tools/run_case.py` still carry the unscoped wording**
-  ("renders exact silence headlessly", no host named). Both are hashed inputs,
-  so correcting them there is #129 and #101's re-run and not this change's.
+- **`profile.json` carried the unscoped wording** ("renders exact silence
+  headlessly", no host named) for a while after `RIG_VERDICTS` and
+  `tools/run_case.py`'s own prose were both host-scoped, because it was a
+  hashed input and correcting a sentence there meant re-rendering or
+  invalidating every measurement checked against its hash. #129 split that
+  prose into `refprofile/profile-notes.json`, which is not a hashed input, and
+  corrected the sentence there.

@@ -1422,6 +1422,97 @@ def test_base_check_refuses_diverged_dependency_changed_upstream(monkeypatch):
         rc.base_check()
 
 
+# ===========================================================================
+# #129: prose commentary (verdict/why/notes) must not be a hashed input
+# ===========================================================================
+def test_profile_notes_is_not_a_hashed_input():
+    """`refprofile/profile-notes.json` holds the prose split out of
+    `refprofile/profile.json` -- verdict/why/readback-caption text -- and must
+    never join `DEPENDENCIES` or `MODEL_INPUTS`. Both tuples name only the
+    evidence-only file; that absence is the entire fix, so a future edit that
+    adds the notes sibling to either tuple would silently reopen #129."""
+    assert "refprofile/profile.json" in rc.DEPENDENCIES
+    assert "refprofile/profile.json" in rc.MODEL_INPUTS
+    assert "refprofile/profile-notes.json" not in rc.DEPENDENCIES
+    assert "refprofile/profile-notes.json" not in rc.MODEL_INPUTS
+
+
+def test_correcting_a_verdict_no_longer_touches_profile_json_so_base_check_passes(
+        monkeypatch):
+    """Reproduces the incident #129 opens with, after the fix: editing a
+    verdict string used to change `profile.json`'s bytes and trip this refusal
+    for every measurement checked against its hash. A verdict now lives in
+    `profile-notes.json`, which `base_check` never reads, so origin/main's copy
+    of `profile.json` and this checkout's are byte-identical even though the
+    verdict was just corrected -- and the batch is not refused."""
+    real_text = (ROOT / "refprofile" / "profile.json").read_text()
+
+    def fake_git(*args):
+        if args[:2] == ("rev-parse", "--verify"):
+            return "deadbeefcafe0000\n"
+        if args[0] == "rev-list":
+            return "0\n"
+        if args[0] == "show" and args[1].endswith("refprofile/profile.json"):
+            return real_text
+        return ""
+    monkeypatch.setattr(rc, "_git", fake_git)
+    monkeypatch.setattr(rc, "DEPENDENCIES", ("refprofile/profile.json",))
+    st = rc.base_check()
+    assert st["problems"] == []
+    assert "refprofile/profile.json" not in st["stale_dependencies"]
+
+
+def test_a_changed_hash_in_profile_json_still_refuses_the_batch(monkeypatch):
+    """The gate must still catch what matters: `profile.json` is evidence, and
+    evidence differing from `origin/main` -- a clip's sha256, a commanded
+    parameter, a rig readback -- has to refuse exactly as before the split."""
+    def fake_git(*args):
+        if args[0] in ("rev-parse", "merge-base"):
+            return "deadbeefcafe0000\n"
+        if args[0] == "rev-list":
+            return "2\n"
+        if args[0] == "show":
+            return ("the reference at the common ancestor\n" if args[1].startswith("deadbeef")
+                    else "a clip hash changed on origin/main, missing from here\n")
+        return ""
+    monkeypatch.setattr(rc, "_git", fake_git)
+    monkeypatch.setattr(rc, "DEPENDENCIES", ("refprofile/profile.json",))
+    with pytest.raises(rc.StaleBase, match="refprofile/profile.json"):
+        rc.base_check()
+
+
+def test_the_committed_profile_json_carries_no_prose_run_case_depends_on():
+    """The evidence file `run_case.py` actually hashes must not have regrown a
+    prose key the #129 split removed -- checked here too, and not only in
+    `tools/test_refprofile.py`, because this is the file this module's own
+    gate reads."""
+    import refprofile as rp
+    real = ROOT / "refprofile" / "profile.json"
+    if not real.exists():
+        pytest.skip("no committed profile in this tree")
+    prof = json.loads(real.read_text())
+    for name, r in prof.get("rigs", {}).items():
+        for k in rp.RIG_PROSE_KEYS:
+            assert k not in r, (name, k)
+    for cid, c in prof.get("clips", {}).items():
+        for k in rp.CLIP_PROSE_KEYS:
+            assert k not in c, (cid, k)
+
+
+def test_run_case_py_is_a_model_input_but_not_a_dependency():
+    """The other half of #129: `tools/run_case.py`'s own `NOT_RUN` reason
+    strings sit in a file that IS a `MODEL_INPUT` (so correcting one changes
+    the hash every future provenance record carries -- a true statement about
+    a source file that changed) but is deliberately NOT a `DEPENDENCY` (so that
+    same edit never trips `base_check`'s StaleBase refusal, unlike
+    `refprofile/profile.json`, whose content-only prose WAS gated by #129
+    before the split). Documented as a rationale, not a TODO: this is the
+    'accept the difference' branch of #129's third acceptance criterion, and
+    it holds only as long as `tools/run_case.py` stays out of `DEPENDENCIES`."""
+    assert "tools/run_case.py" in rc.MODEL_INPUTS
+    assert "tools/run_case.py" not in rc.DEPENDENCIES
+
+
 def test_tolerances_are_frozen_in_one_place_and_named_by_every_metric():
     """A per-case tolerance is a tolerance fitted to an error. Every rule here
     names one of the frozen classes."""

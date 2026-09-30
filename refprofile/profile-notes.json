@@ -1,0 +1,121 @@
+{
+ "schema": "refprofile-notes/1",
+ "what": "Prose commentary on refprofile/profile.json's evidence -- rig disqualification verdicts, per-clip rationale, boilerplate readback captions. Deliberately NOT a hashed input: tools/run_case.py's DEPENDENCIES and MODEL_INPUTS name only profile.json, so editing a sentence here never trips base_check's StaleBase refusal or changes a provenance record's model_input_hashes (#129).",
+ "rigs": {
+  "surge-type2": {
+   "why": "Surge XT is open source and its LP Vintage Ladder subtype Type 2 is sst-filters' VintageLadder::Huov -- Huovilainen's DAFx-04 model, the same paper DR 0001 implements. It is the only reference here whose cutoff is commanded in Hz and reads back in Hz."
+  },
+  "modeld": {
+   "why": "renders exact silence UNDER DAWDREAMER 0.9.0 -- measured, see `--render`'s disqualification probe. The rig BUILDS (its pins hold); it produces no audio under this host, so nothing downstream of it can be a reference. This verdict is about the (plugin, host) pair and not about the plugin: see `modeld-pedalboard`."
+  },
+  "miniv3": {
+   "why": "the rig qualifies and makes sound under dawdreamer (it is SILENT under pedalboard -- the exact reverse of Model D), but every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (reference_compare.calibrate_knob); its ENVELOPE knobs cannot -- nothing in this repository maps a Mini V3 envelope knob to a time. The Mono cases require envelope timing, so a Mini V3 patch frozen here would compare our envelope against an arbitrary knob position and report the difference as a result."
+  },
+  "diva": {
+   "why": "found running unlicensed and inserting clicks (docs/reference-integrity.md section 1); it is also a general analogue-modelling synth rather than a Minimoog emulation, and is excluded from the oscillator study for that reason already."
+  }
+ },
+ "disqualified": {
+  "modeld": {
+   "verdict": "renders exact silence UNDER DAWDREAMER 0.9.0, with the oscillator on AND with the filter self-oscillating. This verdict is about the (plugin, host) pair and not about the plugin: see `modeld-pedalboard`, which is NOT silent under pedalboard. Not usable as a reference under this host."
+  },
+  "miniv3": {
+   "verdict": "makes sound, and its Range control defaults an octave down: note 48 sounds at 65.42 Hz until parameter 45 is written. Not disqualifying on its own -- what disqualifies it for the Mono cases is that its envelope knobs are unitless and nothing here calibrates one to a time."
+  }
+ },
+ "clips": {
+  "surge-type2/lp-open20k-res0.00": {
+   "why": "the filter effectively out of the way: the passband reference that makes 'low-band gain' a ratio inside one instrument",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.00": {
+   "why": "the cutoff-response anchor: resonance zero, the setting F1A states",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.70": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.80": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.86": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.90": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.93": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.95": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.97": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res0.99": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut250-res1.00": {
+   "why": "one rung of Surge's own resonance ladder at the same cutoff",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/drive-100hz-cut250-res0.50-in-12dbfs": {
+   "why": "a steady 100 Hz tone into the filter at a stated input level",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "steady 100 Hz sine"
+  },
+  "surge-type2/drive-100hz-cut250-res0.50-in-6dbfs": {
+   "why": "a steady 100 Hz tone into the filter at a stated input level",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "steady 100 Hz sine"
+  },
+  "surge-type2/drive-100hz-cut250-res0.50-in+0dbfs": {
+   "why": "a steady 100 Hz tone into the filter at a stated input level",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "steady 100 Hz sine"
+  },
+  "surge-type2/lp-cut1000-res0.00": {
+   "why": "the cutoff-response anchor for the 1000 Hz region, at the resonance zero F1B and F1C state",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  },
+  "surge-type2/lp-cut4000-res0.00": {
+   "why": "the cutoff-response anchor for the 4000 Hz region, at the resonance zero F1B and F1C state",
+   "readback_note": "Surge's own cutoff readback, in Hz, at the moment of the render. The COMMANDED cutoff is in `commanded`; the corner this produces is neither and is read off the audio.",
+   "stimulus": "stepped sine, an integer number of periods per step",
+   "parts_note": "(start sample, window length, Hz) into THIS file"
+  }
+ }
+}
