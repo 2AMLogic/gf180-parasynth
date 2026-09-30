@@ -1,0 +1,31 @@
+{
+  "name": "default-m5a",
+  "preset": "default",
+  "note": 45,
+  "fixture": "m5a",
+  "image": "r2",
+  "legacy_image": false,
+  "command": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "m5a",
+    "--image",
+    "r2"
+  ],
+  "init_problems": [],
+  "periods": 8109,
+  "periods_required": 8109,
+  "truncation_control": {
+    "caught": true,
+    "kept_rows": 4174,
+    "of_rows": 8349,
+    "periods": 4174,
+    "periods_required": 8109
+  },
+  "replay_status": 0,
+  "i2s_peak_lsb": 12143,
+  "min_peak_lsb": 1024,
+  "verdict": "PASS"
+}

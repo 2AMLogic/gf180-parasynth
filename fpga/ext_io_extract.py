@@ -59,11 +59,14 @@ INPUTS = ("spi_sck", "spi_mosi", "spi_cs_n", "uart_rxd", "btn_reset")
 CORE_CLOCK = "hardware_clock.clock_raw"
 IMPOSSIBLE_MISO_MAX_NS = 80.000
 # the XDC's synchroniser patterns, verbatim, and what each should match
+# (R2: the UART pair follows #315's fixed XDC, g_uart\.u_uart; R1's record was
+# made with the old patterns and is checked with that instrument, pinned by
+# version in fpga/release/r1_release.py)
 SYNC_PATTERNS = {
     "xdc:spi_async_reg": (r".*u_spi/(sck_q|mosi_q|csn_q)_reg\[[01]\]", "cells", 6),
     "xdc:spi_false_path_d": (r".*u_spi/(sck_q|mosi_q|csn_q)_reg\[0\]/D", "pins", 3),
-    "xdc:uart_async_reg": (r".*g_uart/u_uart/rx_q_reg\[[01]\]", "cells", 2),
-    "xdc:uart_false_path_d": (r".*g_uart/u_uart/rx_q_reg\[0\]/D", "pins", 1),
+    "xdc:uart_async_reg": (r".*g_uart\.u_uart/rx_q_reg\[[01]\]", "cells", 2),
+    "xdc:uart_false_path_d": (r".*g_uart\.u_uart/rx_q_reg\[0\]/D", "pins", 1),
     # what the netlist actually holds (any hierarchy separator)
     "netlist:uart_rx_q": (r".*u_uart/rx_q_reg\[[01]\]", "cells", 2),
 }

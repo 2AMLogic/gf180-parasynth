@@ -1,0 +1,40 @@
+{
+ "state": "PARTIAL",
+ "source_commit": "c544436 (headroom c6c9440, UART c544436); first batch 78c9df1",
+ "host": "build box (ip-172-31-72-198), Icarus 14.0 devel s20260301-476-g1a23d1ffd, Verilator 5.053 devel",
+ "passed": {
+  "deadline stress-pulse PULSE2X=1": "0 missed, slack 20 (R1 loop: 3), I2S 2158/2158 exact, writes 461/461 (dl-stress-pulse-p2x.json)",
+  "deadline stress-saw": "0 missed, slack 20 (R1: 13), I2S 2158/2158 exact (dl-stress-saw.json)",
+  "deadline arty-uart (UART pins, PULSE2X=0 config)": "0 missed, slack 20, I2S 3300/3300 exact, writes 71/71 (dl-arty-uart.json)",
+  "late:20 boundary (stress-pulse PULSE2X=1)": "PASS at slack exactly 0 (dl-late20.json)",
+  "late:21 boundary": "CAUGHT by the deadline check: 1364 missed frames (dl-late21.json)",
+  "reference full2xwin (R1 loop, stress-pulse PULSE2X=1)": "slack 3, reproducing the pre-R2 figure (dl-ref-full2xwin.json)",
+  "control skipallwin (stress-saw)": "358 of 2158 I2S periods differ, deadline met: caught for its intended I2S reason (dl-ctl-skipallwin.json)",
+  "verify_voice quick --osc2x": "74144 frames identical (runall.log)",
+  "verify_voice quick waves3 --osc2x --filter2x --pulse2x": "2880 frames identical (runall.log)",
+  "verify_synth_top full kit --osc2x --filter2x --pulse2x": "2851/2851 I2S periods exact (runall.log)",
+  "M5A full phrase --pulse2x": "1305533/1305533 I2S periods exact (M5A.json)",
+  "M5B full phrase --pulse2x": "729533/729533 I2S periods exact (M5B.json)"
+ },
+ "not_passed": {
+  "verify_voice --set full (R2 config)": "FAIL: 5338 of 442596 samples differ (extremes; runall.log). PRE-EXISTING: R1's published voice_dp.v (67d59af7) fails the same audition+extremes subset with the same counts (5581 PULSE2X=0, 5021 PULSE2X=1), and R2's RTL output equals R1's in every value column on that subset (121040 frames x 27 columns, both configs) -- only the strobe cycle moved, 2..21 cycles earlier (runall3.log, runall4.log). Filed as #354; blocks an R2 build until explained"
+ },
+ "not_run": [
+  "Vivado build of R2: after the settled set lands (#354 resolved; #323, #356, #358, #359 merged) -- the headroom value is delivered and in (0.74), #315 is carried"
+ ],
+ "headroom": {
+  "change": "rectangles 24248/32768 (0.74) in polyblep_saw_pair.v under VOICE_PULSE_2X and voice_fx._render_2x; saw unchanged 27853",
+  "verify_voice waves3 pulse2x": "2880 frames identical (headroom/runall.log)",
+  "control INJECT_BUG_VOICE_PULSE2X_RECT_HEADROOM": "CAUGHT: the comparison failed as required",
+  "verify_voice quick --osc2x (saw unchanged)": "74144 frames identical",
+  "full kit pulse2x": "2851/2851 periods exact",
+  "deadline stress-pulse PULSE2X=1 / stress-saw": "slack 20 / 20, 0 missed, I2S exact",
+  "M5A full phrase pulse2x": "1305533/1305533 periods exact; Foldback 2.208 dB (expected 2.21), Gain error -1.544 dB (expected 1.54)",
+  "M5B full phrase pulse2x": "729533/729533 periods exact; Foldback 1.915 dB (expected 1.91), Gain error +2.057 dB (expected 2.05)"
+ },
+ "uart_pulse2x": {
+  "arty-uart --pulse2x": "PASS: slack 20, I2S 3300/3300 exact, writes 71/71 (uart/dl-arty-uart-p2x.json)",
+  "arty-uart (R1 config, regression)": "PASS: slack 20, 3300/3300 exact",
+  "control arty-uart --pulse2x --inject VOICE_PULSE2X_RECT_HEADROOM": "FAIL as required: 359 of 3300 periods differ from the PULSE2X=1 model"
+ }
+}

@@ -2,37 +2,31 @@
   "engine": "fixed-model",
   "case_id": "D01A",
   "subject": "Bass drum / anchor",
-  "source_commit": "7dd6337",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:27:05Z",
+  "source_commit": "4b560cb",
+  "analysis_run": "run_case@96970102c932 + audio_measure@2aeeca3139f2 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-30T18:04:47Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "7dd6337",
-      "described": "node/D-drums-bitexact-83-g7dd6337",
-      "branch": "fix-decay-and-corner",
-      "dirty": true,
-      "uncommitted_sha256": "f7c8641bd3f74c94",
-      "untracked_files": 1
+      "commit": "4b560cb",
+      "described": "node/D-drums-bitexact-1280-g4b560cb",
+      "branch": "feature/issue-127",
+      "dirty": false,
+      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "398bc543d7b9",
+      "origin_main": "a43a80677e82",
       "behind_commits": 0,
-      "ahead_commits": 5,
+      "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
-      "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
-        }
-      },
+      "ahead_dependencies": {},
       "allow_stale": false,
-      "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "problems": []
     },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
+    "command": "tools/run_case.py D01A --no-audio",
     "config": {
       "voice": "BD",
       "refs": "/tmp/tr808-ref",
@@ -43,16 +37,19 @@
       "level_matched": true
     },
     "python": "3.14.7",
-    "run_at": "2026-09-19T01:27:11Z",
+    "run_at": "2026-09-30T18:04:57Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:b800dfdda3a6cea6",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:2aeeca3139f2dc15",
+      "model/reference_rigs.py": "sha256:377c4862b9ed4baf",
+      "tools/run_case.py": "sha256:96970102c93268e0",
+      "tools/refprofile.py": "sha256:a724653ed17a7ef7",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:801a4d48c1347c43",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
       "reference:bd8/BD5050.WAV": "sha256:2ca93cd7a3b19f6e"
     },
     "artefacts": {
@@ -64,10 +61,11 @@
   },
   "reference_profile": "fischer-tr808-103852:bd8/BD5050.WAV (TONE 5.0, DECAY 5.0)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('BD') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 0 of 11",
+  "render_run": "drums_fx@b800dfdda3a6 kit_with_sounds('BD') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 0 of 11",
   "audio": "reference bd8/BD5050.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
+    "frequency discrimination band": "the geometric mean of two MEASURED bounds for this voice's f0: the floor is the largest session-to-session difference the same machine shows at one setting, the ceiling is everything the machine's own knobs do to that f0 across its whole grid. Measured in docs/bd-repeatability-measurement.md / bd-repeatability-results.json; see F0_DISCRIMINATION_BAND. Unlike the 10 % rule this is an ABSOLUTE Hz figure, because 1.7's +-10 % is a UNIT-TO-UNIT spread and the reference here is a recording of ONE unit, not a nominal",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
     "energy ratio": "3 dB, the half-power convention. A stated convention, not a number derived from any error of ours",
     "event timing": "10 ms -- the positional accuracy audio_measure.onsets states for itself; a failure is larger than the estimator's own resolution",
@@ -115,9 +113,10 @@
       "units": "Hz",
       "reference": 49.7842,
       "error": -0.3643,
-      "tolerance": 4.9784,
+      "tolerance": 2.3703,
       "valid": true,
-      "tolerance_basis": "frequency"
+      "tolerance_basis": "frequency discrimination band",
+      "purpose": "match"
     },
     "early/body energy": {
       "value": -10.3716,
@@ -126,12 +125,13 @@
       "error": 0.2127,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "decay": {
       "units": "ms",
       "valid": false,
-      "why": "reference: the record ends before the decay does: only 842.7 ms follow the -25 dB point and a T20 of 537.3 ms needs 1074.6 ms after it, so the backward integral is reporting the cut and not the decay {'tail_db': -89.98555771349984, 'slope_db_s': -37.22246220364618, 'residual_db': 0.18108304508500606, 'n': 23592, 't20_ms': 537.3099686576046, 'after_hi_ms': 842.6530612244898, 'needed_after_hi_ms': 1074.6199373152092, 'tail_in_t20s': 1.568281086110766, 'min_tail_t20': 2.0, 'tail_residual_db': -33.61473744967074, 'trailing_silence_ms': 0.0, 'sounding_samples': 65970, 'given_samples': 65970}"
+      "why": "reference: the record ends before the decay does: only 842.7 ms follow the -25 dB point and a T20 of 537.3 ms needs 1074.6 ms after it, so the backward integral is reporting the cut and not the decay {'tail_db': -89.98555771349984, 'slope_db_s': -37.222462203646174, 'residual_db': 0.18108304508500161, 'n': 23592, 't20_ms': 537.3099686576047, 'after_hi_ms': 842.6530612244898, 'needed_after_hi_ms': 1074.6199373152094, 'tail_in_t20s': 1.5682810861107657, 'min_tail_t20': 2.0, 'tail_residual_db': -33.61473744967076, 'trailing_silence_ms': 0.0, 'sounding_samples': 65970, 'given_samples': 65970}"
     }
   },
   "diagnostics": {

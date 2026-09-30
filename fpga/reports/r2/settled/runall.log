@@ -1,0 +1,107 @@
+==============================================================================
+PASS          3175.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --osc2x --filter2x --pulse2x --outdir build/r2s/voice-full-p2x
+                [audition] 38400 frames: 0 sample mismatches, 0 tap mismatches
+                [audition] 38400 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 442596 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 224 (slack 30), worst last-busy cycle 223 (slack 32)
+PASS           618.1s  /home/ubuntu/work/venv/bin/python tools/verify_m5a_filter2x_i2s.py --case M5A --pulse2x --timeout 5400 --outdir build/r2s/full-M5A --verification build/r2s/M5A.txt --wav build/r2s/M5A-i2s.wav --record build/r2s/M5A.json --audio build/r2s/M5A-scored.wav
+              verify_synth_top: decoded I2S WAV sha256 f8da7ea81de78ad0e7bb630bb5f285ba87254aa0dfd28638fab58f0242d790d9
+              verify_synth_top: model peak |sample| 7910 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames
+              verify_synth_top: PASS -- 1305533 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+              verify_synth_top: M5A path verified from SPI pins through the production voice and I2S pins
+PASS           353.6s  /home/ubuntu/work/venv/bin/python tools/verify_m5a_filter2x_i2s.py --case M5B --pulse2x --timeout 5400 --outdir build/r2s/full-M5B --verification build/r2s/M5B.txt --wav build/r2s/M5B-i2s.wav --record build/r2s/M5B.json --audio build/r2s/M5B-scored.wav
+              verify_synth_top: decoded I2S WAV sha256 8008bd57e505ef74b6b83e6ef7ab8da27584b5a96adb570538cac0f5112de2d0
+              verify_synth_top: model peak |sample| 8208 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 0, DFILT engaged in 0 frames
+              verify_synth_top: PASS -- 729533 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+              verify_synth_top: M5B path verified from SPI pins through the production voice and I2S pins
+PASS            34.0s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --only extremes --osc2x --filter2x --pulse2x --define INJECT_BUG_LADDER_XG25 --expect-fail --outdir build/r2s/ctl-ladder-xg25
+                first v mismatch at frame 364 [extremes]: model -58338, RTL -58341
+                first out_v mismatch at frame 364 [extremes]: model -116675, RTL -116681
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 212 (slack 42), worst last-busy cycle 211 (slack 44)
+              verify_voice: negative control  CAUGHT (comparison failed as required)
+PASS            64.6s  /home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --pulse2x --scenario phrase --outdir build/r2s/uart-r2
+              verify_uart_bridge[phrase]: PASS -- writes 87/87, timing bad 0, corrupt 0, I2S mismatch 0 over 6734 periods, errs 0 {}
+              {"state": "PASS", "runs": {"phrase": "PASS"}}
+PASS            22.6s  /home/ubuntu/work/venv/bin/python fpga/verify_uart_bridge.py --pulse2x --start-red --outdir build/r2s/uart-r2-startred
+              verify_uart_bridge: START RED against /home/ubuntu/work/r2i/fpga/stubs/arty_a7_uart_stub.v
+                  0 writes drained, 26 expected
+              verify_uart_bridge: start-red run state FAIL (writes_seen 0 of 26, wire_mismatch 0, periods 3418)
+              verify_uart_bridge: start red confirmed -- the bench fails against a behaviour-free stub, as it must
+PASS            23.0s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --osc2x --filter2x --pulse2x --outdir build/r2s/top-fullkit-p2x
+              verify_synth_top: NOTE -- the core strobes its sample as late as cycle 174 of 256, past the LRCLK transition at 128 (32 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+              verify_synth_top: writes landed in frames 2..1353; modelling 2854 frames
+              verify_synth_top: model peak |sample| 32768 of 32768 (349 frames at the rail); drums |dmix| max 60952, |body| max 172093, DFILT engaged in 139 frames
+              verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+PASS            22.4s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --outdir build/r2s/dl-stress-pulse-p2x --json build/r2s/dl-stress-pulse-p2x.json
+                worst frame 518: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+PASS            20.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --outdir build/r2s/dl-stress-saw --json build/r2s/dl-stress-saw.json
+                worst frame 518: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+PASS            30.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --pulse2x --outdir build/r2s/dl-arty-uart-p2x --json build/r2s/dl-arty-uart-p2x.json
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+PASS            30.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --outdir build/r2s/dl-arty-uart --json build/r2s/dl-arty-uart.json
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+PASS            22.8s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --mutant late:20 --outdir build/r2s/dl-late20 --json build/r2s/dl-late20.json
+                worst frame 518: strobe 254 (slack 0), voice 9..253, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 0 cycles, I2S identical to the model
+PASS            32.9s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --mutant late:21 --expect-fail --outdir build/r2s/dl-late21 --json build/r2s/dl-late21.json
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 1017 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- 1364 missed frame(s), first [516, 517, 518, 519, 520]; 1364 frame(s) with no sample; wire_mismatch 1017
+              verify_deadline: negative control late:21 CAUGHT by the deadline check
+PASS            30.8s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-pulse --pulse2x --mutant full2xwin --outdir build/r2s/dl-ref-full2xwin --json build/r2s/dl-ref-full2xwin.json
+                worst frame 835: strobe 249 (slack 5), voice 9..248, drum 9..125, waits r/osc/d/y 57/60/23/11, windows 3/12, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_2x_gate_on': 1789, 'three_2x_audible_gate_on': 1789, 'three_rect_2x_gate_on': 1641, 'three_2x_audible_with_strike': 47, 'three_2x_audible_dfilt': 1333, 'three_saws_gate_on': 142}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 3 cycles, I2S identical to the model
+FAIL(1)         20.2s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --mutant skipallwin --outdir build/r2s/dl-ctl-skipallwin --json build/r2s/dl-ctl-skipallwin.json
+                worst frame 518: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 358 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 358
+FAIL(1)         30.6s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --pulse2x --inject VOICE_PULSE2X_RECT_HEADROOM --outdir build/r2s/dl-arty-uart-p2x-ctl --json build/r2s/dl-arty-uart-p2x-ctl.json
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 359 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: FAIL -- wire_mismatch 359; core_bad 359; UART contract check failed: seg 0 period 2523: model -4191, wire -4192, error -1 LSB; seg 0 period 2524: model -1659, wire -1658, error +1 LSB; seg 0 period 2529: model -2282, wire -2283, error -1 LSB
+PASS            17.7s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --osc2x --outdir build/r2s/voice-waves3-p2x
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+                [waves3] 576 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: PASS -- 2880 frames, every sample and every tap identical to the model; final state identical
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 197 (slack 57), worst last-busy cycle 196 (slack 59)
+PASS            18.8s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set quick --only waves3 --filter2x --pulse2x --osc2x --inject PULSE2X_RECT_HEADROOM --expect-fail --outdir build/r2s/ctl-rect-headroom
+                first v mismatch at frame 30 [waves3]: model -68, RTL -67
+                first out_v mismatch at frame 31 [waves3]: model -35, RTL -34
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 197 (slack 57), worst last-busy cycle 196 (slack 59)
+              verify_voice: negative control PULSE2X_RECT_HEADROOM CAUGHT (comparison failed as required)
+FAIL(1)          1.7s  /home/ubuntu/work/venv/bin/python tools/trial.py run T-RELEASE-BOUND
+                           stale_control: REFUSED -- the unmodified isolated copy is not BOUND (exit 1), so a STALE on the substituted copy would prove nothing
+                           NOT caught: printed REFUSED, not STALE
+              trial T-RELEASE-BOUND: FAIL (execution complete) -- arty-evidence-binding: FAIL -- STALE: arty_a7_top binds fpga/reports/arty/rev14-clean/verification.json, which does not cover 3 compiled source(s):
+              receipt: /home/ubuntu/work/r2i/build/trials/T-RELEASE-BOUND/20260927T125130Z-9703817-check-538699-7056db/receipt.json
+PASS             1.9s  /home/ubuntu/work/venv/bin/python tools/trial.py run T-RELEASE-BOUND-R1
+                           stale_control: STALE -- case host: the R1 manifest with ['host.commands.demo.cmds_sha256', 'host.commands.demo.packets'] taken from R0 is STALE at exactly those fields
+                           caught: STALE
+              trial T-RELEASE-BOUND-R1: PASS (execution complete)
+              receipt: /home/ubuntu/work/r2i/build/trials/T-RELEASE-BOUND-R1/20260927T125132Z-9703817-check-538822-ef9ef2/receipt.json
+FAIL(1)         42.5s  /home/ubuntu/work/venv/bin/python -m pytest -q -p no:cacheprovider fpga/release tools/test_verify_deadline.py tools/test_ladder_xg_width.py fpga/test_build_arty.py fpga/test_xdc_bindings.py
+              FAILED fpga/test_xdc_bindings.py::test_control_publisher_refuses_a_failed_after_route_check[failed2]
+              FAILED fpga/test_xdc_bindings.py::test_control_publisher_refuses_a_failed_after_route_check[failed3]
+              FAILED fpga/test_xdc_bindings.py::test_control_publisher_refuses_an_unintended_exception
+              13 failed, 183 passed in 42.20s
+==============================================================================
+17/21 passed  --  FAIL /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python tools/tria; FAIL /home/ubuntu/work/venv/bin/python -m pytest 
+RUNALL_EXIT=1

@@ -87,7 +87,14 @@ module ladder_dp_n #(
     reg signed [SW-1:0] d2 [0:NCH-1];
     reg        [CHW-1:0] chr;                    // channel of the sample in flight
     wire       [CHW-1:0] chsel = (NCH == 1) ? {CHW{1'b0}} : ch;
-    reg signed [SW:0]   xg;                      // (x * gain) >> 11, 25 bits
+`ifdef INJECT_BUG_LADDER_XG25
+    reg signed [SW:0]   xg;                      // NEGATIVE CONTROL (#354): R1's 25-bit xg, which
+                                                 //   WRAPS when |x| * gain >= 2^35 (gain > 2^19 at |x| = 2^16)
+`else
+    reg signed [SW+1:0] xg;                      // (x * gain) >> 11: 26 bits. 17-bit x times 20-bit
+                                                 //   gain >> 11 reaches +-2^25, one bit past the 25
+                                                 //   R1 kept; the wrap flipped the sign (#354)
+`endif
     reg [3:0] step;                              // 0 idle, 1..12 below
     reg       os;                                // oversample pass
     reg       os2r;                              // per-sample two-update mode
@@ -191,7 +198,11 @@ module ladder_dp_n #(
                 end
             end else case (step)
                 4'd1: begin                              // xg; load k * fb
+`ifdef INJECT_BUG_LADDER_XG25
                     xg    <= xg_full[SW:0];
+`else
+                    xg    <= xg_full[SW+1:0];
+`endif
                     mul_a <= fb0; mul_b <= {3'b0, k};
                     step  <= 4'd2;
                 end

@@ -84,7 +84,7 @@ def main(argv=None) -> int:
     ap.add_argument("--legacy-image", action="store_true")
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--outdir", default=None)
-    ap.add_argument("--image", default="release", choices=("release", "tree", "r1"))
+    ap.add_argument("--image", default="release", choices=("release", "tree", "r1", "r2"))
     ap.add_argument("--fixture", default="none", choices=("none", "m5a"))
     a = ap.parse_args(argv)
     if a.fixture != "none" and a.preset != "default":
@@ -100,14 +100,17 @@ def main(argv=None) -> int:
         print(f"held_note_audible: REFUSED -- the CLI refused the capture (exit {rc})")
         return 2
     init_problems = []
-    if a.image in ("tree", "r1"):
+    if a.image in ("tree", "r1", "r2"):
         import r1_candidate as r1c
         plan = json.load(open(prefix + ".plan.json"))
         setup = [(r["expect"]["flag"], r["expect"]["sec"], r["expect"]["addr"],
                   r["expect"]["data"]) for r in plan["rows"] if r["kind"] == "write"]
         init_problems = r1c.check_init(setup, kit_expected=False)
     import verify_uart_bridge as vub
-    status = vub.main(["--replay", prefix, "--replay-name", name, "--outdir", outdir])
+    # the replay's RTL defines and model are the IMAGE's configuration: r2 is
+    # PULSE2X=1 (vub.image_config), every other image PULSE2X=0
+    with vub.image_config(a.image):
+        status = vub.main(["--replay", prefix, "--replay-name", name, "--outdir", outdir])
     i2s = os.path.join(outdir, name, "uart_i2s.txt")
     vrec_path = os.path.join(outdir, name, "verification.json")
     vrec = json.load(open(vrec_path)) if os.path.exists(vrec_path) else {}

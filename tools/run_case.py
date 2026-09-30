@@ -42,6 +42,18 @@ number was computed (see `TOLERANCE_POLICY`). Retuning a tolerance after
 seeing an error is fitting around a deficiency, and the board would still
 look green.
 
+One tolerance has since been RE-DERIVED, and the distinction matters because
+the paragraph above is exactly what would excuse never touching it. The bass
+drum's f0 tolerance moved from 10 % of the reference to an absolute 2.370 Hz
+(#127, `F0_DISCRIMINATION_BAND`). What it is derived from is measurements of
+the REFERENCE MACHINE -- how far it differs from itself between two recording
+sessions, and how far its own knobs move its f0 -- and not from any error of
+ours; the numbers come from `docs/bd-repeatability-results.json`, which was
+committed before this. And it moved TIGHTER, 5.06 Hz to 2.370 Hz, which is the
+opposite direction from fitting around a deficiency: the old figure was 1.38x
+everything the machine's own controls could do, so it could not fail a kick
+rendered at the wrong end of the voice's range.
+
 **The apparatus asserts its preconditions at the point of use and REFUSES
 rather than reports.** The reference corpus must be present, the named file
 must exist, the sound must be in the kit, and the reference clip must not be
@@ -174,6 +186,15 @@ REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
 TOLERANCE_POLICY = {
     "frequency": "10 % of the reference value -- the TR-808's own component "
                  "tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
+    "frequency discrimination band": (
+        "the geometric mean of two MEASURED bounds for this voice's f0: the "
+        "floor is the largest session-to-session difference the same machine "
+        "shows at one setting, the ceiling is everything the machine's own "
+        "knobs do to that f0 across its whole grid. Measured in "
+        "docs/bd-repeatability-measurement.md / bd-repeatability-results.json; "
+        "see F0_DISCRIMINATION_BAND. Unlike the 10 % rule this is an ABSOLUTE "
+        "Hz figure, because 1.7's +-10 % is a UNIT-TO-UNIT spread and the "
+        "reference here is a recording of ONE unit, not a nominal"),
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for "
             "these bridged-T resonators tau is proportional to Q",
     "energy ratio": "3 dB, the half-power convention. A stated convention, not "
@@ -205,6 +226,143 @@ def tol_frequency_of_f0(ref: float, ctx: dict) -> tuple:
     if f0 is None:
         return abs(ref) * 0.10, "frequency"
     return abs(f0) * 0.10, "frequency (10 % of the reference steady f0)"
+
+
+# ===========================================================================
+# 1a. The f0 DISCRIMINATION BAND (#127), and why a percentage was the wrong
+#     shape rather than the wrong number.
+#
+# `tol_frequency`'s 10 % is sourced -- docs/tr808-reference.md 1.7, quoting
+# W14a section 11: "+-20 % capacitors and +-5 % resistors ... Every f0 below is
+# therefore a +-10 % nominal". READ IT AGAIN: that is a UNIT-TO-UNIT figure. It
+# says where a randomly-drawn 808's f0 may sit relative to the DESIGN VALUE.
+# It is exactly the right number for `LINE_SEARCH_FRAC` below, which has to
+# find a real partial belonging to an unknown unit near a nominal frequency.
+#
+# It is the wrong number for a SCORECARD TOLERANCE, because the reference on
+# the other side of that comparison is not a nominal -- it is a recording of
+# one specific machine, s/n 103852. Matching a recording to +-10 % of a
+# unit-to-unit spread grants our model the whole population's variation as
+# free credit against a single member of it.
+#
+# What that cost, measured in docs/bd-repeatability-measurement.md section 4:
+# on the bass drum the 10 % tolerance is 5.06 Hz, and everything the machine's
+# own DECAY and TONE controls do to its f0 across the full 6x6 grid at both
+# accents is 3.66 Hz. The tolerance was 1.38x the travel of the thing it
+# scores, so NO TWO SETTINGS OF THE VOICE COULD BE TOLD APART -- a kick
+# rendered at the wrong end of its own range passed.
+#
+# A tolerance has two measured bounds and they point opposite ways:
+#
+#   FLOOR    the same machine, recorded twice at one setting, differs by this
+#            much. A tolerance below it convicts the 808 of not being itself,
+#            which is #101's trap on the band split: a number that scores the
+#            recording session instead of the instrument.
+#   CEILING  the machine's own knobs move the metric this much. A tolerance
+#            above it cannot distinguish any two settings.
+#
+# WHICH POINT IN THE BAND: the geometric mean, and that is a derivation rather
+# than a taste. Neither bound has an argued margin attached to it, so the
+# defensible choice is the one that is as far as possible from BOTH failures at
+# once -- and sqrt(floor*ceiling) is the unique point whose two ratio margins,
+# tol/floor and ceiling/tol, are equal. It maximises the smaller of the two. On
+# the bass drum that is sqrt(1.5345 * 3.6612) = 2.370 Hz: 1.54x the worst
+# session pair, and 0.65x the knob travel. No fraction is chosen by hand.
+#
+# 2.370 Hz is 4.76 % of D01A's 49.78 Hz reference, which sits above the ~3 %
+# that same section says f0 "could not be tightened below ... without becoming
+# scoring noise". The derivation and the doc's own limit agree; they were not
+# fitted to each other.
+#
+# THE NUMBERS ARE TRANSCRIBED, SO A TEST CHECKS THE TRANSCRIPTION.
+# `tools/test_run_case.py::test_f0_discrimination_band_matches_the_measurement`
+# reads docs/bd-repeatability-results.json and asserts every field below,
+# because a hand-copied measurement is a claim until something re-derives it.
+#
+# SCOPE: BD only, and deliberately. This table needs a MEASURED floor and a
+# MEASURED ceiling per voice, and #126 measured them for one voice. The other
+# three f0 cases still on `tol_frequency` (D04A/D06A/D08A, the congas) are not
+# in the same state and were checked rather than assumed: their tuning pot
+# spans +-10 % of nominal (reference 1.7), so their f0 travel is ~20 % of
+# nominal against a 10 % tolerance -- tol/travel ~ 0.5, under 1, so the
+# bass drum's specific defect is not present there. Their session-to-session
+# floor is unmeasured, so the floor half of the band cannot be derived for
+# them at all and no entry is invented here. The general question #126 raised
+# -- does this recur elsewhere on the board -- is NOT closed by this change;
+# it is closed one voice at a time by measuring one voice at a time, and this
+# table is where each measurement lands.
+F0_DISCRIMINATION_BAND = {
+    "BD": dict(
+        # session_to_session.metrics["Pitch trajectory"].abs_diff_max, Hz.
+        # The MAX over the six comparable TONE positions, not the 1.3852
+        # median the doc's table quotes: the floor has to clear every pair of
+        # recordings of the same machine that was actually observed, and a
+        # median lets half of them fail by construction.
+        machine_hz=1.5345,
+        # knob_travel["both accents"]["Pitch trajectory"].grid_span, Hz --
+        # the union over both accents of the full 6 DECAY x 6 TONE grid,
+        # 50.5448 to 54.2060 Hz.
+        travel_hz=3.6612,
+        # self_test.editing_noise["Pitch trajectory"].span, Hz. Recorded to be
+        # asserted against, not used in the arithmetic: the estimator's own
+        # scatter on six editor-trim variants of ONE recording. Four orders of
+        # magnitude below the machine floor, which is what makes the machine
+        # floor a measurement of the machine.
+        apparatus_hz=0.00035088462684029764,
+        source=("docs/bd-repeatability-measurement.md sections 2-4 and "
+                "docs/bd-repeatability-results.json (#111/#126), 808 From Mars "
+                "clean Digital bass drum, 144 files x 2 editions"),
+    ),
+}
+
+#: The `tolerance_basis` every voice in `F0_DISCRIMINATION_BAND` reports. A
+#: top-level `TOLERANCE_POLICY` key, so the recorded basis resolves to the
+#: frozen policy text whether a consumer reads the whole string or splits it
+#: at " (" the way `test_tolerances_are_frozen_in_one_place` does.
+F0_BAND_BASIS = "frequency discrimination band"
+
+
+def f0_discrimination_tolerance(voice: str) -> float:
+    """sqrt(floor * ceiling) for `voice`, in Hz. Raises KeyError for a voice
+    whose band has not been measured -- see `tol_f0_discrimination`."""
+    band = F0_DISCRIMINATION_BAND[voice]
+    return math.sqrt(band["machine_hz"] * band["travel_hz"])
+
+
+def tol_f0_discrimination(voice: str):
+    """A tolerance rule for `voice`'s f0: an absolute Hz figure derived from
+    that voice's own MEASURED discrimination band, ignoring the reference
+    value.
+
+    **Two preconditions, both asserted here rather than assumed.**
+
+    A voice with no measured band raises `KeyError` AT IMPORT, when the plan
+    is built -- not a fallback to 10 %, because the whole finding of #127 is
+    that 10 % is the wrong shape, and a silent fallback would re-introduce it
+    under a name that reads as if it had been measured.
+
+    A voice whose measured floor does not sit below its measured ceiling has
+    no usable tolerance at all: there is no value that both spares the machine
+    its own repeat spread and separates two of its settings. That is a REFUSAL
+    of the metric -- `measure_pair` turns the non-finite tolerance into an
+    invalid metric carrying this reason -- and not an exception, because it
+    disqualifies one metric and not the runner."""
+    band = F0_DISCRIMINATION_BAND[voice]        # KeyError: measure it first
+    floor, ceiling = band["machine_hz"], band["travel_hz"]
+    if not (0.0 < floor < ceiling):
+        why = (f"{F0_BAND_BASIS} (REFUSED: {voice}'s measured f0 floor "
+               f"{floor} Hz does not sit below its measured knob travel "
+               f"{ceiling} Hz, so no tolerance can both spare the machine its "
+               f"own repeat spread and separate two of its settings)")
+
+        def refuse(ref: float, ctx: dict) -> tuple:
+            return math.nan, why
+        return refuse
+    tol = f0_discrimination_tolerance(voice)
+
+    def f(ref: float, ctx: dict) -> tuple:
+        return tol, F0_BAND_BASIS
+    return f
 
 
 def tol_time(ref: float, ctx: dict) -> tuple:
@@ -255,8 +413,17 @@ def metric_purpose(name: str) -> str:
 # ===========================================================================
 #: How far either side of a NOMINAL partial frequency a real one is looked for.
 #: 10 % is the TR-808's own component tolerance on an oscillator's f0
-#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
-#: the search covers exactly the range a unit is allowed to sit in.
+#: (docs/tr808-reference.md 1.7), so the search covers exactly the range a unit
+#: is allowed to sit in.
+#:
+#: UNCHANGED BY #127, AND FOR THE REASON #127 TURNS ON. 1.7's +-10 % is a
+#: UNIT-TO-UNIT spread, which is precisely what a search window needs: the
+#: partial belongs to an unknown unit and may sit anywhere in that band. It is
+#: NOT what a tolerance against a recording of ONE known unit needs, which is
+#: why the bass drum's f0 tolerance left this figure behind (see
+#: `F0_DISCRIMINATION_BAND`) while this window keeps it. The two used to be
+#: described here as "the same figure", and they were the same number for two
+#: different reasons.
 LINE_SEARCH_FRAC = 0.10
 
 #: How far above its own measured floor a reading has to sit before it is a
@@ -311,9 +478,9 @@ BAND_PAIR_MAX_DECAY_BIAS_DB = 0.5
 
 #: How far inside its band a partial must sit. The TR-808's own component
 #: tolerance, +-10 % (docs/tr808-reference.md 1.7), the same figure
-#: `LINE_SEARCH_FRAC` and `tol_frequency` use: a band that does not hold the
-#: partial with that much margin cannot hold it for a DIFFERENT unit of the
-#: same machine. Measured cost at exactly that margin: 0.011 dB; at 2 % of the
+#: `LINE_SEARCH_FRAC` uses and for the same unit-to-unit reason: a band that
+#: does not hold the partial with that much margin cannot hold it for a
+#: DIFFERENT unit of the same machine. Measured cost at exactly that margin: 0.011 dB; at 2 % of the
 #: band's half-width from the edge, 5.3 dB.
 BAND_PAIR_EDGE_MARGIN = LINE_SEARCH_FRAC
 
@@ -1861,7 +2028,14 @@ CB_BALANCE_OP = dict(f_lo_range=(460, 700), f_hi_range=(700, 1000),
 # inconvenient thing.
 DRUM_PLAN = {
     "BD": [
-        ("Pitch trajectory", "Hz", _f0("BD", 0.010, 0.500), tol_frequency),
+        # NOT `tol_frequency`. 10 % of this reference is 5.06 Hz and the
+        # machine's own DECAY and TONE controls move its f0 by 3.66 Hz in
+        # total, so the 10 % rule could not fail a kick rendered anywhere in
+        # the voice's own range (#127). The absolute figure here is derived
+        # from that measured travel and from the machine's measured repeat
+        # spread -- see `F0_DISCRIMINATION_BAND`.
+        ("Pitch trajectory", "Hz", _f0("BD", 0.010, 0.500),
+         tol_f0_discrimination("BD")),
         # A TIME split, not a frequency one. The first version asked for the
         # energy above 300 Hz inside a 10 ms window, and 10 ms is three periods
         # of a 49 Hz kick: too short for a spectrum to resolve the split and
@@ -3101,7 +3275,11 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
         m["reference"] = round(float(b.value), 4)
         return m
     if not tol or not math.isfinite(tol):
-        return invalid_metric(units, f"no usable tolerance for reference {b.value!r}")
+        # The basis carries the rule's own reason when it has one (a tolerance
+        # rule that REFUSES says why -- see `tol_f0_discrimination`), and a
+        # reason is the difference between a refusal and a shrug.
+        why = f"no usable tolerance for reference {b.value!r}"
+        return invalid_metric(units, f"{why}: {basis}" if basis else why)
     return {"value": round(float(a.value), 4), "units": units,
             "reference": round(float(b.value), 4),
             "error": round(float(a.value) - float(b.value), 4),

@@ -1,0 +1,414 @@
+{
+  "schema": "gf180-parasynth R2 release manifest v1",
+  "release": "arty-a7-100t R2 2025.1",
+  "status": "RELEASE CANDIDATE: a built, timing-closed, DSP-reviewed image bound to its frozen sources, host bytes and digital evidence. pulse2x is included by OPERATOR OVERRIDE of its acceptance rule, not by passing it (#282). No physical programming, control or audio capture has been performed on it.",
+  "operator_override": {
+    "decision": "#282, 2026-09-27: include pulse2x (rectangles at 0.74) in R2",
+    "rule_verdict": "NOT ACCEPTED: 6 of 107 untouched conditions fail the 1.00 dB rule (docs/scorecard/m5-artifacts-333/README.md, r2-compare/r2-074.json); the bounded repair also failed (PR #370)",
+    "gained": "M5A/M5B foldback 10.27/8.85 dB -> 2.21/1.91 dB (3 dB limit)",
+    "known_limitations": [
+      "square, MIDI 36, cutoff 400, q 0.5, drive 1.6: brightness -4.82 dB vs R1",
+      "pulse29, MIDI 36, cutoff 400, q 0.5, drive 1.6: brightness -3.46 dB",
+      "square, MIDI 96, cutoff 20 kHz, q 0.5, drive 1.6: brightness -2.46 dB",
+      "pulse29, MIDI 96, cutoff 20 kHz, q 0.5, drive 1.6: brightness -2.45 dB",
+      "pulse29, MIDI 84, cutoff 400, q 0, drive 1.6: brightness -1.64 dB",
+      "pulse29, MIDI 120, cutoff 400, q 0.5, drive 0.75: unwanted energy +1.35 dB absolute / +2.92 dB relative, at -113 dBFS (near-silent)"
+    ]
+  },
+  "contract_revision": 14,
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 1
+  },
+  "image": {
+    "publication": "fpga/reports/arty/r2-2025.1/publication.json",
+    "publication_sha256": "0425918478a1d9955aa7bb56055d27e88c8414f76887686c3409f4e78aef9f8c",
+    "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
+    "configuration": {
+      "OSC2X": 1,
+      "FILTER2X": 1,
+      "PULSE2X": 1
+    },
+    "part": "xc7a100tcsg324-1",
+    "tool": [
+      "vivado v2025.1 (64-bit)",
+      "SW Build 6140274 on Wed May 21 22:58:25 MDT 2025"
+    ],
+    "build_seconds": 498.513,
+    "bitstream": "fpga/reports/arty/r2-2025.1/arty.bit",
+    "bitstream_sha256": "167a6c7f7a9c3a1c95bcd98d7000f9dfb6262d2a64e2fb8026c3c88fbeba147d",
+    "bitstream_bytes": 3825912,
+    "routed_dcp_sha256": "e8fd34316cb15d660e1bf48336599d5367fc20da755b38f72f97abac7ff68fb6",
+    "build_script_sha256": "01c06a2dde40f84fed89812bcca32c94359bd209b57350bbc16fa958dcbeba84",
+    "timing": {
+      "wns_ns": 14.7,
+      "tns_ns": 0.0,
+      "setup_failing": 0.0,
+      "setup_endpoints": 43147.0,
+      "whs_ns": 0.02,
+      "ths_ns": 0.0,
+      "hold_failing": 0.0,
+      "hold_endpoints": 43147.0
+    },
+    "core_period_ns": 81.38,
+    "resources": {
+      "Slice LUTs": {
+        "used": 15484.0,
+        "available": 63400.0
+      },
+      "Slice Registers": {
+        "used": 13490.0,
+        "available": 126800.0
+      },
+      "DSPs": {
+        "used": 124.0,
+        "available": 240.0
+      },
+      "Block RAM Tile": {
+        "used": 0.0,
+        "available": 135.0
+      },
+      "Bonded IOB": {
+        "used": 15.0,
+        "available": 210.0
+      }
+    },
+    "drc": {
+      "DPIP-1": {
+        "severity": "Warning",
+        "count": 118
+      },
+      "DPOP-1": {
+        "severity": "Warning",
+        "count": 121
+      },
+      "DPOP-2": {
+        "severity": "Warning",
+        "count": 118
+      },
+      "DPREG-4": {
+        "severity": "Warning",
+        "count": 13
+      }
+    },
+    "internal_timing_pass": true,
+    "external_io_timing_qualified": true,
+    "output_delay_exceptions": [
+      "i2s_bclk"
+    ],
+    "dsp_feedback_review": {
+      "complete": true,
+      "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE",
+      "targets": 13,
+      "routed_dcp_sha256": "e8fd34316cb15d660e1bf48336599d5367fc20da755b38f72f97abac7ff68fb6"
+    },
+    "digital_verification": {
+      "record": "fpga/reports/arty/r2-clean/verification.json",
+      "record_sha256": "5ac37598e2938b0a386d17840274d4100a487f1da50f215acfe36c4d5e006eb4",
+      "periods": 6734
+    },
+    "remaining_review": [
+      "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
+      "physical programming, control and audio capture"
+    ],
+    "source_sha256": {
+      "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
+      "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+      "rtl-sketch/voice_dp.v": "c1d21f5b8e0c616960e5626bdb76a0ce3fa2379de3670f89408b6e94c17acc59",
+      "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+      "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+      "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+      "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+      "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+      "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+      "rtl-sketch/ladder_dp_n.v": "2276e89d112bd24d6384f3deed427bcabb9525d3df68ded8c61d2c681a3a8373",
+      "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+      "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+      "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+      "rtl-sketch/polyblep_saw_pair.v": "cac599b32b23227827dbf3f3b7225a4d1fa8843e1d90d6877ad5916be6d3c886",
+      "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+      "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+      "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+      "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+      "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+      "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+      "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+      "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+      "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+      "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+      "fpga/boards/arty-a7-100.xdc": "b594cc1545a73cdfd7753f578f03de51758ee962fff723273bece33ec3e48715"
+    },
+    "source_commit": "3182638c4349d174bff0b3d127fb13ab3f14a560",
+    "source_commit_verified": true,
+    "image": "r2",
+    "differs_from_r1_freeze": {
+      "fpga/boards/arty-a7-100.xdc": "UART-RX sync constraints bind g_uart.u_uart (#315); build and publisher assert binding and effect (fpga/xdc_bindings.py)",
+      "rtl-sketch/ladder_dp_n.v": "(x * gain) >> 11 held in 26 bits, not 25: the first wrong operation behind #354 (PR #364); control INJECT_BUG_LADDER_XG25",
+      "rtl-sketch/polyblep_saw_pair.v": "rectangle decimator headroom 24248/32768 (#333, recheck-333 item 5)",
+      "rtl-sketch/voice_dp.v": "skip2xwin (#333, docs/deadline/recheck-333)"
+    },
+    "constraint_binding": {
+      "reports_sha256": {
+        "constraint_matches.rpt": "df5f49e2caa9aae3a27cec0774bd766aa7cdaa4dbbf3ca120ae0d1148721ee29",
+        "exceptions.rpt": "3e8835daa60ee461bbb098f4d6cb191f24a88a2205331dfea8aae3d74991e34d"
+      },
+      "checked_by": "fpga/xdc_bindings.check_report + check_route",
+      "verdict": "every XDC object query bound exactly its objects; the UART-RX synchroniser is excepted by the async input arc only; stage 1 -> 2 and downstream are timed"
+    }
+  },
+  "external_io": {
+    "record": "fpga/reports/arty/r2-2025.1/ext-io/ext-io-extract.json",
+    "sha256": "8032563e2a139158b34eb07cfafe58996f60029d5d4af09c4b8f759b1fad3237",
+    "state": "PASS",
+    "worst_setup_slack_ns": 14.7,
+    "worst_hold_slack_ns": 3.154,
+    "ports": {
+      "i2s_lrclk": {
+        "setup_slack_ns": 70.748,
+        "hold_slack_ns": 154.117
+      },
+      "i2s_sdata": {
+        "setup_slack_ns": 72.041,
+        "hold_slack_ns": 153.302
+      },
+      "spi_miso": {
+        "setup_slack_ns": 14.7,
+        "hold_slack_ns": 3.664
+      },
+      "led[1]": {
+        "setup_slack_ns": 67.342,
+        "hold_slack_ns": 4.5
+      },
+      "led[2]": {
+        "setup_slack_ns": 70.913,
+        "hold_slack_ns": 3.154
+      },
+      "led[3]": {
+        "setup_slack_ns": 70.47,
+        "hold_slack_ns": 3.376
+      },
+      "uart_txd": {
+        "setup_slack_ns": 68.508,
+        "hold_slack_ns": 4.043
+      }
+    },
+    "spi_miso": {
+      "sta_co_bound_ns": 11.722,
+      "co_budget_ns": 26.422,
+      "max_guaranteed_readback_mhz": 1.4601,
+      "readback_qualified_mhz": 1.4,
+      "write_ceiling_mhz": 2.0
+    },
+    "control": {
+      "id": "IMPOSSIBLE_MISO",
+      "caught": true,
+      "spi_miso_setup_slack_ns": -10.342
+    },
+    "uart_rx_xdc_constraints_bound": {
+      "xdc:uart_async_reg": 2,
+      "xdc:uart_false_path_d": 1
+    },
+    "uart_rx_async_reg_from_rtl": [
+      "u_synth/g_uart.u_uart/rx_q_reg[0]",
+      "u_synth/g_uart.u_uart/rx_q_reg[1]"
+    ]
+  },
+  "host": {
+    "selector": "--image r2",
+    "contract_revision": 14,
+    "default_image": "release",
+    "kit": {
+      "sha256": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683",
+      "writes": 148,
+      "is_r1_frozen_kit": true
+    },
+    "known_state_preamble": [
+      [
+        0,
+        0,
+        35,
+        0
+      ],
+      [
+        0,
+        1,
+        255,
+        0
+      ]
+    ],
+    "presets": {
+      "default": {
+        "image_sha256": "489401418b0260b6f6d0a8217e0645aa211e5cf65a73c97b2d0ae340213a5511",
+        "image_writes": 30,
+        "playable_midi": [
+          12,
+          126
+        ]
+      },
+      "m5a-saw": {
+        "image_sha256": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+        "image_writes": 30,
+        "playable_midi": [
+          0,
+          127
+        ]
+      },
+      "m5a-pulse": {
+        "image_sha256": "5c0d1c0ed6dca471bc313f40b4da322a0850756a33a57753a95a9f11a3b42d28",
+        "image_writes": 30,
+        "playable_midi": [
+          0,
+          127
+        ]
+      }
+    },
+    "commands": {
+      "held-default": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image r2",
+        "cmds_sha256": "b467f217e6dd8e082f4cfcc18df0a73979770eb24f68707c87935c3ea3ad3695",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false,
+        "equals_r1_bytes": true
+      },
+      "held-m5a-saw": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image r2",
+        "cmds_sha256": "8b8b6cc2dd852cea74a7bd95aa7a6f4dcaf534f815cea7007346ba1b3a04024e",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false,
+        "equals_r1_bytes": true
+      },
+      "held-m5a-pulse": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image r2",
+        "cmds_sha256": "67fa0afe046f1d73bad3e30455613116d604296201b6a5d0c7095f68c818df36",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false,
+        "equals_r1_bytes": true
+      },
+      "run-m5a": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image r2",
+        "cmds_sha256": "5480209251f1fe9dc71ab3ce9a37a3b1916b2d81bc07806900f86049043b23da",
+        "packets": 105,
+        "validator": "uart_host: release domain OK -- 15 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false,
+        "equals_r1_bytes": true
+      },
+      "demo": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r2",
+        "cmds_sha256": "bc8cb37d29efe14f6cd53b57be72d26dcd2d2cc207a1c9bee72d8da84792a2de",
+        "packets": 511,
+        "validator": "uart_host: release domain OK -- 48 increment writes, 45 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 205,
+        "loads_kit": true,
+        "equals_r1_bytes": true
+      },
+      "bar808-full": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r2",
+        "cmds_sha256": "a3c3dd548d589e5c43d790fe425e5a8233e2a372e18cf11f646c5711123c6c28",
+        "packets": 397,
+        "validator": "uart_host: release domain OK -- 6 increment writes, 3 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 205,
+        "loads_kit": true,
+        "equals_r1_bytes": true
+      },
+      "live-midi": {
+        "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r2"
+      }
+    },
+    "pulse2x_admitted_on": [
+      "r2"
+    ],
+    "same_bytes_as_r1": "every supported command emits R1's bound bytes: the host cannot tell R1 from R2 by what it sends; which image is on the board is declared, not verified"
+  },
+  "evidence": {
+    "dir": "fpga/reports/r2",
+    "files": {
+      "fpga/reports/r2/play-digital/held-default/capture.plan.json": "f2c505149f942ac01deaf2d94b9c2b449c0d2393aed0844d7987d2dfa997c391",
+      "fpga/reports/r2/play-digital/held-default/default/run_identity.json": "db72ff6ec854ffd13ae924a4e9fc3b1f7521eae68014966ef17e927cd6860ce7",
+      "fpga/reports/r2/play-digital/held-default/default/verification.json": "1480e561e4daeb0d5f4ce8a11c73646f3043f90d391097c3a1df9c624bb0de15",
+      "fpga/reports/r2/play-digital/held-default/held_note_audible.json": "84e3a7083409809a2fb3bcf364cdbb259377c9a17b8e837409c2c0a397183dfd",
+      "fpga/reports/r2/play-digital/held-legacy-silent/capture.plan.json": "34b181e3119c907df17ea21512b87e03d1ca54786e390ff2066d89dca48b4b6e",
+      "fpga/reports/r2/play-digital/held-legacy-silent/default-legacy/run_identity.json": "bce070054d2e675e9dcbae2b0f94d94a615d72c4e76bb92b669745d6b4f21d56",
+      "fpga/reports/r2/play-digital/held-legacy-silent/default-legacy/verification.json": "2e0323f821a5edf50eb06c7f08c8720d251d96a20900544f0dbc0417feff4bb2",
+      "fpga/reports/r2/play-digital/held-legacy-silent/held_note_audible.json": "436d74b1036521d107b2936de53f784410b1304a921d100bb4e4901d7b191e45",
+      "fpga/reports/r2/play-digital/held-m5a-pulse/capture.plan.json": "6fc9aa00755d696e876a7ae44c4b17be759af7c811881c79abfe8c435d31bc76",
+      "fpga/reports/r2/play-digital/held-m5a-pulse/held_note_audible.json": "8f0354d49b1eb88c850b2b9188f64adf0e19756a319324d5ed61191b99ecd8cc",
+      "fpga/reports/r2/play-digital/held-m5a-pulse/m5a-pulse/run_identity.json": "6ad997bd2fa3619948a3160c2bc9d23965b6c33b87c4617e0350a412389ab088",
+      "fpga/reports/r2/play-digital/held-m5a-pulse/m5a-pulse/verification.json": "941b749e1e8827f00f94424502534ef3013c2fbd9570acdb52f7ac1c69ec9b5e",
+      "fpga/reports/r2/play-digital/held-m5a-saw/capture.plan.json": "abac3347e94a5c152b66b9b7fa230af494d31e5c961ecedcf47169c63e0e5840",
+      "fpga/reports/r2/play-digital/held-m5a-saw/held_note_audible.json": "4f3697861c4e170f332161e04b595cbb2594db398cd035c0910115e439328f21",
+      "fpga/reports/r2/play-digital/held-m5a-saw/m5a-saw/run_identity.json": "6914882511d6e6613b1ad05969387fd21cfe92c9b2285635a914fa54256fad2d",
+      "fpga/reports/r2/play-digital/held-m5a-saw/m5a-saw/verification.json": "a76c913949ef889fa962869603c04ef98156787ee11ca4b539f516dbf439f398",
+      "fpga/reports/r2/play-digital/phrase-bar808-full/rtl-replay/bar808-full-control-due+1.plan.json": "f4731932ac534f3fb2b6618ee485e8f5ba9dabc40f1b8ecba0d48783733ddf5c",
+      "fpga/reports/r2/play-digital/phrase-bar808-full/rtl-replay/bar808-full.plan.json": "082fe89962a1893b5e2ff7d0754846a7a375742b27f6b2393a163880fc9c223e",
+      "fpga/reports/r2/play-digital/phrase-bar808-full/rtl-replay/bar808-full.run_identity.json": "aa6681143d5e922de34d0998d461eb627be8e7437029c2ea541f0c6635dc3474",
+      "fpga/reports/r2/play-digital/phrase-bar808-full/verification.json": "1f3f5e20ec1a8763f9b40d1df87c8bbff52203975c856f974b325da90c8c292e",
+      "fpga/reports/r2/play-digital/phrase-demo/rtl-replay/demo-control-due+1.plan.json": "df43b2c3581a122541baf64c7ae46518d5d5383f4faca3c4198d92ff498117f8",
+      "fpga/reports/r2/play-digital/phrase-demo/rtl-replay/demo.plan.json": "8e88f3f91262e6fc5c635b473a55829f7427e45a60b404e346610d025549f54f",
+      "fpga/reports/r2/play-digital/phrase-demo/rtl-replay/demo.run_identity.json": "9c2b422976d406b4fd4dbff8ed0c58e2e50bdaa972e1f8907f826c7449217226",
+      "fpga/reports/r2/play-digital/phrase-demo/verification.json": "a655a13ff66cbfc0ea4733929a5b89d5f63f7765400652e2d76d2c8b7ce5b28d",
+      "fpga/reports/r2/play-digital/receipt.json": "1a839cef0155bb8e81d0163d44011bffc0dc99ba8370ce32057b20afc914a4f5",
+      "fpga/reports/r2/play-digital/run-m5a/capture.plan.json": "ddded458ebe4d4dcd7c815f7c12d05535f5902e1efc5a4bb9530931dc0b0e2dd",
+      "fpga/reports/r2/play-digital/run-m5a/default-m5a/run_identity.json": "b8833fc2e7743c405668b7d43bee2c605e9c1abe1e8b80c76f5fd200152fc617",
+      "fpga/reports/r2/play-digital/run-m5a/default-m5a/verification.json": "1b40261fd2ed7027876b138cbc3ddd54f855428a9ac157ff4ed92b2fc2793937",
+      "fpga/reports/r2/play-digital/run-m5a/held_note_audible.json": "c9defd494dc5e040ba93a51461a83c1d05f8aeffc8dd543a31d8377f6acf2934",
+      "fpga/reports/r2/play-digital/wrong-kit-demo/verification.json": "9b21378ad4844a1d740af1667a46cf586d062462cf97ee6e7adb1753bdc4d79f",
+      "fpga/reports/r2/settled/M5A.json": "ae1ae48baa7c8f1bacc54ca34806435c767b098ae2e245214c310a87a0302d6c",
+      "fpga/reports/r2/settled/M5A.txt": "baae2e60f9e16b1adb356060c6f0a86751bcab30ad79e497aa65977898ad2142",
+      "fpga/reports/r2/settled/M5B.json": "f7d5c5206377a3de15eb93a3103b18c010529e488361bbf79c8ebde268cad49a",
+      "fpga/reports/r2/settled/M5B.txt": "9049962a0cb91444afc5a690ea69ab7462bd2b8af7fb55bc6b74a38c996f7ade",
+      "fpga/reports/r2/settled/dl-arty-uart-p2x-ctl.json": "a2fecaccbbf990b1de0930bbb8db145bdb22122fa25fce9a4739b92d052ab6ab",
+      "fpga/reports/r2/settled/dl-arty-uart-p2x.json": "f0714f8be9621d0c1184e98d4d4c0e9bf71254028e6b1a08b9b29356826a4c9b",
+      "fpga/reports/r2/settled/dl-arty-uart.json": "83c45fc60c5230881e6a3c78f0a8ff8a31e923d1a25f74f09bf64be3bafa4a1b",
+      "fpga/reports/r2/settled/dl-ctl-skipallwin.json": "9883f9dc1bdc54d26cce9e9e940d1917d10844bb657897f120eb14dc5581127b",
+      "fpga/reports/r2/settled/dl-late20.json": "527ec2ef36586eb6fddd8d0e9fe19d95148e7efae3c9cc0eea77808e2ef94a2e",
+      "fpga/reports/r2/settled/dl-late21.json": "d79423ea1fa3945f473aa5c4d23f370488286eb8ac14395d01e4b5a37ab47431",
+      "fpga/reports/r2/settled/dl-ref-full2xwin.json": "2e0eb6ee56bc18b41b89bc8f209d1a1372c1eab5fe1435b0fd229c8f33a94aef",
+      "fpga/reports/r2/settled/dl-stress-pulse-p2x.json": "5f2a2a44be0494d23927e87314df9db2867f80e16cd014866db74b5fae784f57",
+      "fpga/reports/r2/settled/dl-stress-saw.json": "896a60c3a93513c4e0c5bfacb224fb69267ffc7ddad819d6631ae1775c962df4",
+      "fpga/reports/r2/settled/go.sh": "744b3220a33269454c43de06f9b1a7676c989f7bcfc502592525dba4f208f297",
+      "fpga/reports/r2/settled/runall.json": "1232ac43ed3a721eb915df7180494eec79de3217865737c3993447b73e2f8eac",
+      "fpga/reports/r2/settled/runall.log": "423cf737eae41414d425d40e0527623caa086a5b80d73a64872d5f6365103338",
+      "fpga/reports/r2/summary.json": "2598541946e13e995d6369e0ab1d7aacce22a6655ce8179b8bce4eb6430fa6f4"
+    },
+    "rtl_runs_bound": 7
+  },
+  "rollback": {
+    "name": "R1",
+    "release": "arty-a7-100t R1 player preview 2025.1",
+    "manifest": "fpga/release/r1-2025.1.json",
+    "manifest_sha256": "4ec3a15768e5f09110bedba6873ddbac25774c23d1c2cd906746ada880b7635f",
+    "bitstream": "fpga/reports/arty/r1-player-preview-2025.1/arty.bit",
+    "bitstream_sha256": "544499e2c97061957004f999caf21d5caaf520f6b2682f84c6e6773e7d291d21",
+    "routed_dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+    "host_selector": "--image r1",
+    "check": "python fpga/release/r1_release.py (T-RELEASE-BOUND-R1)",
+    "behind_it": {
+      "name": "R0",
+      "manifest_sha256": "ac2050a37ef5183aa0a807a15f42e66260890287cd29ceef995f345d2f077596",
+      "bitstream_sha256": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95"
+    }
+  },
+  "physical_capture": {
+    "status": "NONE",
+    "hardware_playback_tested": false,
+    "precondition": "the board is programmed with THIS bitstream; the host cannot read the image identity back, so it is declared, not verified"
+  },
+  "excluded": [
+    "#247's domain (glides touching 2^23; ROUTE = 1): refused by the host, issue open",
+    "`play --fixture m5a` from the quick-start (sends no image; see R1.md)",
+    "spi_miso status readback above the qualified rate (see external_io.spi_miso)"
+  ],
+  "cannot_bind": [
+    "which image is on a connected board: the host cannot read it back, and R2's host bytes equal R1's",
+    "physical audio: no capture exists",
+    "the routed checkpoint itself is not shipped: it is bound by digest in report.json, publication.json, the DSP evidence and the external-I/O extraction"
+  ]
+}

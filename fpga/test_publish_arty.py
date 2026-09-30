@@ -411,3 +411,19 @@ def test_extractor_manifest_pins_everything_the_publisher_requires():
     x = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(x)
     assert set(publish.DSP_MANIFEST_PINNED) <= set(x.MANIFEST_FILES)
+
+
+@pytest.mark.parametrize("image,config", [
+    ("r2", {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0}),     # R2 named, R1's configuration
+    ("r1", {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}),     # R1 named, R2's configuration
+    ("r9", {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 1}),     # an image the builder cannot build
+])
+def test_publisher_refuses_a_build_whose_configuration_is_not_its_images(tmp_path, image, config):
+    """The publisher binds each image to its own configuration (build_arty.IMAGE_CONFIGS)."""
+    expected = {str(p.relative_to(publish.ROOT)): publish.build.sha(p)
+                for p in publish.build.sources() + publish.build.roms() + [publish.build.XDC]}
+    (tmp_path / "report.json").write_text(json.dumps({
+        "state": "BUILT_REQUIRES_TIMING_REVIEW", "exit_code": 0, "part": publish.build.PART,
+        "image": image, "configuration": config, "source_sha256": expected}))
+    with pytest.raises(ValueError, match="not a successful, current, selected"):
+        publish.publish(tmp_path, tmp_path / "out")

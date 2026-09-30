@@ -30,8 +30,11 @@ jobs:
       - run: python -m pytest fpga/test_build_arty.py fpga/test_publish_arty.py -q
       - name: SPI writes and decoded I2S, clean and mutated
         run: python fpga/verify_arty_controls.py
+      # the tree's image is R2 (build_arty.TREE_IMAGE, PULSE2X=1): its package is
+      # prepared against the wrapper's own R2 record; the SPI smoke above runs
+      # in R1's configuration and is not a proof for this configuration
       - name: prepare the exact source/configuration package
-        run: python fpga/build_arty.py --prepare-only
+        run: python fpga/build_arty.py --prepare-only --verification fpga/reports/arty/r2-clean/verification.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

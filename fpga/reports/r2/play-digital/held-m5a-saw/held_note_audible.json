@@ -1,0 +1,33 @@
+{
+  "name": "m5a-saw",
+  "preset": "m5a-saw",
+  "note": 72,
+  "fixture": "none",
+  "image": "r2",
+  "legacy_image": false,
+  "command": [
+    "run",
+    "--note",
+    "72",
+    "--fixture",
+    "none",
+    "--image",
+    "r2",
+    "--preset",
+    "m5a-saw"
+  ],
+  "init_problems": [],
+  "periods": 3820,
+  "periods_required": 3820,
+  "truncation_control": {
+    "caught": true,
+    "kept_rows": 2026,
+    "of_rows": 4052,
+    "periods": 2026,
+    "periods_required": 3820
+  },
+  "replay_status": 0,
+  "i2s_peak_lsb": 7345,
+  "min_peak_lsb": 1024,
+  "verdict": "PASS"
+}

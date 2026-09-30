@@ -1,0 +1,31 @@
+==============================================================================
+FAIL(1)         33.3s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --only extremes --osc2x --filter2x --pulse2x --rtl build/r2/mut/mutant-full2xwin/voice_dp.v --outdir build/r2/voice-extremes-p2x-R1loop
+                [extremes] 300 frames: 20 sample mismatches, 119 tap mismatches
+                [extremes] 200 frames: 1 sample mismatches, 3 tap mismatches
+              verify_voice: FAIL -- 300 of 5840 samples differ; tap mismatches: y19 3125, v 3106, out_v 2970
+                first sample mismatch at frame 364 [extremes]: model -18304, RTL -18330
+                first y19 mismatch at frame 363 [extremes]: model 47210, RTL 47214
+                first v mismatch at frame 363 [extremes]: model 47208, RTL 47212
+                first out_v mismatch at frame 363 [extremes]: model 94414, RTL 94422
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 233 (slack 21), worst last-busy cycle 232 (slack 23)
+FAIL(1)       2744.4s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_voice.py --set full --osc2x --filter2x --outdir build/r2/voice-full-p0
+                [audition] 38400 frames: 884 sample mismatches, 4734 tap mismatches
+                [audition] 38400 frames: 0 sample mismatches, 0 tap mismatches
+              verify_voice: FAIL -- 5497 of 442596 samples differ; tap mismatches: y19 14969, v 13901, out_v 7905
+                first sample mismatch at frame 321576 [extremes]: model -32768, RTL -9410
+                first y19 mismatch at frame 321568 [extremes]: model -254775, RTL -254561
+                first v mismatch at frame 321568 [extremes]: model -254768, RTL -254554
+                first out_v mismatch at frame 321568 [extremes]: model -509529, RTL -509101
+              verify_voice: deadline at launch cycle 8: worst strobe cycle 209 (slack 45), worst last-busy cycle 208 (slack 47)
+PASS            36.5s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --outdir build/r2/dl-arty-uart --json build/r2/dl-arty-uart.json
+              verify_deadline: WORST SLACK sample 20 cycles (strobe cycles [152, 234], deadline 254); voice busy 22 (deadline 255); drum busy 130
+              verify_deadline: voice starts at cycle(s) [9], drum at [9]; writes in cycles [6, 6] (max 1 per frame), 0 during computation
+              verify_deadline: max per-frame waits: reciprocal 57, 2x bank 60, drum handshake 23 cycles; max active PolyBLEP windows 1; cost model {'analysis_version': 2, 'formula': 'strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2', 'checked_frames': 3496, 'frames_without_strobe': 0, 'constant': 88, 'residuals': {88: 3496}, 'ywait_range': [5, 11], 'exceptions': 0, 'first_exceptions': [], 'explained': True}
+                worst frame 2398: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2399: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+                worst frame 2400: strobe 234 (slack 20), voice 9..233, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 0/3, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 20 cycles, I2S identical to the model
+==============================================================================
+1/3 passed  --  FAIL /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python rtl-sketch
+runall_exit=1
