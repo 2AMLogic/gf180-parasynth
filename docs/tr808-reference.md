@@ -744,7 +744,7 @@ of the VCAs:
 | band | source | band-pass (bridged-T type, IC3) [values SN p.13; f0/Q inferred] | VCA | envelope | high-pass |
 |---|---|---|---|---|---|
 | high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0033 µF; input C11 0.001 µF + R55 22 kΩ) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp. **2-pole 10.32 kHz Q 5.64 + 1-pole high-pass 5.20 kHz, pass band +8.86 dB** [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.008 dB rms] |
-| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** VR2 2 MΩ ‖ R93 470 kΩ × C41 1 µF: RC up to ≈0.38 s [verified: W14b §7; value inferred] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
+| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** R93 470 kΩ in **series** with VR2 2 MΩ(B) (wiper strapped to its own pin 3), × C41 1 µF: **RC 0.47 s to 2.47 s**, never zero. C41 is Q20's base, and reaches Q17's collector only through R92/R89/R91 — it is the **low** band (Q18) that sits on it at full weight [verified: SN p.13, hash-pinned scan, `tools/cymbal_vca_drive.py`; corrected 2026-09-30, was "2 MΩ ‖ R93 470 kΩ … up to ≈0.38 s"] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
 | low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0068 µF; input C10 0.0033 µF + R52 33 kΩ) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
 
 **Designator correction, 2026-09-28 [verified: SN p.13, hash-pinned scan,
@@ -781,8 +781,17 @@ kicks some more AC energy into each band pass filter" **[verified: W14b §4]**
 — the cymbal is really *ring-down of two resonators struck by an aperiodic
 edge train*, plus VCA distortion.
 
-**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY
-changes only the middle band's RC (chart: 350/800/1200 ms overall). TONE
+**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY's
+chart range is 350/800/1200 ms overall. It does **not** change only the middle
+band's RC, which is what this section said until 2026-09-30 — both the
+recordings and the schematic say otherwise, from opposite directions. VR2 and
+C41 sit on **Q20's base**; Q20's emitter feeds the **low** band's collector
+supply at full weight through R105 33 kΩ / C45 2.2 µF, and reaches the middle
+(DECAY) band only through R92 33 kΩ into the R89 10 kΩ / R91 33 kΩ divider.
+Predicted decay span from the printed parts is ×4.0 on the low band and ×5.2
+on the middle one, with the **short** band not moving at all; the Fischer
+recordings measure ×3.2 (Ln EDT10) and ×4.4 (H late T20) **[verified: SN p.13,
+`tools/cymbal_vca_drive.py`, `docs/scorecard/cymbal-369/vca-supply/`]**. TONE
 (VR4 20 kΩ(B), linear taper) is a passive network that mainly attenuates the
 third (highest) band but also shifts the others ("weakly-separated,
 non-orthogonal controls… like guitar amplifier tone stacks") — see below for
@@ -956,10 +965,25 @@ the collector load from each band's own envelope reservoir: **R94 39 kΩ
 relative to the low band, or **+8.71 / +7.26 dB** as an upper bound that loads
 the low band with Hh1's measured input impedance and leaves the high bands
 unloaded. Closing the short band's +39.79 dB would need R94 ≈ **2.15 MΩ**.
-So the missing factor is not in the cymbal's VCA section, and the remaining
-per-band freedom is on the collector *supply* side — the three envelope
-generators' peak voltages (C38/R87/C37, C40/R88/C39, C45/R105), which set
-where each swing VCA clips and are not resolved here.
+So the missing factor is not in the cymbal's VCA section.
+
+**The collector *supply* side is now read too, and "equal at the peak" is only
+half right [verified: SN p.13, `tools/cymbal_vca_drive.py`,
+`docs/scorecard/cymbal-369/vca-supply/`].** All three reservoirs (C38, C40,
+C41 — all 1 µF) are charged from Q19's emitter follower through D6/D7/D8 and
+do reach the same peak, V_trig − V_BE − V_f, to within the diodes' own
+forward-drop spread (**0.009 V against a 0.25 V bound** at a 14 V trigger).
+But only the **short** band's collector load hangs on its own reservoir. The
+DECAY band's hangs behind R88 33 kΩ into C39 0.47 µF and then the
+R90/R91/R89/R92 divider; the low band's behind Q20 and R105 33 kΩ into C45
+2.2 µF. Against a 1 ms trigger those lags are 8–70 ms, so the peak **collector**
+voltages are **12.79 V (short), 4.94 V (low), 3.97 V (DECAY)** at a 14 V
+trigger and unit duty — **+8.26 dB and −1.91 dB relative to the low band**, and
+they do not even peak at the same time (1 ms, 120 ms, 19 ms). The swing VCA's
+conduction duty is not printed, so the range over duty 0.25–1.0 is
+**+4.02…+8.26 dB (short)** and **−4.39…−1.91 dB (DECAY)**. The ceiling is an
+upper bound on a band's output swing, so even at its most favourable the short
+band's advantage is 31.5 dB below the +39.79 dB the balance needs.
 
 **Do not implement the level stage without the tone stage.** They are the same
 size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
