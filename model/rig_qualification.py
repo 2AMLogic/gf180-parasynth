@@ -131,12 +131,41 @@ MAX_CENTS = 50.0
 CAUSALITY_SEMITONES = 12
 CAUSALITY_RATIO_TOL = 0.02
 
-#: The cutoff sweep must move the measured spectral centroid by at least this
-#: FACTOR from its lowest knob to its highest, and must never move backwards by
-#: more than `MONOTONIC_SLACK` of the previous step. 2.0 is an octave of
-#: centroid movement: a filter whose knob is connected cannot do less, and a
-#: knob wired to nothing cannot do it at all.
-CENTROID_MIN_RATIO = 2.0
+#: The cutoff sweep must move the POWER-weighted spectral centroid by at least
+#: this FACTOR from its lowest knob to its highest, and must never move
+#: backwards by more than `MONOTONIC_SLACK` of the previous step.
+#:
+#: **1.25 IS A MEASURED NUMBER AND THE FIRST VALUE WRITTEN HERE WAS NOT.** This
+#: constant started at 2.0 -- "an octave of centroid movement, a connected knob
+#: cannot do less" -- and that gate was UNSATISFIABLE: a one-pole swept over a
+#: 15.9x range of corners, driven by a fixed band-limited source, moves its
+#: power-weighted centroid by 1.913 (saw) and 1.767 (25 % pulse). The reason is
+#: the source and not the filter: a saw's power falls as 1/k^2, so the centroid
+#: sits near the fundamental and a wide corner sweep drags it only a little.
+#: The rejected gate is recorded because an unsatisfiable gate is worse than no
+#: gate -- it trains everyone to ignore gates, including the ones that work.
+#:
+#: What separates the two states is not the size of the movement, it is that a
+#: knob wired to nothing gives EXACTLY 1.000 (the same render twice). So the
+#: measured window is
+#:
+#:     disconnected knob   1.000
+#:     real low-pass       1.767 .. 1.913 (measured, see
+#:                         model/test_rig_qualification.py's one-pole cases)
+#:
+#: and 1.25 sits between them with margin on both sides. It is deliberately
+#: NOT set just under 1.767: the validation sweep spans 15.9x in corner
+#: frequency and a plugin's own knob over the same normalised span may cover
+#: less, so a gate pinned to the validation case would refuse a working rig
+#: with a gentler taper.
+#:
+#: Power weighting, not amplitude: `audio_measure.spectral_centroid`'s own
+#: docstring records that the amplitude-weighted centroid reads a quiet
+#: wideband floor as brightness, and `sound_report --inject
+#: sd-centroid-amp-weighted` reinstates that as a defect. It is 2.846 on the
+#: same sweep -- more sensitive, and the wrong estimator. Sensitivity bought
+#: from a known-bad measurand is not sensitivity.
+CENTROID_MIN_RATIO = 1.25
 MONOTONIC_SLACK = 0.02
 
 
@@ -587,7 +616,17 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     # `waveform_id` whether an octave-down record repeats at the note that was
     # asked for -- it does not, and the refusal would name a period residual
     # instead of the octave. That is a wrong reason, which is worse than none.
-    f0 = pitch.detail.get("f0_hz") or pitch.detail.get("f0_measured")
+    #
+    # `subharmonic` FIRST, and this was wrong before it was right. On an
+    # octave-down record `refine_f0` reports `f0_measured` as the strongest
+    # component NEAR the command -- which is the record's SECOND harmonic,
+    # sitting exactly on the commanded note -- and `subharmonic` as the
+    # fundamental it found below it. Reading `f0_measured` here handed
+    # `waveform_id` 261.6 Hz for a 130.8 Hz saw, which refused with a 173.6 %
+    # period residual: the octave-down row of the discrimination matrix was
+    # green for the wrong reason. Caught by that matrix, not by inspection.
+    f0 = (pitch.detail.get("f0_hz") or pitch.detail.get("subharmonic")
+          or pitch.detail.get("f0_measured"))
     if f0:
         checks.append(check_waveform(ysteady, float(f0), sr=sr, expect=expect_wave))
     else:
