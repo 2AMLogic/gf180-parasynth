@@ -1,0 +1,18 @@
+release_manifest: BOUND -- fpga/release/baseline-2025.1.json equals a fresh derivation; artifacts agree; NOTE the working tree has moved past this image in ['fpga/boards/arty-a7-100.xdc', 'rtl-sketch/drum_dp.v', 'rtl-sketch/drum_kit.v', 'rtl-sketch/drum_regs.v', 'rtl-sketch/synth_top.v', 'rtl-sketch/voice_dp.v'] -- the image's sources are verified at d089c678e661
+exit 0
+a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95  fpga/reports/arty/integrated-baseline-2025.1/arty.bit
+openFPGALoader v1.1.1
+empty
+Jtag frequency : requested 10.00MHz   -> real 10.00MHz  
+Open file DONE
+Parse file DONE
+load program
+Load SRAM: [===============                                   ] 30.00%
+Load SRAM: [==============================                    ] 60.00%
+Load SRAM: [==============================================    ] 91.00%
+Load SRAM: [===================================================] 100.00%
+
+Done
+Shift IR 35
+ir: 1 isc_done 1 isc_ena 0 init 1 done 1
+exit 0
