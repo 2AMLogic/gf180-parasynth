@@ -24,7 +24,7 @@ FULL_IF = ("${{ !cancelled() && needs.changes.outputs.scope != 'none'"
 DOCS_IF = "${{ needs.changes.outputs.scope == 'docs' }}"
 
 GATED = {
-    "rungs.yml": {"pulse2x-rtl", "reference-controls", "m5a-fast", "python", "rtl"},
+    "rungs.yml": {"pulse2x-rtl", "reference-controls", "m5a-fast", "python", "tools", "rtl"},
     "arty.yml": {"spi-i2s"},
     "provenance.yml": {"stages-and-controls"},
     "trials.yml": {"trial-deadline", "trial-release-bound", "trial-physical"},

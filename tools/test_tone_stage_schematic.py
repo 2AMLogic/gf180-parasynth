@@ -176,12 +176,14 @@ def test_solve_vtone_rejects_an_unknown_drive():
 #
 # The first diagnosis of that was itself wrong, and the correction is the more
 # useful half: this file was not being SKIPPED in CI, it was not being COLLECTED
-# in CI. The `python` job in `.github/workflows/rungs.yml` runs `model/`, `spec/`
-# and a named list of `tools/test_*.py` files; full `pytest tools/` runs only
+# in CI. The `python` job in `.github/workflows/rungs.yml` ran `model/`, `spec/`
+# and a named list of `tools/test_*.py` files; full `pytest tools/` ran only
 # under `make verify`, which no workflow invokes; and `docs/dag.json` has no node
 # under `tools/`. So the sympy gate was a second-order problem sitting on top of
-# a first-order one. Both are now fixed: this file is named in that job (#417),
-# and everything below runs there with numpy/scipy alone.
+# a first-order one. Both are fixed: this file was named in that job (#417), and
+# since #404 it does not need to be -- rungs.yml's `tools` job collects the
+# whole directory, so being under `tools/` is what gets a file run. Everything
+# below runs there with numpy/scipy alone.
 # ---------------------------------------------------------------------------
 
 
