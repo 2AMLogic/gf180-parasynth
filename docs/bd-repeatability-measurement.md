@@ -203,6 +203,35 @@ distinguish any two settings of the machine** — it is the only tolerance on th
 board wider than the travel of the thing it is meant to score. It is simultaneously too loose to discriminate and too close to the
 noise to tighten. This is the tolerance to revisit, not the 3 dB one.
 
+> **Revisited, #127.** The bass drum's f0 tolerance is now an absolute
+> **2.370 Hz** (`run_case.F0_DISCRIMINATION_BAND`), not 10 % of the reference.
+> The two bounds in the paragraph above are the two bounds it is derived from —
+> the floor is `session_to_session` `abs_diff_max` (1.5345 Hz; the largest
+> observed pair rather than the 1.3852 Hz median this section quotes, so that
+> no observed pair of recordings of the same machine can fail) and the ceiling
+> is `knob_travel["both accents"]` `grid_span` (3.6612 Hz). The point taken in
+> that band is their geometric mean, the unique value whose two ratio margins
+> are equal — 1.54× either way — so no fraction is chosen by hand. At 4.76 %
+> of D01A's 49.78 Hz reference it sits above the ~3 % this section says f0
+> could not be tightened past without becoming scoring noise; the derivation
+> was not fitted to that limit and agrees with it.
+>
+> The root cause was the *shape*, not the number: reference 1.7's ±10 % is a
+> **unit-to-unit** component spread, and the reference on the other side of a
+> scorecard comparison is a recording of **one** unit. `LINE_SEARCH_FRAC`
+> keeps the ±10 % for exactly that reason — a search window *does* need the
+> unit-to-unit band.
+>
+> **Only the bass drum, because only the bass drum has both numbers.** The
+> three other f0 cases on the 10 % rule (D04A/D06A/D08A) were checked, not
+> merely left alone: their tuning pot spans ±10 % of nominal, so their travel
+> is ~20 % against a 10 % tolerance — half the travel, not 1.38× it. Their
+> session-to-session floor is unmeasured, so the floor half of a
+> discrimination band cannot be derived for them and none was invented. **The
+> general question this section raises — whether the same shape defect recurs
+> elsewhere on the board — is still open**, and it closes one voice at a time,
+> by measuring one voice at a time.
+
 **The 50 % time tolerance is 38× the machine's floor** and about six tenths of
 one of the vendor's six DECAY steps. It has an order of magnitude of unused
 room.
