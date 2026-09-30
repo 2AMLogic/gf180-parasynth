@@ -238,38 +238,136 @@ def clip_specs() -> list[dict]:
 #: qualified is named here with the measurement that disqualified it, because
 #: "we did not use Model D" and "Model D cannot be used" are different facts
 #: and only one of them tells the next person not to try.
+#:
+#: **EVERY VERDICT IS SCOPED TO A HOST, and that is a finding and not a
+#: formality (#123).** On one machine, with one set of binaries, at one note:
+#:
+#:                  pedalboard                  dawdreamer 0.9.0
+#:   Model D        peak 1.000000  SOUND        peak 0.0  SILENT
+#:   Mini V3        peak 0.000000  SILENT       sounds
+#:
+#: So a key here names a (rig, host) pair -- `modeld` is the dawdreamer-hosted
+#: Model D and `modeld-pedalboard` is the pedalboard-hosted one -- and the
+#: `host` field says which. The two entries are SEPARATE VERDICTS and neither
+#: replaces the other: overwriting the dawdreamer entry with the pedalboard
+#: result would erase the measurement that says this plugin renders silence
+#: under the host the rest of this profile was built with.
+#:
+#: `why` text that predates host scoping said "renders exact silence headlessly"
+#: with no host named. The wording below is host-scoped; the SAME sentence is
+#: still in the committed `refprofile/profile.json` and in `tools/run_case.py`,
+#: both of which are hashed inputs, so correcting it there is #129 and #101's
+#: re-run and not this table's job.
+#:
+#: **Not a capability map, deliberately.** #136 asks for a per-(rig, host,
+#: capability) verdict -- "Mini V3's cutoff is answerable, its envelope timing
+#: is not" is really two verdicts about one rig -- and that is a separate,
+#: smaller change. Nothing here forecloses it: the entries are keyed by a
+#: string and carry a `host` field, so a later `capability` field is additive.
 RIG_VERDICTS = {
     "surge-type2": dict(
-        qualified=True,
+        qualified=True, host="dawdreamer",
         builder="reference_rigs.SurgeRig(subtype='Type 2')",
         why="Surge XT is open source and its LP Vintage Ladder subtype Type 2 is "
             "sst-filters' VintageLadder::Huov -- Huovilainen's DAFx-04 model, the "
             "same paper DR 0001 implements. It is the only reference here whose "
             "cutoff is commanded in Hz and reads back in Hz."),
     "modeld": dict(
-        qualified=False,
+        qualified=False, host="dawdreamer",
         builder="reference_rigs.ModelDRig()",
-        why="renders exact silence headlessly -- measured, see `--render`'s "
-            "disqualification probe. The rig BUILDS (its pins hold); it produces "
-            "no audio, so nothing downstream of it can be a reference."),
+        why="renders exact silence UNDER DAWDREAMER 0.9.0 -- measured, see "
+            "`--render`'s disqualification probe. The rig BUILDS (its pins hold); "
+            "it produces no audio under this host, so nothing downstream of it "
+            "can be a reference. This verdict is about the (plugin, host) pair "
+            "and not about the plugin: see `modeld-pedalboard`."),
+    "modeld-pedalboard": dict(
+        qualified=None, host="pedalboard",
+        builder="reference_rigs.ModelDPedalboardRig()",
+        why="NOT SILENT under pedalboard -- peak 1.000, 8.57 % of samples at the "
+            "rail, strongest partial 131.00 Hz for a commanded MIDI 60 (261.63 Hz, "
+            "so an octave down). Both of those disqualify the DEFAULT PATCH, and "
+            "the rig exists to try to correct them through Model D's own "
+            "parameters and measure whether it worked: it sweeps Osc 1 Range and "
+            "selects the position that sounds the commanded note, and steps the "
+            "master volume to the loudest setting with zero samples at the rail. "
+            "`qualified` is None because no operator has run it on a machine with "
+            "the bundle yet -- see docs/pedalboard-rig.md. None is NOT false: "
+            "'this rig has no verdict' and 'this rig cannot be used' are "
+            "different facts, and writing either one as the other is what #123 "
+            "was about. Run tools/qualify_modeld_pedalboard.py to fill it in.",
+        verdict_source="docs/pedalboard-rig.md"),
     "miniv3": dict(
-        qualified=False,
+        qualified=False, host="dawdreamer",
         builder="reference_rigs.MiniV3Rig()",
-        why="the rig qualifies and makes sound, but every parameter is a bare "
-            "0..1 with no units and no readback. Its cutoff can be calibrated "
+        why="the rig qualifies and makes sound under dawdreamer (it is SILENT "
+            "under pedalboard -- the exact reverse of Model D), but every "
+            "parameter is a bare 0..1 with no units and no readback. Its cutoff "
+            "can be calibrated "
             "against its own self-oscillation (reference_compare.calibrate_knob); "
             "its ENVELOPE knobs cannot -- nothing in this repository maps a Mini "
             "V3 envelope knob to a time. The Mono cases require envelope timing, "
             "so a Mini V3 patch frozen here would compare our envelope against an "
             "arbitrary knob position and report the difference as a result."),
     "diva": dict(
-        qualified=False,
+        qualified=False, host="dawdreamer",
         builder="reference_rigs.DivaRig()",
         why="found running unlicensed and inserting clicks (docs/reference-integrity.md "
             "section 1); it is also a general analogue-modelling synth rather than a "
             "Minimoog emulation, and is excluded from the oscillator study for that "
             "reason already."),
 }
+
+
+def verdict_for(rig: str, host: str) -> dict:
+    """The verdict for one (rig, host) pair, or a REFUSAL.
+
+    Reading `RIG_VERDICTS[rig]` and using it under whatever host happens to be
+    loaded is the mistake #123 found: `modeld`'s verdict is about dawdreamer and
+    says nothing about the same bundle under pedalboard. This accessor makes the
+    host part of the lookup, so a caller cannot forget it."""
+    v = RIG_VERDICTS.get(rig)
+    if v is None:
+        raise Refused(f"{rig!r} is not a rig this profile knows about "
+                      f"({', '.join(sorted(RIG_VERDICTS))})")
+    if v.get("host") != host:
+        raise Refused(
+            f"{rig!r}'s verdict is scoped to host {v.get('host')!r} and was asked "
+            f"for under {host!r}. A verdict measured under one host is not "
+            f"evidence about another: Model D renders silence under dawdreamer "
+            f"0.9.0 and peak 1.000 under pedalboard (#123). Re-derive it, or use "
+            f"the rig whose host matches")
+    return dict(v)
+
+
+def qualified_rigs(host: str | None = None) -> list:
+    """Rig names whose verdict is `qualified is True` -- never the ones whose
+    verdict is None. A rig nobody has qualified yet is not a qualified rig, and
+    `None or False` collapsing to "not usable" is the same conflation in the
+    other direction."""
+    return sorted(n for n, v in RIG_VERDICTS.items()
+                  if v.get("qualified") is True
+                  and (host is None or v.get("host") == host))
+
+
+#: The three words `--list` may print in the `qualified` column, and there are
+#: THREE of them for the same reason `qualified_rigs` exists.
+#:
+#: **`--list` used to print `"yes" if r.get("qualified") else "NO"`**, so the
+#: moment a `qualified: None` entry existed the table would have announced
+#: "NO" -- the tool stating a rejection nobody measured, in the one place a
+#: reader goes to find out what this profile rejects. Found by review on the
+#: same change that introduced the `None`; it is the whole point of that change
+#: leaking straight back out through the renderer.
+VERDICT_WORDS = {True: "yes", False: "NO", None: "no verdict"}
+
+
+def verdict_word(qualified) -> str:
+    """The word for one `qualified` value. Anything that is not exactly True,
+    False or None is `?`, never one of the three: a renderer that maps an
+    unexpected value onto a verdict is how a verdict gets invented."""
+    return VERDICT_WORDS.get(qualified, "?") if isinstance(qualified, (bool, type(None))) \
+        else "?"
+
 
 #: The estimator floors this profile's clips are read through, stated here so a
 #: consumer can refuse a row inside one. Issue #92: a floor that is published
@@ -374,6 +472,131 @@ def plugin_identity(vst3_path: str) -> dict:
 
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ---------------------------------------------------------------------------
+# The environment tuple every clip carries (#123)
+#
+# ONE mechanism, used by both hosts. The pedalboard rig (#124) needed the same
+# tuple the dawdreamer path already recorded, and a second recorder would have
+# been a second thing to keep in step -- which is how "the reference" comes to
+# mean two different things in one file.
+#
+# Every field here is REQUIRED. A field nobody has established is recorded as
+# the literal string "unstated" and the caller has to pass that, deliberately:
+# a tuple with a field missing looks identical to a tuple whose field was never
+# asked about, and one of those is a gap somebody should close.
+# ---------------------------------------------------------------------------
+ENV_FIELDS = ("host", "host_version", "plugin", "block", "sr", "licence", "preset")
+
+#: BLOCK SIZE IS NOT BOOKKEEPING. Three unrelated plugins once appeared to step
+#: identically at 94 Hz; that was dawdreamer applying parameter automation once
+#: per host block, at the default 512 samples (93.75 Hz), and a 16-sample block
+#: REVERSED the conclusion. pedalboard's own default buffer is 8192 -- a 5.86 Hz
+#: chunk rate, straight through the middle of an envelope measurement. So the
+#: block is recorded with its rate spelled out, next to whether the clip
+#: automates anything at all, because the artefact needs both to appear.
+BLOCK_NOTE = ("the host block size, and its rate in Hz. A host block rate that "
+              "lands inside the analysis band can manufacture a result: three "
+              "plugins once appeared to step at 94 Hz because that was "
+              "dawdreamer's 512-sample automation rate, and a 16-sample block "
+              "reversed the conclusion. pedalboard's default buffer is 8192 "
+              "(5.86 Hz), which is why every rig here pins it rather than "
+              "inheriting it")
+
+
+def environment_tuple(*, host: str, host_version: str, plugin: dict, block: int,
+                      sr: int, licence, preset, automates: bool = False,
+                      note: str | None = None) -> dict:
+    """The #123 tuple for one rig, or a REFUSAL.
+
+    `plugin` is a `plugin_identity()` dict. `licence` and `preset` are dicts (or
+    the literal string "unstated"): a licence position has to say HOW it was
+    established, because there is no licence probe for any plugin here -- the one
+    licence finding in this repository was an unlicensed Diva found by hearing
+    its clicks.
+
+    Refuses rather than reports on:
+
+      * any field absent, None or empty -- pass "unstated" to say so on purpose
+      * a plugin that is not present, or present with no binary hash. "What
+        produced this audio" cannot be answered by a path
+    """
+    given = dict(host=host, host_version=host_version, plugin=plugin, block=block,
+                 sr=sr, licence=licence, preset=preset)
+    missing = [k for k in ENV_FIELDS
+               if given.get(k) is None or given.get(k) == "" or given.get(k) == {}]
+    if missing:
+        raise Refused(
+            f"the environment tuple is missing {', '.join(missing)}. Every field "
+            f"is required (#123); a field nobody has established is recorded as "
+            f"the string \"unstated\", deliberately, because an absent field and "
+            f"an unasked one look identical afterwards")
+    if not isinstance(plugin, dict):
+        raise Refused(
+            f"plugin is {plugin!r}, not a plugin_identity() dict. 'what produced "
+            f"this audio' has to carry the bundle's path, its claimed version and "
+            f"its binary hash; a string cannot")
+    if not plugin.get("present"):
+        raise Refused(f"the plugin bundle at {plugin.get('path')!r} is not present: "
+                      f"'what produced this audio' cannot be answered by a path")
+    if not plugin.get("binary_sha256"):
+        raise Refused(
+            f"no binary hash for {plugin.get('path')!r}. The version string is "
+            f"what the bundle CLAIMS and the hash is what it IS -- a vendor who "
+            f"ships a fix without bumping the version moves only the second")
+    # `block` and `sr` may NOT be "unstated". Every other field can be: a licence
+    # position may be unestablished and a host may not report a version. But the
+    # block size and the sample rate were handed TO the host by the caller, so
+    # not knowing them is not a gap in the evidence -- it is a caller that did
+    # not pin them, which is the 94 Hz artefact waiting to happen.
+    for k, v in (("block", block), ("sr", sr)):
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            raise Refused(
+                f"{k} is {v!r}. The block size and the sample rate cannot be "
+                f"'unstated': the caller handed them to the host. A host block "
+                f"rate nobody wrote down is how three plugins came to appear to "
+                f"step at 94 Hz") from None
+        if iv <= 0:
+            raise Refused(f"{k} is {iv}, which is not a size")
+    block, sr = int(block), int(sr)
+    out = {
+        "host": str(host),
+        "host_version": str(host_version),
+        "plugin": plugin,
+        "block": block,
+        "block_rate_hz": round(sr / block, 4) if block else None,
+        "block_note": BLOCK_NOTE,
+        "sr": sr,
+        "automates_a_parameter": bool(automates),
+        "licence": licence,
+        "preset": preset,
+    }
+    if note:
+        out["note"] = note
+    return out
+
+
+def preset_identity(plugin_obj, *, source: str) -> dict:
+    """What patch the rig started from, hashed where the host can hand it over.
+
+    `pedalboard` exposes `preset_data` (the plugin's own serialised state) and
+    dawdreamer does not, so this records the hash where it is available and says
+    plainly that it is not where it is not. "The plugin's defaults, plus the
+    writes the rig made" is a complete description only because
+    `parameters_after_setup` dumps every parameter beside it."""
+    out = {"source": source}
+    data = getattr(plugin_obj, "preset_data", None)
+    if isinstance(data, (bytes, bytearray)) and len(data):
+        out["preset_data_sha256"] = hashlib.sha256(bytes(data)).hexdigest()
+        out["preset_data_bytes"] = len(data)
+    else:
+        out["preset_data"] = ("not exposed by this host; the patch is the plugin's "
+                              "own defaults plus the writes the rig made, and every "
+                              "parameter is dumped in `parameters_after_setup`")
+    return out
 
 
 # ===========================================================================
@@ -711,10 +934,26 @@ def render(probe_disqualified: bool = True) -> dict:
             raise Refused(f"{rig_name}: pinned settings did not hold after setup: {still_bad}")
         verdict.update({
             "plugin": plugin_identity(dev.path),
-            "host": {"sr": SR, "block": dev.block,
-                     "note": "the host block size matters for automation only; no clip "
-                             "in this profile automates a parameter, so no number here "
-                             "can be the host's 93.75 Hz block rate in disguise"},
+            # The SAME recorder the pedalboard path uses (#124), not a second
+            # one: `environment_tuple` refuses a tuple with a field missing, so
+            # "host and version, plugin and binary hash, block size, sample
+            # rate, licence state, preset" (#123) is enforced rather than
+            # remembered.
+            "host": environment_tuple(
+                host="dawdreamer",
+                host_version=getattr(dawdreamer, "__version__", "unknown"),
+                plugin=plugin_identity(dev.path), block=dev.block, sr=SR,
+                licence=getattr(dev, "licence", None) or {
+                    "state": "unverified",
+                    "how": "no licence probe exists for any plugin here; the one "
+                           "licence finding in this repository (an unlicensed Diva "
+                           "inserting clicks, docs/reference-integrity.md section 1) "
+                           "was found by hearing them"},
+                preset=preset_identity(dev.p, source="the plugin's own defaults plus "
+                                                     "reference_rigs.SurgeRig.setup"),
+                automates=False,
+                note="no clip in this profile automates a parameter, so no number "
+                     "here can be the host's 93.75 Hz block rate in disguise"),
             "qualification": {
                 # derived after the clips render, from the per-clip checks
                 "pins_held_after_render": None,
@@ -834,13 +1073,18 @@ def cmd_list() -> int:
             print(f"pins      {name}: checked BEFORE rendering only. Its renderer "
                   f"predates #233 and wrote pins_held_after_render as a constant")
     print()
-    print(f"{'rig':<14}{'qualified':<11}why")
+    print(f"{'rig':<18}{'host':<12}{'qualified':<12}why")
     print("-" * 100)
     for name, r in sorted(prof.get("rigs", {}).items()):
-        q = "yes" if r.get("qualified") else "NO"
+        q = verdict_word(r.get("qualified"))
         pl = r.get("plugin", {})
         ver = f" [{pl.get('bundle_version')}]" if pl.get("bundle_version") else ""
-        print(f"{name:<14}{q:<11}{(r.get('why', '') + ver)[:74]}")
+        host = r.get("host")
+        # `host` is the #123 environment tuple for a rig that RENDERED clips and
+        # a bare name for one that only carries a verdict. Both are legitimate;
+        # what is not is printing a dict into a 12-column field.
+        host = host.get("host", "?") if isinstance(host, dict) else (host or "?")
+        print(f"{name:<18}{host:<12}{q:<12}{(r.get('why', '') + ver)[:58]}")
     print()
     print(f"{'clip':<46}{'frames':>9}{'sha256':>14}  what")
     print("-" * 100)

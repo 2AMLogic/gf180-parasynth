@@ -787,16 +787,34 @@ and an hour.
 Run it:
 
 ```
-.venv/bin/pip install dawdreamer
+.venv/bin/pip install dawdreamer pedalboard
 .venv/bin/python -m pytest model/test_reference_compare.py -q      # the estimators, first
 .venv/bin/python model/reference_compare.py --stage all --devices ours,surge-rk,surge-huov,diva,miniv3
 .venv/bin/python model/reference_compare.py --stage peakdrive,bigdrive --devices ...
 .venv/bin/python model/reference_compare.py --report --out /tmp/refcmp
 ```
 
-`model/reference_rigs.py` holds the five rigs (ours, its injected defects, and
-the three plugins), `model/reference_compare.py` the measurements and the
-report, `model/test_reference_compare.py` their ground truth.
+**Two plugin hosts, not one, and which one works differs PER PLUGIN.** That is
+measured, not a preference — on one machine, with one set of binaries, at one
+note, Model D renders exact silence under `dawdreamer` 0.9.0 and peak 1.000
+under `pedalboard`, while Mini V3 is the exact reverse (issue #123). So
+`pedalboard` is a declared dependency of the reference rigs alongside
+`dawdreamer`, and neither is optional for the rig layer as a whole:
+
+| host | what needs it | what it cannot do |
+|---|---|---|
+| `dawdreamer` | Surge, Diva, Mini V3; **every clip in `refprofile/`**; the swept-cutoff movement study (it is the only host here with parameter automation) | Model D — renders exact silence |
+| `pedalboard` | **Model D** (`reference_rigs.ModelDPedalboardRig`, `tools/qualify_modeld_pedalboard.py`) | Mini V3 — renders exact silence; any swept-cutoff measurement, since it has no parameter automation |
+
+Neither is installed in CI and neither needs to be: everything that depends on
+them REFUSES with a stated reason on a host without them, which is a no-verdict
+and not a hole in the instrument. See `docs/pedalboard-rig.md`.
+
+`model/reference_rigs.py` holds the five dawdreamer rigs (ours, its injected
+defects, and the three plugins) plus the pedalboard-hosted Model D,
+`model/rig_qualification.py` the host-agnostic qualification battery every rig
+is put through, `model/reference_compare.py` the measurements and the report,
+and `model/test_reference_compare.py` their ground truth.
 
 ---
 

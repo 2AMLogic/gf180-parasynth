@@ -101,6 +101,7 @@ def kick_then_silence(cut: float, seconds: float, amp: float, kick_s: float = 0.
 # ===========================================================================
 import voice_fx as vf                                               # noqa: E402
 import audio_measure as am                                          # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 
 G_ROM = vf.make_g_rom()
 K_ROM = vf.make_k_rom()
@@ -1308,3 +1309,625 @@ class ModelDRig(_Plugin):
         self.p.set_automation(self.I['cutoff'], ramp)
         y = self.render(np.zeros(1), len(ramp) / SR)
         return y[pre:pre + n]
+
+
+# ===========================================================================
+# A SECOND HOST: pedalboard
+# ===========================================================================
+# Issue #124. Which host works differs PER PLUGIN, and that is measured, not
+# assumed -- on the same machine, the same binaries and the same note:
+#
+#                 pedalboard                 dawdreamer 0.9.0
+#   Model D       peak 1.000000  SOUND       peak 0.0  SILENT
+#   Mini V3       peak 0.000000  SILENT      sounds
+#
+# So the rig layer has to support both and record which one produced a clip
+# (#123). What follows is a SIBLING of `_Plugin`, not a fork of it: it
+# subclasses `_Plugin` and overrides exactly the three methods that touch the
+# host --
+#
+#     __init__          loads the plugin
+#     render            renders one note
+#     silence_state     settles the plugin without a note
+#
+# -- and inherits `set`, `text`, `apply_pins`, `pinned_report`, `check_pins`
+# and `check_names` VERBATIM, so the pin discipline is one implementation and
+# not two that have to be kept in step. That inheritance is what the
+# host-shaped adapter below exists to buy.
+#
+# WHAT IS GENUINELY DIFFERENT UNDER THIS HOST, and both differences are
+# properties of the reference, not of the code:
+#
+#   * **state does not carry between renders.** `pedalboard`'s `process` takes
+#     `reset=True`, so each render starts from a clean plugin. Under
+#     dawdreamer the engine carries filter and voice state forward, which is
+#     why `SurgeRig.select_osc` has to settle with NO note -- calling `render`
+#     stacks note-ons and leaves the previous voice decaying into the next
+#     measurement. Here that cannot happen. Every clip is independent, which
+#     is better, and it means a `silence_state` call is belt and braces rather
+#     than load-bearing.
+#   * **there is no parameter automation.** `pedalboard` sets a parameter and
+#     it holds; there is no per-block ramp. So the swept-cutoff measurement is
+#     NOT answerable under this host, and `swept_cutoff` refuses rather than
+#     faking a ramp out of stitched renders. The 94 Hz artefact that made three
+#     plugins appear to step identically was dawdreamer's per-block automation
+#     at a 512-sample block; under pedalboard the block size still matters (it
+#     is the processing chunk, and it is recorded), but it cannot manufacture
+#     that particular artefact because nothing here automates.
+class _PedalboardParams:
+    """dawdreamer's BY-INDEX parameter interface, over a `pedalboard` plugin.
+
+    `pedalboard` addresses parameters by sanitised Python name
+    (`plugin.parameters["cutoff_frequency"]`); `reference_rigs`' whole pin
+    discipline is keyed by INDEX, because an index is what a `PINS` table can
+    pin and a name is what the hazard moves (Surge renames 259-267 by
+    oscillator type). `pedalboard` exposes the index on each parameter object,
+    so this adapter presents the same five calls dawdreamer does and the pin
+    code above runs unchanged over it.
+
+    Two preconditions are asserted here rather than assumed, because an
+    index-keyed pin table means nothing without them:
+
+      * the indices must be UNIQUE -- two parameters claiming index 32 makes
+        every pin at 32 a coin toss
+      * they must cover 0..n-1 with no gaps -- a host that hides some
+        parameters renumbers the rest, and a `PINS` table measured under the
+        other host would then be pinning different controls with no error
+    """
+
+    def __init__(self, plugin):
+        raw = getattr(plugin, "_parameters", None)
+        if not raw:
+            raw = list(getattr(plugin, "parameters", {}).values())
+        if not raw:
+            raise RuntimeError("the plugin exposes no parameters, so nothing can be "
+                               "pinned and no rig can be qualified against it")
+        by_index: dict[int, object] = {}
+        for prm in raw:
+            i = int(prm.index)
+            if i in by_index:
+                raise RuntimeError(
+                    f"two parameters report index {i} ({by_index[i].name!r} and "
+                    f"{prm.name!r}): an index-keyed pin table cannot be trusted here")
+            by_index[i] = prm
+        n = len(by_index)
+        missing = [i for i in range(n) if i not in by_index]
+        if missing:
+            raise RuntimeError(
+                f"the plugin reports {n} parameters whose indices are not 0..{n - 1} "
+                f"({len(missing)} missing, first {missing[0]}): a pin table measured "
+                f"under another host would be pinning different controls here")
+        self._by_index = by_index
+        self._plugin = plugin
+
+    # -- the dawdreamer-shaped calls the pin code uses ----------------------
+    def parameter(self, i):
+        try:
+            return self._by_index[int(i)]
+        except KeyError:
+            raise IndexError(f"no parameter at index {i} (the plugin has "
+                             f"{len(self._by_index)})") from None
+
+    def set_parameter(self, i, v):
+        self.parameter(i).raw_value = float(v)
+
+    def get_parameter(self, i):
+        return float(self.parameter(i).raw_value)
+
+    def get_parameter_text(self, i):
+        return str(self.parameter(i).string_value)
+
+    def get_parameter_name(self, i):
+        return str(self.parameter(i).name)
+
+    def get_parameters_description(self):
+        return [{"index": i, "name": p.name, "text": p.string_value,
+                 "num_steps": getattr(p, "num_steps", None),
+                 "is_discrete": bool(getattr(p, "is_discrete", False))}
+                for i, p in sorted(self._by_index.items())]
+
+    def get_latency_samples(self):
+        return int(getattr(self._plugin, "reported_latency_samples", 0) or 0)
+
+    # -- the readback this host can assert and the other one cannot ---------
+    def raw_tolerance(self, i) -> float:
+        """How far a written raw value may legitimately land from where it was
+        put. A DISCRETE parameter snaps to its own steps, so half a step is the
+        honest tolerance; a continuous one has none to speak of.
+
+        This is not slack for a plugin that ignores a write: half a step is the
+        largest error a correct snap can produce, and anything larger is a
+        write that did not take."""
+        p = self.parameter(i)
+        steps = int(getattr(p, "num_steps", 0) or 0)
+        if bool(getattr(p, "is_discrete", False)) and steps > 1:
+            return 0.5 / (steps - 1)
+        return 1e-6
+
+
+class _PedalboardPlugin(_Plugin):
+    """One `pedalboard`-hosted instrument plugin, driven by MIDI, with the pin
+    discipline of `_Plugin` and the signal-side battery of
+    `model/rig_qualification.py` on top.
+
+    `qualify()` here is a SUPERSET of `_Plugin.qualify()`, never a replacement:
+    it still refuses a rig whose pinned settings do not hold by name and by
+    readback, and it additionally refuses one whose output is silent, clipped,
+    an octave out, unidentifiable, or whose commands cause no effect (#137).
+    The record is on `self.qualification` and is attached to the refusal, so a
+    rig that cannot be qualified still produces evidence rather than a
+    traceback.
+    """
+
+    host = "pedalboard"
+
+    #: The rig must STATE its licence position rather than leave it implied.
+    #: There is no licence probe for any plugin in this repository: the one
+    #: licence finding we have (`docs/reference-integrity.md` section 1, Diva
+    #: inserting clicks) was found by hearing the clicks, not by asking the
+    #: plugin. So the honest default is "unverified", and a rig that means
+    #: something else says so.
+    licence = {"state": "unverified",
+               "how": "no licence probe exists for any plugin here. The only licence "
+                      "finding in this repository (docs/reference-integrity.md "
+                      "section 1) was an unlicensed Diva inserting clicks, found by "
+                      "hearing them. 'unverified' is therefore the measured position "
+                      "and not a placeholder"}
+
+    def __init__(self, quiet=True, block=BLOCK, sr=SR):
+        """`block` is `pedalboard`'s `buffer_size`: the chunk the plugin is
+        processed in. It is pinned to the SAME 512 the dawdreamer rigs use, and
+        it is pinned rather than defaulted because `pedalboard`'s own default is
+        8192 -- a 5.86 Hz chunk rate. A host chunk rate that lands inside the
+        analysis band is how three unrelated plugins once appeared to step
+        identically at 94 Hz, which was dawdreamer's 512-sample block and not a
+        plugin defect. It is recorded with every clip (#123)."""
+        import pedalboard
+        self._pb = pedalboard
+        self.block, self.sr = int(block), int(sr)
+        if not os.path.exists(self.path):
+            raise rq.RigRefusal(f"{self.name}: no plugin bundle at {self.path}")
+        self.plugin = pedalboard.load_plugin(self.path)
+        # PRECONDITION: an INSTRUMENT. An effect plugin loaded here would be
+        # handed MIDI, return its own silence, and every check downstream would
+        # be measuring the absence of a synthesiser.
+        if not bool(getattr(self.plugin, "is_instrument", False)):
+            raise rq.RigRefusal(
+                f"{self.name}: {self.path} loads as an effect, not an instrument "
+                f"(is_instrument is False): MIDI cannot drive it")
+        self.p = _PedalboardParams(self.plugin)
+        self.qualification = None
+        self.setup()
+        self.qualify()
+
+    # -- host ---------------------------------------------------------------
+    def render(self, x, seconds, note_at=0.02, note_len=None):
+        """`seconds` of audio with one note held, the plugin's reported latency
+        removed, mono (channel 0).
+
+        `x` exists only to keep the signature identical to `_Plugin.render`, so
+        code written against one host runs against the other. A pedalboard
+        instrument has no audio input, so a NON-ZERO `x` is refused rather than
+        silently dropped -- a measurement that thinks it put a known signal
+        through a filter and did not is the exact shape of the bench that drove
+        the wrong port."""
+        x = np.asarray(x, dtype=np.float64).ravel()
+        if x.size and float(np.abs(x).max()) > 0.0:
+            raise rq.RigRefusal(
+                f"{self.name}: a pedalboard instrument has no audio input, so the "
+                f"{x.size}-sample stimulus handed to render() would be discarded. "
+                f"Nothing here can put a known signal through this plugin's filter")
+        dur = float(seconds)
+        held = dur if note_len is None else float(note_len)
+        off = min(float(note_at) + held, dur)
+        msgs = [([0x90, int(self.note), 100], float(note_at)),
+                ([0x80, int(self.note), 0], float(off))]
+        a = self.plugin(msgs, duration=dur, sample_rate=float(self.sr),
+                        num_channels=2, buffer_size=int(self.block), reset=True)
+        y = np.asarray(a, dtype=np.float64)
+        if y.ndim > 1:
+            y = y[0]
+        lat = self.p.get_latency_samples()
+        return y[lat:] if lat else y
+
+    def silence_state(self, seconds=0.4):
+        """Render with NO note, which under this host also makes the parameter
+        readbacks current. `reset=True` already clears state between renders,
+        so unlike the dawdreamer path this is not how state is cleared -- it is
+        how a plugin whose text readback lags its processor (a Diva cutoff that
+        read 90 for a whole session) is made to tell the truth."""
+        a = self.plugin([], duration=float(seconds), sample_rate=float(self.sr),
+                        num_channels=2, buffer_size=int(self.block), reset=True)
+        y = np.asarray(a, dtype=np.float64)
+        return y[0] if y.ndim > 1 else y
+
+    def swept_cutoff(self, carrier, lo, hi, seconds, cache=None, res=0.05, amp=0.25):
+        raise NotImplementedError(
+            "pedalboard has no parameter automation: a swept cutoff cannot be "
+            "commanded under this host, and stitching one out of per-block renders "
+            "would measure the stitching. Use the dawdreamer rig for the movement "
+            "study")
+
+    # -- the readback this host can assert ----------------------------------
+    def written_pin_problems(self) -> list:
+        """Every pin the rig WROTE, read back from the plugin twice and by two
+        routes: the raw value, and the plugin's own text for the value it is
+        actually holding.
+
+        This is the check `_Plugin.check_pins` cannot make and it is not a
+        duplicate of it. `check_pins` asserts a readback STRING measured under
+        dawdreamer, and a string is the host's formatting of the plugin's
+        answer -- inheriting one across hosts would be pinning a measurement
+        nobody took here. This asserts instead that
+
+          * the write took effect (`raw_value` came back where it was put,
+            within `raw_tolerance`: half a step for a discrete control, which
+            is the largest error a correct snap can produce)
+          * the two readback routes AGREE. `string_value` is what the plugin
+            says it is holding now; `get_text_for_raw_value(held)` is what it
+            says that value means. A plugin whose text lags its processor
+            disagrees between them -- which is precisely the Diva cutoff that
+            read 90 for a session -- and a disagreement here is a refusal, not
+            a note.
+
+        Returns [(index, kind, expected, got, tolerance), ...]."""
+        bad = []
+        for idx, val, _name, _want in self.PINS:
+            if val is None:
+                continue
+            prm = self.p.parameter(idx)
+            held = float(prm.raw_value)
+            tol = self.p.raw_tolerance(idx)
+            if abs(held - float(val)) > tol:
+                bad.append((int(idx), "RAW", float(val), held, tol))
+                continue
+            try:
+                want_text = str(prm.get_text_for_raw_value(held))
+            except Exception as e:                                  # pragma: no cover
+                bad.append((int(idx), "TEXT-UNREADABLE", f"{type(e).__name__}: {e}",
+                            None, None))
+                continue
+            got_text = str(prm.string_value)
+            if got_text != want_text:
+                bad.append((int(idx), "TEXT", want_text, got_text, None))
+        return bad
+
+    def written_pins_check(self):
+        return rq.check_pins(self.written_pin_problems,
+                             n_pins=sum(1 for _i, v, _n, _w in self.PINS if v is not None),
+                             name="pins written (raw readback)")
+
+    # -- qualification ------------------------------------------------------
+    #: The window of the record a periodic estimator may read: past the attack,
+    #: clear of the release. Stated as numbers because "the steady part" is not
+    #: a measurement.
+    STEADY_FROM_S, STEADY_LEN_S = 0.10, 0.40
+    RENDER_S = 0.70
+    CUTOFF_KNOBS = (0.3, 0.5, 0.7, 0.9)
+
+    def steady(self, y):
+        a = int(self.STEADY_FROM_S * self.sr)
+        n = int(self.STEADY_LEN_S * self.sr)
+        return np.asarray(y, dtype=np.float64).ravel()[a:a + n]
+
+    def render_note(self, note: int, seconds: float | None = None):
+        """One note, at the rig's current patch. `note` is written to
+        `self.note` so `render` sends it, and restored after."""
+        was, self.note = self.note, int(note)
+        try:
+            return self.render(np.zeros(1), self.RENDER_S if seconds is None else seconds)
+        finally:
+            self.note = was
+
+    def render_cutoff(self, knob: float, seconds: float | None = None):
+        raise NotImplementedError
+
+    def qualify(self):
+        """`_Plugin.qualify()`'s contract, plus the signal-side battery.
+
+        The record is built whatever the outcome and stored on
+        `self.qualification` BEFORE anything is raised, so a rig that cannot be
+        qualified is a finding with numbers in it. `RigRefusal` carries the same
+        record."""
+        self.silence_state(0.05)
+        checks = [rq.check_pins(self.check_pins, n_pins=len(self.PINS)),
+                  self.written_pins_check()]
+        checks.extend(self.patch_checks())
+        battery = rq.qualify_voice(
+            rig=self.name, host=self.host, render_note=self.render_note,
+            render_cutoff=self.render_cutoff, note_hz=vf.note_hz, note=self.note,
+            sr=self.sr, expect_wave=self.EXPECT_WAVE, steady=self.steady,
+            cutoff_knobs=self.CUTOFF_KNOBS)
+        checks.extend(battery.checks)
+        self.qualification = rq.Qualification(self.name, self.host, tuple(checks))
+        self.qualification.require()
+
+    EXPECT_WAVE = None
+
+    def patch_checks(self) -> list:
+        """Checks that have to run between `setup()` and the battery -- the
+        calibrations a rig needs in order to be in a state worth measuring at
+        all. Default: none."""
+        return []
+
+
+class ModelDPedalboardRig(_PedalboardPlugin):
+    """**Moog's own Minimoog Model D, hosted through `pedalboard`.**
+
+    The same plugin as `ModelDRig` and a DIFFERENT rig, because the host
+    changed the answer: under `dawdreamer` 0.9.0 this bundle renders a buffer
+    whose peak is exactly 0.0, and under `pedalboard` it renders peak 1.000
+    with 8.57 % of samples at the rail and its strongest partial at 131.00 Hz
+    for MIDI 60 -- an octave below the 261.63 Hz that was commanded
+    (`refprofile/README.md`). Both of those are measurements on record, and
+    both of them are reasons the audio cannot be frozen as it comes.
+
+    So this rig does not accept the plugin's default patch. It tries to CORRECT
+    both defects through Model D's own parameters and measures whether it
+    worked:
+
+      * `calibrate_range` sweeps Osc 1 Range across its own discrete positions
+        and MEASURES the fundamental at each, then selects the position that
+        sounds the commanded note. The mapping is not looked up, and it is not
+        borrowed from Mini V3 (whose 8' is 0.575): a value that happens to work
+        on a different vendor's emulation of the same panel is a guess.
+      * `trim_level` steps the master volume down over a stated grid and takes
+        the LOUDEST setting that puts zero samples at the rail, so the clip is
+        as loud as it can be without having lost anything.
+
+    Either search can fail to find a position, and if it does this rig REFUSES.
+    That refusal is issue #124's own sequencing gate and it is a complete
+    outcome: it says the Mono cases cannot use Model D as their reference under
+    this host either, with the sweep table as the evidence, and it sends the
+    re-specification question in #122 back open. It is NOT an error to route
+    around by keeping the octave-down clipped default and calling it a
+    reference.
+
+    The note is MIDI 60, not the 48 the dawdreamer rig uses, so this rig is
+    measured at the note the pedalboard finding was measured at.
+    """
+    name = "modeld-pedalboard"
+    kind = "modeld"
+    path = PATH_MODELD
+    have_input = False
+    cutoff_in_hz = False
+    note = 60
+
+    # Taken from the dawdreamer rig rather than retyped: the index map and the
+    # parameter NAMES are properties of the plugin and are the same under both
+    # hosts. The readback STRINGS are not -- see PINS below.
+    I = dict(ModelDRig.I)
+    NAMES = dict(ModelDRig.NAMES)
+
+    #: The same indices and the same expected NAMES as `ModelDRig.PINS`, with
+    #: every expected readback string dropped to `None`.
+    #:
+    #: **This is deliberate and it is a gap, stated rather than papered over.**
+    #: A readback string is the host's rendering of the plugin's own answer;
+    #: `ModelDRig.PINS` pins '0.00' because that is what dawdreamer returned
+    #: when somebody measured it. Copying those strings here would assert a
+    #: measurement nobody has taken under this host, and if `pedalboard`
+    #: returned '0' or 'Off' the rig would refuse for a formatting difference
+    #: and call it a parameter drift.
+    #:
+    #: What replaces it is NOT weaker: `written_pin_problems` asserts, for
+    #: every pin, that the raw value came back where it was written and that
+    #: the plugin's two readback routes agree with each other. That holds
+    #: without anyone having measured a string first. The observed strings are
+    #: recorded in the qualification record, so the first qualifying run on an
+    #: operator's machine is what fills this column in -- by measurement.
+    PINS = tuple((i, v, n, None) for i, v, n, _w in ModelDRig.PINS)
+
+    #: Written down rather than defaulted, and restated here because the
+    #: dawdreamer rig's `setup` deliberately leaves every mixer source OFF (it
+    #: exists to measure self-oscillation) while this one has to make a note.
+    OSC1_LEVEL = 0.9
+    MASTER_START = 0.8
+    #: The master-volume grid `trim_level` searches, loudest first. Explicit
+    #: rather than a bisection: a bisection on a control whose taper is unknown
+    #: reports a position nobody can reproduce, and twelve renders is cheap.
+    MASTER_GRID = (0.80, 0.70, 0.60, 0.50, 0.42, 0.35, 0.30, 0.25, 0.20, 0.16,
+                   0.12, 0.09, 0.06)
+    #: Osc 1 Range, swept rather than looked up. The Model D panel has LO, 32',
+    #: 16', 8', 4' and 2'; which normalised value selects which is exactly what
+    #: is measured, so the grid is a fine scan of the whole control and the
+    #: answer comes from the fundamental it produces.
+    RANGE_GRID = tuple(round(i / 24.0, 6) for i in range(25))
+    #: How close the measured fundamental has to be to the commanded note for a
+    #: Range position to count as the right one. 50 cents is `refine_f0`'s own
+    #: window: past a quarter tone the rig is playing a different note.
+    RANGE_MAX_CENTS = 50.0
+
+    #: No wave-selector mapping for this plugin has been measured on any host,
+    #: so the waveform check requires the record to be IDENTIFIABLE and does
+    #: not require a particular label. Asserting a label here would be
+    #: asserting the mapping -- `SurgeRig` asked for a saw, received a 50 %
+    #: pulse and published it for a whole study. The identified label is
+    #: recorded, which is how the mapping gets measured.
+    EXPECT_WAVE = None
+
+    # `setup` is `ModelDRig`'s, taken by reference and not copied: it writes
+    # only through `self.set` / `self.check_names` / `self.apply_pins`, all of
+    # which are host-agnostic, so it is literally the same patch under both
+    # hosts. The voice patch on top of it is this rig's own, because the
+    # dawdreamer rig's whole purpose is a silent mixer.
+    _base_setup = ModelDRig.setup
+
+    def setup(self):
+        type(self)._base_setup(self)
+        self.voice_patch()
+
+    def voice_patch(self, cutoff: float = 1.0, emphasis: float = 0.0):
+        """Oscillator 1 alone, filter wide open, flat gate: one note and
+        nothing else in the path."""
+        I = self.I
+        for k in ('o2_on', 'o3_on', 'ext_on', 'noise_on',
+                  'o2_vol', 'o3_vol', 'ext_vol', 'noise_vol'):
+            self.set(I[k], 0.0)
+        self.set(I['o1_on'], 1.0)
+        self.set(I['o1_vol'], self.OSC1_LEVEL)
+        self.set(I['cutoff'], float(cutoff))
+        self.set(I['emphasis'], float(emphasis))
+        self.set(I['master'], self.MASTER_START)
+
+    def render_cutoff(self, knob: float, seconds: float | None = None):
+        """One note at one cutoff-knob position, emphasis at zero, everything
+        else as the patch left it. The cutoff is restored afterwards so a sweep
+        cannot leave the rig somewhere it was not measured."""
+        was = self.p.get_parameter(self.I['cutoff'])
+        self.set(self.I['cutoff'], float(knob))
+        self.set(self.I['emphasis'], 0.0)
+        try:
+            return self.render_note(self.note, seconds)
+        finally:
+            self.set(self.I['cutoff'], was)
+
+    # -- the two corrections, each measured -------------------------------
+    def calibrate_range(self) -> rq.Check:
+        """Sweep Osc 1 Range and MEASURE the fundamental at each position;
+        select the one that sounds the commanded note.
+
+        Every row of the sweep goes into the record, including the rejected
+        ones, because "the octave default cannot be corrected" is only a
+        finding if the positions that were tried are visible. `refine_f0` is
+        the estimator, so a position whose second harmonic sits on the
+        commanded note is rejected rather than accepted -- that is the exact
+        failure mode this control has.
+
+        Selection rule, stated before the sweep runs: among the positions
+        inside `RANGE_MAX_CENTS`, the one whose measured fundamental is CLOSEST
+        to the commanded note. Ties cannot occur (the metric is a float) and a
+        rule chosen after seeing the table would not be a rule."""
+        cmd = float(vf.note_hz(self.note))
+        idx = self.I['o1_range']
+        was = self.p.get_parameter(idx)
+        rows = []
+        try:
+            for v in self.RANGE_GRID:
+                self.set(idx, float(v))
+                # What the plugin HOLDS, not what was written to it. A discrete
+                # control snaps, so the two differ, and a table of commanded
+                # values would name positions the plugin was never in -- the
+                # same reason every readback in this file is read back.
+                held = float(self.p.get_parameter(idx))
+                y = self.steady(self.render_note(self.note))
+                pk = float(np.abs(y).max()) if y.size else 0.0
+                row = {"raw": float(v), "raw_held": held, "text": self.text(idx),
+                       "peak": pk}
+                if y.size and pk > rq.SILENCE_FLOOR:
+                    e = am.refine_f0(y, cmd, self.sr, max_cents=self.RANGE_MAX_CENTS)
+                    row["f0_hz"] = float(e.value) if e.ok else None
+                    row["cents"] = (float(e.detail.get("cents")) if e.ok
+                                    else e.detail.get("cents"))
+                    row["why"] = None if e.ok else e.reason
+                    row["ok"] = bool(e.ok)
+                else:
+                    row.update(f0_hz=None, cents=None, ok=False,
+                               why="the render is silent at this Range position")
+                rows.append(row)
+        finally:
+            self.set(idx, was)
+        det = {"parameter": idx, "name": self.p.get_parameter_name(idx),
+               "commanded_note": int(self.note), "commanded_hz": cmd,
+               "max_cents": self.RANGE_MAX_CENTS, "sweep": rows,
+               "default_raw": float(was),
+               "default_text": self.text(idx)}
+        good = [r for r in rows if r["ok"]]
+        if not good:
+            return rq.Check(
+                "osc range calibration", rq.FAIL,
+                f"no Osc 1 Range position in {len(rows)} sounds the commanded "
+                f"note {self.note} ({cmd:.2f} Hz) within {self.RANGE_MAX_CENTS:.0f} "
+                f"cents. The octave default is NOT correctable through this "
+                f"plugin's own parameters, so nothing downstream of it can be a "
+                f"reference", det)
+        best = min(good, key=lambda r: abs(r["cents"] or 0.0))
+        self.set(idx, best["raw"])
+        # REFUSE rather than report if the write did not land where the sweep
+        # measured. Every number in `best` was measured with the plugin holding
+        # `raw_held`; leaving it holding anything else would qualify one state
+        # and ship another.
+        landed = float(self.p.get_parameter(idx))
+        det["selected_raw_held"] = landed
+        if abs(landed - best["raw_held"]) > self.p.raw_tolerance(idx):
+            det["selected"] = best
+            return rq.Check(
+                "osc range calibration", rq.FAIL,
+                f"the selected Osc 1 Range was measured with the plugin holding "
+                f"{best['raw_held']:.6f} and re-writing it left the plugin holding "
+                f"{landed:.6f}: the rig cannot be put back into the state it "
+                f"qualified in", det)
+        det["selected"] = best
+        det["default_was_correct"] = bool(
+            abs(best["raw_held"] - float(was)) <= self.p.raw_tolerance(idx))
+        why = (f"Osc 1 Range {best['raw_held']:.4f} ({best['text']!r}) sounds "
+               f"{best['f0_hz']:.2f} Hz for note {self.note} "
+               f"({best['cents']:+.1f} cents)")
+        why += (" -- which is where the default already was"
+                if det["default_was_correct"] else
+                f"; the default {det['default_raw']:.4f} "
+                f"({det['default_text']!r}) was not it")
+        return rq.Check("osc range calibration", rq.PASS, why, det)
+
+    def trim_level(self) -> rq.Check:
+        """Step the master volume down and take the LOUDEST setting that puts
+        zero samples at the rail and still clears `rq.PEAK_MIN`.
+
+        Loudest-that-is-clean, not quietest-that-is-safe: a reference frozen 20
+        dB down carries 20 dB less of whatever it is a reference for, and the
+        quantisation floor of the fixed-point side it will be compared against
+        is not movable. Every row is recorded, so "the clipping cannot be
+        corrected" is a table and not an assertion."""
+        idx = self.I['master']
+        was = self.p.get_parameter(idx)
+        rows, chosen = [], None
+        try:
+            for v in self.MASTER_GRID:
+                self.set(idx, float(v))
+                y = self.render_note(self.note)
+                lv = rq.check_level(y)
+                row = {"raw": float(v), "raw_held": float(self.p.get_parameter(idx)),
+                       "text": self.text(idx),
+                       "peak": lv.detail.get("peak"),
+                       "clipped_fraction": lv.detail.get("clipped_fraction"),
+                       "outcome": lv.outcome}
+                rows.append(row)
+                if lv.ok:
+                    chosen = row
+                    break
+        finally:
+            if chosen is None:
+                self.set(idx, was)
+        det = {"parameter": idx, "name": self.p.get_parameter_name(idx),
+               "grid": list(self.MASTER_GRID), "default_raw": float(was),
+               "peak_window": [rq.PEAK_MIN, rq.PEAK_MAX],
+               "clipped_max": rq.CLIPPED_MAX, "sweep": rows}
+        if chosen is None:
+            return rq.Check(
+                "level trim", rq.FAIL,
+                f"no master-volume position in {len(rows)} puts the peak inside "
+                f"[{rq.PEAK_MIN:g}, {rq.PEAK_MAX:g}] with zero samples at the rail. "
+                f"The clipping is NOT correctable through this plugin's own "
+                f"parameters, so no clip from it can be frozen as a reference", det)
+        self.set(idx, chosen["raw"])
+        landed = float(self.p.get_parameter(idx))
+        det["selected"] = chosen
+        det["selected_raw_held"] = landed
+        if abs(landed - chosen["raw_held"]) > self.p.raw_tolerance(idx):
+            return rq.Check(
+                "level trim", rq.FAIL,
+                f"the selected master volume was measured with the plugin holding "
+                f"{chosen['raw_held']:.6f} and re-writing it left the plugin holding "
+                f"{landed:.6f}: the rig cannot be put back into the state it "
+                f"qualified in", det)
+        return rq.Check("level trim", rq.PASS,
+                        f"master volume {chosen['raw_held']:.4f} ({chosen['text']!r}) peaks "
+                        f"at {chosen['peak']:.6f} with "
+                        f"{100 * (chosen['clipped_fraction'] or 0.0):.2f} % at the rail",
+                        det)
+
+    def patch_checks(self) -> list:
+        """Both corrections, in the order they depend on each other: the Range
+        sweep changes the octave and therefore the level, so the level trim
+        runs after it and not before."""
+        return [self.calibrate_range(), self.trim_level()]
