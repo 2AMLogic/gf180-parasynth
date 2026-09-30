@@ -23,7 +23,12 @@ bundle yet, so there is no verdict either way.
 **`None` is not `False`.** "Nobody has run it" and "it cannot be used" are
 different facts, and writing either one as the other is what #123 was about.
 `refprofile.qualified_rigs()` will not pick up a `None`, and nothing may read
-one as a rejection. The command that turns it into a verdict is:
+one as a rejection — including `--list`, whose renderer printed one as **NO**
+until review caught it.
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_an_unrun_rig_is_None_and_not_False -->
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_the_list_renderer_does_not_print_a_None_verdict_as_a_rejection -->
+
+The command that turns it into a verdict is:
 
 ```sh
 python tools/qualify_modeld_pedalboard.py --json docs/pedalboard-rig-run.json
@@ -41,6 +46,7 @@ On every Linux host in this fleet it exits **2** with
 `no pedalboard on this machine` — a stated no-verdict, and the correct answer.
 That refusal deliberately does **not** print the #122 note below: a host that
 never loaded the plugin has concluded nothing about it.
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_no_pedalboard_is_REFUSED_and_says_nothing_about_issue_122 -->
 
 ## The dependency
 
@@ -130,12 +136,15 @@ injected defect, **both which checks fire and which do not**.
   only `check_pitch` refuses it. A rig whose pitch command does nothing plays
   the right note at the base, so `check_pitch` PASSES it; only the causality
   check refuses it. Dropping either loses a real defect.
+  <!-- claim: test=model/test_rig_qualification.py::test_the_octave_down_row_does_not_also_fail_the_causality_check -->
+  <!-- claim: test=model/test_rig_qualification.py::test_the_dead_pitch_command_row_does_not_also_fail_the_pitch_check -->
 - **level vs. waveform.** At **8.57 %** of samples at the rail — the figure on
   record for this plugin — the clip is still named a saw, still plays the
   commanded note, still transposes and still sweeps. The level check is the only
   thing between it and the profile. The waveform check starts to see clipping on
   its own only between **21.5 %** and **40.8 %** at the rail, swept rather than
   argued about.
+  <!-- claim: test=model/test_rig_qualification.py::test_the_clipped_row_is_caught_by_the_level_check_and_by_nothing_else -->
 - **any signal check vs. the pins.** Surge's Phaser is a chain of allpasses: at
   its default mix it moves phase and leaves every harmonic amplitude where it
   was. No signal check can refuse it; the pin readback can.
@@ -155,6 +164,7 @@ against the rate at which they were wrong.
    *Power*-weighted, not amplitude: the amplitude centroid is 2.846 on the same
    sweep — more sensitive, and the estimator `sound_report --inject
    sd-centroid-amp-weighted` reinstates as a defect.
+   <!-- claim: test=model/test_rig_qualification.py::test_the_centroid_gate_sits_between_the_two_states_it_separates -->
 2. **The waveform check was handed the wrong fundamental.** `refine_f0` reports
    `f0_measured` as the strongest component *near* the command, which on an
    octave-down record is that record's **second harmonic** sitting exactly on
@@ -321,6 +331,10 @@ would fail every case in those files.
 Both gate branches are covered: the rig correcting both defects and qualifying,
 and the rig refusing with its sweep table as evidence when no Range position
 sounds the note or no master position clears the rail.
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_the_default_patch_really_is_the_defect_on_record -->
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_the_rig_corrects_both_defects_and_qualifies -->
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_an_uncorrectable_octave_refuses_and_the_sweep_is_the_evidence -->
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_uncorrectable_clipping_refuses_and_the_sweep_is_the_evidence -->
 
 ## What is still not answered
 
