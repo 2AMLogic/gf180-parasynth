@@ -214,9 +214,11 @@ it is restored **too hard**, not that it should not be there.
   (§1 and §5's 11-of-25) and `test_the_documented_tone_spread_at_fixed_decay_is_the_artefacts_spread`
   (§3's 29–85 ms and 7.8 %); the 8.63 dB Hh1 delta is pinned to ±0.02 dB by
   `test_hh1_changes_the_leak_prediction_by_8_63_db_and_must_be_declared`, which previously allowed
-  ±2 dB and so let "~10 dB" stand in three docstrings. These are ordinary tests rather than
-  `docs/claim-markers.md` markers because `tools/check_doc_claims.py` reads only `docs/*.md`, and a
-  marker nothing evaluates is worse than none.
+  ±2 dB and so let "~10 dB" stand in three docstrings. These were made ordinary tests rather than
+  `docs/claim-markers.md` markers because `tools/check_doc_claims.py` then read only `docs/*.md`,
+  which does not reach this file, and a marker nothing evaluates is worse than none. That reason
+  expired with #435: the checker now scans this document, so a marker here would be re-derived on
+  every run. The tests stay as they are; adding markers beside them is optional follow-up.
 - Reproduce: `python3 tools/cymbal_mid.py --fischer --renders --out <path>` (≈9 min, most of it
   candidate 3's level calibration; `--no-candidate` drops it to ≈4 min).
 

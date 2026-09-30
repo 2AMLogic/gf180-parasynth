@@ -236,5 +236,45 @@ So the 8 non-passing jobs are 7 retained design counterexamples and 1 apparatus 
 ```
 .venv/bin/python tools/deadline_batch.py      # writes docs/deadline/runs/, ~35 min
 .venv/bin/python tools/deadline_reanalyse.py  # re-judges the retained captures, archives traces; no simulation
+.venv/bin/python tools/deadline_recapture_l2.py  # re-cuts the two -l2 evidence traces, ~80 s
 .venv/bin/python -m pytest tools/test_verify_deadline.py -q
 ```
+
+`tools/test_verify_deadline.py` judges two committed captures,
+`traces/prod-stress-saw-l2` (clean) and `traces/ctl-prod-stress-late15-l2`
+(its `late:15` negative control), each against the stimulus that drove it, and
+**refuses** either one whose stimulus disagrees with the one this tree builds
+now on anything the schedule can see. The retained pre-L2 `prod-stress-saw` /
+`ctl-prod-stress-late15` captures stay in the tree as history and are
+*expected* to be refused (460 writes, not 461); one test asserts exactly that.
+
+**What the binding is (#443).** It used to be every byte of `top_bx_cmds.txt`,
+which is strictly stronger than the property it protects: it cost two
+re-captures in three days, and in #426 the whole difference was two drum
+register values while the schedule trace was byte-identical
+(`tools/deadline_binding_probe.py --history 8c3de22 a224050`: 2 command lines,
+0 of 2159 schedule lines, 997 of 2158 I2S periods). It is now
+`verify_deadline.stimulus_binding`, which relaxes exactly one thing -- the data
+of a drum-page write other than STOPS -- because drum_dp / modal_dp advance on
+counters only and drum_regs acts on addresses, never data (the argument is in
+the source, above `DRUM_LATENCY_ARGUED_AT`).
+
+- *Still refused:* a different write count or order, any wait (landing frame),
+  flag, section or address, **any voice-page value** (INC moves the PolyBLEP
+  windows, WAVE the window loop, ROUTE the drum filter's wait -- the voice is
+  not classified register by register, it is bound whole), the STOPS value (a
+  coverage fact), and a drum value change when the drum RTL in the tree or in
+  the capture's run record is not the RTL the argument was made on, or the
+  capture's drum busy window is not one fixed window.
+- *Admitted:* drum parameter values only, and the capture is then judged
+  against its own recorded stimulus.
+- *Controls:* `test_a_schedule_relevant_stimulus_change_is_still_refused` (ten
+  edits on the real capture, including a voice INC value -- the issue's
+  "value change that does move the slack"), the premise test, and
+  `test_the_controls_can_fail`. `tools/deadline_binding_probe.py` is the
+  simulator check of the argument (build box, ~80 s per probe): three drum
+  perturbations must leave the schedule identical and the voice-INC control
+  must move it.
+- *Never covered:* the capture is bound to its stimulus, not to the RTL that
+  ran it; a `voice_dp.v` change that moves the schedule is not seen. The
+  byte-exact binding had the same gap.

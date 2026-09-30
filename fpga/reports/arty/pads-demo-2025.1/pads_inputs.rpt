@@ -1,0 +1,7 @@
+INPUT	btn[0]	1	stage1 u_pads/btn_q0_reg[0]; stage2 u_pads/btn_q1_reg[0]; 4 path(s), all False Path required
+INPUT	btn[1]	1	stage1 u_pads/btn_q0_reg[1]; stage2 u_pads/btn_q1_reg[1]; 4 path(s), all False Path required
+INPUT	btn[2]	1	stage1 u_pads/btn_q0_reg[2]; stage2 u_pads/btn_q1_reg[2]; 4 path(s), all False Path required
+INPUT	btn[3]	1	stage1 u_pads/btn_q0_reg[3]; stage2 u_pads/btn_q1_reg[3]; 4 path(s), all False Path required
+INPUT	sw_pads	1	stage1 u_pads/sel_q0_reg; stage2 u_pads/sel_q1_reg; 4 path(s), all False Path required
+INPUT	sw_reset	1	stage1 swr_q_reg[0]; stage2 swr_q_reg[1]; 4 path(s), all False Path required
+END	0

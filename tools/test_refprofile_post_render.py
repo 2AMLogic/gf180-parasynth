@@ -120,8 +120,15 @@ def stub_render(tmp_path, monkeypatch):
     monkeypatch.setattr(rp, "PROFILE_DIR", pdir)
     monkeypatch.setattr(rp, "CACHE", pdir / "cache")
     monkeypatch.setattr(rp, "PROFILE_JSON", pdir / "profile.json")
+    # A bundle with a BINARY in it, not just a directory. Since #124 `render`
+    # assembles its environment tuple through `refprofile.environment_tuple`,
+    # which refuses a plugin with no binary hash -- "what produced this audio"
+    # cannot be answered by a path, and a vendor who ships a fix without
+    # bumping the version moves only the hash. So the stub bundle has to look
+    # like a bundle, which is the gate working rather than a fixture detail.
     bundle = tmp_path / "Surge XT.vst3"
-    bundle.mkdir()
+    (bundle / "Contents" / "MacOS").mkdir(parents=True)
+    (bundle / "Contents" / "MacOS" / "Surge XT").write_bytes(b"not a real binary")
     monkeypatch.setattr(rr, "PATH_SURGE", str(bundle))
     monkeypatch.setitem(sys.modules, "dawdreamer", types.ModuleType("dawdreamer"))
 

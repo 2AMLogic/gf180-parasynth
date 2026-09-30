@@ -1,0 +1,44 @@
+[
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --scenario all --jobs 3 --outdir build/pads",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top[switch]: PASS -- presses 2 (dropped 0), writes 165/165, bad 0, extra 0, hit frame bad 0, I2S mismatch 0 over 7903 periods, errs 0, peak 9604\nverify_pads_top[reset]: PASS -- presses 3 (dropped 0), writes 310/310, bad 0, extra 0, hit frame bad 0, I2S mismatch 0 over 13118 periods, errs 0, peak 6504\nverify_pads_top[phases]: PASS -- presses 23 (dropped 0), writes 245/245, bad 0, extra 0, hit frame bad 0, I2S mismatch 0 over 15611 periods, errs 0, peak 18885\n{\"state\": \"PASS\", \"runs\": {\"phases\": \"PASS\", \"switch\": \"PASS\", \"reset\": \"PASS\"}}\n",
+    "secs": 2386.4375410079956
+  },
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --start-red --outdir build/pads-start-red",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top: START RED against fpga/stubs/arty_a7_pads_stub.v\nverify_pads_top[start-red]: FAIL -- presses 23 (dropped 0), writes 0/245, bad 0, extra 0, hit frame bad 0, I2S mismatch 9593 over 15611 periods, errs 0, peak 18885\nverify_pads_top[start-red]:   seg 0: first I2S mismatch at frame 6015: model 896, wire 0\nverify_pads_top[start-red]:   0 ACKs for 245 expected writes\nverify_pads_top: start red confirmed -- the bench fails against a behaviour-free stub, as it must\n",
+    "secs": 1822.1001319885254
+  },
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --inject PADS_DEBOUNCE_DOUBLE --outdir build/pads-controls",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]: FAIL -- presses 23 (dropped 0), writes 252/245, bad 18, extra 7, hit frame bad 22, I2S mismatch 3280 over 15611 periods, errs 0, peak 18885\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 223 (a=0xd0): contract frame 13413, landed 12328\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 224 (a=0xd1): contract frame 13413, landed 12328\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 225 (a=0x10): contract frame 13414, landed 12329\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 226 (a=0x0): contract frame 13414, landed 12329\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 227: want f/s/a/d 0/1/0x11/0x8000, got 0/1/0x0/0x0 (frame 12330)\nverify_pads_top[phases-inject-PADS_DEBOUNCE_DOUBLE]:   seg 0 hit write 228: want f/s/a/d 0/1/0x0/0x3, got 0/1/0xd0/0x1ffea42 (frame 12520)\nverify_pads_top: control PADS_DEBOUNCE_DOUBLE CAUGHT for its recorded reason\n",
+    "secs": 2387.936266183853
+  },
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --inject PADS_TRIG_STUCK --outdir build/pads-controls",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top[phases-inject-PADS_TRIG_STUCK]: FAIL -- presses 23 (dropped 0), writes 245/245, bad 44, extra 0, hit frame bad 0, I2S mismatch 8395 over 15611 periods, errs 0, peak 18885\nverify_pads_top[phases-inject-PADS_TRIG_STUCK]:   seg 0 hit write 156: want f/s/a/d 0/1/0x0/0x0, got 0/1/0x0/0x1 (frame 6015)\nverify_pads_top[phases-inject-PADS_TRIG_STUCK]:   seg 0 hit write 160: want f/s/a/d 0/1/0x0/0x2, got 0/1/0x0/0x3 (frame 6313)\nverify_pads_top[phases-inject-PADS_TRIG_STUCK]:   seg 0 hit write 161: want f/s/a/d 0/1/0x0/0x0, got 0/1/0x0/0x3 (frame 6314)\nverify_pads_top[phases-inject-PADS_TRIG_STUCK]:   seg 0 hit write 163: want f/s/a/d 0/1/0x0/0x10, got 0/1/0x0/0x13 (frame 6613)\nverify_pads_top[phases-inject-PADS_TRIG_STUCK]:   seg 0: first I2S mismatch at frame 7215: model 398, wire -498\nverify_pads_top: control PADS_TRIG_STUCK CAUGHT for its recorded reason\n",
+    "secs": 2386.580526828766
+  },
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --inject PADS_SRC_STUCK --outdir build/pads-controls",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top[switch-inject-PADS_SRC_STUCK]: FAIL -- presses 2 (dropped 0), writes 162/165, bad 162, extra 0, hit frame bad 7, I2S mismatch 1289 over 7903 periods, errs 0, peak 9604\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0: READY at g 1308121, predicted 1461725\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0 host write 0: want f/s/a/d 0/0/0xe/0x1234, got 0/0/0x23/0x0 (frame 60)\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0 host write 1: want f/s/a/d 0/0/0x2c/0x2345, got 0/1/0xff/0x0 (frame 94)\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0 host write 2: want f/s/a/d 0/1/0x10/0x4000, got 0/1/0x20/0x1184e (frame 127)\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0 boot write 3: want f/s/a/d 0/0/0x23/0x0, got 0/1/0x21/0x1f8a1 (frame 161)\nverify_pads_top[switch-inject-PADS_SRC_STUCK]:   seg 0 boot write 3: predicted frame 661, landed 161\nverify_pads_top: control PADS_SRC_STUCK CAUGHT for its recorded reason\n",
+    "secs": 574.2509891986847
+  },
+  {
+    "cmd": "python3 fpga/verify_pads_top.py --inject PADS_KIT_HASH --outdir build/pads-controls",
+    "state": "PASS",
+    "rc": 0,
+    "out": "verify_pads_top[phases-inject-PADS_KIT_HASH]: REFUSED -- kit-hash: Refused: pads_rom_tampered.v: boot ROM kit hashes to a4201f038011, not R1's frozen kit 321a93546cfa (r1-kit.json says 321a93546cfa)\nverify_pads_top: control PADS_KIT_HASH CAUGHT for its recorded reason\n",
+    "secs": 1.4034857749938965
+  }
+]

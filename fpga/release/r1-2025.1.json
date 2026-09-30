@@ -359,7 +359,7 @@
     "release": "arty-a7-100t baseline 2025.1, r1",
     "contract_revision": 11,
     "manifest": "fpga/release/baseline-2025.1.json",
-    "manifest_sha256": "ad36b01c4f0eed45364637af949344063a4068563f115c2166895164757b71b1",
+    "manifest_sha256": "ac2050a37ef5183aa0a807a15f42e66260890287cd29ceef995f345d2f077596",
     "publication": "fpga/reports/arty/integrated-baseline-2025.1/publication.json",
     "publication_sha256": "eb312a3d03be1bf883c1fc053a6a937ebac20ed1ef8e5e676a261f8c8d3817bd",
     "bitstream": "fpga/reports/arty/integrated-baseline-2025.1/arty.bit",

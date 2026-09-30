@@ -743,9 +743,33 @@ of the VCAs:
 
 | band | source | band-pass (bridged-T type, IC3) [values SN p.13; f0/Q inferred] | VCA | envelope | high-pass |
 |---|---|---|---|---|---|
-| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0033 µF) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp. **2-pole 10.32 kHz Q 5.64 + 1-pole high-pass 5.20 kHz, pass band +8.86 dB** [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.008 dB rms] |
-| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** VR2 2 MΩ ‖ R93 470 kΩ × C41 1 µF: RC up to ≈0.38 s [verified: W14b §7; value inferred] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
-| low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0068 µF) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
+| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0033 µF; input C11 0.001 µF + R55 22 kΩ) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp. **2-pole 10.32 kHz Q 5.64 + 1-pole high-pass 5.20 kHz, pass band +8.86 dB** [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.008 dB rms] |
+| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** R93 470 kΩ in **series** with VR2 2 MΩ(B) (wiper strapped to its own pin 3), × C41 1 µF: **RC 0.47 s to 2.47 s**, never zero. C41 is Q20's base, and reaches Q17's collector only through R92/R89/R91 — it is the **low** band (Q18) that sits on it at full weight [verified: SN p.13, hash-pinned scan, `tools/cymbal_vca_drive.py`; corrected 2026-09-30, was "2 MΩ ‖ R93 470 kΩ … up to ≈0.38 s"] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
+| low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0068 µF; input C10 0.0033 µF + R52 33 kΩ) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
+
+**Designator correction, 2026-09-28 [verified: SN p.13, hash-pinned scan,
+`tools/cymbal_vca_drive.py --verify-source`].** Until today the two rows above
+carried each other's reference designators: the 7.1 kHz filter was credited
+with R56/R57/C13/C14 and the 3.45 kHz one with R58/R59/C15/C16. The schematic
+prints it the other way round — **C13 = C14 = 0.0068 µF with R56/R57 on IC3
+pin 1 (3.45 kHz), C15 = C16 = 0.0033 µF with R58/R59 on IC3 pin 7 (7.1 kHz)**.
+No value and no f0/Q moves, because each row already carried the right
+*capacitance* for its own band and both filters share R 560 / 82 kΩ; what was
+wrong was the label a reader would use to find the part on the board.
+`tools/werner_fig4.py`'s `KNOWN` dict had the *designators* right and the
+*value printed beside them* wrong — "3450 Hz … C13 = C14 3.3 nF", which is not
+a self-consistent pair at all, since 3.3 nF on that network is 7117 Hz. Both
+documents are corrected, and `tools/test_cymbal_vca_drive.py` now recomputes
+f0 from the designators each one names **and** compares the printed
+capacitance against this read, so neither half can silently re-cross. Checking
+only the designators was the first draft of that test and it passed on the very
+string it was written to catch.
+
+**The filters' own input networks are new here** (C10/R52, C11/R55): they are
+what set each band-pass's *absolute* gain, and solving the two filters with
+them reproduces W14b Figure 4's digitised peaks of +22.95 and +24.10 dB to
+**0.01 dB** — an external known answer on the schematic read, since no part of
+Figure 4 informed these four components.
 
 Werner states the band-pass centres as "around 3440 Hz" and "around 7100 Hz"
 **[verified: W14b §4]**, matching the bridged-T formula on the schematic
@@ -757,8 +781,17 @@ kicks some more AC energy into each band pass filter" **[verified: W14b §4]**
 — the cymbal is really *ring-down of two resonators struck by an aperiodic
 edge train*, plus VCA distortion.
 
-**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY
-changes only the middle band's RC (chart: 350/800/1200 ms overall). TONE
+**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY's
+chart range is 350/800/1200 ms overall. It does **not** change only the middle
+band's RC, which is what this section said until 2026-09-30 — both the
+recordings and the schematic say otherwise, from opposite directions. VR2 and
+C41 sit on **Q20's base**; Q20's emitter feeds the **low** band's collector
+supply at full weight through R105 33 kΩ / C45 2.2 µF, and reaches the middle
+(DECAY) band only through R92 33 kΩ into the R89 10 kΩ / R91 33 kΩ divider.
+Predicted decay span from the printed parts is ×4.0 on the low band and ×5.2
+on the middle one, with the **short** band not moving at all; the Fischer
+recordings measure ×3.2 (Ln EDT10) and ×4.4 (H late T20) **[verified: SN p.13,
+`tools/cymbal_vca_drive.py`, `docs/scorecard/cymbal-369/vca-supply/`]**. TONE
 (VR4 20 kΩ(B), linear taper) is a passive network that mainly attenuates the
 third (highest) band but also shifts the others ("weakly-separated,
 non-orthogonal controls… like guitar amplifier tone stacks") — see below for
@@ -854,6 +887,26 @@ not a fresh figure measurement, so it inherits the SN scan's own limits (a
 error; the fit residual above is the honest measure of how much slack that
 leaves, and it is small.
 
+**A third thing the nodal solution settles, and it changed a candidate
+[measured: `tools/cymbal_tone_nodal.py`, `docs/scorecard/cymbal-369/tone-render/`].**
+Fig. 9's per-band 2-pole *window* fits are not the network's poles, and for Ht1
+the difference matters inside the cymbal's own band. The network's five shared
+poles are 130.0/488.6/713.5/1625.4/**4219.0** Hz at the fitted wiper; Fig. 9's
+local fit of Ht1 over 121–564 Hz puts its low-pass pole at **589.5 Hz**, and
+its 2-pole form therefore reads (tone × LEVEL) as **flat to 0.46 dB** across
+2–8 kHz where the network's own response **falls 5.9 dB**. Over the *short*
+band — the one path Fig. 9 draws across the whole audio band — the two routes
+agree to **0.026 dB**, which is what makes this a statement about the window
+rather than about the network.
+<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="the 0.026 dB above is cymbal_tone_nodal.py's nodal-grounded property; it read 0.10 dB here for a week under a [measured:] tag" -->
+ Consequence for an implementation: a model that
+drops the tone low-pass pole against the LEVEL differentiator (on the grounds
+that both are asymptotic over the band) is right for the **DECAY and short**
+bands, whose active ranges lie entirely above 4219 Hz, and **wrong for the low
+band**, whose 2–8 kHz range straddles it. The low band needs that one real pole
+realised, and Fig. 9's 1511.2 Hz value for Ht3's low-pass pole is likewise a
+window artifact — the network's nearest pole is 1625.4 Hz.
+
 Two defects in Fig. 9 itself, both resolved against W14b §10's prose and both
 asserted by the tool: its legend prints `Ht3` twice and `Ht1` never (the
 bottom sub-plot is Ht1, and also mistitles both of its own axes), and **the
@@ -881,20 +934,56 @@ not this section's — see §18.
 
 **The filter chain is not the whole band balance, and the missing factor is the
 larger one [measured: `tools/cymbal_band_balance.py`,
-`docs/scorecard/cymbal-369/balance/`].** Including the tone stage, and
-evaluated at the frequency each band's level is actually set (3175 Hz for the
-low band, 10079 Hz for both high bands), the circuit puts the DECAY band
-**+17.2 dB** and the short band **+24.7 dB** above the low band. But **three
-separate envelope generators and three separate swing VCAs (Q16/Q17/Q18) sit
-between the band-passes and the high-passes, and no W14b figure plots them.**
-Against the model's own shipped-kit level rule that leaves a gap of +9.9 dB
-(DECAY) and **+38.2 dB (short)** unaccounted for, an order of magnitude more
-than the tone stage's own figure-reading bound at those frequencies (7.4 /
-13.9 / 0.04 dB). Applying the resolved factors with the VCA drives held equal
-was rendered and measured: H−L 24.38 dB against the 808 CY5025's 8.16, where
-the level rule it replaced reads 12.09. **So the band balance needs the VCA
-drives from the schematic as well as VR4's network; VR4 alone does not resolve
-it.**
+`docs/scorecard/cymbal-369/balance/`].** Including the tone stage — taken from
+SN p.13's *solved* VR4 network (§18, `sn-p13-vr4.json`) rather than read off
+Figure 9 — and evaluated at the frequency each band's level is actually set
+(3175 Hz for the low band, 10079 Hz for both high bands), the circuit puts the
+DECAY band **+17.5 dB** and the short band **+26.2 dB** above the low band. But
+**three separate envelope generators and three separate swing VCAs
+(Q16/Q17/Q18) sit between the band-passes and the high-passes, and no W14b
+figure plots them.** Against the model's own shipped-kit level rule that leaves
+a gap of **+10.1 dB (DECAY)** and **+39.8 dB (short)** unaccounted for — nearly
+three orders of magnitude more than the tone stage's own uncertainty at those
+frequencies (0.008 / 0.008 / 0.067 dB), and still ~1.9× the widest bound the
+figure route ever offered for it (21.3 dB). Applying the resolved factors with
+the VCA drives held equal was rendered and measured: H−L 25.07 dB against the
+808 CY5025's 8.16, where the level rule it replaced reads 12.09. **So the band
+balance needs the VCA drives from the schematic as well as VR4's network; VR4
+alone does not resolve it — #420 resolved VR4 and the gap grew.**
+
+**The VCA drives are now read off the schematic, and they are not the missing
+factor [verified: SN p.13, `tools/cymbal_vca_drive.py`,
+`docs/scorecard/cymbal-369/vca-drive/`].** The three swing-VCA stages are
+component-identical — the same 0.022 µF coupling capacitor (C42/C44/C46), the
+same 2 MΩ *series* base bias from B1 with no ground leg (R96+R97, R100+R99,
+R102+R103, so the same collector current and the same gm), the same 100 Ω
+emitter degeneration (R95/R98/R101) and the same series diode into the
+collector — and **Q16 and Q17 hang on the same node**, IC3 pin 7, with nothing
+between them, so there is no third drive to read. The only per-band element is
+the collector load from each band's own envelope reservoir: **R94 39 kΩ
+(short), R90 33 kΩ (DECAY), R104 22 kΩ (low)**, i.e. **+4.97 dB and +3.52 dB**
+relative to the low band, or **+8.71 / +7.26 dB** as an upper bound that loads
+the low band with Hh1's measured input impedance and leaves the high bands
+unloaded. Closing the short band's +39.79 dB would need R94 ≈ **2.15 MΩ**.
+So the missing factor is not in the cymbal's VCA section.
+
+**The collector *supply* side is now read too, and "equal at the peak" is only
+half right [verified: SN p.13, `tools/cymbal_vca_drive.py`,
+`docs/scorecard/cymbal-369/vca-supply/`].** All three reservoirs (C38, C40,
+C41 — all 1 µF) are charged from Q19's emitter follower through D6/D7/D8 and
+do reach the same peak, V_trig − V_BE − V_f, to within the diodes' own
+forward-drop spread (**0.009 V against a 0.25 V bound** at a 14 V trigger).
+But only the **short** band's collector load hangs on its own reservoir. The
+DECAY band's hangs behind R88 33 kΩ into C39 0.47 µF and then the
+R90/R91/R89/R92 divider; the low band's behind Q20 and R105 33 kΩ into C45
+2.2 µF. Against a 1 ms trigger those lags are 8–70 ms, so the peak **collector**
+voltages are **12.79 V (short), 4.94 V (low), 3.97 V (DECAY)** at a 14 V
+trigger and unit duty — **+8.26 dB and −1.91 dB relative to the low band**, and
+they do not even peak at the same time (1 ms, 120 ms, 19 ms). The swing VCA's
+conduction duty is not printed, so the range over duty 0.25–1.0 is
+**+4.02…+8.26 dB (short)** and **−4.39…−1.91 dB (DECAY)**. The ceiling is an
+upper bound on a band's output swing, so even at its most favourable the short
+band's advantage is 31.5 dB below the +39.79 dB the balance needs.
 
 **Do not implement the level stage without the tone stage.** They are the same
 size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
@@ -1340,25 +1429,28 @@ envelopes.
   §4.
 
   **Also still open, and NOT resolved by #390: the per-band VCA drive levels,
-  which are the larger term in the inter-band balance** [`#396`,
+  which are the larger term in the inter-band balance** [`#396`, `#420`,
   `tools/cymbal_band_balance.py`, `docs/scorecard/cymbal-369/balance/`]. #396's
   own step measured the balance's decomposition before #390 landed, and its
   finding is untouched by #390's success: the unresolved factor is one **no
   W14b figure carries at all** — the three envelope generators' and swing VCAs'
-  drive levels (Q16/Q17/Q18, §10). Against the model's shipped-kit level rule,
-  the filters-plus-tone balance alone leaves a +9.9 dB (DECAY) and **+38.2 dB
-  (short)** gap, and applying it with the VCA drives held equal was rendered
-  and lands 16.2 dB from the 808's band split where the rule it replaced is
-  3.9 dB from it. That step also said, **before #390 was done, that VR4's
-  network alone would not unblock the balance** — #390 resolved VR4 and the
-  38.2 dB VCA term remains, so the prediction held. What #396's record still
-  states as *bounded* rather than resolved (Ht1 7.4 dB / Ht2 13.9 dB / Ht3
-  0.04 dB at each band's own calibration third, read off Figure 9) is
-  **superseded by the nodal solution above** and needs re-deriving from
-  `tools/tone_stage_schematic.py`; that re-derivation is **#420**, not done in
-  #396's step. The VCA-drive half of route 1 — the
-  envelope generator and swing VCA drive networks from SN p.13 — is what is
-  still missing.
+  drive levels (Q16/Q17/Q18, §10).
+
+  **#420 re-derived that decomposition from the nodal solution above**, so the
+  tone term is no longer #396's bounded reading off Figure 9 (Ht1 7.4 dB / Ht2
+  13.9 dB / Ht3 0.04 dB wide at each band's own calibration third) but a
+  circuit value bounded by the solution's own residual — **0.008 / 0.008 /
+  0.067 dB**, emitted as `docs/scorecard/cymbal-369/sn-p13-vr4.json` by
+  `tools/tone_stage_schematic.py --emit`. Against the model's shipped-kit level
+  rule the filters-plus-tone balance alone now leaves a **+10.1 dB (DECAY)** and
+  **+39.8 dB (short)** gap (was +9.9 / +38.2 on the figure route), and applying
+  it with the VCA drives held equal was re-rendered and lands 16.9 dB from the
+  808's band split where the rule it replaced is 3.9 dB from it. That step also
+  said, **before #390 was done, that VR4's network alone would not unblock the
+  balance** — #390 resolved VR4, #420 applied it, and the gap **grew** rather
+  than closing, so the prediction held in the direction that could have broken
+  it. The VCA-drive half of route 1 — the envelope generator and swing VCA
+  drive networks from SN p.13 — is what is still missing.
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6

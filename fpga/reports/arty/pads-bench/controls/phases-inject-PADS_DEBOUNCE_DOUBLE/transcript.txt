@@ -1,0 +1,35 @@
+tb_pads_top: SEG 0 periods 0
+tb_pads_top: PRESS seg 0 btn 2 g 512003 frame 2000
+tb_pads_top: READY seg 0 level 1 g 1308135
+tb_pads_top: PRESS seg 0 btn 0 g 1359359 frame 5309
+tb_pads_top: PRESS seg 0 btn 1 g 1436159 frame 5609
+tb_pads_top: PRESS seg 0 btn 2 g 1512959 frame 5909
+tb_pads_top: PRESS seg 0 btn 3 g 1589759 frame 6209
+tb_pads_top: PRESS seg 0 btn 0 g 1666304 frame 6509
+tb_pads_top: PRESS seg 0 btn 1 g 1743104 frame 6809
+tb_pads_top: PRESS seg 0 btn 2 g 1819904 frame 7109
+tb_pads_top: PRESS seg 0 btn 3 g 1896704 frame 7409
+tb_pads_top: PRESS seg 0 btn 0 g 1973505 frame 7709
+tb_pads_top: PRESS seg 0 btn 1 g 2050305 frame 8009
+tb_pads_top: PRESS seg 0 btn 2 g 2127105 frame 8309
+tb_pads_top: PRESS seg 0 btn 3 g 2203905 frame 8609
+tb_pads_top: PRESS seg 0 btn 0 g 2280832 frame 8909
+tb_pads_top: PRESS seg 0 btn 1 g 2357632 frame 9209
+tb_pads_top: PRESS seg 0 btn 2 g 2434432 frame 9509
+tb_pads_top: PRESS seg 0 btn 3 g 2511232 frame 9809
+tb_pads_top: PRESS seg 0 btn 0 g 2587944 frame 10109
+tb_pads_top: PRESS seg 0 btn 0 g 2596944 frame 10144
+tb_pads_top: PRESS seg 0 btn 0 g 2612944 frame 10206
+tb_pads_top: PRESS seg 0 btn 0 g 2975944 frame 11624
+tb_pads_top: PRESS seg 0 btn 0 g 2987944 frame 11671
+tb_pads_top: PRESS seg 0 btn 0 g 3253564 frame 12709
+tb_pads_top: PRESS seg 0 btn 1 g 3253564 frame 12709
+tb_pads_top: PRESS seg 0 btn 2 g 3253564 frame 12709
+tb_pads_top: PRESS seg 0 btn 3 g 3253564 frame 12709
+tb_pads_top: PRESS seg 0 btn 2 g 3509514 frame 13709
+tb_pads_top: PRESS seg 0 btn 1 g 3509704 frame 13709
+tb_pads_top: ran 1 segments; 15612 I2S periods decoded
+tb_pads_top: writes drained 252, spi+uart slot collisions 0 (must be 0)
+tb_pads_top: sample strobed in 15613 frames, MISSING in 0, worst strobe cycle 155 of 256
+tb_pads_top: datapath busy at a tick: 0; core overrun 0
+tb_pads_top: TX bytes captured 505

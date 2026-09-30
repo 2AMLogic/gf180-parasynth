@@ -96,11 +96,12 @@ cutoff error — put `corner ratio drift` in the BLIND column, because a
 **non-uniformity** metric cannot by construction see a **uniform** skew. Both
 properties were correct. One of them could never have failed for that defect.
 
-Two suites print the matrix, and they are the only two that can:
+Three suites print the matrix, and they are the only three that can:
 
 | suite | its "properties" | example |
 |---|---|---|
 | `model/sound_report.py --inject` | named acoustic properties per voice | `sd-centroid-amp-weighted` moves SD brightness 1918 → 5868 Hz and leaves SD's other **five** properties BLIND |
+| `fpga/verify_xdc_binding.py --matrix` | the nine properties that decide whether the Arty constraint file still binds this wrapper | `UART_SLASH_JOIN` — #315's own bytes — moves `hier_separators` and leaves the other **eight** BLIND, including `query_counts`: every query still has a declared required count, which is exactly why the text-level gates passed while both constraints were dropped |
 | `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write, plus the write `count` and the `drain` window | `SPI_ADDR7` moves `address` on 105 of 206 writes and the other five are BLIND. `SPI_DATA24` moves `data` on 42 of 206. `SPI_ANYLEN` moves only `count` (208 writes reach the port for 206 sent) and `SPI_DRAIN_LATE` only `drain` (206 of 206 applied at `go`) — each row is printed against its OWN population, so `count` is over the 206 sent while `drain` is over the 208 that arrived |
 
 **Every other `--expect-fail` suite here is single-property by construction and
@@ -137,8 +138,8 @@ the bugs this project actually made. So when a bug is fixed, the fix is half
 the work; the other half is reinstating the exact broken behaviour as a
 permanent control that must stay red.
 
-Six already work this way — two at the control layer, two at the measurement
-layer, and two in the build/report tools:
+Seven already work this way — two at the control layer, two at the measurement
+layer, two in the build/report tools, and one at the constraint layer:
 
 | the bug, as it shipped | the injection it became |
 |---|---|
@@ -148,6 +149,7 @@ layer, and two in the build/report tools:
 | an amplitude-weighted centroid read where a power-weighted one belonged | `sound_report.py --inject sd-centroid-amp-weighted` |
 | `ladder_dp_t16`'s out-of-range tanh index quoted at **1,917 cells** for three rounds | `pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x` — the tool REFUSES and withholds the number |
 | a die area recovered from its own `{"method": "utilization", "utilization_pct": 50}` | `pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular`, and `CORE_UTILIZATION_SET` for the ORFS spelling |
+| the two UART-RX synchroniser constraints joined their generate block with a **slash**, matched nothing, and were dropped by Vivado from the R0 **and** R1 bitstreams while every text-level gate passed (#315) | `fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail` — and, better, the pre-#315 file itself as the bench's start-red, read straight out of `383f10b^` rather than reconstructed |
 
 The last two are the measurement layer, which is where most of this project's
 errors actually lived, and both were already pinned by a helper-function unit
@@ -211,3 +213,30 @@ Python rejects syntax errors.
 And per `CLAUDE.md`: **run the gate against the current state before committing
 it.** An unsatisfiable gate is worse than no gate — it trains everyone to
 ignore gates, including the working ones.
+
+## 6. A claim about an external tool is a claim about a configuration
+
+"Model D renders silence" was true of `dawdreamer` 0.9.0 and false under
+`pedalboard`; unlicensed Diva clicks; Surge parameter 265 depends on oscillator
+type; "94 Hz stepping" was our host block rate; "Mini V3 plays an octave down"
+was a defaulted Range parameter (Model D does the same). Each recorded a tool
+property that was a property of (host, version, binary hash, block size, sample
+rate, licence state, preset). Rules (#123), checked by `tools/external_claim.py`
+over `docs/external-tool-claims.json` in `make verify` and, through its test,
+`make verify-fast`. A record with no polarity or environment is REFUSED:
+
+1. **No external-tool claim without its environment tuple** -- host and version,
+   loader, machine, binary sha256, block size, sample rate, licence state, preset. Negative
+   claims included, especially.
+2. **A negative result needs a second route** (different host, loader or
+   machine) that reproduces it before it is believed.
+3. **Which host works per plugin is data** (`host_per_plugin` in that file).
+   Each entry is `unverified` or names a passing claim; `host_result()` refuses
+   unverified entries. Today every entry is unverified.
+4. **Assert what defaults wrongly, every time**: pitch, level (silence is not
+   data) and pin readback, via `external_claim.assert_readback`. Plugin defaults
+   are chosen for demos, not measurement. This rule is not yet enforced: no
+   render harness calls `assert_readback` yet. Wiring it in is follow-up work.
+
+The same applies to yosys, iverilog, ORFS and scipy defaults (`sosfiltfilt`
+`padtype`, #101).
