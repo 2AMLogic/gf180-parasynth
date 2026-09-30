@@ -1431,6 +1431,205 @@ def test_tolerances_are_frozen_in_one_place_and_named_by_every_metric():
             assert basis.split(" (")[0] in rc.TOLERANCE_POLICY, (voice, name, basis)
 
 
+# ===========================================================================
+# The f0 discrimination band (#127).
+#
+# The bass drum's f0 tolerance used to be 10 % of the reference, which is
+# 5.06 Hz, and everything the machine's own DECAY and TONE controls do to that
+# f0 is 3.66 Hz -- so the check could not fail a kick rendered anywhere in the
+# voice's own range. The two controls below are the two ways the replacement
+# can be wrong, and they pull in opposite directions:
+#
+#   POSITIVE  it must separate two settings of the machine that the 10 % rule
+#             could not tell apart.
+#   NEGATIVE  it must NOT fail the machine for being itself -- a difference
+#             the size of the measured session-to-session spread has to pass,
+#             or the check is scoring the recording session (#101's trap).
+#
+# Both run end to end: the real BD estimator, the real tolerance rule, the
+# real metric record, and `scorecard.metric_distance` for the verdict.
+# ===========================================================================
+BD_GRID_LOW_HZ = 50.5448        # knob_travel["both accents"] grid_min
+BD_GRID_HIGH_HZ = 54.2060       # knob_travel["both accents"] grid_max
+BD_SESSION_SPREAD_HZ = 1.5345   # session_to_session abs_diff_max
+BD_SESSION_MEDIAN_HZ = 1.3852   # session_to_session abs_diff_median
+
+
+def synthetic_kick(f0_hz, seconds=1.2, tau=0.30, sr=SR):
+    """A decaying sinusoid at a CHOSEN f0, behind 20 ms of silence so
+    `rc.prepare` gets the lead it requires from the record rather than
+    manufacturing it. The answer is the argument."""
+    t = np.arange(int(seconds * sr)) / sr
+    return np.concatenate([np.zeros(int(0.020 * sr)),
+                           np.sin(2 * math.pi * f0_hz * t) * np.exp(-t / tau)])
+
+
+def _bd_pitch_metric(ours_f0_hz, ref_f0_hz, rule):
+    """The BD "Pitch trajectory" metric for two synthetic kicks, through the
+    same `measure_pair` the runner uses, under `rule`."""
+    name, units, est, _shipped = rc.DRUM_PLAN["BD"][0]
+    assert name == "Pitch trajectory", name
+    pair = []
+    for hz in (ours_f0_hz, ref_f0_hz):
+        y = rc.prepare(synthetic_kick(hz), SR, side=f"synthetic kick at {hz} Hz")
+        pair.append((y, SR))
+        # PRECONDITION, asserted rather than assumed: the estimator has to
+        # resolve these two f0s far better than the differences being scored,
+        # or the control is measuring the estimator. Measured ~0.03 Hz.
+        e = est(y, SR)
+        assert e.ok and abs(e.value - hz) < 0.10, (hz, e)
+    return rc.measure_pair(name, units, est, pair[0], pair[1], rule, {})
+
+
+def test_f0_discrimination_band_matches_the_measurement():
+    """Every number in `F0_DISCRIMINATION_BAND` is transcribed by hand from
+    `docs/bd-repeatability-results.json`, so the transcription is checked. A
+    hand-copied measurement is a claim until something re-derives it."""
+    measured = json.loads((ROOT / "docs" / "bd-repeatability-results.json").read_text())
+    band = rc.F0_DISCRIMINATION_BAND["BD"]
+    s2s = measured["session_to_session"]["metrics"]["Pitch trajectory"]
+    travel = measured["knob_travel"]["both accents"]["Pitch trajectory"]
+    noise = measured["self_test"]["editing_noise"]["Pitch trajectory"]
+    assert s2s["units"] == travel["units"] == "Hz"
+    assert band["machine_hz"] == pytest.approx(s2s["abs_diff_max"], abs=5e-5)
+    assert band["travel_hz"] == pytest.approx(travel["grid_span"], abs=5e-5)
+    assert band["apparatus_hz"] == pytest.approx(noise["span"], rel=1e-9)
+    # The floor is the MAX over observed session pairs, not the median: a
+    # median floor lets half the observed pairs fail by construction.
+    assert band["machine_hz"] >= s2s["abs_diff_median"]
+    # And the constants the tests themselves quote come from the same file.
+    assert BD_GRID_LOW_HZ == pytest.approx(travel["grid_min"], abs=5e-5)
+    assert BD_GRID_HIGH_HZ == pytest.approx(travel["grid_max"], abs=5e-5)
+    assert BD_SESSION_SPREAD_HZ == pytest.approx(s2s["abs_diff_max"], abs=5e-5)
+    assert BD_SESSION_MEDIAN_HZ == pytest.approx(s2s["abs_diff_median"], abs=5e-5)
+
+
+def test_f0_discrimination_tolerance_is_equidistant_from_both_failures():
+    """sqrt(floor*ceiling) is not a taste. It is the unique point whose two
+    ratio margins -- room above the machine's own spread, room below the
+    machine's own knob travel -- are equal, so it maximises the smaller of
+    them. If a future band makes those unequal, the arithmetic changed."""
+    for voice, band in rc.F0_DISCRIMINATION_BAND.items():
+        tol = rc.f0_discrimination_tolerance(voice)
+        floor, ceiling = band["machine_hz"], band["travel_hz"]
+        assert band["apparatus_hz"] < floor < tol < ceiling, (voice, tol)
+        assert tol / floor == pytest.approx(ceiling / tol, rel=1e-12), voice
+
+
+def test_the_bd_plan_no_longer_scores_f0_as_a_percentage():
+    """The shipped rule is the one this issue changed, and the number it
+    reports is the derived one -- not 10 % of whatever it is handed."""
+    _name, _units, _est, rule = rc.DRUM_PLAN["BD"][0]
+    tol, basis = rule(49.7842, {})
+    assert basis == rc.F0_BAND_BASIS
+    assert basis in rc.TOLERANCE_POLICY
+    assert tol == pytest.approx(rc.f0_discrimination_tolerance("BD"))
+    # Independent of the reference value, which is the whole point.
+    assert rule(500.0, {})[0] == pytest.approx(tol)
+    assert tol < rc.tol_frequency(49.7842, {})[0]
+
+
+def test_POSITIVE_CONTROL_new_f0_check_separates_settings_the_old_one_could_not():
+    """Two settings of the real machine -- the low and high ends of its own
+    measured f0 grid, 50.54 and 54.21 Hz. They are 3.66 Hz apart: MORE than
+    the machine's session-to-session spread, so the difference is real, and
+    LESS than the old 5.06 Hz tolerance, so the old rule passed it."""
+    gap = BD_GRID_HIGH_HZ - BD_GRID_LOW_HZ
+    assert BD_SESSION_SPREAD_HZ < gap < rc.tol_frequency(BD_GRID_LOW_HZ, {})[0]
+
+    old = _bd_pitch_metric(BD_GRID_HIGH_HZ, BD_GRID_LOW_HZ, rc.tol_frequency)
+    new = _bd_pitch_metric(BD_GRID_HIGH_HZ, BD_GRID_LOW_HZ, rc.DRUM_PLAN["BD"][0][3])
+    assert old["valid"] and new["valid"]
+    assert old["error"] == pytest.approx(new["error"], abs=0.05)   # same render
+    assert sb.metric_distance(old) < 1.0, old       # the defect: a pass
+    assert sb.metric_distance(new) > 1.0, new       # the repair: a fail
+    # Not a hair's breadth either side of 1.0 in either direction.
+    assert sb.metric_distance(old) < 0.80
+    assert sb.metric_distance(new) > 1.40
+
+
+def test_NEGATIVE_CONTROL_new_f0_check_passes_the_machines_own_session_spread():
+    """The trap on the other side: a tolerance tightened to the measured floor
+    scores the recording session, not the instrument (#101's shape, on the
+    band split). The same machine at one setting, recorded in two sessions,
+    differs by up to 1.5345 Hz. That must still pass, with margin."""
+    rule = rc.DRUM_PLAN["BD"][0][3]
+    for offset in (BD_SESSION_SPREAD_HZ, BD_SESSION_MEDIAN_HZ,
+                   -BD_SESSION_SPREAD_HZ):
+        ref = 50.6125                               # session_to_session mean_current
+        m = _bd_pitch_metric(ref + offset, ref, rule)
+        assert m["valid"], m
+        assert sb.metric_distance(m) < 1.0, (offset, m)
+        assert sb.metric_distance(m) < 0.70, (offset, m)
+    # The estimator's own scatter is not even in the same decade as the floor,
+    # so the floor is a property of the machine and not of the apparatus.
+    band = rc.F0_DISCRIMINATION_BAND["BD"]
+    assert band["machine_hz"] / band["apparatus_hz"] > 1000.0
+
+
+def test_tol_f0_discrimination_refuses_an_unmeasured_voice_at_import_time():
+    """No fallback to 10 %. A voice with no measured band is a precondition
+    failure, and 10 % under a name that reads as measured is the defect #127
+    exists to remove."""
+    with pytest.raises(KeyError):
+        rc.tol_f0_discrimination("CY")
+    with pytest.raises(KeyError):
+        rc.f0_discrimination_tolerance("CY")
+
+
+def test_tol_f0_discrimination_refuses_a_band_with_no_room_in_it(monkeypatch):
+    """A voice whose repeat spread is WIDER than its knob travel has no usable
+    tolerance at all: no value both spares the machine its own spread and
+    separates two of its settings. That is REFUSED -- an invalid metric with
+    a stated reason and no `error` key -- and not a number, and it costs the
+    metric rather than the runner."""
+    monkeypatch.setitem(rc.F0_DISCRIMINATION_BAND, "XX",
+                        dict(machine_hz=4.0, travel_hz=2.0, apparatus_hz=0.001,
+                             source="synthetic, for this control"))
+    rule = rc.tol_f0_discrimination("XX")           # no exception: one metric
+    tol, basis = rule(50.0, {})
+    assert math.isnan(tol)
+    assert "REFUSED" in basis
+    assert basis.split(" (")[0] in rc.TOLERANCE_POLICY
+
+    m = _bd_pitch_metric(50.6, 50.6, rule)
+    assert m["valid"] is False
+    assert "error" not in m
+    assert "REFUSED" in m["why"]
+    with pytest.raises(ValueError, match="invalid number"):
+        sb.metric_distance(m)
+
+
+def test_the_other_f0_cases_were_CHECKED_not_merely_left_alone():
+    """SCOPE RECORD. This change is BD-only. The other f0 cases still on
+    `tol_frequency` (D04A/D06A/D08A -- LC/MC/HC) do not have the bass drum's
+    defect, and that was checked rather than assumed: their TUNING pot spans
+    +-10 % of nominal (docs/tr808-reference.md 1.7, the same figure
+    `drums_fx.TOM_DROP_TUNING_SPAN` clamps the tuning law to), so their f0
+    travel is ~20 % of nominal against a 10 % tolerance -- half the travel,
+    not 1.38x it.
+
+    This does NOT close #126's general question. Their session-to-session
+    floor is unmeasured, so the floor half of a discrimination band cannot be
+    derived for them at all, and none is invented."""
+    import drums_fx as dx
+    pot_span = dx.TOM_DROP_TUNING_SPAN                  # +-10 % of nominal
+    assert pot_span == 0.10
+    travel_frac, tol_frac = 2.0 * pot_span, 0.10
+    assert tol_frac / travel_frac == pytest.approx(0.5)
+    assert tol_frac < travel_frac                       # BD's defect was > 1
+
+    on_percentage = {(voice, name)
+                     for voice, plan in rc.DRUM_PLAN.items()
+                     for name, _u, _e, rule in plan
+                     if rule is rc.tol_frequency}
+    assert ("BD", "Pitch trajectory") not in on_percentage
+    assert on_percentage == {("LC", "Pitch"), ("MC", "Pitch"), ("HC", "Pitch"),
+                             ("CL", "Pitch")}, on_percentage
+    assert "LC" not in rc.F0_DISCRIMINATION_BAND
+    assert set(rc.F0_DISCRIMINATION_BAND) == {"BD"}
+
+
 def test_written_results_are_the_shape_the_board_reads(tmp_path):
     """Round trip: what the runner writes is what scorecard.py loads, and the
     verdict does not change in the post."""
