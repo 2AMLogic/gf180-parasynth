@@ -14,15 +14,24 @@ THREE OUTCOMES, the same convention `tools/refprofile.py` uses
     exit 1  FAIL     the rig was measured and is NOT usable. Every check that
                      could answer did; the record says which ones said no
     exit 2  REFUSED  a precondition of the apparatus is unmet, so nothing was
-                     attempted: no `pedalboard`, no Model D bundle, or a check
-                     that could not answer at all
+                     attempted: no `pedalboard`, no Model D bundle, a bundle
+                     that exists but will not load, or a check that could not
+                     answer at all
 
-**On most hosts in this fleet this exits 2, and that is the correct answer.**
-`pedalboard` and the Model D bundle live on an operator's macOS machine; Linux
-CI has neither. A REFUSED here is a stated no-verdict, not a hole in the
-instrument, and it is why `RIG_VERDICTS["modeld-pedalboard"]["qualified"]` is
-`None` rather than `False` -- "nobody has run it" and "it cannot be used" are
-different facts.
+**On most hosts in this fleet this exits 2, and that is the correct answer.** A
+REFUSED here is a stated no-verdict, not a hole in the instrument, and it is why
+`RIG_VERDICTS["modeld-pedalboard"]["qualified"]` is `None` rather than `False` --
+"nobody has run it" and "it cannot be used" are different facts.
+
+**Which of the three refusals you get is the useful part, and it changed on
+2026-09-30.** An earlier draft of this docstring said `pedalboard` and the bundle
+both "live on an operator's macOS machine; Linux CI has neither". Half of that is
+wrong: `pedalboard` 0.9.25 installs cleanly from a wheel on Linux / CPython 3.12
+into an isolated venv, and on this dispatch worker the refusal is now `Moog Model
+D is not installed at ...` rather than `no pedalboard on this machine`. **The
+remaining blocker is the licensed plugin binary alone.** The third refusal --
+a bundle that exists but will not load -- used to escape as a TRACEBACK; see
+docs/pedalboard-rig.md, "A bundle that exists is not a plugin".
 
 WHAT A NON-ZERO EXIT MEANS FOR THE REST OF THE WORK
 ---------------------------------------------------

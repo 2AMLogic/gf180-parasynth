@@ -39,14 +39,49 @@ exit 0  OK       the rig qualified; the clip may be frozen and #124's 8 Mono
                  anchor cases are unblocked
 exit 1  FAIL     the rig was measured and is not usable
 exit 2  REFUSED  a precondition is unmet, so nothing was attempted: no
-                 pedalboard, no Model D bundle, or a check that could not answer
+                 pedalboard, no Model D bundle, a bundle that exists but will
+                 not load, or a check that could not answer
 ```
 
-On every Linux host in this fleet it exits **2** with
-`no pedalboard on this machine` — a stated no-verdict, and the correct answer.
-That refusal deliberately does **not** print the #122 note below: a host that
-never loaded the plugin has concluded nothing about it.
+**There are three refusals, not one, and which one you get is the useful part.**
+None of them prints the #122 note below: a host that never loaded the plugin has
+concluded nothing about it.
+
+| refusal | what it means | measured |
+|---|---|---|
+| `no pedalboard on this machine` | the host is not importable | was the answer on every host in this fleet until 2026-09-30 |
+| `Moog Model D is not installed at …` | the host is there, the bundle is not | **the answer on this Linux dispatch worker now** — `pedalboard` 0.9.25 installs cleanly here (see "The dependency"), so the host half is no longer what is missing |
+| `a bundle exists at … but this host could not load it` | a `.vst3` **directory** is present and holds nothing loadable | measured against `/tmp/mdb/Model D.vst3` on this worker — see "A bundle that exists is not a plugin" below |
+
 <!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_no_pedalboard_is_REFUSED_and_says_nothing_about_issue_122 -->
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_a_missing_bundle_is_REFUSED_even_with_pedalboard_installed -->
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_a_bundle_that_exists_but_does_not_load_is_REFUSED_not_a_traceback -->
+<!-- claim: test=tools/test_qualify_modeld_pedalboard.py::test_an_unloadable_bundle_is_distinguishable_from_an_absent_host -->
+
+### A bundle that exists is not a plugin
+
+`_PedalboardPlugin.__init__` checked `os.path.exists(self.path)` and then called
+`pedalboard.load_plugin`. A `.vst3` bundle is a **directory**, so that check
+passes for one containing a single byte — and `load_plugin` then raised
+`ImportError` straight out of the constructor, which the tool does not catch. It
+exited with a **traceback** rather than one of its three outcomes, and the word
+`ImportError` in it reads like the host being missing rather than the file being
+a stub. Both failures raise the same exception type.
+
+This was found on a bundle, not reasoned about: `/tmp/mdb/Model D.vst3` on this
+worker is one byte (the character `x`, mode 644), in the **macOS** layout
+(`Contents/MacOS/`) on a Linux host, and real `pedalboard` 0.9.25 answers it with
+`unsupported plugin format or scan failure` and nothing else.
+
+So the load itself is now the precondition, at the point of use, and
+`reference_rigs.bundle_diagnosis()` turns that opaque error into what an operator
+can act on: which platform sub-directory this platform needs, which one the
+bundle has, and how big its largest file is. **It runs only after a load has
+already failed** — a bundle check that rejected a layout it did not recognise
+would be an unsatisfiable gate, which this repository has written three of.
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_a_bundle_that_exists_but_will_not_load_is_refused_not_raised -->
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_the_diagnosis_names_a_stub_bundle_and_the_wrong_platform_layout -->
+<!-- claim: test=model/test_modeld_pedalboard_rig.py::test_the_diagnosis_does_not_cry_stub_over_a_plausible_bundle -->
 
 ## The dependency
 
@@ -62,6 +97,23 @@ Neither host is in any CI workflow and neither needs to be: everything that
 depends on them refuses with a stated reason without them, and every test in
 this rig's suites runs with neither (see "How this is tested without a plugin"
 below).
+
+**`pedalboard` is not a macOS-only dependency, which is how it was first
+written down here.** Measured on a Linux dispatch worker, 2026-09-30:
+
+```sh
+python3 -m venv /tmp/pb-verify-venv
+/tmp/pb-verify-venv/bin/pip install pedalboard   # -> pedalboard 0.9.25, clean
+```
+
+A prebuilt wheel exists for Linux / CPython 3.12; the install needs no
+compiler and no system audio libraries, and an **isolated** venv is the right
+place for it (four agents share the repo venv, and #124 asks for a deliberate
+addition rather than a mid-flight install). What that changes is which half is
+missing: on this worker the tool now refuses with
+`Moog Model D is not installed at …` rather than `no pedalboard on this
+machine`. **The remaining blocker is the plugin bundle alone**, and it is a
+licensed commercial binary — no venv produces it.
 
 | host | what needs it | what it cannot do |
 |---|---|---|
@@ -104,6 +156,44 @@ Two genuine host differences, both properties of the reference and not of the co
   to settle with no note — calling `render` there stacks note-ons.
 - **There is no parameter automation.** So the 94 Hz artefact cannot be
   manufactured under this host, and neither can the movement study.
+
+### The API shape, verified against pedalboard 0.9.25
+
+This adapter was originally **written against the `pedalboard` API, not tested
+against it** — no host was installed on the worker that built it. It has now been
+read against an installed `pedalboard` 0.9.25 (Linux, CPython 3.12), and **every
+assumption holds**:
+
+| what the rig does | what 0.9.25 provides | verdict |
+|---|---|---|
+| `plugin._parameters` as the primary source | `ExternalPlugin._parameters` → `List[_AudioProcessorParameter]`, the raw C++ objects | ✅ and it is the *right* source — see below |
+| `prm.index`, `.name`, `.string_value`, `.num_steps`, `.is_discrete` | all five are properties on `_AudioProcessorParameter` | ✅ |
+| `prm.raw_value = v` in `set_parameter` | `raw_value` has both a getter and a setter | ✅ |
+| fallback to `plugin.parameters.values()` | those are Python `AudioProcessorParameter` wrappers, which proxy unknown attributes to the C++ parameter via `__getattr__` | ✅ the fallback resolves the same five names |
+| `plugin.is_instrument`, `plugin.reported_latency_samples` | both present on `VST3Plugin` | ✅ |
+| `plugin(msgs, duration=…, sample_rate=…, num_channels=…, buffer_size=…, reset=…)` | exactly the MIDI overload of `ExternalPlugin.__call__` | ✅ |
+| "pedalboard's own default is 8192", the reason the block is pinned | that overload's signature is `buffer_size: int = 8192` | ✅ the claim the pin rests on is real |
+
+**Why `_parameters` rather than `parameters` matters more than it looks.** The
+public `plugin.parameters` dict is keyed by *sanitised Python name*, and
+constructing each wrapper probes the plugin at 1,000 raw values to guess its
+range and units — so the public route is both name-keyed (the thing the Surge
+hazard moves) and expensive. The private list is index-ordered and is what the
+index-keyed pin discipline actually wants.
+
+**And the public dict silently drops parameters, in two ways.**
+`ExternalPlugin._get_parameters` iterates `_parameters` and skips any whose name
+matches `MIDI CC ` or `P\d\d\d` (pedalboard's own comment: TAL Reverb 3 on Ubuntu
+exposes 2,048 of them, Guitar Rig 512), **and** any whose sanitised
+`python_name` comes out empty. `_parameters` is unfiltered.
+
+That is a host silently renumbering the view a pin table is keyed against —
+precisely the hazard `_PedalboardParams`' "indices must cover 0..n-1 with no
+gaps" precondition exists for. It is now known to be a real behaviour of this
+host and not a defensive guess, and it means the fallback path is *guarded*
+rather than merely unused: if `_parameters` were ever unavailable and the
+fallback picked up a filtered view, the gap check refuses the rig instead of
+pinning the wrong controls.
 
 ## What the rig qualifies on
 
@@ -341,11 +431,15 @@ sounds the note or no master position clears the rail.
 - **No verdict for the real plugin.** Everything above is the instrument and its
   controls. `qualified: None` stands until somebody runs
   `tools/qualify_modeld_pedalboard.py` on a machine with the bundle.
-- **The `pedalboard` API shape is unverified against an installed
-  `pedalboard`**, and neither were the four prior-art scripts read — `~/dev` and
-  the plugin bundles are both on the operator's machine, and this was built on a
-  Linux dispatch worker. See "The four prior-art scripts were NOT read" above for
-  exactly which claims are second-hand and which are not.
+- **The four prior-art scripts are still not read.** `~/dev` was re-checked on a
+  second, different Linux dispatch worker on 2026-09-30 and is absent there too
+  (`ls /home/ubuntu/dev` → `No such file or directory`). It is on the operator's
+  machine. See "The four prior-art scripts were NOT read" above for exactly which
+  claims are second-hand; the silence-gate comparison itself does not depend on
+  them, because the two numbers on our side are read out of this tree.
+- **The `pedalboard` API shape is no longer unverified** — see "The API shape,
+  verified against pedalboard 0.9.25" above. What remains unverified is the
+  **plugin**: no measurement has been taken through a real Model D.
 - **The 8 Mono family anchor cases are not built.** #124 gates them on the one
   clip qualifying, and it has not been run. `docs/scorecard/` is untouched.
 - **The readback column.** Empty by design until one qualifying run measures it.
