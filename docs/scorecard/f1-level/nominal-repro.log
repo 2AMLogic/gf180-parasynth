@@ -1,0 +1,47 @@
+workdir   /private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/repro
+renderer  tools/refprofile.py  x2 independent processes
+render 1/2  16 clips  13.9 s  -> profile.run1.json
+render 2/2  16 clips  6.9 s  -> profile.run2.json
+
+--- run vs run ------------------------------------------------------------
+ok       surge-type2/drive-100hz-cut250-res0.50-in+0dbfs  1718607c774d  11040 frames  44218 bytes
+ok       surge-type2/drive-100hz-cut250-res0.50-in-12dbfs  9e131fed5f24  11040 frames  44218 bytes
+ok       surge-type2/drive-100hz-cut250-res0.50-in-6dbfs  b976a98a718b  11040 frames  44218 bytes
+ok       surge-type2/lp-cut1000-res0.00  042d97c684b4  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.00  bd2279368bab  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.70  34abbb23750c  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.80  d53af531b56b  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.86  e07e9a05c02b  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.90  d4fff6ecb367  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.93  12030d2c5459  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.95  3d26d0293502  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.97  d34f02f6be8a  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res0.99  358a60bc3810  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut250-res1.00  e6c6b772d79a  444695 frames  1778838 bytes
+ok       surge-type2/lp-cut4000-res0.00  e18a16e6f220  444695 frames  1778838 bytes
+ok       surge-type2/lp-open20k-res0.00  ad30cebd73b7  444695 frames  1778838 bytes
+16/16 clips bit-identical across 2 independent renders
+
+--- rendered vs the committed profile -------------------------------------
+same     surge-type2/drive-100hz-cut250-res0.50-in+0dbfs  1718607c774d
+same     surge-type2/drive-100hz-cut250-res0.50-in-12dbfs  9e131fed5f24
+same     surge-type2/drive-100hz-cut250-res0.50-in-6dbfs  b976a98a718b
+same     surge-type2/lp-cut1000-res0.00  042d97c684b4
+same     surge-type2/lp-cut250-res0.00  bd2279368bab
+same     surge-type2/lp-cut250-res0.70  34abbb23750c
+same     surge-type2/lp-cut250-res0.80  d53af531b56b
+same     surge-type2/lp-cut250-res0.86  e07e9a05c02b
+same     surge-type2/lp-cut250-res0.90  d4fff6ecb367
+same     surge-type2/lp-cut250-res0.93  12030d2c5459
+same     surge-type2/lp-cut250-res0.95  3d26d0293502
+same     surge-type2/lp-cut250-res0.97  d34f02f6be8a
+same     surge-type2/lp-cut250-res0.99  358a60bc3810
+same     surge-type2/lp-cut250-res1.00  e6c6b772d79a
+same     surge-type2/lp-cut4000-res0.00  e18a16e6f220
+same     surge-type2/lp-open20k-res0.00  ad30cebd73b7
+16 reproduced, 0 changed, 0 new, 0 dropped
+
+wrote docs/scorecard/f1-level/nominal-repro-report.json
+
+(not installed -- pass --accept to write refprofile/profile.json)
+refprofile_repro exit=0

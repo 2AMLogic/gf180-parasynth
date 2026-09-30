@@ -37,6 +37,8 @@ CONTROLS (each must turn the run red for its recorded reason):
   WATERMARK_PRELOAD   watermark verdict sent unthrottled -> device drops, FAIL
   corrupt-byte        one payload bit flipped on the wire -> checksum ERR, FAIL
   reset-mid           device reset mid-phrase -> host REFUSES, never continues
+  UNWRAP_LONG_REST    a 1 s rest between bars -> writes further apart than a
+                      16-bit frame log can step -> REFUSED, not measured
 
 Exit 0 when every clean case passes and every control is caught for its
 reason, 1 otherwise, 2 refused (apparatus precondition failed).
@@ -58,6 +60,9 @@ for _p in ("fpga", "rtl-sketch", "model"):
 import uart_device_sim as dev                     # noqa: E402
 import uart_host as uh                            # noqa: E402
 
+sys.path.insert(0, str(ROOT / "fpga" / "release"))
+import r1_candidate as r1c                        # noqa: E402
+
 SR = uh.SR
 FIXTURES = ("bar808-full", "demo")
 RTL_TIMEOUT_S = 10_800
@@ -67,26 +72,37 @@ ANCHOR_TAGS = {"stops-on", "gate", "trig"}        # the audible instants
 
 # ---- the intended schedule, from the fixture ---------------------------------
 def intended(fixture: str, preset: str | None = None,
-             note: int | None = None) -> dict:
+             note: int | None = None, image: str = uh.DEFAULT_IMAGE) -> dict:
     """What must happen, derived from the fixture and the preset image
     alone. `static` is in send order; `timed` is (rel_frame, flag, sec,
     addr, data) with rel_frame measured from the music's t=0. With `note`,
     the held note's on-writes follow the setup and its gate-off is the
     first timed write (`held` names it); the phrase's frames are then
     fixed RELATIVE to each other -- the host places the whole phrase after
-    the hold, spacing intact."""
-    static_w, timed_w, _n, _host = uh.fixture_split(fixture)
-    static = [tuple(w) for w in uh.voice_image_writes(preset)]
+    the hold, spacing intact.
+
+    `image` is the TARGET the expectation is built for, never the sender's
+    selector. For R1 ("r1", the named release; #323) the expectation is checked against the frozen
+    target (fpga/release/r1_candidate.py) before it is used: the known-state
+    preamble and the revision-14 kit by digest, with its nonzero final
+    strike. An expectation that is not that target REFUSES (Refused)."""
+    static_w, timed_w, _n, _host = uh.fixture_split(fixture, image)
+    static = [tuple(w) for w in r1c.PREAMBLE] if image in uh.KNOWN_STATE_IMAGES else []
+    static += [tuple(w) for w in uh.voice_image_writes(preset)]
     static += [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static_w]
     held = []
     if note is not None:
         static += [tuple(w) for w in uh.note_writes(note, True)]
         held = [tuple(w) for w in uh.note_writes(note, False)]
     timed = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed_w]
+    if image == r1c.HOST_IMAGE:
+        probs = r1c.check_init(static, kit_expected=True)
+        if probs:
+            raise r1c.Refused(f"the {fixture} expectation is not the frozen R1 target: {probs}")
     moved = [w for w in timed_w if w.frame != w.nominal]
     anchors = [w for w in timed_w if w.tag in ANCHOR_TAGS]
     worst = max((w.frame - w.nominal for w in anchors), default=0)
-    return {"static": static, "timed": timed, "held": held,
+    return {"static": static, "timed": timed, "held": held, "target": image,
             "spreading": {"timed_writes": len(timed_w),
                           "moved": len(moved),
                           "anchors": len(anchors),
@@ -111,8 +127,12 @@ class Harness:
 
 def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
             wire_fault=None, reset_after_events: int | None = None,
-            note: int | None = None) -> dict:
-    """uart_host.main on the scripted device; returns everything observed."""
+            note: int | None = None, image: str = uh.DEFAULT_IMAGE,
+            target: str | None = None) -> dict:
+    """uart_host.main on the scripted device; returns everything observed.
+    `image` is what the SENDER is told (`--image`); `target` is what the
+    expectation is built for (default: the same, the historical R0 check).
+    They are separate so a sender that picks the wrong kit is visible."""
     h = Harness(epoch)
     if wire_fault:
         h.ser.mutate = wire_fault
@@ -126,7 +146,7 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
             if op == dev.OP_EVENT and n == reset_after_events and not h.sim.resets:
                 h.ser.reset()
         h.sim._accept = accept
-    want = intended(fixture, note=note)         # the fixture's intent, uninjected
+    want = intended(fixture, note=note, image=target or image)   # uninjected intent
     saved = set(uh.INJECT_BUGS)
     uh.INJECT_BUGS.clear()
     if inject:
@@ -135,7 +155,7 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
-                argv = ["run", "--fixture", fixture, "--port", "sim"]
+                argv = ["run", "--fixture", fixture, "--port", "sim", "--image", image]
                 if note is not None:
                     argv += ["--note", str(note)]
                 rc = uh.main(argv, bridge_factory=h.factory)
@@ -149,8 +169,45 @@ def run_cli(fixture: str, *, epoch: int = 0, inject: str | None = None,
             "h": h, "want": want}
 
 
-def _unwrap(frames16: list, start: int) -> list:
-    """16-bit device frames as a monotone timeline beginning near `start`."""
+class UnwrapRefused(RuntimeError):
+    """The 16-bit frame log cannot be unwrapped unambiguously here."""
+
+
+UNWRAP_GAP_BOUND = 0x8000
+"""The largest step `_unwrap` can read. Its own branch is `d < 0x8000 ->
+forward, else backward`, so a TRUE forward gap of 0x8000 or more is read as a
+backward one: the bound is 0x8000, not the 0x10000 of the forward-only
+`naive_unwrap` in fpga/test_play_song.py. Same ambiguity, a different half of
+it, because this unwrap admits backward steps (the link can log two writes out
+of frame order) and that one does not."""
+
+
+def _unwrap(frames16: list, start: int, expected: list) -> list:
+    """16-bit device frames as a monotone timeline beginning near `start`.
+
+    PRECONDITION, ASSERTED HERE RATHER THAN ASSUMED (#474): consecutive
+    writes are less than UNWRAP_GAP_BOUND frames apart. A modulo-2^16 step
+    cannot show a longer gap -- g and g - 2^16 are the same 16-bit step -- and
+    the log itself cannot say which happened, so `expected` (the schedule the
+    run is checked against, in frames from `start`) is checked instead and an
+    unmeasurable one REFUSES rather than being silently mis-unwrapped.
+
+    WHAT THE PRECONDITION DOES NOT COVER, because the expected schedule cannot
+    say it: a write DELIVERED an exact multiple of 2^16 frames off its due
+    frame is unwrapped straight back onto it, and one delivered further than
+    0x8000 off is aliased to the wrong size and possibly the wrong sign. The
+    first is undetectable from the log; the second is still reported (as a
+    write off its frame) but with a wrong number attached. `check()` closes
+    both against the sim's own unwrapped log, which a board does not have --
+    see `_unwrap_offsets`."""
+    gaps = [b - a for a, b in zip(expected, expected[1:])]
+    worst = max((abs(g) for g in gaps), default=0)
+    if worst >= UNWRAP_GAP_BOUND:
+        raise UnwrapRefused(
+            f"the expected schedule steps {worst} frames between consecutive "
+            f"writes; a 16-bit frame log cannot tell that from "
+            f"{worst - 0x10000}, so this run cannot be unwrapped (bound "
+            f"{UNWRAP_GAP_BOUND})")
     out, prev, acc = [], start & 0xFFFF, start
     for f in frames16:
         d = (f - prev) & 0xFFFF
@@ -160,13 +217,28 @@ def _unwrap(frames16: list, start: int) -> list:
     return out
 
 
+def _unwrap_offsets(got_frames: list, truth: list) -> list:
+    """How far `_unwrap`'s answer sits from the device's own UNWRAPPED log,
+    which the sim keeps (`UartDeviceSim.write_frames`) and a board does not.
+
+    Every unambiguous step moves both timelines by the same amount, so a
+    correct unwrap is a SINGLE constant offset -- `start` is a 16-bit value and
+    the truth is not, so the constant is whatever whole wraps separate them.
+    Two or more offsets means some step was read as its alias: the answer is
+    wrong from that write on, and the harness must refuse rather than report
+    it. This is the one check here whose reference is independent of the thing
+    being measured."""
+    return sorted({g - t for g, t in zip(got_frames, truth)})
+
+
 def check(run: dict) -> dict:
     """Compare what the device executed with the fixture's intent."""
     h, want = run["h"], run["want"]
     sim, bridge = h.sim, h.bridge
     res = {"rc": run["rc"], "reasons": []}
+    ev_i = [i for i, w in enumerate(sim.writes) if w[5] == "event"]
     live = [w for w in sim.writes if w[5] == "live"]
-    ev = [w for w in sim.writes if w[5] == "event"]
+    ev = [sim.writes[i] for i in ev_i]
     res["static_executed"] = len(live)
     res["static_intended"] = len(want["static"])
     res["timed_executed"] = len(ev)
@@ -180,7 +252,14 @@ def check(run: dict) -> dict:
     if sim.errors or sim.drops:
         codes = sorted({e[0] for e in sim.errors})
         res["reasons"].append(f"device errors {codes}, drops {sim.drops}")
-    if [(w[1], w[2], w[3], w[4]) for w in live] != list(want["static"]):
+    executed = [(w[1], w[2], w[3], w[4]) for w in live]
+    if want.get("target") == r1c.HOST_IMAGE:
+        # the frozen R1 target, checked on what the device EXECUTED from the
+        # host's bytes: a wrong kit is a host-correctness failure, named
+        res["init_check"] = r1c.check_init(executed, kit_expected=True)
+        for p in res["init_check"]:
+            res["reasons"].append(f"init bytes: {p}")
+    if executed != list(want["static"]):
         res["reasons"].append("static image not executed exactly, in order")
     p0 = bridge.performance_origin if bridge else None
     res["performance_origin"] = p0
@@ -193,7 +272,38 @@ def check(run: dict) -> dict:
     if live and ((p0 - live[-1][0]) & 0xFFFF) >= 0x8000:
         res["reasons"].append(f"t=0 f{p0} precedes the last static write "
                               f"f{live[-1][0]}")
-    got_frames = _unwrap([w[0] for w in ev], p0)
+    # The device logs 16-bit frames. Unwrapping them is only unambiguous while
+    # consecutive writes stay inside UNWRAP_GAP_BOUND, which the log cannot
+    # show -- so the EXPECTED schedule is checked and an unmeasurable one
+    # REFUSES (#474). t=0 leads it: the first timed write is unwrapped from
+    # `p0`, so its own distance from t=0 is a step like any other. A held
+    # note's gate-off IS t=0 and the phrase behind it is placed by the host,
+    # so that one step is not in the expectation -- `_unwrap_offsets` below is
+    # what covers it.
+    try:
+        got_frames = _unwrap([w[0] for w in ev], p0,
+                             [0] + [e[0] for e in want["timed"]])
+    except UnwrapRefused as exc:
+        res["refused"] = str(exc)
+        res["reasons"].append(f"REFUSED: {exc}")
+        res["ok"] = False
+        return res
+    # ... and then the answer is checked against the sim's own unwrapped log,
+    # which is not derived from it. Skipped after a reset: the device's frame
+    # counter (and the sim's absolute timeline with it) restarts at 0, so the
+    # two sides have no common origin to be constant about.
+    truth = [sim.write_frames[i] for i in ev_i]
+    if not sim.resets and len(truth) == len(got_frames):
+        offs = _unwrap_offsets(got_frames, truth)
+        res["unwrap_offsets"] = offs
+        if len(offs) > 1:
+            res["refused"] = (f"the frame log unwrapped to {len(offs)} different "
+                              f"offsets from the device's own unwrapped log "
+                              f"{offs}: at least one write is further than "
+                              f"{UNWRAP_GAP_BOUND} frames from the one before it")
+            res["reasons"].append(f"REFUSED: {res['refused']}")
+            res["ok"] = False
+            return res
     got = [(f - p0, w[1], w[2], w[3], w[4]) for f, w in zip(got_frames, ev)]
     exp = list(want["timed"])
     if want["held"]:
@@ -316,18 +426,25 @@ def write_rtl_capture(run: dict, prefix: Path) -> dict:
             "last_due": max((r["due"] for r in rows), default=0)}
 
 
-def rtl_replay(fixture: str, outdir: Path, reuse: bool = False) -> dict:
+def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
+               image: str = uh.DEFAULT_IMAGE, target: str | None = None) -> dict:
     """The capture (the evidence of what was replayed) lands in `outdir`;
-    the bench's bulky wave/I2S dumps stay under build/."""
+    the bench's bulky wave/I2S dumps stay under build/, one directory per
+    (sender, target) so a reuse can never cross images."""
     import verify_uart_bridge as vub
-    run = run_cli(fixture)
+    target = target or image
+    run = run_cli(fixture, image=image, target=target)
     sim_res = check(run)
     if not sim_res["ok"]:
-        return {"state": "REFUSED", "reason": "the sim run is not clean; "
-                "replaying it would test nothing", "sim": sim_res}
+        # a wrong sender is found here, in seconds, before any RTL
+        return {"state": "FAIL" if sim_res.get("init_check") else "REFUSED",
+                "reason": "the sim run is not clean; replaying it would test nothing",
+                "sim": sim_res}
     cap = write_rtl_capture(run, outdir / fixture)
+    work = "rolling-rtl" if (image, target) == (uh.DEFAULT_IMAGE, uh.DEFAULT_IMAGE) \
+        else f"rolling-rtl-{image}-for-{target}"
     rr = vub.simulate_replay(str(outdir / fixture),
-                             ROOT / "build/rolling-rtl" / fixture,
+                             ROOT / "build" / work / fixture,
                              tail_frames=int(TAIL_S * SR),
                              # ~258k frames of the full wrapper: 3600 s
                              # reached 87% on a loaded machine (62 fr/s)
@@ -336,23 +453,29 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False) -> dict:
         return {"state": "REFUSED", "reason": "RTL replay did not run",
                 "capture": cap}
     ok, comp, detail = vub.analyze(rr)
+    # completeness (#300 review): every period the stimulus requires, and a
+    # control showing the check can fail
+    trunc = vub.truncation_control(rr)
     # the run's RECEIPT (sources, ROMs, defines, stimulus, length, output
     # digests) is published beside the result it produced
     receipt = Path(rr["outdir"]) / "run_identity.json"
     published = outdir / f"{fixture}.run_identity.json"
     published.write_bytes(receipt.read_bytes())
-    out = {"state": "PASS" if ok else "FAIL", "capture": cap,
+    out = {"state": ("NO VERDICT" if comp.get("i2s_incomplete") or not trunc["caught"]
+                     else "PASS" if ok else "FAIL"), "capture": cap,
+           "truncation_control": trunc,
            "comparison": comp, "detail": detail[:10],
            "reused_rtl_run": bool(rr.get("reused")),
+           "rtl_run": vub.rtl_run_report(rr),
            "run_receipt": {"path": published.name,
                            "sha256": hashlib.sha256(published.read_bytes()).hexdigest()}}
-    out["control"] = rtl_control(fixture, outdir, vub)
-    if not out["control"]["caught"]:
+    out["control"] = rtl_control(fixture, outdir, vub, work)
+    if not out["control"]["caught"] and out["state"] == "PASS":
         out["state"] = "FAIL"
     return out
 
 
-def rtl_control(fixture: str, outdir: Path, vub) -> dict:
+def rtl_control(fixture: str, outdir: Path, vub, work: str = "rolling-rtl") -> dict:
     """The comparison must be able to fail: move ONE intended event a single
     frame later in the expectation (stimulus untouched) and re-analyse the
     same RTL run. It must report that event off its frame."""
@@ -366,12 +489,12 @@ def rtl_control(fixture: str, outdir: Path, vub) -> dict:
     victim["due"] += 1
     victim["apply_frame"] += 1
     Path(f"{ctl}.plan.json").write_text(json.dumps(rec, indent=1) + "\n")
-    rr = vub.simulate_replay(str(ctl), ROOT / "build/rolling-rtl" / fixture,
+    rr = vub.simulate_replay(str(ctl), ROOT / "build" / work / fixture,
                              tail_frames=int(TAIL_S * SR), reuse=True)
     if rr is None:
         return {"caught": False, "reason": "control could not re-analyse"}
     ok, comp, detail = vub.analyze(rr)
-    caught = (not ok) and comp.get("frame_pred_bad") == 1
+    caught = (not ok) and comp.get("frame_pred_bad") == 1 and not comp.get("i2s_incomplete")
     return {"caught": caught, "victim_index": victim["index"],
             "frame_pred_bad": comp.get("frame_pred_bad"),
             "wire_mismatch": comp.get("wire_mismatch"), "detail": detail[:3]}
@@ -425,6 +548,12 @@ CONTROLS = {
                              for x in r["reasons"]),
                      "checksum ERR; the host sees the missing event at its "
                      "next window and REFUSES rather than play on with a hole"),
+    "UNWRAP_LONG_REST": ("bar808-rest", {},
+                         lambda r: bool(r.get("refused"))
+                         and "16-bit frame log" in r["refused"],
+                         "consecutive writes 0x8000 frames or more apart: the "
+                         "device's 16-bit log cannot be unwrapped, so the run "
+                         "is REFUSED rather than mis-measured"),
     "reset-mid": ("demo", {"reset_after_events": 100},
                   lambda r: r["rc"] == 2 and r["resets"] == 1
                   and r["timed_executed"] < r["timed_intended"],
@@ -432,18 +561,33 @@ CONTROLS = {
 }
 
 
-def run_control(name: str) -> dict:
+def run_control(name: str, image: str = uh.DEFAULT_IMAGE, target: str | None = None) -> dict:
     fixture, kw, pred, reason = CONTROLS[name]
     kw = dict(kw)
     if kw.get("wire_fault") == "flip":
         kw["wire_fault"] = _flip_one_event(120)
-    r = check(run_cli(fixture, **kw))
+    r = check(run_cli(fixture, image=image, target=target, **kw))
     caught = (not r["ok"]) and bool(pred(r))
     return {"control": name, "fixture": fixture, "intended_reason": reason,
             "caught": caught, "reasons": r["reasons"],
             "rc": r["rc"], "timed": [r["timed_executed"], r["timed_intended"]],
             "static": [r["static_executed"], r["static_intended"]],
             "device_errors": sorted({e[0] for e in r["device_errors"]})}
+
+
+def wrong_kit_control(fixture: str, target: str) -> dict:
+    """The sender plays the RELEASE (revision-11) kit under `--image r1`
+    (uart_host INJECT WRONG_KIT) while the expectation stays the frozen R1
+    target. Caught only if the check fails FOR THE KIT: the init-byte check
+    names the kit or the final strike (plan088)."""
+    r = check(run_cli(fixture, image=r1c.HOST_IMAGE, target=target, inject="WRONG_KIT"))
+    init = r.get("init_check") or []
+    kit_named = any("kit" in p or "ENV_FRATE" in p for p in init)
+    return {"control": "WRONG_KIT", "fixture": fixture,
+            "intended_reason": "the sender's revision-11 kit under a frozen revision-14 target "
+                               "is a host-correctness FAIL at the init bytes",
+            "caught": (not r["ok"]) and kit_named, "reasons": r["reasons"][:4],
+            "init_check": init, "rc": r["rc"]}
 
 
 def main(argv=None) -> int:
@@ -457,15 +601,41 @@ def main(argv=None) -> int:
                          "stimulus is byte-identical to this capture's)")
     ap.add_argument("--epochs", default="0,32000,65300",
                     help="device frame counter at the host's first STATUS")
+    ap.add_argument("--reuse-rtl-if-identical", action="store_true",
+                    help="re-analyse the RTL run on disk when its full identity (sources, "
+                         "defines, stimulus, length, outputs) is this run's; else simulate")
+    ap.add_argument("--image", default=None, choices=sorted(uh.IMAGE_REVISION),
+                    help="the SENDER's image selector (uart_host --image); default release")
+    ap.add_argument("--expect-image", default=None, choices=sorted(uh.IMAGE_REVISION),
+                    help="the TARGET the expectation is built for. Required with --image: "
+                         "the target is never inferred from the sender (plan088)")
+    ap.add_argument("--expect-fail", action="store_true",
+                    help="exit 0 only if every clean case FAILS at the init bytes (a sender "
+                         "that is not the target); no RTL, no host controls")
     a = ap.parse_args(argv)
+    if a.image is not None and a.expect_image is None:
+        print("verify_rolling_playback: REFUSED -- --image names the sender; state the "
+              "target with --expect-image (it is never inferred from the sender)")
+        return 2
+    image = a.image or uh.DEFAULT_IMAGE
+    target = a.expect_image or image
+    try:
+        if target == r1c.HOST_IMAGE:
+            r1c.frozen_kit()                    # the frozen target exists, or nothing runs
+        for fx in FIXTURES:
+            intended(fx, image=target)          # the expectation is the target, or REFUSED
+    except (r1c.Refused, ValueError) as exc:
+        print(f"verify_rolling_playback: REFUSED -- {exc}")
+        return 2
     epochs = [int(e) for e in a.epochs.split(",")]
     a.outdir.mkdir(parents=True, exist_ok=True)
     ok = True
     clean = {}
     cases = [(fx, ep, None) for fx in FIXTURES for ep in epochs]
-    cases += [(fx, ep, 45) for fx in FIXTURES + ("bar808",) for ep in (0, 65300)]
+    if not a.expect_fail:
+        cases += [(fx, ep, 45) for fx in FIXTURES + ("bar808",) for ep in (0, 65300)]
     for fx, ep, note in cases:
-            r = check(run_cli(fx, epoch=ep, note=note))
+            r = check(run_cli(fx, epoch=ep, note=note, image=image, target=target))
             key = f"{fx}@{ep}" + (f"+note{note}" if note is not None else "")
             clean[key] = r
             ok &= r["ok"]
@@ -477,20 +647,56 @@ def main(argv=None) -> int:
                   f"{m.get('min_deadline_slack_frames')} fr, wraps "
                   f"{m.get('counter_wraps_crossed')}"
                   + ("" if r["ok"] else f" -- {r['reasons']}"))
+    ident = {"sender": image, "target": target,
+             "target_contract_revision": uh.IMAGE_REVISION[target],
+             "target_kit_sha256": (r1c.KIT_R14_SHA256 if target == r1c.HOST_IMAGE else None)}
+    refused = {k: r["refused"] for k, r in clean.items() if r.get("refused")}
+    if refused:
+        # the apparatus could not measure these runs. That is not a FAIL about
+        # the host, and must not be reported as one (#474).
+        record = {"tool": "fpga/verify_rolling_playback.py", "image": ident,
+                  "clean": clean, "controls": {}, "state": "REFUSED",
+                  "refused": refused}
+        (a.outdir / "verification.json").write_text(
+            json.dumps(record, indent=2, default=str) + "\n")
+        for k, why in refused.items():
+            print(f"verify_rolling_playback: REFUSED [{k}] -- {why}")
+        return 2
+    if a.expect_fail:
+        fails = {k: r.get("init_check") for k, r in clean.items()}
+        caught = bool(clean) and all((not r["ok"]) and r.get("init_check")
+                                     for r in clean.values())
+        record = {"tool": "fpga/verify_rolling_playback.py", "image": ident, "clean": clean,
+                  "controls": {}, "state": "FAIL" if caught else "PASS",
+                  "expect_fail": {"caught": caught, "init_check": fails}}
+        (a.outdir / "verification.json").write_text(
+            json.dumps(record, indent=2, default=str) + "\n")
+        print(f"rolling: expect-fail {'CAUGHT' if caught else 'NOT CAUGHT'} -- sender "
+              f"{image}, target {target}")
+        return 0 if caught else 1
     controls = {}
     for name in CONTROLS:
-        c = run_control(name)
+        c = run_control(name, image=image, target=target)
         controls[name] = c
         ok &= c["caught"]
         print(f"rolling control {name}: {'CAUGHT' if c['caught'] else 'MISSED'} "
               f"-- {c['reasons'][:2]}")
+    if target == r1c.HOST_IMAGE:
+        for fx in FIXTURES:
+            c = wrong_kit_control(fx, target)
+            controls[f"WRONG_KIT:{fx}"] = c
+            ok &= c["caught"]
+            print(f"rolling control WRONG_KIT[{fx}]: {'CAUGHT' if c['caught'] else 'MISSED'} "
+                  f"-- {c['init_check'][:2]}")
     record = {"tool": "fpga/verify_rolling_playback.py", "baud": uh.DEFAULT_BAUD,
-              "clean": clean, "controls": controls,
+              "image": ident, "clean": clean, "controls": controls,
               "state": "PASS" if ok else "FAIL"}
     if a.rtl is not None:
         rtl = {}
         for fx in (a.rtl or ["demo"]):
-            rr = rtl_replay(fx, a.outdir / "rtl-replay", reuse=a.reuse_rtl)
+            rr = rtl_replay(fx, a.outdir / "rtl-replay",
+                            reuse="auto" if a.reuse_rtl_if_identical else a.reuse_rtl,
+                            image=image, target=target)
             rtl[fx] = rr
             ok &= rr["state"] == "PASS"
             comp = rr.get("comparison", {})
@@ -504,7 +710,12 @@ def main(argv=None) -> int:
                   + (f" -- {rr.get('detail') or rr.get('reason')}"
                      if rr["state"] != "PASS" else ""))
         record["rtl"] = rtl
-        record["state"] = "PASS" if ok else "FAIL"
+        nv = any(r["state"] in ("NO VERDICT", "REFUSED") for r in rtl.values())
+        record["state"] = "NO VERDICT" if nv else "PASS" if ok else "FAIL"
+        if nv:
+            (a.outdir / "verification.json").write_text(
+                json.dumps(record, indent=2, default=str) + "\n")
+            return 2
     (a.outdir / "verification.json").write_text(
         json.dumps(record, indent=2, default=str) + "\n")
     return 0 if ok else 1

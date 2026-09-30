@@ -1,0 +1,104 @@
+{
+  "state": "PASS",
+  "top": "arty_a7_pads_top",
+  "part": "xc7a100tcsg324-1",
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "release_image": false,
+  "hardware_playback_tested": false,
+  "external_io_timing_qualified": false,
+  "source_sha256": {
+    "fpga/rtl/arty_a7_pads_top.v": "dcb6cc4a27270df3ee55bebee5dbba9c60da81180ff484977713c3a6d716ced8",
+    "fpga/rtl/pads_seq.v": "ce11ff025c68a2158928e3ed9c2db750a6d8a1505e898150305e391b0b7dfb8a",
+    "fpga/rtl/pads_rom.v": "23daa25174c912d569bd475eeb31da8e5d06138bc93747dab395d4a8925d1ee4",
+    "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+    "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
+    "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+    "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+    "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+    "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+    "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+    "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+    "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+    "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+    "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+    "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+    "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+    "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+    "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+    "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+    "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+    "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+    "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+    "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+    "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+    "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+    "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+    "fpga/boards/arty-a7-100-pads.xdc": "ddf25fcbee6c4e306872c35f27f1f35b1dc3a4648507e5f2dda0b3ec01ba6944"
+  },
+  "kit_sha256": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683",
+  "verification": {
+    "phases": {
+      "record_sha256": "e4e5ca1692558df57ad1eef9e1b768778610435fbbc0fe0720b884a360ddebbf",
+      "periods": 15611,
+      "presses": 23,
+      "writes": 245
+    },
+    "switch": {
+      "record_sha256": "06644e3d3afdf76fe3590278365976b999f851b1b1464b38cc44123972b566d7",
+      "periods": 7903,
+      "presses": 2,
+      "writes": 165
+    },
+    "reset": {
+      "record_sha256": "3710ac48c5334a4c3b69cd94bfd144e9b38ad5a8a053b6b9d10cf79b402dc8f3",
+      "periods": 13118,
+      "presses": 3,
+      "writes": 310
+    }
+  },
+  "script_sha256": "d253d562384352945acdc8badd923e2e480662e21dfab2447e73af6db04f1845",
+  "vivado_version": "vivado v2025.1 (64-bit)\nTool Version Limit: 2025.05\nSW Build 6140274 on Wed May 21 22:58:25 MDT 2025\nIP Build 6138677 on Thu May 22 03:10:11 MDT 2025\nSharedData Build 6139179 on Tue May 20 17:58:58 MDT 2025\nCopyright 1986-2022 Xilinx, Inc. All Rights Reserved.\nCopyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.\n",
+  "command": [
+    "/tools/Xilinx/2025.1/Vivado/bin/vivado",
+    "-mode",
+    "batch",
+    "-source",
+    "<box>/build/arty-pads/build.tcl",
+    "-log",
+    "<box>/build/arty-pads/vivado.log",
+    "-journal",
+    "<box>/build/arty-pads/vivado.jou"
+  ],
+  "exit_code": 0,
+  "seconds": 504.794,
+  "artifact_sha256": {
+    "arty_pads.bit": "c27bde5d33e397ed09a80c41414e9c59393596d4fdb749cb230a46579d71d895",
+    "utilization.rpt": "1149950ac95183609faab2fa7bf3231cf986d8fcd84dc9007a52373ba61137aa",
+    "timing.rpt": "ba07c77fce1429837990aea7fc1b7a7753d692672e773798873d31b03421a653",
+    "clocks.rpt": "29c2f4ec08306d707669d584c304615359c598ba81f62abf876d4bcee125a331",
+    "drc.rpt": "997ebc9c1224779194e948036fff9cd9b8f91c67857df9e720bc81178876b7d7",
+    "routed.dcp": "a252423225f5a3537cd5b1f460942e0c2659e8224ebacde739d28f89d5fab263",
+    "constraint_matches.rpt": "1ea966dae73eb82903db466828f6f66adef8d1690a32975a6121dd5ddd393120",
+    "exceptions.rpt": "69777871e8d279f440937ca6ca5ddaa15a7c1900035360395bcbcc81c509d0cd",
+    "pads_inputs.rpt": "25203a319c46a7078d05ebbcd4ebb8eff782737bd8deac3c132609f51cd5a490"
+  },
+  "timing": {
+    "wns_ns": 15.82,
+    "tns_ns": 0.0,
+    "setup_failing": 0.0,
+    "setup_endpoints": 44078.0,
+    "whs_ns": 0.03,
+    "ths_ns": 0.0,
+    "hold_failing": 0.0,
+    "hold_endpoints": 44078.0,
+    "wpws_ns": 3.0,
+    "tpws_ns": 0.0,
+    "pulse_failing": 0.0,
+    "pulse_endpoints": 14098.0
+  },
+  "problems": []
+}

@@ -1,0 +1,62 @@
+{
+ "before": "BD-solo-7156d23-ac67474d-1ea24350ebf5-drum-decay-moving-average-v1-withdrawn-7b2a7480aefe",
+ "after": "BD-solo-7156d23-ac67474d-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+ "renders": [
+  "BD-solo-7156d23-ac67474d-1ea24350ebf5",
+  "BD-solo-7156d23-ac67474d-156c39bccf05"
+ ],
+ "analysers": [
+  "drum-decay-moving-average@v1-withdrawn",
+  "drum-decay-rms@v2"
+ ],
+ "attributable": false,
+ "attribution": "REFUSED: 'fundamental': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2) differ between these two analyses -- this comparison cannot separate the two contributions; re-analyse one leg holding the other fixed",
+ "metrics": {
+  "fundamental": {
+   "metric": "fundamental",
+   "verdict": "REFUSED",
+   "why": "'fundamental': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2) differ between these two analyses -- this comparison cannot separate the two contributions; re-analyse one leg holding the other fixed",
+   "tolerance": 2.0,
+   "attributable": false,
+   "value_a": 49.4084,
+   "value_b": 49.4091,
+   "delta": 0.0007000000000019213,
+   "saw": "BLIND"
+  },
+  "decay tau": {
+   "metric": "decay tau",
+   "verdict": "REFUSED",
+   "why": "'decay tau': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2) differ between these two analyses -- this comparison cannot separate the two contributions; re-analyse one leg holding the other fixed",
+   "tolerance": 36.0,
+   "attributable": false,
+   "value_a": 149.315,
+   "value_b": 86.4672,
+   "delta": -62.84779999999999,
+   "saw": "MOVED"
+  },
+  "T20": {
+   "metric": "T20",
+   "verdict": "REFUSED",
+   "why": "'T20': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2) differ between these two analyses -- this comparison cannot separate the two contributions; re-analyse one leg holding the other fixed",
+   "tolerance": 36.0,
+   "attributable": false,
+   "value_a": 207.0417,
+   "value_b": 186.1042,
+   "delta": -20.9375,
+   "saw": "BLIND"
+  },
+  "attack": {
+   "metric": "attack",
+   "verdict": "REFUSED",
+   "why": "'attack': both the audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5 -> BD-solo-7156d23-ac67474d-156c39bccf05) and the analyser (drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2) differ between these two analyses -- this comparison cannot separate the two contributions; re-analyse one leg holding the other fixed",
+   "tolerance": 3.0,
+   "attributable": false,
+   "value_a": 9.9375,
+   "value_b": 14.2917,
+   "delta": 4.3542000000000005,
+   "saw": "MOVED"
+  }
+ },
+ "recorded_at": "2026-09-26T12:11:56Z",
+ "comparison": "v1 on clean -> v2 on the broken render"
+}

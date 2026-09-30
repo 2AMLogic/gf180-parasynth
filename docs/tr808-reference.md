@@ -15,6 +15,10 @@ terms. Breadth was traded for accuracy: every number is tagged.
 - **[inferred]** — computed by me from verified component values with the
   formulas given in §1, or read by me off the schematic scan where the wiring
   is unambiguous. Reproducible; not independently measured.
+- **[measured]** — read off recordings of a real TR-808, with the instrument
+  that read them committed and validated. This tag **outranks [inferred]**
+  where the two disagree, and §4's pitch drop is the reason it exists: a
+  magnitude tagged *[inferred]* here was shipped as ×1.7 and measures ×1.06.
 - **[could not establish]** — no primary source found; do not build on it.
 
 Where a number below disagrees with folklore, the folklore is wrong or refers
@@ -468,15 +472,55 @@ are unity-gain inverters, 33 kΩ/33 kΩ):
 The agreement with Roland's chart is within 5 % across all six once the diodes
 are treated as open **[inferred]**. (W16 Table 2.2 lists R1 = 333–500 Ω, which
 is the diode-*conducting* limit; with those values every frequency comes out
-1.7× too high against the chart — that is the large-signal pitch, see next.)
+1.7× too high against the chart — that is the large-signal **bound**, not the
+pitch the machine reaches, see next.)
 
-**Pitch drop [verified: SN text; magnitude inferred].** With the diodes fully
-conducting the foot resistance becomes (1−x)·500 + 1 kΩ ‖ x·500 → 333–500 Ω,
-i.e. f0 up to ≈1.7× the small-signal value (LT ≈ 145 Hz at the very start of
-a hard hit, settling to 86 Hz). The transition is amplitude-dependent and
-gradual (germanium diode, soft knee), not a stepped envelope. The congas share
-the mechanism. This, not any envelope, is the toms' characteristic "doom"
-sweep; it also means **accent changes the pitch envelope**.
+**Pitch drop [verified: SN text; magnitude MEASURED — and it is not ×1.7].**
+With the diodes fully conducting the foot resistance becomes (1−x)·500 + 1 kΩ
+‖ x·500 → 333–500 Ω, i.e. f0 would reach ≈1.7× the small-signal value
+(LT ≈ 145 Hz, settling to 86 Hz) — but that is the resistance **limit**, what
+the branch would do with the diodes held hard on, and a real hit does not get
+there. The transition is amplitude-dependent and gradual (germanium diode,
+soft knee), not a stepped envelope. The congas share the mechanism. This, not
+any envelope, is the toms' characteristic "doom" sweep; it also means
+**accent changes the pitch envelope**.
+
+> **AMENDED 2026-09-26 from hardware** (measured in #110, shipped in #154;
+> `docs/tom-pitch-drop-measurement.md`, `docs/tom-pitch-drop-correction.md`,
+> contract 15.7.1). The *mechanism* above survives. The ≈1.7× did not: it was
+> tagged *magnitude inferred* here, was carried into the contract as the
+> shipped sweep, and is the largest single error the drum section has had.
+> Onset f0 ÷ settled f0, 99 clean-digital tom files of a real TR-808, median
+> over 11 TUNING positions × 3 voices:
+>
+> | accent | n | onset ÷ settled | range over the pot | τ |
+> |---|--:|--:|---|--:|
+> | no accent | 23 | **×1.063** | ×1.040 – ×1.094 | 13.0 ms |
+> | accent | 33 | **×1.140** | ×1.085 – ×1.272 | 24.5 ms |
+> | more accent | 33 | **×1.236** | ×1.169 – ×1.344 | 33.1 ms |
+>
+> **×1.7 occurs in none of the 99 files**; the largest drop anywhere is
+> ×1.344. Two further readings of this paragraph were wrong independently of
+> the magnitude, and both are now measured:
+>
+> - **an unaccented hit barely sweeps at all.** Germanium diodes do not
+>   conduct below a drive, so the accent law has a **threshold** — accent
+>   0.670 in the tom position, 1.064 in the conga position — where the
+>   shipped law had a `min(max(accent,0),1)` **clamp** that handed a soft hit
+>   the *full* sweep. Measured excesses at the three recorded accent levels
+>   are 0.054 / 0.143 / 0.239: a straight line that does not pass through the
+>   origin.
+> - **the TUNING pot changes the drop**, which the shipped sequence ignored
+>   entirely. LT at *More Accent* runs ×1.169 at 82 Hz and ×1.325 at 101 Hz;
+>   d ln(excess)/d(f0/f0_nominal) is **3.58 ± 0.14** in the tom position and
+>   **7.46 ± 0.09** in the conga position. HT and LC are both nominally
+>   185 Hz on this same bridged-T with a capacitor switched (SW8) and their
+>   unaccented excesses differ **11×**, so the dependence is on the **switch
+>   position**, not on frequency.
+>
+> Unamended: the **shape** (the exponential beat a linear ramp in 88 of 89
+> measured rows) and the ≈20 ms relaxation carried by the 60 ms window.
+<!-- claim: test=model/test_tom_drop_law.py::test_the_reference_documents_carry_the_measured_magnitude -->
 
 **Noise (toms only) [verified: SN text; values inferred from p.9].** The
 P.N. bus is gated by Q52/Q55/Q58 with an envelope from a diode-charged RC
@@ -489,10 +533,30 @@ It is a quiet, dark rumble under the tone.
 **What to implement (toms/congas).** One modal-bank mode per voice at the
 chart frequency (LT 90, MT 135, HT 185 / LC 185, MC 280, HC 400 Hz; the TUNING
 pot spans ±10 %), Q ≈ 25 (toms) / ≈ 40–55 (congas), excited by the 1 ms pulse
-× accent. Add the **amplitude-dependent pitch offset**: f = f0·(1 + 0.7·
-sat(|y|/y_knee)) or, cheaper, a decaying pitch offset of +40 % → 0 over
-≈ 2τ scaled by accent — the bank must accept per-sample coefficient updates or
-a short coefficient ramp (a 4–8 step ramp of a1 is enough; a2 changes little).
+× accent. Add the **amplitude-dependent pitch offset**: ~~f = f0·(1 + 0.7·
+sat(|y|/y_knee)) or, cheaper, a decaying pitch offset of +40 % → 0 over ≈ 2τ
+scaled by accent~~ — both of those are the ≈1.7× bound above, and the
+measurement says otherwise. Use the **measured** law (contract 15.7.1,
+`drums_fx.tom_drop_excess`):
+
+```
+f(t) = f0 · (1 + excess · exp(−3t/60 ms))
+excess = 0.060 · max(0, accent − A0)/(1 − A0_tom) · exp(G · (f0/f0_nominal − 1))
+```
+
+| constant | tom position | conga position |
+|---|--:|--:|
+| accent threshold `A0` | **0.670** | **1.064** |
+| tuning slope `G` | **3.58** | **7.46** |
+<!-- claim: test=model/test_tom_drop_law.py::test_the_reference_documents_carry_the_measured_magnitude -->
+
+so that a tom at accent 1.0 with the pot centred sweeps **×1.06**, not ×1.7,
+and an *unaccented conga* does not sweep at all. `f0_nominal` is the
+**position's own centre** — this section's chart frequency — not a global one;
+`u` is clamped to the pot's ±10 %, because that is the span the recordings
+cover and the law must not extrapolate past its own evidence. The bank must
+accept per-sample coefficient updates or a short coefficient ramp (a 4–8 step
+ramp of a1 is enough; a2 changes little).
 Toms only: pink noise (LFSR + 1-pole low-pass at ≈400 Hz) × envelope
 (τ ≈ 85 ms) at low level. Congas: no noise.
 
@@ -679,9 +743,33 @@ of the VCAs:
 
 | band | source | band-pass (bridged-T type, IC3) [values SN p.13; f0/Q inferred] | VCA | envelope | high-pass |
 |---|---|---|---|---|---|
-| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0033 µF) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp, resonant ≈10.5 kHz [verified: W14b §9] |
-| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** VR2 2 MΩ ‖ R93 470 kΩ × C41 1 µF: RC up to ≈0.38 s [verified: W14b §7; value inferred] | Hh2: 2nd-order non-unity-gain Sallen-Key (resonant) [verified: W14b] |
-| low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0068 µF) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
+| high, short | IC3 pin 7 | **7.1 kHz, Q ≈ 6** (R58 560 Ω, R59 82 kΩ, C15 = C16 = 0.0033 µF; input C11 0.001 µF + R55 22 kΩ) | Q16 | fixed, short ("its decay time is short") | Hh3: 3rd-order Sallen-Key, op-amp. **2-pole 10.32 kHz Q 5.64 + 1-pole high-pass 5.20 kHz, pass band +8.86 dB** [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.008 dB rms] |
+| high, variable | IC3 pin 7 | same 7.1 kHz | Q17 | **DECAY** R93 470 kΩ in **series** with VR2 2 MΩ(B) (wiper strapped to its own pin 3), × C41 1 µF: **RC 0.47 s to 2.47 s**, never zero. C41 is Q20's base, and reaches Q17's collector only through R92/R89/R91 — it is the **low** band (Q18) that sits on it at full weight [verified: SN p.13, hash-pinned scan, `tools/cymbal_vca_drive.py`; corrected 2026-09-30, was "2 MΩ ‖ R93 470 kΩ … up to ≈0.38 s"] | Hh2: 2nd-order non-unity-gain Sallen-Key. **8.84 kHz, Q 1.00, pass band +6.03 dB (gain ×2)** — not resonant [measured off W14b Fig. 4, `tools/werner_fig4.py`, 0.007 dB rms] |
+| low | IC3 pin 1 | **3.45 kHz, Q ≈ 6** (R56 560 Ω, R57 82 kΩ, C13 = C14 = 0.0068 µF; input C10 0.0033 µF + R52 33 kΩ) | Q18 | fixed, medium | Hh1: 2nd-order Sallen-Key on emitter follower Q25, C48 = C59 = 0.0015 µF, R124 22 kΩ, R127 82 kΩ: **2.5 kHz, Q 0.97** [inferred from W14b eq. 16 + values] |
+
+**Designator correction, 2026-09-28 [verified: SN p.13, hash-pinned scan,
+`tools/cymbal_vca_drive.py --verify-source`].** Until today the two rows above
+carried each other's reference designators: the 7.1 kHz filter was credited
+with R56/R57/C13/C14 and the 3.45 kHz one with R58/R59/C15/C16. The schematic
+prints it the other way round — **C13 = C14 = 0.0068 µF with R56/R57 on IC3
+pin 1 (3.45 kHz), C15 = C16 = 0.0033 µF with R58/R59 on IC3 pin 7 (7.1 kHz)**.
+No value and no f0/Q moves, because each row already carried the right
+*capacitance* for its own band and both filters share R 560 / 82 kΩ; what was
+wrong was the label a reader would use to find the part on the board.
+`tools/werner_fig4.py`'s `KNOWN` dict had the *designators* right and the
+*value printed beside them* wrong — "3450 Hz … C13 = C14 3.3 nF", which is not
+a self-consistent pair at all, since 3.3 nF on that network is 7117 Hz. Both
+documents are corrected, and `tools/test_cymbal_vca_drive.py` now recomputes
+f0 from the designators each one names **and** compares the printed
+capacitance against this read, so neither half can silently re-cross. Checking
+only the designators was the first draft of that test and it passed on the very
+string it was written to catch.
+
+**The filters' own input networks are new here** (C10/R52, C11/R55): they are
+what set each band-pass's *absolute* gain, and solving the two filters with
+them reproduces W14b Figure 4's digitised peaks of +22.95 and +24.10 dB to
+**0.01 dB** — an external known answer on the schematic read, since no part of
+Figure 4 informed these four components.
 
 Werner states the band-pass centres as "around 3440 Hz" and "around 7100 Hz"
 **[verified: W14b §4]**, matching the bridged-T formula on the schematic
@@ -693,21 +781,216 @@ kicks some more AC energy into each band pass filter" **[verified: W14b §4]**
 — the cymbal is really *ring-down of two resonators struck by an aperiodic
 edge train*, plus VCA distortion.
 
-**Controls [verified: SN p.6; W14b §7, §10].** DECAY changes only the middle
-band's RC (chart: 350/800/1200 ms overall). TONE (VR4 20 kΩ) is a passive
-network that mainly attenuates the third (highest) band but also shifts the
-others ("weakly-separated, non-orthogonal controls… like guitar amplifier
-tone stacks"). LEVEL's buffer "also acts as a differentiator in the audio
-band — a 6 dB/octave rising slope" **[verified: W14b §11]**.
+**Controls [verified: SN p.6; W14b §7, §10; VR4 value SN p.13].** DECAY's
+chart range is 350/800/1200 ms overall. It does **not** change only the middle
+band's RC, which is what this section said until 2026-09-30 — both the
+recordings and the schematic say otherwise, from opposite directions. VR2 and
+C41 sit on **Q20's base**; Q20's emitter feeds the **low** band's collector
+supply at full weight through R105 33 kΩ / C45 2.2 µF, and reaches the middle
+(DECAY) band only through R92 33 kΩ into the R89 10 kΩ / R91 33 kΩ divider.
+Predicted decay span from the printed parts is ×4.0 on the low band and ×5.2
+on the middle one, with the **short** band not moving at all; the Fischer
+recordings measure ×3.2 (Ln EDT10) and ×4.4 (H late T20) **[verified: SN p.13,
+`tools/cymbal_vca_drive.py`, `docs/scorecard/cymbal-369/vca-supply/`]**. TONE
+(VR4 20 kΩ(B), linear taper) is a passive network that mainly attenuates the
+third (highest) band but also shifts the others ("weakly-separated,
+non-orthogonal controls… like guitar amplifier tone stacks") — see below for
+the network itself. LEVEL's buffer "also acts as a differentiator in the audio
+band — a 6 dB/octave rising slope" **[verified: W14b §11]**. That slope has a
+corner: W14b Fig. 10's family is a **single-pole differentiator with its corner
+at 18.97 kHz** (0.02 dB rms over 21 Hz–19 kHz), which tilts **+16.6 dB across
+2–20 kHz**, not the +20 dB of an ideal 6 dB/octave. A discrete `(1 - z^-1)` at
+48 kHz tilts +17.4 dB over the same span. **[measured off W14b Fig. 10,
+`tools/werner_fig4.py`]**
+
+**The tone stage [measured off W14b Fig. 9, `tools/werner_fig9.py`].** W14b §10
+gives three *fifth-order* transfer functions, Ht1 = Vtone/Vh1, Ht2 = Vtone/Vh2,
+Ht3 = Vtone/Vh3, and declines to print their coefficients. Fig. 9 plots all
+three families for k ∈ [0.01, 1.0]. At **k = 1.0** (TONE fully open) each is a
+**2-pole band-pass with two real poles** — an RC high-pass cascaded with an RC
+low-pass, which is what a passive network builds:
+
+| | f0 | Q | real poles | peak | plotted over |
+|---|---|---|---|---|---|
+| Ht1 (low band → out) | 274 Hz | 0.38 | 128 / 590 Hz | −26.44 dB | 121–564 Hz only |
+| Ht2 (DECAY band → out) | 972 Hz | 0.45 | 610 / 1549 Hz | −15.12 dB | 562–1640 Hz only |
+| Ht3 (short band → out) | 783 Hz | 0.41 | 406 / 1511 Hz | −22.09 dB | **20 Hz–20 kHz** |
+
+All fifteen plotted curves fit that form to ≤ 0.05 dB rms. **Ht3 is the only
+one measured in the cymbal's own band**: Fig. 9 draws Ht1 on a 4 dB tall axis
+and Ht2 on a 3 dB tall axis, so both leave the plot far below 3.45 kHz, and
+naively extrapolating the local 2-pole window fit above would carry an 18 dB
+(Ht1) and 9 dB (Ht2) spread at 7.1 kHz. **That balance is now resolved
+instead** — see below and §18.
+
+**The one number that was already resolved, and it matters:** across 2–20 kHz
+Ht3 tilts **−17.7 dB**, against the LEVEL buffer's +16.6 dB over the same
+span. The tone stage very nearly cancels the level stage's rising slope. Each
+path's tilt relative to 1 kHz is −24.7 (Ht1), −19.4 (Ht2), −20.2 dB (Ht3) at
+20 kHz.
+
+**The inter-band balance, resolved by nodal analysis [verified: SN p.13
+schematic values, `tools/tone_stage_schematic.py`].** SN p.13's voicing board
+(VG 3116-140) prints the tone network's own resistors and capacitors around
+VR4 ("CY TONE", 20 kΩ(B) linear) and VR6/IC6 ("CY LEVEL"): two op-amp outputs
+(the two 7.1 kHz-band Sallen-Keys, Hh2 and Hh3) and Q25's emitter (Hh1) feed a
+4-node passive bridging network (C55/R112/R119 on one rail, C56/R120 + Q25's
+own C58/R123/C57/R121 pre-filter on the other, VR4 splitting attenuation
+between them, C90 loading the mix node into IC6's virtual ground). Solving it
+by nodal analysis — the same route that gave Hh1 from R124/R127/C48/C59 above
+— and fitting only the pot's wiper fraction (no per-path gain) against Fig.
+9's own digitised k = 1.0 curves gives a single wiper position that matches
+**all three families at once**, 707 points across three independent windows,
+to 0.001–0.013 dB rms — including the fully-measured Ht3 curve across three
+decades, not merely its narrow local window. The network is independently
+5th-order (five capacitors, no cap-only loop), matching W14b's own word for
+it, and its three transfer functions share **exactly one pole set**
+(128.3/509.1/681.4/1635.7/4191.5 Hz) — "one network, one denominator" is now
+an algebraic fact rather than a plausibility argument, because neither matrix
+of the `(G + sC)` pencil depends on which source is driven; only the
+right-hand side does. Two wrong rail assignments (swapping which op-amp is
+which, or putting Hh1's pre-filter on the other band) fit 20–100× worse,
+which is what makes this a measurement and not a curve-fit coincidence
+(`tools/test_tone_stage_schematic.py`).
+
+**The read is pinned to a re-renderable source, and re-reading it settled one
+more thing than the fit could.** "SN p.13" is not checkable on its own, so the
+scan is pinned by SHA-256 with the page and the two crop boxes every value was
+read off; `tools/tone_stage_schematic.py --verify-source <sn.pdf>` re-renders
+them and **REFUSES** on a missing file or a hash mismatch rather than
+answering from a different printing. Re-verified 2026-09-28: all values, VR4's
+wiper-to-ground wiring, and Q25's emitter as Ht1's source match the scan.
+The crop also **confirms the rail assignment independently of the fit** — the
+top rail's op-amp has a three-capacitor input network (C49 .0033, C53 .001,
+C54 .001) and the bottom rail's has two (C51 .001, C52 .001), which is exactly
+the 3rd-order/2nd-order split recorded for Hh3/Hh2 in the table above, and the
+bottom op-amp is the one wired to VR2 "CY DECAY", which is Hh2's band by
+definition. So the assignment is reached two independent ways, not one. The
+scan is a third-party download and deliberately **not** a test dependency:
+`make verify` never needs the network.
+
+Reading the three transfer functions directly off the solved network (no
+extrapolation needed — it covers the whole audio band) at the cymbal's own
+corners:
+
+| | 3.45 kHz | 7.1 kHz | vs. Fig. 9's own extrapolation bound at 7.1 kHz |
+|---|---|---|---|
+| Ht1 | −42.0 dB | −51.8 dB | inside [−54.5, −36.5] |
+| Ht2 | −20.5 dB | −26.7 dB | inside [−31.1, −22.0] |
+| Ht3 | −28.1 dB | −33.7 dB | matches the *measured* value (−33.67 dB) to 0.01 dB |
+
+i.e. relative to Ht3, **Ht2 sits +7.0 to +7.6 dB above it and Ht1 sits 13.9 to
+18.1 dB below it** across the cymbal's own band — the balance a candidate
+would need, resolved rather than bounded. This is a schematic/nodal result,
+not a fresh figure measurement, so it inherits the SN scan's own limits (a
+1981 print, hand-read component values) rather than Fig. 9's digitisation
+error; the fit residual above is the honest measure of how much slack that
+leaves, and it is small.
+
+**A third thing the nodal solution settles, and it changed a candidate
+[measured: `tools/cymbal_tone_nodal.py`, `docs/scorecard/cymbal-369/tone-render/`].**
+Fig. 9's per-band 2-pole *window* fits are not the network's poles, and for Ht1
+the difference matters inside the cymbal's own band. The network's five shared
+poles are 130.0/488.6/713.5/1625.4/**4219.0** Hz at the fitted wiper; Fig. 9's
+local fit of Ht1 over 121–564 Hz puts its low-pass pole at **589.5 Hz**, and
+its 2-pole form therefore reads (tone × LEVEL) as **flat to 0.46 dB** across
+2–8 kHz where the network's own response **falls 5.9 dB**. Over the *short*
+band — the one path Fig. 9 draws across the whole audio band — the two routes
+agree to **0.026 dB**, which is what makes this a statement about the window
+rather than about the network.
+<!-- claim: test=tools/test_cymbal_tone_writeup_figures.py::test_every_quoted_figure_is_the_tool_s_own_output issue=429 why="the 0.026 dB above is cymbal_tone_nodal.py's nodal-grounded property; it read 0.10 dB here for a week under a [measured:] tag" -->
+ Consequence for an implementation: a model that
+drops the tone low-pass pole against the LEVEL differentiator (on the grounds
+that both are asymptotic over the band) is right for the **DECAY and short**
+bands, whose active ranges lie entirely above 4219 Hz, and **wrong for the low
+band**, whose 2–8 kHz range straddles it. The low band needs that one real pole
+realised, and Fig. 9's 1511.2 Hz value for Ht3's low-pass pole is likewise a
+window artifact — the network's nearest pole is 1625.4 Hz.
+
+Two defects in Fig. 9 itself, both resolved against W14b §10's prose and both
+asserted by the tool: its legend prints `Ht3` twice and `Ht1` never (the
+bottom sub-plot is Ht1, and also mistitles both of its own axes), and **the
+k = 1.0 asterisk marks the topmost curve only in Ht3's family** — in Ht1's and
+Ht2's it marks the lowest.
 
 **What to implement (CY).** Six phase accumulators → 7-level staircase sum
 → two 2-pole band-passes (3.45 kHz Q 6; 7.1 kHz Q 6; the modal bank can host
 these if its input is pre-differenced, see §14) → three swing-VCA × envelope
 paths: (low band: τ ≈ 100 ms fixed), (high band: τ = decay knob, ≈40 ms …
-≈400 ms), (high band: τ ≈ 20 ms fixed) → high-passes (2.5 kHz Q 1 on the low
-band; ≈10 kHz resonant on the high bands) → tone mix → +6 dB/oct tilt. The
+≈400 ms), (high band: τ ≈ 20 ms fixed) → high-passes (2.5 kHz Q 0.97 unity-gain on the
+low band; 8.84 kHz Q 1.00 at +6.03 dB on the DECAY band; 10.32 kHz Q 5.64
+cascaded with a 1-pole high-pass at 5.20 kHz, at +8.86 dB, on the short band)
+→ **tone stage** — per band, a 2-pole band-pass with the real poles in the
+table above, which costs each band about −20 dB of tilt from 1 kHz to 20 kHz,
+**and now also an inter-band balance resolved by nodal analysis** (Ht2 +7.0 to
++7.6 dB above Ht3, Ht1 13.9 to 18.1 dB below Ht3 across 3.45–7.1 kHz, see
+above) → the level stage's rising slope, a 1-pole differentiator cornered
+at 18.97 kHz. The two band-passes' own peak gains are +22.95 dB (3.45 kHz) and
++24.10 dB (7.1 kHz), so the **filter chain alone** puts the DECAY band +7.2 dB
+and the short band +10.0 dB above the low band. The
 VCAs' asymmetric clipping is what makes the sum "sizzle"; a linear VCA gives a
-flat, chorus-like tone.
+flat, chorus-like tone. Applying this balance into a candidate is #396's job,
+not this section's — see §18.
+
+**The filter chain is not the whole band balance, and the missing factor is the
+larger one [measured: `tools/cymbal_band_balance.py`,
+`docs/scorecard/cymbal-369/balance/`].** Including the tone stage — taken from
+SN p.13's *solved* VR4 network (§18, `sn-p13-vr4.json`) rather than read off
+Figure 9 — and evaluated at the frequency each band's level is actually set
+(3175 Hz for the low band, 10079 Hz for both high bands), the circuit puts the
+DECAY band **+17.5 dB** and the short band **+26.2 dB** above the low band. But
+**three separate envelope generators and three separate swing VCAs
+(Q16/Q17/Q18) sit between the band-passes and the high-passes, and no W14b
+figure plots them.** Against the model's own shipped-kit level rule that leaves
+a gap of **+10.1 dB (DECAY)** and **+39.8 dB (short)** unaccounted for — nearly
+three orders of magnitude more than the tone stage's own uncertainty at those
+frequencies (0.008 / 0.008 / 0.067 dB), and still ~1.9× the widest bound the
+figure route ever offered for it (21.3 dB). Applying the resolved factors with
+the VCA drives held equal was rendered and measured: H−L 25.07 dB against the
+808 CY5025's 8.16, where the level rule it replaced reads 12.09. **So the band
+balance needs the VCA drives from the schematic as well as VR4's network; VR4
+alone does not resolve it — #420 resolved VR4 and the gap grew.**
+
+**The VCA drives are now read off the schematic, and they are not the missing
+factor [verified: SN p.13, `tools/cymbal_vca_drive.py`,
+`docs/scorecard/cymbal-369/vca-drive/`].** The three swing-VCA stages are
+component-identical — the same 0.022 µF coupling capacitor (C42/C44/C46), the
+same 2 MΩ *series* base bias from B1 with no ground leg (R96+R97, R100+R99,
+R102+R103, so the same collector current and the same gm), the same 100 Ω
+emitter degeneration (R95/R98/R101) and the same series diode into the
+collector — and **Q16 and Q17 hang on the same node**, IC3 pin 7, with nothing
+between them, so there is no third drive to read. The only per-band element is
+the collector load from each band's own envelope reservoir: **R94 39 kΩ
+(short), R90 33 kΩ (DECAY), R104 22 kΩ (low)**, i.e. **+4.97 dB and +3.52 dB**
+relative to the low band, or **+8.71 / +7.26 dB** as an upper bound that loads
+the low band with Hh1's measured input impedance and leaves the high bands
+unloaded. Closing the short band's +39.79 dB would need R94 ≈ **2.15 MΩ**.
+So the missing factor is not in the cymbal's VCA section.
+
+**The collector *supply* side is now read too, and "equal at the peak" is only
+half right [verified: SN p.13, `tools/cymbal_vca_drive.py`,
+`docs/scorecard/cymbal-369/vca-supply/`].** All three reservoirs (C38, C40,
+C41 — all 1 µF) are charged from Q19's emitter follower through D6/D7/D8 and
+do reach the same peak, V_trig − V_BE − V_f, to within the diodes' own
+forward-drop spread (**0.009 V against a 0.25 V bound** at a 14 V trigger).
+But only the **short** band's collector load hangs on its own reservoir. The
+DECAY band's hangs behind R88 33 kΩ into C39 0.47 µF and then the
+R90/R91/R89/R92 divider; the low band's behind Q20 and R105 33 kΩ into C45
+2.2 µF. Against a 1 ms trigger those lags are 8–70 ms, so the peak **collector**
+voltages are **12.79 V (short), 4.94 V (low), 3.97 V (DECAY)** at a 14 V
+trigger and unit duty — **+8.26 dB and −1.91 dB relative to the low band**, and
+they do not even peak at the same time (1 ms, 120 ms, 19 ms). The swing VCA's
+conduction duty is not printed, so the range over duty 0.25–1.0 is
+**+4.02…+8.26 dB (short)** and **−4.39…−1.91 dB (DECAY)**. The ceiling is an
+upper bound on a band's output swing, so even at its most favourable the short
+band's advantage is 31.5 dB below the +39.79 dB the balance needs.
+
+**Do not implement the level stage without the tone stage.** They are the same
+size and opposite in sign (+16.6 and −17.7 dB across 2–20 kHz), so a model with
+the rising slope and no tone stage is *further* from the machine than one with
+neither. That is the state `docs/scorecard/cymbal-369/candidate2/` measured:
+15.3 dB short at 1 kHz and 8.7 dB long at 20 kHz, a +24.0 dB excess tilt
+against the tone stage's 19.4–24.7 dB.
 
 ---
 
@@ -784,7 +1067,8 @@ two (CP, MA) are noise; and the SD and toms add noise to a ring-down.
    W14a's transfer functions; mod that reaches self-oscillation verified: RW]**.
    Component values and the resulting f0/Q: §2–6. Two caveats that *look* like
    sweeps but are not oscillator sweeps: the BD's 4 ms attack at ≈2.6× f0 and
-   its slow sigh; the toms' diode-driven pitch fall (up to ≈1.7× → 1×).
+   its slow sigh; the toms' diode-driven pitch fall (~~up to ≈1.7× → 1×~~
+   **measured ×1.06 – ×1.34 → 1×**, by accent and TUNING — §4's amendment).
 2. **Six square-wave oscillators, summed, band-passed, high-passed —
    confirmed; not noise [verified: W14b §3; SN p.6, p.13]**. Nominal
    frequencies **205.3, 369.6, 304.4, 522.7, 800 (trimmed), 540 (trimmed) Hz**
@@ -1035,18 +1319,138 @@ envelopes.
   set by trimmers/resistors; no measured figure.
 - **Which serial numbers have the changed snare capacitors** — the note gives
   values only.
-- **CY high-pass #2/#3 exact corners** — Werner gives the topology and a
-  ≈10.5 kHz resonance; I did not solve the 3rd-order network. **Partly closed
-  by measurement, and not in this section's favour.** A real machine's cymbal
-  (Fischer s/n 103852, `cy8/CY5025.WAV`, TONE and DECAY at 5.0) puts
+- **CY high-pass #2/#3 exact corners — CLOSED (2026-09-27, #369).** Werner
+  gives no component values for either, but **W14b Figure 4 plots both
+  responses**, and that figure is vector: the coordinates are in the PDF.
+  `tools/werner_fig4.py` reads them, gated on the three curves SN p.13 already
+  fixes (Hbp1 3450/Q6 read as 3437/6.02; Hbp2 7100/Q6 as 7095/6.07; Hh1
+  2500/Q0.97/unity as 2506/0.96/+0.00 dB) and on W14b §9's own "around
+  10500 Hz". **Hh2 is a 2-pole high-pass at 8.84 kHz, Q 1.00, pass band
+  +6.03 dB — not resonant. Hh3 is a 2-pole at 10.32 kHz Q 5.64 cascaded with a
+  1-pole high-pass at 5.20 kHz, pass band +8.86 dB**; a 2-pole model of that
+  curve leaves 0.717 dB rms against the 3-pole's 0.008, so the third pole is
+  located rather than assumed, and it sits at **half** the corner, not at it
+  (#102 and `docs/scorecard/cymbal-369/candidate/README.md` both assumed the
+  same corner). Evidence: `docs/scorecard/cymbal-369/werner-fig4.json`;
+  derivation `docs/scorecard/cymbal-369/candidate2/README.md`.
+
+  **The paragraph below inferred the opposite from a recording, and it was
+  wrong about the mechanism.** A high-pass at 10.3 kHz *can* make a 9–13 kHz
+  shoulder — at Q 5.64 it peaks 15 dB above its own asymptote and is still
+  11 dB down from that peak at 20 kHz, because under one octave of spectrum
+  remains above the corner. What the recording ruled out was a *low-Q* (2.5)
+  high-pass, not a high-pass. The rest of the paragraph stands:
+
+  A real machine's cymbal
+  (Fischer s/n 103852, `cy8/CY5025.WAV`, TONE 5.0 and **DECAY 2.5** — this read
+  "TONE and DECAY at 5.0" until #102, and the second filename code is DECAY,
+  where `25` means 2.5) puts
   1.1 / 10.3 / 53.2 / 23.3 / 6.0 % of its energy in <2k / 2–5k / 5–9k / 9–13k /
   >13k, with its strongest line at **3153 Hz**. Three things in §10 do not
   survive that: the long tail is the **low** band, not a high one (2–5 kHz
   measures T20 1244 ms against 745 ms at 5–9 kHz); every band lengthens with
   the DECAY knob, not only the middle one; and the ≈10.5 kHz stage behaves like
   a **band-pass**, since the machine has a 9–13 kHz shoulder with only 6 % above
-  13 kHz and a high-pass at that corner cannot make that shape.
+  13 kHz and a low-Q high-pass at that corner cannot make that shape.
   `docs/drum-verification.md` §10 has the derivation.
+
+- **The tone stage — SHAPE and inter-band BALANCE are both closed (2026-09-28,
+  #390).** W14b Figure 9 has been digitised (`tools/werner_fig9.py`,
+  `docs/scorecard/cymbal-369/werner-fig9.json`,
+  `docs/scorecard/cymbal-369/tone-stage/`). §10 carries all three paths as
+  2-pole band-passes with real poles (their local window shape), and the
+  headline: the tone stage tilts each band about −20 dB from 1 kHz to 20 kHz,
+  which very nearly cancels the LEVEL buffer's +16.6 dB. That is the right
+  sign and size for candidate 2's +24.0 dB excess tilt at CY5025, and it is
+  the cymbal's largest single modelling error.
+
+  **The balance that Figure 9 alone could only bound to 18 dB (Ht1) / 9 dB
+  (Ht2) at 3.45/7.1 kHz is now resolved by route 1 of the three named below**:
+  SN p.13's schematic gives the tone network's own R/C values around VR4
+  ("CY TONE") and VR6/IC6 ("CY LEVEL"), and solving that network by nodal
+  analysis (`tools/tone_stage_schematic.py`, §10 above) reproduces Figure 9's
+  own digitised k = 1.0 curves — all three families, 707 points, including the
+  fully-measured Ht3 curve across three decades — to 0.001–0.013 dB rms with
+  **one** shared free parameter (the pot's wiper fraction) and no per-path
+  gain fudge. Route 2 (a shared-denominator constrained fit, holding Ht3's
+  poles fixed while refitting Ht1/Ht2) was accordingly not needed — route 1
+  succeeded outright rather than merely narrowing the bound, and it did so on
+  a *stronger* footing than route 2 could have offered: route 2's premise is
+  the shared denominator, whereas route 1 *derives* it, so there is nothing
+  left for route 2 to test. The two wrong-rail-assignment controls in
+  `tools/test_tone_stage_schematic.py` show the fit is not a coincidence
+  (20–100× worse when a band is put on the wrong rail). Resolved balance,
+  relative to Ht3 across 3.45–7.1 kHz: **Ht2 +7.0 to +7.6 dB, Ht1 −13.9 to
+  −18.1 dB.** Whether/how to apply this into a candidate is **#396's job, not
+  this issue's** — #396 already scopes "the tilt only, levels unchanged" for
+  its own step. What it can now take from here is a *level* per band as well
+  as a shape: normalise each path to 0 dB at 1 kHz as it already plans, then
+  reinstate the three offsets above rather than the current inter-band gain
+  rule. That is a revision-3 change and needs its own before/after on
+  conditions not used to select it; nothing here claims it sounds better yet.
+
+  **Two things about this entry's own evidence, recorded because they were
+  wrong-then-right.** (1) The component values were cited as "SN p.13" and
+  were not independently checkable; they have since been re-read against a
+  SHA-256-pinned scan at a recorded page and crop box, and all of them, plus
+  VR4's grounded wiper and Q25's emitter as Ht1's source, hold. The re-read
+  also confirmed the rail assignment from the schematic itself (three-cap vs
+  two-cap op-amp input networks, and which op-amp VR2 "CY DECAY" is wired to),
+  where previously only the fit had chosen it. (2) The "fifth-order, one
+  shared denominator" claim — the most structural claim in §10 — was tested
+  only under `sympy`, which **no workflow here installs**. The first account
+  of what that cost was itself wrong, and the correction is the more useful
+  half, so both are recorded: this entry originally said the test *skipped* in
+  CI and read like a pass. **It did not skip in CI; it was never collected in
+  CI.** `tools/test_tone_stage_schematic.py` was named by no workflow — the
+  `python` job in `.github/workflows/rungs.yml` runs `model/`, `spec/` and a
+  named list of `tools/test_*.py` files, full `pytest tools/` runs only under
+  `make verify` (which no workflow invokes), and `docs/dag.json` has no node
+  under `tools/`. The `sympy` gate was a real but second-order problem on top
+  of that. Both are now repaired: the file is named in that job (#417), so it
+  runs on every pull request, and the claim is also derived with numpy/scipy
+  only, as a count of finite generalised eigenvalues of the `(G + sC)` pencil,
+  cross-checked against a second, independent node formulation that agrees to
+  2.1e-14 dB — an agreement whose non-vacuity is itself a committed control
+  (swapping R119/R129 in one formulation alone parts them by 2.75 dB). A
+  load-bearing check that no job runs is the failure mode
+  `docs/failure-modes.md` names, arriving one level up in the measurement
+  apparatus rather than in the evidence; the general question to ask of any
+  check here is **"which job names this file?"**, and for most of `tools/` the
+  honest answer is still *none*.
+
+  **Still open, and explicitly out of scope for #390: which curve of each
+  family is which k.** Only k = 1.0 is marked, and the four other members
+  carry no k value, so no TONE knob position except fully-open is readable
+  from Figure 9, and the wiper fraction fitted above (`alpha ≈ 0.398`) is a
+  property of k = 1.0 only — nothing here claims a linear or otherwise known
+  map from W14b's own `k` parameter to this pot's physical rotation. That
+  stays the knob-law repair named in `docs/scorecard/cymbal-369/README.md`
+  §4.
+
+  **Also still open, and NOT resolved by #390: the per-band VCA drive levels,
+  which are the larger term in the inter-band balance** [`#396`, `#420`,
+  `tools/cymbal_band_balance.py`, `docs/scorecard/cymbal-369/balance/`]. #396's
+  own step measured the balance's decomposition before #390 landed, and its
+  finding is untouched by #390's success: the unresolved factor is one **no
+  W14b figure carries at all** — the three envelope generators' and swing VCAs'
+  drive levels (Q16/Q17/Q18, §10).
+
+  **#420 re-derived that decomposition from the nodal solution above**, so the
+  tone term is no longer #396's bounded reading off Figure 9 (Ht1 7.4 dB / Ht2
+  13.9 dB / Ht3 0.04 dB wide at each band's own calibration third) but a
+  circuit value bounded by the solution's own residual — **0.008 / 0.008 /
+  0.067 dB**, emitted as `docs/scorecard/cymbal-369/sn-p13-vr4.json` by
+  `tools/tone_stage_schematic.py --emit`. Against the model's shipped-kit level
+  rule the filters-plus-tone balance alone now leaves a **+10.1 dB (DECAY)** and
+  **+39.8 dB (short)** gap (was +9.9 / +38.2 on the figure route), and applying
+  it with the VCA drives held equal was re-rendered and lands 16.9 dB from the
+  808's band split where the rule it replaced is 3.9 dB from it. That step also
+  said, **before #390 was done, that VR4's network alone would not unblock the
+  balance** — #390 resolved VR4, #420 applied it, and the gap **grew** rather
+  than closing, so the prediction held in the direction that could have broken
+  it. The VCA-drive half of route 1 — the envelope generator and swing VCA
+  drive networks from SN p.13 — is what is still missing.
 
 - **LC / MC / HC decay — closed, and §4's Q column is amended.** §4's three
   TOM rows land on a real machine within 3 % (LT 88.4 computed against 87.6

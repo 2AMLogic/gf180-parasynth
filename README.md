@@ -29,13 +29,13 @@ section 10 for where the chip sits against the wafer.space quarter slot.
 ### The board
 
 <!-- BOARD:BEGIN -->
-**20 of 100 acceptance cases have a valid measurement.** 6 pass · 14 fail · 5 no verdict · 75 not run.
+**19 of 100 acceptance cases have a valid measurement.** 9 pass · 10 fail · 7 no verdict · 74 not run.
 
 | | cases | valid | pass | fail | no verdict | not run |
 |---|---:|---:|---:|---:|---:|---:|
-| Drums | 32 | 12 | 3 | 9 | 4 | 16 |
+| Drums | 32 | 11 | 3 | 8 | 6 | 15 |
 | Mono | 32 | 2 | 0 | 2 | 1 | 29 |
-| Filters | 24 | 3 | 0 | 3 | 0 | 21 |
+| Filters | 24 | 3 | 3 | 0 | 0 | 21 |
 | Ensemble | 12 | 3 | 3 | 0 | 0 | 9 |
 
 Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverage is reported separately from agreement on purpose** — a case without a verdict is missing verification, not evidence the instrument is wrong, and it must not be able to flatter a percentage.
@@ -44,14 +44,14 @@ Every case is in [`docs/scorecard/BOARD.md`](docs/scorecard/BOARD.md). **Coverag
 ### Rate, measured from git
 
 <!-- HISTORY:BEGIN -->
-Measured from git, not remembered. **464 commits over 186 hours.**
+Measured from git, not remembered. **1309 commits over 307 hours.**
 
 | | now | per hour |
 |---|---:|---:|
-| tests | 866 | 4.7 |
-| injected controls | 90 | 0.5 |
-| bit-exact verifiers | 7 | — |
-| lines of RTL | 9,181 | 49 |
+| tests | 2381 | 7.8 |
+| injected controls | 198 | 0.6 |
+| bit-exact verifiers | 8 | — |
+| lines of RTL | 11,086 | 36 |
 
 **Cycle time, which is the measure that matters.** 46 merged pull requests, **median 14 minutes** from open to merged, and PR size barely moves it — large changes (>1000 lines) median 16 minutes against 14 for small. That is because the work happens in the agent *before* the PR opens, so the real cost is agent wall-clock: **4–25 minutes** for a brief with one deliverable, **2–3.5 hours** for one containing "and" several times over.
 
@@ -130,20 +130,20 @@ graph LR
 |---|---|---|---|
 | `F1` | Ladder bit-exact | **STALE** | rtl-sketch/ladder_dp.v changed since node/F1-ladder was cut |
 | `F2` | Modal bank bit-exact | **STAMPED** | node/F2-modal (not re-run; verifier is slow) |
-| `F3` | Measurement ground truth | **GREEN** | 134 passed in 3.02s |
+| `F3` | Measurement ground truth | **GREEN** | 146 passed in 3.21s |
 | `M1` | One Moog voice bit-exact | **STALE** | rtl-sketch/voice_dp.v changed since node/M1-voice was cut |
 | `M2` | Matches our own spec | **STAMPED** | node/M2-minimoog |
 | `M3` | Matches software references **fidelity** | **GREEN** | docs/reference-compare-results.json EXISTS ONLY -- no verdict declared |
 | `M4` | Matches real hardware **fidelity** | **BLOCKED** | 0 of 222 Legowelt recordings qualify -- needs one documented self-oscillation clip |
 | `M5` | Noise, osc-3 modulation, full waveform set | **TODO** | issue #48 |
 | `D1` | Drum kit bit-exact | **STALE** | rtl-sketch/drum_kit.v changed since node/D-drums-bitexact was cut |
-| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 104 passed in 406.80s (0:06:46) |
+| `D2` | Is an 808, per the reference **fidelity** | **GREEN** | 105 passed in 413.48s (0:06:53) |
 | `D3` | Per-voice measured against targets **fidelity** | **RED** | model/sound_report.py exit 1 |
 | `D4` | Complete 808 -- all 16 sounds | **TODO** | issue #22 |
 | `I1` | Control link carries every write | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `I2` | Whole chip at its pins | **TODO** | never run -- `tools/compile_dag.py --run` |
 | `S1` | Routed on gf180, DRC clean | **GREEN** | pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared |
-| `S2` | Fits a real shuttle padframe | **BLOCKED** | routed die has padcells: 0 -- LibreLane half-slot in progress |
+| `S2` | Fits a real shuttle padframe | **BLOCKED** | LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348 |
 | `S3` | FPGA build of the real engine | **GREEN** | fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared |
 
 <sub>Compiled from `docs/dag.json` by `tools/compile_dag.py`. Status is derived from evidence, not asserted.</sub>

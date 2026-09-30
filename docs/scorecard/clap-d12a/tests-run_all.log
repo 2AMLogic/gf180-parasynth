@@ -1,0 +1,13 @@
+==============================================================================
+PASS             5.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_clap_d12a_probe.py -q -p no:cacheprovider
+              ...............                                                          [100%]
+              15 passed in 3.71s
+PASS            73.3s  make reference-integration PY=/Users/joseph/dev/gf180-parasynth/.venv/bin/python
+                /private/tmp/wt-clap/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.
+                  sr, x = wavfile.read(str(path))
+              -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+              147 passed, 5 warnings in 71.96s (0:01:11)
+PASS             4.5s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/clap_d12a_probe.py --known-answer-only
+              known answer: PASS (8 signals, 32 mutant runs)
+==============================================================================
+3/3 passed

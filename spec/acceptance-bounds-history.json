@@ -1,0 +1,32 @@
+{
+  "BD-solo": {
+    "T20": {
+      "accepted_at": "2026-09-26T12:08:23Z",
+      "hi": 343.979,
+      "job_id": "BD-solo-7156d23-fe8acaae-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+      "lo": 271.979,
+      "rationale": "[lock] locked at ce400a6; comparable with Roland's chart column (300 ms) | what this model measured at commit ce400a6: outside it the model CHANGED, which may be the point of the commit | source of record: model/sound_report.py build_properties() | last changed at ce400a6 (recorded by 28dfd55): None -> 307.979 because the lock table introduced with this report. Nothing was pinned before, so every entry here is a first lock rather than a move."
+    },
+    "attack": {
+      "accepted_at": "2026-09-26T12:08:23Z",
+      "hi": 17.5625,
+      "job_id": "BD-solo-7156d23-fe8acaae-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+      "lo": 11.5625,
+      "rationale": "[lock] locked at ce400a6 | what this model measured at commit ce400a6: outside it the model CHANGED, which may be the point of the commit | source of record: model/sound_report.py build_properties() | last changed at ce400a6 (recorded by 28dfd55): None -> 14.5625 because the lock table introduced with this report. Nothing was pinned before, so every entry here is a first lock rather than a move."
+    },
+    "decay tau": {
+      "accepted_at": "2026-09-26T12:08:23Z",
+      "hi": 180.0,
+      "job_id": "BD-solo-7156d23-fe8acaae-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+      "lo": 108.0,
+      "rationale": "[target] docs/tr808-reference.md 12/14 via drum_verify.SPEC; tau, not T20 -- the chart's column is chart_ms and is different | a figure a document states: outside it the model is WRONG | source of record: model/sound_report.py build_properties() | last changed at 7be1490: 127.0 -> 144.0 because contract revision 6 (DR 0009), issue #14: the BD's f0 is the circuit's 49.4 Hz, not the chart's 56, and tau follows it -- 144 ms is reference 2's own table. The 127 ms it replaced was derived from the withdrawn 56 Hz."
+    },
+    "fundamental": {
+      "accepted_at": "2026-09-26T12:08:23Z",
+      "hi": 51.4,
+      "job_id": "BD-solo-7156d23-fe8acaae-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+      "lo": 47.4,
+      "rationale": "[target] docs/tr808-reference.md 12/14 via drum_verify.SPEC | a figure a document states: outside it the model is WRONG | source of record: model/sound_report.py build_properties() | last changed at 7be1490: 56.0 -> 49.4 because contract revision 6 (DR 0009), issue #14: 49.4 Hz is the bridged-T circuit's computed resonance; 56 Hz was Roland's chart figure and is withdrawn."
+    }
+  }
+}

@@ -127,6 +127,15 @@ class UartDeviceSim:
         self.booted = False
         # observation, the harness's ground truth
         self.writes: list = []                  # (frame, flag, sec, addr, data, src)
+        # ... and the same writes' frames UNWRAPPED, one per entry in `writes`.
+        # The device's 16-bit log cannot show a gap of g frames apart from
+        # g - 2^16, so a harness that unwraps it is asserting a precondition it
+        # cannot check from the log alone (#474). This is the sim's own
+        # absolute timeline, known independently of any unwrap, so a harness
+        # can check its answer instead of assuming it. It is OBSERVATION, not
+        # contract: a board has no such log, which is why the unwrap must still
+        # refuse an unsafe schedule rather than lean on this.
+        self.write_frames: list = []
         self.received: list = []                # ("write"|"event"|"status"|"abort", detail)
         self.errors: list = []                  # (code, seq, info)
         self.status_requests = 0
@@ -292,17 +301,23 @@ class UartDeviceSim:
             due_past = ddiff == 0 or ddiff > 0x7FFF
             out_of_order = (self.evq_count != 0
                             and ((due - self.last_due) & 0xFFFF) >= 0x8000)
-            if due_past:
+            if due_past and out_of_order:
+                self._err(ERR_DUE, addr)          # past AND out of order: dropped
+            elif due_past:
                 self.flags_sticky |= 0x4         # late
                 if self.evq_count >= self.evq_depth:
                     self.drops += 1
                     self.flags_sticky |= 0x1
                     self._err(ERR_EVQ_FULL, addr)
                 else:
-                    # the RTL executes a late event next window, loudly
-                    self.evq.append([f, flag, sec, addr, data])
-                    self.last_due = f
+                    # the RTL executes a late event in the NEXT frame, loudly
+                    # (uart_bridge.v queues it due audio_frame + 1; #329: this
+                    # queued it due f, the frame already under way)
+                    nxt = (f + 1) & 0xFFFF
+                    self.evq.append([nxt, flag, sec, addr, data])
+                    self.last_due = nxt
                     self.evq_count += 1
+                    self.evq_peak = max(self.evq_peak, self.evq_count)
                     self._err(ERR_DUE, addr)
             elif out_of_order:
                 self._err(ERR_DUE, addr)
@@ -322,12 +337,17 @@ class UartDeviceSim:
         """A device frame as frames-since-start (unwrapped)."""
         return (frame - self.epoch) & 0xFFFF
 
-    def _frame_at(self, t: float) -> int:
+    def _abs_frame_at(self, t: float) -> int:
+        """The device frame at `t`, NOT wrapped to 16 bits: the counter the
+        hardware would have if it were wide enough. Observation only."""
         if self.frame_freeze_t is not None:
             # the audio clock stopped (the counter and the queue with it);
             # the UART parser runs on its own clock and still answers
             t = min(t, self.frame_freeze_t)
-        return (self.epoch + int((t - self._t0) * SR)) & 0xFFFF
+        return self.epoch + int((t - self._t0) * SR)
+
+    def _frame_at(self, t: float) -> int:
+        return self._abs_frame_at(t) & 0xFFFF
 
     def _mono_of_frame(self, frame: int, *, mid: bool = True) -> float:
         """The wall-clock instant a device frame occurs. A half-frame offset
@@ -340,32 +360,48 @@ class UartDeviceSim:
             t += 65536 / SR
         return t
 
+    def _slot_time(self, frame: int) -> float:
+        """When a write whose frame is `frame` next gets a slot. A frame
+        still ahead is its own midpoint. A frame that is due now or already
+        past (wrap-safe, within half a revolution) means as soon as a slot is
+        free: this instant, or the next frame's midpoint if this frame's two
+        slots are used. The RTL fires any head with due <= the audio frame
+        (uart_bridge.v evq_due). Before #329 this was the frame's midpoint
+        pushed a whole revolution (1.365 s) forward once it lay behind the
+        cursor, so a late event, or a third write due in one frame, stalled
+        the queue for 65536 frames."""
+        f = self._frame_at(self._cursor)
+        if ((f - frame) & 0xFFFF) < 0x8000:
+            if self._fire_frame == f and self._fires_this_frame >= WRITE_SLOTS:
+                return self._mono_of_frame((f + 1) & 0xFFFF)
+            return self._cursor
+        return self._mono_of_frame(frame)
+
     def _next_fire_time(self) -> float | None:
         """Earliest pending execution instant: due-scheduled before live."""
         t = None
         if self.evq_count:
-            t = self._mono_of_frame(self.evq[0][0])
+            t = self._slot_time(self.evq[0][0])
         if self.wrq_count:
-            w = self._mono_of_frame(self.wrq[0][0] + 1)
+            w = self._slot_time((self.wrq[0][0] + 1) & 0xFFFF)
             t = w if t is None else min(t, w)
         return t
 
     def _fire_one(self) -> bool:
-        """Execute at most one ready write. The write EXECUTES in its
-        scheduled device frame -- the due frame for events, accept+1 for live
-        -- which is what the contract and the RTL deliver. Wall-clock jitter
-        around that instant is apparatus noise below the device's frame
-        resolution and must not smear into the recorded schedule."""
-        f = self._frame_at(self._cursor)
+        """Execute at most one ready write, in the device frame the cursor is
+        in: its due frame when the queue is on time (the cursor stands at
+        that frame's midpoint), the first frame with a free slot when it is
+        not (#329). Wall-clock jitter around that instant is apparatus noise
+        below the device's frame resolution and must not smear into the
+        recorded schedule."""
+        f_abs = self._abs_frame_at(self._cursor)
+        f = f_abs & 0xFFFF
         ev_ready = bool(self.evq_count) and (((f - self.evq[0][0]) & 0xFFFF) < 0x8000)
         wr_ready = (bool(self.wrq_count) and not ev_ready
                     and (((f - self.wrq[0][0] - 1) & 0xFFFF) < 0x8000))
-        if ev_ready:
-            logged = self.evq[0][0]
-        elif wr_ready:
-            logged = self.wrq[0][0] + 1
-        else:
+        if not (ev_ready or wr_ready):
             return False
+        logged = f
         if logged != self._fire_frame:      # the 2-slots-per-frame cap
             self._fire_frame = logged
             self._fires_this_frame = 0
@@ -379,6 +415,7 @@ class UartDeviceSim:
             stamp, flag, sec, addr, data = self.wrq.pop(0)
             self.wrq_count -= 1
             self.writes.append((logged, flag, sec, addr, data, "live"))
+        self.write_frames.append(f_abs)          # logged, unwrapped (#474)
         self._fires_this_frame += 1
         return True
 

@@ -47,7 +47,10 @@ duration.
   audio output … to its external signal input, thus creating a feedback
   loop" (<https://www.soundonsound.com/reviews/moog-minimoog-model-d>); the
   reissue builds it in ("the Main Output signal is sent back to the input of
-  the mixer"), Arturia copies it as Brute Factor.
+  the mixer"), Arturia copies it as Brute Factor. This survey is context
+  only here; the tap point, gain/delay/saturation parameters and the
+  digital-return-vs-physical-input distinction for this chip are decided in
+  DR 0016.
 - **The VCA is after the filter.** Mixer → filter → loudness contour → volume
   is the Minimoog's chain and every subtractive synth's; the "Loudness
   Contour" is the VCA's envelope (owner's manual, above).

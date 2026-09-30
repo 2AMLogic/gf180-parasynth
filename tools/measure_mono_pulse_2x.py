@@ -30,6 +30,22 @@ SOURCES = ("tools/measure_mono_pulse_2x.py", "model/voice_fx.py",
            "tools/compare_m5a_i2s_candidate.py")
 
 
+# The gain the 2x chain gives RECTANGLES. It is the model's own when the tree
+# defines one (the rectangle-headroom change, #333: 0.74 = 24248), else the
+# saw's 0.85, which is what a tree without that change does to rectangles.
+# `--rect-gain-q15` overrides it for BOTH the pulse2x candidate and the
+# gain-only control, so the "not a win by being quieter" control always
+# applies exactly the level change the candidate makes.
+RECT_GAIN_Q15 = getattr(vf, "_OS2_RECT_GAIN_Q15", vf._OS2_SUBSTEP_GAIN_Q15)
+
+
+def set_rect_gain(q15: int):
+    global RECT_GAIN_Q15
+    if not 0 < int(q15) <= 32767:
+        raise ValueError(f"rectangle gain {q15} outside Q0.15")
+    RECT_GAIN_Q15 = int(q15)
+
+
 class GainOnlyVoice(vf.VoiceFx):
     def reset(self):
         super().reset()
@@ -39,16 +55,43 @@ class GainOnlyVoice(vf.VoiceFx):
             def render(n, inc, *, _osc=osc, _original=original):
                 pcm = _original(n, inc)
                 if _osc.shape in vf.TWO_EDGE:
-                    pcm = (np.asarray(pcm, dtype=np.int64) * vf._OS2_SUBSTEP_GAIN_Q15) >> 15
+                    pcm = (np.asarray(pcm, dtype=np.int64) * RECT_GAIN_Q15) >> 15
                 return pcm
 
             osc.render = render
 
 
+class RectGainVoice(vf.VoiceFx):
+    """The pulse2x candidate with its rectangles at RECT_GAIN_Q15 inside the
+    2x chain; the saw keeps the model's substep gain. When RECT_GAIN_Q15 is
+    the model's own value this renders byte-identically to VoiceFx."""
+    def _render(self, *a, **kw):
+        orig = vf._render_2x
+
+        def r2x(o, *ra, **rk):
+            if o.shape in vf.TWO_EDGE and RECT_GAIN_Q15 != vf._OS2_SUBSTEP_GAIN_Q15 \
+                    and not hasattr(vf, "_OS2_RECT_GAIN_Q15"):
+                saved = vf._OS2_SUBSTEP_GAIN_Q15
+                vf._OS2_SUBSTEP_GAIN_Q15 = RECT_GAIN_Q15
+                try:
+                    return orig(o, *ra, **rk)
+                finally:
+                    vf._OS2_SUBSTEP_GAIN_Q15 = saved
+            return orig(o, *ra, **rk)
+        vf._render_2x = r2x
+        try:
+            return super()._render(*a, **kw)
+        finally:
+            vf._render_2x = orig
+
+
 def factory(mode):
     if mode not in ("baseline", "pulse2x", "gain_only", "disabled_control"):
         raise ValueError(f"unknown pulse experiment mode {mode!r}")
-    cls = GainOnlyVoice if mode == "gain_only" else vf.VoiceFx
+    if (hasattr(vf, "_OS2_RECT_GAIN_Q15") and RECT_GAIN_Q15 != vf._OS2_RECT_GAIN_Q15):
+        raise score.Refused("this tree defines its own rectangle gain; an override would "
+                            "measure a candidate the model does not build")
+    cls = {"gain_only": GainOnlyVoice, "pulse2x": RectGainVoice}.get(mode, vf.VoiceFx)
     return cls(oversample_2x=True, rate_converted_ladder=True,
                preserve_filter_headroom=True, causal_filter=True,
                pulse479_filter_candidate=True,
@@ -86,7 +129,7 @@ def measure(case_id, directory):
             model_label=f"pulse-rate-experiment/{mode}", output_path=audio)
         rows[mode]["audio_sha256"] = hashlib.sha256(audio.read_bytes()).hexdigest()
         rows[mode]["pulse_oscillator_gain_q15"] = (
-            vf._OS2_SUBSTEP_GAIN_Q15 if mode in ("pulse2x", "gain_only") else 32768)
+            RECT_GAIN_Q15 if mode in ("pulse2x", "gain_only") else 32768)
         print(case_id, mode, {k: v["error"] for k, v in rows[mode]["metrics"].items()}, flush=True)
 
     baseline, candidate, disabled = rows["baseline"], rows["pulse2x"], rows["disabled_control"]
@@ -109,7 +152,9 @@ def measure(case_id, directory):
         "source_commit": commit, "source_dirty": bool(dirty),
         "source_sha256": {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in SOURCES},
         "fixed_duty_percent": 100 * vf.DUTY["pulse479"] / vf.CYCLE,
-        "headroom_control": "baseline pulse multiplied by the candidate's exact 27853/32768 gain before mixing",
+        "rect_gain_q15": RECT_GAIN_Q15,
+        "headroom_control": f"baseline pulse multiplied by the candidate's exact {RECT_GAIN_Q15}/32768 "
+                            "rectangle gain before mixing",
         "wrong_then_right": {"reported_sound_measurements_corrected": 0,
                              "complete_phrase_measurements": len(rows),
                              "start_red": "Fourier/DC test rejected saw-only renderer; optional-flag test rejected absent implementation"},
@@ -127,5 +172,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", choices=("M5A", "M5B"), required=True)
     parser.add_argument("--out", type=Path, default=ROOT / "build/mono-pulse-2x")
+    parser.add_argument("--rect-gain-q15", type=int, default=None,
+                        help="rectangle gain for the candidate AND the gain-only control "
+                             "(default: the model's own; 24248 is the #333 headroom value)")
     args = parser.parse_args()
+    if args.rect_gain_q15 is not None:
+        set_rect_gain(args.rect_gain_q15)
     measure(args.case, args.out)

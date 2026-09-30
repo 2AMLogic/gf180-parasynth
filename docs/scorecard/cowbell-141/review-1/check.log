@@ -1,0 +1,16 @@
+==========================================================================
+             cases  valid  pass  fail  no verdict  not run
+--------------------------------------------------------------------------
+Drums           32     12     3     9           4       16
+Mono            32      2     0     2           1       29
+Filters         24      3     3     0           0       21
+Ensemble        12      3     3     0           0        9
+--------------------------------------------------------------------------
+TOTAL          100     20     9    11           5       75
+==========================================================================
+
+Coverage: 20 of 100 cases produced a valid measurement.
+Agreement: 9 of 20 valid cases inside all tolerances.
+Missing verification: 5 no-verdict, 75 not run. These are NOT evidence the instrument is wrong -- they are evidence we have not checked.
+
+Engines represented: fixed-model, integrated-rtl

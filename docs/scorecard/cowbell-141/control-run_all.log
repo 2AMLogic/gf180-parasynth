@@ -1,0 +1,8 @@
+==============================================================================
+PASS            44.1s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl
+              D13A   fail          15.81  worst: unwanted difference tone
+              ------------------------------------------------------------------------------------------------
+              fail: 1
+              control fired: CB_GATE_THE_SUM caused the expected result on 1 measured case(s)
+==============================================================================
+1/1 passed

@@ -1,0 +1,47 @@
+{
+ "published-style(p2x)": {
+  "gate_on_offset_frames": [
+   0,
+   -11,
+   -16,
+   -27
+  ],
+  "gate_off_offset_frames": [
+   -2,
+   -13,
+   -18,
+   -29
+  ],
+  "worst_abs_frames": 29
+ },
+ "saw0.35,margin16": {
+  "gate_on_offset_frames": [
+   0,
+   -11,
+   -11,
+   -22
+  ],
+  "gate_off_offset_frames": [
+   -2,
+   -13,
+   -13,
+   -24
+  ],
+  "worst_abs_frames": 24
+ },
+ "saw0.35,margin22": {
+  "gate_on_offset_frames": [
+   0,
+   -17,
+   -23,
+   -40
+  ],
+  "gate_off_offset_frames": [
+   -2,
+   -19,
+   -25,
+   -42
+  ],
+  "worst_abs_frames": 42
+ }
+}

@@ -1,6 +1,14 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 11 — 2026-09-19 — status: PROPOSED. Not ratified.**
+**Revision 15 — 2026-09-27 — status: PROPOSED. Not ratified.**
+
+Revision 13 is one normative change: the shark-tooth's triangle share now
+carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
+its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
+Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Revision 15 changes
+no register and no arithmetic: it is two values in the reference kit (Appendix
+G), the rimshot's two bridged-T modes' relative drive and the level re-balance
+that follows it (#388). Section 18 has all three.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -10,7 +18,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 11,
+through the two-key process this fleet uses; until then it is revision 15,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
@@ -261,6 +269,7 @@ product the host's job (5.5).
 | `k` | 17 u | voice | ladder resonance, 4·res in Q3.14, before the compensation of 10.2 | `LadderFx.regs`, `VoiceFx.k_reg` |
 | `gain` | 20 u | voice | ladder input gain, drive·2.6 in Q4.16 | same |
 | `ogain` | 20 u | voice | ladder output gain, (1+2·res)/2.6 in Q4.16 | same |
+| `drift` | 16 u | voice | per-oscillator drift depth, Q0.16; 0 is off and bit-identical to no drift at all (6.11) | `VoiceFx.drift` |
 
 The two envelopes are `amp` (section 9) and `filt` (section 10); each has its
 own `a_inc`, `d_dec`, `sus`, `rate`.
@@ -290,7 +299,8 @@ the datapath width of 11.4.
 State registers (not host-writable except by RESET): `phase[k]` (24),
 `inc_acc[k]` (32, section 6.7), `e[k]` and `r[k]` (section 6.6.1), `level`
 and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
-`d1`, `d2` (section 11.2).
+`d1`, `d2` (section 11.2), and the drift generator's `drift_cnt` (10) and
+`drift_acc[k]` (16 signed, section 6.11).
 
 ### 5.2 Writes and their semantics
 
@@ -304,6 +314,7 @@ and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
 | SET_LADDER k/gain/ogain | the named coefficient ← v. Held for the whole frame (both passes). |
 | SET_GLIDE v | `glide ← v`. |
 | SET_VOL v | `vol ← v`. |
+| SET_DRIFT v | `drift ← v`. Takes effect on the next frame's deviation (6.11), not at the next walk update: the three walks advance whether `drift` is zero or not, so when drift was switched on does not change what it does. |
 | GATE_ON | `gate ← 1`, and for both envelopes `seg ← ATTACK` with `level` unchanged (8.5, DR 0003). Nothing else changes: no phase, no ladder state. |
 | TRIG | for both envelopes `seg ← ATTACK` with `level` and `gate` unchanged (8.5): the multi-trigger retrigger while a key is held. |
 | GATE_OFF | `gate ← 0`. Both envelopes take the release branch of 8.3 from wherever their level is. |
@@ -319,7 +330,7 @@ measurement is in that record). `SEC` = 0 is this page. The addresses
 `a_inc, d_dec, sus, rate` 0x10–0x13 and filter envelope 0x14–0x17;
 `CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `K, GAIN, OGAIN` 0x1C–0x1E; `GATE_ON`
 0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `NOP` 0x3F.
-`BVOL` is 0x2C and `DVOL` 0x0E (12). A register narrower than 32 bits takes
+`BVOL` is 0x2C, `DVOL` 0x0E (12) and `DRIFT` 0x2D (6.11). A register narrower than 32 bits takes
 the low bits of `D`; the rest MUST be zero. `SEC` = 1 selects the drum
 section's page, whose map is 15.1's unchanged. **`wave[k]`: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, and 5–7 also
 sine** (bit 2 set selects sine, so every 3-bit value is defined). The chip
@@ -413,6 +424,11 @@ ogain      = fit20( round(0.05 / 0.13 · (1 + 2 · res) · 2^16) )
 glide      = fit24( max(1, round((2^(1 / (T_oct · 48000)) − 1) · 2^24)) )    T_oct = seconds per octave;
                                                      T_oct ≤ 0 → 0, off; clamps below 1.7 µs per octave (DR 0004)
 vol        = fit16( round(volume · 2^15) )           reference 0.45 → 14746; clamps at volume ≥ 2 (DR 0005)
+drift      = fit16( round(drift_cents · CENTS_TO_DEV / DRIFT_ACC_RMS · 2^16) )      6.11, DR 0019
+                                                     CENTS_TO_DEV = 2^20 · ln2 / 1200 = 605.681
+                                                     DRIFT_ACC_RMS = 3394, MEASURED from the
+                                                     integer generator, not the continuous-time
+                                                     formula; drift_cents ≤ 0 → 0, off
 ```
 
 **Where the clamps fire.** (Rev 2; this was OPEN 17.7.)
@@ -447,6 +463,12 @@ waveform — and pins the following:
 - `glide` (rev 3) clamps only below 1.7 µs per octave, a ratio of 2 per
   frame; `vol` clamps at a volume of 2.0 and above. Neither is inside any
   host's plausible range.
+- `drift` (rev 12) clamps at **5.604 cents rms** and above, and is the one
+  conversion here whose clamp sits inside a plausible request: the register is
+  16 bits and the walk's measured rms is what scales it, so the top of the
+  range is 5.604 rather than a round number. The range this project targets is
+  0.8–4.0 cents (DR 0019), comfortably inside it; anything past 5.604 is a
+  different effect and the host is told by the clamp, not by silence.
 
 `a_inc` and `rate` are at least 1 by construction. `d_dec` is 0 only for
 `sustain = 1.0`, where DECAY ends at once because `level = FULL ≤ sus`.
@@ -534,7 +556,7 @@ Let `p` be the 24-bit phase before advance. `naive` is signed 16-bit
 | 2 | pulse25 | `+32767` if `p < 0x400000`, else `−32768` — 25 %; **not a Model D width** |
 | 3 | tri | `q = p >> 7` (0..131071); `q − 32768` if `q < 65536`, else `98303 − q` |
 | 4 | sine | `SINE(p)`, section 6.5; **not a Model D waveform** |
-| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth |
+| 5 | shark | `sat16(( 5749 · saw + 27019 · tri ) >> 15)` — the shark-tooth. **Naive only**: the band-limited form is 6.6.5, and it corrects BOTH shares |
 | 6 | revsaw | `sat16(−saw)` — oscillator 3's reverse sawtooth |
 | 7 | pulse29 | `+32767` if `p < 4 865 393`, else `−32768` — **29 % duty**, the wide rectangle |
 | 8 | pulse15 | `+32767` if `p < 2 516 582`, else `−32768` — **15 % duty**, the narrow rectangle |
@@ -548,10 +570,18 @@ drawing's pulse-width divider read against SM 2.3's 50 % and 15 %.
 
 The square and pulse step **up** at the wrap (p = 0) and **down** at the
 duty point; the saw steps **down** at the wrap. That difference fixes the sign
-of the correction in 6.6.4. The shark-tooth mixes the **corrected** saw (6.6)
-with the naive triangle, as the switch mixes two buffered outputs, so its step
-at the wrap is 10/57 of the sawtooth's and needs no second correction; the
-reverse sawtooth negates the corrected saw, for the same reason.
+of the correction in 6.6.4. The reverse sawtooth negates the **corrected** saw,
+because the switch mixes two buffered outputs and oscillator 3's Q20 inverts
+what the saw buffer already carries.
+
+The shark-tooth mixes the **corrected** saw with the **corrected** triangle, and
+the two corrections are different ones (revision 13, DR 0017). Its step at the
+wrap is 10/57 of the sawtooth's and PolyBLEP is what removes it. Its triangle
+share also **corners** twice per cycle — at `p = 0` and at `p = 2^23` — and a
+corner is a discontinuity in the SLOPE, not in the value, so no step correction
+can see it. That takes the ramp residual of 6.6.5. Before revision 13 the
+triangle share went to the divider naive, which cost up to 6.3 dB of inharmonic
+energy at the top of the register (DR 0017).
 
 ### 6.5 Sine
 
@@ -576,9 +606,12 @@ even-symmetric about 255.5.
 
 ### 6.6 PolyBLEP
 
-Applied to saw, square and pulse25 only. Triangle and sine are the naive
-waveform (the model constructs `OscFx` with `blep = blep and shape in (saw,
-square, pulse25)`). The integer model's aliasing suppression equals the float
+Applied to the discontinuous shapes of 6.4 — saw, revsaw, shark, square,
+pulse25, pulse29 and pulse15 (`voice_fx.BLEP_SHAPES`, which also carries the
+model-only `pulse479`). Triangle and sine are the naive waveform, and sine has
+no discontinuity of either kind. 6.6.1–6.6.3 are the machinery, 6.6.4 the
+application to the shapes of revision 4, and 6.6.5 the shark-tooth's, which is
+the one shape needing a correction 6.6.3 does not provide. The integer model's aliasing suppression equals the float
 PolyBLEP's at every note measured (DESIGN.md section 6); the widths below were
 set by tracking the float waveform inside Q1.15, not by aliasing.
 
@@ -675,6 +708,51 @@ Consequences: at `p = 0` the band-limited saw is `sat16(−32768 − (−32768))
 0`, the midpoint of its step, and the square is `sat16(32767 − 32768 − 0) =
 −1`. Both differ from the naive values by design.
 
+#### 6.6.5 polyBLAMP, and the shark-tooth (revision 13, DR 0017)
+
+A **slope** discontinuity is not corrected by 6.6.3 at all: the signal is
+continuous across it, so `c` has nothing to subtract. The correction it takes is
+the integral of 6.6.3's, evaluated in the same window from the same `s`
+(`voice_fx.blamp_slope`, `voice_fx.blamp_fx`):
+
+```
+m3 = (inc · 21845) >> 15                  once per oscillator per frame; 24 bits
+b  = 0
+if p < inc:                               just after the corner
+    s  = 65536 − frac(p)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+q = 2^24 − p
+if q < inc:                               just before the corner
+    s  = 65536 − frac(q)                  1..65536
+    b  = ( m3 · ((((s·s) >> 16) · s) >> 16) ) >> 24
+```
+
+`b` ranges **0..43690** — 17 bits UNSIGNED, and it is never negative: the sign
+belongs to the caller, because the same residual raises a valley and lowers a
+peak. If both conditions hold (only when `inc > 2^23`) the second assignment
+wins, as in 6.6.3. With `inc = 0`, `b = 0` for every `p`.
+
+`21845` is `round(2^16 / 3)` and MUST be used as written. It is a constant
+multiply, not a division: an implementation that divides by 3 exactly is **not**
+bit-exact with this specification.
+
+The shark-tooth (code 5) is then, with `c(·)` from 6.6.3, `b(·)` from above and
+`tri`, `saw` from 6.4, all evaluated with this oscillator's `inc, e, r`:
+
+```
+shark:    p2   = (p + 0x800000) mod 2^24                  the triangle's peak
+          tric = sat16( tri + b(p) − b(p2) )              valley up, peak down
+          sawc = sat16( saw − c(p) )
+          osc  = sat16(( 5749 · sawc + 27019 · tric ) >> 15)
+```
+
+*Informative:* the residual is `R(x) = (1 − |x|)^3 / 3` for a sample `x` samples
+from the corner, scaled by half the slope change. The triangle of 6.4 reads
+`p >> 7`, so its slope is `inc/128` Q1.15 LSB per sample and half its change at
+a corner is the same `inc/128`; `m3` is that over three. Getting the two corners
+the wrong way round sharpens them and measures *worse* than no correction at all
+(DR 0017's control table).
+
 ### 6.7 Glide (DR 0004)
 
 The glide is on the chip and is **constant rate, linear in pitch**: every
@@ -767,6 +845,80 @@ the same RMS because the instrument's do (drawing 1431 labels all three outputs
 −4 dBm), and pink's crest factor of 4.6 needs the headroom. `NSEL` selects the
 pair: clear puts **white** in the mixer and **pink** on the modulation bus, set
 puts **pink** in the mixer and **red** on the bus.
+
+### 6.11 Per-oscillator drift (DR 0019)
+
+State, per oscillator: `drift_acc[k]`, 16-bit signed; plus one shared 10-bit
+`drift_cnt`. All four reset to 0 (section 14).
+
+The Model D's three VCOs are not stable against each other. 6.9's modulation
+bus carries **one** signal to all three oscillators by construction, so no
+depth on it can make them drift apart; this section is the separate mechanism
+that can. Each oscillator carries a bounded random walk and the walk scales
+its phase increment **multiplicatively**, so the deviation is a constant number
+of *cents* at every pitch rather than a constant number of Hz.
+
+Per frame, immediately after 6.9's increments and before anything reads them
+(`voice_fx.VoiceFx._modulate`):
+
+```
+if drift_cnt == 0:                                       one update in 2^10 frames = 21.33 ms
+    b_k          = w[15 − 5k : 11 − 5k]                  three NON-OVERLAPPING 5-bit fields of
+                                                         6.10's 16-bit word w, k = 0, 1, 2
+    step_k       = ((2·b_k + 1) − 32) << 5               odd·32, in ±992, mean EXACTLY 0
+    drift_acc[k] = sat16( drift_acc[k] + step_k
+                          − ((drift_acc[k] + 32) >> 6) ) the leak, rounded to NEAREST
+drift_cnt  = (drift_cnt + 1) mod 2^10
+dev_k      = sat16( ( drift_acc[k] · DRIFT ) >> 16 )     Q0.20 relative frequency, every frame
+inc_k      = clamp24( inc_k + ( ( inc_k · dev_k ) >> 20 ) )
+```
+
+All shifts are arithmetic (floor). `clamp24` clamps to 0 … 2^24 − 1; it is the
+clamp of 5.5 applied again, because an oscillator already at the top of the
+register can be drifted upward.
+
+`DRIFT = 0` gives `dev_k = 0` and `inc_k + ((inc_k · 0) >> 20) = inc_k`
+exactly, so a voice that never writes `DRIFT` is **bit-identical to one with no
+drift mechanism at all** — which is what makes every register image, recorded
+scenario and pinned table that predates revision 12 unchanged, and why the
+reset value is 0.
+
+Four properties an implementation MUST reproduce, each with the reason it is
+specified rather than left to taste:
+
+1. **The three walks are independent.** They read fields 5 and 10 bits apart in
+   the same word, so they are three reads of one m-sequence at fixed offsets,
+   which cross-correlate at −1/(2^31 − 1) — the DR 0012 argument for the
+   voice/drum seed separation, reused. Measured on the shipped generator over
+   2^18 updates, the realised pairwise correlation is below 0.01 for the steps
+   and 0.05 for the walks. Bit 0 of `w` is deliberately unused so the three
+   fields are symmetric. One field driving all three walks is
+   `INJECT_BUG_VOICE_DRIFT_SHARED`: it passes every measurement of a *single*
+   oscillator and is vibrato, not drift.
+2. **The step's mean is exactly zero.** `2·b + 1 − 32` over uniform `b` has
+   mean 0; the field taken as a plain signed number (`b − 16`) has mean −0.5,
+   and a −0.5 mean step against a leak of `acc/64` parks every walk at −32 — a
+   small *permanent* detune wearing drift's clothes.
+   `INJECT_BUG_VOICE_DRIFT_MEANSTEP`.
+3. **The leak is rounded to nearest, not floored.** A floor pulls every
+   negative state up by one LSB per update, which is a bias rather than a
+   rounding difference. `INJECT_BUG_VOICE_DRIFT_LEAKFLOOR`.
+4. **The walk is bounded, and never saturates.** The leak makes the process
+   stationary with a correlation time of 64 updates = 1.365 s; its measured
+   stationary rms is 3394 LSB and the largest state seen over 2^18 updates is
+   15 403, so `sat16` has 2.1× headroom and does not fire. A walk that
+   saturates has a maximum detune and is a different mechanism. Measured as
+   `Var[acc(t+T) − acc(t)]`, which saturates at 2.00× `Var[acc]` by eight
+   correlation times; the same generator with the leak deleted reaches 0.36×
+   and is still growing.
+
+*Informative:* the walk's rms in cents is `DRIFT / 2^16 · 3394 / 605.681`, so
+the register spans 0 … 5.604 cents rms per oscillator and the reference depth
+is 1.5 cents (`DRIFT` = 17543). Over a window of a few correlation times a
+bounded walk's own mean is not zero, so a pitch estimator that removes the mean
+f0 — every one does, including `model/osc_drift_probe.py` — reads less than the
+register's rms and the difference is a static detune it cannot see. That is not
+an error in either.
 
 ---
 
@@ -1235,6 +1387,8 @@ is no other observable state.
 | `cut_lo`, `cut_hi`, `track_hz` | 0 | the clamp makes the cutoff 30 Hz |
 | `k`, `gain`, `ogain` | 0 | |
 | ladder `y[0..3]`, `w[0..3]`, `d1`, `d2` | 0 | `LadderFx.reset()` |
+| `drift` | 0 | off, and bit-identical to no drift mechanism at all (6.11) |
+| `drift_cnt`, `drift_acc[k]` | 0 | 6.11: the three walks start at no deviation, and the first update lands on the frame after reset |
 | `dvol`, `bvol` | 0 | the drum buses are silent until the host writes a gain (17.8) |
 | every drum register of 15.1, every envelope level, `strike`, `t`, `stops_prev`, the six phases | 0 | 15.8; all-zero paths are OFF, so the section is silent |
 | LFSR state | 1 | 15.4: frame 0's noise word is 1 |
@@ -1302,6 +1456,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
+| `0x43 + 4e` | `ENV_FRATE[e]` | 16 u | **revision 14**: Q0.16 decay rate of the FINAL strike (15.3); 0 = off, the reset value, which is the envelope of revisions 10 to 13 exactly |
 | `0x90 + p` | `PATH[p]` | 25 | `[4:0] src`, `[9:5] e1`, `[14:10] e2`, `[16:15] nl`, `[19:17] att`, `[24:20] dest` (15.5) |
 | `0xB0 + 4m` | `MODE_A1[m]` | 26 s | Q2.24 coefficient a1 = 2r·cos ω |
 | `0xB1 + 4m` | `MODE_A2[m]` | 26 s | Q2.24 coefficient a2 = −r² |
@@ -1329,7 +1484,7 @@ bus.
 
 State registers, not host-writable except by
 RESET: `stops_prev` (11), per envelope `level` (24), `strike` (24), `t`
-(11), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
+(11), `fcap` (24, revision 14: the fire level captured at the strike), the six phases (24 each), the LFSR (31), and the bank's `y1[m]`,
 `y2[m]`, `exc[m]` (21), `h1[m]`, `h2[m]` (21, modes 0..`N_NUMS`−1). The gains
 `dvol`, `bvol` of the output stage (12) are the instrument's, 16 bits
 unsigned each.
@@ -1381,6 +1536,39 @@ else:
 if choke < 8 and fire[choke]:  level ← 0                    choked, after everything above
 ENV(e) = level >> 9                                         Q0.15, what the paths multiply by
 ```
+
+**Revision 14: the final strike** (plan084; the clap's confirmed "L2",
+`docs/scorecard/clap-d12a/README.md` section 10). With `FRATE = 0` nothing
+below applies and the envelope is revision 10 exactly. With `FRATE ≠ 0`, and
+`last = bursts · period`:
+
+```
+fired:                         fcap ← level                 the fire level, captured once per hit
+re-strike at t = last:         strike ← fcap ; level ← strike      NOT 13/16 of the last strike
+decay while t > last:          dec ← (level · FRATE) >> 16   FRATE instead of rate
+choked:                        fcap ← 0 as well              no final strike can follow a choke
+```
+
+- `PEAK` and `ACCENT` are read only when the envelope fires, so a mid-note
+  write of either cannot move the final strike; `RATE` and `FRATE` are read on
+  every decay frame and apply from the frame they are written.
+- A re-strike of the stop (a new fire) restarts `t` and recaptures `fcap`:
+  the new hit owns its state, before, at or after the old hit's `last`.
+- With `bursts = 0` or `period = 0`, `last = 0` and the envelope simply
+  decays at `FRATE` from the frame after its strike.
+- A preset that shares an envelope with a final-strike sound writes
+  `FRATE = 0` (the maracas, on the clap's circuit): the feature is register
+  state and would otherwise persist into it. `test_clap_final_strike.py`'s
+  MA-leak control is that omission.
+- The reference kit's clap (Appendix G): `bursts = 3`, `period = 511` (0,
+  10.6, 21.3, 31.9 ms), early strikes at τ 4 ms and 13/16, the final strike
+  at the fire level with `FRATE` = τ 20 ms, the tail at τ 80 ms.
+- RTL (`drum_dp.v`): no multiply of its own -- the final strike is a register
+  copy from `fcap` and the final decay only selects `FRATE` for `mul_b`, so
+  the envelope schedule's cycle count is unchanged. Negative controls
+  `INJECT_BUG_DRUM_FINAL_WEAK` (13/16 final strike), `_FINAL_SHORT` (keeps
+  `RATE`), `_FINAL_SHIFT` (one burst early, the 4th strike omitted) and
+  `_FCAP_STALE` (a retrigger keeps the previous capture).
 
 `ENV(e)` is read *after* this frame's update: the fired frame reads the
 strike, the next frame the first decay. A `hold` of H keeps the strike for
@@ -1557,7 +1745,7 @@ says so:
 | 1 SD | PULSE × 0.1 ms → modes 7 (173 Hz, Q 16.3) and 8 (336 Hz, Q 9.9); NOISE × 15 ms → mode 3 (**BP** 2.75 kHz, Q 0.7) | 7, 8 (RAW), 3 (**BP**) | 2, 3 | both f0/Q, the snappy filter's pole, τ 15 ms | both bodies from the pulse, not the cascade (17.15); the snappy filter's **numerator**: reference 3 calls it a high-pass and the machine measures a band-pass on the same pole (17.22); SNAPPY level set to the knob's own curve at 5.0 |
 | 2 LT, 3 HT | PULSE × 0.1 ms → mode 9 (90 Hz, Q 25) / 10 (185 Hz, Q 25); the host's diode pitch drop sweeps f0 from ×1.06 down over 60 ms, scaled by accent above a threshold and by the TUNING pot (15.7.1) | 9, 10 (RAW) | 4, 5 | f0, Q, **the pitch drop** (reference 4) | no pink-noise rumble (17.14) |
 | 4 CH, 5 OH | SQSUM → mode 0 (BP 7117 Hz, Q 6, amp 0); TAP 0, SWING × envelope → mode 2 (HP 11.7 kHz, Q 2.5) / mode 1 (HP 7.8 kHz, Q 2.5); CH chokes OH | 0 (BP), 1, 2 (HP) | 6 (20 ms), 7 (150 ms, choke 4) | oscillators, BP, HPs, CH τ, the choke | OH τ 150 ms (DECAY mid) |
-| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (3 bursts τ 4 ms every 480 frames + tail τ 47 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, three bursts, τ 47 ms | period 480 = 10 ms, tail −10 dB (17.17) |
+| 6 CP | NOISE → mode 4 (BP 1071 Hz, Q 1.6, amp 0); TAP 4, TANH × (4 strikes every 511 frames: three τ 4 ms at 13/16, the FINAL at the fire level τ 20 ms via FRATE + tail τ 80 ms at 0.32) → MIX | 4 (BP) | 8, 9 | BP, four strikes, final strike, τ 80 ms | revision 14 (plan084 L2; was 3 bursts every 480, tail τ 47 ms) |
 | 7 CB | **SQ 4 and SQ 5 on two separate paths**, each SWING × (τ 5 ms at 0.5 + **τ 100 ms** at 0.5) → mode 5 (BP **1100 Hz, Q 2.8**) | 5 (BP) | 10, 11 | oscillators 540/800 Hz, two-slope envelope, **one gate per oscillator** (reference 9, DR 0010) | nothing: the BP centre was 17.16 and is now fitted to a recording (1100 Hz Q 2.8), and the tail is the measured 98 ms |
 
 Fourteen of the sixteen paths are used; mode 11 is spare (zero). Levels are
@@ -1608,9 +1796,10 @@ in the reference host (`drums_fx.hit_writes`, `bd_attack_writes`,
                                 · exp(G · (f0/f0_nominal − 1))
   ```
 
-  with `TOM_DROP_RATIO = 1.060` the measured onset ratio at a **stated**
+  with `TOM_DROP_RATIO = 1.060` the fitted law evaluated at a **stated**
   reference setting — accent 1.0, the TUNING pot at its centre, the TOM
-  position of the circuit. Three terms because the measurement found three
+  position of the circuit — against that setting's own measured median of
+  ×1.054. Three terms because the measurement found three
   separate faults in the inferred law: the magnitude; the accent **clamp**,
   which gave an unaccented hit the *full* sweep where the machine gives it
   ×1.06 (germanium diodes do not conduct below a drive, so a soft hit does not
@@ -1638,8 +1827,8 @@ which is why `verify_drums.py`'s stimulus carries them.
 
 ### 15.8 Reset
 
-RESET (`0xFF`, or hardware reset) sets every register of 15.1 and every
-state register to 0, except the LFSR, which takes 1. Consequences: every
+RESET (`0xFF`, or hardware reset) sets every register of 15.1 (including
+revision 14's `ENV_FRATE`) and every state register (including `fcap`) to 0, except the LFSR, which takes 1. Consequences: every
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).
@@ -1725,8 +1914,13 @@ continuous voice by `render_mono_fx`, whose write lists (from `KeyHost`,
 `rtl-sketch/ladder_dp.v` (`INJECT_BUG_LADDER_FB`, `_SAT`, `_TANH_CLAMP`) are
 the pattern, and the voice's are `INJECT_BUG_VOICE_SQUARE_SIGN` (6.6.4),
 `_ENV_FLOOR` (8.3), `_KEFF` (10.2), `_MIX_SAT` (7), `_GLIDE_FLOOR` (6.7),
-`_RECIP_CLAMP` (6.6.1), `_TRIG_RESET` (8.5) and `_OUT_SAT` (12), each run on
-the scenario of `rtl-sketch/verify_voice.py` that reaches it. A voice bench
+`_RECIP_CLAMP` (6.6.1), `_TRIG_RESET` (8.5), `_OUT_SAT` (12) and, since
+revision 12, `_DRIFT_SHARED`, `_DRIFT_MEANSTEP` and `_DRIFT_LEAKFLOOR` (6.11's
+four properties 1–3), each run on the scenario of
+`rtl-sketch/verify_voice.py` that reaches it. **The drift defects need the
+`drift` scenario specifically**: every other scenario runs `DRIFT = 0`, which
+6.11 makes bit-identical to no drift path at all, so on any of them all three
+controls are silent — an unsatisfiable gate rather than a passing one. A voice bench
 MUST compare the taps of item 4 as well as the sample and MUST report an
 undefined (X) output as a mismatch, never a pass: a sample-only comparison
 is blind while the tail is quiet (with the release floor of 8.3 removed the
@@ -1891,14 +2085,34 @@ record that extends this document; none may be resolved by picking a reading.
     cheap fix was measured and rejected: summing k independent slices buys
     2.40 at k = 2 and 2.60 at k = 3, for two or three times the LFSR work and
     an adder tree, to reach what the filter already delivers.
-18. **Per-unit oscillator drift is not modelled** (6.4,
-    `docs/minimoog-reference.md` W3a). Our square is a true 50 % and has no
-    even harmonics; a reference emulation measures 52 % with h2 at −24 dB.
-    SM 2.3 is explicit that 50 % is the design and that Moog hand-selected
-    R137 per unit to hit it, so 52 % is a unit out of trim rather than the
-    instrument. Whether to model drift anyway — three oscillators beating
-    against each other is part of the sound — is a musical decision and one
-    constant.
+18. **Per-unit oscillator drift** (6.4, 6.11,
+    `docs/minimoog-reference.md` W3a) — **closed in rev 12 by DR 0019, in the
+    half that is a mechanism, and the other half is answered rather than
+    closed.** The mechanism is 6.11: three independent bounded walks on the
+    three phase increments, one register (`DRIFT`), default 0 and
+    bit-identical to no drift path at all when off.
+
+    What the rev-11 text asked — "whether to model drift anyway … is a musical
+    decision and one constant" — turned out to be the right framing for a
+    reason that had to be measured to be known. **The references cannot supply
+    the amount.** Every single-oscillator window in the frozen Mini V3 set
+    wanders by 0.001–0.024 cents rms and the same commanded note 13.6 s apart
+    in one continuous render differs by 0.0011 cents: 30–100× below anything a
+    player could hear, so the frozen references *bound* drift rather than
+    measure it (`docs/scorecard/mono-osc-drift/reference-drift-v1.json`;
+    Surge XT and Diva are REFUSED there, with the missing precondition named).
+    The target range is therefore 0.8–4.0 cents rms per oscillator as a
+    **musical decision** (DR 0019), stated as a range because the service
+    manual documents different oscillator boards per serial range, and the
+    default stays off so that switching it on is always a reviewable change.
+
+    The square's duty cycle, which rev 11 filed under this item, is a separate
+    and still-open question: ours is a true 50 % with no even harmonics, a
+    reference emulation measures 52 % with h2 at −24 dB, and SM 2.3 is explicit
+    that 50 % is the design and that Moog hand-selected R137 per unit to hit
+    it — so 52 % is a unit out of trim rather than the instrument. 6.11 does
+    not model it: a drifting *duty cycle* is a second mechanism and nothing
+    measured here argues for it.
 19. **The drum section's size** (15.9) — **closed in rev 10** at 16 modes /
     11 with numerators / 18 envelopes / 23 paths / 11 stops, which is the
     complete TR-808: all sixteen named sounds on eleven circuits. Rev 8 asked
@@ -2009,6 +2223,109 @@ record that extends this document; none may be resolved by picking a reading.
 
 ## 18. Revision history
 
+- **Rev 15 (2026-09-27)** — **the rimshot's two bridged-T modes' relative
+  drive** (15.5, Appendix G; #388). No register, no state, no arithmetic and no
+  write count changes: two values in the reference kit. The bank's RAW
+  numerator is all-pole and its impulse response peaks at ≈ 1/sin(ω₀), where
+  the bridged-T network it stands for is a band-pass peaking at ≈ H₀ω₀/Q — so
+  exciting both rimshot modes with the same pulse, which is what the circuit
+  does, put our 1786 Hz mode **11.80 dB below** the 455 Hz one where the
+  circuit's sits **5.79 dB above**. That 17.60 dB is a pure function of f₀ and
+  Q and contains no measurement; the Fischer s/n 103852 recording independently
+  measures +6.6 dB, agreeing with the closed form to 0.7 dB. `PATH[15]` at
+  0x9F, 14711203 → 15104419, sets `att` = 3 on the pulse into mode 14
+  (`M_RS1`, the 455 Hz body) — 18.06
+  dB, the nearest of the field's 6.02 dB steps. Because that mode was setting
+  the whole voice's peak, the rimshot then sat 7.05 dB under its share of
+  Roland's chart, so `ENV_PEAK[14]` at 0x79, 5754585 → 12965432, carries it
+  back (0.343 → 0.7728, `drums_fx_render.py --balance`, which reports ×1.00 ±
+  0.08 for the other fifteen voices). **KIT808 moves from `321a9354…` to
+  `3d239bf8…`, 148 writes → 148.** Exactly those two writes differ;
+  `test_revision_15_changes_only_the_rimshot_drive_and_gate_registers` rebuilds
+  revision 14's image from the live one by undoing them, requires revision 14's
+  hash, and asserts that the two modes' coefficients did not move — so a
+  coefficient change dressed up as a drive change cannot pass by updating the
+  pin. `test_revision_14_…` now starts from that rebuilt image.
+  **The published R0/R1 Arty images are unaffected**: they are sent frozen
+  kits by value (`drums_fx.kit_808_rev11()` for R0/R1's revision-11 RTL,
+  `fpga/release/r1-kit.json` for R1's), and `kit_808_rev11()` undoes both of
+  these writes explicitly. `--image tree` sends this revision's kit.
+  D10A's scored "Partial balance" error goes −15.52 dB → −8.53 dB (worst 5.17
+  → 2.85) and the 1300–2100 Hz band stops being a flat shelf; the residual gap
+  and what it points at are in `tools/probes/rs_mode_drive.py`.
+
+- **Rev 14 (2026-09-26)** — **the clap's final strike** (15.3, plan084; the
+  "L2" level frozen and confirmed in `docs/scorecard/clap-d12a/README.md`
+  section 10, implemented in `docs/scorecard/clap-l2/`). One new register per
+  envelope, `ENV_FRATE[e]` at `0x43 + 4e` (the stride's spare slot, so no
+  address moves), 16 bits, Q0.16, reset 0; one new state register per
+  envelope, `fcap` (24). With `FRATE = 0` the envelope is revisions 10 to 13
+  exactly. The reference kit's clap (Appendix G) changes: 4 strikes at period
+  511, the last at the fire level with `FRATE` τ 20 ms, tail τ 80 ms.
+  **KIT808 moves from `a43fe2a7…` to `321a9354…`, 147 writes → 148.**
+  Exactly three writes differ, all on the clap's envelopes 8 and 9:
+  `ENV_CTL[8]` at 0x60, 125960438 → 134152438 (bursts 2 → 3, period 480 →
+  511); `ENV_FRATE[8]` at 0x63, new, 68 (τ 20 ms); `ENV_RATE[9]` at 0x66,
+  29 → 17 (τ 47 → 80 ms). Every other table is unchanged.
+  `test_revision_14_changes_only_the_clap_final_strike_registers` rebuilds
+  revision 11's image from the live one by undoing exactly those three and
+  requires revision 11's hash; `test_revision_11_…` now starts from that
+  rebuilt image. This change was first written as "revision 11", colliding
+  with the tom rebalance below, then renumbered 13, and finally 14 because
+  polyBLAMP (Rev 13) merged first. The `*_rev10` keys in
+  `docs/scorecard/clap-l2/clap-phrase.json` name the pre-L2 clap image, whose
+  clap settings date from revision 10 and did not change through revision 13.
+  **Hosts name the image they drive** (`fpga/uart_host.py` and
+  `fpga/midi_session.py` `--image`): the published R0/R1 Arty image
+  (`a66c9349…`, source `d089c678`) is **revision 11** RTL -- it predates drift,
+  polyBLAMP and this revision -- and is sent `drums_fx.kit_808_rev11()`, frozen
+  to REV11's hash; `--image tree` sends this revision's kit.
+
+- **Rev 13 (2026-09-26)** — **polyBLAMP on the shark-tooth's corners** (6.4,
+  6.6, 6.6.5; DR 0017). The shark-tooth's triangle share gains a polyBLAMP
+  correction on its two corners, alongside the PolyBLEP its saw share already
+  carried. Nothing else moves: no register, no pinned table. It merged (#244)
+  with its header and DR 0017 calling it "revision 12", which drift (below)
+  already was; renumbered here, the first place both were in one tree (#293).
+
+- **Rev 12 (2026-09-26)** — **per-oscillator drift** (6.11, DR 0019), closing
+  17.18's mechanism half. One new register, `DRIFT` at 0x2D, 16 bits, Q0.16,
+  reset 0; three new state registers per voice (`drift_cnt`, and
+  `drift_acc[k]` signed 16); one new host conversion in 5.5, whose clamp at
+  5.604 cents rms is the first in that list to sit inside a plausible request.
+  No existing width, clamp or formula changes.
+
+  **No pinned table, hash or reference sequence moves, and that is a property
+  of the design rather than a claim about it:** `DRIFT = 0` makes `dev_k = 0`
+  and `inc_k + ((inc_k · 0) >> 20) = inc_k` exactly, so the drift path is
+  bit-identical to its own absence and every image that predates this revision
+  renders sample for sample as before. `test_drift_zero_is_bit_identical_to_no_drift_register_at_all`
+  plays the same image with the register present and absent and requires
+  equality.
+
+  **Measured, and one of the numbers was wrong before it was right.** The
+  references were measured FIRST and did not give the answer expected: the
+  frozen Mini V3 set's isolated oscillators wander by 0.001–0.024 cents rms,
+  30–100× below audibility, so they bound drift rather than supply it and the
+  amount is a musical decision (17.18). The end-to-end cents check first
+  compared a pitch probe's reading against the *commanded* rms and read 0.601×
+  at three depths — which looks like a 40 % error in the mechanism and is not
+  one: over ten correlation times a bounded walk's own mean is not zero, and a
+  mean offset is a static detune that any mean-removing estimator must not
+  report as drift. The claim is now split between the register's linearity
+  (against the model's own Q0.20 deviation trace) and the probe's recovery of
+  that trace's mean-removed part.
+
+  Bit-exact against `model/voice_fx.py` on a new `drift` scenario set in
+  `rtl-sketch/verify_voice.py` — the reference depth, the register maximum
+  together with the shared modulation bus at full wheel, an oscillator drifted
+  into the increment clamp, and a window straddling a walk-update boundary:
+  9 728 frames, every sample, every tap and the final state including
+  `drift_cnt` and all three `drift_acc`. Three injected defects added (16) and
+  each caught on that scenario; all three are silent on every other scenario by
+  construction, which is why 16 names the scenario they must be run on. Not
+  ratified.
+
 - **Rev 1 (2026-09-17)** — initial proposal, written from `model/voice_fx.py`
   and `model/fixed.py` as committed; appendices generated by
   `spec/reference/gen_tables.py`. Not ratified.
@@ -2099,6 +2416,125 @@ record that extends this document; none may be resolved by picking a reading.
   - Bit-exact against `model/drums_fx.py` over 191 560 frames, 117 clocks per
     frame of the 256; `verify_ctl` and `verify_synth_top` re-run green, the
     latter also at its pins with the new image.
+
+- **Rev 9 (2026-09-18)** — **a complete Minimoog voice, and the cutoff tuning
+  that had been left out** (6.4, 6.9, 6.10, 7, 11.5, 17.12, 17.14; DR 0011, DR
+  0012). Two decisions in one change, in that order because the tuning moves
+  every measurement made on top of it. No width, clamp or formula of the
+  ladder, the envelopes, the control frame or the drum section changes.
+
+  **Two pinned tables move and one is added — the second and third ever to
+  move, and the first to move for a reason other than a fit to a recording.**
+  `G_ROM128` `c5ee86ef…` → `7d03fb29…` and `K_ROM32` `514d0ba2…` → `19da7579…`
+  (Appendices D and E). DR 0011 bakes `CUT_TRIM · fcr(f)` — Huovilainen's
+  tuning polynomial, DAFx-04 §5, times a fitted constant 1.030 — into
+  `make_g_rom` at build time: one multiply per ROM entry and **no datapath
+  change at all**, the ROM keeping its 129 × Q0.16 shape with `g_from_cut` and
+  `voice_dp.v` untouched. `K_ROM32` is derived from the cutoff ROM
+  (`make_k_rom` → `k_onset` → `g_from_cut`), so it could not not move, and DR
+  0006's property — `res = 1` is the onset at every cutoff — is preserved by
+  construction rather than refitted. Worst self-oscillation error over
+  30 Hz .. 10 kHz at `res = 1.05`: **6.85 % → 0.90 %** (115 cents → 15 cents),
+  spread 9.84 → 1.33 percentage points. That narrows 17.12 rather than closing
+  it: one table cannot make both the zero-resonance corner and the
+  self-oscillation frequency exact, the trim was fitted at one resonance, and
+  17.14 records that the ROM's first bin is still flat against its own target.
+  `test_the_tuning_polynomial_is_the_only_thing_that_moved_the_cutoff_rom`
+  requires `make_g_rom(tune=False)` to still reproduce revision 3's image
+  exactly, so the whole difference between the two pins is this polynomial and
+  this constant and nothing crept in with them. **Appendix H (`EXP_ROM65`,
+  `6a1cbbf8…`) is added** for the modulation path's 2^x read (DR 0012); adding
+  is not moving, and no revision has ever pinned a different one. Every other
+  hash is byte-identical and **KIT808 stays at revision 7's `7ea9a2e3…`** —
+  even though the drum filter reads these same two ROMs and is retuned by the
+  same amount, which DR 0011 records as a consequence of one decision and not
+  a second one.
+
+  **A third table nearly moved and deliberately did not.** DR 0013's tanh guard
+  word (32767 → `tanh(4)·32767` = 32745) was implemented and measured — the top
+  bin twelve times more accurate, and no movement at all in the harmonic
+  fingerprint at self-oscillation, because the 16-entry table's own worst error
+  is nine times larger — and then backed out: `rtl-sketch/drum_dp.v` reads the
+  same image with its own hardcoded clamp, so moving the word without moving
+  that literal would break the drum section's bit-exactness silently. What was
+  kept is behaviour-identical (`fixed.TANH_GUARD` as one named constant, the
+  ladders clamping to `rom[2^n]`, and `gen_tables.py` now *writing*
+  `rtl-sketch/tanh16.hex` rather than only checking it). `TANH16_ROM` keeps its
+  revision-3 hash and `test_exactly_three_pinned_tables_have_ever_moved`
+  asserts that by name.
+
+  - **The noise source** (6.10): one 31-bit LFSR, `x^31+x^15+x^13+x^11+1` — the
+    drum section's polynomial, 16 steps per frame, reset `0x7F215FF7`, which is
+    the drums' state advanced 1 060 921 steps so the two noises are independent
+    and sum at +3 dB rather than +6. Pink is drawing 1431's own
+    −3 dB/octave R-C network as its bilinear transform, red one more pole at
+    106 Hz, all three colours level-matched because the drawing labels all three
+    outputs −4 dBm, and all three divided by `NOISE_SHIFT = 2` because pink's
+    crest factor of 4.6 would otherwise peak past the rail. `NSEL` selects the
+    pair: clear puts white in the mixer and pink on the modulation bus, set puts
+    pink in the mixer and red on the bus. The mixer of 7 gains a **fourth term,
+    `noise · WN`** — the Model D's mixer has five sources and this chip has
+    four, the external input being the one it cannot have (no audio input pin).
+  - **Oscillator 3 as a modulation source** (6.9): `mod_sig` is computed at the
+    end of a frame and read at the start of the next, and that one register is
+    what breaks the feedback path when `MROUTE.OSC3` makes oscillator 3 its own
+    destination — 20.8 µs, four orders of magnitude below the fastest rate the
+    instrument reaches, identical in the model and the RTL, with
+    `INJECT_BUG_VOICE_MOD_NODELAY` as the control that says so. `MMIX` is a
+    **pan, not two levels** (SM 2.4), its two weights summing to exactly 32768.
+    Two destinations, two depth registers (`MPD`, `MFD`) because the service
+    manual pins them at different values (13–23 semitones on the oscillators,
+    SM 5.37; 440 Hz → 2.4 kHz on the cutoff, SM 5.19), and **one** `EXP_ROM65`
+    read plus a 12..19-place shift serves both. The tap is oscillator 3's
+    **naive** waveform, before PolyBLEP, because the modulation path is a
+    control voltage and is never summed into the mixer. `MWHEEL = 0` gives
+    `(m, s) = (32768, 15)` and `(v · 32768) >> 15 = v` exactly, so the whole
+    modulation path is bit-identical to its own absence.
+  - **The waveform set** (6.4): `wave[k]` gains a fourth bit and codes 5–8 —
+    the shark-tooth (5749/32768 saw + 27019/32768 triangle, drawing 1448's
+    R030/R031 divider, mixed on the **already-corrected** saw so its step at
+    the wrap needs no second correction), the reverse sawtooth for oscillator
+    3's second position, and the 29 % and 15 % rectangles. Six of the nine
+    codes are now the Model D's waveform switch.
+
+  **The first primary-source reference the voice was built to.** Every property
+  before this revision checked the voice against our own decision records, and
+  the one external comparison it had (`docs/discrimination.md` §8.3–8.4, which
+  DR 0011's motivating figure comes from) is against software emulations.
+  `docs/minimoog-reference.md` is added with every claim tagged [verified]
+  against the Model 204D service manual or an R. A. Moog drawing, [inferred]
+  with the arithmetic shown, or [ours] — and the additions are built to it
+  including where it disagrees with us: 17.16 (the shark-tooth's saw share,
+  which an emulation puts at 0.25–0.30 against drawing 1448's 10/57 and which
+  is therefore NOT changed on an emulation's evidence), 17.17 (raw white is
+  uniform, not Gaussian) and 17.18 (per-unit drift, whose mechanism half
+  revision 12 later closed) are all open items this comparison opened rather
+  than closed.
+
+  Every bit-exact expectation for the voice moves with the g ROM, so
+  `verify_voice.py`, `verify_synth_top.py` and every rendered `.wav` are
+  regenerated. As this revision landed, `verify_voice.py --set full` is
+  **383 460 frames over 37 scenario segments with 12 injected defects**, four
+  of them new (`INJECT_BUG_VOICE_LFSR_TAP`, `INJECT_BUG_VOICE_NOISE_SEL`,
+  `INJECT_BUG_VOICE_MOD_NODELAY`, `INJECT_BUG_VOICE_SHARK_MIX`) and each
+  demonstrated to turn the bench red; `verify_synth_top.py` passes at the chip's
+  pins; `model/test_moog_acceptance.py` gains 21 properties citing the reference
+  document and 7 more injected defects; eight new renders in
+  `voice_fx_render.py` so the additions can be heard. Not ratified.
+
+  **This paragraph was written retroactively (#301).** Revision 9 landed its
+  header, its sections and Appendix H but never got a revision-history entry, so
+  section 18 carried a gap at 9 through five later revisions while the Rev 10
+  entry above and `spec/reference/test_tables.py` both went on citing "revision
+  9's pins" — a gap a reader cannot distinguish from a renumber that dropped a
+  change on the floor, which is what
+  `test_revision_9_is_the_only_revision_with_no_entry` now guards in both
+  directions. **5.1 and 5.2 are still stale for this revision**: they omit
+  `WN` (0x0B), `NSEL` (0x1B), `MROUTE` (0x1F) and `MMIX`/`MWHEEL`/`MPD`/`MFD`
+  (0x24–0x27), and still specify `wave[k]` as three bits with five shapes where
+  6.4 above defines nine codes and the model masks the write with four bits.
+  Filed as #321; not fixed here, because correcting normative register text is
+  its own revision.
 
 - **Rev 8 (2026-09-18)** — **the control frame, because it could not carry
   the register image this contract specifies.** No pinned table moves, no
@@ -2429,58 +2865,58 @@ Informative, pinned so that the renders and the RTL bench are reproducible: the 
 | 0xBE | 0x34B6 | MODE_AMP[3] | | 0x5C | 0x45 | ENV_CTL[7] |
 | 0xBF | 0x1 | MODE_NUM[3] | | 0x5D | 0xFFFFFF | ENV_PEAK[7] |
 | 0xC0 | 0x1E53ED0 | MODE_A1[4] | | 0x5E | 0x9 | ENV_RATE[7] |
-| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x60 | 0x78200F6 | ENV_CTL[8] |
+| 0xC1 | 0x31579F2 | MODE_A2[4] | | 0x60 | 0x7FF00F6 | ENV_CTL[8] |
 | 0xC2 | 0x0 | MODE_AMP[4] | | 0x61 | 0xB0A3D6 | ENV_PEAK[8] |
 | 0xC3 | 0x1 | MODE_NUM[4] | | 0x62 | 0x154 | ENV_RATE[8] |
-| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x64 | 0xF6 | ENV_CTL[9] |
-| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
-| 0xC6 | 0x592 | MODE_AMP[5] | | 0x66 | 0x1D | ENV_RATE[9] |
-| 0xC7 | 0x1 | MODE_NUM[5] | | 0x68 | 0xF7 | ENV_CTL[10] |
-| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x69 | 0x800000 | ENV_PEAK[10] |
-| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x6A | 0x110 | ENV_RATE[10] |
-| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
-| 0xD3 | 0x0 | MODE_NUM[8] | | 0x6D | 0x800000 | ENV_PEAK[11] |
-| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x6E | 0xE | ENV_RATE[11] |
-| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x74 | 0xF9 | ? |
-| 0xD6 | 0xAF | MODE_AMP[9] | | 0x75 | 0xF5C29 | ? |
-| 0xD7 | 0x0 | MODE_NUM[9] | | 0x76 | 0x3025 | ? |
-| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x78 | 0xF9 | ? |
-| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x79 | 0x57CED9 | ? |
-| 0xDA | 0x245 | MODE_AMP[10] | | 0x7A | 0x3E | ? |
-| 0xDB | 0x0 | MODE_NUM[10] | | 0x7C | 0xFA | ? |
-| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7D | 0x52F1AA | ? |
-| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7E | 0x72 | ? |
-| 0xDE | 0x13B | MODE_AMP[11] | | 0x80 | 0xFA | ? |
-| 0xDF | 0x0 | MODE_NUM[11] | | 0x81 | 0x6E978D | ? |
-| 0xE0 | 0x1FFBB4C | ? | | 0x82 | 0xA | ? |
-| 0xE1 | 0x300303D | ? | | 0x84 | 0xFA | ? |
-| 0xE2 | 0x196 | ? | | 0x85 | 0x161E4F | ? |
-| 0xE3 | 0x0 | ? | | 0x86 | 0x3 | ? |
-| 0xE4 | 0x1FF9A1F | ? | | 0x90 | 0x807803 | PATH[0] |
-| 0xE5 | 0x3003F74 | ? | | 0x91 | 0x1F07823 | PATH[1] |
-| 0xE6 | 0x28B | ? | | 0x92 | 0x907843 | PATH[2] |
-| 0xE7 | 0x0 | ? | | 0x93 | 0xA07843 | PATH[3] |
-| 0xE8 | 0x1FCD356 | ? | | 0x94 | 0x307861 | PATH[4] |
-| 0xE9 | 0x30243FF | ? | | 0x95 | 0xB07883 | PATH[5] |
-| 0xEA | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
-| 0xEB | 0x0 | ? | | 0x97 | 0xD078A3 | PATH[7] |
-| 0xEC | 0x1EDC70C | ? | | 0x98 | 0x7BE2 | PATH[8] |
-| 0xED | 0x3046527 | ? | | 0x99 | 0x20F8D0 | PATH[9] |
-| 0xEE | 0x0 | ? | | 0x9A | 0x10F8F0 | PATH[10] |
-| 0xEF | 0x0 | ? | | 0x9B | 0x407BE1 | PATH[11] |
-| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x9C | 0x1F12514 | PATH[12] |
-| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9D | 0x50AD49 | PATH[13] |
-| 0xCA | 0x0 | MODE_AMP[6] | | 0x9E | 0x50AD4A | PATH[14] |
-| 0xCB | 0x1 | MODE_NUM[6] | | 0x9F | 0xE079A3 | PATH[15] |
-| 0xCC | 0x4BE113 | MODE_A1[7] | | 0xA0 | 0xF079A3 | ? |
-| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA1 | 0x1F0F9DE | ? |
-| 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA2 | 0x1F0F9DF | ? |
-| 0xCF | 0x1 | MODE_NUM[7] | | 0xA3 | 0x607BE2 | ? |
-| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA4 | 0x20F9F0 | ? |
-| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA5 | 0x70FA10 | ? |
-| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA6 | 0x1F0FA36 | ? |
-| 0x44 | 0x30F0 | ENV_CTL[1] | | | | |
+| 0xC4 | 0x1EDD6CC | MODE_A1[5] | | 0x63 | 0x44 | ENV_FRATE[8] |
+| 0xC5 | 0x30CD4FE | MODE_A2[5] | | 0x64 | 0xF6 | ENV_CTL[9] |
+| 0xC6 | 0x592 | MODE_AMP[5] | | 0x65 | 0x3851EB | ENV_PEAK[9] |
+| 0xC7 | 0x1 | MODE_NUM[5] | | 0x66 | 0x11 | ENV_RATE[9] |
+| 0xD0 | 0x1FFEA42 | MODE_A1[8] | | 0x68 | 0xF7 | ENV_CTL[10] |
+| 0xD1 | 0x3001300 | MODE_A2[8] | | 0x69 | 0x800000 | ENV_PEAK[10] |
+| 0xD2 | 0xD9 | MODE_AMP[8] | | 0x6A | 0x110 | ENV_RATE[10] |
+| 0xD3 | 0x0 | MODE_NUM[8] | | 0x6C | 0xF7 | ENV_CTL[11] |
+| 0xD4 | 0x1FF8366 | MODE_A1[9] | | 0x6D | 0x800000 | ENV_PEAK[11] |
+| 0xD5 | 0x3005AFC | MODE_A2[9] | | 0x6E | 0xE | ENV_RATE[11] |
+| 0xD6 | 0xAF | MODE_AMP[9] | | 0x74 | 0xF9 | ? |
+| 0xD7 | 0x0 | MODE_NUM[9] | | 0x75 | 0xF5C29 | ? |
+| 0xD8 | 0x1FE5EB2 | MODE_A1[10] | | 0x76 | 0x3025 | ? |
+| 0xD9 | 0x3012282 | MODE_A2[10] | | 0x78 | 0xF9 | ? |
+| 0xDA | 0x245 | MODE_AMP[10] | | 0x79 | 0xC5D638 | ? |
+| 0xDB | 0x0 | MODE_NUM[10] | | 0x7A | 0x3E | ? |
+| 0xDC | 0x1FFD807 | MODE_A1[11] | | 0x7C | 0xFA | ? |
+| 0xDD | 0x3001EE0 | MODE_A2[11] | | 0x7D | 0x52F1AA | ? |
+| 0xDE | 0x13B | MODE_AMP[11] | | 0x7E | 0x72 | ? |
+| 0xDF | 0x0 | MODE_NUM[11] | | 0x80 | 0xFA | ? |
+| 0xE0 | 0x1FFBB4C | ? | | 0x81 | 0x6E978D | ? |
+| 0xE1 | 0x300303D | ? | | 0x82 | 0xA | ? |
+| 0xE2 | 0x196 | ? | | 0x84 | 0xFA | ? |
+| 0xE3 | 0x0 | ? | | 0x85 | 0x161E4F | ? |
+| 0xE4 | 0x1FF9A1F | ? | | 0x86 | 0x3 | ? |
+| 0xE5 | 0x3003F74 | ? | | 0x90 | 0x807803 | PATH[0] |
+| 0xE6 | 0x28B | ? | | 0x91 | 0x1F07823 | PATH[1] |
+| 0xE7 | 0x0 | ? | | 0x92 | 0x907843 | PATH[2] |
+| 0xE8 | 0x1FCD356 | ? | | 0x93 | 0xA07843 | PATH[3] |
+| 0xE9 | 0x30243FF | ? | | 0x94 | 0x307861 | PATH[4] |
+| 0xEA | 0x0 | ? | | 0x95 | 0xB07883 | PATH[5] |
+| 0xEB | 0x0 | ? | | 0x96 | 0xC07983 | PATH[6] |
+| 0xEC | 0x1EDC70C | ? | | 0x97 | 0xD078A3 | PATH[7] |
+| 0xED | 0x3046527 | ? | | 0x98 | 0x7BE2 | PATH[8] |
+| 0xEE | 0x0 | ? | | 0x99 | 0x20F8D0 | PATH[9] |
+| 0xEF | 0x0 | ? | | 0x9A | 0x10F8F0 | PATH[10] |
+| 0xC8 | 0x1BB8EB8 | MODE_A1[6] | | 0x9B | 0x407BE1 | PATH[11] |
+| 0xC9 | 0x31293A2 | MODE_A2[6] | | 0x9C | 0x1F12514 | PATH[12] |
+| 0xCA | 0x0 | MODE_AMP[6] | | 0x9D | 0x50AD49 | PATH[13] |
+| 0xCB | 0x1 | MODE_NUM[6] | | 0x9E | 0x50AD4A | PATH[14] |
+| 0xCC | 0x4BE113 | MODE_A1[7] | | 0x9F | 0xE679A3 | PATH[15] |
+| 0xCD | 0x36C44A6 | MODE_A2[7] | | 0xA0 | 0xF079A3 | ? |
+| 0xCE | 0xFFFF | MODE_AMP[7] | | 0xA1 | 0x1F0F9DE | ? |
+| 0xCF | 0x1 | MODE_NUM[7] | | 0xA2 | 0x1F0F9DF | ? |
+| 0x40 | 0xF0 | ENV_CTL[0] | | 0xA3 | 0x607BE2 | ? |
+| 0x41 | 0x400000 | ENV_PEAK[0] | | 0xA4 | 0x20F9F0 | ? |
+| 0x42 | 0x3025 | ENV_RATE[0] | | 0xA5 | 0x70FA10 | ? |
+| 0x44 | 0x30F0 | ENV_CTL[1] | | 0xA6 | 0x1F0FA36 | ? |
 
-SHA-256 of the 147 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `a43fe2a7d596a417ae3c9949fe43f94cc8e64482f7cac6ede5bc271009a5ff19`
+SHA-256 of the 148 decimal words `address << 32 | value`, joined by commas, which is `spec/reference/tables/kit808.hex` read as decimal: `3d239bf8453635efcc0750d611c83529367961c1f7613dbb1d19d4047a90e458`
 
 <!-- END GENERATED APPENDICES -->

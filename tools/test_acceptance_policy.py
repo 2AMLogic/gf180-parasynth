@@ -174,3 +174,61 @@ def test_evaluate_now_returns_the_property_vector_at_all():
     out = sc.evaluate(case, res)
     assert out["properties"] == {"pitch": 0.5, "decay": 2.0}
     assert out["worst"] == 2.0
+
+
+# --- the bass-compensation pair (issue #47) ----------------------------------
+#
+# "Bass compensation is allowed if it produces the desired playing experience.
+# ... But 'sounds bigger' and 'matches the reference better' need separate
+# scores -- a change that improves the first at the cost of the second is a
+# legitimate choice, and must be visible as one rather than hidden in an
+# aggregate." Two properties, on the same case, never added up.
+
+def test_a_bass_compensation_trade_is_two_properties_not_an_average():
+    """The change this pair exists for: `Playing weight` improves 1.40 -> 0.40
+    and `Bass loss` regresses 0.30 -> 1.30. Their MEAN is unchanged at 0.85 and
+    `worst` improves from 1.40 to 1.30, so both aggregates call this progress.
+    The property vector does not: it is a REJECT naming the half that paid.
+
+    It is still a shippable change -- with the trade recorded, as the
+    allowance below -- and that is the point. The rule is not "never trade",
+    it is "never trade invisibly"."""
+    base = result({"Bass loss": 0.30, "Playing weight": 1.40})
+    cand = result({"Bass loss": 1.30, "Playing weight": 0.40})
+    assert cand["worst"] < base["worst"], "the premise: `worst` really does improve"
+    assert abs(sum(cand["properties"].values())
+               - sum(base["properties"].values())) < 1e-9, "the premise: the mean is unchanged"
+
+    out = sc.compare(base, cand)
+    assert out["verdict"] == sc.REJECT, out
+    assert any("Bass loss" in r for r in out["reasons"]), out
+    assert any("Playing weight" in i for i in out["improved"]), out
+
+    # and the deliberate version: the trade is recorded as an allowance, so it
+    # is a decision in the diff rather than an average nobody can see through
+    deliberate = sc.compare(base, cand, allowances={"Bass loss": 1.1})
+    assert deliberate["verdict"] == sc.ACCEPT, deliberate
+
+
+def test_every_case_scoring_bass_loss_also_scores_playing_weight():
+    """Neither half of the pair may travel alone. `Bass loss` is the
+    reference-match half and is a stated not-run today (the comparison is not
+    well posed until a matched-drive definition exists, `run_case.NOT_RUN`);
+    `Playing weight` is measurable on our own output now. Requiring both is
+    what stops the measurable half from quietly becoming the score -- a case
+    carrying only one of them is `no verdict`, not a smaller maximum."""
+    cases = {c["case_id"]: [m.strip() for m in c["required_measurements"].split(";")]
+             for c in sc.load_cases()}
+    scoring = [cid for cid, req in cases.items()
+               if "Bass loss" in req or "Playing weight" in req]
+    assert scoring, "no case scores the bass-compensation pair at all"
+    for cid in scoring:
+        assert "Bass loss" in cases[cid] and "Playing weight" in cases[cid], \
+            f"{cid} scores half the pair: {cases[cid]}"
+
+    # the mechanism, not just the spelling: half a pair is no verdict
+    case = {"required_measurements": "Bass loss; Playing weight"}
+    res = dict(BASIS, metrics={"Playing weight": {"valid": True, "error": 0.2,
+                                                  "tolerance": 1.0}})
+    out = sc.evaluate(case, res)
+    assert out["state"] == sc.NO_VERDICT and "Bass loss" in out["why"], out

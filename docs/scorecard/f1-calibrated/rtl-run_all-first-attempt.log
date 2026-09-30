@@ -1,0 +1,49 @@
+==============================================================================
+NO-VERDICT      28.1s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only f1cal --filter2x --outdir build/voice-f1cal
+              verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['f1cal']
+                [f1cal] surge-type2-clean-v1 at 250 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 0..1439 (1440), 5 writes; blep windows 21; gate on 1440/1440, trig 1
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 1440..2879 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 4000 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.0, drive 1.0 (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.1, drive 1.0 (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: datapath still busy at the end of frame 0
+                sim: tb_voice.v:141: $finish called at 5231000 (1ps)
+              verify_voice: RTL produced 0 of 7200 frames and no STATE line -- did not run to completion
+NO-VERDICT      28.1s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python rtl-sketch/verify_voice.py --set quick --only f1cal --filter2x --f1cal-fault LEGACY_WORDS --expect-fail --outdir build/voice-f1cal-fault
+              verify_voice: model VoiceFx() (contract rev 4), scenario set 'quick', only ['f1cal']
+                [f1cal] surge-type2-clean-v1 at 250 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 0..1439 (1440), 5 writes; blep windows 21; gate on 1440/1440, trig 1
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 1440..2879 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 4000 Hz, res 0.0, drive 1.0 (gain 42598, ogain 100825): frames 2880..4319 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.0, drive 1.0 (gain 42598, ogain 302474): frames 4320..5759 (1440), 4 writes; blep windows 24; gate on 1440/1440, trig 0
+                [f1cal] surge-type2-clean-v1 at 1000 Hz, res 1.1, drive 1.0 (gain 42598, ogain 322639): frames 5760..7199 (1440), 4 writes; blep windows 18; gate on 1440/1440, trig 0
+                7200 frames, 166 register writes; final amp level 16777215, filt level 10652223
+              verify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 7200 frames, 166 writes at the register port
+                sim: tb_voice: datapath still busy at the end of frame 0
+                sim: tb_voice.v:141: $finish called at 5231000 (1ps)
+              verify_voice: RTL produced 0 of 7200 frames and no STATE line -- did not run to completion
+              verify_voice: NEGATIVE CONTROL NOT CAUGHT (status 2)
+FAIL(1)          7.7s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python rtl-sketch/verify_synth_top.py --f1cal-smoke surge-type2-clean-v1 --outdir build/top-f1cal
+              verify_synth_top: F1 calibration surge-type2-clean-v1: requested image {'k': 0, 'gain': 42598, 'ogain': 100825, 'res': 0.0, 'drive': 1.0, 'filter_calibration': 'surge-type2-clean-v1'}; points [{'cutoff_hz': 250, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 1000, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 4000, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 1000, 'res': 0.5, 'gain': 42598, 'ogain': 201649}]
+              verify_synth_top: 50 writes over the pins (50 voice, 0 drum), 960 frames after the last
+              Traceback (most recent call last):
+                File "/private/tmp/wt-f1-calib/rtl-sketch/verify_synth_top.py", line 953, in <module>
+                  st = main()
+                File "/private/tmp/wt-f1-calib/rtl-sketch/verify_synth_top.py", line 736, in main
+                  print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
+                                                                 ~~~~~^^^^^^^^^
+              KeyError: 'stops'
+FAIL(1)          7.1s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python rtl-sketch/verify_synth_top.py --f1cal-smoke surge-type2-clean-v1 --f1cal-fault LEGACY_WORDS --expect-fail --outdir build/top-f1cal-fault
+              verify_synth_top: F1 calibration surge-type2-clean-v1: requested image {'k': 0, 'gain': 42598, 'ogain': 100825, 'res': 0.0, 'drive': 1.0, 'filter_calibration': 'surge-type2-clean-v1'}; points [{'cutoff_hz': 250, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 1000, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 4000, 'res': 0.0, 'gain': 42598, 'ogain': 100825}, {'cutoff_hz': 1000, 'res': 0.5, 'gain': 42598, 'ogain': 201649}]; FAULT LEGACY_WORDS: the pins carry legacy words [170394, 25206] / [170394, 50412]
+              verify_synth_top: 50 writes over the pins (50 voice, 0 drum), 960 frames after the last
+              Traceback (most recent call last):
+                File "/private/tmp/wt-f1-calib/rtl-sketch/verify_synth_top.py", line 953, in <module>
+                  st = main()
+                File "/private/tmp/wt-f1-calib/rtl-sketch/verify_synth_top.py", line 736, in main
+                  print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
+                                                                 ~~~~~^^^^^^^^^
+              KeyError: 'stops'
+==============================================================================
+0/4 passed  --  NO-VERDICT /Users/joseph/dev/gf180-parasynth/.venv/bin/; NO-VERDICT /Users/joseph/dev/gf180-parasynth/.venv/bin/; FAIL /Users/joseph/dev/gf180-parasynth/.venv/bin/; FAIL /Users/joseph/dev/gf180-parasynth/.venv/bin/
+run_all_exit=1

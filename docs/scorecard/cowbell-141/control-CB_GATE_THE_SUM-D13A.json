@@ -1,0 +1,151 @@
+{
+  "engine": "fixed-model",
+  "case_id": "D13A",
+  "subject": "Cowbell / anchor",
+  "source_commit": "92d826e",
+  "analysis_run": "run_case@b9069cd630e0 + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@22d2ccabb277 at 2026-09-26T02:29:46Z",
+  "provenance": {
+    "engine": "fixed-model",
+    "worktree": {
+      "commit": "92d826e",
+      "described": "node/D-drums-bitexact-480-g92d826e-dirty",
+      "branch": "fix/cowbell-metric-direction",
+      "dirty": true,
+      "uncommitted_sha256": "a42429fd7b33170a",
+      "untracked_files": 4
+    },
+    "base_check": {
+      "checked": true,
+      "origin_main": "ffc1c002c615",
+      "behind_commits": 0,
+      "ahead_commits": 1,
+      "n_stops_here": 11,
+      "n_stops_origin_main": 11,
+      "stale_dependencies": {},
+      "ahead_dependencies": {},
+      "allow_stale": false,
+      "problems": []
+    },
+    "command": "tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl",
+    "config": {
+      "voice": "CB",
+      "refs": "<scratchpad>/tr808-ref",
+      "inject": "CB_GATE_THE_SUM",
+      "render_seconds": 2.2,
+      "accent": 1.0,
+      "bus_gain": 0.45,
+      "level_matched": true
+    },
+    "python": "3.14.7",
+    "run_at": "2026-09-26T02:29:58Z",
+    "inputs": {
+      "model/drums_fx.py": "sha256:4a0177412ff464a3",
+      "model/voice_fx.py": "sha256:970ad08f32eaed5c",
+      "model/audio_measure.py": "sha256:cd27a0a67dfde218",
+      "model/reference_rigs.py": "sha256:4222305718828edf",
+      "tools/run_case.py": "sha256:b9069cd630e09801",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:22d2ccabb27776c7",
+      "refprofile/profile.json": "sha256:c49b2e9046de0c13",
+      "docs/scorecard/cases.csv": "sha256:b644d0defa69e3b3",
+      "reference:cb8/CB.WAV": "sha256:1468cbd6c75a1f23"
+    },
+    "artefacts": {
+      "ours": "not written (--no-audio)",
+      "reference": "<scratchpad>/tr808-ref/cb8/CB.WAV"
+    },
+    "outcome_code": 1,
+    "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
+  },
+  "reference_profile": "fischer-tr808-103852:cb8/CB.WAV (no knob)",
+  "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
+  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('CB') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 7 of 11",
+  "audio": "reference cb8/CB.WAV; ours not written",
+  "tolerance_policy": {
+    "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
+    "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
+    "energy ratio": "3 dB, the half-power convention. A stated convention, not a number derived from any error of ours",
+    "event timing": "10 ms -- the positional accuracy audio_measure.onsets states for itself; a failure is larger than the estimator's own resolution",
+    "bus sum": "0.5 dB -- the final output must be the sum of the per-bus stems",
+    "rail": "0.01 % of samples at the rail, a stated budget for a render with no limiter in the path",
+    "rolloff": "1.5 dB per octave -- audio_measure.slope_db_oct's own max_residual_db. That estimator REFUSES a straight-line fit whose RMS residual exceeds it, so a difference smaller than it is inside the fit's own scatter and is not a difference. A number the estimator states about itself, not one derived from any error of ours"
+  },
+  "windowing": {
+    "ours": {
+      "onset_index": 481,
+      "onset_ms_into_the_record": 10.0208,
+      "lead_samples": 540,
+      "lead_ms": 11.25,
+      "trim_ms": 1.0,
+      "lead_from_the_record_samples": 481,
+      "lead_manufactured_samples": 107,
+      "junction_level_frac_of_peak": 0.0,
+      "dc_removed": true,
+      "dc_frac_of_peak": 0.0,
+      "padtype": "odd (scipy default)",
+      "bandpass_padlen_samples": 27,
+      "lead_in_padlens": 20.0,
+      "convention": "both sides are trimmed so that exactly lead_samples + trim_ms of TRUE silence precede the strike; t = 0 for every window is trim_ms before the onset, and the lead sits before it"
+    },
+    "reference": {
+      "onset_index": 10,
+      "onset_ms_into_the_record": 0.2268,
+      "lead_samples": 540,
+      "lead_ms": 12.2449,
+      "trim_ms": 1.0,
+      "lead_from_the_record_samples": 10,
+      "lead_manufactured_samples": 574,
+      "junction_level_frac_of_peak": 8.7e-05,
+      "dc_removed": false,
+      "dc_frac_of_peak": -0.00138714,
+      "padtype": "odd (scipy default)",
+      "bandpass_padlen_samples": 27,
+      "lead_in_padlens": 20.0,
+      "convention": "both sides are trimmed so that exactly lead_samples + trim_ms of TRUE silence precede the strike; t = 0 for every window is trim_ms before the onset, and the lead sits before it"
+    }
+  },
+  "metrics": {
+    "Partial balance": {
+      "value": 6.3947,
+      "units": "dB",
+      "reference": 15.0177,
+      "error": -8.623,
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
+    },
+    "unwanted difference tone": {
+      "value": -20.5255,
+      "units": "dB",
+      "reference": -67.9664,
+      "error": 47.4408,
+      "tolerance": 3.0,
+      "valid": true,
+      "tolerance_basis": "energy ratio",
+      "purpose": "defect ceiling"
+    },
+    "decay": {
+      "value": 225.5798,
+      "units": "ms",
+      "reference": 255.2691,
+      "error": -29.6893,
+      "tolerance": 127.6345,
+      "valid": true,
+      "tolerance_basis": "time",
+      "purpose": "match"
+    }
+  },
+  "diagnostics": {
+    "ours_peak_fs": 0.114502,
+    "ours_rms_fs": 0.005312,
+    "reference_peak_fs": 0.70401,
+    "reference_rate_hz": 44100,
+    "ours_rate_hz": 48000,
+    "level_matched": true,
+    "note": "levels are not compared: the Fischer set pinned LEVEL at maximum for every voice, so its inter-voice levels are not the machine's. Original-gain peak and RMS are recorded above."
+  },
+  "INJECTED_CONTROL": "CB_GATE_THE_SUM"
+}

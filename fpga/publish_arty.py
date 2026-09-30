@@ -5,7 +5,9 @@ The publication binds its proofs at publish time (refusing drift):
   * the digital verification record is derived from the WRAPPER the build
     actually compiled (parsed from build.tcl's -top), never a free-form
     path; a wrapper with no bound evidence is refused, and the record is
-    hash-validated against the wrapper's COMPILED source set;
+    hash-validated against the wrapper's COMPILED source set -- so a
+    record captured before a compiled source changed cannot bind, and
+    VERIFICATION_BY_WRAPPER must name a run of the CURRENT tree;
   * the compiled source set (read_verilog list) must equal the build
     record's source_sha256 -- an artifact whose build.tcl reads sources
     the record (and proof) never covered is refused;
@@ -24,6 +26,7 @@ import re
 import shutil
 import build_arty as build
 import ext_io_timing as iotime
+import xdc_bindings as xb
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,11 +34,29 @@ ROOT = Path(__file__).resolve().parents[1]
 # a wrapper absent from this map has NO evidence and publication refuses.
 # Since the UART bridge merged, arty_a7_top IS the UART wrapper (uart_rxd/
 # uart_txd ports, uart_bridge.v in the compiled set), so its proof is the
-# UART-bridge clean run; the pre-uart clean run's source set no longer
-# matches the compiled tree and cannot bind. No arty_a7_uart_top module
-# exists in this tree -- a build.tcl claiming it has no evidence.
+# UART-bridge clean run. No arty_a7_uart_top module exists in this tree --
+# a build.tcl claiming it has no evidence.
+#
+# The proof must cover the tree it is bound to, so this entry MOVES whenever
+# a compiled source changes; validate_verification hash-checks it against the
+# live source set and refuses otherwise. Superseded runs stay where they are:
+#   reports/arty/clean            the pre-uart SPI wrapper (fpga/verify_arty.py)
+#   reports/arty/uart-clean       the pre-drift UART wrapper (contract revision
+#                                 11) -- still the proof the PUBLISHED
+#                                 integrated baseline bitstream (R0) cites by
+#                                 hash, so it is never rewritten in place
+#   reports/arty/drift-clean      per-oscillator drift in voice_dp.v (revision
+#                                 12, DR 0019) moved the frame's sample strobe
+#                                 from cycle 175 to 176 and left the audio
+#                                 byte-identical. See that directory's README.
+#   reports/arty/shark-blamp-clean  the shark-tooth's polyBLAMP (revision 13,
+#                                 DR 0017), before the clap's final strike.
+#   reports/arty/l2-clean         the clap's final strike (revision 14,
+#                                 ENV_FRATE) before polyBLAMP merged.
+#   reports/arty/rev14-clean      this tree: revision 14, both of the above.
+#                                 See that directory's README.
 VERIFICATION_BY_WRAPPER = {
-    "arty_a7_top": ROOT / "fpga/reports/arty/uart-clean/verification.json",
+    "arty_a7_top": ROOT / "fpga/reports/arty/rev14-clean/verification.json",
 }
 
 
@@ -298,9 +319,11 @@ def publish(artifact, output):
                                         build.sources() + build.roms())
     if proof != record.get("verification"):
         raise ValueError("digital verification binding differs")
-    required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp"}
+    required = {"arty.bit", "timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt", "routed.dcp",
+                xb.REPORT, xb.EXCEPTIONS}
     if set(record.get("artifact_sha256", {})) != required:
-        raise ValueError("build artifact set incomplete")
+        raise ValueError("build artifact set incomplete (a build before #315 has no "
+                         f"{xb.REPORT}: its constraints were never shown to bind)")
     for name, digest in record["artifact_sha256"].items():
         path = artifact / name
         if not path.is_file() or not path.stat().st_size or build.sha(path) != digest:
@@ -320,6 +343,13 @@ def publish(artifact, output):
         drift += iotime.uart_gate_drift(xdc_snap.read_text())
         if drift:
             raise ValueError("external-I/O constraint drift: " + "; ".join(drift))
+        # #315: present in the text is not bound in the design. The build's own
+        # query counts must show every object query bound exactly its objects
+        bound = xb.check_report((artifact / xb.REPORT).read_text(), xdc_snap.read_text())
+        bound += xb.check_route((artifact / xb.REPORT).read_text(),
+                                (artifact / xb.EXCEPTIONS).read_text(), xdc_snap.read_text())
+        if bound:
+            raise ValueError("XDC constraints did not bind: " + "; ".join(bound))
     remaining = ["physical programming, control and audio capture"]
     dsp = dsp_disposition(artifact, record)
     if summary["external_io_timing_qualified"]:
@@ -362,7 +392,7 @@ def publish(artifact, output):
     return summary
 
 
-def inspect_reports(directory):
+def inspect_reports(directory, design="arty_a7_top"):
     try:
         texts = {name: (directory / name).read_text() for name in
                  ("timing.rpt", "clocks.rpt", "utilization.rpt", "drc.rpt")}
@@ -370,7 +400,7 @@ def inspect_reports(directory):
         raise ValueError("missing implementation report") from exc
     timing = texts["timing.rpt"]
     for content in texts.values():
-        if (not re.search(r"\| Design\s*: arty_a7_top\s*$", content, re.MULTILINE)
+        if (not re.search(r"\| Design\s*: " + re.escape(design) + r"\s*$", content, re.MULTILINE)
                 or not re.search(r"\| Design State\s*: (Fully )?Routed\s*$", content, re.MULTILINE)):
             raise ValueError("report is not the routed Arty design")
     try:

@@ -1,0 +1,9 @@
+reference corpus: <scratchpad>/tr808-ref
+results into:     /private/tmp/wt-cowbell-141/docs/scorecard/results
+
+case   state         worst  note
+------------------------------------------------------------------------------------------------
+D13A   fail           2.82  worst: Partial balance
+------------------------------------------------------------------------------------------------
+fail: 1
+exit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)

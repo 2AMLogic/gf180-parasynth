@@ -1,0 +1,682 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFF..FFFFFF                                     [100%]
+=================================== FAILURES ===================================
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[error-nan-match] ____
+
+purpose = 'match', field = 'error', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'error', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.823866666666...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[error-nan-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'error', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'error', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.823...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[error-inf-match] ____
+
+purpose = 'match', field = 'error', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'error', inf, {'state': 'fail', 'worst': inf, 'properties': {'Partial balance': 2.823866666666667, 'unwanted...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[error-inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'error', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'error', inf, {'state': 'fail', 'worst': inf, 'properties': {'Partial balance': 2.823866666666667, ...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[error--inf-match] ___
+
+purpose = 'match', field = 'error', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'error', -inf, {'state': 'fail', 'worst': inf, 'properties': {'Partial balance': 2.823866666666667, 'unwante...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[error--inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'error', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'error', -inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.82...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-nan-match] __
+
+purpose = 'match', field = 'tolerance', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'tolerance', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.82386666...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-nan-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'tolerance', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-inf-match] __
+
+purpose = 'match', field = 'tolerance', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'tolerance', inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.82386666...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'tolerance', inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--inf-match] _
+
+purpose = 'match', field = 'tolerance', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'tolerance', -inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.8238666...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'tolerance', -inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': ...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-match] __
+
+purpose = 'match', field = 'tolerance', bad = 0.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+        assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+        assert r["worst"] is None
+>       assert NAME in r["why"] and "invalid number" in r["why"], r["why"]
+E       AssertionError: invalid: unwanted difference tone
+E       assert ('unwanted difference tone' in 'invalid: unwanted difference tone' and 'invalid number' in 'invalid: unwanted difference tone')
+
+tools/test_metric_purpose.py:256: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = 0.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+        assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+        assert r["worst"] is None
+>       assert NAME in r["why"] and "invalid number" in r["why"], r["why"]
+E       AssertionError: invalid: unwanted difference tone
+E       assert ('unwanted difference tone' in 'invalid: unwanted difference tone' and 'invalid number' in 'invalid: unwanted difference tone')
+
+tools/test_metric_purpose.py:256: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--3.0-match] _
+
+purpose = 'match', field = 'tolerance', bad = -3.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'tolerance', -3.0, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, '...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--3.0-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = -3.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'tolerance', -3.0, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': ...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[value-nan-match] ____
+
+purpose = 'match', field = 'value', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'value', nan, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, 'unwan...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[value-nan-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'value', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'value', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.823...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[value-inf-match] ____
+
+purpose = 'match', field = 'value', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'value', inf, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, 'unwan...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[value-inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'value', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'value', inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.823...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+___ test_a_non_finite_or_non_positive_number_is_no_verdict[value--inf-match] ___
+
+purpose = 'match', field = 'value', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'value', -inf, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, 'unwa...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[value--inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'value', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'value', -inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2.82...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference-nan-match] __
+
+purpose = 'match', field = 'reference', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'reference', nan, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, 'u...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference-nan-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'reference', bad = nan
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'reference', nan, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference-inf-match] __
+
+purpose = 'match', field = 'reference', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'reference', inf, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, 'u...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference-inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'reference', bad = inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'reference', inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': 2...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference--inf-match] _
+
+purpose = 'match', field = 'reference', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('match', 'reference', -inf, {'state': 'fail', 'worst': 11.344, 'properties': {'Partial balance': 2.823866666666667, '...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[reference--inf-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'reference', bad = -inf
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING]
+                             if hasattr(sc, "MATCH") else ["match", "defect ceiling"])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+>       assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+E       AssertionError: ('defect ceiling', 'reference', -inf, {'state': 'fail', 'worst': 2.823866666666667, 'properties': {'Partial balance': ...'abc', 'dirty': False}, 'inputs': {'model/audio_measure.py': 'sha256:AAAA', 'tools/run_case.py': 'sha256:BBBB'}}, ...})
+E       assert 'fail' == 'no verdict'
+E         
+E         - no verdict
+E         + fail
+
+tools/test_metric_purpose.py:254: AssertionError
+__________ test_measure_pair_refuses_a_non_finite_estimate[ours-nan] ___________
+
+side = 'ours', bad = nan
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': nan, 'units': 'dB', 'reference': -68.0, 'error': nan, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+__________ test_measure_pair_refuses_a_non_finite_estimate[ours--inf] __________
+
+side = 'ours', bad = -inf
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': -inf, 'units': 'dB', 'reference': -68.0, 'error': -inf, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+__________ test_measure_pair_refuses_a_non_finite_estimate[ours-inf] ___________
+
+side = 'ours', bad = inf
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': inf, 'units': 'dB', 'reference': -68.0, 'error': inf, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+___________ test_measure_pair_refuses_a_non_finite_estimate[ref-nan] ___________
+
+side = 'ref', bad = nan
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': -102.0, 'units': 'dB', 'reference': nan, 'error': nan, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+___________ test_measure_pair_refuses_a_non_finite_estimate[ref-inf] ___________
+
+side = 'ref', bad = inf
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': -102.0, 'units': 'dB', 'reference': inf, 'error': -inf, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+__________ test_measure_pair_refuses_a_non_finite_estimate[ref--inf] ___________
+
+side = 'ref', bad = -inf
+
+    @pytest.mark.parametrize("side,bad", [("ours", NAN), ("ours", -INF), ("ours", INF),
+                                          ("ref", NAN), ("ref", INF), ("ref", -INF)])
+    def test_measure_pair_refuses_a_non_finite_estimate(side, bad):
+        """An estimator that says ok with a non-finite number is refused at the
+        point of use: the record gets valid=False and no error, so no NaN is ever
+        written as a distance."""
+        est = lambda v: (lambda *_a: am.Estimate(v, True, "", {}))
+        ours, ref = (bad, -68.0) if side == "ours" else (-102.0, bad)
+        m = rc.measure_pair(NAME, "dB", est(ours), (None, 0), (None, 0),
+                            rc.tol_db, {}, est_ref=est(ref))
+>       assert m["valid"] is False and "error" not in m, m
+E       AssertionError: {'value': -102.0, 'units': 'dB', 'reference': -inf, 'error': inf, ...}
+E       assert (True is False)
+
+tools/test_metric_purpose.py:280: AssertionError
+=========================== short test summary info ============================
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error-nan-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error-nan-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error-inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error-inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error--inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[error--inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-nan-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-nan-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--3.0-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance--3.0-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value-nan-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value-nan-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value-inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value-inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value--inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[value--inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference-nan-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference-nan-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference-inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference-inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference--inf-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[reference--inf-defect ceiling]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ours-nan]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ours--inf]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ours-inf]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ref-nan]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ref-inf]
+FAILED tools/test_metric_purpose.py::test_measure_pair_refuses_a_non_finite_estimate[ref--inf]
+34 failed, 2 passed, 12 deselected in 29.27s

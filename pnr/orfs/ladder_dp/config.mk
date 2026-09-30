@@ -24,7 +24,13 @@ export SYNTH_SCRIPT = $(DESIGN_DIR)/../gf180_7t/synth_unsigned.tcl
 
 # area-oriented ABC mapping (timing is trivial at 81 ns)
 export ABC_AREA          = 1
-# % of core area covered by cells after synthesis
+# % of core area covered by cells after synthesis.
+# THE DIE AND CORE AREAS OF THIS RUN ARE NOT MEASUREMENTS. Setting a target makes them the
+# cell area divided by 0.50, so a die/cell ratio computed from them recovers 2.00 and nothing
+# else -- the bug docs/pnr-synth-top.md section 2 records. ../summarize.py REFUSES to print
+# that ratio for this design (exit 2, ../area_provenance.py, issue #245); the utilisation
+# DRIFT the resizer and CTS add on top of the target is the only measured part. Keeping the
+# target here is deliberate: this is a per-block area probe, not a floorplan of a product.
 export CORE_UTILIZATION  = 50
 export CORE_ASPECT_RATIO = 1
 export CORE_MARGIN       = 2

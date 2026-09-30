@@ -272,6 +272,20 @@ def m_noise_share(voice, bands):
     return f
 
 
+def m_sd_brightness(ctx):
+    """The snare's brightness, power-weighted by default -- `ctx["centroid_weight"]`
+    lets `--inject sd-centroid-amp-weighted` read the other field instead
+    (`drum_verify.measure` already computes both). docs/drum-verification.md 3:
+    the amplitude/magnitude weighting 'weights a wide, quiet noise floor
+    heavily,' which is exactly the snare's shape -- a ~173 Hz body under a
+    16 kHz-wide noise band."""
+    m = _meas(ctx, "SD")
+    if m.get("silent"):
+        return None
+    field = "centroid_hz" if ctx.get("centroid_weight") == "amplitude" else "power_centroid_hz"
+    return m.get(field)
+
+
 # ===========================================================================
 # injections: the known-broken variants the report must be able to see
 # ===========================================================================
@@ -316,6 +330,44 @@ def _env_injection(env_attr, **scale):
     return make
 
 
+def _envelope_injection(kind):
+    """Replace `drum_verify`'s tuned per-voice envelope (moving RMS, window
+    matched to each voice's own fundamental) with ONE method for every voice --
+    which is what this repository shipped before ENV_WIN_MS existed. `kind`
+    selects the historical replacement:
+
+      "moving_average"  the deprecated `audio_measure.moving_average_envelope`
+                         at its original 5 ms window -- audio_measure.py's own
+                         rule 1: 'a 5 ms moving average spans 0.28 of a cycle
+                         at 56 Hz.' Kept alive ONLY as
+                         `test_moving_average_envelope_ripples_where_the_analytic_one_does_not`
+                         until this injection, which reinstates it on the
+                         acceptance path rather than a helper-function test.
+
+    Patches the module attribute, so every voice's `decay_fit`-derived
+    property is exposed to it -- not only the one this injection's declared
+    `voices` list names, which is why the un-declared voices' movement (or
+    lack of it) is worth reading in the printed report too."""
+    def make(ctx):
+        orig = dv.envelope
+
+        def patched(x, sr, win_ms=4.0):
+            if kind == "moving_average":
+                return np.abs(am.moving_average_envelope(x, 5.0, sr))
+            return orig(x, sr, win_ms)
+        ctx["_patches"].append((dv, "envelope", orig))
+        dv.envelope = patched
+    return make
+
+
+def _centroid_weight_injection(weight):
+    """Read `m_sd_brightness` (and any other centroid-based property added
+    later) through the given weighting instead of the correct default."""
+    def make(ctx):
+        ctx["centroid_weight"] = weight
+    return make
+
+
 INJECTIONS = {
     "ladder-2pole": ("a pole dropped from the ladder (2 stages, not 4)",
                      ["LADDER"], _ladder_injection(stages=2)),
@@ -336,6 +388,23 @@ INJECTIONS = {
                 ["LT"], _mode_injection("M_LT", f0=1.15)),
     "oh-decay-half": ("the open hat's envelope tau halved",
                       ["OH"], _env_injection("E_OH", tau=0.5)),
+    # -- permanent injections of historical bugs (issue #52): these two
+    # reinstate defects that actually shipped and were fixed at the estimator
+    # layer, rather than inventing a new defect, per docs/verification-rules.md
+    # ("SPI_ADDR7"/"SPI_DATA24" are the RTL-side precedent for this pattern).
+    "bd-ma-envelope": ("the decay estimator reads every voice through the "
+                       "deprecated 5 ms moving-average envelope instead of "
+                       "the per-voice-tuned RMS window -- the historical "
+                       "defect audio_measure.py rule 1 and "
+                       "test_moving_average_envelope_ripples_where_the_analytic_one_does_not "
+                       "describe, reinstated here on the acceptance path",
+                       ["BD"], _envelope_injection("moving_average")),
+    "sd-centroid-amp-weighted": ("the snare's brightness is read from the "
+                                 "amplitude/magnitude-weighted centroid "
+                                 "instead of the power-weighted one -- "
+                                 "docs/drum-verification.md 3's withdrawn "
+                                 "measurement method, reinstated here",
+                                 ["SD"], _centroid_weight_injection("amplitude")),
 }
 
 
@@ -348,7 +417,55 @@ INJECTIONS = {
 #                Outside it means the model CHANGED, which may be intended --
 #                the commit that changes it re-locks it and says why.
 # ===========================================================================
-LOCK = "ce400a6"          # the commit the locks below were measured at
+# The commit the locks below were measured at. This read `ce400a6` until issue
+# #242 and that object does not exist in this repository -- it was a pre-squash
+# commit on #51's branch, so every "locked at ce400a6" line in the report below
+# pointed at nothing and the bisect its own "suggested next step" recommended
+# could not be started. `28dfd55` is the squash-merge of #51 that actually
+# introduced this table, and re-measuring that tree reproduces every value in
+# `LOCKS` as it was first written (model/drift_probe.py, issue #242).
+LOCK = "28dfd55"
+
+
+# Re-lock provenance: which commit moved a lock, and why the new value is the
+# right one. A lock that drifts is the report doing its job; a lock that drifts
+# and is then silently re-locked destroys the only record of what changed the
+# sound. #242 had to re-measure 17 historical trees, across a 44-commit range,
+# to recover two such records, because the `LOCK` above named a commit that did
+# not exist -- so a re-lock now writes the answer down here, next to the
+# number, and the report prints it on the row.
+#
+#   (voice, property) -> (commit that moved it, the value before it, why)
+RELOCKS = {
+    ("LADDER", "corner ratio drift"): (
+        "50d7aaf", 9.40462,
+        "DR 0011 baked CUT_TRIM * Huovilainen's fcr() into voice_fx.make_g_rom(), "
+        "so the shipped cutoff ROM is the TUNED one. The cutoff scaling got more "
+        "uniform, 9.40 % -> 4.21 %. This property IS the defect contract 17.12 "
+        "records and DR 0011 is its identified fix, so the lock falling is the fix "
+        "landing, not a regression: the sibling 'self-oscillation tuning spread' "
+        "target fell 7.92 -> 0.51 pp in the same commit"),
+    ("LT", "attack"): (
+        "80b3756", 16.625,
+        "the toms' pitch drop was corrected from the inferred x1.7 to the x1.06 "
+        "measured over 99 clean-digital TR-808 files (docs/tom-pitch-drop-"
+        "correction.md). The x1.7 sweep detuned the resonator while the exciter "
+        "pulse was still in it -- 'costing the toms 38-44 % of their ring' -- which "
+        "delayed the envelope peak that drum_verify.attack_ms measures from onset. "
+        "16.625 ms was 1.50 periods of LT's own 90 Hz, an outlier against every "
+        "other voice; 6.27083 ms is 0.57, in family with BD 0.72 and HT 0.89"),
+}
+
+
+def _apply_relocks(props):
+    """Put each re-locked property's provenance in its own `source` line, which
+    is what `Result.sentence()` prints when that property next goes OUT."""
+    for p in props:
+        rl = RELOCKS.get((p.voice, p.name))
+        if rl:
+            commit, was, why = rl
+            p.source += f"; RE-LOCKED at {commit} (was {was:g}) -- {why}"
+    return props
 
 
 def build_properties():
@@ -403,16 +520,31 @@ def build_properties():
                   f"locked at {LOCK}; drum_fit.noise_share, the validated measure "
                   "(drum-verification.md 8.0 withdrew the windowed split)",
                   m_noise_share("SD", [(150.0, 200.0), (300.0, 380.0)])))
-    return P
+    P.append(Prop("SD", "brightness (power centroid)", "Hz", "lock", None, 300.0,
+                  f"locked at {LOCK}; drum_verify.power_centroid_hz, over the "
+                  "amplitude/magnitude-weighted centroid_hz drum-verification.md "
+                  "3 withdrew ('a voice with 98 % of its energy below 700 Hz can "
+                  "still show a 6.5 kHz magnitude centroid') -- ground truth in "
+                  "test_audio_measure.test_amplitude_weighted_centroid_reads_a_quiet_wideband_floor_as_bright",
+                  m_sd_brightness))
+    return _apply_relocks(P)
 
 
 # Locked values, measured on LOCK. `--relock` prints a fresh block to paste
 # here. A commit that intends to move one of these re-locks it and says why in
 # its message; a commit that moves one without meaning to is what this table
 # is for.
+#
+# Do NOT paste `--relock`'s whole block. It reprints every lock at today's
+# measurement, including ones that have drifted a little and are still INSIDE
+# their tolerance -- pasting those baked-in silently re-baselines drift the
+# table is supposed to keep accumulating until it is worth an argument. Two
+# entries below were re-locked in #242 and they are the only two that moved;
+# the rest are untouched at their 28dfd55 values on purpose.
 LOCKS = {
     ("LADDER", "corner at 800 Hz / commanded"): 0.786039,
-    ("LADDER", "corner ratio drift"): 9.40462,
+    # re-locked from 9.40462 in #242; see RELOCKS above (50d7aaf, DR 0011)
+    ("LADDER", "corner ratio drift"): 4.21473,
     ("LADDER", "h3 at self-oscillation (res 1.3)"): -45.3762,
     ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): -13.7836,
     ("BD", "T20"): 307.979,
@@ -420,7 +552,8 @@ LOCKS = {
     ("SD", "T20"): 56.3958,
     ("SD", "attack"): 4.27083,
     ("LT", "T20"): 198.229,
-    ("LT", "attack"): 16.625,
+    # re-locked from 16.625 in #242; see RELOCKS above (80b3756, the tom drop)
+    ("LT", "attack"): 6.27083,
     ("HT", "T20"): 89.3125,
     ("HT", "attack"): 4.20833,
     ("CH", "T20"): 42.5417,
@@ -432,7 +565,147 @@ LOCKS = {
     ("CB", "T20"): 176.125,
     ("CB", "attack"): 4.39583,
     ("SD", "noise share"): 27.5488,
+    ("SD", "brightness (power centroid)"): 1918.08,
 }
+
+
+# ===========================================================================
+# when each lock moved, and why
+# ===========================================================================
+# THE GAP THIS CLOSES (issue #68). `LOCKS` above is an overwrite: a commit that
+# moves a locked value leaves the new number and nothing else, so "did this test
+# go green because the model improved, or because the bound moved?" is answerable
+# only by reading git log and guessing which of a commit's changes was the point.
+# The distinction between a `target` (a document says so) and a `lock` (this
+# model, pinned) was already here; the record of the CHANGE was not.
+#
+# Every entry is a real commit, recovered with `git log -L` on the LOCKS block --
+# nothing below is reconstructed from memory. `check_lock_changelog` asserts that
+# the last recorded value for each lock is the value in `LOCKS`, so an overwrite
+# without an entry is a detectable state rather than an invisible one, and
+# `--relock` prints a skeleton entry beside the new table.
+#
+# `from: None` means the lock did not exist before that commit.
+LOCK_CHANGELOG = [
+    {
+        "at": "ce400a6",
+        "recorded_by": "28dfd55",
+        "issue": 51,
+        "reason": "the lock table introduced with this report. Nothing was pinned "
+                  "before, so every entry here is a first lock rather than a move.",
+        "locks": {
+            ("LADDER", "corner at 800 Hz / commanded"): (None, 0.786039),
+            ("LADDER", "corner ratio drift"): (None, 9.40462),
+            ("LADDER", "h3 at self-oscillation (res 1.3)"): (None, -45.3762),
+            ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): (None, -13.7836),
+            ("BD", "T20"): (None, 307.979),
+            ("BD", "attack"): (None, 14.5625),
+            ("SD", "T20"): (None, 56.3958),
+            ("SD", "attack"): (None, 4.27083),
+            ("LT", "T20"): (None, 198.229),
+            ("LT", "attack"): (None, 16.625),
+            ("HT", "T20"): (None, 89.3125),
+            ("HT", "attack"): (None, 4.20833),
+            ("CH", "T20"): (None, 42.5417),
+            ("CH", "attack"): (None, 2.54167),
+            ("OH", "T20"): (None, 312.083),
+            ("OH", "attack"): (None, 4.39583),
+            ("CP", "T20"): (None, 40.6042),
+            ("CP", "attack"): (None, 3.0),
+            ("CB", "T20"): (None, 176.125),
+            ("CB", "attack"): (None, 4.39583),
+            ("SD", "noise share"): (None, 27.5488),
+        },
+    },
+    {
+        "at": "ce400a6",
+        "recorded_by": "bf13fdd",
+        "issue": 251,
+        "reason": "the power-weighted centroid became a locked property so that "
+                  "--inject sd-centroid-amp-weighted has something to turn red: the "
+                  "amplitude/magnitude weighting docs/drum-verification.md 3 "
+                  "withdrew reads this snare at 5868 Hz. A new lock, not a moved "
+                  "one -- measured at the same commit as the rest.",
+        "locks": {
+            ("SD", "brightness (power centroid)"): (None, 1918.08),
+        },
+    },
+    {
+        "at": "28dfd55",
+        "recorded_by": "50d7aaf",
+        "issue": 242,
+        "reason": "DR 0011 baked CUT_TRIM * Huovilainen's fcr() into "
+                  "voice_fx.make_g_rom(), so the shipped cutoff ROM is the tuned "
+                  "one and the cutoff scaling became more uniform, 9.40 % -> "
+                  "4.21 %. This property is the defect contract 17.12 records "
+                  "and DR 0011 is its identified fix, so the lock falling is the "
+                  "fix landing, not a regression -- see RELOCKS above for the "
+                  "full rationale.",
+        "locks": {
+            ("LADDER", "corner ratio drift"): (9.40462, 4.21473),
+        },
+    },
+    {
+        "at": "28dfd55",
+        "recorded_by": "80b3756",
+        "issue": 242,
+        "reason": "the toms' pitch drop was corrected from the inferred x1.7 to "
+                  "the x1.06 measured over 99 clean-digital TR-808 files, which "
+                  "removed a delayed envelope peak that drum_verify.attack_ms "
+                  "had been reading as a longer attack -- see RELOCKS above for "
+                  "the full rationale.",
+        "locks": {
+            ("LT", "attack"): (16.625, 6.27083),
+        },
+    },
+]
+
+
+def lock_history(voice: str, name: str) -> list:
+    """Every recorded change to one lock, oldest first: `at`, `recorded_by`,
+    `issue`, `from`, `to`, `reason`. `tools/stage_case.py`'s `bound_for` folds
+    the last entry into the rationale it hands `tools/manifest.py`'s `accept()`,
+    and REFUSES a bound whose history is empty -- an empty list means the lock
+    has no record, which is a problem rather than a default."""
+    out = []
+    for ev in LOCK_CHANGELOG:
+        if (voice, name) in ev["locks"]:
+            was, now = ev["locks"][(voice, name)]
+            out.append({"at": ev["at"], "recorded_by": ev["recorded_by"],
+                        "issue": ev["issue"], "from": was, "to": now,
+                        "reason": ev["reason"]})
+    return out
+
+
+def check_lock_changelog() -> list:
+    """Problems with the changelog, as sentences. Empty list means every lock
+    has a recorded value and a reason, and the record agrees with the table.
+
+    Three ways it can be wrong, and the first is the one that matters: a value
+    in `LOCKS` that the changelog does not end on means somebody re-locked
+    without saying why, and every verdict that bound has issued since is
+    unexplained."""
+    problems = []
+    for key, value in sorted(LOCKS.items()):
+        hist = lock_history(*key)
+        if not hist:
+            problems.append(f"{key[0]} {key[1]!r}: locked at {value!r} with no "
+                            f"changelog entry. A bound with no recorded reason is a "
+                            f"number somebody chose")
+            continue
+        last = hist[-1]["to"]
+        if last is None or abs(float(last) - float(value)) > 1e-9:
+            problems.append(f"{key[0]} {key[1]!r}: LOCKS says {value!r}, the "
+                            f"changelog's last entry ({hist[-1]['recorded_by']}) says "
+                            f"{last!r}. The lock moved with no reason recorded")
+    for ev in LOCK_CHANGELOG:
+        for key in ev["locks"]:
+            if key not in LOCKS:
+                problems.append(f"{ev['recorded_by']} records a change to "
+                                f"{key[0]} {key[1]!r}, which is not a lock. Either "
+                                f"the property was removed and the entry is stale, "
+                                f"or the name in one of the two is wrong")
+    return problems
 
 
 # ===========================================================================
@@ -559,11 +832,25 @@ def main(argv=None) -> int:
     ap.add_argument("--list-injections", action="store_true")
     ap.add_argument("--changed", metavar="REF")
     ap.add_argument("--relock", action="store_true")
+    ap.add_argument("--check-locks", action="store_true",
+                    help="every lock must have a recorded change and a reason, and "
+                         "the record must end on the value LOCKS holds. Measures "
+                         "nothing and runs in milliseconds.")
     a = ap.parse_args(argv)
     if a.list_injections:
         for k, (d, v, _) in sorted(INJECTIONS.items()):
             print(f"  {k:18s} {','.join(v):8s} {d}")
         return 0
+    if a.check_locks:
+        problems = check_lock_changelog()
+        for p in problems:
+            print(f"  {p}")
+        print(f"\n{len(LOCKS)} lock(s), {len(LOCK_CHANGELOG)} changelog event(s), "
+              f"{len(problems)} problem(s)")
+        if problems:
+            print("A bound that moved without a reason is how a test goes green "
+                  "without the model improving.")
+        return 1 if problems else 0
     if a.changed:
         return cmd_changed(a.changed)
     if a.inject:
@@ -575,6 +862,28 @@ def main(argv=None) -> int:
             if r.prop.kind == "lock" and r.measured is not None:
                 print(f'    ("{r.prop.voice}", "{r.prop.name}"): {r.measured:.6g},')
         print("}")
+        # A new table with no record of what moved is the gap issue #68 names, so
+        # the skeleton comes out with it. `from` is the value being replaced; fill
+        # in the reason before committing, because --check-locks will not accept
+        # an entry that does not end on the new value and the report will not
+        # explain a bound that moved for no stated reason.
+        print("\n# paste into LOCK_CHANGELOG, and replace the reason:")
+        print("    {")
+        print('        "at": "<the commit these were measured at, and LOCK above>",')
+        print('        "recorded_by": "<the commit that re-locks>",')
+        print('        "issue": 0,')
+        print('        "reason": "WHY these values moved. A bound that moved with no '
+              'reason is how a test goes green without the model improving.",')
+        print('        "locks": {')
+        for r in res:
+            if r.prop.kind == "lock" and r.measured is not None:
+                was = LOCKS.get((r.prop.voice, r.prop.name))
+                if was is not None and abs(float(was) - float(r.measured)) <= 1e-9:
+                    continue
+                print(f'            ("{r.prop.voice}", "{r.prop.name}"): '
+                      f'({was!r}, {r.measured:.6g}),')
+        print("        },")
+        print("    },")
         return 0
     return 1 if print_report(res, "SOUND REPORT -- per voice, per property") else 0
 

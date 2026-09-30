@@ -73,6 +73,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import voice_fx as vf                                               # noqa: E402
 
 SR = rr.SR
 
@@ -117,7 +118,13 @@ def build(name):
         # harmonic the references show up is the LUT, not the structure.
         return rr.OurLadder("ours-tanh256", cfg=dict(tanh_entries=256))
     if name == "ours-huovtune":
-        return rr.OurLadder("ours-huovtune", huov_fcr=True)
+        # "our ladder BEFORE DR 0011, plus Huovilainen's tuning polynomial" --
+        # the candidate section 8.4 reported, and the change DR 0011 then took.
+        # It has to be built against the UNTUNED cutoff ROM: the shipped one has
+        # carried `CUT_TRIM * fcr()` since DR 0011, so `huov_fcr=True` against it
+        # would apply the polynomial twice (`OurLadder.__init__` refuses that).
+        return rr.OurLadder("ours-huovtune", huov_fcr=True,
+                            g_rom=vf.make_g_rom(tune=False))
     if name == "surge-rk":
         return rr.SurgeRig("Type 1")
     if name == "surge-huov":

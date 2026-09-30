@@ -1,0 +1,16 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref",
+    "state": "FAIL",
+    "rc": 1,
+    "out": "reference corpus: <scratchpad>/tr808-ref\nresults into:     /private/tmp/wt-cowbell-141/docs/scorecard/results\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nD13A   fail           2.82  worst: Partial balance\n------------------------------------------------------------------------------------------------\nfail: 1\nexit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)\n",
+    "secs": 49.55005097389221
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --refs <scratchpad>/tr808-ref --inject CB_GATE_THE_SUM --expect fail --no-audio --results <scratchpad>/ctl",
+    "state": "NO-VERDICT",
+    "rc": 2,
+    "out": "CONTROL REFUSED: D13A clean baseline must pass to qualify a fail control\nreference corpus: <scratchpad>/tr808-ref\nresults into:     <scratchpad>/ctl\nINJECTED CONTROL: CB_GATE_THE_SUM -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nD13A   fail          15.81  worst: unwanted difference tone\n------------------------------------------------------------------------------------------------\nfail: 1\n",
+    "secs": 108.68542695045471
+  }
+]

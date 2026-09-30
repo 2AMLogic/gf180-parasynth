@@ -1,0 +1,1415 @@
+{
+ "tool": "fpga/verify_live_midi.py",
+ "trial": "T-LIVE-MIDI",
+ "criterion_version": "live-midi/1",
+ "timing_contract": 3,
+ "lookahead_ms": 16.0,
+ "target": {
+  "p95_ms": 20.0,
+  "p99_ms": 30.0,
+  "endpoints": {
+   "start": "host MIDI receipt: the instant the session's MIDI input hands the message over (the stream timestamp in simulation), read as the DEVICE frame containing that instant",
+   "end": "the device frame in which the event's anchor write is applied: GATE_ON / GATE_OFF, the drum STOPS rising edge, the last pitch write of a legato change, the last register of a knob update"
+  },
+  "population": "every MIDI message whose own value is written by an update the session scheduled. A knob value superseded before it was sent has no update of its own; its staleness (receipt to the first update carrying a newer value) is reported separately and is NOT part of the target's population",
+  "components": {
+   "host_hold": "receipt -> the anchor packet's first byte written to the link",
+   "uart": "first byte written -> the device accepts the packet",
+   "device_queue": "acceptance -> the due frame (the write applies)",
+   "excluded": "synthesis (the write applies at the start of its frame; the sample computed in that frame is the first affected, proved by the bit-exact I2S comparison) and the patch's intentional attack are reported, not counted"
+  },
+  "declared_load": "the `sustained` workload of fpga/verify_live_midi.py, seed SUSTAINED_SEED, SUSTAINED_S seconds: one mono line of 8 note-ons/s with 40-140 ms gates (overlaps included), 808 drums on a 16th grid at 120 bpm (<= 3 stops a step, a tom fill every 2 bars), two knobs twisted at up to 100 CC/s",
+  "if_it_fails": "investigate lookahead, redundant writes and batching first; never relax the target"
+ },
+ "image": "r1",
+ "stub": false,
+ "clean": {
+  "coverage": {
+   "scenario": "coverage",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "193 live writes executed, 193 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 19 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 56 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 14 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 71 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 34 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "drum_sounds": {
+     "moved": false,
+     "detail": "0 of 5 shared-circuit strikes did not play the expected sound"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "14 refused, 14 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "42 increment writes, 39 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 41, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 57, p50 16.02, p95 16.98, p99 25.98, max 25.98 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 1,
+   "expected": {
+    "static": 193,
+    "timed": 211,
+    "refusals": 14,
+    "superseded": 113
+   },
+   "latency": {
+    "n": 57,
+    "min_ms": 15.979166666666666,
+    "p50_ms": 16.020833333333332,
+    "p95_ms": 16.979166666666668,
+    "p99_ms": 25.979166666666668,
+    "max_ms": 25.979166666666668,
+    "histogram_ms": {
+     "15-16": 18,
+     "16-17": 38,
+     "25-26": 1
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.3728,
+     "uart_ms": 3.1202,
+     "device_queue_ms": 12.8732
+    },
+    "components_max_ms": {
+     "host_hold_ms": 9.9931,
+     "uart_ms": 10.1458,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 16,
+     "p50_ms": 17.979166666666668,
+     "p95_ms": 18.125,
+     "max_ms": 18.125
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.0625,
+     "hit": 16.083333333333332,
+     "note-off": 16.0,
+     "knob": 25.979166666666668,
+     "panic": 15.979166666666666
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 41,
+    "device_queue_peak": 6,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 13,
+     "hit": 14,
+     "note-off": 8,
+     "knob": 20,
+     "panic": 3
+    },
+    "refused": {
+     "simultaneous": 1,
+     "sustain": 1,
+     "pitch-bend": 1,
+     "program-change": 1,
+     "mod-unrouted": 1,
+     "channel": 1,
+     "unmapped-drum": 1,
+     "domain": 2,
+     "cc-unsupported": 1,
+     "aftertouch": 1,
+     "sysex": 1,
+     "realtime": 1,
+     "poly-aftertouch": 1
+    },
+    "superseded": 113,
+    "packets": 211,
+    "drum_noteoffs": 1,
+    "noops": 5,
+    "order_guarded": 0,
+    "tails_cut": 0,
+    "init_writes": 193,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "aftertouch",
+    "cc-unsupported",
+    "channel",
+    "domain",
+    "mod-unrouted",
+    "pitch-bend",
+    "poly-aftertouch",
+    "program-change",
+    "realtime",
+    "simultaneous",
+    "sustain",
+    "sysex",
+    "unmapped-drum"
+   ],
+   "verdict": "PASS"
+  },
+  "coverage@65000": {
+   "scenario": "coverage",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "193 live writes executed, 193 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 19 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 56 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 14 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 71 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 34 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "drum_sounds": {
+     "moved": false,
+     "detail": "0 of 5 shared-circuit strikes did not play the expected sound"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "14 refused, 14 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "42 increment writes, 39 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 41, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 57, p50 16.02, p95 16.98, p99 25.98, max 25.98 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 1,
+   "expected": {
+    "static": 193,
+    "timed": 211,
+    "refusals": 14,
+    "superseded": 113
+   },
+   "latency": {
+    "n": 57,
+    "min_ms": 15.979166666666666,
+    "p50_ms": 16.020833333333332,
+    "p95_ms": 16.979166666666668,
+    "p99_ms": 25.979166666666668,
+    "max_ms": 25.979166666666668,
+    "histogram_ms": {
+     "15-16": 18,
+     "16-17": 38,
+     "25-26": 1
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.3728,
+     "uart_ms": 3.1202,
+     "device_queue_ms": 12.8732
+    },
+    "components_max_ms": {
+     "host_hold_ms": 9.9931,
+     "uart_ms": 10.1458,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 16,
+     "p50_ms": 17.979166666666668,
+     "p95_ms": 18.125,
+     "max_ms": 18.125
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.0625,
+     "hit": 16.083333333333332,
+     "note-off": 16.0,
+     "knob": 25.979166666666668,
+     "panic": 15.979166666666666
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 41,
+    "device_queue_peak": 6,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 13,
+     "hit": 14,
+     "note-off": 8,
+     "knob": 20,
+     "panic": 3
+    },
+    "refused": {
+     "simultaneous": 1,
+     "sustain": 1,
+     "pitch-bend": 1,
+     "program-change": 1,
+     "mod-unrouted": 1,
+     "channel": 1,
+     "unmapped-drum": 1,
+     "domain": 2,
+     "cc-unsupported": 1,
+     "aftertouch": 1,
+     "sysex": 1,
+     "realtime": 1,
+     "poly-aftertouch": 1
+    },
+    "superseded": 113,
+    "packets": 211,
+    "drum_noteoffs": 1,
+    "noops": 5,
+    "order_guarded": 0,
+    "tails_cut": 0,
+    "init_writes": 193,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "aftertouch",
+    "cc-unsupported",
+    "channel",
+    "domain",
+    "mod-unrouted",
+    "pitch-bend",
+    "poly-aftertouch",
+    "program-change",
+    "realtime",
+    "simultaneous",
+    "sustain",
+    "sysex",
+    "unmapped-drum"
+   ],
+   "verdict": "PASS"
+  },
+  "alternates": {
+   "scenario": "alternates",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "193 live writes executed, 193 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 25 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 48 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 25 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 253 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 20 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "drum_sounds": {
+     "moved": false,
+     "detail": "0 of 25 shared-circuit strikes did not play the expected sound"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "1 refused, 1 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "36 increment writes, 33 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 14, host queue peak 20, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 69, p50 16.02, p95 16.06, p99 16.08, max 16.08 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 1,
+   "expected": {
+    "static": 193,
+    "timed": 397,
+    "refusals": 1,
+    "superseded": 0
+   },
+   "latency": {
+    "n": 69,
+    "min_ms": 15.979166666666666,
+    "p50_ms": 16.020833333333332,
+    "p95_ms": 16.0625,
+    "p99_ms": 16.083333333333332,
+    "max_ms": 16.083333333333332,
+    "histogram_ms": {
+     "15-16": 17,
+     "16-17": 52
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.0382,
+     "uart_ms": 3.2165,
+     "device_queue_ms": 12.7784
+    },
+    "components_max_ms": {
+     "host_hold_ms": 0.0972,
+     "uart_ms": 10.3333,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 0,
+     "p50_ms": null,
+     "p95_ms": null,
+     "max_ms": null
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "hit": 16.083333333333332,
+     "note-on": 16.041666666666668,
+     "note-off": 15.979166666666666,
+     "knob": 16.0625
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 20,
+    "device_queue_peak": 0,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "hit": 25,
+     "note-on": 12,
+     "note-off": 12,
+     "knob": 20,
+     "panic": 1
+    },
+    "refused": {
+     "simultaneous": 1
+    },
+    "superseded": 0,
+    "packets": 397,
+    "drum_noteoffs": 0,
+    "noops": 0,
+    "order_guarded": 0,
+    "tails_cut": 48,
+    "init_writes": 193,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "simultaneous"
+   ],
+   "verdict": "PASS"
+  },
+  "pressure": {
+   "scenario": "pressure",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "193 live writes executed, 193 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 16 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 28 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 12 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 170 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 155 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "drum_sounds": {
+     "moved": false,
+     "detail": "0 of 11 shared-circuit strikes did not play the expected sound"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "193 refused, 193 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "21 increment writes, 18 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 38, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 120, p50 16.98, p95 17.00, p99 17.00, max 17.62 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 1,
+   "expected": {
+    "static": 193,
+    "timed": 395,
+    "refusals": 193,
+    "superseded": 807
+   },
+   "latency": {
+    "n": 120,
+    "min_ms": 15.979166666666666,
+    "p50_ms": 16.979166666666668,
+    "p95_ms": 17.0,
+    "p99_ms": 17.0,
+    "max_ms": 17.625,
+    "histogram_ms": {
+     "15-16": 9,
+     "16-17": 80,
+     "17-18": 31
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.5903,
+     "uart_ms": 8.7453,
+     "device_queue_ms": 7.2531
+    },
+    "components_max_ms": {
+     "host_hold_ms": 1.6347,
+     "uart_ms": 12.8125,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 90,
+     "p50_ms": 17.979166666666668,
+     "p95_ms": 18.0,
+     "max_ms": 18.625
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "hit": 16.0625,
+     "knob": 17.625,
+     "note-on": 16.020833333333332,
+     "note-off": 15.979166666666666,
+     "panic": 15.979166666666666
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 38,
+    "device_queue_peak": 0,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "hit": 12,
+     "knob": 93,
+     "note-on": 7,
+     "note-off": 7,
+     "panic": 2
+    },
+    "refused": {
+     "queue-pressure": 193
+    },
+    "superseded": 807,
+    "packets": 395,
+    "drum_noteoffs": 0,
+    "noops": 54,
+    "order_guarded": 0,
+    "tails_cut": 0,
+    "init_writes": 193,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "queue-pressure"
+   ],
+   "verdict": "PASS"
+  },
+  "sustained": {
+   "scenario": "sustained",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "193 live writes executed, 193 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 271 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 628 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 138 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 518 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 975 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "drum_sounds": {
+     "moved": false,
+     "detail": "0 of 20 shared-circuit strikes did not play the expected sound"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "0 refused, 0 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "471 increment writes, 468 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 17, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 905, p50 16.00, p95 16.73, p99 16.98, max 17.04 ms (target applies)"
+    },
+    "load_admitted": {
+     "moved": false,
+     "detail": "0 events refused for queue pressure and 0 pushed late under the DECLARED load (both must be 0: a supported load is played whole)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 1,
+   "expected": {
+    "static": 193,
+    "timed": 2669,
+    "refusals": 0,
+    "superseded": 0
+   },
+   "latency": {
+    "n": 905,
+    "min_ms": 15.979166666666666,
+    "p50_ms": 16.0,
+    "p95_ms": 16.729166666666668,
+    "p99_ms": 16.979166666666668,
+    "max_ms": 17.041666666666668,
+    "histogram_ms": {
+     "15-16": 330,
+     "16-17": 568,
+     "17-18": 7
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.0936,
+     "uart_ms": 2.7893,
+     "device_queue_ms": 13.2031
+    },
+    "components_max_ms": {
+     "host_hold_ms": 1.0412,
+     "uart_ms": 11.9583,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 0,
+     "p50_ms": null,
+     "p95_ms": null,
+     "max_ms": null
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.041666666666668,
+     "hit": 16.020833333333332,
+     "note-off": 16.0,
+     "knob": 17.041666666666668
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 17,
+    "device_queue_peak": 4,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 157,
+     "hit": 138,
+     "note-off": 135,
+     "knob": 475,
+     "panic": 1
+    },
+    "refused": {},
+    "superseded": 0,
+    "packets": 2669,
+    "drum_noteoffs": 0,
+    "noops": 28,
+    "order_guarded": 0,
+    "tails_cut": 0,
+    "init_writes": 193,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [],
+   "verdict": "PASS"
+  }
+ },
+ "controls": {
+  "DROP_NOTE_OFF": {
+   "control": "DROP_NOTE_OFF",
+   "scenario": "coverage",
+   "intended_reason": "a lost note-off leaves the gate open past its release",
+   "must_move": [
+    "voice_gate",
+    "stuck_notes"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "MOVED",
+    "voice_pitch": "MOVED",
+    "drum_strikes": "BLIND",
+    "drum_sounds": "BLIND",
+    "drum_coeffs": "BLIND",
+    "knobs": "BLIND",
+    "timing": "BLIND",
+    "stuck_notes": "MOVED",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 25.979166666666668,
+   "reasons": [
+    "voice_gate: 12 of 19 differ; first {'expected': [(20732, False), (22654, True)], 'got': []}",
+    "voice_pitch: 20 of 56 differ; first {'expected': [], 'got': [(22700, 0, 0, 115213), (22700, 0, 1, 115680)]}",
+    "stuck_notes: 37886 frames with the gate open where the schedule closes it (789.3 ms)"
+   ],
+   "preconditions": []
+  },
+  "WRONG_DRUM_MAP": {
+   "control": "WRONG_DRUM_MAP",
+   "scenario": "coverage",
+   "intended_reason": "GM 38 strikes the clap, not the snare",
+   "must_move": [
+    "drum_strikes"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "BLIND",
+    "voice_pitch": "BLIND",
+    "drum_strikes": "MOVED",
+    "drum_sounds": "BLIND",
+    "drum_coeffs": "MOVED",
+    "knobs": "BLIND",
+    "timing": "BLIND",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 25.979166666666668,
+   "reasons": [
+    "drum_strikes: 1 of 14 differ; first {'expected': [(61052, 'SD')], 'got': [(61052, 'CP')]}",
+    "drum_coeffs: 1 of 71 differ; first {'expected': [(61052, 17, 40258)], 'got': [(61052, 22, 40258)]}"
+   ],
+   "preconditions": []
+  },
+  "DELAYED_EVENT": {
+   "control": "DELAYED_EVENT",
+   "scenario": "coverage",
+   "intended_reason": "one event's writes land 5 ms after their frame",
+   "must_move": [
+    "timing"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "BLIND",
+    "voice_pitch": "MOVED",
+    "drum_strikes": "BLIND",
+    "drum_sounds": "BLIND",
+    "drum_coeffs": "BLIND",
+    "knobs": "BLIND",
+    "timing": "MOVED",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 25.979166666666668,
+   "reasons": [
+    "voice_pitch: 4 of 56 differ; first {'expected': [(13052, 0, 0, 115213), (13052, 0, 1, 115680)], 'got': [(13292, 0, 0, 115213), (13292, 0, 1, 115680)]}",
+    "timing: 4 value-matched writes off their frame, worst 240; first {'write': [0, 0, 0, 115213], 'expected': 13052, 'got': 13292}"
+   ],
+   "preconditions": []
+  },
+  "WRONG_ALT": {
+   "control": "WRONG_ALT",
+   "scenario": "alternates",
+   "intended_reason": "a switch to the other sound of a pair re-sends the sound it leaves",
+   "must_move": [
+    "drum_sounds"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "BLIND",
+    "voice_pitch": "BLIND",
+    "drum_strikes": "BLIND",
+    "drum_sounds": "MOVED",
+    "drum_coeffs": "MOVED",
+    "knobs": "BLIND",
+    "timing": "BLIND",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 16.083333333333332,
+   "reasons": [
+    "drum_coeffs: 52 of 253 differ; first {'expected': [(9692, 220, 33535508), (9692, 221, 50340735)], 'got': [(9692, 220, 33544199), (9692, 221, 50339552)]}",
+    "drum_sounds: 20 of 25 shared-circuit strikes did not play the expected sound; first {'frame': 9695, 'circuit': 'LT', 'expected': 'LC', 'executed': 'LT'}"
+   ],
+   "preconditions": []
+  },
+  "NO_TAIL_CUT": {
+   "control": "NO_TAIL_CUT",
+   "scenario": "alternates",
+   "intended_reason": "a switch mid pitch-drop lets the old tom's drop retune the new sound",
+   "must_move": [
+    "drum_coeffs"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "MOVED",
+    "voice_pitch": "MOVED",
+    "drum_strikes": "MOVED",
+    "drum_sounds": "MOVED",
+    "drum_coeffs": "MOVED",
+    "knobs": "MOVED",
+    "timing": "MOVED",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 16.083333333333332,
+   "reasons": [
+    "voice_gate: 2 of 25 differ; first {'expected': [(10654, True)], 'got': [(10655, True)]}",
+    "voice_pitch: 4 of 48 differ; first {'expected': [(10653, 1, 2, 22861), (10653, 0, 26, 183)], 'got': [(10654, 1, 2, 22861), (10654, 0, 26, 183)]}",
+    "drum_strikes: 6 of 25 differ; first {'expected': [(9695, 'LT')], 'got': [(9696, 'LT')]}",
+    "drum_coeffs: 144 of 253 differ; first {'expected': [(9693, 222, 613), (9693, 220, 33534825)], 'got': [(9693, 220, 33543949), (9693, 221, 50339709)]}",
+    "knobs: 17 of 20 differ; first {'expected': [(57695, 24, 241), (58176, 24, 251)], 'got': [(57696, 24, 241), (58177, 24, 251)]}",
+    "timing: 131 value-matched writes off their frame, worst 1; first {'write': [0, 1, 222, 613], 'expected': 9693, 'got': 9694}",
+    "drum_sounds: 6 of 25 shared-circuit strikes did not play the expected sound; first {'frame': 9695, 'circuit': 'LT', 'expected': 'LC', 'executed': 'no strike'}"
+   ],
+   "preconditions": []
+  }
+ },
+ "rtl": {
+  "coverage": {
+   "state": "PASS",
+   "capture": {
+    "rows": 410,
+    "writes": 193,
+    "events": 211,
+    "last_due": 94653
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 404,
+    "writes_seen": 404,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 404,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 109053,
+    "periods_required": 109053,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 54630,
+    "of_rows": 109260,
+    "periods": 54630,
+    "periods_required": 109053
+   },
+   "detail": [],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "coverage.run_identity.json",
+    "sha256": "42fdba2102c5e078aa763ee92935b195f3ee226c906f99eece06d3d4d71eaeeb"
+   }
+  },
+  "alternates": {
+   "state": "PASS",
+   "capture": {
+    "rows": 600,
+    "writes": 193,
+    "events": 397,
+    "last_due": 198333
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 590,
+    "writes_seen": 590,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 590,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 212733,
+    "periods_required": 212733,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 106470,
+    "of_rows": 212940,
+    "periods": 106470,
+    "periods_required": 212733
+   },
+   "detail": [],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "alternates.run_identity.json",
+    "sha256": "a0e126d34c91de7e1439e2a21129f367dd1b642a4334c969c05df53337f0227d"
+   }
+  },
+  "pressure": {
+   "state": "PASS",
+   "capture": {
+    "rows": 592,
+    "writes": 193,
+    "events": 395,
+    "last_due": 32253
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 588,
+    "writes_seen": 588,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 588,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 46653,
+    "periods_required": 46653,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 23430,
+    "of_rows": 46860,
+    "periods": 23430,
+    "periods_required": 46653
+   },
+   "detail": [],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "pressure.run_identity.json",
+    "sha256": "558a1eda409acb56c098b8341c8276166b8ccd7083920373e84d957d53221988"
+   }
+  },
+  "sustained": {
+   "state": "PASS",
+   "capture": {
+    "rows": 511,
+    "writes": 193,
+    "events": 309,
+    "last_due": 152113
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 502,
+    "writes_seen": 502,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 502,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 166513,
+    "periods_required": 166513,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 83360,
+    "of_rows": 166720,
+    "periods": 83360,
+    "periods_required": 166513
+   },
+   "detail": [],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "sustained.run_identity.json",
+    "sha256": "85c637d6fc4e37f94ef623ca6a4346ccaee5d5b9a2fcd04dd5786fce7c5f41fd"
+   }
+  },
+  "control-WRONG_DRUM_MAP": {
+   "state": "FAIL",
+   "capture": {
+    "rows": 410,
+    "writes": 193,
+    "events": 211,
+    "last_due": 94653
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 404,
+    "writes_seen": 404,
+    "writes_bad": 2,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 404,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 47837,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 47838,
+    "periods": 109053,
+    "periods_required": 109053,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 54630,
+    "of_rows": 109260,
+    "periods": 54630,
+    "periods_required": 109053
+   },
+   "detail": [
+    "write 349: intended f/sec/a/d 0/1/0x11/0x9d42, got 0/1/0x16/0x9d42",
+    "write 350: intended f/sec/a/d 0/1/0x0/0x2, got 0/1/0x0/0x40",
+    "seg 0 period 61053: model -2763, wire -2352, error +411 LSB",
+    "seg 0 period 61054: model -2349, wire -5968, error -3619 LSB",
+    "seg 0 period 61055: model -114, wire -5917, error -5803 LSB"
+   ],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "coverage-WRONG_DRUM_MAP.run_identity.json",
+    "sha256": "13268d5075c740838d1cdfb978127d390bd3528ff3d041f17cf396bd5642ebe1"
+   },
+   "caught_by_i2s": true
+  },
+  "control-DELAYED_EVENT": {
+   "state": "FAIL",
+   "capture": {
+    "rows": 410,
+    "writes": 193,
+    "events": 211,
+    "last_due": 94653
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 404,
+    "writes_seen": 404,
+    "writes_bad": 0,
+    "frame_pred_bad": 4,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 404,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 84474,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 84475,
+    "periods": 109053,
+    "periods_required": 109053,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 54630,
+    "of_rows": 109260,
+    "periods": 54630,
+    "periods_required": 109053
+   },
+   "detail": [
+    "write 208 (a=0x0): contract frame 13052, landed 13292",
+    "write 209 (a=0x1): contract frame 13052, landed 13292",
+    "write 210 (a=0x2): contract frame 13053, landed 13293",
+    "write 211 (a=0x1a): contract frame 13053, landed 13293",
+    "seg 0 period 13061: model 253, wire 252, error -1 LSB",
+    "seg 0 period 13064: model -1516, wire -1514, error +2 LSB",
+    "seg 0 period 13065: model -1615, wire -1621, error -6 LSB"
+   ],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "coverage-DELAYED_EVENT.run_identity.json",
+    "sha256": "3b8014f03654f2e014c18f8cd7fa6627c79a1599b9260c5f30d1520c56ff41a3"
+   },
+   "caught_by_i2s": true
+  },
+  "control-WRONG_ALT": {
+   "state": "FAIL",
+   "capture": {
+    "rows": 600,
+    "writes": 193,
+    "events": 397,
+    "last_due": 198333
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 590,
+    "writes_seen": 590,
+    "writes_bad": 52,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 31,
+    "x_bad": 0,
+    "acks_seen": 590,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 202649,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 202650,
+    "periods": 212733,
+    "periods_required": 212733,
+    "i2s_incomplete": false,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "truncation_control": {
+    "caught": true,
+    "kept_rows": 106470,
+    "of_rows": 212940,
+    "periods": 106470,
+    "periods_required": 212733
+   },
+   "detail": [
+    "write 202: intended f/sec/a/d 0/1/0xdc/0x1ffb614, got 0/1/0xdc/0x1ffd807",
+    "write 203: intended f/sec/a/d 0/1/0xdd/0x300237f, got 0/1/0xdd/0x3001ee0",
+    "write 204: intended f/sec/a/d 0/1/0xde/0x265, got 0/1/0xde/0x13b",
+    "seg 0 period 9693: model -5570, wire -5573, error -3 LSB",
+    "seg 0 period 9694: model -10727, wire -5517, error +5210 LSB",
+    "seg 0 period 9695: model -10609, wire -5459, error +5150 LSB"
+   ],
+   "reused_rtl_run": false,
+   "rtl_run": {
+    "reused": false,
+    "asked": "auto",
+    "why": "no identical run on disk: the stimulus differs (or there is none)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "vvp": "Icarus Verilog runtime version 14.0 (devel) (s20260301-476-g1a23d1ffd-dirty)",
+    "oss_cad_pin": {
+     "release": "2026-09-21",
+     "sha256": "fc11a9c05c1de96b2821a5468ed02ba35253b278a78106cbe68167a5c419970c"
+    }
+   },
+   "run_receipt": {
+    "path": "alternates-WRONG_ALT.run_identity.json",
+    "sha256": "ae3bf81ad0ebedf0261937c71d5ffe3068c460552fbd224204ad91b9e00dfb28"
+   },
+   "caught_by_i2s": true
+  }
+ },
+ "verdict": "PASS"
+}

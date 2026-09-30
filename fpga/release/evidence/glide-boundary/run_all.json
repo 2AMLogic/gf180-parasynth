@@ -1,0 +1,93 @@
+[
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --case accept-default",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: case accept-default; INC_LO 2858, INC_HI 4384395 (0x42E68B); 2^23 = 8388608\nverify_voice: model VoiceFx() (contract rev 4), scenario set 'full'\n  [accept-default] accept-default: ('saw', 'saw', 'square'): frames 0..13729 (13730), 44 writes; blep windows 9286 (both 124); power-of-two inc 2; inc changes 31864; gate on 13730/13730, trig 1\n  13730 frames, 73 register writes; final amp level 12582911, filt level 4945003\nverify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 13730 frames, 73 writes at the register port\n  sim: tb_voice: 73 writes, 13730 frames, 0 sample mismatches, worst |error| 0 LSB\n  sim: tb_voice: cycles from go to sample_valid: best 127, mean 172, worst 190 (chip: go at cycle 8 of 256)\n  sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 199 (sample slack 55 to cycle 254); worst last-busy cycle 198 (busy slack 57 to cycle 255); late samples 0\n  sim: tb_voice: PASS\n  sim: tb_voice.v:251: $finish called at 70302831000 (1ps)\nverify_voice: cycles from go to sample_valid: best 127, mean 172.5, worst 190 (of 256 - 8 in the chip)\n  [accept-default] 13730 frames: 0 sample mismatches, 0 tap mismatches\nverify_voice: PASS -- 13730 frames, every sample and every tap identical to the model; final state identical\nverify_voice: deadline at launch cycle 8: worst strobe cycle 199 (slack 55), worst last-busy cycle 198 (slack 57)\n",
+    "secs": 1308.2422080039978
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --case accept-pulse29",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: case accept-pulse29; INC_LO 2858, INC_HI 4384395 (0x42E68B); 2^23 = 8388608\nverify_voice: model VoiceFx() (contract rev 4), scenario set 'full'\n  [accept-pulse29] accept-pulse29: ('pulse29', 'pulse29', 'pulse29'): frames 0..13729 (13730), 44 writes; blep windows 6919; power-of-two inc 2; inc changes 31864; gate on 13730/13730, trig 1\n  13730 frames, 73 register writes; final amp level 12582911, filt level 4945003\nverify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 13730 frames, 73 writes at the register port\n  sim: tb_voice: 73 writes, 13730 frames, 0 sample mismatches, worst |error| 0 LSB\n  sim: tb_voice: cycles from go to sample_valid: best 91, mean 137, worst 156 (chip: go at cycle 8 of 256)\n  sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 165 (sample slack 89 to cycle 254); worst last-busy cycle 164 (busy slack 91 to cycle 255); late samples 0\n  sim: tb_voice: PASS\n  sim: tb_voice.v:251: $finish called at 70302831000 (1ps)\nverify_voice: cycles from go to sample_valid: best 91, mean 137.1, worst 156 (of 256 - 8 in the chip)\n  [accept-pulse29] 13730 frames: 0 sample mismatches, 0 tap mismatches\nverify_voice: PASS -- 13730 frames, every sample and every tap identical to the model; final state identical\nverify_voice: deadline at launch cycle 8: worst strobe cycle 165 (slack 89), worst last-busy cycle 164 (slack 91)\n",
+    "secs": 1136.661285161972
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --case accept-247-shape",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: case accept-247-shape; INC_LO 2858, INC_HI 4384395 (0x42E68B); 2^23 = 8388608\nverify_voice: model VoiceFx() (contract rev 4), scenario set 'full'\n  [accept-247-shape] accept-247-shape: ('saw', 'saw', 'saw'): frames 0..1079 (1080), 52 writes; blep windows 1329; inc changes 1920; noise w 3510 (pink); mod route 6, |mod_sig| max 20842, cut 200..19434; gate on 1080/1080, trig 1\n  1080 frames, 81 register writes; final amp level 16432815, filt level 15875247\nverify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X), 1080 frames, 81 writes at the register port\n  sim: tb_voice: 81 writes, 1080 frames, 0 sample mismatches, worst |error| 0 LSB\n  sim: tb_voice: cycles from go to sample_valid: best 145, mean 181, worst 208 (chip: go at cycle 8 of 256)\n  sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 217 (sample slack 37 to cycle 254); worst last-busy cycle 216 (busy slack 39 to cycle 255); late samples 0\n  sim: tb_voice: PASS\n  sim: tb_voice.v:251: $finish called at 5534831000 (1ps)\nverify_voice: cycles from go to sample_valid: best 145, mean 181.3, worst 208 (of 256 - 8 in the chip)\n  [accept-247-shape] 1080 frames: 0 sample mismatches, 0 tap mismatches\nverify_voice: PASS -- 1080 frames, every sample and every tap identical to the model; final state identical\nverify_voice: deadline at launch cycle 8: worst strobe cycle 217 (slack 37), worst last-busy cycle 216 (slack 39)\n",
+    "secs": 112.00381517410278
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --case accept-default --inject GLIDE_FLOOR --expect-fail --outdir build/release-glide/voice-inject-floor",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: case accept-default; INC_LO 2858, INC_HI 4384395 (0x42E68B); 2^23 = 8388608\nverify_voice: model VoiceFx() (contract rev 4), scenario set 'full'\n  [accept-default] accept-default: ('saw', 'saw', 'square'): frames 0..13729 (13730), 44 writes; blep windows 9286 (both 124); power-of-two inc 2; inc changes 31864; gate on 13730/13730, trig 1\n  13730 frames, 73 register writes; final amp level 12582911, filt level 4945003\nverify_voice: simulating voice_dp.v (recip_div.v, ladder_dp_n.v, osc_2x_saw_path.v, polyblep_saw_pair.v, osc_substep_pair.v, decimate_2x_tm_sym.v, osc_2x_saw_bank.v, rate_conv_2x.v; defines VOICE_OSC_2X, VOICE_FILTER_2X, INJECT_BUG_VOICE_GLIDE_FLOOR), 13730 frames, 73 writes at the register port\n  sim: tb_voice: 73 writes, 13730 frames, 472 sample mismatches, worst |error| 278 LSB\n  sim: tb_voice: cycles from go to sample_valid: best 127, mean 172, worst 190 (chip: go at cycle 8 of 256)\n  sim: tb_voice: DEADLINE go at cycle 8; worst strobe cycle 199 (sample slack 55 to cycle 254); worst last-busy cycle 198 (busy slack 57 to cycle 255); late samples 0\n  sim: tb_voice: first mismatch at frame 12993: model 3109, RTL 3110\n  sim: tb_voice: FAIL\n  sim: tb_voice.v:251: $finish called at 70302831000 (1ps)\nverify_voice: cycles from go to sample_valid: best 127, mean 172.5, worst 190 (of 256 - 8 in the chip)\n  [accept-default] 13730 frames: 472 sample mismatches, 10052 tap mismatches\nverify_voice: FAIL -- 472 of 13730 samples differ; tap mismatches: osc0 716, osc1 706, osc2 2, inc0 799, inc1 799, inc2 544, r0 799, r1 799, r2 544, mixed 685, y19 671, v 630, out_v 472, phase2x0 799, phase2x1 799, phase2x2 288\n  first sample mismatch at frame 12993 [accept-default]: model 3109, RTL 3110\n  first osc0 mismatch at frame 12950 [accept-default]: model 14115, RTL 14116\n  first osc1 mismatch at frame 12945 [accept-default]: model -18645, RTL -18644\n  first osc2 mismatch at frame 13641 [accept-default]: model 30411, RTL 32451\n  first inc0 mismatch at frame 12931 [accept-default]: model 5857, RTL 5858\n  first inc1 mismatch at frame 12931 [accept-default]: model 4857, RTL 4858\n  first inc2 mismatch at frame 13186 [accept-default]: model 3859, RTL 3858\n  first r0 mismatch at frame 12931 [accept-default]: model 45831, RTL 45823\n  first r1 mismatch at frame 12931 [accept-default]: model 55267, RTL 55256\n  first r2 mismatch at frame 13186 [accept-default]: model 34780, RTL 34789\n  first mixed mismatch at frame 12951 [accept-default]: model 8208, RTL 8209\n  first y19 mismatch at frame 12987 [accept-default]: model 9176, RTL 9177\n  first v mismatch at frame 12987 [accept-default]: model 6881, RTL 6882\n  first out_v mismatch at frame 12993 [accept-default]: model 3109, RTL 3110\n  first phase2x0 mismatch at frame 12931 [accept-default]: model 12575714, RTL 12575716\n  first phase2x1 mismatch at frame 12931 [accept-default]: model 2744618, RTL 2744620\n  first phase2x2 mismatch at frame 13442 [accept-default]: model 7613588, RTL 7613586\n  final state differs: phase0 model 478679 RTL 480339, phase1 model 6626977 RTL 6628637, phase2 model 8729355 RTL 8728491, inc_acc0 model 1498848 RTL 1499648, inc_acc1 model 1242848 RTL 1243648, inc_acc2 model 988448 RTL 987648, phase2x0 model 471012 RTL 473184, phase2x1 model 6619132 RTL 6621304, phase2x2 model 8721408 RTL 8720832\nverify_voice: deadline at launch cycle 8: worst strobe cycle 199 (slack 55), worst last-busy cycle 198 (slack 57)\nverify_voice: negative control GLIDE_FLOOR CAUGHT (comparison failed as required)\n",
+    "secs": 1315.451700925827
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case accept-default",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case accept-default; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[accept-default]: PASS -- writes 72/72, timing bad 0, corrupt 0, I2S mismatch 0 over 15258 periods, errs 0 {}\n",
+    "secs": 1402.8799130916595
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case accept-pulse29",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case accept-pulse29; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[accept-pulse29]: PASS -- writes 72/72, timing bad 0, corrupt 0, I2S mismatch 0 over 15258 periods, errs 0 {}\n",
+    "secs": 1367.871383190155
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case accept-247-shape",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case accept-247-shape; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[accept-247-shape]: PASS -- writes 80/80, timing bad 0, corrupt 0, I2S mismatch 0 over 4203 periods, errs 0 {}\n",
+    "secs": 774.6679608821869
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-247-incs",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-247-incs; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-247-incs]: PASS -- writes 80/80, timing bad 0, corrupt 0, I2S mismatch 0 over 4203 periods, errs 0 {}\n",
+    "secs": 777.2415769100189
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-247-shape-sub-nyq",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-247-shape-sub-nyq; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-247-shape-sub-nyq]: PASS -- writes 80/80, timing bad 0, corrupt 0, I2S mismatch 0 over 4203 periods, errs 0 {}\n",
+    "secs": 767.7934226989746
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-247-fast",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-247-fast; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-247-fast]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 2347 periods, errs 0 {}\n",
+    "secs": 405.33796191215515
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-sub-nyq",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-sub-nyq; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-sub-nyq]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 2347 periods, errs 0 {}\n",
+    "secs": 425.97784185409546
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-cross-nyq",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-cross-nyq; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-cross-nyq]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 2347 periods, errs 0 {}\n",
+    "secs": 487.3477611541748
+  },
+  {
+    "cmd": ".venv/bin/python fpga/release/glide_boundary.py --level wrapper --case probe-127-up12",
+    "state": "PASS",
+    "rc": 0,
+    "out": "glide_boundary: wrapper case probe-127-up12; INC_LO 2858, INC_HI 4384395\nverify_uart_bridge[probe-127-up12]: PASS -- writes 36/36, timing bad 0, corrupt 0, I2S mismatch 0 over 2347 periods, errs 0 {}\n",
+    "secs": 440.18880796432495
+  }
+]

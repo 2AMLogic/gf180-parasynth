@@ -1,0 +1,33 @@
+==============================================================================
+FAIL(1)        624.0s  /home/ubuntu/work/venv/bin/python -m pytest model/test_clap_final_strike.py model/test_drums_fx.py model/test_808_acceptance.py model/test_synth_top_model.py tools/test_clap_l2_identity.py tools/test_unqualified_metric.py -q -p no:cacheprovider
+              =========================== short test summary info ============================
+              FAILED model/test_808_acceptance.py::test_maracas_and_clap_cannot_sound_at_once
+              FAILED model/test_808_acceptance.py::test_meta_every_test_declares_status_and_ground_truth
+              2 failed, 178 passed in 623.43s (0:10:23)
+PASS           363.2s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_drums.py --outdir /home/ubuntu/work/clap-d/build/l2-drums-full
+                model corners reached: bank state saturated 16899x, body word saturated 7864x, taps at the rail 27240x; |dmix| max 114624 of 2^21, |exc| max 126344 of 2^20; tail: last 100 frames |dmix| 0, |body| 573
+              verify_drums: simulating drum_kit.v
+                sim: tb_drums: 204999 frames, 835 writes applied of 835, cycles/frame mean 117 worst 117 (tick to body_valid)
+              verify_drums: PASS -- 409998 samples, RTL identical to model
+PASS            42.7s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --outdir /home/ubuntu/work/clap-d/docs/scorecard/clap-l2/top-clap
+              verify_synth_top: writes landed in frames 2..21002; modelling 30201 frames
+              verify_synth_top: model peak |sample| 32768 of 32768 (327 frames at the rail); drums |dmix| max 57731, |body| max 142194, DFILT engaged in 0 frames
+              verify_synth_top: clap phrase: 9 CP fires, 6 final strikes, re-strike spacings [1531, 1535, 1545, 4605, 322, 1028, 5464, 4620] (final at 1533); MA fires 1 with FRATE 0: True; internal envelope saturation at fire: 5; output rail samples L2 327 vs revision-10 clap in the same fixture 324; peak 32768 vs 32768
+              verify_synth_top: PASS -- 30201 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+PASS            52.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --inject DRUM_FINAL_WEAK --expect-fail --outdir /home/ubuntu/work/clap-d/build/l2-top-clap-weak
+                first wire mismatch at period 3414: model 1686, wire 1852, error +166 LSB
+                the core's own sample stream: 13366 of 30202 frames differ from the model; first at frame 3413: model 1686, core 1852
+                the core is already wrong: the defect is upstream of the serialiser
+              verify_synth_top: negative control DRUM_FINAL_WEAK CAUGHT (comparison failed as required)
+PASS            51.5s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --inject DRUM_FCAP_STALE --expect-fail --outdir /home/ubuntu/work/clap-d/build/l2-top-clap-stale
+                first wire mismatch at period 3414: model 1686, wire 1328, error -358 LSB
+                the core's own sample stream: 7010 of 30202 frames differ from the model; first at frame 3413: model 1686, core 1328
+                the core is already wrong: the defect is upstream of the serialiser
+              verify_synth_top: negative control DRUM_FCAP_STALE CAUGHT (comparison failed as required)
+NO-VERDICT     679.2s  /home/ubuntu/work/venv/bin/python tools/run_case.py D12A E1A E1B E2A
+              E2A    pass           0.20  
+              ------------------------------------------------------------------------------------------------
+              no verdict: 1  pass: 3
+              exit 2: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
+==============================================================================
+4/6 passed  --  FAIL /home/ubuntu/work/venv/bin/python -m pytest ; NO-VERDICT /home/ubuntu/work/venv/bin/python tools/run_

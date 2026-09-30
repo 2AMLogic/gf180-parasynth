@@ -218,7 +218,11 @@ NOT_ASSERTED = {
 #       130 Hz / Q 6 window for 4 ms and back. They had also been asserting
 #       the chart's 56 Hz as the steady frequency; DR 0009 makes that 49.4.
 #   test_tom_pitch_falls_during_the_ring -- closed: 15.7.1 sweeps the tom's
-#       f0 from x1.7 over 60 ms, scaled by accent (reference 4).
+#       f0 over 60 ms, scaled by accent (reference 4). The magnitude recorded
+#       here when the entry was closed -- x1.7 -- was INFERRED and is refuted:
+#       #110 measured x1.06 / x1.14 / x1.24 by accent and #154 shipped it
+#       (docs/drum-verification.md 12). The closure is unaffected because
+#       these tests assert that the pitch falls, not by how much.
 #   test_sd_noise_balance_matches_a_real_machine -- closed: the level is set
 #       to the SNAPPY knob's measured curve at 5.0. Its MEASUREMENT was also
 #       withdrawn; see the test.
@@ -1480,16 +1484,37 @@ def test_clap_is_three_bursts_about_ten_ms_apart_inside_thirty_ms():
         assert 0.008 <= gap <= 0.014, f"burst spacing {gap*1e3:.1f} ms outside the inferred 8-14 ms"
     levels = [lv for _, lv in bursts]
     assert levels == sorted(levels, reverse=True), f"bursts do not descend: {[round(v, 2) for v in levels]}"
-    everything = am.envelope_bursts(e, SR, level_frac=0.4, min_sep_s=0.005)
-    late = [t - PRE_ROLL_S for t, _ in everything if t > PRE_ROLL_S + 0.030]
-    assert not late, \
-        f"bursts at {[round(t*1e3, 1) for t in late]} ms, after the 30 ms window the comparator closes"
+    # REVISED, contract revision 14 (plan084). This used to assert NO burst after
+    # the 30 ms window "the comparator closes". The hardware says otherwise:
+    # cp8/CP.WAV has a FOURTH, sustained event from ~31 ms that is the loudest part
+    # of the clap (+2.2 dB re its first burst, a -20 dB duration of ~46 ms;
+    # docs/scorecard/clap-d12a/README.md section 3 and final-strike.json). That is
+    # consistent with SN's own account -- the oscillator stops "in the middle of the
+    # third time", and the last ramp then completes -- and it is what the L2 final
+    # strike implements. [hardware-measured, one recording] So: one late event, it
+    # starts at 30-34 ms, and it is not weaker than 3 dB below the first burst.
+    # Its PEAK is located from the averaged envelope, not counted as bursts:
+    # counting peaks inside a sustained noisy strike is the thing plan081 B showed
+    # the burst detector cannot do (burst-timing-qual.json).
+    i30, i45 = int((PRE_ROLL_S + 0.030) * SR), int((PRE_ROLL_S + 0.045) * SR)
+    i0 = int(PRE_ROLL_S * SR)
+    early_pk = float(np.max(e[i0:i30]))
+    j = i30 + int(np.argmax(e[i30:i45]))
+    late_db = am.db(float(e[j]), early_pk)
+    assert late_db >= -3.0, f"the final strike peaks {late_db:.1f} dB re the first burst; the machine's is +2.2"
+    k = i30 + int(np.argmax(e[i30:i45] > 0.5 * float(e[j])))
+    assert 0.030 <= k / SR - PRE_ROLL_S <= 0.034, \
+        f"the final strike rises at {(k / SR - PRE_ROLL_S) * 1e3:.1f} ms, not 30-34 ms"
 
 
 def test_clap_tail_time_constant():
-    """[source-inferred: reference 7, Q69 charges C138 0.047 uF and it decays
-    through R348 1 M] tau about 47 ms, and Roland's chart says 100 ms, which is
-    2.1 tau. Inferred, so +-40 %, fitted after the bursts have stopped.
+    """[hardware-measured: cp8/CP.WAV, contract revision 14 -- its tail on 80-200 ms
+    fits an amplitude tau of 80.2 ms (docs/scorecard/clap-d12a/README.md section
+    4, fit validated on synthetic exponentials)] SUPERSEDES the source-inferred
+    47 ms (reference 7, Q69 charging C138 0.047 uF through R348 1 M; Roland's
+    chart "100 ms" is 2.1 x 47 or 1.25 x 80, so it does not decide between them).
+    One recording, so the same +-40 %, fitted from 80 ms -- after the final
+    strike (tau 20 ms from 31.9 ms) has fallen well below the tail.
 
     Fitted with is_envelope=True: this is already an envelope, and taking the
     analytic envelope of an envelope reads a 47 ms tail as 89 ms.
@@ -1498,9 +1523,9 @@ def test_clap_tail_time_constant():
     test_audio_measure.test_envelope_bursts_finds_known_restrikes
     """
     e = clap_envelope()
-    tau = am.decay_tau(e, SR, start_s=PRE_ROLL_S + 0.040, is_envelope=True,
+    tau = am.decay_tau(e, SR, start_s=PRE_ROLL_S + 0.080, is_envelope=True,
                        max_residual_db=9.0).require("clap tail")
-    assert abs(tau / 0.047 - 1) <= 0.40, f"clap tail tau {tau*1e3:.1f} ms, reference 47 ms"
+    assert abs(tau / 0.080 - 1) <= 0.40, f"clap tail tau {tau*1e3:.1f} ms, the machine's 80 ms"
 
 
 def test_clap_band_pass():
@@ -1562,9 +1587,12 @@ HW = {
 # still support (see MA below for one that cannot).
 HW_T20 = {"RS": 0.0090, "CL": 0.0226, "MT": 0.1282, "MC": 0.0877,
           "LC": 0.1731, "HC": 0.0768}
-# The cymbal, from cy8/CY5025.WAV -- TONE 5.0 and DECAY 5.0, which is Roland's
-# own chart condition. Schroeder T20, and the band-energy split over the five
-# bands below.
+# The cymbal, from cy8/CY5025.WAV -- TONE 5.0 and DECAY 2.5. This comment said
+# "DECAY 5.0, which is Roland's own chart condition" until #102; it is not that
+# condition. The Fischer filename's second code is DECAY and "25" means 2.5, so
+# the chart's mid-DECAY cymbal is CY5050 (`tools/probe_new_voice_knobs.py`
+# findings 2 and 4). Every number below was measured on this file and still is.
+# Schroeder T20, and the band-energy split over the five bands below.
 CY_BANDS = ((20.0, 2000.0), (2000.0, 5000.0), (5000.0, 9000.0),
             (9000.0, 13000.0), (13000.0, 19000.0))
 HW_CY_SECONDS = 2.0      # the length of cy8/CY5025.WAV after its onset
@@ -1841,6 +1869,16 @@ def test_rimshot_decay_matches_the_machine_and_the_chart():
         f"RS T20 {t20*1e3:.1f} ms against a real TR-808's {HW_T20['RS']*1e3:.1f} ms and the chart's 10 ms"
 
 
+def _rs_harm_db(kit, name):
+    """Harmonics 2-5 of RS_LO_HZ re its fundamental, on one RS strike from
+    `kit`. Shared by the distortion test and its estimator control below."""
+    at = int(PRE_ROLL_S * SR)
+    x = render([(at, dx.CL, 1.0)], 0.4 + PRE_ROLL_S, kit=sorted(dict(kit).items()),
+               name=name).after_hit(0, 0.4, "dmix")
+    p = am.harmonic_powers(x, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
+    return 10 * math.log10(max(p[1:].sum(), 1e-30) / max(p[0], 1e-30))
+
+
 def test_rimshot_is_distorted_and_that_is_the_sound():
     """[source-verified: SN, "VCA of this type is intended to provide many high
     harmonics in the output signals"; reference 5, "The distortion is the sound;
@@ -1849,22 +1887,57 @@ def test_rimshot_is_distorted_and_that_is_the_sound():
     nothing else changed: the harmonics above the 455 Hz fundamental must be
     materially louder with the VCA than without it.
 
+    MEASURED ON THE 455 Hz MODE ALONE -- the 1786 Hz mode's OUTPUT path muted in
+    BOTH arms (#388). `harmonic_powers` cannot separate 4 x 455 = 1820 Hz from
+    RS_HI_HZ 1786 (1.9 %, and both modes' bandwidths are hundreds of Hz), so on
+    the two-mode voice the fourth bin holds the second MODE and not a harmonic.
+    That was invisible while the high mode sat 12 dB down and became the whole
+    reading when #388 brought it up to the machine's +6.6 dB: the LIN arm's bin
+    4 went -23.6 -> -5.7 dB and this test read 1.4 dB on a voice whose
+    distortion had not changed. On one mode it reads +21.9 dB before the change
+    and +22.6 after. The per-bin numbers, the sweep that refutes "the drive
+    correction removed the distortion", and a pure-1786 Hz control that reports
+    +73.6 dB in the fourth bin with no distortion in the signal at all are in
+    `tools/probes/rs_mode_drive.py distort`.
+
     Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
     """
-    lin = dict(dx.kit_with_sounds("RS"))
-    for p in (dx.P_RS1OUT, dx.P_RS2OUT):
-        w = lin[dx.A_PATH + p]
-        lin[dx.A_PATH + p] = (w & ~(3 << 15)) | (dx.NL_LIN << 15)
-    at = int(PRE_ROLL_S * SR)
-    swung = sound("RS", 1.0, 0.4).after_hit(0, 0.4, "dmix")
-    plain = render([(at, dx.CL, 1.0)], 0.4 + PRE_ROLL_S, kit=sorted(lin.items()),
-                   name="RS-linear").after_hit(0, 0.4, "dmix")
-    def harm_db(x):
-        p = am.harmonic_powers(x, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
-        return 10 * math.log10(max(p[1:].sum(), 1e-30) / max(p[0], 1e-30))
-    assert harm_db(swung) - harm_db(plain) >= 6.0, (
-        f"the swing VCA added only {harm_db(swung) - harm_db(plain):.1f} dB of harmonics "
-        f"(swung {harm_db(swung):.1f} dB, linear {harm_db(plain):.1f} dB above the fundamental)")
+    base = dict(dx.kit_with_sounds("RS"))
+    base[dx.A_PATH + dx.P_RS2OUT] = dx.path_word(dx.SRC_OFF, dx.ENV_NONE,
+                                                 dest=dx.DEST_MIX)
+    lin = dict(base)
+    w = lin[dx.A_PATH + dx.P_RS1OUT]
+    lin[dx.A_PATH + dx.P_RS1OUT] = (w & ~(3 << 15)) | (dx.NL_LIN << 15)
+    swung_db = _rs_harm_db(base, "RS-lo-only-swing")
+    plain_db = _rs_harm_db(lin, "RS-lo-only-linear")
+    assert swung_db - plain_db >= 6.0, (
+        f"the swing VCA added only {swung_db - plain_db:.1f} dB of harmonics "
+        f"(swung {swung_db:.1f} dB, linear {plain_db:.1f} dB above the fundamental)")
+
+
+def test_control_the_harmonic_estimator_cannot_separate_the_second_rimshot_mode():
+    """[method] The control for the test above, so the reason it measures ONE
+    mode is itself a test and not a comment: a PURE decaying sinusoid at
+    RS_HI_HZ, synthesised here, with no nonlinearity and no 455 Hz content in it
+    at all, must still report a large "harmonic" in the fourth bin of RS_LO_HZ
+    -- because 4 x 455 = 1820 Hz is 1.9 % away and the mode's own bandwidth is
+    hundreds of Hz. If a future estimator could separate them this turns red,
+    and the two-mode measurement becomes available again (#388).
+
+    Ground truth: test_audio_measure.test_harmonic_powers_recovers_a_known_series
+    -- the same estimator, shown there to recover a series it CAN separate, which
+    is what makes this a limit of the signal rather than of the code.
+    """
+    n = int((0.4 + PRE_ROLL_S) * SR)
+    t = np.arange(n) / SR
+    pure = np.sin(2 * math.pi * dx.RS_HI_HZ * t) * np.exp(-t / 2.4e-3) * 8000.0
+    p = am.harmonic_powers(pure, dx.RS_LO_HZ, (1, 2, 3, 4, 5), SR)
+    bin4 = 10 * math.log10(max(p[3], 1e-30) / max(p[0], 1e-30))
+    assert abs(4 * dx.RS_LO_HZ / dx.RS_HI_HZ - 1) < 0.03, "the two are no longer adjacent"
+    assert bin4 > 20.0, (
+        f"the fourth bin of {dx.RS_LO_HZ:.0f} Hz reads {bin4:+.1f} dB on a pure "
+        f"{dx.RS_HI_HZ:.0f} Hz tone: the estimator now separates them, so the "
+        f"one-mode workaround in the test above can be retired")
 
 
 def test_claves_frequency_and_decay_match_the_machine():
@@ -1912,20 +1985,25 @@ def test_maracas_and_clap_cannot_sound_at_once():
     """[source-verified: SN p.6, switch SW12 selects CP or MA into the shared
     buffer IC19] The two are one circuit, so selecting one must silence the
     other's behaviour rather than layering it. The clap's signature is three
-    bursts; the maracas position must have one.
+    short bursts inside 30 ms (then its final strike, which a burst COUNT cannot
+    read -- plan081 B); the maracas position must have one.
 
     Ground truth: test_audio_measure.test_envelope_bursts_finds_known_restrikes
     """
     for name, want in (("CP", 3), ("MA", 1)):
         x = sound(name, 1.0, 0.30).after_hit(0, 0.20, "dmix")
         env = am.rms_envelope(x, 1.0, SR)
-        n = len(am.envelope_bursts(env, SR, window_s=0.060, min_sep_s=0.005, level_frac=0.45))
+        # The first 30 ms after the strike only (after the pre-roll), with its OWN peak as the reference (level_frac is
+        # relative to the window's maximum): revision 14's final strike is the
+        # loudest event and would otherwise set a threshold the early bursts miss.
+        n = len(am.envelope_bursts(env[:int((PRE_ROLL_S + 0.030) * SR)], SR, min_sep_s=0.005, level_frac=0.45))
         assert n == want, f"{name} shows {n} bursts, expected {want}"
 
 
 def test_cymbal_decay_matches_a_real_machine():
-    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 5.0, Roland's own
-    chart condition -- Schroeder T20 798 ms] The cymbal is the voice every
+    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 2.5 (see HW_CY_T20;
+    the "chart condition" label this said until #102 was wrong) -- Schroeder
+    T20 798 ms] The cymbal is the voice every
     independent source calls the hard one, so its headline number is the
     machine's and not the chart's: Roland's chart says 800 ms at DECAY mid and
     the machine measures 798, which is the one place the two agree closely.
@@ -1962,7 +2040,8 @@ def test_cymbal_decay_matches_a_real_machine():
 
 
 def test_cymbal_is_not_a_long_closed_hat():
-    """[hardware-measured: cy8/CY5025.WAV against ch8/CH.WAV] The failure mode
+    """[hardware-measured: cy8/CY5025.WAV (TONE 5.0, DECAY 2.5) against
+    ch8/CH.WAV] The failure mode
     this voice invites: take the hats' 7.1 kHz band, give it a long envelope,
     call it a cymbal. The machine says no -- its cymbal's strongest line is at
     3153 Hz, from the SECOND band-pass at 3.45 kHz that the hats do not use,
@@ -1991,26 +2070,59 @@ def test_cymbal_is_not_a_long_closed_hat():
 
 
 def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
-    """[hardware-measured: cy8/CY5025.WAV, `band_energy` over five bands]
+    """[hardware-measured: cy8/CY5025.WAV -- TONE 5.0, DECAY 2.5 -- `band_energy`
+    over five bands]
     THE HONEST ROW. The machine puts 1.1 / 10.3 / 53.2 / 23.3 / 6.0 % of its
-    energy in <2k / 2-5k / 5-9k / 9-13k / >13k. The model reaches 1.7 / 6.5 /
-    57.4 / 15.6 / 6.4: the long 3.4 kHz ring, the total decay and the top
-    octave are there, and the 9-13 kHz shoulder is about a third short with
-    the missing energy sitting in 5-9 kHz instead.
+    energy in <2k / 2-5k / 5-9k / 9-13k / >13k. The model reaches 1.3 / 6.3 /
+    58.4 / 15.3 / 6.7 over this window: the long 3.4 kHz ring, the total decay
+    and the top octave are there, and the 9-13 kHz shoulder is about a third
+    short with the missing energy sitting in 5-9 kHz instead.
 
     WHY, precisely: that shoulder wants a resonant filter near 10.5 kHz that
     falls again above it. THE MODEL ALREADY HAS ONE -- `M_CYHI`, at
-    CY_HI_HZ = 10500. It is MISTUNED, NOT MISSING. Measured: Q 2.5 -> 4.0 on
-    that single filter takes the five-band cost from 18.1 to 6.0 -- two thirds
-    of the error -- with no new mode, no new path and no new numerator, and all
-    102 acceptance tests still pass. Adding a second 2-pole instead reaches only
-    10.3, so MORE FILTERING IS NOT THE LEVER.
+    CY_HI_HZ = 10500. It is MISTUNED, NOT MISSING. Adding a second 2-pole at a
+    different corner reaches only five-band cost 10.3, so MORE FILTERING IS NOT
+    THE LEVER.
 
-    (That Q 4.0 is a FIT: a grid search on one reference file with nothing held
-    out, and +60 % is outside reference 1.7's +-50 % unit-to-unit normal. It is
-    probably standing in for the third-order pole reference 10 specifies and the
-    model realises as a single 2-pole. Treat it as a fit until it is checked
-    against a held-out case.)
+    #102 IS NOW SETTLED, AND THIS DOCSTRING USED TO STATE IT AS OPEN.
+    Reference 10 calls Hh3 3rd-order and the model realises it as this single
+    2-pole. A genuine third pole -- the 2-pole cascaded with ONE real pole at
+    the same corner, in both orientations -- was built, rendered through the
+    fixed-point block and judged by the scorecard (DR 0015, DR 0022,
+    `tools/probes/hihat/hh_probe5.py`). **It lost, on the development case and
+    on a held-out recording.** Each structure got its own (Q, gain) fit against
+    D14A only; the two-pole reaches `Band energy` 0.098 against 0.258 and 0.163
+    for the two 3-pole arms. `scorecard.compare` itself returns INCOMPARABLE on
+    every pairing -- `total decay` is required and is invalid on the reference
+    side of D14A and our side of D14B, so neither case has a verdict -- and the
+    same rule read over the properties that DO have distances REJECTS both arms
+    on both cases. That read is INDICATIVE and DR 0022 labels it so.
+    Three reasons it loses, all measured:
+      * at 48 kHz a 1-pole at 10.5 kHz has r = 0.253 and only 1.19 octaves above
+        it, so the low-pass orientation delivers 2.0 dB/octave, not 6;
+      * a cascade costs 1.25 points of band share and -2.75 dB of peak BEFORE it
+        filters anything, because the tap is read before the bank steps and the
+        three cymbal bands then interfere one sample apart;
+      * `TAP_SHIFT = 3` throws away 18.1 dB that `amp` (Q0.16, ceiling 1.0)
+        cannot recover, and `PATH.src`'s 5 bits mean mode 16 cannot be tapped.
+    So reference 10's third pole joins Hh1 as a DOCUMENTED OMISSION.
+
+    THE HOLDOUT SEPARATES NOTHING, AND THAT IS ITS MOST USEFUL RESULT.
+    docs/scorecard/results/D14B.json is the cymbal's first held-out recording
+    (cy8/CY2500.WAV, TONE 2.5 DECAY 0.0, read by no fit in this repository).
+    All four arms land at `Band energy` 3.566 / 3.767 / 3.794 / 3.812 -- a
+    spread of 0.25 tolerances inside a 3.5-tolerance error, with the SHIPPED
+    2-pole the best of the four. What dominates there is not the high band's
+    order but the CY DECAY law: at knob 0.0 we render T20 ~830 ms against the
+    recording's 456 ms. A decision taken on D14A alone could not have seen that.
+
+    AND THE Q 2.5 -> 4.0 RETUNE IS NOT THE ANSWER EITHER. It takes the
+    five-band cost from 18.1 to 6.0 -- and takes the scorecard's `Band energy`
+    distance from 0.501 to 0.726, i.e. the acceptance authority gets WORSE while
+    the measure DR 0015 rejects by name improves threefold. On this voice the
+    lever on that property is the high band's LEVEL, not its Q (Q 4.0 at gain
+    0.80 reads 0.098), and that is a refit of an already-fitted parameter
+    resting on one development case, so it is filed and not shipped.
 
     DO NOT READ THIS AS "the model drops Hh1". Hh1 is a LOW-band filter at
     2.5 kHz Q 0.97 (docs/tr808-reference.md, the IC3 pin 1 row). Restoring it
@@ -2020,7 +2132,9 @@ def test_cymbal_band_split_against_the_machine_and_what_is_still_missing():
     agent to go and restore a filter that was never the cause.
 
     The bounds below are the machine's value with the residual this paragraph
-    admits -- they are NOT a claim that the cymbal matches.
+    admits -- they are NOT a claim that the cymbal matches. They are UNCHANGED
+    by #102: the shipped structure is unchanged, so a moved bound here would be
+    a bound moved to fit nothing.
 
     Ground truth: test_audio_measure.test_band_energy_splits_a_two_tone_signal,
     test_audio_measure.test_band_energy_disagrees_with_a_windowed_fft_on_a_decaying_signal
@@ -2073,36 +2187,16 @@ def test_meta_every_test_declares_status_and_ground_truth():
     `model/test_audio_measure.py` that backs the estimator it uses -- and that
     test must exist. "Verified in a source" and "validated by our own
     measurement" are different claims, and an acceptance suite that blurs them
-    is how an inference becomes a fact."""
+    is how an inference becomes a fact.
+
+    The checking logic itself is shared with `test_moog_acceptance.py`'s own
+    meta-test (#222) -- `model/acceptance_meta.py` -- so a third suite can
+    reuse it without copy-pasting this body; this test's only job is to name
+    ITS OWN module and ITS OWN escape hatches."""
     import test_808_acceptance as mod
     import test_audio_measure as gt
-    tags = ("[source-verified:", "[source-inferred:", "[hardware-measured:",
-            "[measured-here:", "[defect:", "[method]", "[meta]")
-    known = {n for n in vars(gt) if n.startswith("test_")}
-    missing_tag, missing_gt, unknown_gt = [], [], []
-    for name, fn in sorted(vars(mod).items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        doc = (fn.__doc__ or "").lstrip()
-        if not doc.startswith(tags):
-            missing_tag.append(name)
-            continue
-        if name.startswith("test_meta_"):
-            continue
-        m = re.search(r"Ground truth:\s*(.+)$", doc, re.S)
-        if not m:
-            missing_gt.append(name)
-            continue
-        for ref in re.findall(r"test_audio_measure\.(\w+)", m.group(1)):
-            if ref not in known:
-                unknown_gt.append(f"{name} -> {ref}")
-    assert not missing_tag, f"tests without a claim-status tag: {missing_tag}"
-    assert not missing_gt, f"tests that name no estimator ground truth: {missing_gt}"
-    assert not unknown_gt, f"ground-truth tests that do not exist: {unknown_gt}"
-    assert NOT_ASSERTED, "the could-not-establish list must stay in this file"
-    live = {n for n in vars(mod) if n.startswith("test_")}
-    stale = [n for n in KNOWN_DEFECTS if n not in live]
-    assert not stale, f"KNOWN_DEFECTS names tests that no longer exist: {stale}"
+    from acceptance_meta import assert_ground_truth_gate
+    assert_ground_truth_gate(mod, gt, not_asserted=NOT_ASSERTED, known_defects=KNOWN_DEFECTS)
 
 
 def test_meta_render_manifest_describes_what_was_played():

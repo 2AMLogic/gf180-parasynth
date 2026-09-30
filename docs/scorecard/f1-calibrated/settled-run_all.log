@@ -1,0 +1,75 @@
+==============================================================================
+PASS           133.3s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py F1A F1B F1C
+              reference corpus: /tmp/tr808-ref
+              results into:     /private/tmp/wt-f1-calib/docs/scorecard/results
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              F1A    pass           0.76  
+              F1B    pass           0.42  
+              F1C    pass           0.36  
+              ------------------------------------------------------------------------------------------------
+              pass: 3
+              exit 0: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
+PASS           141.5s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_PROFILE_MISSING F1A F1B F1C --results build/case-f1-noclip --expect 'no verdict'
+              reference corpus: /tmp/tr808-ref
+              results into:     build/case-f1-noclip
+              INJECTED CONTROL: REF_PROFILE_MISSING -- this output is a control, not evidence
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              CONTROL BASELINE: measuring the same cases without the injection
+              CONTROL BASELINE: complete
+              F1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              ------------------------------------------------------------------------------------------------
+              no verdict: 3
+              control fired: REF_PROFILE_MISSING caused the expected result on 3 measured case(s)
+PASS           141.7s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_PROFILE_TAMPERED F1A F1B F1C --results build/case-f1-badhash --expect 'no verdict'
+              reference corpus: /tmp/tr808-ref
+              results into:     build/case-f1-badhash
+              INJECTED CONTROL: REF_PROFILE_TAMPERED -- this output is a control, not evidence
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              CONTROL BASELINE: measuring the same cases without the injection
+              CONTROL BASELINE: complete
+              F1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              ------------------------------------------------------------------------------------------------
+              no verdict: 3
+              control fired: REF_PROFILE_TAMPERED caused the expected result on 3 measured case(s)
+PASS           211.3s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_CORNER_2X F1A F1B F1C --results build/case-f1-corner2x --expect fail
+              reference corpus: /tmp/tr808-ref
+              results into:     build/case-f1-corner2x
+              INJECTED CONTROL: REF_CORNER_2X -- this output is a control, not evidence
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              CONTROL BASELINE: measuring the same cases without the injection
+              CONTROL BASELINE: complete
+              F1A    fail           8.76  worst: Corner frequency
+              F1B    fail           9.39  worst: Corner frequency
+              F1C    fail           9.33  worst: Corner frequency
+              ------------------------------------------------------------------------------------------------
+              fail: 3
+              control fired: REF_CORNER_2X caused the expected result on 3 measured case(s)
+PASS           139.0s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject F1_LEGACY_SUBSTITUTE F1A F1B F1C --results build/case-f1-legacy --expect 'no verdict'
+              reference corpus: /tmp/tr808-ref
+              results into:     build/case-f1-legacy
+              INJECTED CONTROL: F1_LEGACY_SUBSTITUTE -- this output is a control, not evidence
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              CONTROL BASELINE: measuring the same cases without the injection
+              CONTROL BASELINE: complete
+              F1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              F1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff
+              ------------------------------------------------------------------------------------------------
+              no verdict: 3
+              control fired: F1_LEGACY_SUBSTITUTE caused the expected result on 3 measured case(s)
+PASS            49.6s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest model/test_filter_calibration.py tools/test_run_case.py tools/test_f1_selected_path.py tools/test_f1_level_scaling.py tools/test_refprofile.py tools/test_refprofile_post_render.py -q
+              ...................................................ssss................. [ 40%]
+              ........................................................................ [ 81%]
+              ................................                                         [100%]
+              172 passed, 4 skipped in 45.67s
+==============================================================================
+6/6 passed

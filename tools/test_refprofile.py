@@ -26,6 +26,8 @@ So the cases below are the drifts:
   * the file is there and is SHORTER than the profile says -- the
     zero-byte-`.wav` hazard `tools/refaudio_fetch.py` was built around
   * the file is there and is silent
+  * the file is there, is NOT silent, and is far below the level every
+    consumer reads it at -- #481, the case a 1e-9 silence floor passed
   * the file is there at the wrong sample rate, or with the wrong frame count
   * the clip id is not in the profile at all
   * a write that is interrupted leaves no partial file behind
@@ -166,17 +168,95 @@ def test_an_empty_clip_is_refused(profile):
         rp.load_clip("fake/clip")
 
 
-def test_a_silent_clip_is_refused(profile):
-    """A reference that is silence is not a reference. Model D renders exactly
-    this, headlessly, which is why the check is here and not assumed away."""
-    prof, dest = profile
-    rp.write_clip(dest, np.zeros(prof["clips"]["fake/clip"]["frames"], dtype=np.float32))
+def _refreeze(prof, dest, y):
+    """Put `y` in the cache and make the profile describe it, so the only thing
+    left that can refuse the clip is its CONTENT. Every byte-level check --
+    size, hash -- passes after this by construction."""
+    rp.write_clip(dest, np.asarray(y, dtype=np.float32))
     prof["clips"]["fake/clip"]["bytes"] = dest.stat().st_size
     prof["clips"]["fake/clip"]["sha256"] = rp.file_sha256(dest)
     rp.PROFILE_JSON.write_text(json.dumps(prof))
+
+
+def test_a_silent_clip_is_refused(profile):
+    """A reference that is silence is not a reference. Model D renders exactly
+    this, headlessly, which is why the check is here and not assumed away.
+
+    Since #481 the GATE is the level floor, but the refusal must still say
+    *silent* when that is what it is: "the host returned zeros" and "the level
+    is wrong" have different causes and only one of them is an apparatus
+    fault."""
+    prof, dest = profile
+    _refreeze(prof, dest, np.zeros(prof["clips"]["fake/clip"]["frames"]))
     with pytest.raises(rp.Refused) as e:
         rp.load_clip("fake/clip")
     assert "silent" in str(e.value)
+    assert "silence floor" in str(e.value)
+    assert "level floor" in str(e.value)
+
+
+def test_a_clip_below_the_level_floor_but_not_silent_is_refused(profile):
+    """**The #481 control.** A clip peaking at 1e-7 is NOT silent by the 1e-9
+    floor this check used to carry: it passed, it hashes correctly, and it is
+    140 dB below the level every consumer reads this profile at. Every number
+    measured off it would be the path's own truncation noise wearing the
+    profile's provenance block.
+
+    It must now refuse, and it must refuse AS A LEVEL DEFECT -- not as silence,
+    which it is not."""
+    prof, dest = profile
+    y = _tone(amp=1e-7)
+    assert np.abs(y).max() > 1e-9, "the control must clear the OLD floor to be a control"
+    _refreeze(prof, dest, y)
+
+    with pytest.raises(rp.Refused) as e:
+        rp.load_clip("fake/clip")
+    why = str(e.value)
+    assert "level floor" in why, why
+    assert "1e-06" in why, f"the refusal must name the floor it enforced: {why}"
+    assert "not usable as a reference" in why, why
+    assert "silent" not in why, f"1e-7 is not silence and must not be reported as it: {why}"
+
+
+def test_a_clip_at_the_level_floor_is_refused_and_one_above_it_loads(profile):
+    """The boundary, in both directions, because `<=` and `<` are one character
+    apart and a floor nothing is ever exactly at is a floor nobody has tested.
+
+    `float32(1e-6)` lands a hair BELOW 1e-6 (9.99999997e-07), which is itself
+    the point: the comparison is on the audio as stored, not on the float the
+    test asked for."""
+    prof, dest = profile
+    n = prof["clips"]["fake/clip"]["frames"]
+
+    at = np.zeros(n)
+    at[n // 2] = np.float32(rp.LEVEL_FLOOR)
+    _refreeze(prof, dest, at)
+    with pytest.raises(rp.Refused) as e:
+        rp.load_clip("fake/clip")
+    assert "level floor" in str(e.value)
+
+    above = np.zeros(n)
+    above[n // 2] = np.float32(2 * rp.LEVEL_FLOOR)
+    _refreeze(prof, dest, above)
+    y, sr, _ = rp.load_clip("fake/clip")        # must NOT raise
+    assert float(np.abs(y).max()) > rp.LEVEL_FLOOR
+
+
+def test_the_freeze_and_read_floors_are_the_same_number():
+    """#481's other half. A freeze-time floor below the read-time one would let
+    `--render` write, hash and commit a clip that every consumer refuses
+    forever after -- a render that reports success and is already unusable. The
+    two are one constant on purpose.
+
+    Asserted from the SOURCE because the freeze path needs a plugin host and
+    `dawdreamer`, which no machine running this file is required to have. A
+    weak assertion that runs everywhere beats a strong one that is skipped on
+    every host that would notice the divergence."""
+    src = pathlib.Path(rp.__file__).read_text()
+    assert src.count("<= LEVEL_FLOOR") >= 2, \
+        "the read-time and the freeze-time gate must both be LEVEL_FLOOR"
+    assert "<= 1e-9" not in src, "no bare silence floor should survive #481"
+    assert rp.SILENCE_FLOOR < rp.LEVEL_FLOOR
 
 
 def test_the_wrong_sample_rate_is_refused(profile):
@@ -382,9 +462,41 @@ def test_the_profile_records_what_produced_it():
             continue
         assert r["plugin"]["present"] is True, name
         assert r["plugin"]["binary_sha256"], name
-        assert r["qualification"]["pins_held_after_render"] is True, name
-        assert r["qualification"]["n_pins"] > 0, name
+        q = r["qualification"]
+        if b["builder_sha256"] == "4bbd8e90c0a58e52a2f38d68174e71c8a73cd62180b2c6b018687a0d61136f77":
+            # #233: the frozen profile's renderer wrote the flag as a constant
+            # and never checked after a render. It must not be read as having
+            # made the per-clip check; a re-render replaces this branch.
+            assert not rp.post_render_checked(r), name
+        else:
+            assert rp.post_render_checked(r), name
+            chk = q["post_render_check"]
+            n = sum(c["rig"] == name for c in prof["clips"].values())
+            assert q["pins_held_after_render"] is True, name
+            assert chk["clips_checked"] == chk["clips_rendered"] == n, name
+        assert q["n_pins"] > 0, name
         assert r["parameters_after_setup"], name
+
+
+def test_every_committed_clip_clears_the_level_floor():
+    """#481 raised the floor by three orders of magnitude, and "nothing in the
+    profile is anywhere near it" stopped being self-evident the moment it
+    moved. A gate rather than a one-off check, because the next clip frozen
+    here is the one this is for.
+
+    Reads the RECORDED peaks, so it answers on the hosts with no cache -- which
+    is most of them. Where the audio IS present, `verify()` reads it through
+    `load_clip` and the same floor applies to the samples themselves."""
+    real = ROOT / "refprofile" / "profile.json"
+    if not real.exists():
+        pytest.skip("no committed profile in this tree")
+    clips = json.loads(real.read_text())["clips"]
+    assert clips, "a profile with no clips"
+    missing = [cid for cid, m in clips.items() if m.get("peak") is None]
+    assert not missing, f"clips with no recorded peak, so nothing to check: {missing}"
+    quiet = {cid: m["peak"] for cid, m in clips.items() if m["peak"] <= rp.LEVEL_FLOOR}
+    assert not quiet, (f"committed clips at or below the level floor "
+                       f"{rp.LEVEL_FLOOR:g}: {quiet}")
 
 
 def test_the_profile_states_its_estimator_floors():

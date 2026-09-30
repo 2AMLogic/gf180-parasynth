@@ -1,0 +1,768 @@
+{
+ "CY0000": {
+  "sr": 44100,
+  "record_s": 1.501,
+  "L": {
+   "energy_share_db": -9.279,
+   "floor_db_re_peak": -66.39,
+   "edt10_ms": 378.34,
+   "end_margin_db": 42.86,
+   "late_residual_db": 1.48,
+   "t20_late_ms": 410.83
+  },
+  "Ln": {
+   "energy_share_db": -12.309,
+   "floor_db_re_peak": -66.66,
+   "edt10_ms": 401.25,
+   "end_margin_db": 44.24,
+   "late_residual_db": 1.74,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.062,
+   "floor_db_re_peak": -71.34,
+   "edt10_ms": 139.09,
+   "end_margin_db": 44.7,
+   "late_residual_db": 0.5,
+   "t20_late_ms": 250.24
+  },
+  "H_minus_L_db": 7.217
+ },
+ "CY0010": {
+  "sr": 44100,
+  "record_s": 4.001,
+  "L": {
+   "energy_share_db": -6.787,
+   "floor_db_re_peak": -66.17,
+   "edt10_ms": 1231.07,
+   "end_margin_db": 41.98,
+   "late_residual_db": 1.61,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -9.524,
+   "floor_db_re_peak": -66.89,
+   "edt10_ms": 1280.14,
+   "end_margin_db": 42.41,
+   "late_residual_db": 1.5,
+   "t20_late_ms": 1407.25
+  },
+  "H": {
+   "energy_share_db": -2.659,
+   "floor_db_re_peak": -71.16,
+   "edt10_ms": 320.86,
+   "end_margin_db": 38.69,
+   "late_residual_db": 0.45,
+   "t20_late_ms": 1092.86
+  },
+  "H_minus_L_db": 4.128
+ },
+ "CY0025": {
+  "sr": 44100,
+  "record_s": 2.001,
+  "L": {
+   "energy_share_db": -7.842,
+   "floor_db_re_peak": -67.09,
+   "edt10_ms": 586.39,
+   "end_margin_db": 43.31,
+   "late_residual_db": 1.66,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -10.835,
+   "floor_db_re_peak": -67.79,
+   "edt10_ms": 617.78,
+   "end_margin_db": 44.55,
+   "late_residual_db": 1.82,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.396,
+   "floor_db_re_peak": -70.71,
+   "edt10_ms": 182.83,
+   "end_margin_db": 41.62,
+   "late_residual_db": 0.44,
+   "t20_late_ms": 446.62
+  },
+  "H_minus_L_db": 5.446
+ },
+ "CY0050": {
+  "sr": 44100,
+  "record_s": 2.5,
+  "L": {
+   "energy_share_db": -7.263,
+   "floor_db_re_peak": -51.73,
+   "edt10_ms": 860.84,
+   "end_margin_db": 28.76,
+   "late_residual_db": 1.58,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -9.957,
+   "floor_db_re_peak": -51.93,
+   "edt10_ms": 890.36,
+   "end_margin_db": 28.99,
+   "late_residual_db": 1.61,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.477,
+   "floor_db_re_peak": -71.04,
+   "edt10_ms": 229.16,
+   "end_margin_db": 39.82,
+   "late_residual_db": 0.43,
+   "t20_late_ms": 726.83
+  },
+  "H_minus_L_db": 4.786
+ },
+ "CY0075": {
+  "sr": 44100,
+  "record_s": 3.501,
+  "L": {
+   "energy_share_db": -6.885,
+   "floor_db_re_peak": -64.7,
+   "edt10_ms": 1114.1,
+   "end_margin_db": 39.96,
+   "late_residual_db": 1.67,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -9.545,
+   "floor_db_re_peak": -64.97,
+   "edt10_ms": 1142.65,
+   "end_margin_db": 41.37,
+   "late_residual_db": 1.61,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.681,
+   "floor_db_re_peak": -70.97,
+   "edt10_ms": 295.6,
+   "end_margin_db": 38.47,
+   "late_residual_db": 0.39,
+   "t20_late_ms": 980.13
+  },
+  "H_minus_L_db": 4.204
+ },
+ "CY1000": {
+  "sr": 44100,
+  "record_s": 1.501,
+  "L": {
+   "energy_share_db": -15.529,
+   "floor_db_re_peak": -62.62,
+   "edt10_ms": 319.82,
+   "end_margin_db": 36.79,
+   "late_residual_db": 1.78,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -19.037,
+   "floor_db_re_peak": -61.9,
+   "edt10_ms": 363.7,
+   "end_margin_db": 37.48,
+   "late_residual_db": 1.83,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H": {
+   "energy_share_db": -0.982,
+   "floor_db_re_peak": -68.93,
+   "edt10_ms": 97.39,
+   "end_margin_db": 39.61,
+   "late_residual_db": 0.31,
+   "t20_late_ms": 295.07
+  },
+  "H_minus_L_db": 14.547
+ },
+ "CY1010": {
+  "sr": 44100,
+  "record_s": 4.001,
+  "L": {
+   "energy_share_db": -12.592,
+   "floor_db_re_peak": -63.13,
+   "edt10_ms": 1165.03,
+   "end_margin_db": 35.61,
+   "late_residual_db": 1.59,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -15.619,
+   "floor_db_re_peak": -61.24,
+   "edt10_ms": 1236.08,
+   "end_margin_db": 36.0,
+   "late_residual_db": 1.54,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.184,
+   "floor_db_re_peak": -73.94,
+   "edt10_ms": 136.19,
+   "end_margin_db": 38.96,
+   "late_residual_db": 1.85,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.9 dB)"
+  },
+  "H_minus_L_db": 11.408
+ },
+ "CY1025": {
+  "sr": 44100,
+  "record_s": 2.001,
+  "L": {
+   "energy_share_db": -14.563,
+   "floor_db_re_peak": -62.56,
+   "edt10_ms": 535.62,
+   "end_margin_db": 35.75,
+   "late_residual_db": 1.66,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -17.698,
+   "floor_db_re_peak": -61.66,
+   "edt10_ms": 583.63,
+   "end_margin_db": 37.9,
+   "late_residual_db": 1.54,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.031,
+   "floor_db_re_peak": -72.58,
+   "edt10_ms": 110.68,
+   "end_margin_db": 41.78,
+   "late_residual_db": 0.47,
+   "t20_late_ms": 394.58
+  },
+  "H_minus_L_db": 13.532
+ },
+ "CY1050": {
+  "sr": 44100,
+  "record_s": 2.501,
+  "L": {
+   "energy_share_db": -13.576,
+   "floor_db_re_peak": -52.88,
+   "edt10_ms": 804.42,
+   "end_margin_db": 28.11,
+   "late_residual_db": 1.62,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -16.638,
+   "floor_db_re_peak": -49.58,
+   "edt10_ms": 880.5,
+   "end_margin_db": 27.54,
+   "late_residual_db": 1.62,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.056,
+   "floor_db_re_peak": -73.65,
+   "edt10_ms": 119.46,
+   "end_margin_db": 40.66,
+   "late_residual_db": 1.35,
+   "t20_late_ms": 609.37
+  },
+  "H_minus_L_db": 12.52
+ },
+ "CY1075": {
+  "sr": 44100,
+  "record_s": 3.501,
+  "L": {
+   "energy_share_db": -12.549,
+   "floor_db_re_peak": -61.77,
+   "edt10_ms": 1063.95,
+   "end_margin_db": 34.68,
+   "late_residual_db": 1.54,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -15.496,
+   "floor_db_re_peak": -60.95,
+   "edt10_ms": 1123.36,
+   "end_margin_db": 36.52,
+   "late_residual_db": 1.38,
+   "t20_late_ms": 1309.18
+  },
+  "H": {
+   "energy_share_db": -1.202,
+   "floor_db_re_peak": -73.14,
+   "edt10_ms": 137.1,
+   "end_margin_db": 39.71,
+   "late_residual_db": 1.63,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H_minus_L_db": 11.347
+ },
+ "CY2500": {
+  "sr": 44100,
+  "record_s": 1.501,
+  "L": {
+   "energy_share_db": -9.939,
+   "floor_db_re_peak": -67.08,
+   "edt10_ms": 372.79,
+   "end_margin_db": 43.71,
+   "late_residual_db": 1.71,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -13.017,
+   "floor_db_re_peak": -67.14,
+   "edt10_ms": 390.68,
+   "end_margin_db": 44.49,
+   "late_residual_db": 1.99,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 2.0 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.861,
+   "floor_db_re_peak": -70.87,
+   "edt10_ms": 143.15,
+   "end_margin_db": 44.17,
+   "late_residual_db": 0.28,
+   "t20_late_ms": 254.15
+  },
+  "H_minus_L_db": 8.078
+ },
+ "CY2510": {
+  "sr": 44100,
+  "record_s": 4.001,
+  "L": {
+   "energy_share_db": -7.401,
+   "floor_db_re_peak": -66.58,
+   "edt10_ms": 1236.46,
+   "end_margin_db": 42.15,
+   "late_residual_db": 1.57,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -10.099,
+   "floor_db_re_peak": -67.37,
+   "edt10_ms": 1275.37,
+   "end_margin_db": 43.73,
+   "late_residual_db": 1.51,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.355,
+   "floor_db_re_peak": -72.39,
+   "edt10_ms": 284.92,
+   "end_margin_db": 39.72,
+   "late_residual_db": 0.42,
+   "t20_late_ms": 1090.74
+  },
+  "H_minus_L_db": 5.046
+ },
+ "CY2525": {
+  "sr": 44100,
+  "record_s": 2.001,
+  "L": {
+   "energy_share_db": -8.808,
+   "floor_db_re_peak": -67.28,
+   "edt10_ms": 589.59,
+   "end_margin_db": 43.74,
+   "late_residual_db": 1.65,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -11.608,
+   "floor_db_re_peak": -67.72,
+   "edt10_ms": 615.4,
+   "end_margin_db": 45.25,
+   "late_residual_db": 1.68,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.056,
+   "floor_db_re_peak": -71.98,
+   "edt10_ms": 166.21,
+   "end_margin_db": 42.41,
+   "late_residual_db": 0.36,
+   "t20_late_ms": 445.26
+  },
+  "H_minus_L_db": 6.752
+ },
+ "CY2550": {
+  "sr": 44100,
+  "record_s": 2.501,
+  "L": {
+   "energy_share_db": -7.778,
+   "floor_db_re_peak": -50.48,
+   "edt10_ms": 874.9,
+   "end_margin_db": 28.45,
+   "late_residual_db": 1.6,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -10.507,
+   "floor_db_re_peak": -49.14,
+   "edt10_ms": 908.32,
+   "end_margin_db": 28.17,
+   "late_residual_db": 1.56,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.282,
+   "floor_db_re_peak": -71.56,
+   "edt10_ms": 212.9,
+   "end_margin_db": 41.02,
+   "late_residual_db": 0.28,
+   "t20_late_ms": 730.56
+  },
+  "H_minus_L_db": 5.496
+ },
+ "CY2575": {
+  "sr": 44100,
+  "record_s": 3.501,
+  "L": {
+   "energy_share_db": -7.534,
+   "floor_db_re_peak": -64.14,
+   "edt10_ms": 1112.54,
+   "end_margin_db": 40.22,
+   "late_residual_db": 1.66,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -10.234,
+   "floor_db_re_peak": -65.15,
+   "edt10_ms": 1147.1,
+   "end_margin_db": 40.89,
+   "late_residual_db": 1.66,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "H": {
+   "energy_share_db": -2.333,
+   "floor_db_re_peak": -72.66,
+   "edt10_ms": 253.79,
+   "end_margin_db": 40.22,
+   "late_residual_db": 0.37,
+   "t20_late_ms": 979.17
+  },
+  "H_minus_L_db": 5.201
+ },
+ "CY5000": {
+  "sr": 44100,
+  "record_s": 1.501,
+  "L": {
+   "energy_share_db": -11.114,
+   "floor_db_re_peak": -66.47,
+   "edt10_ms": 367.96,
+   "end_margin_db": 42.72,
+   "late_residual_db": 1.57,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -14.273,
+   "floor_db_re_peak": -66.42,
+   "edt10_ms": 396.44,
+   "end_margin_db": 43.88,
+   "late_residual_db": 1.48,
+   "t20_late_ms": 399.46
+  },
+  "H": {
+   "energy_share_db": -1.592,
+   "floor_db_re_peak": -70.32,
+   "edt10_ms": 128.1,
+   "end_margin_db": 43.39,
+   "late_residual_db": 0.33,
+   "t20_late_ms": 265.33
+  },
+  "H_minus_L_db": 9.522
+ },
+ "CY5010": {
+  "sr": 44100,
+  "record_s": 4.001,
+  "L": {
+   "energy_share_db": -8.392,
+   "floor_db_re_peak": -66.51,
+   "edt10_ms": 1224.15,
+   "end_margin_db": 42.59,
+   "late_residual_db": 1.6,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -11.182,
+   "floor_db_re_peak": -67.35,
+   "edt10_ms": 1272.49,
+   "end_margin_db": 42.84,
+   "late_residual_db": 1.62,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.996,
+   "floor_db_re_peak": -73.81,
+   "edt10_ms": 235.74,
+   "end_margin_db": 40.63,
+   "late_residual_db": 0.35,
+   "t20_late_ms": 1093.96
+  },
+  "H_minus_L_db": 6.396
+ },
+ "CY5025": {
+  "sr": 44100,
+  "record_s": 2.001,
+  "L": {
+   "energy_share_db": -9.875,
+   "floor_db_re_peak": -66.83,
+   "edt10_ms": 574.47,
+   "end_margin_db": 42.04,
+   "late_residual_db": 1.65,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -12.639,
+   "floor_db_re_peak": -67.26,
+   "edt10_ms": 591.16,
+   "end_margin_db": 43.28,
+   "late_residual_db": 1.62,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.6 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.711,
+   "floor_db_re_peak": -73.32,
+   "edt10_ms": 147.78,
+   "end_margin_db": 42.93,
+   "late_residual_db": 0.37,
+   "t20_late_ms": 432.43
+  },
+  "H_minus_L_db": 8.164
+ },
+ "CY5050": {
+  "sr": 44100,
+  "record_s": 2.501,
+  "L": {
+   "energy_share_db": -8.967,
+   "floor_db_re_peak": -50.8,
+   "edt10_ms": 859.41,
+   "end_margin_db": 28.31,
+   "late_residual_db": 1.68,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -11.776,
+   "floor_db_re_peak": -49.31,
+   "edt10_ms": 892.09,
+   "end_margin_db": 26.89,
+   "late_residual_db": 1.79,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.905,
+   "floor_db_re_peak": -72.97,
+   "edt10_ms": 180.43,
+   "end_margin_db": 41.22,
+   "late_residual_db": 0.54,
+   "t20_late_ms": 721.01
+  },
+  "H_minus_L_db": 7.062
+ },
+ "CY5075": {
+  "sr": 44100,
+  "record_s": 3.501,
+  "L": {
+   "energy_share_db": -8.462,
+   "floor_db_re_peak": -65.27,
+   "edt10_ms": 1090.68,
+   "end_margin_db": 40.46,
+   "late_residual_db": 1.49,
+   "t20_late_ms": 1300.94
+  },
+  "Ln": {
+   "energy_share_db": -11.207,
+   "floor_db_re_peak": -65.24,
+   "edt10_ms": 1118.46,
+   "end_margin_db": 42.12,
+   "late_residual_db": 1.36,
+   "t20_late_ms": 1287.69
+  },
+  "H": {
+   "energy_share_db": -1.972,
+   "floor_db_re_peak": -73.62,
+   "edt10_ms": 214.08,
+   "end_margin_db": 40.84,
+   "late_residual_db": 0.28,
+   "t20_late_ms": 962.0
+  },
+  "H_minus_L_db": 6.49
+ },
+ "CY7500": {
+  "sr": 44100,
+  "record_s": 1.501,
+  "L": {
+   "energy_share_db": -12.38,
+   "floor_db_re_peak": -65.54,
+   "edt10_ms": 357.73,
+   "end_margin_db": 41.34,
+   "late_residual_db": 1.48,
+   "t20_late_ms": 425.03
+  },
+  "Ln": {
+   "energy_share_db": -15.646,
+   "floor_db_re_peak": -65.27,
+   "edt10_ms": 387.8,
+   "end_margin_db": 43.1,
+   "late_residual_db": 1.35,
+   "t20_late_ms": 404.74
+  },
+  "H": {
+   "energy_share_db": -1.331,
+   "floor_db_re_peak": -69.51,
+   "edt10_ms": 121.25,
+   "end_margin_db": 41.77,
+   "late_residual_db": 0.38,
+   "t20_late_ms": 273.85
+  },
+  "H_minus_L_db": 11.049
+ },
+ "CY7510": {
+  "sr": 44100,
+  "record_s": 4.001,
+  "L": {
+   "energy_share_db": -9.675,
+   "floor_db_re_peak": -65.05,
+   "edt10_ms": 1225.9,
+   "end_margin_db": 40.04,
+   "late_residual_db": 1.55,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.5 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -12.494,
+   "floor_db_re_peak": -66.3,
+   "edt10_ms": 1280.2,
+   "end_margin_db": 41.6,
+   "late_residual_db": 1.41,
+   "t20_late_ms": 1411.8
+  },
+  "H": {
+   "energy_share_db": -1.65,
+   "floor_db_re_peak": -74.54,
+   "edt10_ms": 190.2,
+   "end_margin_db": 40.64,
+   "late_residual_db": 0.6,
+   "t20_late_ms": 1081.75
+  },
+  "H_minus_L_db": 8.025
+ },
+ "CY7525": {
+  "sr": 44100,
+  "record_s": 2.001,
+  "L": {
+   "energy_share_db": -11.29,
+   "floor_db_re_peak": -66.06,
+   "edt10_ms": 568.64,
+   "end_margin_db": 41.76,
+   "late_residual_db": 1.71,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -14.274,
+   "floor_db_re_peak": -66.18,
+   "edt10_ms": 599.8,
+   "end_margin_db": 43.21,
+   "late_residual_db": 1.82,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.425,
+   "floor_db_re_peak": -73.24,
+   "edt10_ms": 138.73,
+   "end_margin_db": 42.67,
+   "late_residual_db": 0.47,
+   "t20_late_ms": 411.38
+  },
+  "H_minus_L_db": 9.865
+ },
+ "CY7550": {
+  "sr": 44100,
+  "record_s": 2.501,
+  "L": {
+   "energy_share_db": -10.063,
+   "floor_db_re_peak": -52.35,
+   "edt10_ms": 845.42,
+   "end_margin_db": 29.07,
+   "late_residual_db": 1.41,
+   "t20_late_ms": 1010.94
+  },
+  "Ln": {
+   "energy_share_db": -12.935,
+   "floor_db_re_peak": -51.14,
+   "edt10_ms": 886.53,
+   "end_margin_db": 28.81,
+   "late_residual_db": 1.39,
+   "t20_late_ms": 990.65
+  },
+  "H": {
+   "energy_share_db": -1.624,
+   "floor_db_re_peak": -73.5,
+   "edt10_ms": 164.74,
+   "end_margin_db": 41.6,
+   "late_residual_db": 0.86,
+   "t20_late_ms": 697.11
+  },
+  "H_minus_L_db": 8.439
+ },
+ "CY7575": {
+  "sr": 44100,
+  "record_s": 3.501,
+  "L": {
+   "energy_share_db": -9.742,
+   "floor_db_re_peak": -63.34,
+   "edt10_ms": 1111.7,
+   "end_margin_db": 39.63,
+   "late_residual_db": 1.69,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.7 dB)"
+  },
+  "Ln": {
+   "energy_share_db": -12.441,
+   "floor_db_re_peak": -63.71,
+   "edt10_ms": 1145.24,
+   "end_margin_db": 40.08,
+   "late_residual_db": 1.8,
+   "t20_late_ms": null,
+   "t20_refused": "late decay is not one exponential (Schroeder residual 1.8 dB)"
+  },
+  "H": {
+   "energy_share_db": -1.652,
+   "floor_db_re_peak": -74.02,
+   "edt10_ms": 184.01,
+   "end_margin_db": 40.82,
+   "late_residual_db": 0.67,
+   "t20_late_ms": 966.44
+  },
+  "H_minus_L_db": 8.09
+ }
+}

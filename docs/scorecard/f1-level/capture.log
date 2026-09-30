@@ -1,0 +1,47 @@
+take 1 amp 0.25 open20k: readback 20000.0 Hz peak 0.09272
+take 1 amp 0.25 cut250: readback 250.0 Hz peak 0.08584
+take 1 amp 0.25 cut1000: readback 1000.0 Hz peak 0.08965
+take 1 amp 0.25 cut4000: readback 4000.0 Hz peak 0.08990
+take 2 amp 0.25 open20k: readback 20000.0 Hz peak 0.09272
+take 2 amp 0.25 cut250: readback 250.0 Hz peak 0.08584
+take 2 amp 0.25 cut1000: readback 1000.0 Hz peak 0.08965
+take 2 amp 0.25 cut4000: readback 4000.0 Hz peak 0.08990
+take 1 amp 0.125 open20k: readback 20000.0 Hz peak 0.04636
+take 1 amp 0.125 cut250: readback 250.0 Hz peak 0.04292
+take 1 amp 0.125 cut1000: readback 1000.0 Hz peak 0.04482
+take 1 amp 0.125 cut4000: readback 4000.0 Hz peak 0.04495
+take 2 amp 0.125 open20k: readback 20000.0 Hz peak 0.04636
+take 2 amp 0.125 cut250: readback 250.0 Hz peak 0.04292
+take 2 amp 0.125 cut1000: readback 1000.0 Hz peak 0.04482
+take 2 amp 0.125 cut4000: readback 4000.0 Hz peak 0.04495
+take 1 amp 0.0625 open20k: readback 20000.0 Hz peak 0.02318
+take 1 amp 0.0625 cut250: readback 250.0 Hz peak 0.02146
+take 1 amp 0.0625 cut1000: readback 1000.0 Hz peak 0.02241
+take 1 amp 0.0625 cut4000: readback 4000.0 Hz peak 0.02247
+take 2 amp 0.0625 open20k: readback 20000.0 Hz peak 0.02318
+take 2 amp 0.0625 cut250: readback 250.0 Hz peak 0.02146
+take 2 amp 0.0625 cut1000: readback 1000.0 Hz peak 0.02241
+take 2 amp 0.0625 cut4000: readback 4000.0 Hz peak 0.02247
+
+wrote docs/scorecard/f1-level/captures/manifest.json: 24 clips, 12 unique
+nominal open20k/a0.2500/take1: bit_identical=True max_abs_diff=0.0
+nominal open20k/a0.2500/take2: bit_identical=True max_abs_diff=0.0
+nominal cut250/a0.2500/take1: bit_identical=True max_abs_diff=0.0
+nominal cut250/a0.2500/take2: bit_identical=True max_abs_diff=0.0
+nominal cut1000/a0.2500/take1: bit_identical=False max_abs_diff=5.18863575216244e-07
+nominal cut1000/a0.2500/take2: bit_identical=False max_abs_diff=5.18863575216244e-07
+nominal cut4000/a0.2500/take1: bit_identical=False max_abs_diff=7.450580596923828e-09
+nominal cut4000/a0.2500/take2: bit_identical=False max_abs_diff=7.450580596923828e-09
+take-to-take open20k/a0.2500: bit_identical=True max_abs_diff=0.0
+take-to-take open20k/a0.1250: bit_identical=True max_abs_diff=0.0
+take-to-take open20k/a0.0625: bit_identical=True max_abs_diff=0.0
+take-to-take cut250/a0.2500: bit_identical=True max_abs_diff=0.0
+take-to-take cut250/a0.1250: bit_identical=True max_abs_diff=0.0
+take-to-take cut250/a0.0625: bit_identical=True max_abs_diff=0.0
+take-to-take cut1000/a0.2500: bit_identical=True max_abs_diff=0.0
+take-to-take cut1000/a0.1250: bit_identical=True max_abs_diff=0.0
+take-to-take cut1000/a0.0625: bit_identical=True max_abs_diff=0.0
+take-to-take cut4000/a0.2500: bit_identical=True max_abs_diff=0.0
+take-to-take cut4000/a0.1250: bit_identical=True max_abs_diff=0.0
+take-to-take cut4000/a0.0625: bit_identical=True max_abs_diff=0.0
+capture exit=0

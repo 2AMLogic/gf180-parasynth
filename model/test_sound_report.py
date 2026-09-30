@@ -1,0 +1,445 @@
+#!/usr/bin/env python3
+"""The injection machinery of `model/sound_report.py`, checked cheaply.
+
+    .venv/bin/python -m pytest model/test_sound_report.py -q
+
+**Why this file exists separately from `make controls`.** A control counts as
+caught only if all three of these hold (docs/verification-rules.md 5):
+
+  1. the clean run passes;
+  2. the mutant **builds, activates and actually executes**;
+  3. the intended assertion is the one that fails.
+
+`make controls` runs the two historical-bug injections end to end and so
+covers 1 and 3 -- but each of those is about ninety seconds of rendering, and
+neither of them can distinguish "the patch was applied and the defect is
+invisible" from "the patch silently did nothing." Condition 2 is the one this
+repository has actually got wrong: it once shipped a negative control that
+mutated a function signature into invalid Python and passed, proving only that
+Python rejects syntax errors.
+
+So this file asserts condition 2 directly and in under a second: that each
+injection's `make` really does change the function the report will call, that
+the changed function returns the historically broken answer rather than merely
+being a different object, and that `run()`'s restore actually restores -- a
+patch that leaked would make every LATER property in the same process wrong
+while the report still printed clean numbers.
+"""
+from __future__ import annotations
+
+import os
+import sys
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import audio_measure as am                                          # noqa: E402
+import drum_verify as dv                                            # noqa: E402
+import sound_report as sr                                           # noqa: E402
+
+SR = sr.SR
+
+
+# ===========================================================================
+# the registry: the historical-bug injections exist and declare real voices
+# ===========================================================================
+HISTORICAL = ("bd-ma-envelope", "sd-centroid-amp-weighted")
+
+
+def test_the_historical_bug_injections_are_registered():
+    """docs/verification-rules.md 5 -- a bug is not closed until it is an
+    injection. These two are the measurement-layer counterparts of
+    verify_ctl.py's SPI_ADDR7 / SPI_DATA24, which replay the exact broken SPI
+    frame that shipped."""
+    for name in HISTORICAL:
+        assert name in sr.INJECTIONS, f"{name} is not registered; make controls would not run it"
+        desc, voices, make = sr.INJECTIONS[name]
+        assert desc.strip(), f"{name} has no description"
+        assert voices, f"{name} declares no voice, so cmd_inject has nothing to check"
+        assert callable(make)
+
+
+def test_every_injection_declares_voices_the_report_actually_measures():
+    """A defect declared against a voice no property covers reports `NO
+    PROPERTY MOVED` forever -- an unsatisfiable control, which is worse than
+    no control. Checked over the whole registry, not just the new pair."""
+    measured = {p.voice for p in sr.build_properties()}
+    for name, (_, voices, _) in sr.INJECTIONS.items():
+        missing = [v for v in voices if v not in measured]
+        assert not missing, f"{name} touches {missing}, which no property in build_properties() measures"
+
+
+# ===========================================================================
+# condition 2: the mutant activates, executes, and is undone
+# ===========================================================================
+def test_the_moving_average_injection_really_replaces_drum_verify_envelope():
+    """`bd-ma-envelope` reinstates the 5 ms moving average that shipped as an
+    envelope estimator. audio_measure.py rule 1: a 5 ms window spans 0.28 of a
+    cycle at 56 Hz, so it ripples at the carrier rather than tracking the
+    decay.
+
+    This asserts the patched `dv.envelope` returns the *historically broken*
+    answer -- numerically equal to `moving_average_envelope` and numerically
+    different from the tuned per-voice RMS window -- not merely that some
+    attribute was rebound. A patch installed as a pass-through would satisfy
+    'the attribute changed' and change nothing the report can see."""
+    _, _, make = sr.INJECTIONS["bd-ma-envelope"]
+    ctx = {"_patches": []}
+    original = dv.envelope
+
+    t = np.arange(int(0.4 * SR)) / SR
+    x = np.exp(-t / 0.10) * np.sin(2 * np.pi * 56.0 * t)
+    clean = original(x, SR)
+
+    make(ctx)
+    try:
+        assert dv.envelope is not original, "the injection did not rebind drum_verify.envelope at all"
+        got = dv.envelope(x, SR)
+        want = np.abs(am.moving_average_envelope(x, 5.0, SR))
+        assert np.allclose(got, want), \
+            "the patched envelope is not the 5 ms moving average this injection claims to reinstate"
+        # And it is a real change, not a re-spelling of the correct estimator.
+        rel = np.max(np.abs(got - clean)) / max(np.max(clean), 1e-12)
+        assert rel > 0.05, \
+            f"the patched envelope is within {rel:.3%} of the correct one; this mutant does not mutate"
+    finally:
+        for mod, attr, orig in ctx["_patches"]:
+            setattr(mod, attr, orig)
+
+    assert dv.envelope is original, "the injection leaked: drum_verify.envelope was not restored"
+
+
+def test_the_moving_average_injection_ripples_at_the_carrier_it_cannot_resolve():
+    """The mechanism, not just the identity: 5 ms holds 0.28 of a cycle at
+    56 Hz, so the estimate swings with the waveform instead of tracking the
+    decay. BD's tuned window is 12 ms (`drum_verify.ENV_WIN_MS`), 0.67 of a
+    cycle, and the RMS of a squared sine over that is far flatter.
+
+    **A wrong-then-right record, kept because it is the point of the file.**
+    The first version of this test compared against `dv.envelope(x, SR)` --
+    the signature DEFAULT, 4 ms -- and failed, correctly: 4 ms is *shorter*
+    than the injected 5 ms and ripples 7.50 dB against the moving average's
+    6.55 dB, so the injection measured as an improvement. The default window
+    is not the window the acceptance path uses; `dv.measure` selects a
+    per-voice one, and comparing against anything else measures a function
+    nobody calls. Same shape as every failure in docs/failure-modes.md: a
+    correct instrument in a wrong state.
+
+    Measured on this tree at 56 Hz: tuned 12 ms 1.85 dB, injected 5 ms
+    moving average 6.55 dB."""
+    _, voices, make = sr.INJECTIONS["bd-ma-envelope"]
+    assert voices == ["BD"]
+    win = dv.ENV_WIN_MS["BD"]
+    ctx = {"_patches": []}
+    original = dv.envelope
+
+    t = np.arange(int(0.5 * SR)) / SR
+    x = np.sin(2 * np.pi * 56.0 * t)                      # no decay at all
+
+    def ripple_db(e):
+        seg = e[int(0.1 * SR):int(0.4 * SR)]
+        return 20.0 * np.log10(np.max(seg) / max(np.min(seg), 1e-12))
+
+    clean_db = ripple_db(original(x, SR, win_ms=win))
+    make(ctx)
+    try:
+        broken_db = ripple_db(dv.envelope(x, SR, win_ms=win))
+    finally:
+        for mod, attr, orig in ctx["_patches"]:
+            setattr(mod, attr, orig)
+
+    assert clean_db < 3.0, (
+        f"the tuned {win:g} ms window itself rippled {clean_db:.2f} dB on a steady 56 Hz carrier; "
+        "this test's apparatus is the comparison, so a noisy baseline invalidates it")
+    assert broken_db > clean_db + 3.0, (
+        f"the 5 ms moving average rippled {broken_db:.2f} dB against the tuned window's "
+        f"{clean_db:.2f} dB on a steady 56 Hz carrier; it should be markedly worse, not comparable")
+
+
+def test_the_moving_average_injection_shortens_the_decay_it_is_asked_to_measure():
+    """And the consequence the report actually prints: a rippling envelope
+    crosses -20 dB early, so T20 reads short. On a closed-form 100 ms
+    exponential at 56 Hz, measured on this tree, the tuned 12 ms window
+    recovers tau 100.4 ms / T20 209.6 ms at R^2 0.993; the injected 5 ms
+    moving average gives T20 156.0 ms at R^2 0.882.
+
+    The truth is known here (tau is 100 ms by construction), which is what
+    separates this from the end-to-end `make controls` run: that one shows
+    BD T20 moving 308 -> 207 ms on a real render, but the render has no
+    independently known answer, so it can only show the number CHANGED. This
+    shows it changed in the wrong DIRECTION, against a signal whose decay was
+    chosen before it was measured."""
+    _, _, make = sr.INJECTIONS["bd-ma-envelope"]
+    win = dv.ENV_WIN_MS["BD"]
+    ctx = {"_patches": []}
+    original = dv.envelope
+
+    tau_s = 0.10
+    t = np.arange(int(0.5 * SR)) / SR
+    x = np.exp(-t / tau_s) * np.sin(2 * np.pi * 56.0 * t)
+
+    clean = dv.decay_fit(original(x, SR, win_ms=win), SR)
+    make(ctx)
+    try:
+        broken = dv.decay_fit(dv.envelope(x, SR, win_ms=win), SR)
+    finally:
+        for mod, attr, orig in ctx["_patches"]:
+            setattr(mod, attr, orig)
+
+    assert abs(clean["tau_ms"] - tau_s * 1e3) < 5.0, (
+        f"the tuned window recovered tau {clean['tau_ms']:.2f} ms from a signal built with "
+        f"{tau_s * 1e3:.0f} ms; the baseline of this comparison is not trustworthy")
+    assert broken["t20_ms"] < 0.8 * clean["t20_ms"], (
+        f"the injected moving average read T20 {broken['t20_ms']:.1f} ms against the tuned window's "
+        f"{clean['t20_ms']:.1f} ms; the historical defect makes decays read SHORT and this does not")
+    assert broken["r2"] < clean["r2"] - 0.05, (
+        f"the injected fit's R^2 is {broken['r2']:.4f} against {clean['r2']:.4f}; a rippling envelope "
+        "should fit an exponential visibly worse, and if it does not, the ripple is not reaching the fit")
+
+
+def test_the_centroid_injection_switches_which_field_the_brightness_property_reads():
+    """`sd-centroid-amp-weighted` does not patch a function -- it sets
+    `ctx["centroid_weight"]`, and `m_sd_brightness` reads the other field of
+    the measurement `drum_verify.measure` already computes. So the thing to
+    assert is that the property's OUTPUT changes, on a real snare render,
+    rather than that a dict key was set.
+
+    One render is shared: `_meas` caches on the ctx, so flipping the key and
+    re-reading isolates the weighting from every other source of variation."""
+    _, voices, make = sr.INJECTIONS["sd-centroid-amp-weighted"]
+    assert voices == ["SD"]
+    ctx = {"_patches": []}
+    power = sr.m_sd_brightness(ctx)
+    assert power is not None, "the snare rendered silent; this test has no apparatus"
+
+    make(ctx)
+    amplitude = sr.m_sd_brightness(ctx)
+    assert amplitude is not None
+    assert not ctx["_patches"], "this injection should not need to patch a module attribute"
+
+    assert amplitude > 2.0 * power, (
+        f"the amplitude-weighted centroid read {amplitude:.0f} Hz against the power-weighted "
+        f"{power:.0f} Hz; docs/drum-verification.md 3 withdrew the amplitude weighting because it "
+        "reads a wide quiet noise floor as brightness, so on the snare it must read far higher")
+
+
+def test_the_brightness_property_is_locked_and_the_lock_is_the_power_weighted_one():
+    """A property with no lock reports `no lock recorded yet` and passes
+    whatever it measures -- which would make the centroid injection
+    unsatisfiable however far it moved the number."""
+    key = ("SD", "brightness (power centroid)")
+    assert key in sr.LOCKS, "the brightness property has no lock, so nothing can be out of tolerance"
+    props = {(p.voice, p.name): p for p in sr.build_properties()}
+    assert key in props, "the lock names a property build_properties() does not create"
+    p = props[key]
+    assert p.kind == "lock"
+    assert sr.LOCKS[key] < 3000.0, (
+        f"the locked brightness is {sr.LOCKS[key]:.0f} Hz -- high enough to be the amplitude-weighted "
+        "value, which would mean the lock was taken with the defect in place")
+
+
+# ===========================================================================
+# the lock changelog (issue #68)
+# ===========================================================================
+# `LOCKS` used to be an overwrite: a commit that moved a locked value left the
+# new number and nothing else, so "did this go green because the model improved
+# or because the bound moved?" was answerable only by reading git log and
+# guessing which of a commit's changes was the point. These are the gate on the
+# record that closes it.
+def test_the_lock_changelog_agrees_with_the_live_table():
+    """Run the gate against the current state. An unsatisfiable gate is worse
+    than no gate -- it trains everyone to ignore gates, including the working
+    ones."""
+    problems = sr.check_lock_changelog()
+    assert problems == [], problems
+
+
+def test_every_lock_has_a_history_entry_with_a_reason():
+    for key in sr.LOCKS:
+        hist = sr.lock_history(*key)
+        assert hist, f"{key} has no recorded change"
+        assert hist[-1]["reason"].strip(), f"{key}'s last change records no reason"
+        assert hist[-1]["recorded_by"], f"{key}'s last change names no commit"
+
+
+def test_a_lock_moved_without_an_entry_is_flagged(monkeypatch):
+    """The injected control. Without this the changelog is a comment: it would
+    agree with the table on the day it was written and quietly stop agreeing on
+    the first re-lock."""
+    key = ("BD", "T20")
+    monkeypatch.setitem(sr.LOCKS, key, 207.0)
+    problems = sr.check_lock_changelog()
+    assert any("BD" in p and "T20" in p and "no reason recorded" in p
+               for p in problems), problems
+
+
+def test_a_lock_added_without_an_entry_is_flagged(monkeypatch):
+    monkeypatch.setitem(sr.LOCKS, ("BD", "a new property"), 1.0)
+    assert any("a new property" in p for p in sr.check_lock_changelog())
+
+
+def test_a_changelog_entry_for_a_property_that_is_not_a_lock_is_flagged(monkeypatch):
+    """A stale entry is the other direction of the same failure: a record that
+    describes a bound nobody applies reads as coverage."""
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", sr.LOCK_CHANGELOG + [
+        {"at": "x", "recorded_by": "y", "issue": 0, "reason": "r",
+         "locks": {("BD", "gone"): (None, 1.0)}}])
+    assert any("gone" in p for p in sr.check_lock_changelog())
+
+
+def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
+    """Recovered with `git log -L` on the LOCKS block, not from memory: 28dfd55
+    introduced the table (#51), bf13fdd added the power-centroid lock (#251),
+    and 50d7aaf / 80b3756 are the two re-locks #242 traced with drift_probe.py."""
+    by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
+    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756"}
+    assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
+    assert list(by["50d7aaf"]["locks"]) == [("LADDER", "corner ratio drift")]
+    assert list(by["80b3756"]["locks"]) == [("LT", "attack")]
+    assert all(was is None for was, _ in by["28dfd55"]["locks"].values()), (
+        "nothing was pinned before 28dfd55, so every entry there is a first lock")
+
+
+def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
+    assert sr.main(["--check-locks"]) == 0
+    monkeypatch.setitem(sr.LOCKS, ("SD", "T20"), 1.0)
+    assert sr.main(["--check-locks"]) == 1
+
+
+# ===========================================================================
+# the lock table's own provenance, and the gate that reads it (issue #242)
+#
+# Two locks drifted past tolerance and nobody noticed for nights, because the
+# nightly step that was supposed to catch them grepped the plain report for
+# "MOVED"/"REGRESS" -- words only the `--inject` report prints. Diagnosing it
+# then cost re-measuring 17 historical trees over a 44-commit range, because
+# `LOCK` named `ce400a6`, an object that does not exist in this repository. Both are mechanism failures, so both get
+# a mechanism here rather than a note.
+# ===========================================================================
+def _git(*args):
+    import subprocess
+    return subprocess.run(["git", "-C", os.path.dirname(HERE), *args],
+                          capture_output=True, text=True)
+
+
+def _in_a_git_checkout() -> bool:
+    return _git("rev-parse", "--git-dir").returncode == 0
+
+
+def _history_is_truncated() -> bool:
+    """A shallow clone has not fetched the ancestors these tests resolve, so
+    `git cat-file -t <real ancestor sha>` fails there with exactly the error a
+    dangling sha gives. That is the apparatus in a wrong state, not a finding:
+    the first CI run of these tests went red on `28dfd55`/`50d7aaf`, both of
+    which resolve fine in a full clone, because `moog-acceptance.yml` checked
+    out at the default depth of 1.
+
+    Report it as its own outcome -- named, and still red. Skipping instead
+    would hand back a green run for the one check #242 exists to install, which
+    is the blind spot rather than a fix for it."""
+    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+
+
+def _assert_history_reaches_the_shas():
+    assert not _history_is_truncated(), (
+        "REFUSED: this is a shallow clone, so the lock table's ancestor commits "
+        "were never fetched and `git cat-file` cannot answer whether they exist. "
+        "Not a provenance failure -- a checkout-depth one. Clone with full "
+        "history, or set `fetch-depth: 0` on the workflow's checkout step.")
+
+
+def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
+    """`LOCK = "ce400a6"` for months and `git cat-file -t ce400a6` fails: it
+    was a pre-squash commit on #51's branch. Every "locked at ..." line in the
+    report therefore cited nothing, and the bisect the report's own advice
+    recommends could not be started at all -- the concrete cost, in #242, was
+    re-measuring 17 historical trees to recover two answers the table should
+    have carried."""
+    if not _in_a_git_checkout():
+        import pytest
+        pytest.skip("not a git checkout")
+    _assert_history_reaches_the_shas()
+    r = _git("cat-file", "-t", sr.LOCK)
+    assert r.returncode == 0 and r.stdout.strip() == "commit", (
+        f'sound_report.LOCK = "{sr.LOCK}" is not a commit in this repository '
+        f'({r.stdout.strip() or r.stderr.strip()}). A lock table whose own '
+        "provenance is a dangling sha cannot be bisected against.")
+
+
+def test_every_relock_names_a_real_property_and_a_real_commit():
+    """A re-lock records WHICH commit changed the sound. If that key does not
+    match a property, or that sha does not resolve, the record is decoration."""
+    props = {(p.voice, p.name) for p in sr.build_properties()}
+    for key, (commit, was, why) in sr.RELOCKS.items():
+        assert key in props, f"RELOCKS names {key}, which build_properties() does not create"
+        assert key in sr.LOCKS, f"RELOCKS names {key}, which has no entry in LOCKS"
+        assert abs(sr.LOCKS[key] - was) > 0, (
+            f"RELOCKS says {key} moved away from {was}, but LOCKS still holds {was}")
+        assert len(why) > 40, f"{key}'s re-lock gives no reason"
+        if _in_a_git_checkout():
+            _assert_history_reaches_the_shas()
+            r = _git("cat-file", "-t", commit)
+            assert r.returncode == 0 and r.stdout.strip() == "commit", (
+                f"{key} is re-locked against '{commit}', which is not a commit here")
+
+
+def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints():
+    """The provenance has to be where the number is read. `Result.sentence()`
+    is the only text a reader sees when a lock goes OUT, so the re-lock record
+    is appended to `source`, which that sentence quotes."""
+    props = {(p.voice, p.name): p for p in sr.build_properties()}
+    for key, (commit, _, _) in sr.RELOCKS.items():
+        p = props[key]
+        assert f"RE-LOCKED at {commit}" in p.source, (
+            f"{key}'s re-lock provenance is not in its source line")
+        # build_properties() leaves a lock's value None; run() fills it from LOCKS
+        p.value = sr.LOCKS[key]
+        s = sr.Result(p, p.value + 10 * p.tol, False, "", 10 * p.tol).sentence()
+        assert commit in s, f"{key} going OUT would not print which commit re-locked it"
+
+
+def test_the_plain_report_never_prints_the_words_the_nightly_gate_used_to_grep_for():
+    """The root cause, asserted directly. `print_report` marks a failure `OUT`;
+    `MOVED` and `REGRESS` belong to `cmd_inject` and to nothing else. Any gate
+    keyed to those words over the plain report is an unconditional pass."""
+    import io
+    import contextlib
+    p = sr.Prop("X", "a property", "ms", "lock", 1.0, 0.1, "made up", lambda ctx: None)
+    bad = sr.Result(p, 99.0, False, "", 98.0)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        n = sr.print_report([bad], "test")
+    text = buf.getvalue()
+    assert n == 1, "print_report must count the failure, so main() can exit 1"
+    assert "OUT" in text, "the plain report marks a failing row OUT"
+    assert "MOVED" not in text.upper().replace("REMOVED", ""), (
+        "the plain report printed MOVED -- if that is intentional the nightly "
+        "gate's history in #242 needs re-reading first")
+    assert "REGRESS" not in text.upper()
+
+
+def test_the_nightly_gate_decides_on_the_reports_exit_status_not_on_its_text():
+    """#242's mechanism fix. The step may still grep the report to SHOW which
+    rows are out; what it may not do is decide by grep, which is how it stayed
+    green through two out-of-tolerance locks."""
+    import pathlib
+    wf = pathlib.Path(HERE).parent / ".github" / "workflows" / "nightly.yml"
+    if not wf.exists():
+        import pytest
+        pytest.skip("no nightly.yml in this checkout")
+    text = wf.read_text()
+    marker = "no locked property may have moved"
+    assert marker in text, "the nightly gate step has been renamed or removed"
+    # the step's body: from its `- name:` line to the next step at that indent
+    start = text.index("- name: " + marker)
+    rest = text[start + 1:]
+    end = rest.find("\n      - ")
+    step = rest[:end if end != -1 else len(rest)]
+    assert "steps.report.outputs.rc" in step, (
+        "the gate does not read sound_report.py's exit status; grepping the "
+        "report text is what failed silently in #242")
+    for decide_by_grep in ("grep -q", "grep -iq", "if grep", "if ! grep"):
+        assert decide_by_grep not in step, (
+            f"the gate decides with `{decide_by_grep}` over the report text")

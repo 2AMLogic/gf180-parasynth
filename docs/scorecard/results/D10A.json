@@ -2,37 +2,37 @@
   "engine": "fixed-model",
   "case_id": "D10A",
   "subject": "Rimshot / anchor",
-  "source_commit": "7dd6337",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:28:01Z",
+  "source_commit": "811acdf",
+  "analysis_run": "run_case@dcac69f8b1d0 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T23:01:32Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "7dd6337",
-      "described": "node/D-drums-bitexact-83-g7dd6337",
-      "branch": "fix-decay-and-corner",
+      "commit": "811acdf",
+      "described": "node/D-drums-bitexact-991-g811acdf-dirty",
+      "branch": "feature/issue-388",
       "dirty": true,
-      "uncommitted_sha256": "f7c8641bd3f74c94",
-      "untracked_files": 1
+      "uncommitted_sha256": "ec085c7dff7dd35b",
+      "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "398bc543d7b9",
+      "origin_main": "38911709f9bb",
       "behind_commits": 0,
       "ahead_commits": 5,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
+        "model/drums_fx.py": {
+          "origin_main": "034b9efb4397",
+          "here": "b800dfdda3a6"
         }
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drums_fx.py."
     },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
+    "command": "tools/run_case.py D10A --no-audio",
     "config": {
       "voice": "RS",
       "refs": "/tmp/tr808-ref",
@@ -43,16 +43,19 @@
       "level_matched": true
     },
     "python": "3.14.7",
-    "run_at": "2026-09-19T01:28:07Z",
+    "run_at": "2026-09-27T23:02:22Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:b800dfdda3a6cea6",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:c31aadac74845fc7",
+      "tools/run_case.py": "sha256:dcac69f8b1d01bb2",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:801a4d48c1347c43",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
       "reference:rs8/RS.WAV": "sha256:20d5cd385c0f8c3a"
     },
     "artefacts": {
@@ -64,7 +67,7 @@
   },
   "reference_profile": "fischer-tr808-103852:rs8/RS.WAV (no knob)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('RS') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 9 of 11",
+  "render_run": "drums_fx@b800dfdda3a6 kit_with_sounds('RS') solo, one hit at accent 1.0, 2.20 s, both drum buses 0.45, 48000 Hz, circuit 9 of 11",
   "audio": "reference rs8/RS.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
@@ -111,13 +114,14 @@
   },
   "metrics": {
     "Partial balance": {
-      "value": -11.5643,
+      "value": -4.6859,
       "units": "dB",
-      "reference": 5.7061,
-      "error": -17.2705,
+      "reference": 3.8537,
+      "error": -8.5396,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "attack": {
       "value": 1.9583,
@@ -126,21 +130,23 @@
       "error": -0.468,
       "tolerance": 1.2132,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     },
     "tail decay": {
-      "value": 9.2803,
+      "value": 7.8569,
       "units": "ms",
       "reference": 7.2369,
-      "error": 2.0434,
+      "error": 0.62,
       "tolerance": 3.6185,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     }
   },
   "diagnostics": {
-    "ours_peak_fs": 0.192627,
-    "ours_rms_fs": 0.004424,
+    "ours_peak_fs": 0.192902,
+    "ours_rms_fs": 0.003124,
     "reference_peak_fs": 0.751526,
     "reference_rate_hz": 44100,
     "ours_rate_hz": 48000,

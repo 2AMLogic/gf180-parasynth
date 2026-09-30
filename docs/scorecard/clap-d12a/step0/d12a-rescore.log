@@ -1,0 +1,9 @@
+reference corpus: /home/ubuntu/dev/refs/sounds-tr808-fischer
+results into:     docs/scorecard/clap-d12a/step0/d12a-rescore
+
+case   state         worst  note
+------------------------------------------------------------------------------------------------
+D12A   fail           4.75  worst: burst/tail ratio
+------------------------------------------------------------------------------------------------
+fail: 1
+exit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)

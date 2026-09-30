@@ -1,0 +1,12 @@
+{
+ "engine": "pulse2x",
+ "rows": {
+  "0.25": {
+   "drive": 0.25,
+   "vol_factor": 2.65341,
+   "refused": "saw volume correction would leave the supported 0..1 range"
+  }
+ },
+ "commit": "db59dcc2a9a7d661945408938e486556f0c45e2d",
+ "sources_dirty": false
+}

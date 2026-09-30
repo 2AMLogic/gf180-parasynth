@@ -103,6 +103,71 @@ GLIDE_BITS = 24                  # glide register: ratio per frame - 1, Q0.24; 0
 INC_FRAC = 8                     # the slewed increment carries 8 fraction bits, Q24.8
 GLIDE_REF_S = 0.09               # reference host: 90 ms per octave (engines.mono_note's 90 ms glide)
 LADDER_CFG = dict(state_bits=24, state_q=20, tanh_entries=16, interp=True, out_bits=LADDER_OUT_BITS)
+
+# ---- versioned filter operating points (plan074 B) -------------------------
+# A calibration is a NAMED, FROZEN operating point of the host's gain/ogain
+# conversion (contract 5.5) -- not a filter algorithm and not a default. The one
+# entry is #231's selected result: the ladder's input scaled by s = 1/4 with the
+# exact reciprocal output compensation, recomputed from the physical mapping
+# (volts_per_unit = 0.13 * s) and quantised, never derived by scaling the
+# rounded baseline words. ROMs, CUT_TRIM, the tanh table, state widths and the
+# rate chain are untouched: two writable register values change and nothing
+# else. `None` is the legacy conversion, byte-identical to every existing patch.
+# Scope (docs/scorecard/f1-level/): Surge Type 2 small-signal cutoff response,
+# res 0, drive 1.0, -12..-24 dBFS. It is SELECTABLE, not qualified as a global
+# default (plan074 G) -- resonance/overdrive behaviour differs by construction.
+FILTER_CALIBRATIONS = {
+    "surge-type2-clean-v1": dict(
+        input_scale=0.25,
+        base_volts_per_unit=0.13,
+        source="docs/scorecard/f1-level/selection-rule.md (#231), s = 1/4 frozen "
+               "across F1A-F1C and all three development levels",
+        expected_words_res0_drive1=dict(gain=42598, ogain=100825),
+    ),
+}
+
+
+class CalibrationError(ValueError):
+    """An unknown calibration, or one whose words cannot be carried by the
+    register: REFUSED, never clamped or silently replaced by the default."""
+
+
+def filter_calibration(name: str) -> dict:
+    try:
+        return FILTER_CALIBRATIONS[name]
+    except KeyError:
+        raise CalibrationError(f"unknown filter calibration {name!r}; known: "
+                               f"{sorted(FILTER_CALIBRATIONS)}") from None
+
+
+def ladder_regs(res: float, drive: float, calibration: str | None = None) -> tuple:
+    """THE host conversion for the ladder's k / gain / ogain registers. Every
+    production caller (`VoiceFx.patch_regs`, the SPI host's resonance knob)
+    goes through here, so a calibration cannot be applied on one path and
+    forgotten on another.
+
+    calibration None: the legacy conversion, `LadderFx(**LADDER_CFG).regs`,
+    clamped to the register widths exactly as before.
+    calibration name: `LadderFx.regs_unclamped` at volts_per_unit =
+    base * input_scale; a word outside its register REFUSES."""
+    if calibration is None:
+        return LadderFx(**LADDER_CFG).regs(res, drive)
+    cal = filter_calibration(calibration)
+    base = LadderFx(**LADDER_CFG)
+    if base.vpu != cal["base_volts_per_unit"]:
+        raise CalibrationError(f"{calibration}: frozen against volts_per_unit "
+                               f"{cal['base_volts_per_unit']}, the global conversion now "
+                               f"uses {base.vpu}")
+    lad = LadderFx(**{**LADDER_CFG, "volts_per_unit": cal["base_volts_per_unit"]
+                      * cal["input_scale"]})
+    words = lad.regs_unclamped(res, drive)
+    for name, v, bits in zip(("k", "gain", "ogain"), words,
+                             (LadderFx.K_BITS, LadderFx.GAIN_BITS, LadderFx.GAIN_BITS)):
+        if not 0 <= v < (1 << bits):
+            raise CalibrationError(f"{calibration}: {name} = {v} at res {res}, drive {drive} "
+                                   f"does not fit its {bits}-bit register; refused, not clamped")
+    return words
+
 INC_BITS = PHASE_BITS            # the increment register is as wide as the phase
 INC_MAX = (1 << INC_BITS) - 1
 WEIGHT_BITS = 16                 # Q0.15 mixer weight; 1.0 = 32768 needs the 16th bit
@@ -175,6 +240,61 @@ MMIX_FULL = 1 << 15              # mmix = 32768 is noise only; 0 is oscillator 3
 MPD_REF_OCT = 0.75
 MFD_REF_OCT = 1.30
 
+# ---- per-oscillator drift (DR 0019; contract 6.11) --------------------------
+# The Model D's three VCOs are not stable against each other, and the beating
+# of three slowly-wandering oscillators is part of what it sounds like. Static
+# detune gives a PERIODIC beat; drift gives a moving one.
+#
+# The mechanism is a bounded (Ornstein-Uhlenbeck) random walk per oscillator,
+# perturbing the phase increment MULTIPLICATIVELY, so the deviation is a
+# constant number of cents at every pitch. It is DISTINCT from the MR_OSC
+# modulation path of 6.9, which carries one shared, vibrato-shaped signal to all
+# three oscillators by construction and therefore cannot produce independent
+# drift whatever its depth.
+#
+# Entropy comes from the noise board's LFSR (DR 0012) -- no second generator --
+# decimated to one update every DRIFT_DIV frames and split into three
+# non-overlapping 5-bit fields of the same 16-bit word. The three fields are
+# reads of the same m-sequence 5 and 10 bits apart, and two shifts of an
+# m-sequence cross-correlate at -1/(2^31 - 1): the same decorrelation argument
+# DR 0012 already uses for the voice/drum seed separation, reused rather than
+# reinvented. `test_moog_acceptance.py` measures the realised correlation.
+DRIFT_BITS = 16                  # the DRIFT register: Q0.16 depth; 0 is off and
+                                 #   makes every sample bit-identical to no drift
+DRIFT_DIV_LOG2 = 10              # one update every 1024 frames = 21.33 ms
+DRIFT_DIV = 1 << DRIFT_DIV_LOG2
+DRIFT_ACC_BITS = 16              # the walk's state per oscillator, signed
+DRIFT_LEAK_LOG2 = 6              # acc -= round(acc / 64) each update: a bounded
+                                 #   walk with tau = 64 updates = 1.365 s. The
+                                 #   rounding is to NEAREST, not floor: floor
+                                 #   pulls negative states up by one LSB and
+                                 #   shows up as a static detune
+DRIFT_FIELD_BITS = 5             # LFSR bits per oscillator per update
+DRIFT_STEP_SHIFT = 5             # the step's scale. The 5-bit field b becomes
+                                 #   ((b << 1) + 1 - 32) << 5: odd values in
+                                 #   +-992, mean EXACTLY zero for uniform b
+DRIFT_DEV_BITS = 16              # the per-oscillator deviation word, signed
+DRIFT_DEV_Q = 20                 # ... Q0.20 of RELATIVE frequency. 1 cent is
+                                 #   2^20 * ln2 / 1200 = 605.6 LSB
+# The stationary rms of the walk's state, needed by the host to turn cents into
+# the DRIFT register. It is a property of the integer generator above, so it is
+# MEASURED from it (`drift_acc_rms`) rather than taken from the continuous-time
+# formula, and `test_moog_acceptance.py` pins it.
+DRIFT_ACC_RMS = 3394.0            # measured over 2^18 updates: 3406.4 / 3343.0
+                                  #   / 3432.3 for the three oscillators, whose
+                                  #   spread is this run's own sampling error.
+                                  #   Largest |acc| seen 15403, so the 16-bit
+                                  #   saturation has 2.1x headroom and never fires
+# The RANGE this project commits to as a target, and the reference value inside
+# it (DR 0019). It is a MUSICAL decision, not a reference measurement: the
+# frozen Mini V3 renders wander by 0.001-0.024 cents rms, 30-100x below this,
+# so the references bound drift rather than supplying an amount
+# (docs/scorecard/mono-osc-drift/). The default stays 0 -- switching it on moves
+# every rendered sample, which is a separate reviewable change.
+DRIFT_TARGET_CENTS = (0.8, 4.0)   # rms per oscillator
+DRIFT_REF_CENTS = 1.5             # the value inside it that patches should ask for
+CENTS_TO_DEV = (1 << DRIFT_DEV_Q) * math.log(2.0) / 1200.0          # 605.61 LSB per cent
+
 # ---- oscillator waveforms (docs/minimoog-reference.md W1-W7) ----------------
 # Drawing 1448 "WAVEFORM SWITCHING MINI D": saw and triangle reach the waveform
 # switch at the same +-1.75 V [verified: SM 2.3], and the shark-tooth position
@@ -213,7 +333,8 @@ REG_BITS = dict(inc=INC_BITS, w=WEIGHT_BITS, wn=WEIGHT_BITS,
                 cut_lo=CUT_BITS, cut_hi=CUT_BITS, track_hz=CUT_BITS,
                 k=LadderFx.K_BITS, gain=LadderFx.GAIN_BITS, ogain=LadderFx.GAIN_BITS,
                 glide=GLIDE_BITS, vol=VOL_BITS, nsel=NSEL_BITS, mmix=MOD_BITS,
-                mwheel=MOD_BITS, mpd=MOD_BITS, mfd=MOD_BITS, mroute=MROUTE_BITS)
+                mwheel=MOD_BITS, mpd=MOD_BITS, mfd=MOD_BITS, mroute=MROUTE_BITS,
+                drift=DRIFT_BITS)
 
 _SINE = dsp._QUARTER.astype(np.int64)   # 256-entry quarter wave, midpoint-sampled
 
@@ -344,6 +465,82 @@ def blep_fx(ph: np.ndarray, inc, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BIT
     return c
 
 
+# ---- PolyBLAMP (DR 0017) ----------------------------------------------------
+# The shark-tooth has TWO kinds of discontinuity and PolyBLEP corrects one of
+# them. Esqueda, Bilbao and Valimaki analyse this exact waveform (ISMRA 2016
+# section 3): the saw share STEPS at the wrap -- an amplitude discontinuity,
+# which is what BLEP is for -- and the triangle share CORNERS, at the valley
+# (phase 0) and the peak (half a cycle). A corner is a SLOPE discontinuity and
+# a step correction does nothing for it; the correction it needs is the
+# INTEGRAL of the step's, which is polyBLAMP.
+#
+# The derivation, so the constants below are checkable rather than quoted.
+# Write x for the time of a sample relative to the discontinuity, in samples.
+# `blep_fx` above is, in these terms, the residual
+#
+#     B(x) = (1 + x)^2   for -1 <= x < 0        (subtracted from a step of -2)
+#          = -(1 - x)^2  for  0 <= x < 1
+#
+# Integrating once, R(x) = integral of B from -1 to x, gives the ramp residual
+#
+#     R(x) = (1 - |x|)^3 / 3      for |x| <= 1, and 0 outside
+#
+# -- a non-negative bump peaking at 1/3, which is the published two-point
+# polyBLAMP residual (the paper's d^3/6 per-sample form is this with the
+# slope-change factor of 2 taken out). A naive signal whose slope JUMPS by
+# `ds` per sample at x = 0 is band-limited by ADDING (ds/2) * R(x). For the
+# triangle, |slope| = inc/128 in Q1.15 LSBs per sample (`_tri_fx` reads
+# ph >> 7), so ds = +-inc/64 and ds/2 = +-inc/128: the valley is RAISED by
+# (inc/128) * R and the peak LOWERED by the same amount, which is what
+# rounding a corner looks like.
+#
+# Fixed point, integer end to end so the RTL can be bit-exact against it (this
+# is not a float prototype that was quantised afterwards):
+#
+#     m3 = (inc * BLAMP_THIRD) >> 15      once per oscillator per frame; the
+#                                         |slope|/3 term, 8 extra fraction bits
+#     s  = 65536 - ph/inc  in Q0.16       the SAME window word PolyBLEP forms
+#     s3 = (((s*s) >> 16) * s) >> 16      Q0.16 of (1-|x|)^3
+#     blamp = (m3 * s3) >> 24             Q1.15 LSBs, >= 0
+#
+# BLAMP_THIRD is a constant multiply, not a divider, and the model is DEFINED
+# by that multiply: the RTL performs the identical one, so "exactly 1/3" never
+# enters the bit-exactness question. Widths: m3 < 2^24, s3 <= 2^16, so the
+# product fits the voice datapath's one 25 x 21 multiplier and blamp <= 43690.
+BLAMP_THIRD = 21845              # Q0.16 approximation of 1/3 (65536/3 = 21845.33)
+HALF_CYCLE = CYCLE >> 1          # the triangle's peak: its second corner
+
+
+def blamp_slope(inc):
+    """The triangle's |slope| / 3, with 8 fraction bits below a Q1.15 LSB.
+    `inc` scalar or per-sample; one multiply per oscillator per frame."""
+    return (np.asarray(inc, dtype=np.int64) * BLAMP_THIRD) >> 15
+
+
+def blamp_fx(ph: np.ndarray, inc, m3, e, r, mant_bits=MANT_BITS, recip_bits=RECIP_BITS):
+    """The ramp residual at the corner at phase 0, Q1.15, NEVER NEGATIVE --
+    the sign belongs to the caller, because the same residual raises a valley
+    and lowers a peak. `m3` is `blamp_slope(inc)`. Windowed exactly as
+    `blep_fx` is: the sample either side of the corner and no other."""
+    inc = np.asarray(inc); e = np.asarray(e); r = np.asarray(r)
+    m3 = np.asarray(m3)
+    out = np.zeros_like(ph)
+    a = ph < inc
+    if a.any():
+        ea = e if e.ndim == 0 else e[a]; ra = r if r.ndim == 0 else r[a]
+        ma = m3 if m3.ndim == 0 else m3[a]
+        s = 65536 - frac_q16(ph[a], ea, ra, mant_bits, recip_bits)      # 1 .. 65536
+        out[a] = (ma * ((((s * s) >> 16) * s) >> 16)) >> 24
+    q = CYCLE - ph
+    b = q < inc
+    if b.any():
+        eb = e if e.ndim == 0 else e[b]; rb = r if r.ndim == 0 else r[b]
+        mbb = m3 if m3.ndim == 0 else m3[b]
+        s = 65536 - frac_q16(q[b], eb, rb, mant_bits, recip_bits)       # 1 .. 65535
+        out[b] = (mbb * ((((s * s) >> 16) * s) >> 16)) >> 24
+    return out
+
+
 class OscFx:
     """One oscillator: 24-bit phase accumulator, waveform, PolyBLEP on the
     discontinuous shapes, and an optional causal 3-tap output filter. `inc` may
@@ -441,10 +638,21 @@ class OscFx:
             return self._smooth(raw) if self.smooth else raw
         if self.shape == "shark":
             # The switch mixes the two BUFFERED waveform outputs through R030
-            # and R031, so the correction the saw already carries is what the
-            # junction sees. The step at the wrap is 10/57 of the saw's.
+            # and R031, so whatever correction each one already carries is what
+            # the junction sees. Both of them need one, and they are different
+            # corrections (DR 0017): the saw STEPS at the wrap, so its share of
+            # the step is 10/57 of the saw's and PolyBLEP is what removes it;
+            # the triangle CORNERS twice per cycle, at the valley (phase 0) and
+            # the peak (half a cycle), and a corner is a slope discontinuity
+            # that BLEP cannot see. polyBLAMP raises the valley and lowers the
+            # peak by the same non-negative residual.
+            m3 = blamp_slope(inc_a)
+            tri = sat16(_tri_fx(ph)
+                        + blamp_fx(ph, inc_a, m3, e, r, self.MB, self.RB)
+                        - blamp_fx((ph + HALF_CYCLE) & PHASE_MASK, inc_a, m3, e, r,
+                                   self.MB, self.RB))
             raw = sat16((SHARK_W_SAW * sat16(_saw_fx(ph) - c)
-                         + SHARK_W_TRI * _tri_fx(ph)) >> 15)
+                         + SHARK_W_TRI * tri) >> 15)
             return self._smooth(raw) if self.smooth else raw
         ph2 = (ph + (CYCLE - DUTY[self.shape])) & PHASE_MASK
         raw = sat16(naive_fx(self.shape, ph) + c
@@ -564,6 +772,96 @@ class NoiseFx:
         for i in range(n):
             w[i], p[i], r[i] = self.step()
         return w, p, r
+
+
+# ---- per-oscillator drift (contract 6.11; DR 0019) --------------------------
+def drift_step(word: int, k: int) -> int:
+    """Oscillator k's noise step from the LFSR's 16-bit word.
+
+    Bits [15:11] for oscillator 0, [10:6] for 1, [5:1] for 2 -- three
+    NON-OVERLAPPING fields, so the three walks are reads of the same
+    m-sequence 5 and 10 places apart. Bit 0 is deliberately unused: the three
+    fields are then symmetric and the choice does not depend on the word width.
+
+    The field b becomes ((b << 1) + 1) - 32, i.e. an ODD value in +-31, whose
+    mean over uniform b is EXACTLY zero. Taking the field as a signed number
+    instead (b - 16) has mean -0.5, and a -0.5 mean step against a leak of
+    acc/64 parks the walk at -32 -- a small permanent detune dressed up as
+    drift."""
+    b = (word >> (11 - DRIFT_FIELD_BITS * k)) & ((1 << DRIFT_FIELD_BITS) - 1)
+    return (((b << 1) + 1) - (1 << DRIFT_FIELD_BITS)) << DRIFT_STEP_SHIFT
+
+
+def drift_acc_next(acc: int, step: int) -> int:
+    """One update of one oscillator's bounded walk:
+        acc <- sat(acc + step - round(acc / 2^DRIFT_LEAK_LOG2))
+    The leak is what makes it BOUNDED rather than a random walk, and the
+    saturation is a width guard that the measured rms sits 9 sigma inside."""
+    half = 1 << (DRIFT_LEAK_LOG2 - 1)
+    leak = (acc + half) >> DRIFT_LEAK_LOG2          # round to nearest
+    return sat(acc + step - leak, DRIFT_ACC_BITS)
+
+
+def drift_dev(acc: int, depth: int) -> int:
+    """The Q0.20 relative-frequency deviation from a walk state and the DRIFT
+    register: (acc * depth) >> 16, saturated to its own width. depth = 0 gives
+    exactly 0, so a voice with DRIFT unwritten is bit-identical to one with no
+    drift mechanism at all."""
+    return sat((acc * depth) >> DRIFT_BITS, DRIFT_DEV_BITS)
+
+
+def drift_apply(inc: int, dev: int) -> int:
+    """inc + ((inc * dev) >> DRIFT_DEV_Q), clamped to the increment register.
+    Multiplicative, so the deviation is the same number of CENTS at every
+    pitch; additive would make it the same number of Hz, which is 40 dB more
+    cents at the bottom of the keyboard than at the top."""
+    v = inc + ((inc * dev) >> DRIFT_DEV_Q)
+    return 0 if v < 0 else (INC_MAX if v > INC_MAX else v)
+
+
+def drift_reg(cents_rms: float) -> int:
+    """Host conversion (contract 5.5): the DRIFT register for a target rms
+    deviation in cents per oscillator.
+
+        depth = cents * CENTS_TO_DEV / DRIFT_ACC_RMS * 2^16
+
+    `DRIFT_ACC_RMS` is the walk's MEASURED stationary rms, not the
+    continuous-time prediction, so this conversion is grounded in the integer
+    generator that ships. 0 (or a nonpositive request) is off."""
+    if not cents_rms or cents_rms <= 0:
+        return 0
+    return usat(int(round(cents_rms * CENTS_TO_DEV / DRIFT_ACC_RMS
+                          * (1 << DRIFT_BITS))), DRIFT_BITS)
+
+
+def drift_cents(depth: int) -> float:
+    """The inverse of `drift_reg`: the rms cents a DRIFT register value means.
+    Reported rather than assumed, because the register is coarse at the bottom
+    of its range."""
+    return depth / (1 << DRIFT_BITS) * DRIFT_ACC_RMS / CENTS_TO_DEV
+
+
+def drift_walk(n_updates: int, *, div: int = 1, seed: int = VOICE_LFSR_SEED) -> tuple:
+    """(trace, rms, max|acc|) of the three walks over `n_updates`.
+
+    `div` is the LFSR frames per update. The STATIONARY statistics do not
+    depend on it -- any two distinct samples of an m-sequence are equally
+    uncorrelated -- only the timescale in seconds does, so the default 1 gives
+    the same rms 1024x faster and `test_moog_acceptance.py` checks that the
+    shipped div = DRIFT_DIV agrees within its own sampling error."""
+    state = int(seed)
+    acc = [0, 0, 0]
+    tr = [[], [], []]
+    for _ in range(int(n_updates)):
+        for _ in range(int(div)):
+            state, _ = lfsr_frame(state)
+        w = state & 0xFFFF
+        for k in range(3):
+            acc[k] = drift_acc_next(acc[k], drift_step(w, k))
+            tr[k].append(acc[k])
+    a = np.array(tr, dtype=np.float64)
+    return (a, [float(np.sqrt(np.mean(r * r))) for r in a],
+            [int(np.max(np.abs(r))) for r in a])
 
 
 # ---- 2^x for the modulation path (contract 6.9) -----------------------------
@@ -985,6 +1283,9 @@ class VoiceFx:
         self.mod_sig = 0                             # the registered modulation value (6.9)
         self.weights = [0, 0, 0, 0]
         self.nsel = self.mmix = self.mwheel = self.mpd = self.mfd = self.mroute = 0
+        self.drift = 0                               # the DRIFT register (6.11)
+        self.drift_cnt = 0                           # frames to the next update
+        self.drift_acc = [0, 0, 0]                   # the three bounded walks
         for o in self.oscs:
             o.phase = o.inc_tgt = o.inc_acc = 0
 
@@ -995,16 +1296,29 @@ class VoiceFx:
                    amp=(0.005, 0.25, 0.75, 0.12), fenv=(0.004, 0.30, 0.25, 0.10),
                    track=0.35, vol=None, glide_s=GLIDE_REF_S,
                    mod_mix=0.0, mod_wheel=0.0, mod_pitch=MPD_REF_OCT, mod_filter=MFD_REF_OCT,
-                   osc_mod=False, filt_mod=False, osc3_ctl=True, **_ignored) -> dict:
+                   osc_mod=False, filt_mod=False, osc3_ctl=True, drift_cents=0.0,
+                   filter_calibration=None,
+                   **_ignored) -> dict:
         """The patch's physical units as the control image, less the per-note
         registers (inc, track_hz, gate). Same names and defaults as
         engines.mono_note. `vol` in 0..1 (reference 0.45); `glide_s` is the
-        time per octave at the constant-rate glide of DR 0004."""
+        time per octave at the constant-rate glide of DR 0004.
+
+        `filter_calibration`: None (the legacy conversion; the image is exactly
+        what it always was, with no calibration key) or a FILTER_CALIBRATIONS
+        name, recorded in the image as `filter_calibration`. An unknown name
+        refuses; a misspelt keyword is refused rather than swallowed by
+        `_ignored`, because an ignored calibration would look selected."""
+        stray = [key for key in _ignored if "calib" in key.lower()]
+        if stray:
+            raise CalibrationError(f"patch keyword(s) {stray} are not `filter_calibration`; "
+                                   f"refusing rather than ignoring a calibration request")
         waves = tuple(waves) + ("saw",) * (3 - len(waves))     # a patch with fewer than
         detune = tuple(detune) + (0.0,) * (3 - len(detune))      # three oscillators leaves
         mix = tuple(mix) + (0.0,) * (3 - len(mix))               # the rest silent: w = 0
         weights = mix_weights(list(mix) + [noise])               # FOUR mixer sources (6.10)
-        k, gain, ogain = LadderFx(**LADDER_CFG).regs(q, drive)     # clamped to 17 / 20 / 20 bits
+        k, gain, ogain = ladder_regs(q, drive, filter_calibration)   # 17 / 20 / 20 bits
+        extra = {} if filter_calibration is None else {"filter_calibration": filter_calibration}
         return dict(waves=waves, detune=detune, weights=weights,
                     cut_lo=usat(int(round(cutoff[0])), CUT_BITS),
                     cut_hi=usat(int(round(cutoff[1])), CUT_BITS),
@@ -1018,7 +1332,9 @@ class VoiceFx:
                     mpd=usat(int(round(mod_pitch * (1 << OCT_Q))), MOD_BITS),
                     mfd=usat(int(round(mod_filter * (1 << OCT_Q))), MOD_BITS),
                     mroute=((MR_OSC if osc_mod else 0) | (MR_FILT if filt_mod else 0)
-                            | (MR_OSC3 if osc3_ctl else 0)))
+                            | (MR_OSC3 if osc3_ctl else 0)),
+                    drift=drift_reg(drift_cents),
+                    **extra)
 
     @staticmethod
     def note_incs(note, detune) -> list:
@@ -1090,6 +1406,16 @@ class VoiceFx:
         self.cut_lo, self.cut_hi = int(r["cut_lo"]), int(r["cut_hi"])
         self.res, self.drive = r["res"], r["drive"]
         self.k_reg, self.gain, self.ogain = int(r["k"]), int(r["gain"]), int(r["ogain"])
+        cal = r.get("filter_calibration")
+        if cal is not None:
+            # An image that NAMES a calibration must carry its words: a request
+            # for the operating point with the legacy words delivered is the
+            # constructor-only trap of #231, refused here rather than rendered.
+            want = ladder_regs(r["res"], r["drive"], cal)
+            if (self.k_reg, self.gain, self.ogain) != tuple(want):
+                raise CalibrationError(
+                    f"image names {cal!r} but carries k/gain/ogain "
+                    f"{(self.k_reg, self.gain, self.ogain)}, not its words {tuple(want)}")
         self.vol = int(r["vol"])
         self.glide = int(r["glide"])
         self.nsel = int(r.get("nsel", 0))
@@ -1098,6 +1424,7 @@ class VoiceFx:
         self.mpd = int(r.get("mpd", 0))
         self.mfd = int(r.get("mfd", 0))
         self.mroute = int(r.get("mroute", 0))
+        self.drift = int(r.get("drift", 0))
         self.regs = r
 
     def _modulate(self, incs, n, mw):
@@ -1141,8 +1468,26 @@ class VoiceFx:
         ph3 = self.oscs[2].phase
         m = self.mod_sig
         mwl = [int(v) for v in mw]
+        depth = self.drift
+        dacc = self.drift_acc
+        dcnt = self.drift_cnt
+        dev = [drift_dev(a, depth) for a in dacc]
+        dev_t = [np.empty(n, dtype=np.int64) for _ in range(3)]
         for i in range(n):
             w, p, r = nz.step()
+            # 6.11, BEFORE the modulation path uses the increments: the walk is
+            # updated on one frame in DRIFT_DIV, from the word the noise board's
+            # LFSR produced on THAT frame, and `dev` is recomputed every frame
+            # so that a DRIFT write takes effect on the frame it lands rather
+            # than waiting up to 21 ms for the next update.
+            if dcnt == 0:
+                word = nz.lfsr & 0xFFFF
+                for k in range(3):
+                    dacc[k] = drift_acc_next(dacc[k], drift_step(word, k))
+            dcnt = (dcnt + 1) & (DRIFT_DIV - 1)
+            for k in range(3):
+                dev[k] = drift_dev(dacc[k], depth)
+                dev_t[k][i] = dev[k]
             white[i] = w; pink[i] = p; red[i] = r
             msig[i] = m
             amt = clamp16((m * mwl[i]) >> 15)                    # the wheel
@@ -1161,10 +1506,19 @@ class VoiceFx:
                     inc_m[k][i] = v
             else:
                 inc_m[0][i] = inc_l[0][i]; inc_m[1][i] = inc_l[1][i]; inc_m[2][i] = inc_l[2][i]
+            if depth:
+                # drift comes AFTER the shared modulation factor and applies to
+                # all three oscillators unconditionally -- SW2 takes oscillator
+                # 3 off the MODULATION bus (M1), not off its own tuning.
+                for k in range(3):
+                    inc_m[k][i] = drift_apply(inc_m[k][i], dev[k])
             o3 = naive_one(shape3, ph3)                          # the tap, before the advance
             ph3 = (ph3 + inc_m[2][i]) & PHASE_MASK
             m = mod_pan(o3, r if nsel else p, mmix)              # 2.5: pink or RED for modulation
         self.mod_sig = m
+        self.drift_acc = dacc
+        self.drift_cnt = dcnt
+        self.drift_dev_trace = dev_t
         return inc_m, white, pink, red, mant_f, sh_f, msig
 
     def _render(self, incs, track, gate, trig, n, mw=None) -> np.ndarray:
@@ -1215,6 +1569,7 @@ class VoiceFx:
                           kc=kc, k_eff=k_eff, ladder=y, vca=v, incs=incs, gate=gate, trig=trig,
                           white=white, pink=pink, red=red, noise=n_audio, mod_sig=msig,
                           mant_f=mant_f, sh_f=sh_f, mwheel=mw, phase2=phase2_trace,
+                          drift_dev=getattr(self, "drift_dev_trace", None),
                           filter_reconstruction=getattr(lad, "last_reconstruction", None),
                           filter_decimation=(getattr(getattr(lad, "converter", None),
                                                      "last_decimation", None)))

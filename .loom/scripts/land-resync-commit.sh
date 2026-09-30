@@ -255,6 +255,10 @@ if [[ $_DB_RC -ne 0 ]]; then
 fi
 rm -f "$DEFAULT_BRANCH_ERR_FILE"
 
+# (#9106: loom_default_branch refuses an unsafe name at the source, and its
+# failure is already handled above, so the `git fetch origin --
+# "$DEFAULT_BRANCH"` below can never receive one.)
+
 CURRENT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [[ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]]; then
     err "The primary checkout ($REPO_ROOT) is on '$CURRENT_BRANCH', not '$DEFAULT_BRANCH'."
@@ -266,17 +270,38 @@ fi
 # ---------- identify resync-managed dirt; refuse anything else ----------
 #
 # Mirrors the path-prefix allowlist resync-installed.sh's own
-# suggest_commit_if_resync_only_dirt() uses for its printed suggestion, so
-# this script never stages (and commits) an unrelated -- possibly operator --
+# collect_resync_dirt() uses for its printed suggestion (its
+# _is_loom_pure_copy_surface_path() plus the single-file cases), so this
+# script never stages (and commits) an unrelated -- possibly operator --
 # change under the "chore: resync" message.
-
+#
+# #9345: `.agents/skills/*` and `.gitignore` were MISSING here while
+# resync-installed.sh wrote both on every run -- `.agents/skills/*` via
+# resync_agent_skills() (#8673) and `.gitignore` via the loom-daemon-managed
+# block refresh (#4280). The result was that this script refused its own
+# sibling's ordinary output as "non-resync dirt" on every repo those surfaces
+# existed in, which is exactly the ad hoc hand-committing it was written
+# (#6646) to eliminate. `.loom/biome.jsonc` / `.claude/biome.jsonc` (#6031)
+# had drifted out the same way.
+#
+# The two lists cannot silently re-diverge: init/resync_surface_parity_tests.rs
+# fails CI when a surface appears in one script's allowlist and not the other's.
+#
+# `.gitignore` is the one entry that is not purely Loom-owned (a consumer's own
+# rules live in it alongside the managed block), so landing it can carry an
+# unrelated .gitignore edit into the resync commit. That is accepted
+# deliberately: the alternative -- refusing every resync that refreshed the
+# managed block, i.e. all of them -- strands the block, and the block is where
+# the credential ignore rules live, so stranding it is itself a security
+# regression (#9046). The credential-class check below runs BEFORE this
+# allowlist and is unaffected either way.
 is_resync_surface_path() {
     case "$1" in
         .loom/hooks/* | .loom/scripts/* | .loom/roles/* | .loom/docs/* | \
-            .loom/bin/* | .loom/runtimes/* | \
-            .claude/commands/loom/* | .claude/README.md | \
-            .github/CONFIGURATION.md | \
-            .loom/install-metadata.json | .loom/CLAUDE.md | .gitattributes)
+            .loom/bin/* | .loom/runtimes/* | .agents/skills/* | \
+            .claude/commands/loom/* | .claude/README.md | .claude/biome.jsonc | \
+            .github/CONFIGURATION.md | .loom/biome.jsonc | .loom/CLAUDE.md | \
+            .loom/install-metadata.json | .gitattributes | .gitignore)
             return 0
             ;;
         *)
@@ -305,14 +330,18 @@ is_resync_surface_path() {
 # (init/credential_class_tests.rs fails CI if the two disagree). It cannot be
 # read from the daemon at runtime: a consumer repo has no post_init.rs, and the
 # installed binary is exactly what is stale on the hosts this guards (#7818).
-# Contract: a trailing `/` is a directory (itself + everything under it);
-# anything else is an exact file path.
+# Contract (#9134): each entry, with any trailing `/` stripped, is a PREFIX of
+# the path it protects -- covering the entry itself, everything under it (for
+# a directory), and any sibling path that extends its final path component
+# (e.g. a rename/backup like `tokens.bak-<ts>/` or `accounts.env.bak`, #9046).
+# Deliberately over-inclusive rather than under-inclusive: a false positive
+# here costs one extra untracked path, a false negative is a credential leak.
 LOOM_CREDENTIAL_PATTERNS=(.loom/claude-config/ .loom/tokens/ .loom/accounts.env
     .loom/api-keys/ .loom/gh-config/ .loom/gh-config-by-owner/)
 is_credential_leak_path() {
     local p
     for p in "${LOOM_CREDENTIAL_PATTERNS[@]}"; do
-        [[ "$1" == "${p%/}" || ("$p" == */ && "$1" == "$p"*) ]] && return 0
+        [[ "$1" == "${p%/}"* ]] && return 0
     done
     return 1
 }
@@ -503,7 +532,7 @@ fi
 FETCH_ERR_FILE="$(mktemp)"
 PUSH_ERR_FILE="$(mktemp)"
 trap 'rm -f "$FETCH_ERR_FILE" "$PUSH_ERR_FILE"' EXIT
-if ! git -C "$REPO_ROOT" fetch --quiet origin "$DEFAULT_BRANCH" 2>"$FETCH_ERR_FILE"; then
+if ! git -C "$REPO_ROOT" fetch --quiet origin -- "$DEFAULT_BRANCH" 2>"$FETCH_ERR_FILE"; then
     warn "Could not fetch origin/$DEFAULT_BRANCH: $(cat "$FETCH_ERR_FILE")"
     if [[ -n "$RESYNC_SHA" ]]; then
         warn "  The resync commit ($RESYNC_SHA) stays LOCAL, uncommitted-to-origin."
@@ -659,7 +688,7 @@ BRANCH="$FALLBACK_BRANCH"
 # CURRENT tip of the side branch (not a stale local notion of it). If origin
 # has no such branch the lease must expect "absent", so drop any stale
 # tracking ref too.
-if ! git -C "$REPO_ROOT" fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
+if ! git -C "$REPO_ROOT" fetch --quiet origin -- "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
     git -C "$REPO_ROOT" update-ref -d "refs/remotes/origin/$BRANCH" 2>/dev/null || true
 fi
 LEASE_SHA="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "refs/remotes/origin/$BRANCH" 2>/dev/null || true)"

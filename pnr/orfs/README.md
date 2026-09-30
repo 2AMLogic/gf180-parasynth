@@ -25,6 +25,8 @@ and `synth_stat.txt` are the files worth opening.
 | `gf180_7t/synth_unsigned.tcl` | `SYNTH_SCRIPT` wrapper that strips `signed` from netlist declarations (OpenSTA's Verilog reader rejects them; `[ERROR STA-0171]`) |
 | `sta-corners.tcl` | post-route STA at tt_025C_5v00 / ss_125C_4v50 / ff_n40C_5v50 with per-corner OpenRCX extraction |
 | `check-pdn.py` | proves the routed DEF has Metal1 follow-pin rails, Metal4/Metal5 straps, PDN vias, tap/endcap and filler cells |
+| `summarize.py` | the per-stage tables in `docs/pnr-first-run.md`. **Exit 2 = REFUSED**: it will not print a `die / synth cell area` ratio for a run whose die came from a utilisation target |
+| `area_provenance.py` | the guard behind that refusal, and its two permanent injections (issue #245). `area_provenance.py --design <d>` classifies a design's config on its own: `synth_top` OK (fixed die), `ladder_dp` and `synth_core` REFUSED (`CORE_UTILIZATION = 50`, so their die area is the cell area / 0.50 and a ratio only recovers the input) |
 
 Gotchas met on the way (each cost a run): GNU make keeps trailing spaces before an inline `#`
 comment in a value (`CORNER = TC   # ...` makes `$(TC   _LIB_FILES)` empty); the design config is

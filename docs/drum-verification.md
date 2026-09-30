@@ -20,6 +20,26 @@ weak". **All four of the previously suspected defects are refuted**: they were
 measurement artefacts, not design faults. The real faults are different ones,
 listed below.
 
+**What each constant rests on is a query, not a read (#114).** Every constant in
+`model/drums_fx.py` whose comment claims a basis has a record in that module's
+`PROVENANCE` registry, under a closed status — `derived-from-circuit` /
+`measured` / `inferred` / `fitted` — carrying, for a measurement, its sample
+(n, spread, date) and, for a fit, what it was fitted on and what was held out.
+<!-- claim: test=model/test_drums_provenance.py::test_every_prose_tagged_constant_in_the_source_is_registered -->
+
+A constant with no record REFUSES rather than reporting a status, so the
+registry's boundary is stated instead of implied.
+<!-- claim: test=model/test_drums_provenance.py::test_a_constant_with_no_record_is_refused_rather_than_defaulted -->
+
+```
+python model/drums_provenance.py                 # every constant by status
+python model/drums_provenance.py --no-holdout    # fits with nothing held out
+```
+
+The prose comments beside each constant remain the justification; the registry
+is the machine-readable half, so a failing case here can be asked what kind of
+evidence it rests on rather than grepped for one.
+
 ---
 
 ## 1. The reference audio
@@ -667,7 +687,7 @@ tuned away.
 | BD f0 | 56 Hz (chart) | **49.4 Hz** (circuit) | verified in a source, §2 |
 | BD Q / DECAY law | §2's table | **§2's table, unchanged** | — |
 | BD attack window | absent | **130 Hz Q 6 for 4 ms** | verified in a source, §2 |
-| tom pitch drop | absent | **×1.7, accent-scaled, 60 ms** | verified in a source, §4 |
+| tom pitch drop | absent | ~~**×1.7, accent-scaled, 60 ms**~~ — **REFUTED, see §12** | ~~verified in a source, §4~~ **inferred, and wrong: §4 tagged the mechanism verified and the *magnitude* inferred, and this row lost the distinction.** Measured ×1.060 in rev 10 (#110/#154) |
 | excitation shape | impulse | **impulse** — 17.20 | not done |
 
 ### 8.5 Amendments to `tr808-reference.md` that this section forces
@@ -897,7 +917,7 @@ fixed, and the branch's own copy of the suite is 53/53 green under
 | 11 | `test_sd_noise_balance_matches_a_real_machine` | outdated expectation — **method and target both withdrawn** | §8.0/§8.1: the 700 Hz whole-span Hann split is invalid on a decaying one-shot (1.25 % against an exact 18.55 %). Replaced by the validated separator; the machine at SNAPPY 5.0 carries **27.66 %** |
 | 12 | `test_sd_noise_highpass_corner` | outdated expectation | `AttributeError: module 'drums_fx' has no attribute 'M_SDHP'`. The mode is `M_SDN` and its numerator is a **band-pass**, not a high-pass (§8.1, contract 17.22) |
 | 13 | `test_meta_render_manifest_describes_what_was_played` | outdated expectation | asserts the manifest's BD f0 is 56.0; DR 0009 makes it 49.4 |
-| 14–15 | `test_tom_pitch_falls_during_the_ring[LT/HT]` | **unexpectedly passing — good news** | contract 15.7.1 sweeps the tom f0 from ×1.7 over 60 ms, accent-scaled (`tr808-reference.md` §4). Removed from `KNOWN_DEFECTS` |
+| 14–15 | `test_tom_pitch_falls_during_the_ring[LT/HT]` | **unexpectedly passing — good news** | contract 15.7.1 sweeps the tom f0 over 60 ms, accent-scaled (`tr808-reference.md` §4). Removed from `KNOWN_DEFECTS`. *The magnitude stated here at the time — ×1.7 — was inferred and is refuted; see §12. These two tests assert that the pitch falls, not by how much, so the closure stands and the number does not* |
 | 16 | `test_cowbell_decay_matches_a_real_machine` | **unexpectedly passing — good news** | `E_CBB` is the measured τ = 98 ms, not 30 (§4.6). Removed from `KNOWN_DEFECTS` |
 
 **Zero real defects.** The reconciliation was already done, in
@@ -1035,8 +1055,14 @@ with a known answer before anything was quoted (`test_audio_measure`):
   questions. They agree exactly on a stationary two-tone signal, which is how
   each was checked.
 
-Measured on `cy8/CY5025.WAV` — TONE 5.0, DECAY 5.0, Roland's own chart
-condition — against a render of exactly the same length (2.00 s, which matters:
+Measured on `cy8/CY5025.WAV` — TONE 5.0, **DECAY 2.5**. This paragraph read
+"DECAY 5.0, Roland's own chart condition" until #102; it is not that
+condition. The Fischer filename's second code is DECAY and `25` means 2.5, so
+the chart's mid-DECAY cymbal is `CY5050` (`tools/probe_new_voice_knobs.py`
+findings 2 and 4). Nothing measured here moves — every CY figure in this
+document was taken on this file and is still a figure about this file — but
+what the file *is* moves, and with it what a fit to it generalises to.
+Measured against a render of exactly the same length (2.00 s, which matters:
 the energy integral runs to the end of the array, so an unmatched window moves
 the answer by 7 %):
 
@@ -1433,3 +1459,90 @@ already carries it at −40.2 dB.
 `model/drums_fx.py` at contract revision 10. Script:
 `model/bd_excitation_probe.py`, validated by
 `model/test_bd_excitation_probe.py`.*
+
+---
+
+## 12. The tom pitch drop — §8.4's row is refuted (issue #95)
+
+§8.4 records the rev-6 kit adding `tom pitch drop | absent | **×1.7,
+accent-scaled, 60 ms** | verified in a source, §4`. **The authority column was
+wrong, and it was wrong in a way this document can be read for.** §4 tags that
+paragraph *[verified: SN text; **magnitude inferred**]* — the *mechanism* is
+verified in the service notes, the ×1.7 never was. The table dropped the
+qualifier, and a number that had been marked as an inference was thereafter
+cited as a source-verified one, in the contract and in the kit, for three
+revisions.
+
+`×1.7 occurs in none of the 99 clean-digital tom files` of a real TR-808
+(#110). The shipped law is now:
+
+| | inferred (rev 6–9) | measured (rev 10, #154) |
+|---|---|---|
+| magnitude at accent 1.0, pot centred | ×1.7 | **×1.060** |
+| accent | `min(max(accent,0),1)` — a **clamp** | `max(0, accent − A0)` — a **threshold** |
+| tuning pot | ignored | `exp(G · (f0/f0_nominal − 1))`, ±10 % |
+| tom / conga | one law | separate `A0` and `G` |
+| shape, 60 ms window | exponential, 6 steps | **unchanged** |
+<!-- claim: test=model/test_tom_drop_law.py::test_the_reference_documents_carry_the_measured_magnitude -->
+
+### 12.1 What it did to the board
+
+The three tom cases were failing `Pitch drop` at 4.7–5.4× tolerance, which is
+what opened #95. They no longer are — scored on the committed results
+(`docs/scorecard/results/`), error ÷ tolerance:
+
+| case | Pitch drop | body spectrum | decay |
+|---|--:|--:|--:|
+| D03A low tom | **0.06** | 6.04 | 0.04 |
+| D05A mid tom | **0.14** | 5.46 | 0.04 |
+| D07A high tom | **0.14** | 4.51 | 0.04 |
+
+**All three now fail on `body spectrum` instead, and D03A is worse overall
+than it was.** That is the finding, not a regression to be argued away: all six
+tom/conga positions were already 3–14 dB short of high-band energy, and the
+×1.7 sweep was manufacturing 4–8 dB that masked it. A wrong constant was
+compensating for a real spectral deficit; correcting it exposed the deficit.
+That deficit is #152 / §11, and it is the next thing to fix — it is *not* the
+pitch drop.
+
+### 12.2 The congas were re-examined, and the answer changed once
+
+#95 asks whether the congas — same circuit, the mechanism at about half the
+size — carry the same clamp and missing-tuning gaps. **They do not.** Measured
+pot-centre excess against what `drums_fx.tom_drop_excess` ships at the same
+position's chart frequency:
+
+| cell | measured | shipped | error |
+|---|--:|--:|--:|
+| LC *No Accent* | 0.0053 | 0.0000 | −0.0053 |
+| LC *Accent* | 0.0617 | 0.0611 | −0.0006 |
+| MC *No Accent* | 0.0030 | 0.0000 | −0.0030 |
+| MC *Accent* | 0.0655 | 0.0611 | −0.0044 |
+| HC *No Accent* | 0.0043 | 0.0000 | −0.0043 |
+| HC *Accent* | 0.0593 | 0.0611 | +0.0018 |
+<!-- claim: test=model/test_tom_drop_law.py::test_the_congas_carry_neither_the_clamp_nor_the_missing_tuning_term -->
+
+No conga cell is off by more than **0.0053 of excess** — 0.5 % of f0, under
+the 2 Hz floor of the board's own `pitch_drop_hz` estimator at these
+frequencies. The *No Accent* rows read zero because the conga threshold
+(`A0` = 1.064) sits **above** an unaccented hit, which is the point: the
+machine's unaccented congas measure 0.003–0.005, at the measurement floor. A
+conga left on the tom law would have swept 12× too far there.
+
+**Wrong-then-right, recorded because the control is what caught it.** The
+first pass of this comparison evaluated the shipped law at the *machine's*
+settled f0 (LC 207 Hz) and reported LC *Accent* **2.1× too large**. That was
+the comparison being wrong, not the law: `u` is normalised **centre to
+centre** — the machine's own median settled f0 on the measuring side, the
+model's chart f0 on the shipping side (`model/tom_drop_fit.py`, "why u is
+normalised to each position's own centre"). This unit's LC pot centre sits
+11 % above the chart, so feeding it in as a *pot position* asks the law for a
+hit with the tuning wound up, and it correctly answers with a bigger drop.
+Recomputed centre to centre, the error is −0.0006. One measurement, wrong
+before it was right, caught by re-reading the fit's own stated convention.
+
+*Re-examined 2026-09-26 from `docs/tom-pitch-drop-results.json` (#110's
+corpus) and `docs/tom-pitch-drop-law.json`, against `model/drums_fx.py` at
+contract revision 10. Scripts: `model/tom_drop_fit.py`, gated by
+`model/test_tom_drop_law.py`; board figures from the committed
+`docs/scorecard/results/D0{3,5,7}A.json`.*

@@ -224,7 +224,7 @@
       "name": "Fits a real shuttle padframe",
       "group": "silicon",
       "class": "implementation",
-      "blocked": "routed die has padcells: 0 -- LibreLane half-slot in progress",
+      "blocked": "LibreLane half-slot, in flight: padcells 0 -> 754 placed with all 5 wafer.space IP macros, 73.07 % core utilisation, drum_regs 3,520/3,520 flops placed on the run's own DEF. Detailed routing has NOT completed (iteration 60 of a 64 cap, 1 Metal2 short), so there is no final router DRC count, no post-route antenna check and no post-route STA at any corner. The verdict this node will read is pnr/shuttle/evidence/halfslot-verdict.json ('passed' = the AREA question only); finish it with pnr/shuttle/finish_halfslot.py finish. docs/pnr-shuttle-halfslot.md, PR #348",
       "deps": [
         "S1"
       ]

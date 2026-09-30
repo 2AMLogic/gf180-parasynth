@@ -133,7 +133,9 @@ def test_drum_section_rtl_is_bit_exact(tmp_path):
 
 @needs_sim
 @pytest.mark.parametrize("bug", ["DRUM_ENV_FLOOR", "DRUM_LEVEL_TRIG", "DRUM_LFSR_TAP", "DRUM_TAP_NOSAT",
-                                 "DRUM_LAST_PATH", "DRUM_SQ_LONE", "MODAL_NUM_HOLD", "MODAL_EXC_NOCLEAR"])
+                                 "DRUM_LAST_PATH", "DRUM_SQ_LONE", "MODAL_NUM_HOLD", "MODAL_EXC_NOCLEAR",
+                                 "DRUM_FINAL_WEAK", "DRUM_FINAL_SHORT", "DRUM_FINAL_SHIFT",
+                                 "DRUM_FCAP_STALE"])
 def test_drum_negative_control_is_caught(bug, tmp_path):
     """Each defect -- the envelope without its max(1, .), level- instead of
     edge-triggered stops, a wrong LFSR tap, a wrapping tap, the strawman's

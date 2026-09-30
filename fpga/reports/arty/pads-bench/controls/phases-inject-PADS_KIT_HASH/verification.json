@@ -1,0 +1,9 @@
+{
+  "state": "REFUSED",
+  "exit_code": 2,
+  "inject": "PADS_KIT_HASH",
+  "scenario": "phases",
+  "reason": "kit-hash",
+  "detail": "Refused: pads_rom_tampered.v: boot ROM kit hashes to a4201f038011, not R1's frozen kit 321a93546cfa (r1-kit.json says 321a93546cfa)",
+  "mutant_compiles": true
+}

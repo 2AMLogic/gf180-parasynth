@@ -1,0 +1,28 @@
+==============================================================================
+PASS            36.3s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --outdir /home/ubuntu/work/clap-d/build/l2-top-clap
+              verify_synth_top: writes landed in frames 2..21002; modelling 30201 frames
+              verify_synth_top: model peak |sample| 32768 of 32768 (327 frames at the rail); drums |dmix| max 57731, |body| max 142194, DFILT engaged in 0 frames
+              verify_synth_top: clap phrase: 9 CP fires, 6 final strikes, re-strike spacings [1531, 1535, 1545, 4605, 322, 1028, 5464, 4620] (final at 1533); MA fires 1 with FRATE 0: True; internal envelope saturation at fire: 5; output rail samples L2 327 vs revision-10 clap in the same fixture 324; peak 32768 vs 32768
+              verify_synth_top: PASS -- 30201 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+PASS            36.2s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --inject DRUM_FINAL_SHORT --expect-fail --outdir /home/ubuntu/work/clap-d/build/l2-top-clap-short
+                first wire mismatch at period 3415: model 2434, wire 2433, error -1 LSB
+                the core's own sample stream: 13666 of 30202 frames differ from the model; first at frame 3414: model 2434, core 2433
+                the core is already wrong: the defect is upstream of the serialiser
+              verify_synth_top: negative control DRUM_FINAL_SHORT CAUGHT (comparison failed as required)
+PASS            36.1s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --inject DRUM_FINAL_SHIFT --expect-fail --outdir /home/ubuntu/work/clap-d/build/l2-top-clap-shift
+                first wire mismatch at period 1372: model -8976, wire -7040, error +1936 LSB
+                the core's own sample stream: 15745 of 30202 frames differ from the model; first at frame 1371: model -8976, core -7040
+                the core is already wrong: the defect is upstream of the serialiser
+              verify_synth_top: negative control DRUM_FINAL_SHIFT CAUGHT (comparison failed as required)
+PASS            24.0s  cd /tmp/clap-pre && /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --json /home/ubuntu/work/clap-d/docs/scorecard/clap-l2/deadline-stress-saw-pre.json
+                worst frame 586: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2156 of 2156 required periods compared (2156 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 460/460, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 13 cycles, I2S identical to the model
+PASS            31.3s  cd /tmp/clap-pre && /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --json /home/ubuntu/work/clap-d/docs/scorecard/clap-l2/deadline-arty-uart-pre.json
+                worst frame 2440: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 2482: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 13 cycles, I2S identical to the model
+==============================================================================
+5/5 passed

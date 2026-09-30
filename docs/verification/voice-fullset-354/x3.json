@@ -1,0 +1,24 @@
+{
+ "headroom": {
+  "worst": {
+   "ladder_y19_abs": 30021,
+   "mixed_abs": 29679,
+   "out_abs": 12750,
+   "vca_abs": 28332,
+   "ladder_margin_db": 18.82
+  },
+  "per_scenario": [
+   {
+    "name": "rate = 0 (release at one LSB per frame)",
+    "ladder_y19_abs": 30021,
+    "mixed_abs": 29679,
+    "out_abs": 12750,
+    "vca_abs": 28332
+   }
+  ]
+ },
+ "verify_voice_exit": 0,
+ "scenarios": [
+  "rate = 0 (release at one LSB per frame)"
+ ]
+}

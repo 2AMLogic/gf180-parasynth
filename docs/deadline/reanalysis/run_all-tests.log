@@ -1,0 +1,11 @@
+==============================================================================
+PASS            69.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_verify_deadline.py fpga/test_build_arty.py fpga/test_publish_arty.py -q
+              ..........................................................               [100%]
+              58 passed in 66.11s (0:01:06)
+PASS           115.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/check_doc_claims.py
+              OK      docs/ladder-rung1-audit.md:187  model/test_ladder_headroom.py::test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin passed, as claimed
+              OK      docs/ladder-rung1-audit.md:201  model/test_ladder_headroom.py::test_the_drive_stage_saturation_point_is_in_the_references_range passed, as claimed
+              OK      docs/ladder-rung1-audit.md:219  model/test_ladder_headroom.py::test_the_rig_refuses_to_apply_the_tuning_polynomial_twice passed, as claimed
+              22 claim(s) in 39 document(s): 22 ok, 0 stale, 0 refused
+==============================================================================
+2/2 passed

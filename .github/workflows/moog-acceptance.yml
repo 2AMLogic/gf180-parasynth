@@ -17,6 +17,52 @@
 # analysers measures the analysers.
 name: acceptance
 
+# WHY BOTH `push` AND `pull_request` (issue #264, and please read this before
+# deleting one of them).
+#
+# #264 reported this job being cancelled at its 20-minute cap on ~20% of runs,
+# and proposed dropping one trigger on the theory that the two copies of a PR
+# commit contend for capacity. **That theory is refuted by measurement**; the
+# duplication is not what was costing the time, so both triggers stay.
+#
+# The measurement is `tools/ci_acceptance_timing.py`, which reads per-step
+# `started_at`/`completed_at` out of the jobs API -- run-level timing folds
+# queue, setup and every step into one number and cannot separate these cases.
+# Over the 100 most recent runs on 2026-09-26 it found, split by runner class:
+#
+#                      n   cancelled   job minutes (min/median/max)
+#   blacksmith        49       0 (0%)       10.4 / 11.1 / 12.3
+#   github-hosted     51      10 (20%)       8.9 / 15.3 / 20.0
+#
+# Every cancellation was on a GitHub-hosted runner, and all ten predate PR #186
+# (the Blacksmith migration, `runs-on:` below) landing on main at 11:18Z --
+# they are runs of branch snapshots that still said `runs-on: ubuntu-latest`.
+# Since that merge: 49 jobs, zero cancellations. Three things follow.
+#
+#   - It was not trigger duplication. Two of the ten cancellations were `main`
+#     pushes, which have no `pull_request` twin to contend with at all; and on
+#     Blacksmith the `push`/`pull_request` pair of a commit routinely runs
+#     concurrently with the whole distribution inside a 1.9-minute spread.
+#   - It was not the suite outgrowing the cap. In the cancelled runs *every*
+#     step stretched by the same ~2x, including short ones (the properties
+#     step 124s -> 240s, the TR-808 step 203s -> 406s), which is the signature
+#     of a slow machine, not of one test that grew.
+#   - The cap is right where it should be. 20 minutes against a measured
+#     worst case of 12.3 is 1.6x headroom; raising it would only slow the
+#     signal from a genuinely hung test. (That was on Blacksmith. Since
+#     2026-09-30 the job is back on GitHub-hosted and the cap is 40 -- see
+#     the comment on `timeout-minutes` below.)
+#
+# And the two triggers are not redundant in the first place: `push` verifies
+# the branch tip as committed, `pull_request` verifies it merged into the base.
+# Dropping `push` would also stop verifying branches with no open PR (the
+# `measure/*` and `release/*` branches do land work this way). Per
+# `.loom/docs/ci-principles.md` rule 1, the runner minutes are the cheaper
+# half of that trade.
+#
+# To re-check, at any time:
+#   python tools/ci_acceptance_timing.py --limit 100
+#   python tools/ci_acceptance_timing.py --require-clean --window 40
 on:
   push:
     paths:
@@ -34,10 +80,32 @@ on:
 
 jobs:
   acceptance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
+    # outage and the operator's move of every public repo off Blacksmith (D5).
+    # The header's measurement is why the cap moves with it: on the hosted
+    # class this job ran 8.9 / 15.3 / 20.0 min (min/median/max, n=51) and 20%
+    # of runs hit the old 20-minute cap, while the Blacksmith worst case was
+    # 12.3 min (n=49; 14 min over the last 40 runs). The suite has grown
+    # since: the first two hosted runs after the move (PR #489, push +
+    # pull_request) both took 25.1 min, over the old cap on every run. 40
+    # minutes is ~1.6x that -- the headroom 20 gave over 12.3 on Blacksmith
+    # -- so a hosted run is not cancelled for being on a slower machine.
+    # Re-measure with tools/ci_acceptance_timing.py once hosted runs
+    # accumulate.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
+      # fetch-depth: 0, same as dag.yml / fpga_selected.yml / rungs.yml.
+      # `model/test_sound_report.py`'s provenance tests resolve the shas in
+      # sound_report.py's LOCK/RELOCKS with `git cat-file -t`, and those are
+      # ancestor commits. A default depth-1 checkout has not fetched them, so
+      # `cat-file` reports "Not a valid object name" for a sha that is perfectly
+      # real -- CI red with a message blaming the lock table for the checkout's
+      # depth. Those tests refuse rather than skip on a shallow clone (they are
+      # the gate that #242 exists to install), so this depth is load-bearing.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

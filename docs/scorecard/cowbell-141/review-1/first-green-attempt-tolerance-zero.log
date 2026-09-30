@@ -1,0 +1,40 @@
+........................FF......................                         [100%]
+=================================== FAILURES ===================================
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-match] __
+
+purpose = 'match', field = 'tolerance', bad = 0.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+        assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+        assert r["worst"] is None
+>       assert NAME in r["why"] and "invalid number" in r["why"], r["why"]
+E       AssertionError: invalid: unwanted difference tone
+E       assert ('unwanted difference tone' in 'invalid: unwanted difference tone' and 'invalid number' in 'invalid: unwanted difference tone')
+
+tools/test_metric_purpose.py:255: AssertionError
+_ test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-defect ceiling] _
+
+purpose = 'defect ceiling', field = 'tolerance', bad = 0.0
+
+    @pytest.mark.parametrize("purpose", [sc.MATCH, sc.DEFECT_CEILING])
+    @pytest.mark.parametrize("field,bad", BAD_FIELDS)
+    def test_a_non_finite_or_non_positive_number_is_no_verdict(purpose, field, bad):
+        res = with_purpose(purpose)
+        res["metrics"][NAME][field] = bad
+        r = sc.evaluate(CASE, res)
+        assert r["state"] == sc.NO_VERDICT, (purpose, field, bad, r)
+        assert r["worst"] is None
+>       assert NAME in r["why"] and "invalid number" in r["why"], r["why"]
+E       AssertionError: invalid: unwanted difference tone
+E       assert ('unwanted difference tone' in 'invalid: unwanted difference tone' and 'invalid number' in 'invalid: unwanted difference tone')
+
+tools/test_metric_purpose.py:255: AssertionError
+=========================== short test summary info ============================
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-match]
+FAILED tools/test_metric_purpose.py::test_a_non_finite_or_non_positive_number_is_no_verdict[tolerance-0.0-defect ceiling]
+2 failed, 46 passed in 217.63s (0:03:37)

@@ -1,0 +1,12 @@
+# scoped to Digilent FT2232H serial 210319C088B7 (two FT2232H present on this host)
+openFPGALoader v1.1.1
+--- detect ---
+empty
+Jtag frequency : requested 10.00MHz   -> real 10.00MHz  
+index 0:
+	idcode 0x3631093
+	manufacturer xilinx
+	family artix a7 100t
+	model  xc7a100
+	irlength 6
+exit 0

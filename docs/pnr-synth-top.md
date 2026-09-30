@@ -59,6 +59,19 @@ So `CORE_UTILIZATION` is not set anywhere in `pnr/orfs/synth_top/config.mk`. `DI
 Both are aspect ≈ 1 and land on the 7t site grid (0.56 µm × 3.92 µm), so the row structure is exact.
 The die area in every row below is an **input**. The utilisation next to it is the **result**.
 
+**That is now a check rather than a convention** (issue #245).
+`pnr/orfs/area_provenance.py` reads the run's own `config.mk` or
+`par_request.json` and `pnr/orfs/summarize.py` refuses — exit 2, no ratio printed
+— when a utilisation target is set; the shipped `{"method": "utilization",
+"utilization_pct": 50}` request above is one of its two permanent injections.
+Writing the check found two runs nobody had classified: **`pnr/orfs/ladder_dp`
+and `pnr/orfs/synth_core` both set `CORE_UTILIZATION = 50`**, so their die and
+core areas are the cell area divided by 0.50 and `summarize.py` would have quoted
+a die/cell ratio of about 2 for either. `docs/pnr-first-run.md` §1.2 does declare
+that setting among the flow settings "that matter for reading the numbers", which
+is why this is a latent trap rather than a published wrong number — but the tool
+that prints the ratio did not know, and now it does.
+
 ---
 
 ## 3. The placeholder chip, routed — `2a88c35`

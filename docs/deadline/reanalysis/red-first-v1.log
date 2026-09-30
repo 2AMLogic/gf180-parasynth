@@ -1,0 +1,8 @@
+v1 cost_model on paired frames 538/840: {'base_values': {82: 1, 76: 1}, 'explained': False}
+v2 cost_model on paired frames 538/840: {'constant': 87, 'residuals': {87: 2}, 'explained': True}
+v1 verdict with periods=2156: (0, [], False)
+v2 verdict with periods=2156: (0, [], False)
+v1 verdict with periods=1: (0, [], False)
+v2 verdict with periods=1: (2, ['NO VERDICT -- evidence incomplete: I2S capture truncated: 1 periods, 2156 required'], False)
+v1 verdict with periods=0: (0, [], False)
+v2 verdict with periods=0: (2, ['NO VERDICT -- evidence incomplete: no I2S periods decoded (2156 required)'], False)

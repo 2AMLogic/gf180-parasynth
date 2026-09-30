@@ -44,7 +44,8 @@ def _coverage(host: MusicHost) -> dict:
                 knobs=sum(1 for t in tags if t.startswith("knob-")))
 
 
-def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
+def bar_808(*, short: bool = True, bpm: float = 118.0, kit: list = None,
+            rest_s: float = 0.0) -> tuple:
     """THE MUSICAL FIXTURE: a bass line under a drum part, both through the
     link, with every host behaviour #81 names.
 
@@ -52,13 +53,29 @@ def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
     material with the rests taken out -- the hits keep their order and their
     accents, and both timed sequences keep their full real duration, so the
     tom's 60 ms bend and the BD's 4 ms window are exercised exactly as they
-    would be on a board. Returns (host, frames, coverage)."""
+    would be on a board. `kit` is the kit image the target plays (None: the
+    tree's `kit_808()`). Returns (host, frames, coverage).
+
+    `rest_s` (long form only) puts a REST of that length between the two bars.
+    The material does not change -- same hits, keys, knobs and accents -- only
+    the silence in the middle, so a harness that cannot measure the result
+    cannot measure this music. At 1 s that rest is 48000 frames, past the
+    0x8000 a 16-bit frame log can step unambiguously, which is what
+    `bar808-rest` exists to prove (fpga/verify_rolling_playback.py, #474)."""
     patch = vf.VoiceFx.patch_regs(cutoff=(320, 4200), q=0.62)
-    host = MusicHost(patch=patch)
+    host = MusicHost(patch=patch, kit=kit)
     host.load(0, dvol=0.45, bvol=0.45)
 
     if not short:
         hits = dx.pattern_hits(dx.PATTERN_808, bpm=bpm, bars=2, start_s=0.35)
+        if rest_s:
+            # the second bar, `rest_s` later. Only drums play there (the keys
+            # and knobs below are all inside the first bar), so the rest is a
+            # gap in the write stream and nothing else
+            bar_s = 16 * 60.0 / bpm / 4.0
+            hits = (dx.pattern_hits(dx.PATTERN_808, bpm=bpm, bars=1, start_s=0.35)
+                    + dx.pattern_hits(dx.PATTERN_808, bpm=bpm, bars=1,
+                                      start_s=0.35 + bar_s + rest_s))
         step = int(round(60.0 / bpm / 4.0 * SR))
         host.keys([(400, "on", 33), (400 + 6 * step, "off", 33),
                    (400 + 8 * step, "on", 40), (400 + 14 * step, "off", 40)])
@@ -96,12 +113,12 @@ def bar_808(*, short: bool = True, bpm: float = 118.0) -> tuple:
     return host, n, _coverage(host)
 
 
-def demo(*, bars: int = 2, bpm: float = 118.0) -> tuple:
+def demo(*, bars: int = 2, bpm: float = 118.0, kit: list = None) -> tuple:
     """DEMO MODE: no keyboard attached. The pattern plays, the bass line walks
     and the three knobs sweep on their own, so a board with nothing plugged in
-    still makes the instrument's own noise."""
+    still makes the instrument's own noise. `kit` as for `bar_808`."""
     patch = vf.VoiceFx.patch_regs(cutoff=(300, 4600), q=0.7)
-    host = MusicHost(patch=patch)
+    host = MusicHost(patch=patch, kit=kit)
     host.load(0)
     step = int(round(60.0 / bpm / 4.0 * SR))
     start = 400
@@ -123,6 +140,11 @@ def demo(*, bars: int = 2, bpm: float = 118.0) -> tuple:
     return host, n, _coverage(host)
 
 
-FIXTURES = {"bar808": lambda: bar_808(short=True),
-            "bar808-full": lambda: bar_808(short=False),
+# Each takes an optional `kit=`: the image a host drives decides the kit
+# (drums_fx.KITS_BY_REVISION); the default is the tree's.
+FIXTURES = {"bar808": lambda kit=None: bar_808(short=True, kit=kit),
+            "bar808-full": lambda kit=None: bar_808(short=False, kit=kit),
+            # bar808-full with a 1 s rest between its bars: the CONTROL
+            # fixture for a 16-bit frame log's unwrap (#474)
+            "bar808-rest": lambda kit=None: bar_808(short=False, rest_s=1.0, kit=kit),
             "demo": demo}

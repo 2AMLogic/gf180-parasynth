@@ -1,0 +1,147 @@
+{
+ "apparatus": {
+  "cut_trim": 1.03,
+  "external_reference": "docs/reference-compare-results.json, frozen; Surge Type 2 cannot self-oscillate, so its tracking row is a decaying ring and only its DRIFT is comparable with ours",
+  "grom_bits": 7,
+  "proxy": "linearised loop of DR 0006, accurate to 0.31 pp against DR 0011's locked measured table",
+  "quick": false,
+  "tanh_entries": 16
+ },
+ "axes": {
+  "coefficient-rom": {
+   "deciding_number": 21.0,
+   "detail": {
+    "doubling_the_table_saves_cents": 8.7,
+    "entry_refit_saves_cents": 21.0,
+    "floor_cents": 9.2,
+    "shipped_rms_cents": 1.423,
+    "shipped_worst_at_hz": 30,
+    "shipped_worst_cents": -29.0,
+    "sweep": {
+     "5": {
+      "entries": 33,
+      "rom_bits": 528,
+      "worst_cents": -90.4
+     },
+     "6": {
+      "entries": 65,
+      "rom_bits": 1040,
+      "worst_cents": -49.8
+     },
+     "7": {
+      "entries": 129,
+      "rom_bits": 2064,
+      "worst_cents": -29.0
+     },
+     "8": {
+      "entries": 257,
+      "rom_bits": 4112,
+      "worst_cents": -20.3
+     },
+     "9": {
+      "entries": 513,
+      "rom_bits": 8208,
+      "worst_cents": -9.2
+     },
+     "10": {
+      "entries": 1025,
+      "rom_bits": 16400,
+      "worst_cents": -9.2
+     }
+    }
+   },
+   "units": "cents recoverable (refitting the existing 129 entries, free)",
+   "verdict": "available but small",
+   "why": "the read error is worst at the bottom of the range, where g is a few hundred LSB, and is under a cent above 1 kHz. Past 513 entries the sweep FLOORS: what is left is the Q0.16 coefficient word, and widening that is a datapath change. But linear interpolation between EDGE samples of a concave law is one-sided, so refitting the 129 entries already there -- same ROM bits, same read, no datapath change -- beats a 1025-entry table"
+  },
+  "cutoff-offset": {
+   "deciding_number": 104.8,
+   "detail": {
+    "res_1.02": {
+     "mean_offset_pct": 0.59,
+     "spread_pp": 1.13
+    },
+    "res_1.05": {
+     "mean_offset_pct": 0.07,
+     "spread_pp": 1.12
+    },
+    "res_1.1": {
+     "mean_offset_pct": -0.64,
+     "spread_pp": 1.1
+    },
+    "res_1.2": {
+     "mean_offset_pct": -1.9,
+     "spread_pp": 1.08
+    },
+    "res_1.45": {
+     "mean_offset_pct": -3.81,
+     "spread_pp": 0.99
+    },
+    "res_1.7": {
+     "mean_offset_pct": -4.84,
+     "spread_pp": 1.02
+    },
+    "res_2.0": {
+     "mean_offset_pct": -5.32,
+     "spread_pp": 1.26
+    }
+   },
+   "units": "cents of travel across the resonance knob",
+   "verdict": "worth pursuing",
+   "why": "CUT_TRIM is one constant fitted at res = 1.05 and the residual it removes is resonance-dependent, so the cutoff control does not mean the same thing at every resonance. Invisible to DR 0011's drift metric by construction, and not addressed by any of rungs 2-4: where the loop sings is set by how the correction was fitted"
+  },
+  "drive": {
+   "deciding_number": -8.21,
+   "detail": {
+    "mini_v3_dbfs": -5.7,
+    "ours_section_8_3_dbfs": -6.6,
+    "surge_rk_dbfs": -0.6
+   },
+   "units": "dBFS at which h3 reaches -40 dB",
+   "verdict": "no further win available",
+   "why": "input-referred, so it is comparable across devices whatever each one's internal scaling is. Within a few dB of the dedicated Minimoog emulation, which is what section 8.3 reads as in trim"
+  },
+  "numerical-precision": {
+   "deciding_number": 0.0041,
+   "detail": {
+    "20/16": 1.12,
+    "22/18": 1.117,
+    "24/20": 1.116,
+    "26/22": 1.116,
+    "28/24": 1.116,
+    "32/28": 1.116
+   },
+   "units": "pp of drift moved by 4 fewer to 8 more state bits",
+   "verdict": "no further win available",
+   "why": "the shipped 24/20 state is four bits past the plateau, so the filter is not arithmetic-limited and no candidate can be argued for on that ground"
+  },
+  "tuning-law": {
+   "deciding_number": 12.87,
+   "detail": {
+    "best_reference_drift_pp": 0.62,
+    "drift_before_dr_0011_pp": 7.92,
+    "drift_now_pp": 1.26,
+    "refit_cubic_coeffs": [
+     0.995448,
+     1.083415,
+     -0.702698,
+     1.020311
+    ],
+    "refit_cubic_worst_pct": 0.249,
+    "refit_quartic_coeffs": [
+     4.776851,
+     -3.019532,
+     2.082734,
+     -0.774418,
+     1.020845
+    ],
+    "refit_quartic_worst_pct": 0.023,
+    "shipped_worst_pct": 0.997
+   },
+   "units": "cents recoverable",
+   "verdict": "available but small",
+   "why": "a cubic of fcr's own shape, refitted to THIS loop instead of the paper's implementation, costs one multiply per ROM entry at build time and nothing in the datapath -- but it buys under a tenth of what the offset axis below does"
+  }
+ },
+ "conclusion": "Rung 1 is not exhausted: cutoff-offset still has a useful, reproducible win available without changing the algorithm, and none of rungs 2-4 addresses it. Retain the current filter and take the rung-1 work first."
+}

@@ -38,6 +38,8 @@ module voice_dp #(
     wire signed [15:0] osc = 16'bx;
     reg [31:0] inc_acc [0:2];
     reg [23:0] phase [0:2];
+    reg [23:0] phase_os2 [0:2];        // the 2x path's taps (bd7ba32); the red run died on them
+    reg [23:0] inc_mod [0:2];
     reg [4:0]  sh [0:2];
     reg [15:0] r [0:2];
     reg signed [24:0] ma = 25'bx;
@@ -47,7 +49,7 @@ module voice_dp #(
     reg [23:0] level_a = 24'bx, level_f = 24'bx;
     reg [1:0]  seg_a = 2'bx, seg_f = 2'bx;
     integer i;
-    initial for (i = 0; i < 3; i = i + 1) begin inc_acc[i] = 32'bx; phase[i] = 24'bx; sh[i] = 5'bx; r[i] = 16'bx; end
+    initial for (i = 0; i < 3; i = i + 1) begin inc_acc[i] = 32'bx; phase[i] = 24'bx; phase_os2[i] = 24'bx; inc_mod[i] = 24'bx; sh[i] = 5'bx; r[i] = 16'bx; end
 
     reg [1:0] d;
     assign busy = 1'b0;

@@ -1,0 +1,21 @@
+verify_synth_top: 266 writes over the pins (84 voice, 182 drum), 125953 frames after the last
+verify_synth_top: ENSEMBLE E1A part stop:HT: patch 01-bass-classic, sparse groove, 124 BPM, 2 bars, 6.000 s (288000 frames), no limiter
+verify_synth_top: E1A ensemble gains: vol=0, dvol=14746, bvol=14746; 8 voice notes and 2 drum hits over 1 stop(s): HT
+verify_synth_top: selected legacy single-rate waveform; compile defines: (none)
+verify_synth_top: simulator backend verilator
+  sim: tb_top_bx: status word on MISO = 4d210001
+  sim: tb_top_bx: 266 writes sent, 288025 frames, 288024 I2S periods decoded
+  sim: tb_top_bx: transactions accepted at the pin 266, writes drained 266, landing frame differs from the pin prediction 0 times (must be 0)
+  sim: tb_top_bx: sample strobed in 288025 frames, MISSING in 0, worst strobe cycle 134 of 256
+  sim: tb_top_bx: datapath busy at a tick: 0 (must be 0); overrun 0; overflow 0
+verify_synth_top: built from 76d246f-dirty, outdir /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/rtl-stop-HT; synth_top.v 2fc3939d1140, drum_kit.v 23e97ff6e0e4, drum_regs.v 1282ebc944ee; ROMs tanh16.hex a5c4862a7e90, tanh256.hex c6e81324b225; every source from rtl-sketch/
+verify_synth_top: NOTE -- the core strobes its sample as late as cycle 134 of 256, past the LRCLK transition at 128 (48 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+verify_synth_top: E1A ensemble part stop:HT: register schedule from the CS_N pin, 2 raises; worst host-to-register latency +20 frame(s) (+0.417 ms) on HT at intended frame 66271
+verify_synth_top: ensemble schedule written to /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/stop-HT-schedule.json
+verify_synth_top: ensemble schedule sha256 427d36137ddd0ec8acb0838586c0b81050d64afbdb1911b301418d1047db556b
+verify_synth_top: writes landed in frames 2..162070; modelling 288024 frames
+verify_synth_top: decoded I2S WAV written to /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-292/build/ensemble-E1A/stop-HT.wav
+verify_synth_top: decoded I2S WAV sha256 28887ed8e653d9896088cbbdb9954da211c65005ef2c9d4045ad46c46ac2333d
+verify_synth_top: model peak |sample| 7379 of 32768 (0 frames at the rail); drums |dmix| max 0, |body| max 16399, DFILT engaged in 0 frames
+verify_synth_top: PASS -- 288024 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+verify_synth_top: E1A ensemble part stop:HT verified from SPI pins through the COMBINED voice and drum paths to the I2S pins

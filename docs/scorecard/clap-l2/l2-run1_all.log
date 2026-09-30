@@ -1,0 +1,51 @@
+==============================================================================
+FAIL(1)        603.6s  /home/ubuntu/work/venv/bin/python -m pytest model/test_clap_final_strike.py model/test_drums_fx.py model/test_808_acceptance.py model/test_synth_top_model.py tools/test_clap_l2_identity.py -q -p no:cacheprovider
+              FAILED model/test_808_acceptance.py::test_clap_tail_time_constant - audio_mea...
+              FAILED model/test_808_acceptance.py::test_maracas_and_clap_cannot_sound_at_once
+              FAILED model/test_808_acceptance.py::test_meta_rev8_stub_is_red_on_the_new_circuits_and_green_on_the_old_ones
+              4 failed, 174 passed in 603.18s (0:10:03)
+PASS          1665.2s  /home/ubuntu/work/venv/bin/python -m pytest rtl-sketch/test_rtl.py -q -p no:cacheprovider -k drum
+              .................                                                        [100%]
+              17 passed, 47 deselected in 1664.90s (0:27:44)
+NO-VERDICT      31.5s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_drums.py --outdir build/l2-drums-full
+              verify_drums: simulating drum_kit.v
+              verify_drums: iverilog failed:
+              build/l2-drums-full/tb_drums.vvp: No such file or directory
+              error: Code generator failure: -1
+PASS             1.6s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_ctl.py --outdir build/l2-ctl
+                sim: tb_ctl: writes accepted from two mis-sized transactions: 0 (must be 0)
+                sim: tb_ctl: 209 transactions sent at 48 bits, 209 writes reached the port, drain cycles 2..2, after go: 0
+                sim: tb_ctl: fresh 0 overflow 0 q_count 0
+              verify_ctl: PASS -- all 209 writes reached the register port exactly as sent, every one in the drain window (cycles 2..2, before `go` at 8)
+FAIL(1)          0.7s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --outdir docs/scorecard/clap-l2/top-clap
+                File "/home/ubuntu/work/clap-d/rtl-sketch/verify_synth_top.py", line 858, in main
+                  print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
+                                                                 ~~~~~^^^^^^^^^
+              KeyError: 'stops'
+FAIL(1)          0.6s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --clap-phrase --simulator verilator --inject DRUM_FINAL_WEAK --expect-fail --outdir build/l2-top-clap-weak
+                File "/home/ubuntu/work/clap-d/rtl-sketch/verify_synth_top.py", line 858, in main
+                  print(f"verify_synth_top: stimulus covers {len(cover['stops'])} of {dx.N_STOPS} circuits and "
+                                                                 ~~~~~^^^^^^^^^
+              KeyError: 'stops'
+PASS            29.2s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_synth_top.py --simulator verilator --outdir build/l2-top-full
+              verify_synth_top: NOTE -- the core strobes its sample as late as cycle 156 of 256, past the LRCLK transition at 128 (39 % of the frame still spare, no overrun). A right-channel-only defect is INVISIBLE at the pins in this configuration: see the I2S_SWAP entry in the Makefile's controls target
+              verify_synth_top: writes landed in frames 2..1353; modelling 2854 frames
+              verify_synth_top: model peak |sample| 32768 of 32768 (352 frames at the rail); drums |dmix| max 60952, |body| max 172093, DFILT engaged in 139 frames
+              verify_synth_top: PASS -- 2851 I2S periods decoded from the wire, every one identical to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too
+PASS            25.3s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario stress-saw --json docs/scorecard/clap-l2/deadline-stress-saw.json
+                worst frame 586: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: coverage (frames): {'three_saws_gate_on': 1644, 'three_2x_gate_on': 1644, 'three_2x_audible_gate_on': 1644, 'three_2x_audible_with_strike': 44, 'three_2x_audible_dfilt': 1188}
+              verify_deadline: I2S: 2158 of 2158 required periods compared (2158 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 461/461, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 13 cycles, I2S identical to the model
+PASS            51.6s  /home/ubuntu/work/venv/bin/python rtl-sketch/verify_deadline.py --scenario arty-uart --json docs/scorecard/clap-l2/deadline-arty-uart.json
+                worst frame 2440: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+                worst frame 2482: strobe 241 (slack 13), voice 9..240, drum 9..125, waits r/osc/d/y 57/60/23/5, windows 2/6, im1 3, sk 0
+              verify_deadline: I2S: 3300 of 3300 required periods compared (3498 decoded), 0 differ from the model; L!=R 0; bad width 0; writes 71/71, corrupted 0, off-prediction 0
+              verify_deadline: PASS -- zero missed frames, worst sample slack 13 cycles, I2S identical to the model
+PASS             9.6s  /home/ubuntu/work/venv/bin/python tools/run_case.py D12A --results docs/scorecard/clap-l2/d12a-rescore
+              D12A   pass           0.88  
+              ------------------------------------------------------------------------------------------------
+              pass: 1
+              exit 0: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
+==============================================================================
+6/10 passed  --  FAIL /home/ubuntu/work/venv/bin/python -m pytest ; NO-VERDICT /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python rtl-sketch; FAIL /home/ubuntu/work/venv/bin/python rtl-sketch

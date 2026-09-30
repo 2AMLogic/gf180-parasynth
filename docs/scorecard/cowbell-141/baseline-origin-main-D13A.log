@@ -1,0 +1,9 @@
+reference corpus: <scratchpad>/tr808-ref
+results into:     <scratchpad>/base
+
+case   state         worst  note
+------------------------------------------------------------------------------------------------
+D13A   fail          11.34  worst: unwanted difference tone
+------------------------------------------------------------------------------------------------
+fail: 1
+exit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)

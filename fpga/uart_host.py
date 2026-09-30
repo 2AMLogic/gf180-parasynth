@@ -103,6 +103,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from fractions import Fraction
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -119,6 +120,85 @@ FRAME_S = Fraction(CYC_PER_FRAME, CLK_HZ)
 
 DEFAULT_BAUD = 115_200
 UART_DATA_BITS = 8                 # 8N1: start + 8 data (LSB first) + stop
+
+# ---- the image this CLI drives, and so the drum kit it sends ------------------
+# The kit is a property of the IMAGE on the board, not of the tree the CLI runs
+# from. The published R0 image (fpga/release, integrated-baseline-2025.1) is
+# contract revision 11 RTL: no ENV_FRATE, no final strike. Revision 14's
+# `kit_808()` programs a clap that image cannot play, so the default -- the
+# image a player actually has -- sends revision 11's frozen kit, and a board
+# built from this tree is named explicitly (`--image tree`).
+#
+# `r1` (#323, plan092 section 2) is the NAMED, FROZEN R1 player release: the
+# published R1 image (fpga/release/r1-2025.1.json). It sends R1's kit frozen by
+# value (fpga/release/r1-kit.json, checked against its digest), so later work
+# on the tree's kit cannot change what an R1 board is sent. `tree` stays the
+# development selector: whatever this tree builds. `release` and no --image
+# stay R0 (plan092: the public default does not flip).
+IMAGE_REVISION = {"release": 11, "tree": 15, "r1": 14}
+DEFAULT_IMAGE = "release"
+# the images whose sessions start from the known state (voice + drum RESET)
+KNOWN_STATE_IMAGES = ("tree", "r1")
+R1_KIT = Path(__file__).resolve().parent / "release/r1-kit.json"
+R1_KIT_SHA256 = "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683"
+
+
+def r1_kit() -> list:
+    """R1's kit as frozen by value; REFUSES (KitRefused) unless it hashes to
+    R1_KIT_SHA256."""
+    import json
+    import drums_fx as dx
+    rec = json.loads(R1_KIT.read_text())
+    kit = [(int(a), int(v)) for a, v in rec["writes"]]
+    got = dx._kit_sha256(kit)
+    if got != R1_KIT_SHA256 or rec.get("sha256") != R1_KIT_SHA256:
+        raise dx.KitRefused(f"{R1_KIT.name} hashes to {got[:12]}, not R1's frozen kit "
+                            f"{R1_KIT_SHA256[:12]}")
+    return kit
+
+
+R1_PRESETS_SHA256 = "faca91bad851fbb2319de6e764a2608e442d0d2d7c6540d82d28ac75fa550146"
+# the images that expose the five alternate sounds (#298): R0 (`release`) is
+# qualified for its eleven stops only
+ALTERNATE_IMAGES = ("tree", "r1")
+
+
+def image_sound_presets(image: str) -> dict:
+    """{sound: [(addr, value)]}: the writes that put each of the sixteen sounds'
+    circuit in that sound's position, for `image` (#298). `r1` reads R1's
+    table frozen by value (r1-kit.json, REFUSED unless it hashes to
+    R1_PRESETS_SHA256); `tree` is this tree's drums_fx.preset_writes; `release`
+    has none (R0 is eleven sounds)."""
+    import hashlib
+    import json
+    import drums_fx as dx
+    if image == "r1":
+        rec = json.loads(R1_KIT.read_text())
+        table = rec.get("presets") or {}
+        canon = json.dumps(table, sort_keys=True, separators=(",", ":"))
+        got = hashlib.sha256(canon.encode()).hexdigest()
+        if got != R1_PRESETS_SHA256:
+            raise dx.KitRefused(f"{R1_KIT.name} presets hash to {got[:12]}, not R1's frozen "
+                                f"sound presets {R1_PRESETS_SHA256[:12]}")
+        return {k: [(int(a), int(v)) for a, v in w] for k, w in table.items()}
+    if image == "tree":
+        return {k: [(int(a), int(v)) for a, v in dx.preset_writes(k)] for k in dx.SOUND_NAMES}
+    return {}
+
+
+def image_kit(image: str = DEFAULT_IMAGE) -> list:
+    """The drum kit `image` plays. The frozen revision-11 kit (R0) and R1's
+    frozen kit REFUSE (drums_fx.KitRefused) if they no longer hash to the image
+    they were verified with; `tree` is this tree's kit_808()."""
+    import drums_fx as dx
+    if image not in IMAGE_REVISION:
+        raise ValueError(f"image {image!r} is not one of {sorted(IMAGE_REVISION)}")
+    if "WRONG_KIT" in INJECT_BUGS and image in KNOWN_STATE_IMAGES:
+        # the control (#279, plan088): the release kit under `--image tree|r1`
+        return dx.KITS_BY_REVISION[IMAGE_REVISION["release"]]()
+    if image == "r1":
+        return r1_kit()
+    return dx.KITS_BY_REVISION[IMAGE_REVISION[image]]()
 BITS_PER_BYTE = 10
 
 OP_WRITE = 0x57
@@ -455,6 +535,69 @@ def voice_image_writes(preset: str | None = None) -> list:
     return w
 
 
+def preset_regs(preset: str | None = None) -> dict:
+    """The control image a named preset (or the default patch) programs."""
+    import voice_fx as vf
+    import selected_preset
+    return (selected_preset.definition(preset)["registers"] if preset
+            else vf.VoiceFx.patch_regs())
+
+
+def voice_mixer_writes(preset: str | None = None) -> list:
+    """The rest of the voice image `voice_image_writes` does not carry: the
+    four mixer weights (as `MusicHost.load` writes them) and the noise/
+    modulation registers. Without the weights a note-only run is SILENT --
+    every weight resets to 0 -- which is what `run --note 45 --fixture none`
+    played until the release validator (fpga/release/qualified_domain.py)
+    refused it. Sent only when no fixture image follows (a fixture's own
+    load() writes its weights), so every fixture's byte stream is unchanged."""
+    import spi_host as sh
+    import synth_top_model as stm
+    regs = preset_regs(preset)
+    w = [(0, sh.SEC_VOICE, stm.A_W + k, int(g)) for k, g in enumerate(regs["weights"])]
+    for addr, key in ((stm.A_NSEL, "nsel"), (stm.A_MROUTE, "mroute"), (stm.A_MMIX, "mmix"),
+                      (stm.A_MWHEEL, "mwheel"), (stm.A_MPD, "mpd"), (stm.A_MFD, "mfd")):
+        w.append((0, sh.SEC_VOICE, addr, int(regs.get(key, 0))))
+    return w
+
+
+def apply_order(commands: list) -> list:
+    """The (flag, sec, addr, data) writes of a command list in the order the
+    device APPLIES them: live writes in order, the scheduled gate-off, then
+    events by due (stable). What the release validator checks."""
+    live = [c[1:] for c in commands if c[0] in ("write", "gate-off")]
+    ev = sorted((c for c in commands if c[0] == "event"), key=lambda c: c[1])
+    return live + [c[2:] for c in ev]
+
+
+def qualify(commands: list, *, preset: str | None, note: int | None,
+            image_sent: bool, image: str = DEFAULT_IMAGE) -> dict:
+    """The player-facing release domain (fpga/release/RELEASE.md), enforced
+    on the final register writes. Raises qualified_domain.Rejected."""
+    sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+    import qualified_domain as qd
+    regs = preset_regs(preset)
+    out = {}
+    if image_sent:
+        out["patch"] = qd.check_patch(regs, name=preset or "default")
+    if note is not None:
+        qd.check_note(note, regs)
+    # device state before this command is not readable: everything the
+    # stream does not write is unknown, except the modulation registers the
+    # player path never writes on a fixture run (declared precondition)
+    out["stream"] = qd.check_stream(apply_order(commands), initial="unknown",
+                                    mod_initial="reset", image=image)
+    return out
+
+
+def known_state_preamble() -> list:
+    """R1's session start: voice RESET (0x23), drum RESET (0xFF), as
+    (flag, sec, addr, data). Owned by fpga/release/r1_candidate.py."""
+    sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+    import r1_candidate
+    return [tuple(w) for w in r1_candidate.PREAMBLE]
+
+
 def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
                 held: bool = False) -> list:
     """One key event through the model's own KeyHost (contract 5.6): pitch
@@ -486,16 +629,17 @@ def note_writes(note: int, on: bool, *, preset_regs: dict | None = None,
     return writes
 
 
-def fixture_split(fixture: str) -> tuple:
+def fixture_split(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """(static, timed, n_frames, host): a scripted fixture's writes, spread
     by the link's own rules, split into the configuration image its
     `MusicHost.load()` emitted and everything after it. The split is by
     POSITION (`load_span`), never by tag: a hit writes an "accent" and a
     key writes a "glide" too, and treating those as setup would play every
-    accent of the pattern at t=0 and none on its step."""
+    accent of the pattern at t=0 and none on its step. The kit in the load
+    image is the one `image` plays (`image_kit`)."""
     import fixtures
     import spi_host as sh
-    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    host, n_frames, _cover = fixtures.FIXTURES[fixture](kit=image_kit(image))
     if host.load_span is None:
         raise ValueError(f"fixture {fixture!r} has no load(): nothing to "
                          "deliver as static configuration")
@@ -520,7 +664,7 @@ def fixture_split(fixture: str) -> tuple:
     return static, timed, n_frames, host
 
 
-def phrase_static_and_events(fixture: str) -> tuple:
+def phrase_static_and_events(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """A scripted phrase SPLIT the way the link delivers it: the fixture's
     configuration image (`MusicHost.load()`: patch, kit, initial accents)
     as live writes carrying no due, and everything after it (keys, hits,
@@ -532,14 +676,14 @@ def phrase_static_and_events(fixture: str) -> tuple:
     frames at 115200 -- a due'd load image would die under the wire no
     matter how the phrase rolled. As live writes it applies ahead of the
     music, which starts ROLLING_START_FRAMES after the image completes."""
-    static, timed, n_frames, _host = fixture_split(fixture)
+    static, timed, n_frames, _host = fixture_split(fixture, image)
     st = [(w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in static]
     ev = [(w.frame, w.flag, w.sec, w.addr, w.data & 0xFFFFFFFF) for w in timed]
     end = (max(d for d, *_ in ev) + 64) if ev else n_frames
     return st, ev, end
 
 
-def phrase_events(fixture: str) -> tuple:
+def phrase_events(fixture: str, image: str = DEFAULT_IMAGE) -> tuple:
     """A scripted phrase as scheduled events: (due, flag, sec, addr, data),
     reusing the existing fixtures and the link's own spreading rules. Dues are
     >= 1 frame apart, which the device's two write slots deliver exactly.
@@ -557,7 +701,7 @@ def phrase_events(fixture: str) -> tuple:
         return _phrase_events_m5a()
     import fixtures
     import spi_host as sh
-    host, n_frames, _cover = fixtures.FIXTURES[fixture]()
+    host, n_frames, _cover = fixtures.FIXTURES[fixture](kit=image_kit(image))
     link = sh.LinkTiming.contract_max()
     step = link.min_land_gap()
     ws = sh.feasible(sorted(host.w, key=lambda w: w.frame), link)
@@ -654,6 +798,10 @@ class Bridge:
         self.acks_seen = 0
         self._run_ack_base = 0
         self._run_acks_expected = 0
+        # R1 (#279): refuse to start over events or writes an earlier session
+        # left queued -- they would fire into this one after its known state
+        self.require_idle = False
+        self._idle_checked = False
 
     def _take(self, kinds: set, deadline: float) -> DevicePacket | None:
         """Read bytes until one complete packet of `kinds` parses. The buffer
@@ -662,6 +810,12 @@ class Bridge:
         while True:
             pkts, consumed = scan_packets(self.buf)
             self.buf = self.buf[consumed:]
+            # every consumed packet is a delivery and is counted BEFORE the
+            # first match returns: returning mid-scan dropped the rest of the
+            # chunk from the counts, so a burst whose ACKs arrived four to a
+            # read counted one in four (#281: 48 of 190 on a real-time pty;
+            # SimSerial delivers one ACK per read and could not show it)
+            match = None
             for p in pkts:
                 if p.kind == "ack":
                     self.acks_seen += 1
@@ -669,8 +823,10 @@ class Bridge:
                     self.boots_seen += 1
                 elif p.kind == "err":
                     self.device_errors.append((p.code, p.info))
-                if p.kind in kinds:
-                    return p
+                if match is None and p.kind in kinds:
+                    match = p
+            if match is not None:
+                return match
             now = self.clock.monotonic()
             if now >= deadline:
                 return None
@@ -731,6 +887,16 @@ class Bridge:
               "bitstream, wiring (A9/D10) and baud", file=sys.stderr)
         raise SystemExit(2)
 
+    def assert_idle(self) -> None:
+        """One STATUS before anything is sent: both device queues must be
+        empty, or the session start is not a known state. REFUSES."""
+        st = self.status()
+        self._idle_checked = True
+        if st.evq or st.wrq:
+            raise Refused(f"the device holds {st.evq} queued events and {st.wrq} queued "
+                          "writes from an earlier session; they would play into this one. "
+                          "Run `uart_host.py --port ... abort` (or press BTN0) and retry")
+
     def run(self, commands: list, *, dry_run: bool = False, baud: int = DEFAULT_BAUD,
             quiet: bool = False, hold_frames: int = 0) -> list:
         """Origin FIRST, then the plan: the schedule is anchored to the
@@ -744,6 +910,8 @@ class Bridge:
         STATUS must still leave slack before the first event's due, or the
         plan is re-anchored -- a plan whose dues died during planning is
         re-planned, never sent late."""
+        if self.require_idle and not self._idle_checked:
+            self.assert_idle()
         markers = [c for c in commands if c[0] == "gate-off"]
         if markers:
             return self._run_with_hold(commands, baud=baud, quiet=quiet,
@@ -1577,8 +1745,18 @@ def main(argv=None, *, bridge_factory=None) -> int:
                          "mode -- the DEFAULT), m5a (the short phrase the "
                          "UART bench proves), bar808 (full musical fixture; "
                          "preflight REFUSES it: over queue and wire budget)")
+    ap.add_argument("--image", default=DEFAULT_IMAGE, choices=sorted(IMAGE_REVISION),
+                    help="the Arty image on the board, which decides the drum kit a "
+                         "fixture sends: release (the published R0 image, contract "
+                         "revision 11, no final strike -- the DEFAULT), r1 (the "
+                         "published R1 player release, its frozen kit and known-state "
+                         "start) or tree (an image built from this tree, revision 14; "
+                         "development)")
     ap.add_argument("--dry-run", action="store_true",
                     help="render the exact byte schedule and landing frames; no hardware")
+    ap.add_argument("--engineering", action="store_true",
+                    help="skip the release-domain validator: the raw engineering "
+                         "interface, OUTSIDE the qualified player-facing domain")
     ap.add_argument("--capture", default=None, metavar="PREFIX",
                     help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
                          "S-line format) and PREFIX.plan.json, for replay through "
@@ -1595,7 +1773,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
     common.add_argument("--note", type=int, default=argparse.SUPPRESS)
     common.add_argument("--hold-frames", type=int, default=argparse.SUPPRESS)
     common.add_argument("--fixture", default=argparse.SUPPRESS)
+    common.add_argument("--image", default=argparse.SUPPRESS, choices=sorted(IMAGE_REVISION))
     common.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS)
+    common.add_argument("--engineering", action="store_true", default=argparse.SUPPRESS)
     common.add_argument("--capture", default=argparse.SUPPRESS, metavar="PREFIX",
                         help="write the exact emitted bytes to PREFIX.cmds (RTL bench "
                              "S-line format) and PREFIX.plan.json, for replay through "
@@ -1624,19 +1804,40 @@ def main(argv=None, *, bridge_factory=None) -> int:
         # The first phrase is `--fixture m5a` (bench-proven), never a default.
         fixture = a.fixture or "none"
         if fixture == "m5a":
-            fx_events, _end = phrase_events(fixture)
+            fx_events, _end = phrase_events(fixture, a.image)
         elif fixture != "none":
             # the fixture's own structure: its load() image as live setup,
             # everything after it as scheduled events
-            fx_static, fx_events, _end = phrase_static_and_events(fixture)
-    if a.cmd in ("load", "run") or a.cmd is None:
+            fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
+    fixture_image = a.cmd in ("play", "run") and (a.fixture or "none") != "none"
+    if fixture_image and a.preset and not a.engineering:
+        # the fixture programs its own patch over the preset: the player
+        # would hear the fixture's sound under the preset's name
+        print(f"uart_host: REFUSED -- --preset {a.preset} with --fixture {a.fixture}: "
+              "the fixture loads its own patch over the preset", file=sys.stderr)
+        return 2
+    image_sent = a.cmd in ("load", "run") or a.cmd is None
+    if image_sent and a.image in KNOWN_STATE_IMAGES:
+        # R1's known-state session start (#279): voice RESET and drum RESET
+        # zero every register and state of both sections BEFORE the image,
+        # so routing, modulation, drift and any drum register the image does
+        # not write are known -- not assumed from an earlier (engineering)
+        # session. The frozen target lives in fpga/release/r1_candidate.py.
+        # The release image's byte streams are unchanged (its manifest pins them).
+        for flag, sec, addr, data in known_state_preamble():
+            commands.append(("write", flag, sec, addr, data))
+    if image_sent:
         for flag, sec, addr, data in voice_image_writes(a.preset):
             commands.append(("write", flag, sec, addr, data))
+        if not fx_static:
+            for flag, sec, addr, data in voice_mixer_writes(a.preset):
+                commands.append(("write", flag, sec, addr, data))
     for flag, sec, addr, data in fx_static:
         commands.append(("write", flag, sec, addr, data))
     if a.cmd == "note-on" or (a.cmd == "run" and a.note is not None):
         note = a.note if a.note is not None else 45
-        for flag, sec, addr, data in note_writes(note, True):
+        for flag, sec, addr, data in note_writes(note, True,
+                                                 preset_regs=preset_regs(a.preset)):
             commands.append(("write", flag, sec, addr, data))
     if a.cmd == "note-off":
         # a standalone off releases what is sounding: the live gate-off write
@@ -1662,6 +1863,25 @@ def main(argv=None, *, bridge_factory=None) -> int:
         return 0
     if not commands:
         ap.print_usage(); return 2
+    played_note = (a.note if a.note is not None else 45) if (
+        a.cmd == "note-on" or (a.cmd == "run" and a.note is not None)) else None
+    if a.engineering:
+        print("uart_host: ENGINEERING -- release-domain validator skipped; this "
+              "traffic is OUTSIDE the qualified player-facing domain", file=sys.stderr)
+    else:
+        sys.path.insert(0, os.path.join(ROOT, "fpga", "release"))
+        import qualified_domain as qd
+        try:
+            q = qualify(commands, preset=a.preset, note=played_note, image_sent=image_sent,
+                        image=a.image)
+        except qd.Rejected as exc:
+            print(f"uart_host: REFUSED -- outside the qualified release domain: {exc}",
+                  file=sys.stderr)
+            return 2
+        st = q["stream"]
+        print(f"uart_host: release domain OK -- {st['inc_writes']} increment writes, "
+              f"{st['glide_transitions']} glide transitions, all in "
+              f"[{qd.INC_LO}, {qd.INC_HI}]")
 
     if a.dry_run:
         try:
@@ -1708,6 +1928,9 @@ def main(argv=None, *, bridge_factory=None) -> int:
         return 2
     try:
         bridge = open_bridge(a.port, a.baud)
+        # only a command that establishes R1's known state asserts it: a
+        # standalone note-off must never be refused for a busy queue
+        bridge.require_idle = a.image in KNOWN_STATE_IMAGES and image_sent
         rows = bridge.run(commands, baud=a.baud, hold_frames=a.hold_frames)
     except Refused as exc:
         print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)

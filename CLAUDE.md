@@ -49,6 +49,26 @@ the host's block rate.
 
 This file is about how to work, not what to build.
 
+## Current milestone priority (read before choosing work)
+
+**Right now the product goal outranks the canary goal below.** The current
+milestone (#282, plan098) is a great-sounding mono Moog-like synth and a
+complete 808-style kit: find and repair measurable sound defects across the
+playing range, confirm each improvement on conditions not used to select it,
+then prove the hardware delivers it.
+
+- **Sound qualification and repair always has a continuous owner.** Release,
+  receipt and tooling work must not leave it unstaffed.
+- **Tooling work gets priority only when it unblocks a named sound or player
+  requirement.** Name that requirement in the issue or PR. Otherwise it waits.
+- **Still record tool defects and file them upstream**, as the section below
+  says. Filing a defect is quick; letting tool work displace the instrument is
+  the failure mode this section exists to prevent.
+- **Lead progress reports with sound:** what improved (before/after,
+  confirmed on untouched conditions), what still fails, and whether it reaches
+  the RTL and the image. Merged bookkeeping PRs are supporting work, not
+  progress on the goal.
+
 ## Why this block exists: it is a canary for the tools
 
 **The instrument is the payload. Exercising the toolchain is the point.**
@@ -168,6 +188,16 @@ between running a thing and reading its result:
 job and stopping costs nothing while it runs. Firing a job and polling costs a
 full turn per check.
 
+**Except in a headless session, where ending your turn kills the job.** Loom
+sweeps run as `claude -p` (`LOOM_HEADLESS_SESSION=1`). There, ending the turn
+ends the process, and the wrapper reaps every background job and subagent it
+left behind. On 2026-09-26 the first `/loom:sweep 225` did exactly that: its
+Builder backgrounded a verification run and ended the turn "to avoid polling",
+and the sweep exited 0 with the run killed and #225 stranded at
+`loom:building`. In a headless session, run the job in the foreground, chain
+its result check into the same command, and end the turn only when the step is
+done or blocked.
+
 **Use `Monitor` for progress you actually need to see** — it streams stdout
 lines as events without a turn each. Filter to the lines you would act on,
 including failures, not just the success marker.
@@ -197,6 +227,49 @@ records and four experiments it measured and correctly did not ship. The test
 is whether the pieces are *independently verifiable*, not whether they are
 separately describable: `fcr` changes the cutoff mapping so everything measured
 after it must be re-baselined, and sequencing that inside one agent was right.
+
+### Heavy work runs on the build box, not the developer's laptop
+
+**`make verify`, `make verify-full`, `make reference-integration`, RTL
+simulations (iverilog/vvp), render or parameter sweeps, and whole-suite pytest
+runs go on the repo's pinned AWS build box.** The laptop is for editing,
+reading and single focused test files. On 2026-09-26 two agents ran `make
+verify` and an 8-worker probe render on the developer's MacBook at load
+average 70–100 for over an hour; the probe timed out and neither produced a
+verdict. The same work on the box has 8 dedicated cores.
+
+- **The box** is this repo's pinned instance (`REPO_REMOTE_INSTANCE_ID` in the
+  gitignored `.env`; ssh alias `repo-remote-gf180-parasynth`). Start and stop
+  it **only** through `.claude/skills/repo/scripts/repo-remote.sh up --yes
+  --json aws` / `down --yes` — see `~/.config/repo/README.md` for the rules
+  (≤ 8 vCPU, no raw `aws ec2 run-instances`, never `Fleet=loom` hosts).
+  **Stop it when the queued work is done.**
+- **Match CI, not your laptop:** Python 3.12 (`uv venv --python 3.12`, then
+  `numpy scipy pytest pyyaml`, what the workflows install) and the pinned
+  toolchain from `tools/setup_ci_oss_cad.py`. That script writes the tool
+  directory into the file named by `GITHUB_PATH` (stdout is version JSON, not
+  the path), so run it as `GITHUB_PATH=$HOME/oss-path.txt python
+  tools/setup_ci_oss_cad.py` and then, in every shell that runs tools,
+  `export PATH="$(cat $HOME/oss-path.txt):$PATH"` — an ssh shell does not do
+  this for you. Install `make` if absent. Run make with `PY=<that venv's
+  python>`.
+- **Ship code as a `git bundle`** of the branches and clone it on the box. A
+  worktree's `.git` is a pointer file, and the provenance tooling needs real
+  commits and dirty flags.
+- **References:** copy `~/dev/refs/` (the Fischer TR-808 corpus and its
+  manifest, `GF180_TR808_REFS`) to the same path on the box; the clap probe
+  checks that manifest path and refuses without it.
+- **Coordinators run the box; subagent briefs say so.** A subagent that needs
+  a heavy run commits its branch and asks for it; it does not start the run
+  locally "just this once".
+- **The coordinator owns the box's compute budget.** Default to ONE heavy
+  workload at a time; if two must overlap, divide the workers explicitly
+  (e.g. `--jobs 4` each on the 8 cores) and say so in both briefs. A broad
+  pytest run beside an 8-worker sweep reproduces the contention this section
+  exists to prevent, just on a different machine.
+
+The same waiting rules apply: launch the job with `nohup`, then block in one
+command that reads its exit code and chains the follow-up analysis.
 
 ### If you are stopping because you are blocked
 
@@ -248,3 +321,12 @@ This repository uses [Loom](https://github.com/rjwalters/loom) for AI-powered de
 <!-- BEGIN LOOM ORCHESTRATION (AGENTS) -->
 This repository uses [Loom](https://github.com/rjwalters/loom) for AI-powered development orchestration (dual-runtime: Claude Code reads `CLAUDE.md`; OpenAI Codex CLI and other AGENTS.md-aware runtimes read this file). See the Loom repository for the full guide (roles, labels, worktrees, configuration). When installed, Loom also writes a locally-substituted copy of the runtime-neutral guide to `.loom/AGENTS.md`.
 <!-- END LOOM ORCHESTRATION (AGENTS) -->
+
+<!-- BEGIN REPO-SKILLS -->
+This repository has [Repo Skills](https://github.com/rjwalters/repo) v0.16.1 installed —
+general repository hygiene and environment commands invoked as `/repo:<command>`. Run
+`/repo:help` for the command list, or see `.claude/skills/repo/SKILL.md` for the full
+guide. Hygiene commands apply safe, reversible fixes by default and report each
+change; run with `--ask` to review first, and `--prune` to allow irreversible
+removals. Managed by `install.sh` — edit outside the markers only.
+<!-- END REPO-SKILLS -->

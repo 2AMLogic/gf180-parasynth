@@ -17,17 +17,17 @@
 # the wrapper.
 #
 # Behavior on missing tokens:
-#   Token selection resolves the effective pool (issue #3938): the per-repo
-#   pool at `<repo>/.loom/tokens/` when it holds `*.token` files, else the
-#   shared machine-level pool at `~/.loom/tokens/` (override
-#   `LOOM_SHARED_TOKENS_DIR`; set it empty to disable the fallback). This lets a
-#   consumer repo the daemon dispatches into — which has no pool of its own —
-#   spawn against the shared pool instead of hard-failing. All pool STATE
+#   Token selection resolves the effective pool (issue #3938) to the shared
+#   machine-level pool at `~/.loom/tokens/` (override `LOOM_SHARED_TOKENS_DIR`;
+#   set it empty to disable it). A legacy per-repo pool at `<repo>/.loom/tokens/`
+#   still resolves only when that workspace is NOT inside a git worktree —
+#   inside one it is refused outright (issue #9135: OAuth credentials must never
+#   live in a repository checkout). All pool STATE
 #   (`.bad_tokens`/`.ranking`/`.allowlist`/`.failure_counts`) lives in whichever
 #   pool was selected, so it is never forked per repo.
-#   When NEITHER pool exists/has tokens (or all tokens are bad), this script
+#   When no pool exists/has tokens (or all tokens are bad), this script
 #   exits 78 (EX_CONFIG) with a message instructing the user to run
-#   `loom-daemon tokens bootstrap` (or `--shared` for the machine-level pool).
+#   `loom-daemon tokens bootstrap` (which always targets the shared pool).
 #   It does NOT silently fall back to keychain.
 #   (The recovery advice named the Python `loom-tokens` console script until epic
 #   #4081 Phase 4, #4557, deleted the package that provided it; `loom-daemon
@@ -551,6 +551,18 @@ if [[ -f "$_sleep_inhibit_config_lib" ]]; then
     fi
 fi
 
+# --- Per-worktree cargo target dir (issue #8458) ---
+#
+# Nothing to do here. The per-worktree `CARGO_TARGET_DIR` a claim-owning sweep
+# runs under is injected by `loom-daemon spawn-worker` itself
+# (`worker_spawn::run`, beside the `CARGO_INCREMENTAL=0` it already sets for the
+# same #8453 reasons), so it is already in this process's environment — and in
+# the environment of every `cargo test` an agent runs as a subprocess of it,
+# which is where #8453's false verdicts came from. That seam is the one every
+# dispatch surface converges on, so one Rust site covers all of them and this
+# script needs no wiring at all; the containerized block below re-exports
+# whatever it finds across the docker boundary, unchanged.
+
 # --- Containerized dispatch mode (issue #7429, epic #6896 Phase 3) ---
 #
 # Config-selectable, initially OFF: `.loom/config.json` ->
@@ -800,9 +812,14 @@ if [[ "$CONTAINMENT_ENABLED" == "1" ]]; then
     # the variables host-side token selection exports LATER
     # (CLAUDE_CODE_OAUTH_TOKEN, LOOM_TOKEN_NAME) and ANTHROPIC_BASE_URL are
     # added by name by `worker proxy-exec --docker-workspace` itself.
+    # TRACEPARENT and OTEL_* are forwarded too (#9215): neither matches a
+    # LOOM_/CLAUDE_ prefix, so before this a contained dispatch silently
+    # dropped the trace parent and the whole Claude Code OTel env — the
+    # in-container session emitted no spans at all, with no error, while the
+    # same host's bare-metal dispatch worked.
     while IFS='=' read -r _containment_var _; do
         case "$_containment_var" in
-            LOOM_* | CLAUDE_* | SAFEHOUSE* | CODEX_* | GH_TOKEN | GITHUB_TOKEN)
+            LOOM_* | CLAUDE_* | SAFEHOUSE* | CODEX_* | GH_TOKEN | GITHUB_TOKEN | TRACEPARENT | OTEL_*)
                 _containment_env+=(-e "$_containment_var")
                 ;;
         esac
@@ -1110,11 +1127,11 @@ if [[ -z "${LOOM_SPAWN_NO_EXPORT:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; th
         log_error "Token selection failed:"
         cat "$_selection_stderr_file" >&2 || true
         rm -f "$_selection_stderr_file"
-        log_error "Run '$_daemon_bin tokens bootstrap' to populate <repo>/.loom/tokens/,"
-        log_error "or add '--shared' for the machine-level pool"
-        log_error "(~/.loom/tokens, override LOOM_SHARED_TOKENS_DIR) that consumer"
-        log_error "repos fall back to. Use '$_daemon_bin tokens unblock <name>' if"
-        log_error ".bad_tokens is the cause."
+        log_error "Run '$_daemon_bin tokens bootstrap' to populate the shared pool"
+        log_error "(~/.loom/tokens, override LOOM_SHARED_TOKENS_DIR) — the only"
+        log_error "supported location since #9135; a pool inside a git worktree is"
+        log_error "refused. Use '$_daemon_bin tokens unblock <name>' if .bad_tokens"
+        log_error "is the cause."
         log_error "Spawn-claude refuses to auto-clear .bad_tokens — that's"
         log_error "intentional: an empty pool indicates a real auth problem."
         log_error "Set CLAUDE_CODE_OAUTH_TOKEN explicitly to bypass selection."

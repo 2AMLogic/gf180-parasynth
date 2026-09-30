@@ -1,0 +1,26 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved. Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2025.1 (lin64) Build 6140274 Wed May 21 22:58:25 MDT 2025
+| Date         : Tue Sep 29 03:41:25 2026
+| Command      : report_exceptions -file <box>/build/arty-pads/exceptions.rpt
+| Design       : arty_a7_pads_top
+| Device       : 7a100t-csg324
+| Speed File   : -1  PRODUCTION 1.23 2018-06-13
+| Design State : Routed
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Exceptions Report
+
+Position  From                  Through         To                                                           Setup           Hold            Status           
+--------  --------------------  --------------  -----------------------------------------------------------  --------------  --------------  -----------------
+2         [get_ports {btn[0]}]  *               *                                                            false           false           
+3         [get_ports {btn[1]}]  *               *                                                            false           false           
+4         [get_ports {btn[2]}]  *               *                                                            false           false           
+5         [get_ports {btn[3]}]  *               *                                                            false           false           
+6         [get_ports sw_pads]   *               *                                                            false           false           
+7         [get_ports sw_reset]  *               *                                                            false           false           
+8         [get_ports spi_sck]   *               [get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]          false           false           
+9         [get_ports spi_mosi]  *               [get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]         false           false           
+10        [get_ports spi_cs_n]  *               [get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]          false           false           
+11        [get_ports uart_rxd]  *               [get_pins -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[0\]/D}]  false           false           
+

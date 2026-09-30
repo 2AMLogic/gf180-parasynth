@@ -138,12 +138,18 @@ class LadderFx:
         is 17 bits to res 1.5. g is Q0.16 and reaches 61,659 at the 0.45*fs
         cutoff clamp (bit 15 set above ~10.6 kHz, so it is NOT a signed 16-bit
         quantity)."""
-        k = usat(int(round(4.0 * res * (1 << 14))), self.K_BITS)          # Q3.14
+        k, gain, ogain = self.regs_unclamped(res, drive)
+        return usat(k, self.K_BITS), usat(gain, self.GAIN_BITS), usat(ogain, self.GAIN_BITS)
+
+    def regs_unclamped(self, res: float, drive: float = 1.0) -> tuple[int, int, int]:
+        """`regs` before the register-width clamp: the one formula, so a caller
+        that must REFUSE an out-of-range word rather than clamp it (a versioned
+        calibration, `voice_fx.ladder_regs`) computes exactly what `regs` does."""
+        k = int(round(4.0 * res * (1 << 14)))                              # Q3.14
         # Q1.15 audio -> state units (2*Vt). One constant: drive*vpu/(2*Vt).
-        gain = usat(int(round(drive * self.vpu / VT2 * (1 << COEF_Q))), self.GAIN_BITS)
+        gain = int(round(drive * self.vpu / VT2 * (1 << COEF_Q)))
         # state units -> Q1.15 audio on the way out, with resonance gain comp
-        ogain = usat(int(round(VT2 / self.vpu * (1.0 + 0.5 * res * 4.0) * (1 << COEF_Q))),
-                     self.GAIN_BITS)
+        ogain = int(round(VT2 / self.vpu * (1.0 + 0.5 * res * 4.0) * (1 << COEF_Q)))
         return k, gain, ogain
 
     def coefficients(self, cutoff_hz: np.ndarray, res: float, drive: float = 1.0,

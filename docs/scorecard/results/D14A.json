@@ -2,37 +2,42 @@
   "engine": "fixed-model",
   "case_id": "D14A",
   "subject": "Cymbal / anchor",
-  "source_commit": "7dd6337",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@77e321cbfe87 at 2026-09-19T01:28:25Z",
+  "source_commit": "32e824d",
+  "analysis_run": "run_case@1b31969d340f + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@801a4d48c134 at 2026-09-27T02:01:55Z",
   "provenance": {
     "engine": "fixed-model",
     "worktree": {
-      "commit": "7dd6337",
-      "described": "node/D-drums-bitexact-83-g7dd6337",
-      "branch": "fix-decay-and-corner",
+      "commit": "32e824d",
+      "described": "node/D-drums-bitexact-667-g32e824d-dirty",
+      "branch": "feature/issue-102",
       "dirty": true,
-      "uncommitted_sha256": "628231a78397603e",
-      "untracked_files": 1
+      "uncommitted_sha256": "bffaca2b74d67581",
+      "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "398bc543d7b9",
-      "behind_commits": 0,
-      "ahead_commits": 5,
+      "origin_main": "b815b95e1f6b",
+      "behind_commits": 18,
+      "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {
-        "model/audio_measure.py": {
-          "origin_main": "288aa83814a5",
-          "here": "77e321cbfe87"
+        "model/drums_fx.py": {
+          "origin_main": "9c4eebbd42ee",
+          "here": "449cfefe39ad"
+        },
+        "model/drum_verify.py": {
+          "origin_main": "16421a20a229",
+          "here": "215ff1e6ffd0"
         }
       },
       "allow_stale": false,
       "problems": [],
-      "ahead_note": "5 commit(s) ahead of origin/main and 0 behind, so these inputs differ because this branch changed them: model/audio_measure.py. That is not a stale premise -- the tree contains everything origin/main has."
+      "ahead_note": "These inputs differ because this branch changed them, while origin/main has no missing changes to these dependencies: model/drum_verify.py, model/drums_fx.py.",
+      "note": "18 commit(s) behind origin/main, none of them touching an input this measurement depends on"
     },
-    "command": "tools/run_case.py --batch First 32 --no-audio --results /private/tmp/claude-501/-Users-joseph-dev-2amlogic/b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad/res2",
+    "command": "tools/run_case.py D14A --no-audio",
     "config": {
       "voice": "CY",
       "refs": "/tmp/tr808-ref",
@@ -42,17 +47,20 @@
       "bus_gain": 0.45,
       "level_matched": true
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-19T01:28:35Z",
+    "python": "3.12.3",
+    "run_at": "2026-09-27T02:02:10Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:77e321cbfe87a6c9",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:449cfefe39ada055",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:c31aadac74845fc7",
+      "tools/run_case.py": "sha256:1b31969d340f6ef9",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:801a4d48c1347c43",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
       "reference:cy8/CY5025.WAV": "sha256:6bec4a9d12d10c93"
     },
     "artefacts": {
@@ -62,9 +70,9 @@
     "outcome_code": 2,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
-  "reference_profile": "fischer-tr808-103852:cy8/CY5025.WAV (TONE 5.0, DECAY 5.0)",
+  "reference_profile": "fischer-tr808-103852:cy8/CY5025.WAV (TONE 5.0, DECAY 2.5)",
   "reference_identity": "Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 s/n 103852, individual voice outputs, 16-bit/44.1 kHz",
-  "render_run": "drums_fx@4a0177412ff4 kit_with_sounds('CY') solo, one hit at accent 1.0, 3.60 s, both drum buses 0.45, 48000 Hz, circuit 10 of 11",
+  "render_run": "drums_fx@449cfefe39ad kit_with_sounds('CY') solo, one hit at accent 1.0, 3.60 s, both drum buses 0.45, 48000 Hz, circuit 10 of 11",
   "audio": "reference cy8/CY5025.WAV; ours not written",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
@@ -117,7 +125,8 @@
       "error": 1.5027,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "band decay": {
       "value": 369.1241,
@@ -126,12 +135,13 @@
       "error": -53.4397,
       "tolerance": 211.2819,
       "valid": true,
-      "tolerance_basis": "time"
+      "tolerance_basis": "time",
+      "purpose": "match"
     },
     "total decay": {
       "units": "ms",
       "valid": false,
-      "why": "reference: the record ends before the decay does: only 1173.3 ms follow the -25 dB point and a T20 of 799.6 ms needs 1599.2 ms after it, so the backward integral is reporting the cut and not the decay {'tail_db': -102.81987136542737, 'slope_db_s': -25.012989490263593, 'residual_db': 1.6310246378094533, 'n': 32891, 't20_ms': 799.5845521697869, 'after_hi_ms': 1173.3333333333333, 'needed_after_hi_ms': 1599.1691043395738, 'tail_in_t20s': 1.4674287167621307, 'min_tail_t20': 2.0, 'tail_residual_db': -48.186218653796175, 'trailing_silence_ms': 0.0, 'sounding_samples': 88147, 'given_samples': 88147}"
+      "why": "reference: the record ends before the decay does: only 1173.3 ms follow the -25 dB point and a T20 of 799.6 ms needs 1599.2 ms after it, so the backward integral is reporting the cut and not the decay {'tail_db': -102.81987136542737, 'slope_db_s': -25.012989490263788, 'residual_db': 1.631024637809479, 'n': 32891, 't20_ms': 799.5845521697806, 'after_hi_ms': 1173.3333333333333, 'needed_after_hi_ms': 1599.1691043395613, 'tail_in_t20s': 1.4674287167621423, 'min_tail_t20': 2.0, 'tail_residual_db': -48.18621865379578, 'trailing_silence_ms': 0.0, 'sounding_samples': 88147, 'given_samples': 88147}"
     }
   },
   "diagnostics": {

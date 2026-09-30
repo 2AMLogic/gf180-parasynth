@@ -1,0 +1,11 @@
+constraint binding: fpga/boards/arty-a7-100.xdc vs arty_a7_top
+  ports_declared       ok
+  ports_constrained    ok
+  hier_names           ok
+  hier_separators      ok
+  clock_names          ok
+  query_counts         ok
+  exception_model      ok
+  output_delay_budget  ok
+  uart_gate            ok
+  PASS: 0 problem(s) across 9 properties

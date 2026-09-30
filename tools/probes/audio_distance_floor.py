@@ -45,11 +45,14 @@ WHAT IS MEASURED, AND WHY EACH ONE
     2.74 % f0, 1.30 % T20, 0.159 dB band split -- so every reading can be put
     beside the floor it has to beat.
 
-`E5 the tom pitch drop`  The live defect. `spec/NUMERIC-CONTRACT.md` 15.7.1
-    ships the drop at x1.7; `docs/tom-pitch-drop-measurement.md` measured the
-    hardware at x1.06 / x1.14 / x1.24. We render LT at each ratio through the
-    real model and ask whether a spectral distance separates them. A distance
-    that cannot is blind exactly where our largest open drum defect lives.
+`E5 the tom pitch drop`  The defect this was written against, now FIXED:
+    `spec/NUMERIC-CONTRACT.md` 15.7.1 shipped the drop at x1.7 where
+    `docs/tom-pitch-drop-measurement.md` measured the hardware at
+    x1.06 / x1.14 / x1.24, and #154 corrected it. The experiment stands
+    unchanged and is now a discrimination case rather than a live defect: we
+    render LT at each ratio through the real model and ask whether a spectral
+    distance separates them. A distance that cannot is blind to the largest
+    single error the drum section has had.
 
 `E6 identifiability`  The exchange rate. For each distance, the broadband gain
     error that reads the SAME value as a 5 % decay error. A scalar that gives
@@ -757,7 +760,7 @@ def report(r: dict) -> None:
     for k, v in b["rungs"].items():
         p(_row(f"{k}  ({v['f0_error_pct']:+.2f} %, {v['f0_hz']:.2f} Hz)", v))
 
-    p("\nE5  the tom pitch drop: shipped x1.7 against the measured hardware")
+    p("\nE5  the tom pitch drop: the pre-#154 x1.7 against the measured hardware")
     t = r["E5_tom_pitch_drop"]
     p(f"  full clip {t['full_clip_s']} s; the drop lives in the first {t['drop_window_ms']:g} ms")
     p(HEAD)

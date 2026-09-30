@@ -29,6 +29,12 @@ the test suite runs; --only picks by key):
              with both destinations on and OSC-3 CONTROL ON, which is
              oscillator 3 modulating its own pitch; and both depths at the
              register maximum, where the octave word saturates
+  drift      per-oscillator drift (6.11, DR 0019): the reference depth, the
+             register maximum together with the SHARED modulation bus at full
+             wheel, an oscillator drifted into the increment clamp, and a window
+             straddling a walk-update boundary. Every OTHER scenario runs
+             DRIFT = 0, which is bit-identical to no drift at all, so without
+             this key the drift path is never simulated
   notes      every NOTE_INC entry (0..127) with the default detunes; the
              increments where 5.5's clamp fires (note 127 + 24 semitones =
              2^24 - 1); the powers of two where the reciprocal clamps; inc =
@@ -53,6 +59,25 @@ the test suite runs; --only picks by key):
   audition   the reference sequences of contract 16: 04-lead-glide,
              07-growl-bass and 08-self-osc-whistle through KeyHost (the first
              0.8 s of each) -- full set only
+
+SCOPE (#354). This bench deliberately exceeds R1's qualified domain
+(fpga/release/qualified_domain.py): almost every scenario uses waveform sets,
+drives, resonances or register words the release host cannot send
+(`tools/verify_voice_scoped.py --classify-full` lists each and its rule). Its
+job is component equivalence over the whole register space, not a statement
+about supported play. KNOWN FAILURE, OUT OF DOMAIN: with --osc2x --filter2x
+the all-maximum `extremes` image (inc 2^24-1, k 131071, gain/ogain 2^20-1,
+vol 65535) diverges at the ladder's 19-bit rail (frame 62: model -262119,
+RTL -262144) and the output rails with opposite signs. Every scenario runs on
+ONE continuing voice, so that divergence is CARRIED into the later scenarios:
+`--only audition` alone passes bit-exact (115,200 frames, with and without
+--pulse2x), and so does an in-domain stress of all three R1 presets at the
+live controllers' limits (`verify_voice_scoped.py --domain`, 144,000 frames).
+A full-set FAIL is therefore not evidence of an in-domain defect -- and a
+full-set PASS remains the goal. The out-of-domain divergence is
+ladder_dp_n.v's 25-bit (x * gain) >> 11 register wrapping (26 bits needed);
+repaired for R2 in #364 (full set then PASSES, 442,596 frames), unrepaired in
+R1's frozen bytes by design.
 
 Exit status (a CI job asserting that a negative control fails must require
 exactly 1):
@@ -83,19 +108,38 @@ from verify_ladder import tool
 A = dict(INC=0x00, WAVE=0x04, W=0x08, WN=0x0B, GLIDE=0x0C, VOL=0x0D, AMP=0x10, FILT=0x14,
          CUT_LO=0x18, CUT_HI=0x19, TRACK=0x1A, NSEL=0x1B, K=0x1C, GAIN=0x1D, OGAIN=0x1E,
          MROUTE=0x1F, GATE_ON=0x20, GATE_OFF=0x21, TRIG=0x22,
-         MMIX=0x24, MWHEEL=0x25, MPD=0x26, MFD=0x27)
+         MMIX=0x24, MWHEEL=0x25, MPD=0x26, MFD=0x27, DRIFT=0x2D)
 WAVE_CODE = vf.WAVE_CODE
 FULL24 = (1 << 24) - 1
 FIELDS = ["sample", "osc0", "osc1", "osc2", "inc0", "inc1", "inc2", "sh0", "sh1", "sh2",
           "r0", "r1", "r2", "mixed", "ae", "fe", "cut", "g", "kc", "k_eff", "y19", "v", "out_v",
           "phase2x0", "phase2x1", "phase2x2"]
 STATE_FIELDS = ["phase0", "phase1", "phase2", "inc_acc0", "inc_acc1", "inc_acc2",
-                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2"]
+                "level_a", "level_f", "seg_a", "seg_f", "phase2x0", "phase2x1", "phase2x2",
+                "drift_cnt", "drift_acc0", "drift_acc1", "drift_acc2"]
 RTL_FILES = ["tb_voice.v", "voice_dp.v", "recip_div.v", "ladder_dp_n.v",
              "osc_2x_saw_path.v", "polyblep_saw_pair.v", "osc_substep_pair.v",
              "decimate_2x_tm_sym.v", "osc_2x_saw_bank.v", "rate_conv_2x.v"]
+F1CAL = "surge-type2-clean-v1"
+#: plan074 D negative control: the image names the calibration, the register
+#: port receives the LEGACY gain/ogain words. The model still renders the
+#: requested image, so the bench must mismatch. Set by --f1cal-fault.
+F1CAL_FAULT = None
 BUGS = ["SQUARE_SIGN", "ENV_FLOOR", "ENV_RATE_EXP", "KEFF", "MIX_SAT", "GLIDE_FLOOR", "RECIP_CLAMP", "TRIG_RESET", "OUT_SAT", "OSC_SMOOTH_ON", "OSC2X_HEADROOM", "OSC2X_OFF", "FILTER2X_OFF", "PULSE2X_OFF",
-        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "MOD_NODELAY"]
+        "LFSR_TAP", "NOISE_SEL", "SHARK_MIX", "SHARK_BLAMP_SIGN", "MOD_NODELAY",
+        "DRIFT_SHARED", "DRIFT_LEAKFLOOR", "DRIFT_MEANSTEP"]
+#: The production launch. tb_voice.v's GO must equal synth_top.v's GO_CYCLE:
+#: a bench that launches later than the chip refuses configurations the chip
+#: runs (PR #235's three-saw refusal, docs/deadline/README.md), and one that
+#: launches earlier passes configurations the chip cannot. Checked, not assumed.
+import re as _re
+def _param(path, name):
+    m = _re.search(rf"parameter\s+{name}\s*=\s*(\d+)", open(os.path.join(HERE, path)).read())
+    return int(m.group(1)) if m else None
+#: What the last simulation's deadline check found (tb_voice's OVERRUN / LATE
+#: SAMPLE / DEADLINE lines), so a negative control can be checked against the
+#: failure it was recorded to cause.
+DEADLINE: dict = {}
 
 
 # ---- the model's writes as register writes -----------------------------------
@@ -114,7 +158,8 @@ def patch_to_writes(regs: dict, f0: int) -> list:
             (f0, 0, A["VOL"], int(regs["vol"])), (f0, 0, A["GLIDE"], int(regs["glide"]))]
     out += [(f0, 0, A["NSEL"], int(regs.get("nsel", 0))), (f0, 0, A["MROUTE"], int(regs.get("mroute", 0))),
             (f0, 0, A["MMIX"], int(regs.get("mmix", 0))), (f0, 0, A["MWHEEL"], int(regs.get("mwheel", 0))),
-            (f0, 0, A["MPD"], int(regs.get("mpd", 0))), (f0, 0, A["MFD"], int(regs.get("mfd", 0)))]
+            (f0, 0, A["MPD"], int(regs.get("mpd", 0))), (f0, 0, A["MFD"], int(regs.get("mfd", 0))),
+            (f0, 0, A["DRIFT"], int(regs.get("drift", 0)))]
     return out
 
 
@@ -155,6 +200,27 @@ def scenarios(which: str, only=None) -> list:
         assert all(0 <= int(w[0]) < n for w in writes), (key, n, [w for w in writes if not 0 <= int(w[0]) < n])
         if only is None or key in only:
             S.append((key, name, regs, writes, n))
+
+    # -- threesaw: plan075 T1 (docs/deadline/). OPT-IN ONLY (name it in --only).
+    # The configuration PR #235's f1cal scenario could not run here under the
+    # old launch (go at cycle 48): THREE 2x SAW oscillators with the 2x filter,
+    # at the calibrated surge-type2-clean-v1 words (the image names the
+    # calibration; the words are asserted equal to PR #235's record), at its
+    # five F1 points. Frame 0 carries the whole image plus the note, the
+    # burst that was refused.
+    if only is not None and "threesaw" in only:
+        n = int((0.03 if q else 0.1) * SR)
+        cal_words = {0.0: (42598, 100825), 1.0: (42598, 302474), 1.1: (42598, 322639)}
+        for i, (cut, res) in enumerate(((250, 0.0), (1000, 0.0), (4000, 0.0),
+                                        (1000, 1.0), (1000, 1.1))):
+            regs = v.patch_regs(waves=("saw", "saw", "saw"), detune=(0.0, 0.0, 0.0),
+                                mix=(1.0, 0.0, 0.0), cutoff=(cut, cut), q=res, drive=1.0,
+                                track=0.0, amp=(0.001, 0.25, 1.0, 0.05),
+                                filter_calibration=F1CAL)
+            assert (regs["gain"], regs["ogain"]) == cal_words[res], (res, regs["gain"], regs["ogain"])
+            writes = _note_writes(45, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+            add("threesaw", f"three 2x saws at {cut} Hz, res {res}, calibrated words "
+                            f"(gain {regs['gain']}, ogain {regs['ogain']})", regs, writes, n)
 
     # -- default: the default patch, one note from reset --------------------------
     d = 0.025 if q else 0.3
@@ -250,6 +316,37 @@ def scenarios(which: str, only=None) -> list:
     w = _note_writes(64, regs) + [(0, "GATE", 1), (n // 2, "MWHEEL", 0)]
     add("modulation", "both depths at 65535 (the octave word saturates at +-4), mmix past its top, "
         "wheel at 65535 then 0", regs, w, n)
+
+    # -- drift: per-oscillator drift, 6.11 / DR 0019 --------------------------------
+    # Every scenario above runs DRIFT = 0, which is bit-identical to no drift
+    # mechanism at all -- so without this key the RTL's drift path is never
+    # exercised and could be anything. Three cases: the reference depth; the
+    # register maximum together with the SHARED modulation bus on, where drift
+    # and MR_OSC multiply the same increment in one frame; and the increment
+    # clamp, where an oscillator already at 2^24 - 1 is drifted upward.
+    n = int((0.06 if q else 0.4) * SR)
+    for i, (cents, note, extra) in enumerate((
+            (vf.DRIFT_REF_CENTS, 33, {}),
+            (vf.drift_cents(65535), 45, dict(osc_mod=True, mod_wheel=1.0, mod_mix=0.0,
+                                             mod_pitch=vf.MPD_REF_OCT, osc3_ctl=True)),
+            (vf.drift_cents(65535), 127, dict(detune=(24.0, 23.0, -12.0))))):
+        regs = v.patch_regs(waves=("saw", "saw", "square"), mix=(1.0, 0.9, 0.8),
+                            q=0.7, drive=1.8, cutoff=(300, 6000), track=0.3,
+                            drift_cents=cents, **extra)
+        writes = _note_writes(note, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+        add("drift", f"DRIFT {regs['drift']} ({cents:.3f} cents rms) at note {note}"
+                     + (" with the shared mod bus at full wheel" if i == 1 else "")
+                     + (" at the increment clamp" if i == 2 else ""),
+            regs, writes, n)
+    # and the walk's own update boundary: DRIFT_DIV frames is 21.3 ms, so a
+    # window that straddles one carries the update itself rather than only the
+    # steady deviation between updates.
+    regs = v.patch_regs(waves=("saw", "revsaw", "tri"), mix=(1.0, 1.0, 1.0), q=0.4,
+                        drive=1.2, cutoff=(400, 4000), track=0.0,
+                        drift_cents=vf.DRIFT_REF_CENTS)
+    n = vf.DRIFT_DIV + (64 if q else 512)
+    add("drift", f"across a walk update: {n} frames spanning a DRIFT_DIV "
+                 f"({vf.DRIFT_DIV}-frame) boundary", regs, _note_writes(60, regs), n)
 
     # -- notes: the full note range and the increments where 5.5's clamps fire ----
     per = 12 if q else 40
@@ -380,6 +477,30 @@ def scenarios(which: str, only=None) -> list:
                 on = int(start * SR); off = min(n - 1, on + max(1, int(g * SR)))
                 if on < n: events.append((on, "on", note)); events.append((off, "off", note))
             add("audition", f"reference sequence {name} through KeyHost, first 0.8 s", regs, host.writes(events, regs), n)
+
+    # -- f1cal: plan074 D. OPT-IN ONLY (it must be named in --only), so the
+    # existing quick/full sets and their recorded frame counts do not move.
+    # The calibrated operating point's words at the F1 cutoffs (res 0, drive
+    # 1.0), then at resonance 1.0 and 1.1 (past self-oscillation onset) at
+    # 1 kHz: the resonant/self-oscillating path the reciprocal ogain feeds.
+    # REVSAW, not saw: with --filter2x, three 2x SAW oscillators plus the 2x
+    # filter do not finish frame 0 inside this bench's budget (go at cycle 48
+    # of 256; synth_top pulses go at cycle 8) -- "datapath still busy at the
+    # end of frame 0", measured with the legacy words too, so it is not the
+    # calibration. The ladder sees a sawtooth either way.
+    # RESOLVED (plan075 T1, docs/deadline/README.md): the bench now launches at
+    # synth_top's cycle 8, and the saw case runs as the opt-in `threesaw`.
+    if only is not None and "f1cal" in only:
+        n = int((0.03 if q else 0.1) * SR)
+        for i, (cut, res) in enumerate(((250, 0.0), (1000, 0.0), (4000, 0.0),
+                                        (1000, 1.0), (1000, 1.1))):
+            regs = v.patch_regs(waves=("revsaw", "revsaw", "revsaw"), detune=(0.0, 0.0, 0.0),
+                                mix=(1.0, 0.0, 0.0), cutoff=(cut, cut), q=res, drive=1.0,
+                                track=0.0, amp=(0.001, 0.25, 1.0, 0.05),
+                                filter_calibration=F1CAL)
+            writes = _note_writes(45, regs) + ([(0, "GATE", 1)] if i == 0 else [])
+            add("f1cal", f"{F1CAL} at {cut} Hz, res {res}, drive 1.0 "
+                         f"(gain {regs['gain']}, ogain {regs['ogain']})", regs, writes, n)
     return S
 
 
@@ -445,7 +566,12 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
         phases0 = [o.phase for o in v.oscs]
         y = v.play(regs, writes, n)                     # the voice persists across scenarios
         t = v.trace
-        all_writes += patch_to_writes(regs, f0) + model_writes_to_regs(writes, f0)
+        pw = patch_to_writes(regs, f0)
+        if F1CAL_FAULT == "LEGACY_WORDS" and regs.get("filter_calibration"):
+            _, lg, log = vf.ladder_regs(regs["res"], regs["drive"])
+            pw = [(f, fl, ad, lg if ad == A["GAIN"] else log if ad == A["OGAIN"] else d)
+                  for f, fl, ad, d in pw]
+        all_writes += pw + model_writes_to_regs(writes, f0)
         er = [[vf.recip_of(int(i)) for i in t["incs"][k]] for k in range(3)]
         vol = int(regs["vol"])
         for i in range(n):
@@ -461,7 +587,8 @@ def generate(outdir: str, which: str, only=None, verbose=True, oversample_2x=Fal
             print(f"  [{key}] {name}: frames {f0}..{f0 + n - 1} ({n}), {len(writes)} writes; {cov}")
         f0 += n
     state = [o.phase for o in v.oscs] + [o.inc_acc for o in v.oscs] + \
-            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + list(v._os2_phase)
+            [v.amp_env.level, v.filt_env.level, v.amp_env.seg, v.filt_env.seg] + \
+            list(v._os2_phase) + [v.drift_cnt] + list(v.drift_acc)
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "voice_writes.txt"), "w") as fh:
         fh.writelines("%d %d %d %d\n" % w for w in all_writes)
@@ -530,8 +657,18 @@ def compare(expected, state, report, out_file, name="verify_voice") -> int:
 
 
 def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 3600.0,
-             simulator: str = "iverilog") -> str | None:
+             simulator: str = "iverilog", go: int | None = None) -> str | None:
     import shutil
+    DEADLINE.clear()
+    bench_go, chip_go = _param("tb_voice.v", "GO"), _param("synth_top.v", "GO_CYCLE")
+    if bench_go is None or chip_go is None:
+        print("verify_voice: REFUSED -- cannot read tb_voice.v's GO or synth_top.v's GO_CYCLE"); return None
+    if go is None and bench_go != chip_go:
+        print(f"verify_voice: REFUSED -- tb_voice.v launches at cycle {bench_go}, synth_top.v at "
+              f"{chip_go}: the bench would not be measuring the chip's deadline"); return None
+    if go is not None and go != chip_go:
+        print(f"verify_voice: DIAGNOSTIC launch at cycle {go}, NOT the chip's cycle {chip_go}: "
+              f"a deadline result from this run says nothing about the chip")
     iverilog, vvp = tool("iverilog"), tool("vvp")
     if simulator == "iverilog" and (not iverilog or not vvp):
         print("verify_voice: iverilog/vvp not on PATH (or set OSS_CAD_SUITE)"); return None
@@ -545,9 +682,11 @@ def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 360
             print("verify_voice: Verilator not on PATH"); return None
         compiler = [verilator, "--binary", "--timing", "-Wno-fatal", "--top-module", "tb_voice",
                     "--Mdir", os.path.join(outdir, "obj_voice"), "-o", vvp_file]
+        if go is not None: compiler.append(f"-GGO={go}")
         runner = [vvp_file]
     else:
         compiler = [iverilog, "-g2012", "-o", vvp_file]
+        if go is not None: compiler.append(f"-Ptb_voice.GO={go}")
         runner = [vvp, "-n", vvp_file]
     r = subprocess.run(compiler + [f"-D{d}" for d in defines] + files,
                        cwd=HERE, capture_output=True, text=True)
@@ -560,6 +699,17 @@ def simulate(outdir: str, defines: list, rtl: str = None, timeout_s: float = 360
     except subprocess.TimeoutExpired:
         print("verify_voice: simulation timed out"); return None
     sys.stdout.write("".join("  sim: " + l + "\n" for l in r.stdout.splitlines() if l.startswith("tb_voice")))
+    m = _re.search(r"tb_voice: OVERRUN at frame (\d+)", r.stdout)
+    if m: DEADLINE["overrun_frame"] = int(m.group(1))
+    m = _re.search(r"tb_voice: LATE SAMPLE: (\d+) frame\(s\) strobed after cycle 254, first frame (\d+) at cycle (\d+)", r.stdout)
+    if m: DEADLINE.update(late_samples=int(m.group(1)), late_first=int(m.group(2)), late_cycle=int(m.group(3)))
+    m = _re.search(r"DEADLINE go at cycle (\d+); worst strobe cycle (-?\d+) \(sample slack (-?\d+) to cycle 254\); "
+                   r"worst last-busy cycle (-?\d+) \(busy slack (-?\d+)", r.stdout)
+    if m:
+        DEADLINE.update(go=int(m.group(1)), worst_strobe=int(m.group(2)), sample_slack=int(m.group(3)),
+                        worst_busy=int(m.group(4)), busy_slack=int(m.group(5)))
+    if "tb_voice: REFUSED" in r.stdout:
+        DEADLINE["refused"] = True
     if r.returncode != 0 or not os.path.exists(out_file):
         print(f"verify_voice: {simulator} run failed:\n" + r.stdout + r.stderr); return None
     return out_file
@@ -581,7 +731,18 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true")
     ap.add_argument("--rtl", default=None, metavar="FILE", help="simulate FILE in place of voice_dp.v")
     ap.add_argument("--compare-only", default=None, metavar="FILE")
+    ap.add_argument("--go", type=int, default=None,
+                    help="DIAGNOSTIC: launch at this cycle instead of synth_top's GO_CYCLE")
+    ap.add_argument("--expect-deadline-fail", action="store_true",
+                    help="exit 0 only if the run FAILED its frame deadline (an overrun or a "
+                         "late sample) -- the late-completion control, e.g. with --rtl pointing "
+                         "at verify_deadline.py's late mutant; a value mismatch does not count")
+    ap.add_argument("--f1cal-fault", default=None, choices=("LEGACY_WORDS",),
+                    help="with --only f1cal: deliver the legacy gain/ogain words while the "
+                         "image names the calibration; must mismatch (use --expect-fail)")
     a = ap.parse_args(argv)
+    global F1CAL_FAULT
+    F1CAL_FAULT = a.f1cal_fault
     a.outdir = os.path.abspath(a.outdir)              # the bench runs with cwd = rtl-sketch
     if "VOICE_OSC_2X" in a.define:
         ap.error("use --osc2x to enable the model and RTL together; do not pass VOICE_OSC_2X via --define")
@@ -607,8 +768,35 @@ def main(argv=None) -> int:
         print(f"verify_voice: simulating {rtl or 'voice_dp.v'} ({', '.join(RTL_FILES[2:])}; "
               f"defines {', '.join(defines) or '(none)'}), {len(expected)} frames, "
               f"{len(writes)} writes at the register port")
-        out = simulate(a.outdir, defines, rtl, simulator=a.simulator)
-        status = 2 if out is None else compare(expected, state, report, out)
+        out = simulate(a.outdir, defines, rtl, simulator=a.simulator, go=a.go)
+        if out is not None and "overrun_frame" in DEADLINE:
+            # the frame's computation did not finish before the next tick at the
+            # production launch: a FAILED deadline, which is a result, not a refusal
+            print(f"verify_voice: FAIL -- DEADLINE: overrun at frame {DEADLINE['overrun_frame']} "
+                  f"(datapath busy at the tick, go at cycle {a.go or _param('tb_voice.v', 'GO')})")
+            status = 1
+        elif out is None and "overrun_frame" in DEADLINE:
+            print(f"verify_voice: FAIL -- DEADLINE: overrun at frame {DEADLINE['overrun_frame']} "
+                  f"(datapath busy at the tick, go at cycle {a.go or _param('tb_voice.v', 'GO')})")
+            status = 1
+        else:
+            status = 2 if out is None else compare(expected, state, report, out)
+            if status == 0 and DEADLINE.get("late_samples"):
+                status = 1
+            if "late_samples" in DEADLINE:
+                print(f"verify_voice: FAIL -- DEADLINE: {DEADLINE['late_samples']} late sample(s), first at "
+                      f"frame {DEADLINE['late_first']} cycle {DEADLINE['late_cycle']} (> 254)")
+            if "sample_slack" in DEADLINE:
+                print(f"verify_voice: deadline at launch cycle {DEADLINE['go']}: worst strobe cycle "
+                      f"{DEADLINE['worst_strobe']} (slack {DEADLINE['sample_slack']}), worst last-busy "
+                      f"cycle {DEADLINE['worst_busy']} (slack {DEADLINE['busy_slack']})")
+    if a.expect_deadline_fail:
+        # the late-completion control is caught only by the DEADLINE check, never by a value mismatch
+        if status == 1 and ("overrun_frame" in DEADLINE or DEADLINE.get("late_samples")):
+            print("verify_voice: late-completion control CAUGHT by the deadline check")
+            return 0
+        print(f"verify_voice: LATE-COMPLETION CONTROL NOT CAUGHT FOR ITS REASON (status {status}, {DEADLINE})")
+        return 1 if status != 2 else 2
     if a.expect_fail:
         if status == 1:
             print(f"verify_voice: negative control {a.inject or ''} CAUGHT (comparison failed as required)")

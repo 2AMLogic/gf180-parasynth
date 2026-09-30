@@ -1,0 +1,44 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_metric_purpose.py tools/test_acceptance_policy.py tools/test_acceptance_on_real_records.py -q -p no:cacheprovider",
+    "state": "PASS",
+    "rc": 0,
+    "out": "........................................................................ [ 75%]\n.......................                                                  [100%]\n95 passed in 77.92s (0:01:17)\n",
+    "secs": 81.35016202926636
+  },
+  {
+    "cmd": "env GF180_REQUIRE_TR808_REFS=1 GF180_TR808_REFS=<scratchpad>/tr808-ref /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -rs",
+    "state": "PASS",
+    "rc": 0,
+    "out": "........................................................................ [ 72%]\n...........................                                              [100%]\n=============================== warnings summary ===============================\ntools/test_run_case.py::test_every_result_this_runner_writes_carries_provenance\ntools/test_run_case.py::test_a_missing_reference_is_a_no_verdict_with_a_reason\ntools/test_run_case.py::test_a_reference_shifted_by_twice_the_tolerance_fails\ntools/test_run_case.py::test_the_same_case_without_the_injection_does_not_fail_on_pitch\ntools/test_run_case.py::test_written_results_are_the_shape_the_board_reads\n  /private/tmp/wt-cowbell-141/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.\n    sr, x = wavfile.read(str(path))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n99 passed, 5 warnings in 175.82s (0:02:55)\n",
+    "secs": 178.9912350177765
+  },
+  {
+    "cmd": "env GF180_REQUIRE_TR808_REFS=1 GF180_TR808_REFS=<scratchpad>/emptyrefs /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -k 'injection_refuses_to_write or missing_reference_is_a_no_verdict'",
+    "state": "FAIL",
+    "rc": 1,
+    "out": "EE                                                                       [100%]\n==================================== ERRORS ====================================\n___ ERROR at setup of test_a_missing_reference_is_a_no_verdict_with_a_reason ___\nREFUSED: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS. GF180_REQUIRE_TR808_REFS=1 makes this a required gate, and a required gate does not pass by skipping.\n_____ ERROR at setup of test_the_injection_refuses_to_write_onto_the_board _____\nREFUSED: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS. GF180_REQUIRE_TR808_REFS=1 makes this a required gate, and a required gate does not pass by skipping.\n=========================== short test summary info ============================\nERROR tools/test_run_case.py::test_a_missing_reference_is_a_no_verdict_with_a_reason\nERROR tools/test_run_case.py::test_the_injection_refuses_to_write_onto_the_board\n97 deselected, 2 errors in 11.93s\n",
+    "secs": 17.181316137313843
+  },
+  {
+    "cmd": "env -u GF180_REQUIRE_TR808_REFS GF180_TR808_REFS=<scratchpad>/emptyrefs /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider -rs -k 'injection_refuses_to_write or missing_reference_is_a_no_verdict'",
+    "state": "PASS",
+    "rc": 0,
+    "out": "ss                                                                       [100%]\n=========================== short test summary info ============================\nSKIPPED [1] tools/test_run_case.py:590: OPTIONAL local run, skipped: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS\nSKIPPED [1] tools/test_run_case.py:645: OPTIONAL local run, skipped: the Fischer corpus is not at <scratchpad>/emptyrefs (no bd8/BD5050.WAV); clone tidalcycles/sounds-tr808-fischer there or set GF180_TR808_REFS\n2 skipped, 97 deselected in 11.20s\n",
+    "secs": 16.323105812072754
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py D13A --inject CB_GATE_THE_SUM --expect changed --no-audio --results <scratchpad>/ctl2",
+    "state": "PASS",
+    "rc": 0,
+    "out": "reference corpus: <scratchpad>/tr808-ref\nresults into:     <scratchpad>/ctl2\nINJECTED CONTROL: CB_GATE_THE_SUM -- this output is a control, not evidence\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nCONTROL BASELINE: measuring the same cases without the injection\nCONTROL BASELINE: complete\n\nD13A   fail          15.81  worst: unwanted difference tone\n------------------------------------------------------------------------------------------------\nfail: 1\ncontrol fired: CB_GATE_THE_SUM caused the expected result on 1 measured case(s)\n",
+    "secs": 80.36667203903198
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/check_doc_claims.py",
+    "state": "PASS",
+    "rc": 0,
+    "out": "OK      docs/failure-modes.md:111       '^claims:' found at Makefile:213\nOK      docs/failure-modes.md:112       tools/test_check_doc_claims.py::test_a_claim_whose_backing_test_fails_is_stale passed, as claimed\nOK      docs/failure-modes.md:166       model/test_audio_measure.py::test_t20_is_ln10_times_tau passed, as claimed\nOK      docs/failure-modes.md:169       '--inject SPI_ADDR7' found at Makefile:166\nOK      docs/failure-modes.md:171       '^srccheck:' found at fpga/Makefile:134\nOK      docs/failure-modes.md:173       'verify_synth_top' found at .github/workflows/nightly.yml:41 (+1 more)\nOK      docs/failure-modes.md:176       model/test_audio_measure.py::test_rms_of_a_sinusoid_is_amplitude_over_root_two passed, as claimed\nOK      docs/failure-modes.md:182       'UNVALIDATED' found at tools/compile_dag.py:42\nOK      docs/failure-modes.md:187       tools/test_run_case.py::test_a_result_without_provenance_gets_no_verdict passed, as claimed\nOK      docs/failure-modes.md:192       tools/test_check_doc_claims.py::test_a_claim_backed_by_a_passing_test_is_ok passed, as claimed\nOK      docs/failure-modes.md:200       'estimator_meta|reachable_estimators' matches nothing in the 164 file(s) under model/*.py,tools/*.py\nOK      docs/failure-modes.md:202       'check_sensitivity|sensitivity_gate' matches nothing in the 164 file(s) under tools/*.py,model/*.py\nOK      docs/ladder-rung1-audit.md:20   model/test_ladder_headroom.py::test_the_audit_reports_every_axis_with_a_verdict_and_a_number passed, as claimed\nOK      docs/ladder-rung1-audit.md:72   model/test_ladder_headroom.py::test_dr_0011_removed_the_drift_and_left_a_resonance_dependent_offset passed, as claimed\nOK      docs/ladder-rung1-audit.md:104  model/test_ladder_headroom.py::test_the_frozen_surge_row_is_not_a_like_for_like_limit_cycle passed, as claimed\nOK      docs/ladder-rung1-audit.md:119  model/test_ladder_headroom.py::test_the_predicted_tracking_agrees_with_the_measured_table_dr_0011_locked passed, as claimed\nOK      docs/ladder-rung1-audit.md:131  model/test_ladder_headroom.py::test_a_refitted_tuning_polynomial_recovers_most_of_the_remaining_drift passed, as claimed\nOK      docs/ladder-rung1-audit.md:164  model/test_ladder_headroom.py::test_more_coefficient_rom_entries_is_a_poor_buy_and_the_sweep_floors passed, as claimed\nOK      docs/ladder-rung1-audit.md:174  model/test_ladder_headroom.py::test_refitting_the_existing_129_entries_beats_a_1025_entry_table passed, as claimed\nOK      docs/ladder-rung1-audit.md:187  model/test_ladder_headroom.py::test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin passed, as claimed\nOK      docs/ladder-rung1-audit.md:201  model/test_ladder_headroom.py::test_the_drive_stage_saturation_point_is_in_the_references_range passed, as claimed\nOK      docs/ladder-rung1-audit.md:219  model/test_ladder_headroom.py::test_the_rig_refuses_to_apply_the_tuning_polynomial_twice passed, as claimed\n\n22 claim(s) in 39 document(s): 22 ok, 0 stale, 0 refused\n",
+    "secs": 93.86537408828735
+  }
+]

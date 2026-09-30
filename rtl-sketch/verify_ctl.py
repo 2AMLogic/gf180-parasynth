@@ -27,6 +27,25 @@ Exit status, as verify_ladder.py: 0 identical, 1 differed, 2 did not run.
                            SPI_ANYLEN     accept any bit count  (drops DR 0007 section 1)
                            SPI_DRAIN_LATE drain from cycle 8, i.e. at `go`
   --expect-fail          exit 0 only if the comparison gave 1
+
+Every `--inject` or `--link dr7rev1` run also prints a blindness matrix: which
+of the SIX properties the comparison decomposes a run into -- the four fields
+of a write (flag, section, address, data), the write COUNT, and the DRAIN
+window -- the defect MOVED and which stayed BLIND to it. That is the same
+MOVED/BLIND distinction `model/sound_report.py --inject` reports for the sound
+model, extended here to a second suite whose "properties" are link properties
+rather than acoustic ones. SPI_ADDR7 (address truncated to 7 bits) should show
+`address` MOVED and the other five BLIND; SPI_ANYLEN moves `count` alone and
+SPI_DRAIN_LATE moves `drain` alone. A defect that moves all six, or none, is
+worth reading even when the pass/fail verdict alone would look ordinary.
+
+The row set is `PROPERTIES` below, and it is deliberately the single source
+for both what `compare_writes` records and what `print_blindness` prints: the
+matrix listed only the four bit-fields while `compare_writes` had been
+recording the count and drain counters all along, so SPI_ANYLEN and
+SPI_DRAIN_LATE -- both CAUGHT, each by one of the two unlisted properties --
+printed four BLIND rows and "no property moved". A reporting hole reads
+exactly like a coverage hole, which is why the two are now tied together.
 """
 from __future__ import annotations
 import argparse, os, subprocess, sys
@@ -88,7 +107,7 @@ def stimulus() -> list:
     m_top = dx.A_MODE + (dx.N_MODES - 1) * dx.MODE_STRIDE
     p_top = dx.A_PATH + dx.N_PATH - 1
     assert m_top + 3 != dx.A_RESET, "the top MODE register aliases the drum RESET: revision 8's defect"
-    assert e_top + 2 < dx.A_PATH and p_top < dx.A_MODE, "two drum register blocks overlap"
+    assert e_top + 3 < dx.A_PATH and p_top < dx.A_MODE, "two drum register blocks overlap"
     corners = [
         (dx.A_STOPS,               (1 << bits["stops"]) - 1),         # all ELEVEN stop bits
         (dx.A_ACCENT,              (1 << bits["accent"]) - 1),
@@ -99,8 +118,10 @@ def stimulus() -> list:
         (dx.A_ENV,                 (1 << bits["env_ctl"]) - 1),       # 27 bits
         (dx.A_ENV + 1,             (1 << bits["peak"]) - 1),
         (dx.A_ENV + 2,             (1 << bits["rate"]) - 1),
+        (dx.A_ENV + 3,             (1 << bits["frate"]) - 1),         # revision 14: FRATE
         (e_top,                    (1 << bits["env_ctl"]) - 1),       # envelope 17, 0x84
-        (e_top + 2,                (1 << bits["rate"]) - 1),          # 0x86: the block's top
+        (e_top + 2,                (1 << bits["rate"]) - 1),
+        (e_top + 3,                (1 << bits["frate"]) - 1),         # 0x87: the block's top now
         (dx.A_PATH,                (1 << bits["path"]) - 1),          # 25 bits now, at 0x90
         (p_top,                    (1 << bits["path"]) - 1),          # path 22, 0xA6
         (dx.A_MODE,                (1 << bits["a1"]) - 1),            # 26 bits, at 0xB0
@@ -163,11 +184,63 @@ def simulate(link: str, defines, outdir: str, bits: int, timeout_s: float = 900.
 # never from the RTL -- which is what keeps it from going self-referential.
 LAST: dict = {}
 
+# The properties a run is decomposed into: the name the matrix prints, the key
+# in `LAST` holding that property's numerator, the key holding the POPULATION
+# that numerator was counted over, and what a nonzero numerator means.
+#
+# This table is the single source of the matrix's row set. `compare_writes`
+# records exactly these keys and `print_blindness` prints exactly one row per
+# entry, so a counter cannot be added to the comparison without a row
+# appearing in the report. That coupling is the fix for a real defect: the
+# comparison decomposed every run into six properties and recorded all six,
+# while the matrix listed only the first four -- so `SPI_ANYLEN` (write count)
+# and `SPI_DRAIN_LATE` (drain window), both caught by the comparison, were
+# reported as "no property moved", i.e. as a coverage hole in the bench rather
+# than a hole in its own reporting.
+#
+# Each denominator is the population its own numerator was counted over, never
+# a larger one. `compared` is min(sent, seen), because a field can only be
+# compared on a write that actually arrived; printing a field count against
+# the number of writes SENT is the "37 of 155 writes" shape from CLAUDE.md
+# with the two populations swapped.
+PROPERTIES = (
+    # name       numerator    population    what a nonzero numerator means
+    ("flag",     "bad_flag",  "compared",   "compared writes wrong"),
+    ("section",  "bad_sec",   "compared",   "compared writes wrong"),
+    ("address",  "bad_addr",  "compared",   "compared writes wrong"),
+    ("data",     "bad_data",  "compared",   "compared writes wrong"),
+    ("count",    "count_off", "count_sent", "writes unaccounted for"),
+    ("drain",    "late",      "cyc_seen",   "writes at or after `go`"),
+)
+# `LAST` keys that are deliberately NOT matrix rows, so the test that pins the
+# coupling above can tell a new counter from ordinary bookkeeping: `bad` is an
+# aggregate of the four field counters, `total` is a legacy alias of
+# `count_sent`, and `count_seen` is the raw arrival count the `count` row is
+# derived from.
+NON_PROPERTY_KEYS = frozenset({"bad", "total", "count_seen"})
+
 
 def compare_writes(writes: list, rtl_out: str) -> int:
-    """0 identical, 1 differed, 2 did not run. Reports per-field, because
-    'the address was truncated' and 'the datum was truncated' are different
-    defects with different fixes."""
+    """0 identical, 1 differed, 2 did not run. Reports per-property, because
+    'the address was truncated', 'the datum was truncated', 'two writes the
+    host never sent arrived' and 'every write landed after `go`' are different
+    defects with different fixes.
+
+    Records every property's numerator AND the population it was counted over
+    in `LAST`, for `print_blindness` -- see `PROPERTIES`.
+
+    Clears `LAST` first, unconditionally. Every `return` below happens before
+    the `LAST.update(...)` line, so a call that returns 2 leaves nothing
+    behind -- without the clear, a SECOND call in the same process that
+    returns 2 (no RTL output this time) would leave the FIRST call's counters
+    in place, and `print_blindness` would then print a full, confident matrix
+    for a run that delivered nothing. `main()` only calls this once per
+    process today, but the precondition `print_blindness` documents -- empty
+    `LAST` means nothing was recorded -- has to be true unconditionally, not
+    just true for a single call, or the missing-keys refusal below cannot see
+    the difference: the keys are all present, they just describe a run that
+    already ended."""
+    LAST.clear()
     try:
         rows = [l.split() for l in open(rtl_out).read().splitlines() if l.strip()]
     except OSError:
@@ -203,8 +276,13 @@ def compare_writes(writes: list, rtl_out: str) -> int:
         if hit and first is None: first = (i, (wf, ws, wa, wd), have)
     bad = sum(1 for want, have in zip(writes, got)
               if have != (int(want[0]), int(want[1]), int(want[2]) & 0xFF, int(want[3]) & 0xFFFFFFFF))
+    # `compared` is the population every per-field numerator above was counted
+    # over -- `zip` stops at the shorter of the two -- and is NOT the number of
+    # writes sent whenever the link dropped or invented writes.
+    compared = min(n, len(got))
     LAST.update(bad=bad, bad_flag=bad_f, bad_sec=bad_s, bad_addr=bad_a, bad_data=bad_d,
-                count_seen=len(got), count_sent=n, late=len(late), total=n)
+                count_off=abs(len(got) - n), count_seen=len(got), count_sent=n,
+                late=len(late), cyc_seen=len(cycs), compared=compared, total=n)
     if bad == 0 and not count_bad and not late:
         print(f"verify_ctl: PASS -- all {n} writes reached the register port exactly as sent, "
               f"every one in the drain window (cycles {min(cycs)}..{max(cycs)}, before `go` at {GO_CYCLE})")
@@ -212,12 +290,94 @@ def compare_writes(writes: list, rtl_out: str) -> int:
     if first is None:
         return 1
     i, want, have = first
-    print(f"verify_ctl: FAIL -- {bad} of {n} writes corrupted in the link")
+    print(f"verify_ctl: FAIL -- {bad} of {compared} compared writes corrupted in the link"
+          + ("" if compared == n else f" ({n - compared} of the {n} sent never arrived, "
+                                      "so no field could be compared on them)"))
     print(f"  wrong flag {bad_f}, wrong section {bad_s}, wrong address {bad_a}, wrong data {bad_d}")
     print(f"  first at write {i}: host sent flag {want[0]} sec {want[1]} addr 0x{want[2]:02X} data 0x{want[3]:X}"
           f" ({want[3].bit_length()} bits)")
     print(f"                 port saw  flag {have[0]} sec {have[1]} addr 0x{have[2]:02X} data 0x{have[3]:X}")
     return 1
+
+
+def print_blindness(tag: str, simulated: bool = True) -> None:
+    """Which of `PROPERTIES` this control moved and which it did not -- the
+    same MOVED/BLIND distinction `model/sound_report.py --inject` makes for
+    the sound model, extended here to a second, differently-shaped suite
+    (link properties rather than named acoustic ones).
+
+    One row per entry in `PROPERTIES`, each against its own population, so no
+    property `compare_writes` measures can be left out of the report. Leaving
+    two of them out is what made SPI_ANYLEN and SPI_DRAIN_LATE -- each caught
+    by one of the omitted rows -- print as "no property moved".
+
+    `simulated` distinguishes an apparatus failure from a DUT failure: pass
+    False when `simulate()` itself returned `None` (iverilog/vvp missing,
+    compile failure, vvp failure, or a timeout), so `compare_writes` was
+    never even called. Without that flag this function had exactly one way
+    to render "no data", worded as a claim about the LINK ("the link
+    delivered no writes at all") -- which is wrong when the link was never
+    exercised in the first place: the correct-instrument-in-a-wrong-state
+    shape from CLAUDE.md, reported as a property of the design instead of the
+    apparatus.
+
+    Four outcomes are distinct, and none may be dressed as another:
+
+      MOVED/BLIND    measured: the property had a population, and did or did
+                     not see the defect.
+      REFUSED (row)  a property whose population is zero was never measured
+                     at all. "0 of 0" would render as BLIND, i.e. as evidence
+                     that the property cannot see this defect, which is a
+                     claim no data was taken for.
+      REFUSED (sim)  `simulated` is False: the simulator did not produce a
+                     run at all, so nothing about the LINK was exercised.
+                     This is not the same claim as the next line, even though
+                     both look like "no matrix": one says the comparison ran
+                     and saw nothing arrive, the other says the comparison
+                     never started.
+      no matrix      `simulated` is True but `LAST` is empty (`compare_writes`
+                     returned 2 before recording anything -- no RTL output,
+                     or an empty one), or `LAST` predates this row set. NOTE
+                     that a mere write-count MISMATCH does not land here:
+                     that run still populates `LAST` and is reported by the
+                     `count` row.
+    """
+    if not simulated:
+        print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- "
+              "REFUSED: the simulator did not run, so the comparison was never attempted "
+              "and this says nothing about the link")
+        return
+    if not LAST:
+        print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- "
+              "the comparison recorded nothing: the link delivered no writes at all")
+        return
+    missing = sorted({k for _, num, pop, _ in PROPERTIES for k in (num, pop)} - set(LAST))
+    if missing:
+        print(f"\nverify_ctl: no per-field blindness matrix for '{tag}' -- REFUSED: `LAST` has no "
+              f"{', '.join(missing)}, so this run cannot be decomposed into the {len(PROPERTIES)} "
+              "properties the matrix reports; a partial matrix is what it exists to prevent")
+        return
+    n = LAST.get("total", LAST["count_sent"])
+    print(f"\nverify_ctl: blindness matrix for '{tag}' -- which of the {len(PROPERTIES)} properties "
+          f"moved, of {n} writes sent")
+    moved = refused = 0
+    for name, num_key, pop_key, what in PROPERTIES:
+        count, pop = LAST[num_key], LAST[pop_key]
+        if pop == 0:
+            refused += 1
+            print(f"  REFUSED {name:8s} population 0 -- this property was never measured on this "
+                  "run, which is not evidence that it cannot see the defect")
+        elif count:
+            moved += 1
+            print(f"  MOVED   {name:8s} {count} of {pop} {what} -- this property sees the defect")
+        else:
+            print(f"  BLIND   {name:8s} 0 of {pop} {what} -- this property cannot see this defect")
+    if not moved:
+        print(f"  NO PROPERTY MOVED for '{tag}'. Either the defect does not change what reaches the "
+              "register port, or the coverage has a hole.")
+    if refused:
+        print(f"  {refused} of {len(PROPERTIES)} properties had no population on this run, so this "
+              "matrix is INCOMPLETE -- read those rows as no evidence, not as BLIND.")
 
 
 def main(argv=None) -> int:
@@ -242,6 +402,8 @@ def main(argv=None) -> int:
           f"at {bits} bits per transaction{' with ' + defines[0] if defines else ''}")
     out = simulate(a.link, defines, a.outdir, bits)
     status = 2 if out is None else compare_writes(writes, out)
+    if a.inject or a.link != "rev2":
+        print_blindness(a.inject or a.link, simulated=out is not None)
     if a.expect_fail:
         tag = a.inject or a.link
         if status == 1:

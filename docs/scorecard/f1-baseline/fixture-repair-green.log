@@ -1,0 +1,9 @@
+==============================================================================
+PASS             6.4s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q -p no:cacheprovider tools/test_f1_selected_path.py
+              .........                                                                [100%]
+              9 passed in 5.43s
+PASS             5.1s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest -q -p no:cacheprovider tools/test_run_case.py -k 'filt_ or filter'
+              ................                                                         [100%]
+              16 passed, 80 deselected in 3.42s
+==============================================================================
+2/2 passed

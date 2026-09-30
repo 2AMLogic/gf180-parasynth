@@ -1,0 +1,25 @@
+ok       cut1000/a0.0625/take1  7f6afc57a83f
+ok       cut1000/a0.0625/take2  7f6afc57a83f
+ok       cut1000/a0.1250/take1  404d40757d06
+ok       cut1000/a0.1250/take2  404d40757d06
+ok       cut1000/a0.2500/take1  cf9dff788f12
+ok       cut1000/a0.2500/take2  cf9dff788f12
+ok       cut250/a0.0625/take1  4a4f9d430bd7
+ok       cut250/a0.0625/take2  4a4f9d430bd7
+ok       cut250/a0.1250/take1  9f17c1fcc99c
+ok       cut250/a0.1250/take2  9f17c1fcc99c
+ok       cut250/a0.2500/take1  bd2279368bab
+ok       cut250/a0.2500/take2  bd2279368bab
+ok       cut4000/a0.0625/take1  785d1e8967a5
+ok       cut4000/a0.0625/take2  785d1e8967a5
+ok       cut4000/a0.1250/take1  b50b20082b86
+ok       cut4000/a0.1250/take2  b50b20082b86
+ok       cut4000/a0.2500/take1  1eac2c7e4c84
+ok       cut4000/a0.2500/take2  1eac2c7e4c84
+ok       open20k/a0.0625/take1  5a2b6eb50937
+ok       open20k/a0.0625/take2  5a2b6eb50937
+ok       open20k/a0.1250/take1  d11d3e0b4aea
+ok       open20k/a0.1250/take2  d11d3e0b4aea
+ok       open20k/a0.2500/take1  ad30cebd73b7
+ok       open20k/a0.2500/take2  ad30cebd73b7
+24 verified, 0 failed

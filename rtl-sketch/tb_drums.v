@@ -28,6 +28,7 @@ module tb_drums;
     reg [26:0] ectl_r   [0:ENVS-1];
     reg [23:0] peak_r   [0:ENVS-1];
     reg [15:0] rate_r   [0:ENVS-1];
+    reg [15:0] frate_r  [0:ENVS-1];
     reg [24:0] path_r   [0:PATHS-1];
     reg [25:0] a1_r     [0:MODES-1];
     reg [25:0] a2_r     [0:MODES-1];
@@ -38,6 +39,7 @@ module tb_drums;
     reg [ENVS*27-1:0]  env_ctl_bus;
     reg [ENVS*24-1:0]  env_peak_bus;
     reg [ENVS*16-1:0]  env_rate_bus;
+    reg [ENVS*16-1:0]  env_frate_bus;
     reg [PATHS*25-1:0] path_bus;
     reg [MODES*26-1:0] a1_bus, a2_bus;
     reg [MODES*16-1:0] amp_bus;
@@ -48,6 +50,7 @@ module tb_drums;
         for (k = 0; k < 6; k = k + 1) osc_inc_bus[k*24 +: 24] = osc_r[k];
         for (k = 0; k < ENVS; k = k + 1) begin
             env_ctl_bus[k*27 +: 27] = ectl_r[k]; env_peak_bus[k*24 +: 24] = peak_r[k]; env_rate_bus[k*16 +: 16] = rate_r[k];
+            env_frate_bus[k*16 +: 16] = frate_r[k];
         end
         for (k = 0; k < PATHS; k = k + 1) path_bus[k*25 +: 25] = path_r[k];
         for (k = 0; k < MODES; k = k + 1) begin
@@ -60,7 +63,7 @@ module tb_drums;
     drum_kit #(.ENVS(ENVS), .PATHS(PATHS), .MODES(MODES), .NUMS(NUMS), .STOPS(STOPS), .MW(MW)) dut (
         .clk(clk), .rst_n(rst_n), .frame_tick(frame_tick), .stops(stops_r), .accent_bus(accent_bus),
         .osc_inc_bus(osc_inc_bus), .env_ctl_bus(env_ctl_bus), .env_peak_bus(env_peak_bus),
-        .env_rate_bus(env_rate_bus), .path_bus(path_bus), .a1_bus(a1_bus), .a2_bus(a2_bus),
+        .env_rate_bus(env_rate_bus), .env_frate_bus(env_frate_bus), .path_bus(path_bus), .a1_bus(a1_bus), .a2_bus(a2_bus),
         .amp_bus(amp_bus), .num_bus(num_bus), .mix_out(mix_out), .mix_valid(mix_valid),
         .body_out(body_out), .body_valid(body_valid));
     always #10 clk = ~clk;
@@ -71,7 +74,7 @@ module tb_drums;
             stops_r = 0;
             for (j = 0; j < STOPS; j = j + 1) accent_r[j] = 0;
             for (j = 0; j < 6; j = j + 1) osc_r[j] = 0;
-            for (j = 0; j < ENVS; j = j + 1) begin ectl_r[j] = 0; peak_r[j] = 0; rate_r[j] = 0; end
+            for (j = 0; j < ENVS; j = j + 1) begin ectl_r[j] = 0; peak_r[j] = 0; rate_r[j] = 0; frate_r[j] = 0; end
             for (j = 0; j < PATHS; j = j + 1) path_r[j] = 0;
             for (j = 0; j < MODES; j = j + 1) begin a1_r[j] = 0; a2_r[j] = 0; amp_r[j] = 0; num_r[j] = 0; end
         end
@@ -87,7 +90,7 @@ module tb_drums;
             else if (a >= 8'h20 && a < 8'h26) osc_r[a - 8'h20] = v[23:0];
             else if (a >= 8'h40 && a < 8'h40 + ENVS * 4) begin
                 idx = (a - 8'h40) >> 2; fld = a & 3;
-                if (fld == 0) ectl_r[idx] = v[26:0]; else if (fld == 1) peak_r[idx] = v[23:0]; else if (fld == 2) rate_r[idx] = v[15:0];
+                if (fld == 0) ectl_r[idx] = v[26:0]; else if (fld == 1) peak_r[idx] = v[23:0]; else if (fld == 2) rate_r[idx] = v[15:0]; else frate_r[idx] = v[15:0];
             end else if (a >= 8'h90 && a < 8'h90 + PATHS) path_r[a - 8'h90] = v[24:0];
             else if (a >= 8'hB0 && a < 8'hB0 + MODES * 4) begin
                 idx = (a - 8'hB0) >> 2; fld = a & 3;

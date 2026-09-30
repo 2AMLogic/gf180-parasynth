@@ -1,0 +1,395 @@
+{
+  "schema": "gf180-parasynth R1 release manifest v1",
+  "release": "arty-a7-100t R1 player preview 2025.1",
+  "alias": "plan087 R1 (player preview)",
+  "status": "RELEASE CANDIDATE: a built, timing-closed, DSP-reviewed image bound to its frozen revision-14 sources, host bytes and digital evidence. No physical programming, control or audio capture has been performed on it.",
+  "contract_revision": 14,
+  "configuration": {
+    "OSC2X": 1,
+    "FILTER2X": 1,
+    "PULSE2X": 0
+  },
+  "image": {
+    "publication": "fpga/reports/arty/r1-player-preview-2025.1/publication.json",
+    "publication_sha256": "6f44e51800491cd33b165700cbaed1d218d2aa397ee332cb2c0fe72928f24af3",
+    "state": "BUILT_INTERNAL_TIMING_PASS_REVIEW_REQUIRED",
+    "configuration": {
+      "OSC2X": 1,
+      "FILTER2X": 1,
+      "PULSE2X": 0
+    },
+    "part": "xc7a100tcsg324-1",
+    "tool": [
+      "vivado v2025.1 (64-bit)",
+      "SW Build 6140274 on Wed May 21 22:58:25 MDT 2025"
+    ],
+    "build_seconds": 510.54,
+    "bitstream": "fpga/reports/arty/r1-player-preview-2025.1/arty.bit",
+    "bitstream_sha256": "544499e2c97061957004f999caf21d5caaf520f6b2682f84c6e6773e7d291d21",
+    "bitstream_bytes": 3825912,
+    "routed_dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f",
+    "build_script_sha256": "a7275e9c8558c35ceb4b639cd5b48dace63d976b15791813f74c828949461e18",
+    "timing": {
+      "wns_ns": 15.445,
+      "tns_ns": 0.0,
+      "setup_failing": 0.0,
+      "setup_endpoints": 43133.0,
+      "whs_ns": 0.036,
+      "ths_ns": 0.0,
+      "hold_failing": 0.0,
+      "hold_endpoints": 43133.0
+    },
+    "core_period_ns": 81.38,
+    "resources": {
+      "Slice LUTs": {
+        "used": 14006.0,
+        "available": 63400.0
+      },
+      "Slice Registers": {
+        "used": 13485.0,
+        "available": 126800.0
+      },
+      "DSPs": {
+        "used": 100.0,
+        "available": 240.0
+      },
+      "Block RAM Tile": {
+        "used": 0.0,
+        "available": 135.0
+      },
+      "Bonded IOB": {
+        "used": 15.0,
+        "available": 210.0
+      }
+    },
+    "drc": {
+      "DPIP-1": {
+        "severity": "Warning",
+        "count": 64
+      },
+      "DPOP-1": {
+        "severity": "Warning",
+        "count": 97
+      },
+      "DPOP-2": {
+        "severity": "Warning",
+        "count": 94
+      },
+      "DPREG-4": {
+        "severity": "Warning",
+        "count": 13
+      }
+    },
+    "internal_timing_pass": true,
+    "external_io_timing_qualified": true,
+    "output_delay_exceptions": [
+      "i2s_bclk"
+    ],
+    "dsp_feedback_review": {
+      "complete": true,
+      "verdict": "VERDICT: all 13 cells: P-feedback unreachable on every reachable OPMODE",
+      "targets": 13,
+      "routed_dcp_sha256": "0f81026ecc8a0455da62ec2b7140ea806e00a97a71006d99743340299476ad5f"
+    },
+    "digital_verification": {
+      "record": "fpga/reports/arty/rev14-clean/verification.json",
+      "record_sha256": "ccc7ba037ba4f9afcdb7c17cadbac59f2c59d7a2f578a20b4fa5750ce82e72ed",
+      "periods": 6734
+    },
+    "remaining_review": [
+      "spi_miso status readback is qualified only at SCK <= 1.4 MHz, not at the 2.0 MHz write ceiling (fpga/ext_io_timing.py)",
+      "physical programming, control and audio capture"
+    ],
+    "source_sha256": {
+      "fpga/rtl/arty_a7_top.v": "664a4359af9093e9bc3a24193ed5a38b72c54079c97278c20d98cdda9f6abfd1",
+      "rtl-sketch/synth_top.v": "2fc3939d1140b48eaeddfd968e02091638c1f3ea5089f4f58663f0170d42b704",
+      "rtl-sketch/voice_dp.v": "67d59af7e249bf51ddff285a7856377609f60c93507357297cd29448b6088ea3",
+      "rtl-sketch/spi_ctl.v": "8892b72cde65c2ac52cd577fdefb0cf9d9e50c3b2fef5676745a07750eafe815",
+      "rtl-sketch/drum_regs.v": "1282ebc944eea40fbd33349faa8452905f76cac000a76ce69c7879d3f6578195",
+      "rtl-sketch/drum_kit.v": "23e97ff6e0e4cd79b050d89df0ac374029dae0d7d574940e4f4c4ce3a994c5f1",
+      "rtl-sketch/drum_dp.v": "2ad7e5cec5b32f26d001b08e246fd03f3e70d120d870395915b0daaf73b4c38a",
+      "rtl-sketch/modal_dp.v": "dd49066179195961504a726dbb952ecac4fe27983d1a986c2c64d10e03400ec8",
+      "rtl-sketch/i2s_tx.v": "2cdb2112a11e1cff855ae1d2dc99e06032b3ef4efab8fdff29ca061802326202",
+      "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07dd48625049e6885258095696aa31ef0b26a91ebb67a0eb98",
+      "rtl-sketch/recip_div.v": "bf081a1b780d047d8ebc7a66a22db55d997de57507b3907a117f13fec2fc4388",
+      "rtl-sketch/osc_2x_saw_bank.v": "05869337f593b23e61d1e9cca3b1f3061de7aeb038fc100de54a831b6cf5d0fa",
+      "rtl-sketch/osc_2x_saw_path.v": "9e61079d40fa7539b12c6af2a3937c04e86bde0e761b323e6522aca779b88461",
+      "rtl-sketch/polyblep_saw_pair.v": "1576461daa916107993c4eff1c61d381807e5b70706e877d47cdef3990240f7f",
+      "rtl-sketch/osc_substep_pair.v": "6dc5cfb922cbce10e155b67b755d72b8684954a80475592bb66ae8deae20ef0d",
+      "rtl-sketch/decimate_2x_tm_sym.v": "0575e80ef33cd156d269a6ff09e4395e2046c8b2b527ef4cedf7c20bdee175f4",
+      "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9924d9216256e3c6548da53c3d3a7f85d13cf72ae2d6d2bd3",
+      "rtl-sketch/uart_bridge.v": "25ef72bc47f939b94584459ce7537558664161b17a51b6d03c147eb900f79581",
+      "rtl-sketch/tanh16.hex": "a5c4862a7e902a1bc7b02c6b506b717de8b3d4f8db7a7a194cbfcf404e21860c",
+      "rtl-sketch/tanh256.hex": "c6e81324b22554528417af493024d5261b7f05b3f9a444da68bcc44fd4d99036",
+      "spec/reference/tables/exp_rom65.hex": "c29b6f815d80e9fbe1ea16d5c06444a90280754b46370c2cff69cd6ee0c7f696",
+      "spec/reference/tables/g_rom128.hex": "97bd3bc7774f0a8ee6247842248a18f3b265f17353868abdb4c4cc669d600946",
+      "spec/reference/tables/k_rom32.hex": "723f288d7bc171aaa454de259664fe387b5c3abcb94015e94739c88b8379facd",
+      "spec/reference/tables/sine_q256.hex": "040736830a6b4906b681b52c70d0f354ad74f1b546b47884dbbf349e7288ee11",
+      "fpga/boards/arty-a7-100.xdc": "a56cc506631f3bed7e4f9a91bbf8432dbb4a8597019ff3df23213b99332dd3bb"
+    },
+    "source_commit": "6864435aa6eb3ecb406d13cf86f6a6bb79b2b8db",
+    "source_commit_verified": true
+  },
+  "external_io": {
+    "record": "fpga/reports/arty/r1-player-preview-2025.1/ext-io/ext-io-extract.json",
+    "sha256": "5d2b306aced752edaadd7b648d8a2a993267248fab5ced12d5b412f21052bb5d",
+    "state": "PASS",
+    "worst_setup_slack_ns": 15.445,
+    "worst_hold_slack_ns": 3.402,
+    "ports": {
+      "i2s_lrclk": {
+        "setup_slack_ns": 71.926,
+        "hold_slack_ns": 153.621
+      },
+      "i2s_sdata": {
+        "setup_slack_ns": 72.352,
+        "hold_slack_ns": 152.912
+      },
+      "spi_miso": {
+        "setup_slack_ns": 15.445,
+        "hold_slack_ns": 3.42
+      },
+      "led[1]": {
+        "setup_slack_ns": 67.975,
+        "hold_slack_ns": 3.859
+      },
+      "led[2]": {
+        "setup_slack_ns": 70.344,
+        "hold_slack_ns": 3.402
+      },
+      "led[3]": {
+        "setup_slack_ns": 68.704,
+        "hold_slack_ns": 4.264
+      },
+      "uart_txd": {
+        "setup_slack_ns": 69.675,
+        "hold_slack_ns": 3.709
+      }
+    },
+    "spi_miso": {
+      "sta_co_bound_ns": 10.977,
+      "co_budget_ns": 26.422,
+      "max_guaranteed_readback_mhz": 1.4633,
+      "readback_qualified_mhz": 1.4,
+      "write_ceiling_mhz": 2.0
+    },
+    "control": {
+      "id": "IMPOSSIBLE_MISO",
+      "caught": true,
+      "spi_miso_setup_slack_ns": -9.597
+    },
+    "uart_rx_xdc_constraints_bound": {
+      "xdc:uart_async_reg": 0,
+      "xdc:uart_false_path_d": 0
+    },
+    "uart_rx_async_reg_from_rtl": [
+      "u_synth/g_uart.u_uart/rx_q_reg[0]",
+      "u_synth/g_uart.u_uart/rx_q_reg[1]"
+    ]
+  },
+  "host": {
+    "selector": "--image r1",
+    "contract_revision": 14,
+    "default_image": "release",
+    "default_image_is_r1": false,
+    "kit": {
+      "revision": 14,
+      "sha256": "321a93546cfa5ffab03b3cf91557580ea7655ada933ce380c81cd07597a9b683",
+      "writes": 148,
+      "clap_final_strike": {
+        "register": "ENV_FRATE[8]",
+        "address": 99,
+        "value": 68
+      },
+      "digest_rule": "drums_fx._kit_sha256: sha256 of the decimal words addr<<32|value, comma-joined"
+    },
+    "known_state_preamble": [
+      [
+        0,
+        0,
+        35,
+        0
+      ],
+      [
+        0,
+        1,
+        255,
+        0
+      ]
+    ],
+    "presets": {
+      "default": {
+        "image_sha256": "489401418b0260b6f6d0a8217e0645aa211e5cf65a73c97b2d0ae340213a5511",
+        "image_writes": 30,
+        "playable_midi": [
+          12,
+          126
+        ]
+      },
+      "m5a-saw": {
+        "image_sha256": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+        "image_writes": 30,
+        "playable_midi": [
+          0,
+          127
+        ]
+      },
+      "m5a-pulse": {
+        "image_sha256": "5c0d1c0ed6dca471bc313f40b4da322a0850756a33a57753a95a9f11a3b42d28",
+        "image_writes": 30,
+        "playable_midi": [
+          0,
+          127
+        ]
+      }
+    },
+    "commands": {
+      "held-default": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture none --image r1",
+        "cmds_sha256": "b467f217e6dd8e082f4cfcc18df0a73979770eb24f68707c87935c3ea3ad3695",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false
+      },
+      "held-m5a-saw": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-saw --note 72 --fixture none --image r1",
+        "cmds_sha256": "8b8b6cc2dd852cea74a7bd95aa7a6f4dcaf534f815cea7007346ba1b3a04024e",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false
+      },
+      "held-m5a-pulse": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --preset m5a-pulse --note 72 --fixture none --image r1",
+        "cmds_sha256": "67fa0afe046f1d73bad3e30455613116d604296201b6a5d0c7095f68c818df36",
+        "packets": 38,
+        "validator": "uart_host: release domain OK -- 3 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false
+      },
+      "run-m5a": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --note 45 --fixture m5a --image r1",
+        "cmds_sha256": "5480209251f1fe9dc71ab3ce9a37a3b1916b2d81bc07806900f86049043b23da",
+        "packets": 105,
+        "validator": "uart_host: release domain OK -- 15 increment writes, 0 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 37,
+        "loads_kit": false
+      },
+      "demo": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture demo --image r1",
+        "cmds_sha256": "bc8cb37d29efe14f6cd53b57be72d26dcd2d2cc207a1c9bee72d8da84792a2de",
+        "packets": 511,
+        "validator": "uart_host: release domain OK -- 48 increment writes, 45 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 205,
+        "loads_kit": true
+      },
+      "bar808-full": {
+        "command": ".venv/bin/python fpga/uart_host.py --port /dev/cu.usbserial-XXXX run --fixture bar808-full --image r1",
+        "cmds_sha256": "a3c3dd548d589e5c43d790fe425e5a8233e2a372e18cf11f646c5711123c6c28",
+        "packets": 397,
+        "validator": "uart_host: release domain OK -- 6 increment writes, 3 glide transitions, all in [2858, 4384395]",
+        "setup_writes": 205,
+        "loads_kit": true
+      },
+      "live-midi": {
+        "command": ".venv/bin/python fpga/midi_session.py --port /dev/ttyUSB1 --midi-in /dev/snd/midiC1D0 --image r1",
+        "sim_start": ".venv/bin/python fpga/midi_session.py --port sim --midi-in scripted:coverage",
+        "init_writes": 193
+      }
+    },
+    "domain": {
+      "enforced_by": "fpga/release/qualified_domain.py, called by fpga/uart_host.py main() on the final register writes of every player-facing command",
+      "inc_lo": 2858,
+      "inc_hi": 4384395,
+      "hz_lo": 8.1768,
+      "hz_hi": 12543.8547,
+      "nyquist_inc": 8388608,
+      "margin_octaves_below_nyquist": 0.9361,
+      "derivation": "phase_inc(note_hz(0)) .. phase_inc(note_hz(127)) at SR 48000, 24-bit phase: no oscillator is PROGRAMMED below MIDI 0's pitch or above MIDI 127's, whatever the note and per-oscillator transposition/detune. A glide is admitted only from a known in-range increment to an in-range increment; the slew is monotone between them (voice_fx.OscFx.slew, voice_dp.v S_SL2), so every increment it passes through is in range.",
+      "rules": [
+        "INC_WIDTH",
+        "INC_RANGE",
+        "GLIDE_SOURCE",
+        "GLIDE_247",
+        "MOD_EXCURSION",
+        "WAVES",
+        "CALIBRATION_RESONANCE",
+        "PULSE2X",
+        "ROUTE_DRUMFILTER",
+        "NOT_IN_IMAGE"
+      ],
+      "supported_audible_waveforms": [
+        "('pulse29', None, None)",
+        "('saw', 'saw', 'square')",
+        "('saw', None, None)"
+      ],
+      "glide_register": "any value 0..2^24-1 (the bench covers 1, 2692 (preset), 12118 (0.02 s/oct) and 2^24-1 (an octave per frame) at the range ends)",
+      "modulation": "oscillator pitch modulation (MROUTE bit 0, wheel and depth nonzero) is checked SEPARATELY (rule MOD_EXCURSION): its worst-case excursion (|octaves| <= min(4, min(1, mwheel/2^15) * mpd/2^12)) must keep the effective increment in range. No supported preset or fixture enables it (mwheel 0 everywhere). It is NOT the #247 glide slew and is not claimed to share its defect.",
+      "never_clamps": "a write outside the domain is REFUSED (exit 2) naming the write, pitch and rule; nothing is re-pitched to fit",
+      "engineering_interface": "fpga/uart_host.py --engineering, fpga/spi_host.py, the benches: available, and OUTSIDE the qualified player-facing domain",
+      "playable_midi": {
+        "default": [
+          12,
+          126
+        ],
+        "m5a-saw": [
+          0,
+          127
+        ],
+        "m5a-pulse": [
+          0,
+          127
+        ]
+      },
+      "session_start": "every R1 image-loading command (uart_host run/load --image r1, midi_session --image r1) sends the known-state preamble first -- voice RESET (0x23) and drum RESET (0xFF), which zero every register and state of both sections -- then its whole image; ROUTE, modulation, drift and unwritten drum registers are therefore KNOWN (0), not assumed. Before sending, the host REFUSES if the device reports queued events or writes left from an earlier session.",
+      "physical_precondition": "the board is programmed with the R1 bitstream (fpga/release/r1-2025.1.json, #280). The host cannot read the image identity back, so this is declared, not verified.",
+      "open_defect": "#247 stays OPEN; its restrictions stay in force: INC_RANGE, GLIDE_247 and ROUTE_DRUMFILTER are refused, with a reason, before any byte is sent",
+      "drift": "DRIFT (0x2D) is compiled into R1 (#252) but not in the qualified player domain: a nonzero write is refused (NOT_IN_IMAGE rule, R1 wording)"
+    },
+    "candidate": {
+      "record": "fpga/release/r1-candidate.json",
+      "sha256": "8ce7b36950dd339ea18f79c38171250dfd7bd89a7a2c0d313aa05af4979f59af",
+      "evidence_dir": "fpga/reports/r1-candidate",
+      "rtl_runs_bound": 12
+    }
+  },
+  "rollback": {
+    "name": "R0",
+    "release": "arty-a7-100t baseline 2025.1, r1",
+    "contract_revision": 11,
+    "manifest": "fpga/release/baseline-2025.1.json",
+    "manifest_sha256": "ac2050a37ef5183aa0a807a15f42e66260890287cd29ceef995f345d2f077596",
+    "publication": "fpga/reports/arty/integrated-baseline-2025.1/publication.json",
+    "publication_sha256": "eb312a3d03be1bf883c1fc053a6a937ebac20ed1ef8e5e676a261f8c8d3817bd",
+    "bitstream": "fpga/reports/arty/integrated-baseline-2025.1/arty.bit",
+    "bitstream_sha256": "a66c9349ef9b5572f3c3453777f38e1b143136755620fe419e730d6f5c84cb95",
+    "routed_dcp_sha256": "6c3c22c591671eb1f6790ac0500980f9660b8433ef8a1e235d3da2ee4a21fbf8",
+    "host_selector": "--image release",
+    "check": "python fpga/release/release_manifest.py (T-RELEASE-BOUND)"
+  },
+  "default_switch": {
+    "today": "fpga/uart_host.py DEFAULT_IMAGE = \"release\": a command without --image targets R0; R1 is selected by name with --image r1 (#323; tree stays a development selector)",
+    "one_line": "fpga/uart_host.py: DEFAULT_IMAGE = \"r1\" (not planned: plan092 keeps the public default on R0)",
+    "consequences": "fpga/midi_session.py follows (resolve_image falls back to uart_host.DEFAULT_IMAGE). R0's manifest pins the bytes of its commands WITHOUT --image, so T-RELEASE-BOUND then REFUSES R0 (measured by fpga/release/test_r1_release.py; only the verdict is quoted, because the first reason printed depends on how the default is flipped, #319) -- the gate doing its job: the same change must give R0's documented commands and its manifest's captures an explicit --image release. This manifest records host.default_image and goes STALE, and is re-bound with --write.",
+    "decided_by": "the operator (#280 keeps release as the default)"
+  },
+  "physical_capture": {
+    "status": "NONE",
+    "hardware_playback_tested": false,
+    "precondition": "the board is programmed with THIS bitstream (544499e2...); the host cannot read the image identity back, so it is declared, not verified"
+  },
+  "excluded": [
+    "PULSE2X=1 (#205, #248): not in this image",
+    "#247's domain (glides touching 2^23; ROUTE = 1): refused by the host, issue open",
+    "five of sixteen 808 sounds from live MIDI (#298): congas, rimshot, maracas unmapped",
+    "`play --fixture m5a` from the R1 quick-start (sends no image; see R1.md)",
+    "spi_miso status readback above 1.4 MHz (qualified rate; writes to 2.0 MHz)"
+  ],
+  "cannot_bind": [
+    "which image is on a connected board: the host cannot read it back",
+    "physical audio: no capture exists",
+    "a numeric host/protocol version: none exists; bytes are pinned instead",
+    "the routed checkpoint itself is not shipped (9.9 MB): it is bound by digest in report.json, publication.json, the DSP evidence and the external-I/O extraction"
+  ]
+}

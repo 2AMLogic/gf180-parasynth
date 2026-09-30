@@ -1,0 +1,722 @@
+{
+ "miniv3": {
+  "across_note": {
+   "m1a-midi36-4.0s-apart": {
+    "refusal": "TOO_FEW_WINDOWS",
+    "refusal_detail": "0 windows carried an f0",
+    "verdict": "REFUSED"
+   },
+   "m1a-osc1-midi36-4.0s-apart": {
+    "refusal": "TOO_FEW_WINDOWS",
+    "refusal_detail": "0 windows carried an f0",
+    "verdict": "REFUSED"
+   },
+   "m1a-osc2-midi48-4.0s-apart": {
+    "cents_vs_first": [
+     0.0,
+     0.010178324249010353
+    ],
+    "floor_cents": 0.005150163572678186,
+    "labels": [
+     "m1a/osc2_open/n0-midi48",
+     "m1a/osc2_open/n2-midi48"
+    ],
+    "n_windows": 2,
+    "span_cents": 0.010178324249010353,
+    "verdict": "STABLE"
+   },
+   "m5a-midi84-13.6s-apart": {
+    "cents_vs_first": [
+     0.0,
+     -0.0011272920845980933
+    ],
+    "floor_cents": 0.011268287038650196,
+    "labels": [
+     "m5a/seg0-saw/n0-midi84",
+     "m5a/seg1-pulse/n0-midi84"
+    ],
+    "n_windows": 2,
+    "span_cents": 0.0011272920845980933,
+    "verdict": "STABLE"
+   }
+  },
+  "reference": "Arturia Mini V3 3.12.0.3422 (frozen renders)",
+  "reports": [
+   {
+    "duration_s": 0.6008541666666667,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     0.112375,
+     0.7132291666666667
+    ],
+    "label": "m1a/phrase0/n0-midi36",
+    "n_samples": 28841,
+    "note": 36,
+    "peak": 0.11349006742238998,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "13 clean periods < 24",
+    "rms": 0.047947759118466764,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     0.1,
+     1.9
+    ]
+   },
+   {
+    "acorr_time_s": 0.05499999999999999,
+    "drift_p2p_cents": 5.44424675247521,
+    "drift_rate_cents_per_s": 10.371111917635657,
+    "drift_rms_cents": 1.328461382615313,
+    "duration_s": 0.6038541666666667,
+    "env_corr": -0.8934975924035531,
+    "env_mod_db": 0.4931900391467572,
+    "env_ripple_db": 0.462189750349157,
+    "f0_measured_hz": 98.00004088433941,
+    "f0_nominal": 97.99885899543733,
+    "f0_offset_cents": 0.020878957083688622,
+    "floor_cents": 0.07804934913532678,
+    "held_s": [
+     2.107479166666667,
+     2.711333333333333
+    ],
+    "label": "m1a/phrase0/n1-midi43",
+    "n_samples": 28985,
+    "note": 43,
+    "peak": 0.1763705015182495,
+    "periodic_kind": "beating",
+    "reason": "the wander tracks the envelope (beating)",
+    "repeat_r": NaN,
+    "rms": 0.05948782229936436,
+    "sr": 48000,
+    "taus_in_window": 10.979166666666668,
+    "trajectory_rate_hz": 200.00000000000003,
+    "verdict": "PERIODIC",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_cycles": 1.1182484567901236,
+    "wobble_hz": 1.851851851851852,
+    "wobble_line_fraction": 0.9528139715653741,
+    "xcheck_cents": -0.13430686336583536,
+    "zc_period_sigma_cents": 0.3455371868801954
+   },
+   {
+    "duration_s": 0.5973333333333334,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     4.1115625,
+     4.708895833333333
+    ],
+    "label": "m1a/phrase0/n2-midi36",
+    "n_samples": 28672,
+    "note": 36,
+    "peak": 0.14481627941131592,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.057499283577317865,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ]
+   },
+   {
+    "duration_s": 0.6008541666666667,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     0.112375,
+     0.7132291666666667
+    ],
+    "label": "m1a/phrase1/n0-midi36",
+    "n_samples": 28841,
+    "note": 36,
+    "peak": 0.11349006742238998,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "13 clean periods < 24",
+    "rms": 0.047947759118466764,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     0.1,
+     1.9
+    ]
+   },
+   {
+    "acorr_time_s": 0.05499999999999999,
+    "drift_p2p_cents": 5.44424675247521,
+    "drift_rate_cents_per_s": 10.371111917635657,
+    "drift_rms_cents": 1.328461382615313,
+    "duration_s": 0.6038541666666667,
+    "env_corr": -0.8934975924035531,
+    "env_mod_db": 0.4931900391467572,
+    "env_ripple_db": 0.462189750349157,
+    "f0_measured_hz": 98.00004088433941,
+    "f0_nominal": 97.99885899543733,
+    "f0_offset_cents": 0.020878957083688622,
+    "floor_cents": 0.07804934913532678,
+    "held_s": [
+     2.107479166666667,
+     2.711333333333333
+    ],
+    "label": "m1a/phrase1/n1-midi43",
+    "n_samples": 28985,
+    "note": 43,
+    "peak": 0.1763705015182495,
+    "periodic_kind": "beating",
+    "reason": "the wander tracks the envelope (beating)",
+    "repeat_r": NaN,
+    "rms": 0.05948782229936436,
+    "sr": 48000,
+    "taus_in_window": 10.979166666666668,
+    "trajectory_rate_hz": 200.00000000000003,
+    "verdict": "PERIODIC",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_cycles": 1.1182484567901236,
+    "wobble_hz": 1.851851851851852,
+    "wobble_line_fraction": 0.9528139715653741,
+    "xcheck_cents": -0.13430686336583536,
+    "zc_period_sigma_cents": 0.3455371868801954
+   },
+   {
+    "duration_s": 0.5973333333333334,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     4.1115625,
+     4.708895833333333
+    ],
+    "label": "m1a/phrase1/n2-midi36",
+    "n_samples": 28672,
+    "note": 36,
+    "peak": 0.14481627941131592,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.057499283577317865,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ]
+   },
+   {
+    "duration_s": 0.6008541666666667,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     0.112375,
+     0.7132291666666667
+    ],
+    "label": "m1a/phrase2/n0-midi36",
+    "n_samples": 28841,
+    "note": 36,
+    "peak": 0.11349006742238998,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "13 clean periods < 24",
+    "rms": 0.047947759118466764,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     0.1,
+     1.9
+    ]
+   },
+   {
+    "acorr_time_s": 0.05499999999999999,
+    "drift_p2p_cents": 5.44424675247521,
+    "drift_rate_cents_per_s": 10.371111917635657,
+    "drift_rms_cents": 1.328461382615313,
+    "duration_s": 0.6038541666666667,
+    "env_corr": -0.8934975924035531,
+    "env_mod_db": 0.4931900391467572,
+    "env_ripple_db": 0.462189750349157,
+    "f0_measured_hz": 98.00004088433941,
+    "f0_nominal": 97.99885899543733,
+    "f0_offset_cents": 0.020878957083688622,
+    "floor_cents": 0.07804934913532678,
+    "held_s": [
+     2.107479166666667,
+     2.711333333333333
+    ],
+    "label": "m1a/phrase2/n1-midi43",
+    "n_samples": 28985,
+    "note": 43,
+    "peak": 0.1763705015182495,
+    "periodic_kind": "beating",
+    "reason": "the wander tracks the envelope (beating)",
+    "repeat_r": NaN,
+    "rms": 0.05948782229936436,
+    "sr": 48000,
+    "taus_in_window": 10.979166666666668,
+    "trajectory_rate_hz": 200.00000000000003,
+    "verdict": "PERIODIC",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_cycles": 1.1182484567901236,
+    "wobble_hz": 1.851851851851852,
+    "wobble_line_fraction": 0.9528139715653741,
+    "xcheck_cents": -0.13430686336583536,
+    "zc_period_sigma_cents": 0.3455371868801954
+   },
+   {
+    "duration_s": 0.5973333333333334,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     4.1115625,
+     4.708895833333333
+    ],
+    "label": "m1a/phrase2/n2-midi36",
+    "n_samples": 28672,
+    "note": 36,
+    "peak": 0.14481627941131592,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.057499283577317865,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ]
+   },
+   {
+    "duration_s": 0.597375,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     0.11591666666666667,
+     0.7132916666666667
+    ],
+    "label": "m1a/osc1_open/n0-midi36",
+    "n_samples": 28674,
+    "note": 36,
+    "peak": 0.14766618609428406,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.05081172246251244,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     0.1,
+     1.9
+    ]
+   },
+   {
+    "drift_p2p_cents": 0.047310252230735886,
+    "drift_rate_cents_per_s": 0.14631391927790552,
+    "drift_rms_cents": 0.010842156237243784,
+    "duration_s": 0.6067916666666666,
+    "env_corr": 0.5437704102538554,
+    "env_mod_db": 0.5038080575377109,
+    "env_ripple_db": 0.4697407771655624,
+    "f0_measured_hz": 97.99820440236675,
+    "f0_nominal": 97.99885899543733,
+    "f0_offset_cents": -0.011563987668339038,
+    "floor_cents": 0.00387846252258849,
+    "held_s": [
+     2.107416666666667,
+     2.7142083333333336
+    ],
+    "label": "m1a/osc1_open/n1-midi43",
+    "n_samples": 29126,
+    "note": 43,
+    "peak": 0.15142124891281128,
+    "reason": "slow component 0.0108 cents is under 3.0 x the window's floor 0.0039",
+    "rms": 0.051709948252846465,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_hz": 1.8348623853211008,
+    "wobble_line_fraction": 0.9581766426453066,
+    "xcheck_cents": 0.007353817105271335,
+    "zc_period_sigma_cents": 0.01717058558876453
+   },
+   {
+    "duration_s": 0.5985416666666666,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     4.111208333333333,
+     4.70975
+    ],
+    "label": "m1a/osc1_open/n2-midi36",
+    "n_samples": 28730,
+    "note": 36,
+    "peak": 0.1561722606420517,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.0510358339765995,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ]
+   },
+   {
+    "acorr_time_s": 0.055,
+    "drift_p2p_cents": 0.10421356203173307,
+    "drift_rate_cents_per_s": 0.22655900912429042,
+    "drift_rms_cents": 0.02370424603367156,
+    "duration_s": 0.6053333333333333,
+    "env_corr": 0.4490003427788516,
+    "env_mod_db": 0.6517902011842125,
+    "env_ripple_db": 0.6351016042205825,
+    "f0_measured_hz": 130.54682911016218,
+    "f0_nominal": 130.8127826502993,
+    "f0_offset_cents": -3.5233292548352004,
+    "floor_cents": 0.005138208321678487,
+    "held_s": [
+     0.10710416666666667,
+     0.7124375
+    ],
+    "label": "m1a/osc2_open/n0-midi48",
+    "n_samples": 29056,
+    "note": 48,
+    "peak": 0.07680965214967728,
+    "reason": "0.024 cents rms slow wander, 3.0 x floor 0.0051, not repeating (r=nan) and not envelope-tracked (r=0.45)",
+    "repeat_r": NaN,
+    "rms": 0.02694475263245178,
+    "sr": 48000,
+    "taus_in_window": 11.006060606060606,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "DRIFTING",
+    "walk_exponent": NaN,
+    "window_s": [
+     0.1,
+     1.9
+    ],
+    "wobble_cycles": 1.0906906906906906,
+    "wobble_hz": 1.8018018018018016,
+    "wobble_line_fraction": 0.9552825643965743,
+    "xcheck_cents": 0.012577339852273271,
+    "zc_period_sigma_cents": 0.02628159981174432
+   },
+   {
+    "drift_p2p_cents": 0.062263802798985135,
+    "drift_rate_cents_per_s": 0.12432938502548942,
+    "drift_rms_cents": 0.013306374474604797,
+    "duration_s": 0.6087083333333333,
+    "env_corr": 0.15795074747891727,
+    "env_mod_db": 1.0247664994804921,
+    "env_ripple_db": 0.9751065543033264,
+    "f0_measured_hz": 195.60167491802684,
+    "f0_nominal": 195.99771799087463,
+    "f0_offset_cents": -3.5017597003008736,
+    "floor_cents": 0.00551191753029587,
+    "held_s": [
+     2.1040625,
+     2.7127708333333334
+    ],
+    "label": "m1a/osc2_open/n1-midi55",
+    "n_samples": 29218,
+    "note": 55,
+    "peak": 0.08100571483373642,
+    "reason": "slow component 0.0133 cents is under 3.0 x the window's floor 0.0055",
+    "rms": 0.02713689208436177,
+    "sr": 48000,
+    "trajectory_rate_hz": 199.99999999999997,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_hz": 1.7391304347826084,
+    "wobble_line_fraction": 0.9245378244864363,
+    "xcheck_cents": -0.008728162271603812,
+    "zc_period_sigma_cents": 0.034509861496268744
+   },
+   {
+    "drift_p2p_cents": 0.0575996187498566,
+    "drift_rate_cents_per_s": 0.1951104250228051,
+    "drift_rms_cents": 0.013911100778752817,
+    "duration_s": 0.6076666666666667,
+    "env_corr": -0.6199956926753476,
+    "env_mod_db": 0.7624629673551624,
+    "env_ripple_db": 0.7181395886259042,
+    "f0_measured_hz": 130.54759662733474,
+    "f0_nominal": 130.8127826502993,
+    "f0_offset_cents": -3.513150930586154,
+    "floor_cents": 0.005150163572678186,
+    "held_s": [
+     4.1055625,
+     4.713229166666666
+    ],
+    "label": "m1a/osc2_open/n2-midi48",
+    "n_samples": 29168,
+    "note": 48,
+    "peak": 0.07976768910884857,
+    "reason": "slow component 0.0139 cents is under 3.0 x the window's floor 0.0052",
+    "rms": 0.027031371504547028,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.00000000000003,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ],
+    "wobble_hz": 1.7857142857142858,
+    "wobble_line_fraction": 0.964662039499556,
+    "xcheck_cents": 0.011874299322744761,
+    "zc_period_sigma_cents": 0.02634275013939791
+   },
+   {
+    "duration_s": 0.6009375,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     0.11229166666666668,
+     0.7132291666666667
+    ],
+    "label": "m1a/filter_envelope_disabled/n0-midi36",
+    "n_samples": 28845,
+    "note": 36,
+    "peak": 0.10067648440599442,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "13 clean periods < 24",
+    "rms": 0.04786723399604192,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     0.1,
+     1.9
+    ]
+   },
+   {
+    "drift_p2p_cents": 0.18220727774907275,
+    "drift_rate_cents_per_s": 0.555765338159318,
+    "drift_rms_cents": 0.03907699995415226,
+    "duration_s": 0.603875,
+    "env_corr": -0.913290073356852,
+    "env_mod_db": 0.49956470317546575,
+    "env_ripple_db": 0.46854995010435857,
+    "f0_measured_hz": 98.00021362786188,
+    "f0_nominal": 97.99885899543733,
+    "f0_offset_cents": 0.023930580344154417,
+    "floor_cents": 0.07804933330500581,
+    "held_s": [
+     2.107458333333333,
+     2.711333333333333
+    ],
+    "label": "m1a/filter_envelope_disabled/n1-midi43",
+    "n_samples": 28986,
+    "note": 43,
+    "peak": 0.15308184921741486,
+    "reason": "slow component 0.0391 cents is under 3.0 x the window's floor 0.0780",
+    "rms": 0.05928903495340284,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.00000000000003,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     2.1,
+     3.9000000000000004
+    ],
+    "wobble_hz": 1.851851851851852,
+    "wobble_line_fraction": 0.9838157432044313,
+    "xcheck_cents": -0.13735859995158575,
+    "zc_period_sigma_cents": 0.3455371167967849
+   },
+   {
+    "duration_s": 0.5973541666666666,
+    "f0_nominal": 65.40639132514966,
+    "held_s": [
+     4.111541666666667,
+     4.708895833333333
+    ],
+    "label": "m1a/filter_envelope_disabled/n2-midi36",
+    "n_samples": 28673,
+    "note": 36,
+    "peak": 0.13493916392326355,
+    "refusal": "TOO_FEW_PERIODS",
+    "refusal_detail": "12 clean periods < 24",
+    "rms": 0.05742059844153478,
+    "sr": 48000,
+    "verdict": "REFUSED",
+    "window_s": [
+     4.1,
+     5.8999999999999995
+    ]
+   },
+   {
+    "drift_p2p_cents": 0.014235081750642278,
+    "drift_rate_cents_per_s": 0.1591222082873677,
+    "drift_rms_cents": 0.004712537582019291,
+    "duration_s": 0.7197708333333334,
+    "env_corr": 0.7189410223880833,
+    "env_mod_db": 1.3533959506917945,
+    "env_ripple_db": 1.254771554790228,
+    "f0_measured_hz": 1046.5867977347698,
+    "f0_nominal": 1046.5022612023945,
+    "f0_offset_cents": 0.13984357014594304,
+    "floor_cents": 0.011268287038650196,
+    "held_s": [
+     0.10514583333333334,
+     0.8249166666666666
+    ],
+    "label": "m5a/seg0-saw/n0-midi84",
+    "n_samples": 34549,
+    "note": 84,
+    "peak": 0.20751287043094635,
+    "reason": "slow component 0.0047 cents is under 3.0 x the window's floor 0.0113",
+    "rms": 0.10826717279135314,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     0.1,
+     1.9
+    ],
+    "wobble_hz": 1.4084507042253522,
+    "wobble_line_fraction": 0.8122087378573677,
+    "xcheck_cents": -0.06221375179668521,
+    "zc_period_sigma_cents": 0.16302078672028825
+   },
+   {
+    "drift_p2p_cents": 0.0051778046349294365,
+    "drift_rate_cents_per_s": 0.07194929243436593,
+    "drift_rms_cents": 0.0010499838100713834,
+    "duration_s": 0.7229166666666667,
+    "env_corr": -0.9847889004275123,
+    "env_mod_db": 1.4223547010563173,
+    "env_ripple_db": 1.2995271520476854,
+    "f0_measured_hz": 2093.1812407254156,
+    "f0_nominal": 2093.004522404789,
+    "f0_offset_cents": 0.14616684077365427,
+    "floor_cents": 0.004677255507648452,
+    "held_s": [
+     5.7021875,
+     6.425104166666667
+    ],
+    "label": "m5a/seg0-saw/n1-midi96",
+    "n_samples": 34700,
+    "note": 96,
+    "peak": 0.20497004687786102,
+    "reason": "slow component 0.0010 cents is under 3.0 x the window's floor 0.0047",
+    "rms": 0.1043713899543206,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     5.7,
+     7.5
+    ],
+    "wobble_hz": 1.3888888888888888,
+    "wobble_line_fraction": 0.48908960569779614,
+    "xcheck_cents": 0.00756524432285802,
+    "zc_period_sigma_cents": 0.09569542515484289
+   },
+   {
+    "drift_p2p_cents": 0.015922771606814386,
+    "drift_rate_cents_per_s": 0.15844289688150553,
+    "drift_rms_cents": 0.005059493487752022,
+    "duration_s": 0.7203125,
+    "env_corr": 0.7927447831846912,
+    "env_mod_db": 1.3523439315062191,
+    "env_ripple_db": 1.2543548786559162,
+    "f0_measured_hz": 1046.5861162505826,
+    "f0_nominal": 1046.5022612023945,
+    "f0_offset_cents": 0.1387162780614678,
+    "floor_cents": 0.009953643018268503,
+    "held_s": [
+     13.804145833333333,
+     14.524458333333333
+    ],
+    "label": "m5a/seg1-pulse/n0-midi84",
+    "n_samples": 34575,
+    "note": 84,
+    "peak": 0.23161184787750244,
+    "reason": "slow component 0.0051 cents is under 3.0 x the window's floor 0.0100",
+    "rms": 0.18959191368969616,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     13.799083333333334,
+     15.599083333333333
+    ],
+    "wobble_hz": 1.4084507042253522,
+    "wobble_line_fraction": 0.8492175369481526,
+    "xcheck_cents": -0.05353929335879556,
+    "zc_period_sigma_cents": 0.14400154255969413
+   },
+   {
+    "drift_p2p_cents": 0.003888669666183188,
+    "drift_rate_cents_per_s": 0.0644041482860099,
+    "drift_rms_cents": 0.000960731221227197,
+    "duration_s": 0.7231666666666666,
+    "env_corr": -0.8583128104827207,
+    "env_mod_db": 1.420485033057453,
+    "env_ripple_db": 1.299226211306198,
+    "f0_measured_hz": 2093.1825589298105,
+    "f0_nominal": 2093.004522404789,
+    "f0_offset_cents": 0.14725710451622032,
+    "floor_cents": 0.0038334184087444934,
+    "held_s": [
+     19.40125,
+     20.12441666666667
+    ],
+    "label": "m5a/seg1-pulse/n1-midi96",
+    "n_samples": 34712,
+    "note": 96,
+    "peak": 0.2253294438123703,
+    "reason": "slow component 0.0010 cents is under 3.0 x the window's floor 0.0038",
+    "rms": 0.18334220110491628,
+    "sr": 48000,
+    "trajectory_rate_hz": 200.0,
+    "verdict": "STABLE",
+    "walk_exponent": NaN,
+    "window_s": [
+     19.399083333333333,
+     21.199083333333334
+    ],
+    "wobble_hz": 1.3888888888888888,
+    "wobble_line_fraction": 0.6116982091255855,
+    "xcheck_cents": 0.012916401490953562,
+    "zc_period_sigma_cents": 0.07843073867171291
+   }
+  ]
+ },
+ "probe_constants": {
+  "AM_DEPTH_DB": 0.1,
+  "EDGE_PERIODS": 16,
+  "HET_CASCADE": 2,
+  "MIN_PERIODS": 24,
+  "MIN_TAUS": 5.0,
+  "MULTI_PARTIAL_DB": 2.0,
+  "PERIODIC_R": 0.55,
+  "REPEAT_R": 0.7,
+  "SLOW_S": 0.2,
+  "SNR_SIGMA": 3.0
+ },
+ "refused": [
+  {
+   "reference": "Surge XT",
+   "refusal": "NO_SUSTAINED_OSCILLATOR_CLIP",
+   "refusal_detail": "dawdreamer importable: False; /Library/Audio/Plug-Ins/VST3 present: False. refprofile/ holds 16 frozen Surge clips and all 16 drive the FILTER from our own stepped tone through Audio In -- Surge's oscillators appear in none of them.",
+   "verdict": "REFUSED"
+  },
+  {
+   "reference": "u-he Diva",
+   "refusal": "NO_FROZEN_AUDIO",
+   "refusal_detail": "dawdreamer importable: False; /Library/Audio/Plug-Ins/VST3 present: False. No frozen Diva audio exists in this repository.",
+   "verdict": "REFUSED"
+  }
+ ]
+}

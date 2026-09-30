@@ -1,0 +1,44 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject CONSTRUCTOR_ONLY --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-constructor-only.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 259.2008099555969
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject WORDS_NOT_ENTERING --expect-refused 'not the candidate' > docs/scorecard/f1-level/control-words-not-entering.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 258.9012060165405
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --expect-refused 'equal the baseline' > docs/scorecard/f1-level/control-clean-run-is-not-a-refusal.log 2>&1; test $? -eq 1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 259.0203318595886
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_f1_level_scaling.py tools/test_f1_selected_path.py -q > docs/scorecard/f1-level/tests.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 88.00640821456909
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/f1_level_capture.py > docs/scorecard/f1-level/captures-verify.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 3.5006449222564697
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/refprofile.py > docs/scorecard/f1-level/refprofile-verify.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 2.868021011352539
+  }
+]

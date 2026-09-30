@@ -1,0 +1,343 @@
+{
+ "scenario": "extreme-pulse-mod",
+ "configuration": {
+  "OSC2X": 1,
+  "FILTER2X": 1,
+  "PULSE2X": 1
+ },
+ "bench": "tb_top_bx (SPI pins)",
+ "go_cycle": 8,
+ "inject": null,
+ "mutant": null,
+ "status": "FAIL",
+ "reasons": [
+  "1739 missed frame(s), first [310, 311, 312, 313, 314]",
+  "datapath busy at 1675 tick(s)",
+  "sticky overrun flag set",
+  "64 frame(s) with no sample",
+  "113 write(s) during computation, 0 frame(s) with a write at/after go",
+  "wire_mismatch 1836"
+ ],
+ "deadline_failed": true,
+ "schedule": {
+  "frames": 2167,
+  "missed": 1739,
+  "missed_frames": [
+   310,
+   311,
+   312,
+   313,
+   314,
+   315,
+   316,
+   318,
+   319,
+   320,
+   321,
+   322,
+   323,
+   324,
+   325,
+   326,
+   327,
+   328,
+   329,
+   330
+  ],
+  "bad_go": 0,
+  "writes_in_compute": 113,
+  "frames_with_write_after_go": 0,
+  "worst_sample_slack": 15,
+  "worst_busy_slack": 0,
+  "worst_drum_slack": 130,
+  "strobe_range": [
+   -1,
+   239
+  ],
+  "voice_start": [
+   9
+  ],
+  "drum_start": [
+   9
+  ],
+  "max_rwait": 57,
+  "max_oscwait": 60,
+  "max_dwait": 30,
+  "max_active_windows": 11,
+  "cost_model": {
+   "analysis_version": 2,
+   "formula": "strobe = C + rwait + oscwait + dwait + win + 2*w1 + im1 + 3*sk; overlap condition ywait >= 2",
+   "checked_frames": 2103,
+   "frames_without_strobe": 64,
+   "constant": -169,
+   "residuals": {
+    "-169": 1584,
+    "87": 400,
+    "82": 31,
+    "-168": 28,
+    "-170": 28,
+    "86": 13,
+    "84": 11,
+    "80": 8
+   },
+   "ywait_range": [
+    5,
+    11
+   ],
+   "exceptions": 519,
+   "first_exceptions": [
+    {
+     "frame": 2,
+     "residual": 87,
+     "ywait": 11
+    },
+    {
+     "frame": 3,
+     "residual": 87,
+     "ywait": 11
+    },
+    {
+     "frame": 4,
+     "residual": 87,
+     "ywait": 11
+    },
+    {
+     "frame": 5,
+     "residual": 87,
+     "ywait": 11
+    },
+    {
+     "frame": 6,
+     "residual": 87,
+     "ywait": 11
+    }
+   ],
+   "explained": false
+  },
+  "write_cycles": [
+   2,
+   2
+  ],
+  "max_writes_per_frame": 1,
+  "slack_histogram_8": {
+   "8": 2,
+   "24": 1,
+   "32": 4,
+   "40": 8,
+   "48": 144,
+   "56": 1,
+   "64": 256,
+   "88": 44,
+   "96": 3,
+   "240": 44,
+   "248": 1596
+  },
+  "worst_frames": [
+   {
+    "frame": 354,
+    "go": 8,
+    "v_start": 9,
+    "v_last": 238,
+    "strobe": 239,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 1,
+    "wr_first": 2,
+    "wr_last": 2,
+    "wr_in_compute": 0,
+    "busy_at_tick": 0,
+    "rwait": 38,
+    "oscwait": 60,
+    "dwait": 23,
+    "win": 12,
+    "w1": 8,
+    "im1": 3,
+    "sk": 0,
+    "ywait": 5,
+    "sample_slack": 15,
+    "busy_slack": 17,
+    "drum_slack": 130
+   },
+   {
+    "frame": 1953,
+    "go": 8,
+    "v_start": 9,
+    "v_last": 238,
+    "strobe": 239,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 0,
+    "wr_first": -1,
+    "wr_last": -1,
+    "wr_in_compute": 0,
+    "busy_at_tick": 1,
+    "rwait": 38,
+    "oscwait": 60,
+    "dwait": 28,
+    "win": 12,
+    "w1": 8,
+    "im1": 3,
+    "sk": 0,
+    "ywait": 9,
+    "sample_slack": 15,
+    "busy_slack": 17,
+    "drum_slack": 130
+   },
+   {
+    "frame": 352,
+    "go": 8,
+    "v_start": 9,
+    "v_last": 223,
+    "strobe": 224,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 0,
+    "wr_first": -1,
+    "wr_last": -1,
+    "wr_in_compute": 0,
+    "busy_at_tick": 1,
+    "rwait": 19,
+    "oscwait": 60,
+    "dwait": 28,
+    "win": 12,
+    "w1": 10,
+    "im1": 3,
+    "sk": 0,
+    "ywait": 9,
+    "sample_slack": 30,
+    "busy_slack": 32,
+    "drum_slack": 130
+   },
+   {
+    "frame": 308,
+    "go": 8,
+    "v_start": 9,
+    "v_last": 219,
+    "strobe": 220,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 1,
+    "wr_first": 2,
+    "wr_last": 2,
+    "wr_in_compute": 0,
+    "busy_at_tick": 0,
+    "rwait": 19,
+    "oscwait": 60,
+    "dwait": 23,
+    "win": 12,
+    "w1": 8,
+    "im1": 3,
+    "sk": 0,
+    "ywait": 11,
+    "sample_slack": 34,
+    "busy_slack": 36,
+    "drum_slack": 130
+   },
+   {
+    "frame": 353,
+    "go": 8,
+    "v_start": 9,
+    "v_last": 219,
+    "strobe": 220,
+    "d_start": 9,
+    "d_last": 125,
+    "wr_n": 1,
+    "wr_first": 2,
+    "wr_last": 2,
+    "wr_in_compute": 0,
+    "busy_at_tick": 0,
+    "rwait": 19,
+    "oscwait": 60,
+    "dwait": 23,
+    "win": 12,
+    "w1": 8,
+    "im1": 3,
+    "sk": 0,
+    "ywait": 7,
+    "sample_slack": 34,
+    "busy_slack": 36,
+    "drum_slack": 130
+   }
+  ]
+ },
+ "analysis_version": 2,
+ "evidence_problems": [],
+ "facts": {
+  "busy_at_tick": 1675,
+  "overrun": 1,
+  "overflow": 0,
+  "frames_no_sample": 64,
+  "worst_strobe_cycle": 239,
+  "periods": 2168,
+  "periods_required": 2168,
+  "periods_decoded": 2168,
+  "wire_mismatch": 1836,
+  "swap": 0,
+  "width": 0,
+  "writes_sent": 357,
+  "writes_seen": 357,
+  "writes_bad": 0,
+  "frame_pred_bad": 0,
+  "collisions": null,
+  "model_peak": 3313
+ },
+ "coverage": {
+  "three_2x_gate_on": 1861,
+  "three_2x_audible_gate_on": 1861,
+  "three_2x_audible_dfilt": 1861,
+  "three_rect_2x_gate_on": 1861,
+  "three_2x_audible_with_strike": 32
+ },
+ "provenance": {
+  "commit": "2221d2c-dirty",
+  "files": {
+   "synth_top.v": "e4f8d97b9785",
+   "voice_dp.v": "a15752570543",
+   "spi_ctl.v": "8892b72cde65",
+   "drum_regs.v": "c20808c86b23",
+   "drum_kit.v": "41bdf7a73aaa",
+   "drum_dp.v": "debc3ed0d64e",
+   "modal_dp.v": "dd4906617919",
+   "i2s_tx.v": "2cdb2112a11e",
+   "ladder_dp_n.v": "22e2be19863b",
+   "recip_div.v": "bf081a1b780d",
+   "osc_2x_saw_bank.v": "05869337f593",
+   "osc_2x_saw_path.v": "9e61079d40fa",
+   "polyblep_saw_pair.v": "1576461daa91",
+   "osc_substep_pair.v": "6dc5cfb922cb",
+   "decimate_2x_tm_sym.v": "0575e80ef33c",
+   "rate_conv_2x.v": "0e28468820bd",
+   "tb_top_bx.v": "dc2c177a0ec0",
+   "tb_uart_bx.v": "3d0e792b0de1",
+   "uart_bridge.v": "25ef72bc47f9",
+   "deadline_mon.vh": "b57cc36a8fc5",
+   "deadline_mon_top.v": "45fc4b0c22f3",
+   "deadline_mon_arty.v": "00507623ea2a",
+   "fpga/rtl/arty_a7_top.v": "664a4359af90"
+  },
+  "generated": {
+   "tanh16.hex": "a5c4862a7e90",
+   "tanh256.hex": "c6e81324b225"
+  },
+  "defines": [
+   "VOICE_OSC_2X",
+   "VOICE_FILTER_2X",
+   "VOICE_PULSE_2X"
+  ]
+ },
+ "reanalysis": {
+  "analysis_version": 2,
+  "capture_dir": "rtl-sketch/build/deadline/extreme-pulse-mod-p2x",
+  "capture_sha256": {
+   "top_bx_cmds.txt": "a959abb9132553a03ec2c53389fd1ecccdbff12f9dc55b117d583e0ad21265eb",
+   "top_i2s_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "c69af280d44b916e51d7b167a0e65e9487ea921b464e3fd52a197ba9500814e8",
+   "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt": "1db6ae40a228eabe110e68ac7c1328f6635f5aaec9b1690d89e1559d92f608ca",
+   "top_wrs_VOICE_OSC_2X_VOICE_FILTER_2X_VOICE_PULSE_2X.txt.sched": "d1bc37df935ca31260dc91349fa2a35cf17b7bae17c4e88c2261125bf7837b31"
+  },
+  "original_record": "docs/deadline/runs/prod-extreme-pulse-mod-p2x.json",
+  "original_status": "FAIL",
+  "original_analysis_version": 1,
+  "facts_source": "schedule trace; overflow from the run record",
+  "note": "re-judged from retained files; no simulation. provenance is the ORIGINAL run's identity"
+ }
+}

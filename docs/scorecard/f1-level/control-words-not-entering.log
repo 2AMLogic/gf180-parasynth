@@ -1,0 +1,6 @@
+identity RateConvertedLadder factor=2 causal=True  exact match: ladder 0 / g 0 / k 0 mismatches in 12000 frames
+registers baseline  s=1.0    gain/ogain [(170394, 25206)]
+registers half      s=0.5    gain/ogain [(85197, 50412)]
+registers quarter   s=0.25   gain/ogain [(42598, 100825)]
+REFUSED  half: gain/ogain entering the ladder [(170394, 25206)] are not the candidate's predicted words (85197, 50412)
+CONTROL OK  refused for the stated reason: 'not the candidate'

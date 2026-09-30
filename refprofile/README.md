@@ -52,16 +52,29 @@ and use the frozen WAVs. Missing or corrupt archives and clips still refuse.
 
 ## What is in it, and what is not
 
-One rig qualifies. Three do not, and the entries that say **no** are the
-load-bearing ones — "we did not use Model D" and "Model D cannot be used" are
-different facts and only the second one tells the next person not to try.
+One rig qualifies. Three do not and one has **no verdict yet**, and the entries
+that say **no** are the load-bearing ones — "we did not use Model D" and "Model D
+cannot be used" are different facts and only the second one tells the next person
+not to try. So is the entry that says **not yet**: it is neither of those two.
 
-| rig | | why |
-|---|---|---|
-| **Surge XT 1.2.3** Type 2 | ✅ | open source; its LP Vintage Ladder subtype Type 2 is `sst-filters`' `VintageLadder::Huov` — Huovilainen's DAFx-04 model, the same paper DR 0001 implements. The **only** reference here whose cutoff is commanded in Hz and reads back in Hz |
-| **Moog Model D** | ❌ **under dawdreamer only** | **renders exact silence under `dawdreamer` 0.9.0.** Measured, not inherited: peak 0.0 with oscillator 1 on at full level and the filter wide open, and peak 0.0 with the filter self-oscillating. The rig builds and its pins hold. **It is NOT silent under `pedalboard`** — peak 1.000, 8.57 % of samples at the rail, strongest partial 131.00 Hz for MIDI 60 (an octave down, the same default as Mini V3, which is itself the exact reverse: it sounds under dawdreamer and is silent under pedalboard). Per #123 this is a property of the host, not of the plugin — **re-derive per host before inheriting this verdict.** `profile.json` and `tools/run_case.py` still carry the unscoped wording; both are hashed inputs, so correcting them there is #129 and #101's re-run |
-| **Arturia Mini V3** | ❌ | makes sound, and every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (`reference_compare.calibrate_knob`); its **envelope** knobs cannot, because nothing here maps a Mini V3 envelope knob to a time. Its Range control also defaults an octave down — note 48 reads 65.42 Hz until parameter 45 is written |
-| **u-he Diva** | ❌ | found running unlicensed and inserting clicks (`docs/reference-integrity.md` §1), and is a general analogue-modelling synth rather than a Minimoog emulation |
+**Every verdict is scoped to a (rig, host) pair (#123).** Read
+`tools/refprofile.py`'s `RIG_VERDICTS` through `refprofile.verdict_for(rig,
+host)`, which refuses a verdict asked for under a host it was not measured
+under — using `RIG_VERDICTS["modeld"]` under whatever host happens to be loaded
+is the mistake #123 found.
+
+| rig | host | | why |
+|---|---|---|---|
+| **Surge XT 1.2.3** Type 2 | `dawdreamer` | ✅ | open source; its LP Vintage Ladder subtype Type 2 is `sst-filters`' `VintageLadder::Huov` — Huovilainen's DAFx-04 model, the same paper DR 0001 implements. The **only** reference here whose cutoff is commanded in Hz and reads back in Hz |
+| **Moog Model D** | `dawdreamer` | ❌ | **renders exact silence under `dawdreamer` 0.9.0.** Measured, not inherited: peak 0.0 with oscillator 1 on at full level and the filter wide open, and peak 0.0 with the filter self-oscillating. The rig builds and its pins hold. This verdict is about the (plugin, host) pair and **not** about the plugin — see the row below. `profile.json` and `tools/run_case.py` still carry the unscoped wording ("renders exact silence headlessly", no host named); both are hashed inputs, so correcting them there is #129 and #101's re-run |
+| **Moog Model D** | `pedalboard` | ⏳ **no verdict yet** | **NOT silent under `pedalboard`** — peak 1.000, 8.57 % of samples at the rail, strongest partial 131.00 Hz for a commanded MIDI 60 (261.63 Hz, so an octave down — the same default as Mini V3, which is itself the exact reverse: it sounds under dawdreamer and is silent under pedalboard). Both of those disqualify the **default patch**, so `reference_rigs.ModelDPedalboardRig` (#124) exists to try to correct them through Model D's own parameters and measure whether it worked: it sweeps Osc 1 Range and selects the position that *sounds* the commanded note, and steps the master volume to the loudest setting with zero samples at the rail. `qualified` is **`None`, not `false`** — no operator has run it on a machine with the bundle. Run `python tools/qualify_modeld_pedalboard.py`; see [`docs/pedalboard-rig.md`](../docs/pedalboard-rig.md). **What is missing narrowed on 2026-09-30:** the *host* is no longer part of it — `pedalboard` 0.9.25 installs cleanly from a wheel on Linux / CPython 3.12 into an isolated venv, the rig's API surface has been read against that install and holds, and the refusal on this fleet is now `Moog Model D is not installed at …` rather than `no pedalboard on this machine`. The one remaining blocker is the **licensed Model D binary**, which no venv produces |
+| **Arturia Mini V3** | `dawdreamer` | ❌ | makes sound under this host (it is **silent** under `pedalboard`), and every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (`reference_compare.calibrate_knob`); its **envelope** knobs cannot, because nothing here maps a Mini V3 envelope knob to a time. Its Range control also defaults an octave down — note 48 reads 65.42 Hz until parameter 45 is written |
+| **u-he Diva** | `dawdreamer` | ❌ | found running unlicensed and inserting clicks (`docs/reference-integrity.md` §1), and is a general analogue-modelling synth rather than a Minimoog emulation |
+
+**No clip in this profile comes from a pedalboard-hosted rig.** All sixteen are
+Surge XT Type 2 under `dawdreamer`, and adding the pedalboard entry to
+`RIG_VERDICTS` changes no clip and no hash — it appears in `profile.json` only
+on the next `--render`.
 
 Sixteen clips, all from Surge XT Type 2 at 48 kHz:
 
@@ -134,6 +147,53 @@ rate, the block size. Those are pinned by the rig and recorded in
 run. A clip that does not reproduce is not frozen, and the tool refuses to
 install it.
 
+## Pins after rendering: what the frozen profile does and does not show (#233)
+
+**The committed `profile.json` makes no post-render pin claim, although its
+`pins_held_after_render` field says `true`.** The renderer that built it
+(builder `4bbd8e90…`, at `daf9e64`) checked the pinned Surge parameters once,
+*before* any clip was rendered, and wrote that field as a constant. Nothing
+re-read the pins after a clip. `profile.json` and the frozen audio are left
+byte-unchanged here: rewriting the field would change the historical record,
+and re-rendering the profile would add nothing a reproduction does not
+already show. `tools/refprofile.py --list` says this about the profile, and
+`refprofile.post_render_checked()` returns false for it.
+
+Since #233, `--render` re-reads every pinned name and readback after **each**
+clip render, before that clip is written, and refuses on any change. The one
+name change it accepts is the Classic→Audio In rename that #231 measured at
+**259, 260, 264 and 265**. The readback is still required to match exactly.
+`pins_held_after_render` is now derived from those checks. The per-clip
+results are recorded in `qualification.post_render_check` and in each clip's
+`pins_after_render`.
+
+**The builder hash changed, and nothing is re-pinned to it.** Any profile
+rendered from now on records the new `builder_sha256`. The committed profile
+still records `4bbd8e90…`. `tools/run_case.py` hashes `tools/refprofile.py` as
+a model input, so a run_case result from before this change no longer covers
+the tree. That is the intended effect of a hashed input.
+
+At `9f106f7` (clean), same host, Surge XT 1.2.3 and dawdreamer 0.9.0 as above,
+the new renderer checked every clip in two independent renders
+([`post-233-check/`](post-233-check/)):
+
+```
+16/16 clips bit-identical across 2 independent renders
+16 reproduced the committed sha256, 0 changed, 0 new, 0 dropped   (exit 0)
+pins_held_after_render: true, derived; 16/16 clips checked in each run
+name aliases observed on every clip: 259, 260, 264, 265 (readbacks unchanged)
+```
+
+The last line re-observes #231 independently. From the first clip onward,
+Surge reports all four indices under their Audio In names. So the pre-#233
+check, had it re-read the pins by exact name, would have refused every clip.
+The frozen audio remains the same audio: the 16 committed hashes reproduce
+under the new check. That reproduction is evidence about the *current* rig.
+It does not show that the 2026-09-18 capture had a post-render check.
+`profile.render1.json` in that folder is a run's output, kept for its
+`qualification` and `pins_after_render` records. It is **not** the frozen
+profile, and nothing reads clips through it.
+
 ## The probe level, and the floor it comes from
 
 Every stepped-tone clip is at **−12.04 dBFS** (`amp = 0.25`), the level
@@ -170,3 +230,16 @@ constant withdrew a whole column of #61.)
   frozen reference is not comparable with one measured against this one.
 - **Re-rendering is a decision, and its diff is the review.** If a clip's hash
   changes, something about the reference changed, and the diff says what.
+- **A verdict belongs to a (rig, host) pair and is never overwritten by the other
+  host's result.** Ask for one through `refprofile.verdict_for(rig, host)`, which
+  refuses the cross-host read. Model D's dawdreamer entry records that this bundle
+  renders exact silence under the host every clip here was built with; replacing
+  it with a pedalboard result would erase that measurement.
+- **`qualified: None` is not `qualified: false`.** "Nobody has run it" and "it
+  cannot be used" are different facts. `refprofile.qualified_rigs()` returns only
+  the `True` entries, and nothing may read a `None` as a rejection.
+- **Every clip's environment tuple goes through `refprofile.environment_tuple`,
+  whichever host rendered it.** One recorder — host and version, plugin and
+  binary hash, block size *and its rate in Hz*, sample rate, licence state,
+  preset (#123). It refuses rather than reports on a missing field, a plugin with
+  no binary hash, and a `block` or `sr` given as `"unstated"`.

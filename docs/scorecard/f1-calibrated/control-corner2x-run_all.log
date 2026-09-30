@@ -1,0 +1,16 @@
+==============================================================================
+PASS          1035.8s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/run_case.py --inject REF_CORNER_2X F1A F1B --results build/case-f1ab-corner2x --expect fail --no-audio
+              reference corpus: /tmp/tr808-ref
+              results into:     build/case-f1ab-corner2x
+              INJECTED CONTROL: REF_CORNER_2X -- this output is a control, not evidence
+              case   state         worst  note
+              ------------------------------------------------------------------------------------------------
+              CONTROL BASELINE: measuring the same cases without the injection
+              CONTROL BASELINE: complete
+              F1A    fail           8.72  worst: Corner frequency
+              F1B    fail           9.29  worst: Corner frequency
+              ------------------------------------------------------------------------------------------------
+              fail: 2
+              control fired: REF_CORNER_2X caused the expected result on 2 measured case(s)
+==============================================================================
+1/1 passed

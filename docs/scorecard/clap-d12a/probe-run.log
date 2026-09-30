@@ -1,0 +1,26 @@
+known answer: PASS (8 signals, 32 mutant runs)
+reproduced D12A: 14.2557 dB error; ours sha256 03684093c3d559b9
+baseline                               ratio   11.28 (err +14.26) pred 11.283   span  18.85 (ok) T20 101.094 (ok) pk2 0.3889 rail 0
+tail peak x1.41 (+3 dB)                ratio    9.78 (err +12.76) pred 9.782    span  18.33 (ok) T20 105.7208 (ok) pk2 0.4449 rail 0
+tail peak x2 (+6 dB)                   ratio    8.50 (err +11.47) pred 8.498    span  17.02 (FAIL) T20 108.0865 (ok) pk2 0.5241 rail 0
+tail peak x0.5 (-6 dB)                 ratio   14.74 (err +17.71) pred 14.741   span  19.62 (ok) T20 77.2605 (FAIL) pk2 0.3214 rail 0
+tail tau 47->70 ms                     ratio    8.62 (err +11.59) pred          span  18.85 (ok) T20 149.4603 (ok) pk2 0.3897 rail 0
+tail tau 47->90 ms                     ratio    6.81 (err  +9.79) pred          span  18.33 (ok) T20 199.4262 (ok) pk2 0.3901 rail 0
+bursts 3 strikes->4, period 480        ratio    7.23 (err +10.20) pred          span  30.17 (ok) T20 87.0183 (FAIL) pk2 0.3889 rail 0
+bursts 4 strikes, period 511           ratio    6.49 (err  +9.47) pred          span  31.94 (ok) T20 84.5048 (FAIL) pk2 0.3889 rail 0
+burst tau 4->8 ms                      ratio   10.56 (err +13.54) pred          span   9.48 (FAIL) T20 82.387 (FAIL) pk2 0.4168 rail 0
+tail peak 0.44 + tau 90 ms             ratio    4.03 (err  +7.00) pred          span  17.02 (FAIL) T20 203.5074 (ok) pk2 0.5264 rail 0
+4 strikes p511 + tail tau 90 ms, peak 0.33 ratio    3.37 (err  +6.35) pred          span  31.92 (ok) T20 200.7265 (ok) pk2 0.4583 rail 0
+final burst tau 20 ms alone            ratio    2.42 (err  +5.39) pred          span  31.94 (ok) T20 72.73 (FAIL) pk2 0.3889 rail 0
+final burst tau 38.5 ms alone          ratio    0.41 (err  +3.38) pred          span  56.12 (FAIL) T20 96.0692 (FAIL) pk2 0.3889 rail 0
+decomposition: {'error_db': 14.256, 'late_deficit_db_anchor_peak': 11.08, 'early_excess_db_anchor_peak': 3.18, 'late_deficit_db_anchor_first_30ms': 14.26, 'early_excess_db_anchor_first_30ms': 0.0, 'error_if_ours_had_ref_30_50ms': 3.98, 'error_if_ours_had_ref_50_200ms': 9.28, 'error_if_ours_had_ref_30_200ms': 3.18}
+baseline                               Burst timi 18.67..20.00 pass 8/8  burst/tail 10.19..11.28 pass 0/8  decay 88.93..101.09 pass 3/8
+C1 final tau 30 ms                     Burst timi 32.02..56.12 pass 5/8  burst/tail -0.53..0.61 pass 3/8  decay 122.65..135.17 pass 8/8
+C2 final tau 38.5 ms (C144 x R365)     Burst timi 39.44..73.67 pass 2/8  burst/tail -1.31..-0.23 pass 8/8  decay 124.75..136.79 pass 8/8
+C3 final tau 45 ms                     Burst timi 39.44..78.77 pass 2/8  burst/tail -1.80..-0.74 pass 8/8  decay 129.48..141.90 pass 8/8
+{'label': 'baseline', 'accent2_peak_fs': 0.3889, 'accent2_rail_samples': 0, 'accent2_ratio_db': 9.884, 'accent0.5_peak_fs': 0.1214, 'accent0.5_ratio_db': 11.279}
+{'label': 'C1 final tau 30 ms', 'accent2_peak_fs': 0.39, 'accent2_rail_samples': 0, 'accent2_ratio_db': 0.24, 'accent0.5_peak_fs': 0.1216, 'accent0.5_ratio_db': 0.169}
+{'label': 'C2 final tau 38.5 ms (C144 x R365)', 'accent2_peak_fs': 0.39, 'accent2_rail_samples': 0, 'accent2_ratio_db': -0.416, 'accent0.5_peak_fs': 0.1216, 'accent0.5_ratio_db': -0.568}
+{'label': 'C3 final tau 45 ms', 'accent2_peak_fs': 0.39, 'accent2_rail_samples': 0, 'accent2_ratio_db': -0.827, 'accent0.5_peak_fs': 0.1216, 'accent0.5_ratio_db': -1.028}
+wrote docs/scorecard/clap-d12a/probe.json
+exit=0

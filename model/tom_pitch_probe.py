@@ -2,10 +2,14 @@
 """The TR-808 toms' diode pitch drop, measured from a recording.
 
 `spec/NUMERIC-CONTRACT.md` 15.7.1 ships the drop as a coefficient sequence:
-f0 starts at **x1.7** the small-signal value and relaxes over **60 ms**, the
-excess scaled by accent. `docs/tr808-reference.md` 4 marks that magnitude
-**[inferred]** -- the service notes verify that the drop exists, not how big it
-is. This module measures it.
+f0 starts above the small-signal value and relaxes over **60 ms**, the excess
+scaled by accent. When this module was written 15.7.1 shipped that excess at
+**x1.7** and `docs/tr808-reference.md` 4 marked the magnitude **[inferred]** --
+the service notes verify that the drop exists, not how big it is. This module
+measured it (x1.06 / x1.14 / x1.24 by accent, #110); #154 shipped the
+correction, and 4 now carries the measured figure with the same tags. The
+x1.7 references below are the DEFECT this instrument was pointed at, kept
+because recovering it to 0.41 % is one of the probe's own validation cases.
 
 WHAT IT MEASURES, and why this way
 ----------------------------------
@@ -41,6 +45,9 @@ from __future__ import annotations
 import argparse, json, math, pathlib, sys, warnings
 import numpy as np
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import audio_measure as am                                            # noqa: E402
+
 SR_EXPECTED = 44100
 MIN_SETTLED = 8          # clean periods needed in the settled window
 SNR_SIGMA = 3.0          # excess must beat this many sigma of the settled scatter
@@ -57,6 +64,73 @@ SETTLED_XCHECK = 0.02    # settled f0 must agree with the spectral peak to this 
 # neighbour level is therefore measured over the SETTLED window, where a sweep
 # contributes nothing, and reported. The artefact bound that actually governs
 # this measurement is empirical and comes from the accent-A recordings.
+
+
+#: This probe's validated domain, as data rather than as the table in
+#: `docs/tom-pitch-drop-measurement.md` (#115). The third of the three ad-hoc
+#: validation measurements that issue asks to relocate INTO the estimator: the
+#: 0.41 % figure was reachable only by reading a docstring paragraph and a row
+#: of a markdown table.
+#:
+#: `measure()` returns a dict with its own `verdict`/`why`, not an `Estimate`,
+#: so this declaration is inspectable evidence rather than a gate -- every
+#: bound below is already enforced inside `measure()` by the named constant,
+#: and duplicating the check here would be a second place for it to drift.
+PITCH_DROP_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="tom_pitch_probe.measure",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("decaying",),
+                      basis="a 2-pole resonator's free ring. The measurement IS "
+                            "the frequency trajectory of a decay; a stationary "
+                            "tone has no drop to recover"),
+        am.DomainAxis(am.AXIS_SNR, lo=SETTLED_HEADROOM_DB,
+                      units="dB above THIS file's own measured noise floor",
+                      basis="a settled period must clear the file's own floor "
+                            "(noise_floor_dbfs) by this much, and the excess must "
+                            "additionally beat SNR_SIGMA = 3 sigma of the "
+                            "per-period scatter measured in that same file's "
+                            "settled window -- 0.25-0.75 Hz on LT/MT, 1.9-2.1 Hz "
+                            "on HT. The floor is measured per file, never quoted "
+                            "(#92). A -20 dB pink rumble, worse than any measured, "
+                            "does not fake a drop"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=float(MIN_SETTLED),
+                      units="clean settled periods",
+                      basis="fewer, and there is no settled f0 to measure the "
+                            "excess against; refused, with the count"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, enforced=False,
+                      basis="a competing line is REPORTED, not gated, and "
+                            "deliberately: a -30 dB gate over the onset is "
+                            "UNSATISFIABLE, because a genuine x1.7 sweep spreads "
+                            "its own energy and reads as a -20 dB neighbour. "
+                            "Measured cost when one is present: 5 of 12 refused, "
+                            "worst survivor +-0.045 of the ratio"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=-SETTLED_XCHECK, hi=SETTLED_XCHECK,
+                      units="fraction the settled f0 may differ from the spectral "
+                            "peak",
+                      basis="the settled f0 is cross-checked against an independent "
+                            "spectral estimate on the same window; disagreement "
+                            "past this refuses rather than picking one"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, lo=1.0, units="carrier periods per "
+                      "amplitude tau",
+                      enforced=False,
+                      basis="measured, not assumed: the x1.05-x1.40 recoveries hold "
+                            "to 0.46 % over 60 ms drops and degrade to 5.6 % over "
+                            "25 ms drops, whose worst corner is LT with tau = "
+                            "8.3 ms -- SHORTER than one period of its 90 Hz "
+                            "carrier. That corner is the bound"),
+    ),
+    worst_error="0.41 % of the excess recovering the contract's own x1.7 / 60 ms "
+                "drop; <= 0.46 % over x1.05-x1.40 at 60 ms; |R-1| < 0.0002 on a "
+                "null, i.e. it invents no drop",
+    evidence=("model/tom_pitch_probe.py `synth_tom` gate cases",
+              "model/test_tom_pitch_probe.py",
+              "docs/tom-pitch-drop-measurement.md 'The gate: recover a known "
+              "drop before measuring an unknown one'"),
+    notes="The x1.7 in this file's own references is the DEFECT the instrument "
+          "was pointed at (15.7.1 shipped it; #110 measured x1.06/x1.14/x1.24 "
+          "and #154 corrected the contract). Recovering x1.7 to 0.41 % is a "
+          "validation case, not a claim about the machine.",
+))
 
 
 # ------------------------------------------------------------------ io ------

@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_saw_drive.py --drives 0.75 --out build/sawdrive/d0.75.json && /home/ubuntu/work/venv/bin/python tools/run_case.py F1A F1B F1C --results build/sawdrive/f1",
+    "state": "NO-VERDICT",
+    "rc": 2,
+    "out": "saw drive 0.75: vol x1.0000 (0.4271); M5A {'Pitch': -0.14813, 'Harmonic shape': 7.56136, 'Foldback energy': 2.20593, 'Envelope attack': 5.27083, 'Envelope release': -8.9375, 'Gain': -1.54373, 'Clipping': 0.0}; M5B {'Pitch': -0.14828, 'Harmonic shape': 5.96219, 'Foldback energy': 1.91296, 'Envelope attack': 6.125, 'Envelope release': -30.0, 'Gain': 2.04851, 'Clipping': 0.0}; r1 bytes change False\nwrote build/sawdrive/d0.75.json\nreference corpus: /home/ubuntu/dev/refs\nresults into:     build/sawdrive/f1\n\ncase   state         worst  note\n------------------------------------------------------------------------------------------------\nF1A    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1B    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\nF1C    no verdict       --  invalid: Corner frequency, low-band gain, rolloff\n------------------------------------------------------------------------------------------------\nno verdict: 3\nexit 2: 0 match, 1 mismatch (a result), 2 did not run (no evidence)\n",
+    "secs": 94.35967183113098
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_saw_drive.py --drives 0.5 --out build/sawdrive/d0.5.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "saw drive 0.5: vol x1.3894 (0.5934); M5A {'Pitch': -0.14813, 'Harmonic shape': 5.29678, 'Foldback energy': 2.31297, 'Envelope attack': 5.4375, 'Envelope release': -7.95833, 'Gain': -1.54373, 'Clipping': 0.0}; M5B {'Pitch': -0.14828, 'Harmonic shape': 4.95726, 'Foldback energy': 2.31222, 'Envelope attack': 6.125, 'Envelope release': -33.91667, 'Gain': 1.84497, 'Clipping': 0.0}; r1 bytes change True\nwrote build/sawdrive/d0.5.json\n",
+    "secs": 64.55871391296387
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_saw_drive.py --drives 0.35 --out build/sawdrive/d0.35.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "saw drive 0.35: vol x1.9231 (0.8213); M5A {'Pitch': -0.14813, 'Harmonic shape': 5.29678, 'Foldback energy': 0.31556, 'Envelope attack': 5.4375, 'Envelope release': -7.02083, 'Gain': -1.54373, 'Clipping': 0.0}; M5B {'Pitch': -0.14828, 'Harmonic shape': 4.95726, 'Foldback energy': 0.3165, 'Envelope attack': 6.20833, 'Envelope release': -35.85417, 'Gain': 1.72804, 'Clipping': 0.0}; r1 bytes change True\nwrote build/sawdrive/d0.35.json\n",
+    "secs": 96.84778141975403
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_m5_saw_drive.py --drives 0.3 --out build/sawdrive/d0.3.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "saw drive 0.3: vol x2.2290 (0.9519); M5A {'Pitch': -0.14813, 'Harmonic shape': 5.29678, 'Foldback energy': 0.41318, 'Envelope attack': 5.4375, 'Envelope release': -7.0, 'Gain': -1.54373, 'Clipping': 0.0}; M5B {'Pitch': -0.14828, 'Harmonic shape': 4.95726, 'Foldback energy': 0.40664, 'Envelope attack': 6.20833, 'Envelope release': -35.875, 'Gain': 1.6999, 'Clipping': 0.0}; r1 bytes change True\nwrote build/sawdrive/d0.3.json\n",
+    "secs": 65.03174638748169
+  }
+]

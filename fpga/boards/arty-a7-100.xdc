@@ -39,11 +39,15 @@ set_property PULLUP TRUE [get_ports uart_rxd]
 # The link samples asynchronous inputs through two flops. Only the paths to
 # the first stages are asynchronous; do not exempt the engine's timing.
 set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_spi/(sck_q|mosi_q|csn_q)_reg\[[01]\]}]
-set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*g_uart/u_uart/rx_q_reg\[[01]\]}]
+# #315: the bridge sits in a generate block, which Vivado joins with a DOT
+# (u_synth/g_uart.u_uart). The old `.*g_uart/u_uart/...` matched nothing and
+# both UART lines were dropped in R0 and R1. fpga/xdc_bindings.py now asserts
+# every query below binds exactly its objects, at build time.
+set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[[01]\]}]
 set_false_path -from [get_ports spi_sck] -to [get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_mosi] -to [get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]
 set_false_path -from [get_ports spi_cs_n] -to [get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]
-set_false_path -from [get_ports uart_rxd] -to [get_pins -hier -regexp {.*g_uart/u_uart/rx_q_reg\[0\]/D}]
+set_false_path -from [get_ports uart_rxd] -to [get_pins -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[0\]/D}]
 set_false_path -from [get_ports btn_reset]
 
 # The output budgets below close the external timing; the core WNS alone

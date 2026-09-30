@@ -1,0 +1,20 @@
+==============================================================================
+FAIL(1)         24.8s  cd <scratchpad>/wt-red && /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_metric_purpose.py -q -p no:cacheprovider -rN
+                                         ^^^^^^^^^^^^^^^^^
+              E       AttributeError: module 'scorecard' has no attribute 'DEFECT_CEILING'
+              tools/test_metric_purpose.py:220: AttributeError
+              12 failed in 18.52s
+PASS            90.8s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_metric_purpose.py tools/test_acceptance_policy.py tools/test_acceptance_on_real_records.py -q -p no:cacheprovider
+              ...........................................................              [100%]
+              59 passed in 87.17s (0:01:27)
+PASS            34.7s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python -m pytest tools/test_run_case.py -q -p no:cacheprovider
+              ........................................ssss............................ [ 74%]
+              .........................                                                [100%]
+              93 passed, 4 skipped in 27.64s
+PASS           102.9s  /Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/check_doc_claims.py
+              OK      docs/ladder-rung1-audit.md:187  model/test_ladder_headroom.py::test_the_state_width_has_no_precision_headroom_and_four_bits_of_margin passed, as claimed
+              OK      docs/ladder-rung1-audit.md:201  model/test_ladder_headroom.py::test_the_drive_stage_saturation_point_is_in_the_references_range passed, as claimed
+              OK      docs/ladder-rung1-audit.md:219  model/test_ladder_headroom.py::test_the_rig_refuses_to_apply_the_tuning_polynomial_twice passed, as claimed
+              22 claim(s) in 39 document(s): 22 ok, 0 stale, 0 refused
+==============================================================================
+3/4 passed  --  FAIL cd /private/tmp/claude-501/-Users-joseph--su

@@ -60,7 +60,6 @@ for _p in ("model", "audition", "rtl-sketch"):
 import drums_fx as dx                       # noqa: E402
 import voice_fx as vf                       # noqa: E402
 import synth_top_model as stm               # noqa: E402
-from fixed import LadderFx                  # noqa: E402
 
 SEC_VOICE, SEC_DRUM = 0, 1
 
@@ -583,7 +582,11 @@ class MusicHost:
             self.regs["cut_hi"] = hi
             self.voice(frame, stm.A_CUT_HI, hi, tag="knob-cutoff")
         elif n == "resonance":
-            k, g, og = LadderFx(**vf.LADDER_CFG).regs(float(value), self.regs["drive"])
+            # the COMMON conversion, under the image's own calibration: a
+            # knob turn must not silently revert a calibrated patch to the
+            # legacy gain/ogain words (plan074 B)
+            k, g, og = vf.ladder_regs(float(value), self.regs["drive"],
+                                      self.regs.get("filter_calibration"))
             self.regs.update(res=float(value), k=k, gain=g, ogain=og)
             self.voice(frame, stm.A_K, k, tag="knob-res")
             self.voice(frame, stm.A_GAIN, g, tag="knob-res")

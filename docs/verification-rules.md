@@ -1,7 +1,8 @@
 # Verification rules
 
-Short, because there are only three, and they exist because each was learned
-the expensive way in this repository on 2026-09-17.
+Short, because there are only five, and they exist because each was learned
+the expensive way in this repository — the first three on 2026-09-17, rules 4
+and 5 on 2026-09-26 (issue #52).
 
 ---
 
@@ -70,3 +71,172 @@ area, and it was reported here three times before anyone simulated it.
 Quote area only alongside a simulation result, and say which flow produced it —
 `klt` allows `*_1` cells and ORFS excludes them by default, which is a 22–42 %
 difference on the same RTL.
+
+This is now enforced rather than advised, for one tool: `pnr/report_synth_area.py`
+simulates before it answers and REFUSES — withholding the cell count it already
+has — when any output is X. Rule 5 records what that refusal cost to make
+trustworthy, and why the netlist-side checks cannot do the job.
+
+---
+
+## 4. A multi-property suite reports what it is BLIND to, not just what failed
+
+Rule 2 asks whether a control turns the bench red. That is a yes/no about the
+**bench**. It does not say which of the bench's properties actually saw the
+defect, and a property that never sees anything is decoration wearing the
+costume of coverage.
+
+So: **when a suite measures more than one property, every injected control
+prints a properties × defects matrix — MOVED for the properties that saw it,
+BLIND for the ones that did not.**
+
+This is not a proposal; it has already caught a hole in a metric that looked
+rigorous. `model/sound_report.py --inject ladder-cut30` — a uniform 30 %
+cutoff error — put `corner ratio drift` in the BLIND column, because a
+**non-uniformity** metric cannot by construction see a **uniform** skew. Both
+properties were correct. One of them could never have failed for that defect.
+
+Three suites print the matrix, and they are the only three that can:
+
+| suite | its "properties" | example |
+|---|---|---|
+| `model/sound_report.py --inject` | named acoustic properties per voice | `sd-centroid-amp-weighted` moves SD brightness 1918 → 5868 Hz and leaves SD's other **five** properties BLIND |
+| `fpga/verify_xdc_binding.py --matrix` | the nine properties that decide whether the Arty constraint file still binds this wrapper | `UART_SLASH_JOIN` — #315's own bytes — moves `hier_separators` and leaves the other **eight** BLIND, including `query_counts`: every query still has a declared required count, which is exactly why the text-level gates passed while both constraints were dropped |
+| `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write, plus the write `count` and the `drain` window | `SPI_ADDR7` moves `address` on 105 of 206 writes and the other five are BLIND. `SPI_DATA24` moves `data` on 42 of 206. `SPI_ANYLEN` moves only `count` (208 writes reach the port for 206 sent) and `SPI_DRAIN_LATE` only `drain` (206 of 206 applied at `go`) — each row is printed against its OWN population, so `count` is over the 206 sent while `drain` is over the 208 that arrived |
+
+**Every other `--expect-fail` suite here is single-property by construction and
+a matrix would be a table with one column.** `verify_ladder.py`,
+`verify_modal.py`, `verify_voice.py`, `verify_synth_top.py`, `verify_drums.py`,
+`tools/verify_rate_conv_2x.py` and `fpga/verify_fixture.py` all compare an RTL
+sample stream against the Python model **with no tolerance**, sample for
+sample. There is exactly one question — "is the stream identical" — so there is
+exactly one property, and "which property saw it" has one possible answer.
+Those suites already report the thing a matrix would add: the first mismatching
+sample, the mismatch count, and the error in LSB.
+
+The test for whether this rule applies is therefore: *does the suite reduce its
+comparison to more than one named quantity?* If yes, print the matrix. If it is
+one bit-exact stream comparison, do not invent columns to fill.
+
+`verify_ctl.py` is the one that was **not** obvious — its verdict is pass/fail
+like the others, but `compare_writes` had already been decomposing the failure
+into four per-field counters for its own error message. The matrix was one
+function away and nobody had asked for it.
+
+---
+
+## 5. A bug is not closed until it is an injection
+
+**The failure mode of injection testing is that you inject the bugs you already
+thought of.** That is `docs/failure-modes.md`'s root cause wearing a lab coat:
+validating against our own imagination. An injection suite grown only from
+what its authors imagined is as internally consistent, and as ungrounded, as an
+estimator calibrated on our own model.
+
+There is one source of defects guaranteed **not** to come from our imagination:
+the bugs this project actually made. So when a bug is fixed, the fix is half
+the work; the other half is reinstating the exact broken behaviour as a
+permanent control that must stay red.
+
+Seven already work this way — two at the control layer, two at the measurement
+layer, two in the build/report tools, and one at the constraint layer:
+
+| the bug, as it shipped | the injection it became |
+|---|---|
+| the SPI address truncated to 7 bits | `verify_ctl.py --inject SPI_ADDR7` — the exact broken frame |
+| the SPI datum truncated to 24 bits | `verify_ctl.py --inject SPI_DATA24` |
+| a 5 ms moving average used as an envelope on a 56 Hz carrier — 0.28 of a cycle | `sound_report.py --inject bd-ma-envelope` |
+| an amplitude-weighted centroid read where a power-weighted one belonged | `sound_report.py --inject sd-centroid-amp-weighted` |
+| `ladder_dp_t16`'s out-of-range tanh index quoted at **1,917 cells** for three rounds | `pnr/report_synth_area.py --inject TANH_INDEX_OOR --expect refused-x` — the tool REFUSES and withholds the number |
+| a die area recovered from its own `{"method": "utilization", "utilization_pct": 50}` | `pnr/orfs/area_provenance.py --inject UTILIZATION_TARGET --expect refused-circular`, and `CORE_UTILIZATION_SET` for the ORFS spelling |
+| the two UART-RX synchroniser constraints joined their generate block with a **slash**, matched nothing, and were dropped by Vivado from the R0 **and** R1 bitstreams while every text-level gate passed (#315) | `fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail` — and, better, the pre-#315 file itself as the bench's start-red, read straight out of `383f10b^` rather than reconstructed |
+
+The last two are the measurement layer, which is where most of this project's
+errors actually lived, and both were already pinned by a helper-function unit
+test before this rule existed. **A unit test on the helper is not the same
+control**: it proves the broken function is broken, not that the acceptance
+path would have noticed someone using it. Reinstating them through
+`sound_report.py` puts them where the verdict is issued.
+
+A third historical measurement bug — the Hann-windowed 700 Hz noise-share
+split, wrong by 15× — is kept the other way round, as a method retained
+*because it must stay wrong*, in `model/test_drum_fit.py`. That is the same
+rule with the sign flipped and is equally valid.
+
+**Not yet injections**: the list is empty. It held two entries — X-propagation
+quoted as a 1,917-cell area, and a die area recovered from its own utilization
+input — and both became controls under issue #245. It is a debt marker, not
+coverage; it shrinks only when an entry becomes a control, and it grows again
+the next time a bug is fixed without one.
+
+The two newest are refusal controls rather than comparison controls, which is a
+distinction worth keeping straight. The four above ask "does the bench notice a
+wrong number?" The two below ask "does the tool decline to produce a number it
+cannot stand behind?", so their `--expect` names the *reason* for the refusal
+(`refused-x`, `refused-circular`), not merely that one occurred. Without that, a
+missing yosys would have made the X control look like it had fired.
+
+**What enforcing the second one immediately found**, and this is the argument
+for a check over a comment: `pnr/orfs/ladder_dp/config.mk` and
+`pnr/orfs/synth_core/config.mk` both set `CORE_UTILIZATION = 50`, the setting
+`synth_top/config.mk`'s own header warns against at length, so
+`pnr/orfs/summarize.py` would have quoted a `die / synth cell area` of about 2
+for either of them without a word. The convention held exactly where somebody
+had written a paragraph about it and nowhere else.
+
+**And what the first one measured is a warning about which checks are worth
+anything here.** Under `TANH_INDEX_OOR` — a tanh index field one bit wider than
+the table it reads, the `ladder_dp_t16` defect — the synthesised netlist contains
+no `x`, simulates `x`-free at the gate level, and its cell count moves by
+**0.1 %** (1,677 against 1,679). Yosys is entitled to resolve a don't-care to
+anything it likes, and does. Only a behavioural simulation of the sources sees
+it: `y` is `x` on 506 of 512 sampled cycles. The area is not a weak detector of
+this class of defect, it is not a detector at all.
+
+### The three conditions, because a control that cannot run looks like one that works
+
+A control counts as caught only if **all three** hold, and anything else is
+`NO VERDICT` — which is red, and is *not* a fail:
+
+1. the clean run passes;
+2. the mutant **builds, activates and actually executes**;
+3. the intended assertion is the one that fails.
+
+Condition 2 is not theoretical. The nightly's injection check once swallowed
+the exit status with `|| true` and then grepped the output for `MISS`/`FAIL`/
+`MOVED` — so **a traceback containing any of those words counted as a caught
+defect.** A tool that could not run was indistinguishable from a control that
+worked. Separately, this repository has shipped a "negative control" that
+mutated a function signature into invalid Python and passed, proving only that
+Python rejects syntax errors.
+
+And per `CLAUDE.md`: **run the gate against the current state before committing
+it.** An unsatisfiable gate is worse than no gate — it trains everyone to
+ignore gates, including the working ones.
+
+## 6. A claim about an external tool is a claim about a configuration
+
+"Model D renders silence" was true of `dawdreamer` 0.9.0 and false under
+`pedalboard`; unlicensed Diva clicks; Surge parameter 265 depends on oscillator
+type; "94 Hz stepping" was our host block rate; "Mini V3 plays an octave down"
+was a defaulted Range parameter (Model D does the same). Each recorded a tool
+property that was a property of (host, version, binary hash, block size, sample
+rate, licence state, preset). Rules (#123), checked by `tools/external_claim.py`
+over `docs/external-tool-claims.json` in `make verify` and, through its test,
+`make verify-fast`. A record with no polarity or environment is REFUSED:
+
+1. **No external-tool claim without its environment tuple** -- host and version,
+   loader, machine, binary sha256, block size, sample rate, licence state, preset. Negative
+   claims included, especially.
+2. **A negative result needs a second route** (different host, loader or
+   machine) that reproduces it before it is believed.
+3. **Which host works per plugin is data** (`host_per_plugin` in that file).
+   Each entry is `unverified` or names a passing claim; `host_result()` refuses
+   unverified entries. Today every entry is unverified.
+4. **Assert what defaults wrongly, every time**: pitch, level (silence is not
+   data) and pin readback, via `external_claim.assert_readback`. Plugin defaults
+   are chosen for demos, not measurement. This rule is not yet enforced: no
+   render harness calls `assert_readback` yet. Wiring it in is follow-up work.
+
+The same applies to yosys, iverilog, ORFS and scipy defaults (`sosfiltfilt`
+`padtype`, #101).

@@ -1,32 +1,32 @@
 {
-  "engine": "fixed-model",
+  "engine": "integrated-rtl",
   "case_id": "F1A",
   "subject": "Cutoff response / low",
-  "source_commit": "01e01e1",
-  "analysis_run": "run_case@531aa8a3731d + audio_measure@2345ced894c7 at 2026-09-19T01:55:02Z",
+  "source_commit": "62809b3",
+  "analysis_run": "run_case@e57b03f5bb24 + audio_measure@ff1ae641f707 + mono_m5a_score@a27fbddee20a + scorecard@aa365a0cdcaf at 2026-09-26T22:57:44Z",
   "provenance": {
-    "engine": "fixed-model",
+    "engine": "integrated-rtl",
     "worktree": {
-      "commit": "01e01e1",
-      "described": "node/D-drums-bitexact-82-g01e01e1",
-      "branch": "refs-rescore-filters",
-      "dirty": false,
-      "uncommitted_sha256": "e3b0c44298fc1c14",
+      "commit": "62809b3",
+      "described": "node/D-drums-bitexact-618-g62809b3-dirty",
+      "branch": "feature/issue-291",
+      "dirty": true,
+      "uncommitted_sha256": "efb904e0fa43e9c7",
       "untracked_files": 0
     },
     "base_check": {
       "checked": true,
-      "origin_main": "01e01e162bcf",
+      "origin_main": "f464bffc774f",
       "behind_commits": 0,
-      "ahead_commits": 0,
+      "ahead_commits": 1,
       "n_stops_here": 11,
       "n_stops_origin_main": 11,
       "stale_dependencies": {},
       "ahead_dependencies": {},
-      "allow_stale": false,
+      "allow_stale": true,
       "problems": []
     },
-    "command": "tools/run_case.py F1A F1B F1C",
+    "command": "tools/score_f1_rtl.py --case F1A --allow-stale",
     "config": {
       "cut_hz": 250.0,
       "res_ours": 0.0,
@@ -34,33 +34,375 @@
       "probe_amp": 0.25,
       "probe_level_dbfs": -12.04,
       "n_probe_tones": 32,
-      "inject": null
+      "inject": null,
+      "engine_profile": "selected-m5a-reconstructed-filter2x",
+      "filter_calibration": "surge-type2-clean-v1",
+      "gain": 42598,
+      "ogain": 100825,
+      "sr_hz": 48000,
+      "rtl_injection": null
     },
-    "python": "3.14.7",
-    "run_at": "2026-09-19T01:55:02Z",
+    "python": "3.12.3",
+    "run_at": "2026-09-26T22:57:44Z",
     "inputs": {
-      "model/drums_fx.py": "sha256:4a0177412ff464a3",
-      "model/voice_fx.py": "sha256:771f4a21ef7617ad",
-      "model/audio_measure.py": "sha256:2345ced894c70d3d",
-      "model/reference_rigs.py": "sha256:99b1c862857a34a8",
-      "tools/run_case.py": "sha256:531aa8a3731dfdb8",
-      "tools/refprofile.py": "sha256:4bbd8e90c0a58e52",
+      "model/drums_fx.py": "sha256:9c4eebbd42eeb591",
+      "model/voice_fx.py": "sha256:876b31f280fd3ef4",
+      "model/audio_measure.py": "sha256:ff1ae641f70752d1",
+      "model/reference_rigs.py": "sha256:78de333e7ecb2d6f",
+      "tools/run_case.py": "sha256:e57b03f5bb24b291",
+      "tools/refprofile.py": "sha256:bde30e5f0a93e3e4",
+      "tools/mono_m5a_score.py": "sha256:a27fbddee20a0827",
+      "tools/measure_mono_m5a_reference.py": "sha256:7f4e6d4e820e10ef",
+      "tools/scorecard.py": "sha256:aa365a0cdcafb6c7",
       "refprofile/profile.json": "sha256:c49b2e9046de0c13",
-      "docs/scorecard/cases.csv": "sha256:a51ac5844f32873e",
+      "docs/scorecard/cases.csv": "sha256:7ca634a856eeb8cc",
       "frozen:surge-type2/lp-cut250-res0.00": "sha256:bd2279368babf5b6",
-      "frozen:surge-type2/lp-open20k-res0.00": "sha256:ad30cebd73b77be3"
+      "frozen:surge-type2/lp-open20k-res0.00": "sha256:ad30cebd73b77be3",
+      "tools/f1_filter_path.py": "sha256:027233caa2f57ae4",
+      "tools/probes/f1_selected_path.py": "sha256:ee680e654b55625e",
+      "model/filter_rate_chain.py": "sha256:134b958dec5308fd",
+      "model/fixed.py": "sha256:eec1c66158a611dc",
+      "rtl:tb_f1_chain": "sha256:5434ab12480a936a",
+      "rtl:ladder_dp_n": "sha256:22e2be19863b4d07",
+      "rtl:rate_conv_2x": "sha256:0e28468820bddbf9"
     },
     "artefacts": {
-      "ours": "build/scorecard/F1A-ours-response.json",
+      "ours": "build/scorecard/F1A-ours-response-rtl.json",
       "reference": "cache/surge-type2/lp-cut250-res0.00.wav"
     },
-    "outcome_code": 1,
+    "outcome_code": 0,
     "outcome_code_meaning": "0 match, 1 mismatch (a result), 2 did not run (no evidence)"
   },
   "reference_profile": "surge-type2:surge-type2/lp-cut250-res0.00 (commanded 250 Hz, readback 250.0 Hz, resonance 0.0), frozen at daf9e64",
   "reference_identity": "1.2.3 org.surge-synth-team.surge-xt, binary sha256 2bc28ffe729965aa; LP Vintage Ladder subtype Type 2 = sst-filters VintageLadder::Huov, Huovilainen DAFx-04, the same paper DR 0001 implements. Rendered once through the qualified rig of #87 and frozen: this result did not run a plugin.",
-  "render_run": "reference_rigs.OurLadder@99b1c862857a stepped tone, 32 frequencies 40-12000 Hz, amp 0.25 (-12.04 dBFS), cutoff 250 Hz, resonance 0.0 (k = 4*res, so this is our zero), 48000 Hz, no resampling anywhere",
-  "audio": "reference surge-type2/lp-cut250-res0.00 (frozen, sha256 bd2279368bab); ours build/scorecard/F1A-ours-response.json",
+  "model_path": {
+    "path_version": "f1-filter-path-v1",
+    "engine_profile": "selected-m5a-reconstructed-filter2x",
+    "filter_calibration": "surge-type2-clean-v1",
+    "calibration_definition": {
+      "input_scale": 0.25,
+      "base_volts_per_unit": 0.13,
+      "source": "docs/scorecard/f1-level/selection-rule.md (#231), s = 1/4 frozen across F1A-F1C and all three development levels",
+      "expected_words_res0_drive1": {
+        "gain": 42598,
+        "ogain": 100825
+      }
+    },
+    "gain_ogain_res0_drive1": [
+      42598,
+      100825
+    ],
+    "legacy_gain_ogain_res0_drive1": [
+      170394,
+      25206
+    ],
+    "identity": {
+      "ladder_class": "RateConvertedLadder",
+      "factor": 2,
+      "causal": true,
+      "preserve_headroom": true,
+      "latency_frames": 20,
+      "out_bits": 19,
+      "g_rom_bits": 7,
+      "k_rom_bits": 5
+    },
+    "rom": {
+      "CUT_TRIM": 1.03,
+      "coefficient_oversample": 2,
+      "g_rom_sha256": "48c6c974faf01776",
+      "k_rom_sha256": "f27ec0e198d0b1f8"
+    },
+    "exact_match": {
+      "frames": 12000,
+      "calibration_in_image": "surge-type2-clean-v1",
+      "voice_words_entering": [
+        [
+          42598,
+          100825
+        ]
+      ],
+      "probe_words_entering": [
+        [
+          42598,
+          100825
+        ]
+      ],
+      "g_mismatches": 0,
+      "k_mismatches": 0,
+      "ladder_mismatches": 0,
+      "ladder_sha256": "fdf85a20b6f0c4e7",
+      "ok": true
+    },
+    "engine": "integrated-rtl",
+    "rtl_chain": {
+      "chain_version": "f1-rtl-filter-chain-v1",
+      "bench": "rtl-sketch/tb_f1_chain.v",
+      "modules": [
+        "rtl-sketch/rate_conv_2x.v (interpolation and decimation)",
+        "rtl-sketch/ladder_dp_n.v (NCH=1, os2x=0, OW=19)"
+      ],
+      "wired_as": "voice_dp.v VOICE_FILTER_2X filter block: interp -> ladder subframe 0 -> ladder subframe 1 -> decimate",
+      "tanh_rom": "tanh16.hex",
+      "ladder_cfg": {
+        "state_bits": 24,
+        "state_q": 20,
+        "tanh_entries": 16,
+        "interp": true,
+        "out_bits": 19
+      },
+      "simulator": "iverilog",
+      "simulator_versions": {
+        "iverilog": "Icarus Verilog version 13.0 (stable) (v13_0)",
+        "vvp": "Icarus Verilog runtime version 13.0 (stable) (v13_0)"
+      },
+      "rtl_injection": null,
+      "frames_limit": null,
+      "source_sha256": {
+        "rtl-sketch/tb_f1_chain.v": "5434ab12480a936a",
+        "rtl-sketch/rate_conv_2x.v": "0e28468820bddbf9",
+        "rtl-sketch/ladder_dp_n.v": "22e2be19863b4d07",
+        "rtl-sketch/tanh16.hex": "a5c4862a7e902a1b",
+        "tools/f1_rtl_filter_path.py": "12cb43f58e168f0b",
+        "tools/f1_filter_path.py": "027233caa2f57ae4",
+        "tools/probes/f1_selected_path.py": "ee680e654b55625e",
+        "model/filter_rate_chain.py": "134b958dec5308fd",
+        "model/fixed.py": "eec1c66158a611dc"
+      },
+      "curves": [
+        {
+          "tag": "cut250-res0p0",
+          "cut_hz": 250.0,
+          "res": 0.0,
+          "engine": "integrated-rtl",
+          "chain_version": "f1-rtl-filter-chain-v1",
+          "regs": {
+            "cut_lo": 250,
+            "k": 0,
+            "gain": 42598,
+            "ogain": 100825,
+            "res": 0.0,
+            "drive": 1.0,
+            "filter_calibration": "surge-type2-clean-v1"
+          },
+          "words_driven": {
+            "g": 1089,
+            "k_eff": 0,
+            "gain": 42598,
+            "ogain": 100825
+          },
+          "words_entering": [
+            [
+              42598,
+              100825
+            ]
+          ],
+          "g_q16": 1089,
+          "k_eff_q14": 0,
+          "frames": 442296,
+          "n_tones": 32,
+          "reconstruction_would_clip": 0,
+          "reconstruction_max_abs_q15": 9313,
+          "interp_clamp_q15": 65535,
+          "reconstruction_within_rtl_interp_clamp": true,
+          "output_max_abs": 7797,
+          "output_sha256": "5e8ec644023d1229",
+          "model_output_sha256": "5e8ec644023d1229",
+          "rtl_vs_model": {
+            "frames": 442296,
+            "mismatches": 0,
+            "first_mismatch_frame": null,
+            "first_mismatch_model": null,
+            "first_mismatch_rtl": null,
+            "max_abs_error_lsb": 0,
+            "bit_exact": true,
+            "model_sha256": "5e8ec644023d1229",
+            "rtl_sha256": "5e8ec644023d1229"
+          },
+          "rtl_injection": null,
+          "simulator": "iverilog",
+          "simulator_versions": {
+            "iverilog": "Icarus Verilog version 13.0 (stable) (v13_0)",
+            "vvp": "Icarus Verilog runtime version 13.0 (stable) (v13_0)"
+          },
+          "compile_command": "/home/ubuntu/.local/bin/iverilog -g2012 -o /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp -Ptb_f1_chain.LOG2N=4 -Ptb_f1_chain.ROM_FILE=\"tanh16.hex\" -Ptb_f1_chain.OW=19 tb_f1_chain.v rate_conv_2x.v ladder_dp_n.v",
+          "simulate_command": "/home/ubuntu/.local/bin/vvp -n /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp +vec=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut250-res0p0-in.txt +out=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut250-res0p0-out.txt +g=1089 +k=0 +gain=42598 +ogain=100825"
+        },
+        {
+          "tag": "cut20000-res0p0",
+          "cut_hz": 20000.0,
+          "res": 0.0,
+          "engine": "integrated-rtl",
+          "chain_version": "f1-rtl-filter-chain-v1",
+          "regs": {
+            "cut_lo": 20000,
+            "k": 0,
+            "gain": 42598,
+            "ogain": 100825,
+            "res": 0.0,
+            "drive": 1.0,
+            "filter_calibration": "surge-type2-clean-v1"
+          },
+          "words_driven": {
+            "g": 47327,
+            "k_eff": 0,
+            "gain": 42598,
+            "ogain": 100825
+          },
+          "words_entering": [
+            [
+              42598,
+              100825
+            ]
+          ],
+          "g_q16": 47327,
+          "k_eff_q14": 0,
+          "frames": 442296,
+          "n_tones": 32,
+          "reconstruction_would_clip": 0,
+          "reconstruction_max_abs_q15": 9313,
+          "interp_clamp_q15": 65535,
+          "reconstruction_within_rtl_interp_clamp": true,
+          "output_max_abs": 8418,
+          "output_sha256": "3a3fdc64a67efe1d",
+          "model_output_sha256": "3a3fdc64a67efe1d",
+          "rtl_vs_model": {
+            "frames": 442296,
+            "mismatches": 0,
+            "first_mismatch_frame": null,
+            "first_mismatch_model": null,
+            "first_mismatch_rtl": null,
+            "max_abs_error_lsb": 0,
+            "bit_exact": true,
+            "model_sha256": "3a3fdc64a67efe1d",
+            "rtl_sha256": "3a3fdc64a67efe1d"
+          },
+          "rtl_injection": null,
+          "simulator": "iverilog",
+          "simulator_versions": {
+            "iverilog": "Icarus Verilog version 13.0 (stable) (v13_0)",
+            "vvp": "Icarus Verilog runtime version 13.0 (stable) (v13_0)"
+          },
+          "compile_command": "/home/ubuntu/.local/bin/iverilog -g2012 -o /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp -Ptb_f1_chain.LOG2N=4 -Ptb_f1_chain.ROM_FILE=\"tanh16.hex\" -Ptb_f1_chain.OW=19 tb_f1_chain.v rate_conv_2x.v ladder_dp_n.v",
+          "simulate_command": "/home/ubuntu/.local/bin/vvp -n /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp +vec=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut20000-res0p0-in.txt +out=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut20000-res0p0-out.txt +g=47327 +k=0 +gain=42598 +ogain=100825"
+        }
+      ],
+      "bit_exact_against_model": true
+    },
+    "cut_registers": {
+      "engine": "integrated-rtl",
+      "chain_version": "f1-rtl-filter-chain-v1",
+      "regs": {
+        "cut_lo": 250,
+        "k": 0,
+        "gain": 42598,
+        "ogain": 100825,
+        "res": 0.0,
+        "drive": 1.0,
+        "filter_calibration": "surge-type2-clean-v1"
+      },
+      "words_driven": {
+        "g": 1089,
+        "k_eff": 0,
+        "gain": 42598,
+        "ogain": 100825
+      },
+      "words_entering": [
+        [
+          42598,
+          100825
+        ]
+      ],
+      "g_q16": 1089,
+      "k_eff_q14": 0,
+      "frames": 442296,
+      "n_tones": 32,
+      "reconstruction_would_clip": 0,
+      "reconstruction_max_abs_q15": 9313,
+      "interp_clamp_q15": 65535,
+      "reconstruction_within_rtl_interp_clamp": true,
+      "output_max_abs": 7797,
+      "output_sha256": "5e8ec644023d1229",
+      "model_output_sha256": "5e8ec644023d1229",
+      "rtl_vs_model": {
+        "frames": 442296,
+        "mismatches": 0,
+        "first_mismatch_frame": null,
+        "first_mismatch_model": null,
+        "first_mismatch_rtl": null,
+        "max_abs_error_lsb": 0,
+        "bit_exact": true,
+        "model_sha256": "5e8ec644023d1229",
+        "rtl_sha256": "5e8ec644023d1229"
+      },
+      "rtl_injection": null,
+      "simulator": "iverilog",
+      "simulator_versions": {
+        "iverilog": "Icarus Verilog version 13.0 (stable) (v13_0)",
+        "vvp": "Icarus Verilog runtime version 13.0 (stable) (v13_0)"
+      },
+      "compile_command": "/home/ubuntu/.local/bin/iverilog -g2012 -o /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp -Ptb_f1_chain.LOG2N=4 -Ptb_f1_chain.ROM_FILE=\"tanh16.hex\" -Ptb_f1_chain.OW=19 tb_f1_chain.v rate_conv_2x.v ladder_dp_n.v",
+      "simulate_command": "/home/ubuntu/.local/bin/vvp -n /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp +vec=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut250-res0p0-in.txt +out=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut250-res0p0-out.txt +g=1089 +k=0 +gain=42598 +ogain=100825",
+      "simulator_report": "tb_f1_chain: DONE frames_in=442296 frames_out=442296\ntb_f1_chain.v:188: $finish called at 265377690000 (1ps)"
+    },
+    "open_registers": {
+      "engine": "integrated-rtl",
+      "chain_version": "f1-rtl-filter-chain-v1",
+      "regs": {
+        "cut_lo": 20000,
+        "k": 0,
+        "gain": 42598,
+        "ogain": 100825,
+        "res": 0.0,
+        "drive": 1.0,
+        "filter_calibration": "surge-type2-clean-v1"
+      },
+      "words_driven": {
+        "g": 47327,
+        "k_eff": 0,
+        "gain": 42598,
+        "ogain": 100825
+      },
+      "words_entering": [
+        [
+          42598,
+          100825
+        ]
+      ],
+      "g_q16": 47327,
+      "k_eff_q14": 0,
+      "frames": 442296,
+      "n_tones": 32,
+      "reconstruction_would_clip": 0,
+      "reconstruction_max_abs_q15": 9313,
+      "interp_clamp_q15": 65535,
+      "reconstruction_within_rtl_interp_clamp": true,
+      "output_max_abs": 8418,
+      "output_sha256": "3a3fdc64a67efe1d",
+      "model_output_sha256": "3a3fdc64a67efe1d",
+      "rtl_vs_model": {
+        "frames": 442296,
+        "mismatches": 0,
+        "first_mismatch_frame": null,
+        "first_mismatch_model": null,
+        "first_mismatch_rtl": null,
+        "max_abs_error_lsb": 0,
+        "bit_exact": true,
+        "model_sha256": "3a3fdc64a67efe1d",
+        "rtl_sha256": "3a3fdc64a67efe1d"
+      },
+      "rtl_injection": null,
+      "simulator": "iverilog",
+      "simulator_versions": {
+        "iverilog": "Icarus Verilog version 13.0 (stable) (v13_0)",
+        "vvp": "Icarus Verilog runtime version 13.0 (stable) (v13_0)"
+      },
+      "compile_command": "/home/ubuntu/.local/bin/iverilog -g2012 -o /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp -Ptb_f1_chain.LOG2N=4 -Ptb_f1_chain.ROM_FILE=\"tanh16.hex\" -Ptb_f1_chain.OW=19 tb_f1_chain.v rate_conv_2x.v ladder_dp_n.v",
+      "simulate_command": "/home/ubuntu/.local/bin/vvp -n /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/tb_f1_chain.vvp +vec=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut20000-res0p0-in.txt +out=/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-291/rtl-sketch/build/f1-rtl/clean-1714212/f1-chain-cut20000-res0p0-out.txt +g=47327 +k=0 +gain=42598 +ogain=100825",
+      "simulator_report": "tb_f1_chain: DONE frames_in=442296 frames_out=442296\ntb_f1_chain.v:188: $finish called at 265377690000 (1ps)"
+    }
+  },
+  "render_run": "selected Mono filter path selected-m5a-reconstructed-filter2x (RTL filter chain f1-rtl-filter-chain-v1: rate_conv_2x.v + ladder_dp_n.v (NCH=1, os2x=0, OW=19) under iverilog, composed by rtl-sketch/tb_f1_chain.v as voice_dp.v composes them) under filter calibration surge-type2-clean-v1 (gain 42598, ogain 100825 from VoiceFx.patch_regs; exact match to a selected-voice note 12000 frames, 0 mismatches); stepped tone, 32 frequencies 40-12000 Hz, amp 0.25 (-12.04 dBFS), cutoff 250 Hz, resonance 0.0 (k = 4*res, so this is our zero), 48000 Hz, no resampling anywhere",
+  "audio": "reference surge-type2/lp-cut250-res0.00 (frozen, sha256 bd2279368bab); ours build/scorecard/F1A-ours-response-rtl.json",
   "tolerance_policy": {
     "frequency": "10 % of the reference value -- the TR-808's own component tolerance on an oscillator's f0 (docs/tr808-reference.md 1.7)",
     "time": "50 % of the reference value -- 1.7 states +-50 % on Q, and for these bridged-T resonators tau is proportional to Q",
@@ -92,41 +434,148 @@
   },
   "metrics": {
     "Corner frequency": {
-      "value": 97.8537,
+      "value": 108.6651,
       "units": "Hz",
       "reference": 117.6344,
-      "error": -19.7808,
+      "error": -8.9693,
       "tolerance": 11.7634,
       "valid": true,
-      "tolerance_basis": "frequency"
+      "tolerance_basis": "frequency",
+      "purpose": "match"
     },
     "low-band gain": {
-      "value": -1.2801,
+      "value": -0.8967,
       "units": "dB",
       "reference": -0.9073,
-      "error": -0.3728,
+      "error": 0.0106,
       "tolerance": 3.0,
       "valid": true,
-      "tolerance_basis": "energy ratio"
+      "tolerance_basis": "energy ratio",
+      "purpose": "match"
     },
     "rolloff": {
-      "value": -18.5395,
+      "value": -17.7933,
       "units": "dB/oct",
       "reference": -18.6879,
-      "error": 0.1483,
+      "error": 0.8946,
       "tolerance": 1.5,
       "valid": true,
-      "tolerance_basis": "rolloff"
+      "tolerance_basis": "rolloff",
+      "purpose": "match"
     }
   },
   "diagnostics": {
-    "ours_corner_hz": 97.8537,
+    "ours_corner_hz": 108.6651,
+    "dut_probe_grid_sha256": "449ca4205ccd35f3",
+    "reference_axis_sha256": "449ca4205ccd35f3",
     "reference_corner_hz": 117.6344,
-    "ours_wide_open_plateau_db": -0.0009,
+    "ours_wide_open_plateau_db": -0.0006,
     "reference_wide_open_plateau_db": -9.2894,
+    "legacy_standalone": {
+      "engine": "reference_rigs.OurLadder (legacy base-rate standalone component, global gain/ogain words)",
+      "corner_hz": 97.8537,
+      "lowband_db": -1.2801,
+      "rolloff_db_oct": -16.8728,
+      "wide_open_plateau_db": -0.0009
+    },
     "reference_commanded_cutoff_hz": 250.0,
     "reference_cutoff_readback_hz": 250.0,
     "probe_level_dbfs": -12.04,
     "note": "levels are never compared across the two instruments: every number here is a ratio inside one of them, a frequency, or a slope. The wide-open plateaus are recorded so the discarded absolute levels are still on the record."
-  }
+  },
+  "engine_comparison": {
+    "why": "#94: an integrated-rtl reading of a case whose twin is fixed-model. A disagreement means every model row on the board needs re-reading, so both readings are on this record rather than one overwriting the other.",
+    "rtl_vs_model_samples": {
+      "curves": [
+        {
+          "tag": "cut250-res0p0",
+          "cut_hz": 250.0,
+          "frames": 442296,
+          "mismatches": 0,
+          "first_mismatch_frame": null,
+          "first_mismatch_model": null,
+          "first_mismatch_rtl": null,
+          "max_abs_error_lsb": 0,
+          "bit_exact": true,
+          "model_sha256": "5e8ec644023d1229",
+          "rtl_sha256": "5e8ec644023d1229"
+        },
+        {
+          "tag": "cut20000-res0p0",
+          "cut_hz": 20000.0,
+          "frames": 442296,
+          "mismatches": 0,
+          "first_mismatch_frame": null,
+          "first_mismatch_model": null,
+          "first_mismatch_rtl": null,
+          "max_abs_error_lsb": 0,
+          "bit_exact": true,
+          "model_sha256": "3a3fdc64a67efe1d",
+          "rtl_sha256": "3a3fdc64a67efe1d"
+        }
+      ],
+      "bit_exact": true,
+      "total_frames": 884592,
+      "total_mismatches": 0
+    },
+    "rtl_vs_model_metrics": {
+      "twin_present": true,
+      "twin_engine": "fixed-model",
+      "twin_source_commit": "e356498",
+      "twin_analysis_run": "run_case@06eba1bead1c + audio_measure@cd27a0a67dfd + mono_m5a_score@a27fbddee20a + scorecard@2094d43f15e9 at 2026-09-26T01:54:24Z",
+      "twin_state": "pass",
+      "rtl_state": "pass",
+      "twin_worst": 0.7624751347399561,
+      "rtl_worst": 0.7624751347399561,
+      "state_changed": false,
+      "metrics": {
+        "Corner frequency": {
+          "twin_value": 108.6651,
+          "rtl_value": 108.6651,
+          "units": "Hz",
+          "reference": 117.6344,
+          "delta": 0.0,
+          "twin_error": -8.9693,
+          "rtl_error": -8.9693,
+          "same": true
+        },
+        "low-band gain": {
+          "twin_value": -0.8967,
+          "rtl_value": -0.8967,
+          "units": "dB",
+          "reference": -0.9073,
+          "delta": 0.0,
+          "twin_error": 0.0106,
+          "rtl_error": 0.0106,
+          "same": true
+        },
+        "rolloff": {
+          "twin_value": -17.7933,
+          "rtl_value": -17.7933,
+          "units": "dB/oct",
+          "reference": -18.6879,
+          "delta": 0.0,
+          "twin_error": 0.8946,
+          "rtl_error": 0.8946,
+          "same": true
+        }
+      },
+      "metrics_that_moved": [],
+      "agrees": true
+    },
+    "controls": {
+      "exercised_by_this_stimulus": [
+        "F1_CHAIN_SKIP_INTERP",
+        "F1_CHAIN_DROP_DECIM"
+      ],
+      "not_exercised_by_this_stimulus": {
+        "LADDER_FB": "resonance 0 makes k_eff 0, so the feedback term is multiplied by zero",
+        "LADDER_SAT": "the -12 dBFS probe never drives the ladder state to a rail",
+        "LADDER_TANH_CLAMP": "|state| stays below 4.0, so the tanh clamp never engages",
+        "RATE_CONV_2X_CLAMP": "the interpolated word never passes +/-32767"
+      },
+      "why": "which RTL injections this stimulus reaches was measured, not assumed: at resonance 0 the ladder's feedback term is multiplied by zero and at -12 dBFS nothing saturates, so the arithmetic-corner controls cannot fire here and the composition controls are the ones that do."
+    }
+  },
+  "source_dirty": true
 }

@@ -1,0 +1,23 @@
+[
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --json docs/scorecard/f1-level/results.json > docs/scorecard/f1-level/results.log 2>&1",
+    "state": "PASS",
+    "rc": 0,
+    "out": "",
+    "secs": 111.98073101043701
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject CONSTRUCTOR_ONLY > docs/scorecard/f1-level/control-constructor-only.log 2>&1",
+    "state": "NO-VERDICT",
+    "rc": 2,
+    "out": "",
+    "secs": 74.60299897193909
+  },
+  {
+    "cmd": "/Users/joseph/dev/gf180-parasynth/.venv/bin/python tools/probes/f1_level_scaling.py --inject WORDS_NOT_ENTERING > docs/scorecard/f1-level/control-words-not-entering.log 2>&1",
+    "state": "NO-VERDICT",
+    "rc": 2,
+    "out": "",
+    "secs": 56.6850688457489
+  }
+]

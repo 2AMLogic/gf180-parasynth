@@ -262,7 +262,7 @@ def _reg_name(a: int) -> str:
     if dx.A_ACCENT <= a < dx.A_ACCENT + 8: return f"ACCENT[{a - dx.A_ACCENT}]"
     if dx.A_OSC <= a < dx.A_OSC + 6: return f"OSC_INC[{a - dx.A_OSC}]"
     if dx.A_ENV <= a < dx.A_ENV + 48:
-        e, f = divmod(a - dx.A_ENV, 4); return f"ENV_{('CTL', 'PEAK', 'RATE', '-')[f]}[{e}]"
+        e, f = divmod(a - dx.A_ENV, 4); return f"ENV_{('CTL', 'PEAK', 'RATE', 'FRATE')[f]}[{e}]"
     if dx.A_PATH <= a < dx.A_PATH + 16: return f"PATH[{a - dx.A_PATH}]"
     if dx.A_MODE <= a < dx.A_MODE + 48:
         m, f = divmod(a - dx.A_MODE, 4); return f"MODE_{('A1', 'A2', 'AMP', 'NUM')[f]}[{m}]"

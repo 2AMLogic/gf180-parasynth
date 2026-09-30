@@ -1,0 +1,623 @@
+#!/usr/bin/env python3
+"""Tests for check_route.py and run_librelane.py -- the parsing and the refusals.
+
+A checker's only failure mode that matters is a FALSE GREEN, so most of these are
+cases that once produced one, or would:
+
+  * `stat -width` gives counts and widths; reading the count alone under-reports
+    every multi-bit register.
+  * `stat`'s trailing `=== design hierarchy ===` section holds the FLATTENED
+    totals.  Attributing them to the last module seen reported synth_top's own
+    29 flops as 12,572.
+  * a module with no flops of its own must report 0, not be absent, or the caller
+    REFUSES on a correct design.
+  * `$mem` is not a flop.  (The cause of the other wrong-then-right number here:
+    without the `memory` pass drum_regs censuses at 11 instead of 3,520.)
+  * the DEF bucketer must key on the MASTER name for sequential-ness -- an
+    instance name proves nothing about what was placed.
+
+Run: python3 -m pytest pnr/shuttle/test_check_route.py -q
+"""
+
+import os
+import sys
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import check_route as cr           # noqa: E402
+import run_librelane as rl         # noqa: E402
+
+
+# --------------------------------------------------------------------------- #
+# yosys stat parsing
+# --------------------------------------------------------------------------- #
+
+STAT = """
+6. Printing statistics.
+
+=== $paramod$deadbeef\\drum_regs ===
+
+   Number of wires:               1000
+   Number of cells:                177
+          1   $dff_11
+         63   $dff_16
+         16   $dff_2
+         24   $dff_24
+         23   $dff_25
+         32   $dff_26
+         18   $dff_27
+        400   $mux
+
+=== $paramod$c0ffee\\drum_kit ===
+
+   Number of cells:                  2
+          1   $paramod$1\\drum_dp
+          1   $paramod$2\\modal_dp
+
+=== synth_top ===
+
+   Number of cells:                 40
+          1   $dff_8
+          1   $dff_16
+          3   $dff_1
+          1   $mem
+
+=== design hierarchy ===
+
+   synth_top                         1
+       9999   $dff_16
+       9999   $dff_1
+"""
+
+
+def test_widths_are_multiplied_not_counted():
+    # 1*11 + 63*16 + 16*2 + 24*24 + 23*25 + 32*26 + 18*27 = 3520
+    got = cr.parse_yosys_stat(STAT)
+    assert got["drum_regs"] == 3520
+
+
+def test_design_hierarchy_section_is_not_attributed_to_a_module():
+    got = cr.parse_yosys_stat(STAT)
+    # 1*8 + 1*16 + 3*1 = 27, NOT 27 + 9999*16 + 9999
+    assert got["synth_top"] == 27
+
+
+def test_module_with_no_flops_reports_zero_not_absent():
+    got = cr.parse_yosys_stat(STAT)
+    assert got["drum_kit"] == 0
+
+
+def test_mem_is_not_a_flop():
+    # synth_top's section carries a $mem; it must not contribute.
+    assert cr.parse_yosys_stat(STAT)["synth_top"] == 27
+
+
+def test_only_requested_modules_are_reported():
+    assert set(cr.parse_yosys_stat(STAT)) <= set(cr.CENSUS_MODULES)
+
+
+@pytest.mark.parametrize("raw,want", [
+    ("$paramod$deadbeef\\drum_regs", "drum_regs"),
+    ("$paramod\\ladder_dp_n\\NCH=2", "NCH=2"),   # documents the shape we do NOT see
+    ("\\i2s_tx", "i2s_tx"),
+    ("spi_ctl", "spi_ctl"),
+])
+def test_module_base_name(raw, want):
+    assert cr.module_base_name(raw) == want
+
+
+# --------------------------------------------------------------------------- #
+# DEF parsing / bucketing
+# --------------------------------------------------------------------------- #
+
+DEF = """VERSION 5.8 ;
+DESIGN chip_top ;
+COMPONENTS 6 ;
+- core.u_synth.u_dregs.a1_reg[0][0] gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 100 100 ) N ;
+- core.u_synth.u_drums.bank.y_reg[3] gf180mcu_fd_sc_mcu7t5v0__sdffq_2 + PLACED ( 200 100 ) N ;
+- core.u_synth.u_voice.u_ladder.s[1] gf180mcu_fd_sc_mcu7t5v0__dffrnq_1 + PLACED ( 300 100 ) N ;
+- core.u_synth.u_dregs._0123_ gf180mcu_fd_sc_mcu7t5v0__nand2_1 + PLACED ( 400 100 ) N ;
+- clk_pad gf180mcu_fd_io__in_s + FIXED ( 0 0 ) N ;
+- qrcode_id gf180mcu_ws_ip__qrcode_id + FIXED ( 26 26 ) N ;
+END COMPONENTS
+END DESIGN
+"""
+
+
+@pytest.fixture()
+def def_file(tmp_path):
+    p = tmp_path / "final.def"
+    p.write_text(DEF)
+    return str(p)
+
+
+def test_def_components_parsed(def_file):
+    comps = cr.parse_def_components(def_file)
+    assert len(comps) == 6
+    assert ("clk_pad", "gf180mcu_fd_io__in_s") in comps
+
+
+def test_sequential_is_keyed_on_the_master_not_the_instance():
+    # a combinational cell under u_dregs must NOT count as a flop
+    assert cr.SEQ_MASTER.search("gf180mcu_fd_sc_mcu7t5v0__nand2_1") is None
+    assert cr.SEQ_MASTER.search("gf180mcu_fd_sc_mcu7t5v0__dffq_1")
+    assert cr.SEQ_MASTER.search("gf180mcu_fd_sc_mcu7t5v0__sdffq_2")
+    assert cr.SEQ_MASTER.search("gf180mcu_fd_sc_mcu7t5v0__dffrnq_1")
+
+
+def test_an_rtl_instance_path_is_not_what_the_def_contains():
+    """The retired assumption, kept as the record of a false RED.
+
+    This test used to assert that `core.u_synth.u_dregs.a1_reg[0][0]` buckets as
+    drum_regs, because that is what the RTL hierarchy looks like. No such name exists
+    in the DEF: synthesis flattens before placement and every instance is an
+    auto-name. Keying on instance names put ALL 12,275 placed flops in "outside
+    synth_top", reported drum_regs at zero, and printed the collapse signature for a
+    layout that turned out to place exactly the 3,520 flops the RTL declares.
+    """
+    assert cr.bucket_of("_141690_", DREGS_NETS) == cr.OUTSIDE
+    assert cr.bucket_of("clk_pad", DREGS_NETS) == cr.OUTSIDE
+    # and the names that ARE in the DEF resolve
+    assert "modal_dp" in cr.bucket_of("i_chip_core.u_synth.u_drums.bank.y", DREGS_NETS)
+    assert "ladder_dp_n" in cr.bucket_of(r"i_chip_core.u_synth.u_voice.u_ladder.s\[1\]",
+                                         DREGS_NETS)
+
+
+def test_pad_and_ws_ip_masters_are_distinguished():
+    assert cr.PAD_MASTER.search("gf180mcu_fd_io__in_s")
+    assert cr.PAD_MASTER.search("gf180mcu_ef_io__bi_t")
+    assert not cr.PAD_MASTER.search("gf180mcu_ws_ip__qrcode_id")
+    assert cr.WS_IP_MASTER.search("gf180mcu_ws_ip__qrcode_id")
+
+
+def test_no_def_refuses_rather_than_passing(tmp_path):
+    with pytest.raises(cr.Refusal):
+        cr.find_final_def(str(tmp_path))
+
+
+def test_find_final_def_takes_the_latest_step(tmp_path):
+    for step in ("05-floorplan", "40-openroad-detailedrouting"):
+        d = tmp_path / step
+        d.mkdir()
+        (d / "chip_top.def").write_text(DEF)
+    got = cr.find_final_def(str(tmp_path))
+    assert "40-openroad-detailedrouting" in got
+
+
+# --------------------------------------------------------------------------- #
+# run_librelane preconditions
+# --------------------------------------------------------------------------- #
+
+def test_image_tag_follows_the_host_arch(monkeypatch):
+    monkeypatch.setattr(rl.platform, "machine", lambda: "x86_64")
+    assert rl.default_image().endswith("-x86_64")
+    monkeypatch.setattr(rl.platform, "machine", lambda: "aarch64")
+    assert rl.default_image().endswith("-aarch64")
+
+
+def test_unknown_arch_refuses_rather_than_emulating(monkeypatch):
+    monkeypatch.setattr(rl.platform, "machine", lambda: "riscv64")
+    with pytest.raises(rl.Refusal):
+        rl.default_image()
+
+
+def test_missing_pad_library_refuses(tmp_path):
+    root = tmp_path / "gf180mcuD"
+    (root / "libs.tech" / "librelane").mkdir(parents=True)
+    (root / "libs.tech" / "librelane" / "config.tcl").write_text("")
+    (root / "libs.ref" / "gf180mcu_fd_sc_mcu7t5v0").mkdir(parents=True)
+    with pytest.raises(rl.Refusal, match="gf180mcu_fd_io"):
+        rl.check_pdk(str(tmp_path), "gf180mcuD", "gf180mcu_fd_sc_mcu7t5v0", "gf180mcu_fd_io")
+
+
+def test_pad_library_without_blackbox_pp_refuses(tmp_path):
+    root = tmp_path / "gf180mcuD"
+    (root / "libs.tech" / "librelane").mkdir(parents=True)
+    (root / "libs.tech" / "librelane" / "config.tcl").write_text("")
+    (root / "libs.ref" / "gf180mcu_fd_sc_mcu7t5v0").mkdir(parents=True)
+    vdir = root / "libs.ref" / "gf180mcu_fd_io" / "verilog"
+    vdir.mkdir(parents=True)
+    (vdir / "gf180mcu_fd_io.v").write_text("")      # the volare-era build
+    with pytest.raises(rl.Refusal, match="blackbox_pp"):
+        rl.check_pdk(str(tmp_path), "gf180mcuD", "gf180mcu_fd_sc_mcu7t5v0", "gf180mcu_fd_io")
+
+
+def test_openlane1_era_pdk_refuses(tmp_path):
+    root = tmp_path / "gf180mcuD"
+    (root / "libs.tech" / "openlane").mkdir(parents=True)
+    with pytest.raises(rl.Refusal, match="libs.tech/librelane"):
+        rl.check_pdk(str(tmp_path), "gf180mcuD", "gf180mcu_fd_sc_mcu7t5v0", "gf180mcu_fd_io")
+
+
+def test_verilog_files_are_read_from_the_config_not_duplicated():
+    files = rl.verilog_files(rl.HERE)
+    names = [os.path.basename(f) for f in files]
+    assert "chip_top.sv" in names and "chip_core.sv" in names
+    assert "synth_top.v" in names and "drum_kit.v" in names
+    # in place, under rtl-sketch/ -- not copied, or the $readmemh paths break
+    assert any(os.path.join("rtl-sketch", "voice_dp.v") in f for f in files)
+
+
+def test_floorplan_mode_does_not_ask_for_final_views():
+    args = rl.stage_args("floorplan", "/runs")
+    assert "--save-views-to" not in args
+    assert args == ["--to", "OpenROAD.Floorplan"]
+
+
+def test_full_mode_skips_signoff_but_still_saves_views():
+    args = rl.stage_args("full", "/runs")
+    assert "--save-views-to" in args
+    for step in ("Magic.DRC", "Netgen.LVS", "KLayout.XOR", "Checker.KLayoutAntenna"):
+        assert step in args
+    # the detailed router is NOT skipped: `full` still routes
+    assert "OpenROAD.DetailedRouting" not in args
+
+
+def test_signoff_mode_skips_nothing():
+    assert "--skip" not in rl.stage_args("signoff", "/runs")
+
+
+def test_density_is_layered_last_and_only_when_present(tmp_path):
+    files = rl.config_files(rl.HERE, str(tmp_path / "absent.yaml"))
+    assert len(files) == 3
+    d = tmp_path / "density.yaml"
+    d.write_text("PL_TARGET_DENSITY_PCT: 55\n")
+    files = rl.config_files(rl.HERE, str(d))
+    assert files[-1] == str(d)
+
+
+def test_docker_argv_maps_host_paths_onto_themselves(monkeypatch):
+    monkeypatch.setattr(rl.platform, "machine", lambda: "x86_64")
+    argv = rl.docker_argv("img", ["/a", "/b"], "/b", ["librelane", "x"])
+    assert "-v" in argv and "/a:/a" in argv and "/b:/b" in argv
+    assert argv[argv.index("--platform") + 1] == "linux/amd64"
+    assert argv[-2:] == ["librelane", "x"]
+
+
+if __name__ == "__main__":
+    sys.exit(pytest.main([__file__, "-q"]))
+
+
+# --------------------------------------------------------------------------- #
+# metric provenance: the carried-forward pre-route number
+# --------------------------------------------------------------------------- #
+#
+# LibreLane's metrics are cumulative, so a key no later step updates survives into
+# the final payload looking like a fresh measurement.  In the halfslot run,
+# `timing__setup__ws__corner:nom_ss_125C_4v50` = -178.5 ns was written ONCE by step
+# 12 (OpenROAD.STAPrePNR, unplaced and unrouted, ideal clock) and is byte-identical
+# in every step after it.  Read naively it says the routed chip misses the slow
+# corner by more than two clock periods.  There is no routed slow corner in that run
+# at all.  These tests pin the discriminator.
+
+def _fake_run(tmp_path, steps):
+    """steps = [(dirname, metrics dict)] -- writes a minimal LibreLane run tree."""
+    for name, metrics in steps:
+        d = tmp_path / name
+        d.mkdir()
+        (d / "state_out.json").write_text(__import__("json").dumps({"metrics": metrics}))
+    return str(tmp_path)
+
+
+def test_metric_source_step_names_the_step_that_last_changed_a_key(tmp_path):
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5, "a": 1}),
+        ("30-openroad-stamidpnr", {"timing__setup__ws__corner:ss": -178.5, "a": 2}),
+        ("43-openroad-detailedrouting", {"timing__setup__ws__corner:ss": -178.5, "a": 2,
+                                         "route__drc_errors": 0}),
+    ])
+    src = cr.metric_source_step(run)
+    # carried forward unchanged for two steps -- still attributed to step 12
+    assert src["timing__setup__ws__corner:ss"] == "12-openroad-staprepnr"
+    assert src["a"] == "30-openroad-stamidpnr"
+    assert src["route__drc_errors"] == "43-openroad-detailedrouting"
+
+
+def test_post_route_keys_excludes_the_carried_forward_pre_route_corner(tmp_path):
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5}),
+        ("43-openroad-detailedrouting", {"timing__setup__ws__corner:ss": -178.5,
+                                         "route__drc_errors": 7}),
+    ])
+    post = cr.post_route_keys(run)
+    assert "route__drc_errors" in post
+    assert "timing__setup__ws__corner:ss" not in post
+
+
+def test_post_route_keys_is_empty_before_detailed_routing(tmp_path):
+    """A run that never reached the router has NOTHING post-route in it.
+
+    Returning anything here would let a placement-only run be reported as a route.
+    """
+    run = _fake_run(tmp_path, [
+        ("12-openroad-staprepnr", {"timing__setup__ws__corner:ss": -178.5}),
+        ("27-openroad-globalplacement", {"design__instance__utilization": 0.73}),
+    ])
+    assert cr.post_route_keys(run) == set()
+
+
+def test_worst_setup_refuses_to_fall_back_to_the_nominal_corner(tmp_path):
+    """The whole point: NOT MEASURED must not become "fine".
+
+    `timing__setup__ws` is the nominal corner.  On the halfslot run it is +34 ns
+    while the only per-corner numbers present are pre-route.  A fallback would
+    report +34 as the design's worst slack.
+    """
+    import report_halfslot as rh
+    m = {"timing__setup__ws": 34.06, "timing__setup__ws__corner:ss": -178.5}
+    slack, why = rh.worst_setup(m, post=set())
+    assert slack is None
+    assert "after detailed routing" in why
+    # ...and with a post-route corner present it does report it
+    slack, corner = rh.worst_setup(m, post={"timing__setup__ws__corner:ss"})
+    assert (slack, corner) == (-178.5, "ss")
+
+
+def test_verdict_marks_an_unfinished_route_not_measured_rather_than_failed(tmp_path):
+    """NOT MEASURED and FAILED are different outcomes and must read differently."""
+    import report_halfslot as rh
+    m = {"design__instance__utilization": 0.73,
+         "design__instance__count__padcells": 754,
+         "timing__setup__ws": 34.06,
+         "timing__setup__ws__corner:nom_ss_125C_4v50": -178.5}
+    body = rh.verdict_section(m, post=set(), src={})
+    assert "*not measured*" in body
+    assert "NOT MEASURED is not FAILED" in body
+    # the pre-route -178.5 must not be presented as a failed post-route corner
+    assert "-178.500" not in body
+
+
+# --------------------------------------------------------------------------- #
+# bucketing a flop by the net its Q drives
+# --------------------------------------------------------------------------- #
+#
+# The false RED this replaced: keying on DEF *instance* names put all 12,275 placed
+# sequential cells in "outside synth_top" and reported drum_regs at zero -- the
+# collapse signature, for a healthy layout.  The netlist is flattened before
+# placement, so instances are auto-names and only NET names carry hierarchy.
+
+DREGS_NETS = {"d_a1", "d_a2", "d_path", "d_stops", "d_soft_rst"}
+
+
+def test_net_stem_removes_the_def_escapes_on_a_bit_select():
+    r"""DEF writes `d_a1\[0\]`.  Splitting on '[' without unescaping leaves a
+    trailing backslash on the stem -- which kept the drum_regs row at ZERO through
+    the first attempt at this very fix."""
+    assert cr.net_stem(r"i_chip_core.u_synth.d_a1\[0\]") == "d_a1"
+    assert cr.net_stem("i_chip_core.u_synth.d_stops") == "d_stops"
+    assert cr.net_stem("_000123_") == "_000123_"
+
+
+def test_bucket_of_uses_net_hierarchy_and_the_dregs_port_set():
+    assert cr.bucket_of(r"i_chip_core.u_synth.u_drums.bank.foo\[3\]",
+                        DREGS_NETS).startswith("u_drums.bank")
+    assert cr.bucket_of("i_chip_core.u_synth.u_voice.u_ladder.acc",
+                        DREGS_NETS).startswith("u_voice.u_ladder")
+    assert cr.bucket_of(r"i_chip_core.u_synth.d_a1\[100\]", DREGS_NETS) == cr.DREGS_BUCKET
+    assert cr.bucket_of("i_chip_core.u_synth.cyc", DREGS_NETS) == cr.SYNTH_OWN
+    assert cr.bucket_of("_000042_", DREGS_NETS) == cr.OUTSIDE
+
+
+def test_dregs_output_nets_is_read_from_the_rtl_and_excludes_inputs(tmp_path):
+    v = tmp_path / "synth_top.v"
+    v.write_text(
+        "drum_regs #(.ENVS(E), .MODES(M)) u_dregs (\n"
+        "    .clk(clk), .rst_n(rst_n_drum), .wr_valid(wr_drum), .wr_addr(wr_addr),\n"
+        "    .wr_data(wr_data), .soft_rst(d_soft_rst), .stops(d_stops),\n"
+        "    .a1_bus(d_a1), .num_bus(d_num));\n")
+    nets = cr.dregs_output_nets(str(v))
+    assert nets == {"d_soft_rst", "d_stops", "d_a1", "d_num"}
+    assert "clk" not in nets and "wr_data" not in nets
+
+
+def test_dregs_output_nets_refuses_when_the_instance_is_renamed(tmp_path):
+    """REFUSED, not an empty set.  An empty set silently reports drum_regs at zero,
+    which is indistinguishable from a collapsed netlist."""
+    v = tmp_path / "synth_top.v"
+    v.write_text("drum_regs #(.MODES(M)) u_registers (.clk(clk), .stops(d_stops));\n")
+    with pytest.raises(cr.Refusal):
+        cr.dregs_output_nets(str(v))
+
+
+DEF_TEXT = r"""
+COMPONENTS 5 ;
+    - _000001_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+    - _000002_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+    - _000003_ gf180mcu_fd_sc_mcu7t5v0__sdffq_1 + PLACED ( 0 0 ) N ;
+    - _000004_ gf180mcu_fd_sc_mcu7t5v0__nand2_1 + PLACED ( 0 0 ) N ;
+    - _000005_ gf180mcu_fd_sc_mcu7t5v0__dffq_1 + PLACED ( 0 0 ) N ;
+END COMPONENTS
+NETS 3 ;
+    - i_chip_core.u_synth.d_a1\[0\] ( _000001_ Q ) ( _000004_ A1 )
+      + USE SIGNAL ;
+    - i_chip_core.u_synth.u_drums.bank.busy ( _000002_ Q ) + USE SIGNAL ;
+    - i_chip_core.u_synth.d_stops ( _000003_ Q ) + USE SIGNAL ;
+END NETS
+"""
+
+
+def test_flops_by_block_counts_each_flop_once_and_spans_wrapped_nets(tmp_path):
+    """A DEF wraps a long net over several lines. A per-line parse drops exactly the
+    high-fanout nets that matter; this one is deliberately wrapped."""
+    d = tmp_path / "chip.def"
+    d.write_text(DEF_TEXT)
+    got = cr.flops_by_block(str(d), DREGS_NETS)
+    assert got[cr.DREGS_BUCKET] == 2                      # d_a1[0] and d_stops
+    assert got["u_drums.bank     (modal_dp)"] == 1
+    # the combinational cell is not counted, and the flop whose Q drives nothing is
+    # reported rather than dropped, so the total reconciles with the flow's own count
+    assert got["placed but Q drives no net"] == 1
+    assert sum(got.values()) == 4
+
+
+# --------------------------------------------------------------------------- #
+# resume: the mode that exists because ERROR_ON_TR_DRC aborts before STAPostPNR
+# --------------------------------------------------------------------------- #
+#
+# The failure being guarded is quiet rather than loud.  `librelane --run-tag X
+# --from OpenROAD.RCX` pointed at a path that is NOT an existing run does not
+# error: it creates the directory and starts the flow at that step with an empty
+# initial state.  A post-route STA on an empty state produces a report, and the
+# report is of nothing.  So the resumable state is asserted on the host, before a
+# container is started, and REFUSED (exit 3) is the outcome when it is absent.
+
+def _fake_ll_run(tmp_path, steps):
+    """steps = [(dirname, has_state)] -- a minimal LibreLane run directory."""
+    run = tmp_path / "runs" / "halfslot"
+    run.mkdir(parents=True)
+    for name, has_state in steps:
+        d = run / name
+        d.mkdir()
+        if has_state:
+            (d / "state_out.json").write_text("{}")
+    return str(run)
+
+
+def test_resume_refuses_when_the_run_directory_does_not_exist(tmp_path):
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(str(tmp_path / "runs" / "nope"), "OpenROAD.RCX")
+    assert "nothing to resume" in str(e.value)
+
+
+def test_resume_refuses_a_run_directory_with_no_state(tmp_path):
+    """A directory full of step folders that never got as far as writing a state is
+    not resumable, and resuming it would run STA on an empty design."""
+    run = _fake_ll_run(tmp_path, [("01-verilator-lint", False)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, "OpenROAD.RCX")
+    assert "state_out.json" in str(e.value)
+
+
+def test_resume_refuses_without_a_from_step(tmp_path):
+    """Without --from, LibreLane restarts the flow from step 1 in the same run
+    directory -- overwriting the very layout being resumed."""
+    run = _fake_ll_run(tmp_path, [("43-openroad-detailedrouting", True)])
+    with pytest.raises(rl.Refusal) as e:
+        rl.check_resume(run, None)
+    assert "--from" in str(e.value)
+
+
+def test_resume_reports_the_last_step_that_holds_a_state(tmp_path):
+    run = _fake_ll_run(tmp_path, [
+        ("09-checker-netlistassignstatements", True),
+        ("43-openroad-detailedrouting", True),
+        ("44-checker-trdrc", False),          # aborted before writing a state
+    ])
+    assert rl.check_resume(run, "OpenROAD.RCX") == "43-openroad-detailedrouting"
+
+
+def test_resume_carries_full_s_skip_list_exactly():
+    """--from resolves against the CONFIGURED step list. Resuming with a different
+    skip set resumes into a different flow; that does not error, it runs the wrong
+    steps."""
+    assert rl.stage_args("resume", "/runs") == rl.stage_args("full", "/runs")
+
+
+def test_resume_does_not_skip_the_router_s_own_drc_checker():
+    """`full` skips the sign-off decks and names them. Checker.TrDRC is not one of
+    them: silencing the router's own violation count in the wrapper would remove
+    the only DRC number this flow produces."""
+    assert "Checker.TrDRC" not in rl.SIGNOFF_SKIPS
+    assert "Checker.TrDRC" not in rl.stage_args("resume", "/runs")
+
+
+@pytest.mark.parametrize("rest,want", [
+    (["--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag=halfslot"], "halfslot"),
+    (["-c", "ERROR_ON_TR_DRC=false", "--run-tag", "halfslot"], "halfslot"),
+    (["--run-tag"], None),                       # dangling: no value to read
+    ([], None),
+])
+def test_run_tag_is_read_from_the_forwarded_args(rest, want):
+    """`rest` is an argparse.REMAINDER, so every flag after the mode goes to
+    librelane. Declaring --run-tag on the wrapper too would create a second
+    spelling that reaches the precondition check but not the tool (or vice
+    versa); the check reads what the tool is actually given."""
+    assert rl.passthrough_opt(rest, "--run-tag") == want
+
+
+def test_from_step_accepts_librelane_s_short_spelling():
+    assert rl.passthrough_opt(["-F", "OpenROAD.RCX"], "--from", "-F") == "OpenROAD.RCX"
+
+
+# --------------------------------------------------------------------------- #
+# verify(): the gate itself, with injected defects
+# --------------------------------------------------------------------------- #
+#
+# Everything above tests a PART of the collapse gate.  These four run `verify` end
+# to end, because the gate's only failure mode that matters is a false green and a
+# gate has to be shown going red against the current state before it is worth
+# anything (CLAUDE.md: "Run a gate against the current state before committing it").
+#
+# The injected defects are the three shapes this project has actually hit or
+# recorded: a netlist that collapsed (drum_regs short of its declared bits -- the
+# "1,917-cell all-X ladder_dp" shape), a die with no padframe (docs/dag.json S2's
+# own blocking condition, "routed die has padcells: 0"), and a missing mandatory
+# wafer.space IP macro.
+
+CENSUS_3520 = {"flops_declared_per_module": {"drum_regs": 3520}}
+
+
+def _synthetic_run(tmp_path, *, dregs_flops, pads=754, ws_ip=5):
+    """A minimal LibreLane run directory whose DEF has a known flop census.
+
+    The net names come from the REAL rtl-sketch/synth_top.v, because verify() reads
+    that file rather than taking a net set as an argument -- so a port rename breaks
+    these controls too, which is the point.
+    """
+    nets = sorted(cr.dregs_output_nets(os.path.join(cr.REPO, "rtl-sketch",
+                                                    "synth_top.v")))
+    run = tmp_path / "runs" / "halfslot"
+    step = run / "43-openroad-detailedrouting"
+    step.mkdir(parents=True)
+
+    comps, netlines, n = [], [], 0
+    for i in range(dregs_flops):
+        inst = f"_{i:06d}_"
+        comps.append(f"    - {inst} gf180mcu_fd_sc_mcu7t5v0__dffq_1 "
+                     f"+ PLACED ( 0 0 ) N ;")
+        net = nets[i % len(nets)]
+        netlines.append(f"    - i_chip_core.u_synth.{net}\\[{i}\\] "
+                        f"( {inst} Q ) + USE SIGNAL ;")
+        n += 1
+    for i in range(pads):
+        comps.append(f"    - pad_{i} gf180mcu_fd_io__bi_t + PLACED ( 0 0 ) N ;")
+    for i in range(ws_ip):
+        comps.append(f"    - ws_{i} gf180mcu_ws_ip__qrcode_id + PLACED ( 0 0 ) N ;")
+
+    (step / "chip_top.def").write_text(
+        "COMPONENTS %d ;\n%s\nEND COMPONENTS\nNETS %d ;\n%s\nEND NETS\n"
+        % (len(comps), "\n".join(comps), n, "\n".join(netlines)))
+    (step / "state_out.json").write_text('{"metrics": {"route__drc_errors": 3}}')
+    return str(run)
+
+
+def test_verify_passes_a_healthy_synthetic_layout(tmp_path, capsys):
+    """The green case, so the three reds below are known not to be red for free."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 0
+    assert "VERDICT: the layout places the flops the RTL declares" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_collapsed_drum_regs(tmp_path, capsys):
+    """ONE flop short must fail. A collapsed netlist is smaller AND cleaner."""
+    run = _synthetic_run(tmp_path, dregs_flops=3519)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    out = capsys.readouterr().out
+    assert "VERDICT: MISMATCH" in out
+    assert "collapse signature" in out
+
+
+def test_verify_goes_red_on_a_die_with_no_padframe(tmp_path, capsys):
+    """docs/dag.json S2's own blocking condition was 'routed die has padcells: 0'."""
+    run = _synthetic_run(tmp_path, dregs_flops=3520, pads=0)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "not a chip on" in capsys.readouterr().out
+
+
+def test_verify_goes_red_on_a_missing_wafer_space_ip_macro(tmp_path, capsys):
+    run = _synthetic_run(tmp_path, dregs_flops=3520, ws_ip=4)
+    assert cr.verify(run, CENSUS_3520, min_pads=1, expect_ws_ip=5) == 1
+    assert "mandatory" in capsys.readouterr().out

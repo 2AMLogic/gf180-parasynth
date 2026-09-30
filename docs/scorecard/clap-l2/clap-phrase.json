@@ -1,0 +1,192 @@
+{
+ "cp_fires": 9,
+ "ma_fires": 1,
+ "ma_frate_zero": true,
+ "final_strikes": 6,
+ "final_frame": 1533,
+ "restrike_spacings": [
+  1531,
+  1535,
+  1545,
+  4605,
+  322,
+  1028,
+  5464,
+  4620
+ ],
+ "env_saturated_fires": 5,
+ "env_saturated_where": [
+  {
+   "env": 6,
+   "frame": 20999,
+   "stops": [
+    "BD",
+    "SD",
+    "LT",
+    "HT",
+    "CH",
+    "OH",
+    "CP",
+    "CB",
+    "MT",
+    "CL",
+    "CY"
+   ]
+  },
+  {
+   "env": 8,
+   "frame": 3415,
+   "stops": [
+    "CP"
+   ]
+  },
+  {
+   "env": 8,
+   "frame": 20999,
+   "stops": [
+    "BD",
+    "SD",
+    "LT",
+    "HT",
+    "CH",
+    "OH",
+    "CP",
+    "CB",
+    "MT",
+    "CL",
+    "CY"
+   ]
+  },
+  {
+   "env": 10,
+   "frame": 20999,
+   "stops": [
+    "BD",
+    "SD",
+    "LT",
+    "HT",
+    "CH",
+    "OH",
+    "CP",
+    "CB",
+    "MT",
+    "CL",
+    "CY"
+   ]
+  },
+  {
+   "env": 11,
+   "frame": 20999,
+   "stops": [
+    "BD",
+    "SD",
+    "LT",
+    "HT",
+    "CH",
+    "OH",
+    "CP",
+    "CB",
+    "MT",
+    "CL",
+    "CY"
+   ]
+  }
+ ],
+ "all_stops_hit_frame": 20999,
+ "rail_in_all_stops_hit_50ms": 327,
+ "rail_in_all_stops_hit_50ms_rev10": 324,
+ "rail_elsewhere": [],
+ "rail_elsewhere_rev10": [],
+ "rail_samples": 327,
+ "rail_samples_rev10": 324,
+ "peak": 32768,
+ "peak_rev10": 32768,
+ "refused": [],
+ "wire_sha256": "a1400eb291d7e7ed2b9557346d4e02437b4a27179b378de957eb47977b5f250b",
+ "model_sha256": "a1400eb291d7e7ed2b9557346d4e02437b4a27179b378de957eb47977b5f250b",
+ "periods": 30201,
+ "wire_mismatch": 0,
+ "writes_sent": 418,
+ "provenance": {
+  "commit": "1f8e267d-dirty",
+  "files": {
+   "synth_top.v": [
+    "2fc3939d1140",
+    "rtl-sketch"
+   ],
+   "voice_dp.v": [
+    "1c8cfdbe1737",
+    "rtl-sketch"
+   ],
+   "spi_ctl.v": [
+    "8892b72cde65",
+    "rtl-sketch"
+   ],
+   "drum_regs.v": [
+    "f7a6ff086b44",
+    "rtl-sketch"
+   ],
+   "drum_kit.v": [
+    "23e97ff6e0e4",
+    "rtl-sketch"
+   ],
+   "drum_dp.v": [
+    "57731e688eff",
+    "rtl-sketch"
+   ],
+   "modal_dp.v": [
+    "dd4906617919",
+    "rtl-sketch"
+   ],
+   "i2s_tx.v": [
+    "2cdb2112a11e",
+    "rtl-sketch"
+   ],
+   "ladder_dp_n.v": [
+    "22e2be19863b",
+    "rtl-sketch"
+   ],
+   "recip_div.v": [
+    "bf081a1b780d",
+    "rtl-sketch"
+   ],
+   "osc_2x_saw_bank.v": [
+    "05869337f593",
+    "rtl-sketch"
+   ],
+   "osc_2x_saw_path.v": [
+    "9e61079d40fa",
+    "rtl-sketch"
+   ],
+   "polyblep_saw_pair.v": [
+    "1576461daa91",
+    "rtl-sketch"
+   ],
+   "osc_substep_pair.v": [
+    "6dc5cfb922cb",
+    "rtl-sketch"
+   ],
+   "decimate_2x_tm_sym.v": [
+    "0575e80ef33c",
+    "rtl-sketch"
+   ],
+   "rate_conv_2x.v": [
+    "0e28468820bd",
+    "rtl-sketch"
+   ],
+   "tb_top_bx.v": [
+    "dc2c177a0ec0",
+    "rtl-sketch"
+   ],
+   "uart_bridge.v": [
+    "25ef72bc47f9",
+    "rtl-sketch"
+   ]
+  },
+  "generated": {
+   "tanh16.hex": "a5c4862a7e90",
+   "tanh256.hex": "c6e81324b225"
+  }
+ },
+ "compile_defines": []
+}

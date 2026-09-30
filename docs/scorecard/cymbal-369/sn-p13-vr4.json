@@ -1,0 +1,1074 @@
+{
+ "alpha_k1": 0.3977174262519643,
+ "alpha_k_sigma": 3.0,
+ "alpha_sigma": 3.290423518334664e-05,
+ "artifact": "sn-p13-vr4",
+ "bands": {
+  "decay": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.0002580164185488343,
+     "bound_db": 0.004228712050970529,
+     "db": -29.857892287477977,
+     "hi_db": -29.853663575427007,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -29.862120999528948,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.09041553104083278,
+       "frequency_scaling_residual_db_per_pct": -7.638334409421077e-12,
+       "impedance_scaling_residual_db_per_pct": 2.0694557179012918e-10,
+       "sum_capacitors_db_per_pct": -0.09041553104847111,
+       "sum_resistors_db_per_pct": -0.09041553084152554
+      },
+      "db_per_pct": {
+       "C55": 1.8761982367720975e-05,
+       "C56": 0.0015899833911703354,
+       "C57": -0.0071630559949298345,
+       "C58": 5.580954720585396e-06,
+       "C90": -0.08486680138179992,
+       "R112": 6.734621891268944e-05,
+       "R119": 0.0005615660111146781,
+       "R120": -0.05840852940490748,
+       "R121": 0.016545078934626645,
+       "R123": -0.00033520350104510044,
+       "R125": 0.0028973774327312185,
+       "R129": -0.06768868832462971,
+       "VR4_TOTAL": 0.015945521791671524
+      },
+      "dominant": [
+       "C90",
+       "R129",
+       "R120",
+       "R121",
+       "VR4_TOTAL"
+      ],
+      "dominant_share": 0.9506474169874133,
+      "hz": 10079.0,
+      "rss_db_per_pct": 0.12564375417860996,
+      "worst_case_db_per_pct": 0.25609349532462744
+     },
+     "unit_tolerance": {
+      "bound_db": 2.6054026232396055,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht2",
+      "hz": 10079.0,
+      "per_component_db": {
+       "C55": 0.0003752396473544195,
+       "C56": 0.03179966782340671,
+       "C57": 0.1432611198985967,
+       "C58": 0.00011161909441170792,
+       "C90": 1.6973360276359983,
+       "R112": 0.0003367310945634472,
+       "R119": 0.0028078300555733904,
+       "R120": 0.2920426470245374,
+       "R121": 0.08272539467313322,
+       "R123": 0.0016760175052255022,
+       "R125": 0.014486887163656093,
+       "R129": 0.33844344162314854
+      },
+      "rss_db": 1.7633439112486005,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.015945521791671524
+      }
+     }
+    },
+    "3175.0": {
+     "alpha_db": 0.0002844370163899157,
+     "bound_db": 0.00425513264881161,
+     "db": -19.83254117450289,
+     "hi_db": -19.828286041854078,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -19.8367963071517,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.0742591480946686,
+       "frequency_scaling_residual_db_per_pct": 3.623767952376511e-11,
+       "impedance_scaling_residual_db_per_pct": -2.6645352591003757e-11,
+       "sum_capacitors_db_per_pct": -0.07425914805843092,
+       "sum_resistors_db_per_pct": -0.07425914808507628
+      },
+      "db_per_pct": {
+       "C55": 0.0001255461777205369,
+       "C56": 0.010524944388734525,
+       "C57": -0.013257319458404027,
+       "C58": 9.918260808206014e-05,
+       "C90": -0.07175150177456402,
+       "R112": 0.0005184066392160958,
+       "R119": 0.004530495150056879,
+       "R120": -0.046584271399652266,
+       "R121": 0.0017989751817992783,
+       "R123": 0.0004007305813402695,
+       "R125": 0.0033530660045855143,
+       "R129": -0.057300474644428334,
+       "VR4_TOTAL": 0.019023924402006287
+      },
+      "dominant": [
+       "C90",
+       "R129",
+       "R120",
+       "VR4_TOTAL",
+       "C57"
+      ],
+      "dominant_share": 0.9068720072053676,
+      "hz": 3175.0,
+      "rss_db_per_pct": 0.10623378509492777,
+      "worst_case_db_per_pct": 0.2292688384105901
+     },
+     "unit_tolerance": {
+      "bound_db": 2.4876019861554965,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht2",
+      "hz": 3175.0,
+      "per_component_db": {
+       "C55": 0.0025109235544107378,
+       "C56": 0.2104988877746905,
+       "C57": 0.26514638916808053,
+       "C58": 0.001983652161641203,
+       "C90": 1.4350300354912804,
+       "R112": 0.0025920331960804788,
+       "R119": 0.022652475750284395,
+       "R120": 0.23292135699826133,
+       "R121": 0.008994875908996391,
+       "R123": 0.0020036529067013475,
+       "R125": 0.01676533002292757,
+       "R129": 0.28650237322214167
+      },
+      "rss_db": 1.5202485494905946,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.019023924402006287
+      }
+     }
+    },
+    "7100.0": {
+     "alpha_db": 0.00026348176083601516,
+     "bound_db": 0.00423417739325771,
+     "db": -26.681204428168908,
+     "hi_db": -26.67697025077565,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -26.685438605562165,
+     "residual_db": 0.003970695632421695,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.09059458611684335,
+       "frequency_scaling_residual_db_per_pct": -5.8619775700208265e-12,
+       "impedance_scaling_residual_db_per_pct": 1.3660184094987926e-10,
+       "sum_capacitors_db_per_pct": -0.09059458612270532,
+       "sum_resistors_db_per_pct": -0.09059458598610348
+      },
+      "db_per_pct": {
+       "C55": 3.6029097572054525e-05,
+       "C56": 0.002978153172961129,
+       "C57": -0.010611281555128471,
+       "C58": 1.6561125448788516e-05,
+       "C90": -0.08301404796355882,
+       "R112": 0.0001310440049806516,
+       "R119": 0.0010974331891233646,
+       "R120": -0.056241529592071515,
+       "R121": 0.01134563903413266,
+       "R123": -0.00039322642475525527,
+       "R125": 0.0029798007702197538,
+       "R129": -0.0659884177805381,
+       "VR4_TOTAL": 0.01647467081280496
+      },
+      "dominant": [
+       "C90",
+       "R129",
+       "R120",
+       "VR4_TOTAL",
+       "R121"
+      ],
+      "dominant_share": 0.9274056482369699,
+      "hz": 7100.0,
+      "rss_db_per_pct": 0.1222324712649286,
+      "worst_case_db_per_pct": 0.2513078345232955
+     },
+     "unit_tolerance": {
+      "bound_db": 2.624006912272492,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht2",
+      "hz": 7100.0,
+      "per_component_db": {
+       "C55": 0.0007205819514410905,
+       "C56": 0.059563063459222576,
+       "C57": 0.21222563110256942,
+       "C58": 0.0003312225089757703,
+       "C90": 1.6602809592711765,
+       "R112": 0.000655220024903258,
+       "R119": 0.005487165945616823,
+       "R120": 0.2812076479603576,
+       "R121": 0.0567281951706633,
+       "R123": 0.0019661321237762763,
+       "R125": 0.014899003851098769,
+       "R129": 0.3299420889026905
+      },
+      "rss_db": 1.7310502492456756,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.01647467081280496
+      }
+     }
+    }
+   },
+   "drive": "bottom",
+   "family": "Ht2"
+  },
+  "low": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.0002580164185559397,
+     "bound_db": 0.0037984156308716877,
+     "db": -57.2214212707796,
+     "hi_db": -57.21762285514873,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -57.22521968641047,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.16044320792509836,
+       "frequency_scaling_residual_db_per_pct": -7.815970093361102e-12,
+       "impedance_scaling_residual_db_per_pct": 1.9682033780554775e-10,
+       "sum_capacitors_db_per_pct": -0.16044320793291433,
+       "sum_resistors_db_per_pct": -0.160443207736094
+      },
+      "db_per_pct": {
+       "C55": 1.876198219008529e-05,
+       "C56": -0.000523133208218951,
+       "C57": -0.07514974836553279,
+       "C58": 7.771304062487161e-05,
+       "C90": -0.08486680138197755,
+       "R112": 6.734621891268944e-05,
+       "R119": 0.0005615660111146781,
+       "R120": 0.026337250665520173,
+       "R121": -0.05320356959863659,
+       "R123": -0.08536001193242271,
+       "R125": 0.0028973774327312185,
+       "R129": -0.06768868832480734,
+       "VR4_TOTAL": 0.01594552179149389
+      },
+      "dominant": [
+       "R123",
+       "C90",
+       "C57",
+       "R129",
+       "R121",
+       "R120"
+      ],
+      "dominant_share": 0.9513168357590038,
+      "hz": 10079.0,
+      "rss_db_per_pct": 0.16883564145012017,
+      "worst_case_db_per_pct": 0.41269748995418354
+     },
+     "unit_tolerance": {
+      "bound_db": 4.393302210491612,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht1",
+      "hz": 10079.0,
+      "per_component_db": {
+       "C55": 0.0003752396438017058,
+       "C56": 0.01046266416437902,
+       "C57": 1.5029949673106557,
+       "C58": 0.0015542608124974322,
+       "C90": 1.697336027639551,
+       "R112": 0.0003367310945634472,
+       "R119": 0.0028078300555733904,
+       "R120": 0.13168625332760087,
+       "R121": 0.26601784799318295,
+       "R123": 0.42680005966211354,
+       "R125": 0.014486887163656093,
+       "R129": 0.3384434416240367
+      },
+      "rss_db": 2.350549376725936,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.01594552179149389
+      }
+     }
+    },
+    "3175.0": {
+     "alpha_db": 0.0002844370163899157,
+     "bound_db": 0.0038248362287056636,
+     "db": -41.04327946019974,
+     "hi_db": -41.03945462397104,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -41.047104296428444,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.11433456339560166,
+       "frequency_scaling_residual_db_per_pct": 3.836930773104541e-11,
+       "impedance_scaling_residual_db_per_pct": 2.7355895326763857e-11,
+       "sum_capacitors_db_per_pct": -0.11433456335723235,
+       "sum_resistors_db_per_pct": -0.11433456332987646
+      },
+      "db_per_pct": {
+       "C55": 0.0001255461775429012,
+       "C56": -0.006917752839186164,
+       "C57": -0.036252570505723725,
+       "C58": 0.00046171558452101635,
+       "C90": -0.07175150177438638,
+       "R112": 0.0005184066388608244,
+       "R119": 0.004530495149879243,
+       "R120": 0.022831928042421623,
+       "R121": -0.02714764534594849,
+       "R123": -0.08014426357689786,
+       "R125": 0.00335306600476315,
+       "R129": -0.05730047464496124,
+       "VR4_TOTAL": 0.019023924402006287
+      },
+      "dominant": [
+       "R123",
+       "C90",
+       "R129",
+       "C57",
+       "R121",
+       "R120",
+       "VR4_TOTAL"
+      ],
+      "dominant_share": 0.9518494474253498,
+      "hz": 3175.0,
+      "rss_db_per_pct": 0.13367608974845382,
+      "worst_case_db_per_pct": 0.3303592906870989
+     },
+     "unit_tolerance": {
+      "bound_db": 3.289313134645866,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht1",
+      "hz": 3175.0,
+      "per_component_db": {
+       "C55": 0.002510923550858024,
+       "C56": 0.13835505678372328,
+       "C57": 0.7250514101144745,
+       "C58": 0.009234311690420327,
+       "C90": 1.4350300354877277,
+       "R112": 0.002592033194304122,
+       "R119": 0.022652475749396217,
+       "R120": 0.11415964021210812,
+       "R121": 0.13573822672974245,
+       "R123": 0.4007213178844893,
+       "R125": 0.01676533002381575,
+       "R129": 0.2865023732248062
+      },
+      "rss_db": 1.696809904718877,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.019023924402006287
+      }
+     }
+    },
+    "7100.0": {
+     "alpha_db": 0.0002634817608466733,
+     "bound_db": 0.0038038809731624212,
+     "db": -51.764406551535814,
+     "hi_db": -51.76060267056265,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -51.76821043250898,
+     "residual_db": 0.003540399212315748,
+     "residual_measured_here": false,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.15034144529408877,
+       "frequency_scaling_residual_db_per_pct": -4.263256414560601e-12,
+       "impedance_scaling_residual_db_per_pct": 1.3713474800169934e-10,
+       "sum_capacitors_db_per_pct": -0.15034144529835203,
+       "sum_resistors_db_per_pct": -0.15034144516121728
+      },
+      "db_per_pct": {
+       "C55": 3.602909792732589e-05,
+       "C56": -0.0011775621413079307,
+       "C57": -0.06632792514480457,
+       "C58": 0.00014206085303669624,
+       "C90": -0.08301404796320355,
+       "R112": 0.00013104400480301592,
+       "R119": 0.0010974331893010003,
+       "R120": 0.026461651763654004,
+       "R121": -0.04727791676941706,
+       "R123": -0.08421971115168958,
+       "R125": 0.0029798007702197538,
+       "R129": -0.06598841778071574,
+       "VR4_TOTAL": 0.016474670812627323
+      },
+      "dominant": [
+       "R123",
+       "C90",
+       "C57",
+       "R129",
+       "R121",
+       "R120"
+      ],
+      "dominant_share": 0.9442524037332428,
+      "hz": 7100.0,
+      "rss_db_per_pct": 0.16111021359359654,
+      "worst_case_db_per_pct": 0.39532827144270755
+     },
+     "unit_tolerance": {
+      "bound_db": 4.154732381154602,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht1",
+      "hz": 7100.0,
+      "per_component_db": {
+       "C55": 0.0007205819585465179,
+       "C56": 0.023551242826158614,
+       "C57": 1.3265585028960913,
+       "C58": 0.002841217060733925,
+       "C90": 1.660280959264071,
+       "R112": 0.0006552200240150796,
+       "R119": 0.0054871659465050016,
+       "R120": 0.13230825881827002,
+       "R121": 0.2363895838470853,
+       "R123": 0.4210985557584479,
+       "R125": 0.014899003851098769,
+       "R129": 0.3299420889035787
+      },
+      "rss_db": 2.2083200363865134,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.016474670812627323
+      }
+     }
+    }
+   },
+   "drive": "hh1",
+   "family": "Ht1"
+  },
+  "short": {
+   "at_hz": {
+    "10079.0": {
+     "alpha_db": 0.0012555296071923294,
+     "bound_db": 0.03364580059918154,
+     "db": -36.574565057314146,
+     "hi_db": -36.540919256714965,
+     "hz": 10079.0,
+     "k_sigma": 3.0,
+     "lo_db": -36.60821085791333,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.08432136673413027,
+       "frequency_scaling_residual_db_per_pct": -4.263256414560601e-12,
+       "impedance_scaling_residual_db_per_pct": 2.5579538487363607e-10,
+       "sum_capacitors_db_per_pct": -0.08432136673839352,
+       "sum_resistors_db_per_pct": -0.08432136648259814
+      },
+      "db_per_pct": {
+       "C55": 0.0002972597012984579,
+       "C56": 9.032442775946947e-05,
+       "C57": 0.00015796609815765805,
+       "C58": -1.155839868260955e-07,
+       "C90": -0.08486680138162228,
+       "R112": -0.06834596376599222,
+       "R119": -0.06805628688937304,
+       "R120": 6.855075831424529e-05,
+       "R121": 0.00029109639676505594,
+       "R123": -7.627788178865558e-06,
+       "R125": -1.2337538635165402e-05,
+       "R129": 0.0012764675439314033,
+       "VR4_TOTAL": 0.050464734800570454
+      },
+      "dominant": [
+       "C90",
+       "R112",
+       "R119",
+       "VR4_TOTAL"
+      ],
+      "dominant_share": 0.9919625401804203,
+      "hz": 10079.0,
+      "rss_db_per_pct": 0.13803525953448198,
+      "worst_case_db_per_pct": 0.27393553267458515
+     },
+     "unit_tolerance": {
+      "bound_db": 2.398540997262444,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht3",
+      "hz": 10079.0,
+      "per_component_db": {
+       "C55": 0.005945194025969158,
+       "C56": 0.0018064885551893894,
+       "C57": 0.003159321963153161,
+       "C58": 2.31167973652191e-06,
+       "C90": 1.6973360276324456,
+       "R112": 0.3417298188299611,
+       "R119": 0.3402814344468652,
+       "R120": 0.00034275379157122643,
+       "R121": 0.0014554819838252797,
+       "R123": 3.813894089432779e-05,
+       "R125": 6.168769317582701e-05,
+       "R129": 0.006382337719657016
+      },
+      "rss_db": 1.7645429662839234,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.050464734800570454
+      }
+     }
+    },
+    "3175.0": {
+     "alpha_db": 0.0012836669970361925,
+     "bound_db": 0.033673937989025404,
+     "db": -27.498486696753158,
+     "hi_db": -27.464812758764133,
+     "hz": 3175.0,
+     "k_sigma": 3.0,
+     "lo_db": -27.532160634742183,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.06839095927517747,
+       "frequency_scaling_residual_db_per_pct": 7.638334409421077e-12,
+       "impedance_scaling_residual_db_per_pct": 1.5134560271690134e-10,
+       "sum_capacitors_db_per_pct": -0.06839095926753913,
+       "sum_resistors_db_per_pct": -0.06839095911619353
+      },
+      "db_per_pct": {
+       "C55": 0.0028526984335641714,
+       "C56": 0.0007658229321805265,
+       "C57": -0.00026068487262165263,
+       "C58": 2.7060137242074234e-06,
+       "C90": -0.07175150177438638,
+       "R112": -0.06596004784853449,
+       "R119": -0.06395091891349125,
+       "R120": 0.0013047776651120557,
+       "R121": 0.0006853285666963416,
+       "R123": -0.00014212217358533508,
+       "R125": -6.013659277215311e-05,
+       "R129": 0.008568406449249721,
+       "VR4_TOTAL": 0.05116375373113158
+      },
+      "dominant": [
+       "C90",
+       "R112",
+       "R119",
+       "VR4_TOTAL"
+      ],
+      "dominant_share": 0.9452546319484701,
+      "hz": 3175.0,
+      "rss_db_per_pct": 0.1276356592259524,
+      "worst_case_db_per_pct": 0.26746890596704986
+     },
+     "unit_tolerance": {
+      "bound_db": 2.2160269715767456,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht3",
+      "hz": 3175.0,
+      "per_component_db": {
+       "C55": 0.05705396867128343,
+       "C56": 0.015316458643610531,
+       "C57": 0.005213697452433053,
+       "C58": 5.412027448414847e-05,
+       "C90": 1.4350300354877277,
+       "R112": 0.32980023924267243,
+       "R119": 0.31975459456745625,
+       "R120": 0.006523888325560279,
+       "R121": 0.003426642833481708,
+       "R123": 0.0007106108679266754,
+       "R125": 0.00030068296386076554,
+       "R129": 0.04284203224624861
+      },
+      "rss_db": 1.5085521781579576,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.05116375373113158
+      }
+     }
+    },
+    "7100.0": {
+     "alpha_db": 0.001259441088343749,
+     "bound_db": 0.03364971208033296,
+     "db": -33.656341172680165,
+     "hi_db": -33.62269146059983,
+     "hz": 7100.0,
+     "k_sigma": 3.0,
+     "lo_db": -33.6899908847605,
+     "residual_db": 0.03239027099198921,
+     "residual_measured_here": true,
+     "sensitivity": {
+      "checks": {
+       "frequency_db_per_pct": -0.08203713060197515,
+       "frequency_scaling_residual_db_per_pct": -4.618527782440651e-12,
+       "impedance_scaling_residual_db_per_pct": 2.398081733190338e-10,
+       "sum_capacitors_db_per_pct": -0.08203713060659368,
+       "sum_resistors_db_per_pct": -0.0820371303667855
+      },
+      "db_per_pct": {
+       "C55": 0.0005954368457850023,
+       "C56": 0.0001873298682397717,
+       "C57": 0.0001944231620143455,
+       "C58": -2.7251907397385366e-07,
+       "C90": -0.08301404796355882,
+       "R112": -0.06806029905739308,
+       "R119": -0.06750476742674039,
+       "R120": 0.0001767790156037563,
+       "R121": 0.0004585180271021727,
+       "R123": -2.354575379115431e-05,
+       "R125": -2.241466035002304e-05,
+       "R129": 0.0024078922553627535,
+       "VR4_TOTAL": 0.05053070723342046
+      },
+      "dominant": [
+       "C90",
+       "R112",
+       "R119",
+       "VR4_TOTAL"
+      ],
+      "dominant_share": 0.9851136056982412,
+      "hz": 7100.0,
+      "rss_db_per_pct": 0.13652930233256644,
+      "worst_case_db_per_pct": 0.2731764337884357
+     },
+     "unit_tolerance": {
+      "bound_db": 2.373101288155155,
+      "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+      "family": "Ht3",
+      "hz": 7100.0,
+      "per_component_db": {
+       "C55": 0.011908736915700047,
+       "C56": 0.0037465973647954343,
+       "C57": 0.00388846324028691,
+       "C58": 5.450381479477073e-06,
+       "C90": 1.6602809592711765,
+       "R112": 0.3403014952869654,
+       "R119": 0.33752383713370193,
+       "R120": 0.0008838950780187815,
+       "R121": 0.0022925901355108635,
+       "R123": 0.00011772876895577156,
+       "R125": 0.0001120733017501152,
+       "R129": 0.012039461276813768
+      },
+      "rss_db": 1.728173110402312,
+      "tolerance_pct": {
+       "C55": 20.0,
+       "C56": 20.0,
+       "C57": 20.0,
+       "C58": 20.0,
+       "C90": 20.0,
+       "R112": 5.0,
+       "R119": 5.0,
+       "R120": 5.0,
+       "R121": 5.0,
+       "R123": 5.0,
+       "R125": 5.0,
+       "R129": 5.0,
+       "VR4_TOTAL": null
+      },
+      "uncited": [
+       "VR4_TOTAL"
+      ],
+      "uncited_lever_db_per_pct": {
+       "VR4_TOTAL": 0.05053070723342046
+      }
+     }
+    }
+   },
+   "drive": "top",
+   "family": "Ht3"
+  }
+ },
+ "bound_excludes": "component tolerance -- bound_db solves the network SN p.13 PRINTS, for which the printed values are the definition rather than an uncertainty. The unit-to-unit spread is carried instead as a separate CITED term: see component_tolerance and each band's at_hz.<f>.unit_tolerance (#425)",
+ "component_tolerance": {
+  "class": {
+   "also_used_by": "docs/tr808-reference.md section 1.7, which turns the same sentence into this repository's +-10 % f0 and +-50 % Q tolerances (docs/scorecard/README.md)",
+   "capacitors_pct": 20.0,
+   "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+   "does_not_cover": "VR4's total resistance. It is a potentiometer, not a fixed resistor, and no tolerance for it is citable from W14a, from SN p.13, or from SN p.16's parts list (which prints 'EVH-LWAD25B24 20K (B)' and no tolerance). Carried as an explicit None and reported separately rather than assumed into the resistor class.",
+   "quote": "the voice circuits featured +-20% capacitors and +-5% resistors",
+   "resistors_pct": 5.0,
+   "sha256": "3c4a685dd805c536f19cb721151e435a7d699b367052ab2c7632deb77787e901",
+   "url": "https://www.dafx.de/paper-archive/2014/dafx14_kurt_james_werner_a_physically_informed,_ci.pdf",
+   "verified_on": "2026-09-28"
+  },
+  "on_the_balance": {
+   "decay-low": {
+    "bound_db": 2.125540051541641,
+    "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+    "db_per_pct": {
+     "C55": -0.00010678419517518023,
+     "C56": 0.0085077362303565,
+     "C57": 0.02908951451079389,
+     "C58": -0.00045613462980043096,
+     "C90": -0.013115299607413533,
+     "R112": -0.00045106041994813495,
+     "R119": -0.003968929138764565,
+     "R120": -0.0812404574473291,
+     "R121": 0.043692724280575135,
+     "R123": 0.07980906007585276,
+     "R125": -0.00045568857203193147,
+     "R129": -0.010388213679668468,
+     "VR4_TOTAL": -0.003078402610334763
+    },
+    "family": "Ht2-Ht1",
+    "hz": [
+     10079.0,
+     3175.0
+    ],
+    "per_component_db": {
+     "C55": 0.0021356839035036046,
+     "C56": 0.17015472460713,
+     "C57": 0.5817902902158778,
+     "C58": 0.00912269259600862,
+     "C90": 0.26230599214827066,
+     "R112": 0.0022553020997406747,
+     "R119": 0.019844645693822827,
+     "R120": 0.40620228723664553,
+     "R121": 0.21846362140287567,
+     "R123": 0.3990453003792638,
+     "R125": 0.0022784428601596574,
+     "R129": 0.05194106839834234
+    },
+    "rss_db": 0.9007722000064444,
+    "tolerance_pct": {
+     "C55": 20.0,
+     "C56": 20.0,
+     "C57": 20.0,
+     "C58": 20.0,
+     "C90": 20.0,
+     "R112": 5.0,
+     "R119": 5.0,
+     "R120": 5.0,
+     "R121": 5.0,
+     "R123": 5.0,
+     "R125": 5.0,
+     "R129": 5.0,
+     "VR4_TOTAL": null
+    },
+    "uncited": [
+     "VR4_TOTAL"
+    ],
+    "uncited_lever_db_per_pct": {
+     "VR4_TOTAL": -0.003078402610334763
+    }
+   },
+   "short-low": {
+    "bound_db": 2.8120104283662073,
+    "citation": "W14a section 11 (RESULTS): K. J. Werner, J. S. Abel, J. O. Smith, 'A Physically-Informed, Circuit-Bendable, Digital Model of the Roland TR-808 Bass Drum Circuit', DAFx-14",
+    "db_per_pct": {
+     "C55": 0.0001717135237555567,
+     "C56": 0.007008077266945634,
+     "C57": 0.03641053660388138,
+     "C58": -0.00046183116850784245,
+     "C90": -0.013115299607235897,
+     "R112": -0.06886437040485305,
+     "R119": -0.07258678203925228,
+     "R120": -0.022763377284107378,
+     "R121": 0.027438741742713546,
+     "R123": 0.08013663578871899,
+     "R125": -0.0033654035433983154,
+     "R129": 0.058576942188892644,
+     "VR4_TOTAL": 0.03144081039856417
+    },
+    "family": "Ht3-Ht1",
+    "hz": [
+     10079.0,
+     3175.0
+    ],
+    "per_component_db": {
+     "C55": 0.003434270475111134,
+     "C56": 0.14016154533891267,
+     "C57": 0.7282107320776277,
+     "C58": 0.009236623370156849,
+     "C90": 0.26230599214471795,
+     "R112": 0.34432185202426524,
+     "R119": 0.3629339101962614,
+     "R120": 0.11381688642053689,
+     "R121": 0.13719370871356773,
+     "R123": 0.40068317894359495,
+     "R125": 0.016827017716991577,
+     "R129": 0.2928847109444632
+    },
+    "rss_db": 1.0712162445838194,
+    "tolerance_pct": {
+     "C55": 20.0,
+     "C56": 20.0,
+     "C57": 20.0,
+     "C58": 20.0,
+     "C90": 20.0,
+     "R112": 5.0,
+     "R119": 5.0,
+     "R120": 5.0,
+     "R121": 5.0,
+     "R123": 5.0,
+     "R125": 5.0,
+     "R129": 5.0,
+     "VR4_TOTAL": null
+    },
+    "uncited": [
+     "VR4_TOTAL"
+    ],
+    "uncited_lever_db_per_pct": {
+     "VR4_TOTAL": 0.03144081039856417
+    }
+   }
+  },
+  "on_the_balance_note": "the balance reads band-to-band DIFFERENCES, and C90 -- the largest lever on every band -- mostly cancels in one. Quote these, not the per-band numbers, for an inter-band claim",
+  "per_band": "bands.<band>.at_hz.<f>.unit_tolerance -- bound_db is the adversarial corner, rss_db is what independent parts give; they differ by ~2x, so say which",
+  "per_component_pct": {
+   "C55": 20.0,
+   "C56": 20.0,
+   "C57": 20.0,
+   "C58": 20.0,
+   "C90": 20.0,
+   "R112": 5.0,
+   "R119": 5.0,
+   "R120": 5.0,
+   "R121": 5.0,
+   "R123": 5.0,
+   "R125": 5.0,
+   "R129": 5.0,
+   "VR4_TOTAL": null
+  },
+  "sensitivity_tables": "bands.<band>.at_hz.<f>.sensitivity, with the two identities that check them",
+  "service_notes_print_none": {
+   "citable_tolerance_class_in_this_source": null,
+   "conclusion": "No tolerance class for C55/C56/C57/C58/C90 or R112/R119/R125/R129/R120/R123/R121/VR4 is printed in THIS source. E24 5 % resistors and 5-10 % film capacitors would be a plausible 1981 Roland build, and a bound built on that would be invention. The class that IS carried comes from W14a instead -- see TOLERANCE_CLASS.",
+   "searched": {
+    "1": "CAUTION: parts are 'designated in abridged number or numberless in this limited space, they are fully numbered on the Parts List' -- that full parts list is a SEPARATE document, not one of these 16 pages",
+    "8": "the document's only 'NOTE: UNLESS OTHERWISE SPECIFIED' legend, and it covers semiconductors alone (NPN 2SC945(P), PNP 2SA733(P), Q23~Q26 2SA1015(GR), diodes 1S2473, op-amps uPC4558C). No resistor or capacitor tolerance, and no wattage or dielectric either",
+    "13": "the page every component value here was read off. Values and reference designators only; the one tolerance-adjacent annotation on it is a POWER SUPPLY note ('FRNB 10 ohm 1/4W (fusing resistor)'), which is a wattage, not a tolerance, and is not in this network",
+    "16": "PARTS LIST. Its RESISTOR section has ONE entry (ERSC23CS61, 560 ohm) and its CAPACITOR section THREE (a 10uF 25V non-polar and two 0.047uF polypropylene mains parts); none of the thirteen appears. VR4 is listed as '13219314 EVH-LWAD25B24 20K (B) CY tone' -- resistance and taper, no tolerance"
+   },
+   "searched_on": "2026-09-28",
+   "source_sha256": "d3239b51e2eb5523ff7247528667dc753f9db84a8d29b62cf763cbc51d4aad74",
+   "why_it_is_kept": "an absence is only as strong as the corpus it was searched over. Reading this record WITHOUT that caveat produced the wrong answer once already (see this section's header), so the corpus is named here."
+  },
+  "term_in_resolved_bound": false,
+  "why_not": "bound_db answers 'is the printed network solved'; this answers 'how much does a built unit differ'. Summing them would make the balance's verdict depend on which physical 808 is meant"
+ },
+ "components": {
+  "C55": 1e-08,
+  "C56": 1e-08,
+  "C57": 3.3e-09,
+  "C58": 1e-08,
+  "C90": 1e-08,
+  "R112": 22000.0,
+  "R119": 22000.0,
+  "R120": 10000.0,
+  "R121": 10000.0,
+  "R123": 100000.0,
+  "R125": 2200.0,
+  "R129": 15000.0,
+  "VR4_TOTAL": 20000.0
+ },
+ "emit": "python3 tools/tone_stage_schematic.py --emit",
+ "fit": {
+  "alpha": 0.3977174262538905,
+  "free_per_path_gain": false,
+  "joint_rms_db": 0.010491043921917768,
+  "n_points": 707,
+  "per_family": {
+   "Ht1": {
+    "max_db": 0.003540399212315748,
+    "n_points": 150,
+    "rms_db": 0.0014219853218362113,
+    "window_hz": [
+     121.0457,
+     563.8392
+    ]
+   },
+   "Ht2": {
+    "max_db": 0.003970695632421695,
+    "n_points": 107,
+    "rms_db": 0.001427315841774605,
+    "window_hz": [
+     561.6,
+     1640.0729
+    ]
+   },
+   "Ht3": {
+    "max_db": 0.03239027099198921,
+    "n_points": 450,
+    "rms_db": 0.013105770214764785,
+    "window_hz": [
+     20.011,
+     19905.3794
+    ]
+   }
+  }
+ },
+ "fitted_against": {
+  "path": "docs/scorecard/cymbal-369/werner-fig9.json",
+  "sha256": "c5621f78202a7be18df80e423b70f136d8df5875f3b51111e373c79f764f1e70"
+ },
+ "poles_hz": [
+  128.30835574381518,
+  509.0924897529267,
+  681.3665043667831,
+  1635.7471939445004,
+  4191.512135179339
+ ],
+ "source": {
+  "board": "VG 3116-140",
+  "crops": {
+   "q25": {
+    "dpi": 500,
+    "h": 900,
+    "w": 1500,
+    "x": 2500,
+    "y": 4700
+   },
+   "tone": {
+    "dpi": 400,
+    "h": 1300,
+    "w": 1600,
+    "x": 2480,
+    "y": 3040
+   }
+  },
+  "page": 13,
+  "sha256": "d3239b51e2eb5523ff7247528667dc753f9db84a8d29b62cf763cbc51d4aad74",
+  "url": "https://archive.org/download/synthmanual-roland-tr-808-service-notes/rolandtr-808servicenotes.pdf"
+ },
+ "tool": "tools/tone_stage_schematic.py",
+ "what": "the CY TONE network around VR4 (SN p.13, voicing board VG 3116-140), solved by nodal analysis -- the resolved inter-band tone term, not a bound on it"
+}

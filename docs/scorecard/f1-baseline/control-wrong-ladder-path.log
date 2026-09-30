@@ -1,0 +1,5 @@
+engine profile under test: legacy-osc2x-base-rate-filter
+identity: LadderFx factor=None causal=None headroom=None latency=None out_bits=19
+exact match vs selected voice trace: 12000 frames, g 0 / k 0 / ladder 11996 mismatches
+REFUSED  wrong ladder path: ladder is LadderFx, not RateConvertedLadder
+FAIL     and the probe's output differs from the selected component in 11996 of 12000 frames

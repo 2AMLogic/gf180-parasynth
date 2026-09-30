@@ -1,0 +1,944 @@
+{
+ "tool": "fpga/verify_live_midi.py",
+ "trial": "T-LIVE-MIDI",
+ "criterion_version": "live-midi/1",
+ "timing_contract": 2,
+ "lookahead_ms": 16.0,
+ "target": {
+  "p95_ms": 20.0,
+  "p99_ms": 30.0,
+  "endpoints": {
+   "start": "host MIDI receipt: the instant the session's MIDI input hands the message over (the stream timestamp in simulation), read as the DEVICE frame containing that instant",
+   "end": "the device frame in which the event's anchor write is applied: GATE_ON / GATE_OFF, the drum STOPS rising edge, the last pitch write of a legato change, the last register of a knob update"
+  },
+  "population": "every MIDI message whose own value is written by an update the session scheduled. A knob value superseded before it was sent has no update of its own; its staleness (receipt to the first update carrying a newer value) is reported separately and is NOT part of the target's population",
+  "components": {
+   "host_hold": "receipt -> the anchor packet's first byte written to the link",
+   "uart": "first byte written -> the device accepts the packet",
+   "device_queue": "acceptance -> the due frame (the write applies)",
+   "excluded": "synthesis (the write applies at the start of its frame; the sample computed in that frame is the first affected, proved by the bit-exact I2S comparison) and the patch's intentional attack are reported, not counted"
+  },
+  "declared_load": "the `sustained` workload of fpga/verify_live_midi.py, seed SUSTAINED_SEED, SUSTAINED_S seconds: one mono line of 8 note-ons/s with 40-140 ms gates (overlaps included), 808 drums on a 16th grid at 120 bpm (<= 3 stops a step, a tom fill every 2 bars), two knobs twisted at up to 100 CC/s",
+  "if_it_fails": "investigate lookahead, redundant writes and batching first; never relax the target"
+ },
+ "stub": false,
+ "clean": {
+  "coverage": {
+   "scenario": "coverage",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "190 live writes executed, 190 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 19 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 56 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 14 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 64 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 34 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "14 refused, 14 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "42 increment writes, 39 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 41, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 57, p50 16.04, p95 17.00, p99 26.00, max 26.00 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 0,
+   "expected": {
+    "static": 190,
+    "timed": 204,
+    "refusals": 14,
+    "superseded": 113
+   },
+   "latency": {
+    "n": 57,
+    "min_ms": 16.0,
+    "p50_ms": 16.041666666666668,
+    "p95_ms": 17.0,
+    "p99_ms": 26.0,
+    "max_ms": 26.0,
+    "histogram_ms": {
+     "16-17": 46,
+     "17-18": 10,
+     "26-27": 1
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.3715,
+     "uart_ms": 3.0044,
+     "device_queue_ms": 12.9956
+    },
+    "components_max_ms": {
+     "host_hold_ms": 9.9931,
+     "uart_ms": 10.125,
+     "device_queue_ms": 15.1458
+    },
+    "superseded_staleness": {
+     "n": 16,
+     "p50_ms": 18.0,
+     "p95_ms": 18.145833333333332,
+     "max_ms": 18.145833333333332
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.083333333333332,
+     "hit": 16.104166666666668,
+     "note-off": 16.020833333333332,
+     "knob": 26.0,
+     "panic": 16.0
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 41,
+    "device_queue_peak": 6,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 13,
+     "hit": 14,
+     "note-off": 8,
+     "knob": 20,
+     "panic": 3
+    },
+    "refused": {
+     "simultaneous": 1,
+     "sustain": 1,
+     "pitch-bend": 1,
+     "program-change": 1,
+     "mod-unrouted": 1,
+     "channel": 1,
+     "unmapped-drum": 1,
+     "domain": 2,
+     "cc-unsupported": 1,
+     "aftertouch": 1,
+     "sysex": 1,
+     "realtime": 1,
+     "poly-aftertouch": 1
+    },
+    "superseded": 113,
+    "packets": 204,
+    "drum_noteoffs": 1,
+    "noops": 5,
+    "init_writes": 190,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "aftertouch",
+    "cc-unsupported",
+    "channel",
+    "domain",
+    "mod-unrouted",
+    "pitch-bend",
+    "poly-aftertouch",
+    "program-change",
+    "realtime",
+    "simultaneous",
+    "sustain",
+    "sysex",
+    "unmapped-drum"
+   ],
+   "verdict": "PASS"
+  },
+  "coverage@65000": {
+   "scenario": "coverage",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "190 live writes executed, 190 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 19 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 56 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 14 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 64 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 34 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "14 refused, 14 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "42 increment writes, 39 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 41, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 57, p50 16.04, p95 17.00, p99 26.00, max 26.00 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 0,
+   "expected": {
+    "static": 190,
+    "timed": 204,
+    "refusals": 14,
+    "superseded": 113
+   },
+   "latency": {
+    "n": 57,
+    "min_ms": 16.0,
+    "p50_ms": 16.041666666666668,
+    "p95_ms": 17.0,
+    "p99_ms": 26.0,
+    "max_ms": 26.0,
+    "histogram_ms": {
+     "16-17": 46,
+     "17-18": 10,
+     "26-27": 1
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.3715,
+     "uart_ms": 3.0044,
+     "device_queue_ms": 12.9956
+    },
+    "components_max_ms": {
+     "host_hold_ms": 9.9931,
+     "uart_ms": 10.125,
+     "device_queue_ms": 15.1458
+    },
+    "superseded_staleness": {
+     "n": 16,
+     "p50_ms": 18.0,
+     "p95_ms": 18.145833333333332,
+     "max_ms": 18.145833333333332
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.083333333333332,
+     "hit": 16.104166666666668,
+     "note-off": 16.020833333333332,
+     "knob": 26.0,
+     "panic": 16.0
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 41,
+    "device_queue_peak": 6,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 13,
+     "hit": 14,
+     "note-off": 8,
+     "knob": 20,
+     "panic": 3
+    },
+    "refused": {
+     "simultaneous": 1,
+     "sustain": 1,
+     "pitch-bend": 1,
+     "program-change": 1,
+     "mod-unrouted": 1,
+     "channel": 1,
+     "unmapped-drum": 1,
+     "domain": 2,
+     "cc-unsupported": 1,
+     "aftertouch": 1,
+     "sysex": 1,
+     "realtime": 1,
+     "poly-aftertouch": 1
+    },
+    "superseded": 113,
+    "packets": 204,
+    "drum_noteoffs": 1,
+    "noops": 5,
+    "init_writes": 190,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "aftertouch",
+    "cc-unsupported",
+    "channel",
+    "domain",
+    "mod-unrouted",
+    "pitch-bend",
+    "poly-aftertouch",
+    "program-change",
+    "realtime",
+    "simultaneous",
+    "sustain",
+    "sysex",
+    "unmapped-drum"
+   ],
+   "verdict": "PASS"
+  },
+  "pressure": {
+   "scenario": "pressure",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "190 live writes executed, 190 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 16 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 28 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 12 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 170 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 155 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "193 refused, 193 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "21 increment writes, 18 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 38, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 120, p50 17.00, p95 17.00, p99 17.00, max 17.65 ms (reported; the target applies to `sustained`)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 0,
+   "expected": {
+    "static": 190,
+    "timed": 395,
+    "refusals": 193,
+    "superseded": 807
+   },
+   "latency": {
+    "n": 120,
+    "min_ms": 16.0,
+    "p50_ms": 17.0,
+    "p95_ms": 17.0,
+    "p99_ms": 17.0,
+    "max_ms": 17.645833333333332,
+    "histogram_ms": {
+     "16-17": 59,
+     "17-18": 61
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.5903,
+     "uart_ms": 8.7345,
+     "device_queue_ms": 7.2655
+    },
+    "components_max_ms": {
+     "host_hold_ms": 1.6347,
+     "uart_ms": 12.7917,
+     "device_queue_ms": 15.125
+    },
+    "superseded_staleness": {
+     "n": 90,
+     "p50_ms": 18.0,
+     "p95_ms": 18.0,
+     "max_ms": 18.645833333333332
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "hit": 16.083333333333332,
+     "knob": 17.645833333333332,
+     "note-on": 16.041666666666668,
+     "note-off": 16.0,
+     "panic": 16.0
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 38,
+    "device_queue_peak": 0,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "hit": 12,
+     "knob": 93,
+     "note-on": 7,
+     "note-off": 7,
+     "panic": 2
+    },
+    "refused": {
+     "queue-pressure": 193
+    },
+    "superseded": 807,
+    "packets": 395,
+    "drum_noteoffs": 0,
+    "noops": 54,
+    "init_writes": 190,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [
+    "queue-pressure"
+   ],
+   "verdict": "PASS"
+  },
+  "sustained": {
+   "scenario": "sustained",
+   "inject": null,
+   "props": {
+    "static_image": {
+     "moved": false,
+     "detail": "190 live writes executed, 190 expected; 0 differ"
+    },
+    "voice_gate": {
+     "moved": false,
+     "detail": "0 of 271 differ"
+    },
+    "voice_pitch": {
+     "moved": false,
+     "detail": "0 of 628 differ"
+    },
+    "drum_strikes": {
+     "moved": false,
+     "detail": "0 of 138 differ"
+    },
+    "drum_coeffs": {
+     "moved": false,
+     "detail": "0 of 518 differ"
+    },
+    "knobs": {
+     "moved": false,
+     "detail": "0 of 975 differ"
+    },
+    "timing": {
+     "moved": false,
+     "detail": "0 value-matched writes off their frame, worst 0"
+    },
+    "stuck_notes": {
+     "moved": false,
+     "detail": "0 frames with the gate open where the schedule closes it (0.0 ms)"
+    },
+    "refusals": {
+     "moved": false,
+     "detail": "0 refused, 0 expected, 0 differ"
+    },
+    "release_domain": {
+     "moved": false,
+     "detail": "471 increment writes, 468 glides, all inside the qualified domain"
+    },
+    "queues": {
+     "moved": false,
+     "detail": "device queue peak 18, host queue peak 17, no drops, errors or late packets"
+    },
+    "latency": {
+     "moved": false,
+     "detail": "n 905, p50 16.02, p95 16.73, p99 16.98, max 17.04 ms (target applies)"
+    },
+    "load_admitted": {
+     "moved": false,
+     "detail": "0 events refused for queue pressure and 0 pushed late under the DECLARED load (both must be 0: a supported load is played whole)"
+    }
+   },
+   "reasons": [],
+   "preconditions": [],
+   "time_map_worst_error_frames": 0,
+   "expected": {
+    "static": 190,
+    "timed": 2669,
+    "refusals": 0,
+    "superseded": 0
+   },
+   "latency": {
+    "n": 905,
+    "min_ms": 16.0,
+    "p50_ms": 16.020833333333332,
+    "p95_ms": 16.729166666666668,
+    "p99_ms": 16.979166666666668,
+    "max_ms": 17.041666666666668,
+    "histogram_ms": {
+     "16-17": 896,
+     "17-18": 9
+    },
+    "components_mean_ms": {
+     "host_hold_ms": 0.0936,
+     "uart_ms": 2.7852,
+     "device_queue_ms": 13.2149
+    },
+    "components_max_ms": {
+     "host_hold_ms": 1.0412,
+     "uart_ms": 11.9583,
+     "device_queue_ms": 15.1458
+    },
+    "superseded_staleness": {
+     "n": 0,
+     "p50_ms": null,
+     "p95_ms": null,
+     "max_ms": null
+    },
+    "pushed_events": 0,
+    "anchors_unpaired": 0,
+    "by_kind_max_ms": {
+     "note-on": 16.041666666666668,
+     "hit": 16.041666666666668,
+     "note-off": 16.0,
+     "knob": 17.041666666666668
+    }
+   },
+   "session_stats": {
+    "host_queue_peak": 17,
+    "device_queue_peak": 4,
+    "deadline_misses": 0,
+    "pushed_events": 0,
+    "reanchors": 0,
+    "device_errors": [],
+    "boots": 0,
+    "groups": {
+     "note-on": 157,
+     "hit": 138,
+     "note-off": 135,
+     "knob": 475,
+     "panic": 1
+    },
+    "refused": {},
+    "superseded": 0,
+    "packets": 2669,
+    "drum_noteoffs": 0,
+    "noops": 28,
+    "init_writes": 190,
+    "final_status": {
+     "evq": 0,
+     "wrq": 0,
+     "drops": 0,
+     "errs": 0,
+     "flags": 0
+    }
+   },
+   "refusal_categories": [],
+   "verdict": "PASS"
+  }
+ },
+ "controls": {
+  "DROP_NOTE_OFF": {
+   "control": "DROP_NOTE_OFF",
+   "scenario": "coverage",
+   "intended_reason": "a lost note-off leaves the gate open past its release",
+   "must_move": [
+    "voice_gate",
+    "stuck_notes"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "MOVED",
+    "voice_pitch": "MOVED",
+    "drum_strikes": "BLIND",
+    "drum_coeffs": "BLIND",
+    "knobs": "BLIND",
+    "timing": "BLIND",
+    "stuck_notes": "MOVED",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 26.0,
+   "reasons": [
+    "voice_gate: 12 of 19 differ; first {'expected': [(20591, False), (22513, True)], 'got': []}",
+    "voice_pitch: 20 of 56 differ; first {'expected': [], 'got': [(22559, 0, 0, 115213), (22559, 0, 1, 115680)]}",
+    "stuck_notes: 37886 frames with the gate open where the schedule closes it (789.3 ms)"
+   ],
+   "preconditions": []
+  },
+  "WRONG_DRUM_MAP": {
+   "control": "WRONG_DRUM_MAP",
+   "scenario": "coverage",
+   "intended_reason": "GM 38 strikes the clap, not the snare",
+   "must_move": [
+    "drum_strikes"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "BLIND",
+    "voice_pitch": "BLIND",
+    "drum_strikes": "MOVED",
+    "drum_coeffs": "MOVED",
+    "knobs": "BLIND",
+    "timing": "BLIND",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 26.0,
+   "reasons": [
+    "drum_strikes: 1 of 14 differ; first {'expected': [(60911, 'SD')], 'got': [(60911, 'CP')]}",
+    "drum_coeffs: 1 of 64 differ; first {'expected': [(60911, 17, 40258)], 'got': [(60911, 22, 40258)]}"
+   ],
+   "preconditions": []
+  },
+  "DELAYED_EVENT": {
+   "control": "DELAYED_EVENT",
+   "scenario": "coverage",
+   "intended_reason": "one event's writes land 5 ms after their frame",
+   "must_move": [
+    "timing"
+   ],
+   "caught": true,
+   "verdict": "FAIL",
+   "matrix": {
+    "static_image": "BLIND",
+    "voice_gate": "BLIND",
+    "voice_pitch": "MOVED",
+    "drum_strikes": "BLIND",
+    "drum_coeffs": "BLIND",
+    "knobs": "BLIND",
+    "timing": "MOVED",
+    "stuck_notes": "BLIND",
+    "refusals": "BLIND",
+    "release_domain": "BLIND",
+    "queues": "BLIND",
+    "latency": "BLIND"
+   },
+   "latency_max_ms": 26.0,
+   "reasons": [
+    "voice_pitch: 4 of 56 differ; first {'expected': [(12911, 0, 0, 115213), (12911, 0, 1, 115680)], 'got': [(13151, 0, 0, 115213), (13151, 0, 1, 115680)]}",
+    "timing: 4 value-matched writes off their frame, worst 240; first {'write': [0, 0, 0, 115213], 'expected': 12911, 'got': 13151}"
+   ],
+   "preconditions": []
+  }
+ },
+ "rtl": {
+  "coverage": {
+   "state": "PASS",
+   "capture": {
+    "rows": 399,
+    "writes": 190,
+    "events": 204,
+    "last_due": 94512
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 394,
+    "writes_seen": 394,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 30,
+    "x_bad": 0,
+    "acks_seen": 394,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 108912,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "detail": [],
+   "reused_rtl_run": true,
+   "run_receipt": {
+    "path": "coverage.run_identity.json",
+    "sha256": "498fe17301bd1d9700c575b4edb7d5e62bea1480139aded361a161e0814d2692"
+   }
+  },
+  "pressure": {
+   "state": "PASS",
+   "capture": {
+    "rows": 588,
+    "writes": 190,
+    "events": 395,
+    "last_due": 32112
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 585,
+    "writes_seen": 585,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 30,
+    "x_bad": 0,
+    "acks_seen": 585,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 46512,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "detail": [],
+   "reused_rtl_run": true,
+   "run_receipt": {
+    "path": "pressure.run_identity.json",
+    "sha256": "fd6c7e8b2391f42a9d5addb8bf3a32a4b47ff240c3619b16d5622c5f5a660c0b"
+   }
+  },
+  "sustained": {
+   "state": "PASS",
+   "capture": {
+    "rows": 507,
+    "writes": 190,
+    "events": 309,
+    "last_due": 151972
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 499,
+    "writes_seen": 499,
+    "writes_bad": 0,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 30,
+    "x_bad": 0,
+    "acks_seen": 499,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 0,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 0,
+    "periods": 166372,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "detail": [],
+   "reused_rtl_run": true,
+   "run_receipt": {
+    "path": "sustained.run_identity.json",
+    "sha256": "4d0ff3dd60807eb9d93a7a4b28355b3ec52d52cfb320e6c4ea4b92711dab8eaf"
+   }
+  },
+  "control-WRONG_DRUM_MAP": {
+   "state": "FAIL",
+   "capture": {
+    "rows": 399,
+    "writes": 190,
+    "events": 204,
+    "last_due": 94512
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 394,
+    "writes_seen": 394,
+    "writes_bad": 2,
+    "frame_pred_bad": 0,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 30,
+    "x_bad": 0,
+    "acks_seen": 394,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 47824,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 47825,
+    "periods": 108912,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "detail": [
+    "write 346: intended f/sec/a/d 0/1/0x11/0x9d42, got 0/1/0x16/0x9d42",
+    "write 347: intended f/sec/a/d 0/1/0x0/0x2, got 0/1/0x0/0x40",
+    "seg 0 period 60912: model -2553, wire -2867, error -314 LSB",
+    "seg 0 period 60913: model -3643, wire -1547, error +2096 LSB",
+    "seg 0 period 60914: model -2531, wire -3762, error -1231 LSB"
+   ],
+   "reused_rtl_run": true,
+   "run_receipt": {
+    "path": "coverage-WRONG_DRUM_MAP.run_identity.json",
+    "sha256": "14f8bd7cd792b0fabcf83ab7c34a98d285748d2f3f1be28556c0f4ab38efac6d"
+   },
+   "caught_by_i2s": true
+  },
+  "control-DELAYED_EVENT": {
+   "state": "FAIL",
+   "capture": {
+    "rows": 399,
+    "writes": 190,
+    "events": 204,
+    "last_due": 94512
+   },
+   "comparison": {
+    "scenario": "replay",
+    "inject": null,
+    "writes_sent": 394,
+    "writes_seen": 394,
+    "writes_bad": 0,
+    "frame_pred_bad": 4,
+    "frame_no_pred": 0,
+    "live_phase_jitter": 30,
+    "x_bad": 0,
+    "acks_seen": 394,
+    "errs_seen": 0,
+    "err_codes": {},
+    "boots_seen": 1,
+    "ack_missing": 0,
+    "status_bad": 0,
+    "wire_mismatch": 84447,
+    "swap": 0,
+    "width": 0,
+    "core_bad": 84448,
+    "periods": 108912,
+    "collisions": 0,
+    "busy_at_tick": 0,
+    "overrun": 0,
+    "overflow": 0,
+    "frames_no_sample": 0,
+    "worst_strobe_cycle": 198
+   },
+   "detail": [
+    "write 205 (a=0x0): contract frame 12911, landed 13151",
+    "write 206 (a=0x1): contract frame 12911, landed 13151",
+    "write 207 (a=0x2): contract frame 12912, landed 13152",
+    "write 208 (a=0x1a): contract frame 12912, landed 13152",
+    "seg 0 period 12920: model 255, wire 254, error -1 LSB",
+    "seg 0 period 12923: model -1520, wire -1518, error +2 LSB",
+    "seg 0 period 12924: model -1599, wire -1605, error -6 LSB"
+   ],
+   "reused_rtl_run": true,
+   "run_receipt": {
+    "path": "coverage-DELAYED_EVENT.run_identity.json",
+    "sha256": "aef6a1fd5717554bc4abc79ca2a7730ca41c13666ebdc96de3ed784045175a73"
+   },
+   "caught_by_i2s": true
+  }
+ },
+ "verdict": "PASS"
+}

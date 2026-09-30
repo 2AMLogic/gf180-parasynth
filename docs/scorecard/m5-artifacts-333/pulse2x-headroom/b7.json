@@ -1,0 +1,23 @@
+[
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_pulse2x_headroom.py fine --gains 0.80 0.78 0.76 --out build/headroom/fine-a.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "gain 0.800 (Q15 26214): fail square peak 32435@120.875 clip 0; pulse479 peak 33104@120.75 clip 23214; pulse25 peak 34891@127.0 clip 81508; pulse15 peak 33227@102.5 clip 18687\ngain 0.780 (Q15 25559): fail square peak 31625@120.875 clip 0; pulse479 peak 32277@120.75 clip 0; pulse25 peak 34019@127.0 clip 22520; pulse15 peak 32397@102.5 clip 0\ngain 0.760 (Q15 24904): fail square peak 30814@120.875 clip 0; pulse479 peak 31450@120.75 clip 0; pulse25 peak 33147@127.0 clip 5046; pulse15 peak 31566@102.5 clip 0\nwrote build/headroom/fine-a.json\n",
+    "secs": 232.2560772895813
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_pulse2x_headroom.py fine --gains 0.75 0.74 0.73 --out build/headroom/fine-b.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "gain 0.750 (Q15 24576): fail square peak 30408@120.875 clip 0; pulse479 peak 31035@120.75 clip 0; pulse25 peak 32711@127.0 clip 0; pulse15 peak 31151@102.625 clip 0\ngain 0.740 (Q15 24248): PASS square peak 30003@120.875 clip 0; pulse479 peak 30621@120.75 clip 0; pulse25 peak 32274@127.0 clip 0; pulse15 peak 30735@102.5 clip 0\ngain 0.730 (Q15 23921): PASS square peak 29598@120.875 clip 0; pulse479 peak 30208@120.75 clip 0; pulse25 peak 31839@127.0 clip 0; pulse15 peak 30320@102.5 clip 0\nwrote build/headroom/fine-b.json\n",
+    "secs": 230.5623893737793
+  },
+  {
+    "cmd": "/home/ubuntu/work/venv/bin/python tools/measure_pulse2x_headroom.py fine --gains 0.72 0.71 0.70 --out build/headroom/fine-c.json",
+    "state": "PASS",
+    "rc": 0,
+    "out": "gain 0.720 (Q15 23593): PASS square peak 29192@120.875 clip 0; pulse479 peak 29794@120.75 clip 0; pulse25 peak 31402@127.0 clip 0; pulse15 peak 29905@102.625 clip 0\ngain 0.710 (Q15 23265): PASS square peak 28786@120.875 clip 0; pulse479 peak 29380@120.75 clip 0; pulse25 peak 30966@127.0 clip 0; pulse15 peak 29489@102.5 clip 0\ngain 0.700 (Q15 22938): PASS square peak 28382@120.875 clip 0; pulse479 peak 28967@120.75 clip 0; pulse25 peak 30531@127.0 clip 0; pulse15 peak 29074@102.5 clip 0\nwrote build/headroom/fine-c.json\n",
+    "secs": 230.54815936088562
+  }
+]

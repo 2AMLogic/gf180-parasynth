@@ -1,0 +1,178 @@
+{
+ "stage": "analyse",
+ "job_id": "BD-solo-7156d23-ac67474d-156c39bccf05-drum-decay-rms-v2-d85980fff66a",
+ "case_id": "BD-solo",
+ "render_id": "BD-solo-7156d23-ac67474d-156c39bccf05",
+ "render_wav_sha256": "sha256:4144d54580ca3f13",
+ "analyser": "drum-decay-rms",
+ "analyser_version": "v2",
+ "config": {
+  "status": "current",
+  "drum_verify_sha256": "sha256:16421a20a229c753",
+  "audio_measure_sha256": "sha256:ff1ae641f70752d1",
+  "read": "raw.wav",
+  "read_sha256": "sha256:4144d54580ca3f13"
+ },
+ "measurements": {
+  "fundamental": {
+   "name": "fundamental",
+   "units": "Hz",
+   "value": 49.4091,
+   "analyser": "drum-decay-rms",
+   "analyser_version": "v2",
+   "method": "drum_verify.spectrum (Hann over the first 0.500 s, 262144-point rfft) -> parabolic-interpolated maximum inside 20-2000 Hz",
+   "interval_s": [
+    0.0,
+    0.5
+   ],
+   "channel": "mono: the drum buses summed through drums_fx.output_fx",
+   "resample_hz": "none: rendered and analysed at 48000 Hz",
+   "filter": "the maximum is restricted to drum_verify.BAND['BD'] = 20-2000 Hz; the signal itself is not filtered",
+   "normalisation": "none: a frequency, unaffected by level",
+   "fft": {
+    "transform": "real FFT of a Hann-windowed segment",
+    "window": "Hann, 24000 samples (500.0 ms)",
+    "nfft": 262144,
+    "bin_hz": 0.183105,
+    "hop": "one transform of one segment, not a spectrogram"
+   },
+   "fit_quality": {
+    "model": "parabolic interpolation of the three bins around the maximum",
+    "uncertainty": 0.0916,
+    "uncertainty_basis": "half the 0.1831 Hz bin spacing before interpolation improves it",
+    "noise_floor_db": -102.991,
+    "noise_floor_treatment": "the maximum is taken inside the band, so the -103.0 dB mean level above it cannot become the peak"
+   },
+   "reference_identity": "document: docs/tr808-reference.md 12/14 carried by model/drum_verify.py SPEC['BD'] (source: reference 2 (DR 0009)), sha256:ba784b8499a8df42; the documented reference setting is TONE 5.0, DECAY 5.0 (bd8/BD5050.WAV) and ours is one hit at accent 1.0 with both drum buses at 0.45. NO RECORDING IS READ: the comparand is the document's figure, so this is a document identity and not a recording one",
+   "selection": {
+    "hit_index": 0,
+    "onset_s": 0.009,
+    "interval_basis": "from the trimmed onset, capped at 0.5 s so a long tail does not dilute the transform (drum_verify.measure's own rule)"
+   }
+  },
+  "decay tau": {
+   "name": "decay tau",
+   "units": "ms",
+   "value": 86.4672,
+   "analyser": "drum-decay-rms",
+   "analyser_version": "v2",
+   "method": "drum_verify.trim_onset -> moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) -> drum_verify.decay_fit, least squares on the log-envelope between -3 and -30 dB of its peak",
+   "interval_s": [
+    0.037625,
+    0.300708
+   ],
+   "channel": "mono: the drum buses summed through drums_fx.output_fx",
+   "resample_hz": "none: rendered and analysed at 48000 Hz",
+   "filter": "none on the envelope path -- the envelope is a moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) of the full-band signal; drum_verify.BAND is applied to the spectrum rows only",
+   "normalisation": "none (absolute full scale); the decay is measured relative to the envelope's own peak, so a gain change cannot move it",
+   "fft": {
+    "transform": "none: a time-domain envelope fit",
+    "window": "moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental)",
+    "nfft": "none: no transform is taken",
+    "hop": "none: the envelope is evaluated at every sample"
+   },
+   "fit_quality": {
+    "r2": 0.99518,
+    "span_db": 26.9811,
+    "points": 12629,
+    "model": "least squares on the log-envelope, dB vs s",
+    "uncertainty": 0.0536,
+    "uncertainty_basis": "1 sigma on tau, propagated from the least-squares covariance of the log-envelope slope",
+    "noise_floor_db": -41.782,
+    "noise_floor_treatment": "the fit stops at the first sample -30.0 dB below the envelope peak; the render's last 50 ms sits at -41.8 dB, so no sample inside the floor enters the fit"
+   },
+   "reference_identity": "document: docs/tr808-reference.md 12/14 carried by model/drum_verify.py SPEC['BD'] (source: reference 2 (DR 0009)), sha256:ba784b8499a8df42; the documented reference setting is TONE 5.0, DECAY 5.0 (bd8/BD5050.WAV) and ours is one hit at accent 1.0 with both drum buses at 0.45. NO RECORDING IS READ: the comparand is the document's figure, so this is a document identity and not a recording one",
+   "selection": {
+    "hit_index": 0,
+    "onset_s": 0.009,
+    "interval_basis": "the samples between -3 and -30 dB below the envelope peak, which is what decay_fit fits -- not the whole tail"
+   }
+  },
+  "T20": {
+   "name": "T20",
+   "units": "ms",
+   "value": 186.1042,
+   "analyser": "drum-decay-rms",
+   "analyser_version": "v2",
+   "method": "drum_verify.trim_onset -> moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) -> the first sample at or below -20 dB of the envelope peak, in ms from the peak. A threshold crossing, not a fit",
+   "interval_s": [
+    0.014292,
+    0.200396
+   ],
+   "channel": "mono: the drum buses summed through drums_fx.output_fx",
+   "resample_hz": "none: rendered and analysed at 48000 Hz",
+   "filter": "none on the envelope path -- the envelope is a moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) of the full-band signal; drum_verify.BAND is applied to the spectrum rows only",
+   "normalisation": "none (absolute full scale); the decay is measured relative to the envelope's own peak, so a gain change cannot move it",
+   "fft": {
+    "transform": "none: a -20 dB threshold crossing",
+    "window": "moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental)",
+    "nfft": "none: no transform is taken",
+    "hop": "none: the envelope is evaluated at every sample"
+   },
+   "fit_quality": {
+    "model": "none: a crossing is located, not fitted",
+    "uncertainty": 0.0208,
+    "uncertainty_basis": "+/-1 sample (0.0208 ms); the envelope's own smoothing window is the larger term and is stated in fft.window",
+    "noise_floor_db": -41.782,
+    "noise_floor_treatment": "-20 dB is far above this render's floor, so the crossing is on signal; a floor above -20 dB would make this metric meaningless and is recorded for that check"
+   },
+   "reference_identity": "model-lock: model/sound_report.py LOCKS measured at commit ce400a6, sha256:7a4c3981a40c6473; matched to the same solo render sound_report.py measures -- one BD hit at accent 1.0 through the whole drum path at 48000 Hz with trim_onset applied before the envelope",
+   "selection": {
+    "hit_index": 0,
+    "onset_s": 0.009,
+    "interval_basis": "the envelope peak to its first -20 dB crossing"
+   }
+  },
+  "attack": {
+   "name": "attack",
+   "units": "ms",
+   "value": 14.2917,
+   "analyser": "drum-decay-rms",
+   "analyser_version": "v2",
+   "method": "drum_verify.trim_onset -> moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) -> drum_verify.attack_ms: the 2 %-of-peak crossing of the envelope to the envelope's peak",
+   "interval_s": [
+    0.0,
+    0.014292
+   ],
+   "channel": "mono: the drum buses summed through drums_fx.output_fx",
+   "resample_hz": "none: rendered and analysed at 48000 Hz",
+   "filter": "none on the envelope path -- the envelope is a moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental) of the full-band signal; drum_verify.BAND is applied to the spectrum rows only",
+   "normalisation": "none (absolute full scale); the decay is measured relative to the envelope's own peak, so a gain change cannot move it",
+   "fft": {
+    "transform": "none: an onset-to-peak time",
+    "window": "moving RMS, drum_verify.ENV_WIN_MS[voice] ms (several periods of the voice's own fundamental)",
+    "nfft": "none: no transform is taken",
+    "hop": "none: the envelope is evaluated at every sample"
+   },
+   "fit_quality": {
+    "model": "none: two locations, no fit",
+    "uncertainty": 0.0208,
+    "uncertainty_basis": "+/-1 sample (0.0208 ms) on each end; the envelope window is what sets the real resolution, and is why this metric moves when the envelope method changes",
+    "noise_floor_db": -41.782,
+    "noise_floor_treatment": "the 2 % threshold is 34 dB below the peak; the measured floor is the check that it is above it"
+   },
+   "reference_identity": "model-lock: model/sound_report.py LOCKS measured at commit ce400a6, sha256:7a4c3981a40c6473; matched to the same solo render sound_report.py measures -- one BD hit at accent 1.0 through the whole drum path at 48000 Hz with trim_onset applied before the envelope",
+   "selection": {
+    "hit_index": 0,
+    "onset_s": 0.009,
+    "interval_basis": "the 2 %-of-peak crossing to the peak"
+   }
+  }
+ },
+ "trace_paths": {
+  "fit_region_t_s": "traces/fit_region_t_s.json",
+  "fit_region_db": "traces/fit_region_db.json",
+  "envelope_db_per_ms": "traces/envelope_db_per_ms.json"
+ },
+ "provenance": {
+  "worktree": {
+   "commit": "7156d23",
+   "described": "node/D-drums-bitexact-537-g7156d23-dirty",
+   "branch": "feature/issue-68",
+   "dirty": true,
+   "uncommitted_sha256": "ac67474d1d4fe2cd",
+   "untracked_files": 5
+  },
+  "run_at": "2026-09-26T12:11:56Z"
+ }
+}

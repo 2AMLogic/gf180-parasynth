@@ -63,12 +63,6 @@ def tag_is_ancestor(tag: str) -> bool:
     return r.returncode == 0
 
 
-def mtime_commit(path: str) -> int:
-    """Commit time of a path's last change, 0 if untracked or absent."""
-    out = git("log", "-1", "--format=%ct", "--", path)
-    return int(out) if out.isdigit() else 0
-
-
 def run_evidence(nid: str, n: dict) -> tuple[bool, str]:
     """Actually execute this node's evidence. Returns (passed, detail).
 

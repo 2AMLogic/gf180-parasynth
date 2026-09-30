@@ -1,0 +1,31 @@
+==============================================================================
+PASS           452.2s  /home/ubuntu/work/venv/bin/python -m pytest model/test_filter_rate_chain.py tools/test_rate_conv_2x.py tools/test_mono_m5a_score.py tools/test_measure_m5a_saw_cutoff.py tools/test_score_m5a_i2s.py tools/test_compare_m5a_i2s_candidate.py tools/test_verify_m5a_filter2x_i2s.py tools/test_measure_m5a_filter_oversample.py tools/test_measure_m5a_filter_headroom.py tools/test_measure_m5a_pulse_duty.py tools/test_measure_m5a_signal_path.py tools/test_measure_m5a_attack_bias.py tools/test_measure_mono_attack_context.py tools/test_measure_mono_m1a_reference.py tools/test_mono_m1a_score.py tools/test_qualify_m1a_attack.py tools/test_measure_m1a_volume_mapping.py tools/test_m5a_fast_workflow.py tools/test_run_case.py tools/test_run_all.py rtl-sketch/test_m5a_stimulus.py rtl-sketch/test_verify_ctl_blindness.py -q
+                /home/ubuntu/work/clap-d/tools/run_case.py:801: WavFileWarning: Reached EOF prematurely; finished at 22094 bytes, expected 22095 bytes from header.
+                  sr, x = wavfile.read(str(path))
+              -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+              272 passed, 5 warnings in 451.85s (0:07:31)
+PASS             8.7s  /home/ubuntu/work/venv/bin/python -m pytest fpga/test_selected_preset.py fpga/test_build_selected.py fpga/test_build_arty.py fpga/test_publish_arty.py fpga/test_publish_selected.py fpga/test_uart_host.py fpga/test_uart_host_rolling.py fpga/test_uart_replay_reuse.py tools/test_setup_ci_oss_cad.py fpga/test_spi_host.py -q
+              ........................................................................ [ 44%]
+              ........................................................................ [ 88%]
+              ...................                                                      [100%]
+              163 passed in 8.37s
+PASS             2.0s  /home/ubuntu/work/venv/bin/python -m pytest model/test_pulse_oversample.py tools/test_measure_mono_pulse_2x.py tools/test_pulse2x_configuration.py -q
+              ..........                                                               [100%]
+              10 passed in 1.67s
+PASS             1.1s  /home/ubuntu/work/venv/bin/python -m pytest model/test_audio_measure.py -q -k foldback
+              ...                                                                      [100%]
+              3 passed, 132 deselected in 0.75s
+PASS            31.3s  /home/ubuntu/work/venv/bin/python tools/measure_m5a_signal_path.py --cutoff 14073 --drive 1.0 0.75 --out build/verification/m5a-signal-path-fast.json
+                    ]
+                  }
+                ]
+              }
+PASS            69.9s  /home/ubuntu/work/venv/bin/python tools/verify_mono_case.py
+              ------------------------------------------------------------------------------------------------
+              fail: 1
+              exit 1: 0 match, 1 mismatch (a result), 2 did not run (no evidence)
+              M5A sound measurement is valid (fail); all seven metrics and the hash-bound SPI-to-I2S integration report are present.
+PASS             0.1s  /home/ubuntu/work/venv/bin/python tools/check_workflows.py
+              7 workflow(s) parse and declare a usable trigger
+==============================================================================
+7/7 passed

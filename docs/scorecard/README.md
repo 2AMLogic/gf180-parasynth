@@ -31,6 +31,15 @@ worst, which is dimensionless and passes at ≤ 1.
 **Coverage is reported separately and always** — *"20 passing, 4 failing, 6
 without verdicts"*, never *"83 % passing"*, which conceals what was not checked.
 
+**Known coverage gap: time-varying mono behaviour has no artifact measurement.**
+The stage-by-stage artifact probe (`tools/mono_artifact_probe.py`, #333) is
+qualified only for held, stationary notes, where everything that is not a
+harmonic of the programmed pitch is unwanted. **Transitions, glides, filter and
+pitch modulation, drift and noise are not covered.** The probe refuses those
+stimuli, and no case measures clicks, zippering or aliasing during them. They
+need a validated time-varying oracle, which does not exist yet. Until one does,
+a clean held-note sweep says nothing about those behaviours.
+
 **Every result names the engine that produced it:** `float-model`,
 `fixed-model`, `integrated-rtl`, `board-digital`, `board-analog`. These are not
 interchangeable, and the tool says so out loud when no case has been measured on
@@ -41,6 +50,85 @@ the integrated RTL:
 
 **That is the failure this column exists to prevent** — optimising eighty cases
 against a model the built instrument does not reproduce.
+
+### The two anchors that exist, and what each one drives
+
+An `integrated-rtl` row is not one thing. What the label promises is that the
+audio scored came out of synthesizable RTL; *which* RTL, and how the stimulus
+reached it, differs by family and has to be read off the record:
+
+| case | route | driven by | scored by |
+|---|---|---|---|
+| `M5A` | SPI pins → `synth_top` → I2S pins, decoded | `rtl-sketch/verify_synth_top.py` | `tools/score_m5a_i2s.py` |
+| `F1A` | stepped tone → `rate_conv_2x` → `ladder_dp_n` → `rate_conv_2x` | `rtl-sketch/tb_f1_chain.v` | `tools/score_f1_rtl.py` |
+
+**`M5A`'s route does not generalise to a filter case**, and the reason is worth
+stating rather than discovering: `synth_top` has no audio input. Its filter is
+fed by the oscillator mixer, and an F1 case is a transfer function — it needs a
+stepped tone to enter the *filter*. So `F1A` drives the two production filter
+modules directly, composed by `rtl-sketch/tb_f1_chain.v` in the order and with
+the sequencing `voice_dp.v` uses under `VOICE_FILTER_2X`. That is a smaller
+claim than `M5A`'s: it covers the filter path, not the pin-to-pin chip.
+`tools/check_f1_rtl_record.py` binds the record to the bytes of the bench and
+both modules, so the claim cannot outlive the RTL it was made about.
+
+**The RTL reading and its `fixed-model` twin come from the same scorer.**
+`run_case.run_filter_case` takes the filter path as an argument, so both engines
+meet the same estimators, the same frozen Surge clips and the same tolerance
+policy; a second scoring path would have left a difference between engines
+indistinguishable from a difference between scorers. Both readings stay on the
+record under `engine_comparison`, because a disagreement is the finding, not a
+thing to overwrite.
+
+**What the F1 stimulus does not exercise, measured rather than assumed.** F1A–F1C
+command resonance 0, so `k_eff` is 0 and the ladder's feedback term is multiplied
+by zero; the probe sits at −12 dBFS, so nothing saturates and the interpolated
+word never passes ±32767. Of the arithmetic-corner controls in `ladder_dp_n.v`
+and `rate_conv_2x.v`, **none can turn an F1 curve red** — checked, not assumed
+(`f1_rtl_filter_path.INJECTS_NOT_EXERCISED`). The two controls that do fire are
+composition defects in the bench (bypass the interpolator; drop the decimator),
+and they are in `make controls`. A Filters row is therefore evidence about the
+filter's *linear* response on the instrument and says nothing about its
+nonlinear corners.
+
+## Two scores for one change: bass compensation
+
+A ladder loses bass as its resonance rises — `H(0) = 1/(1 + k)` in the
+small-signal model, which `model/test_moog_acceptance.py` now asserts against
+our filter directly.
+<!-- claim: test=model/test_moog_acceptance.py::test_the_ladders_low_frequency_gain_is_one_over_one_plus_k -->
+DR 0005's `ogain` gives part of it back (`(1 + 2 res)`), and DR 0006's `k_comp`
+ROM moves the onset. **Both are level policy, and a change to either has two
+effects that must never be added up:**
+
+| property | asks | measured against |
+|---|---|---|
+| **`Bass loss`** | *does it match the reference?* | the frozen Surge Type 2 profile — the low-frequency gain versus resonance of another implementation of the same filter |
+| **`Playing weight`** | *does it sound bigger?* | our own declared level at that node, unnormalised — no reference, and no claim that a reference would agree |
+
+The two are **separate named properties on the same case** (`F2A`–`F2D` in
+[`cases.csv`](cases.csv)), never combined into one number, because the
+interesting change is the one that moves them in opposite directions:
+compensation that makes the instrument feel better to play while moving it
+*away* from the reference. That is a legitimate product choice — and it has to
+be **visible as a choice**, which means seeing both numbers, not an average
+that hides which half paid for which.
+<!-- claim: test=tools/test_acceptance_policy.py::test_a_bass_compensation_trade_is_two_properties_not_an_average -->
+
+Two consequences of listing both as required measurements, both deliberate:
+
+- **You cannot report the weight and call the compensation validated.**
+  A case missing either half is `no verdict`, by the rule three sections up.
+  `Bass loss` is currently a stated not-run (`run_case.NOT_RUN["F2A"]`: the
+  comparison is not well posed until a matched-drive definition is written
+  down), and `Playing weight` is measurable on our own output today — exactly
+  the asymmetry that would otherwise let the easy half stand in for the hard
+  one.
+  <!-- claim: test=tools/test_acceptance_policy.py::test_every_case_scoring_bass_loss_also_scores_playing_weight -->
+- **A regression in either is a regression.** `scorecard.compare` rejects a
+  candidate where any property regresses past its allowance, whatever the
+  others did; widening one property's allowance is available and is a recorded
+  decision, which is the difference between a trade and an accident.
 
 ## What is frozen before results are collected, and why
 
@@ -81,6 +169,55 @@ tests repeatability; it is not evidence of generalisation to a new knob setting.
 
 And once a holdout case's detailed errors have guided a change, **it has become
 development data** — a fresh independent claim needs new holdout cases.
+
+### Both of those sentences are now a mechanism: [`holdout/`](holdout/) and `tools/holdout.py`
+
+They were prose for a year, and prose cannot answer the only question that
+matters about a holdout: *was this setting chosen before or after somebody saw
+the error?* On disk those two states look identical. `tools/run_case.py`'s own
+`NOT_RUN` table said so — an agent who "picks the setting, freezes the clip and
+reads the error in one pass has produced a development case wearing a holdout's
+label, and **there is no way to tell afterwards which it was**."
+
+A seal is a committed file, `docs/scorecard/holdout/<case>.json`, holding the
+settings, who chose them, what has already seen them, and why they are unseen —
+the same fields `tools/probes/hihat/hh_probe5.py` carries in its module-level
+`HOLDOUT` dict, moved to where **git** can check the ordering instead of a
+docstring asserting it. What the mechanism does, all of it refusal rather than
+report:
+<!-- claim: test=tools/test_holdout.py::test_an_unsealed_holdout_case_is_refused_and_carries_no_distance -->
+
+| | |
+|---|---|
+| a `Holdout`-split case with no seal | **REFUSED** — a stated no-verdict naming the missing seal, never a score |
+| a seal git has never seen, or one with uncommitted edits | **REFUSED** — otherwise "chosen before" and "chosen after" are the same state |
+| every reading | appended to [`holdout/LEDGER.json`](holdout/LEDGER.json) with the seal's hash and the *model state* it was read at |
+| a seal edited after it was read | **STALE** from `tools/holdout.py check` — the one failure the seal alone cannot catch |
+| a second reading after the model moved | **REFUSED** until `tools/holdout.py open` records the transition; after it, records carry `holdout_claim: false` |
+
+Every result for a holdout case carries a `holdout` block saying which seal it
+was measured against, and the ordering is re-derivable from git rather than
+believed:
+
+```
+git merge-base --is-ancestor <holdout.seal_commit> <provenance.worktree.commit>
+```
+
+**What it does not do.** It cannot say a setting was a *good* choice — `why` and
+`seen_by` are the author's argument and a reviewer still reads them. "The model
+moved" is a hash over `run_case.MODEL_INPUTS`, so a change outside that set is as
+invisible here as it is to every other result. And sealing does not make a case
+measurable: **F1D** is sealed at 500 Hz, resonance zero — the cutoff region no
+case, fit or tolerance here has read — and it is a stated no-verdict until
+somebody renders `surge-type2/lp-cut500-res0.00` on a host with the plugin, which
+is exactly the ordering the seal is for.
+
+**Nineteen of the twenty holdout cases have no seal, deliberately.** F2D, F3D and
+F5D are blocked on what their A/B/C rungs are blocked on — a matched-drive
+definition, a rig change, a stimulus neither side can produce — and sealing them
+now would freeze settings nothing can read. The other sixteen are not yet reached
+by the development-set work. Every one of them is REFUSED rather than scored
+today, which is the change: the absence is now enforced instead of assumed.
 
 ## Filling it
 

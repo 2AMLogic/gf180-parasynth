@@ -1,15 +1,38 @@
 # The capability DAG's permanent regression gate -- docs/capability-dag.md.
 #
-# Every stamped node's test set runs here, on every push, with NO path filter.
+# Every stamped node's test set runs here on every push that could affect it.
 # The `moog-acceptance` workflow is path-filtered to model/, audition/ and
 # spec/, so an RTL or flow change cannot turn it red. A promise conditioned on
-# which directory you edited is not a promise.
+# which directory you edited is not a promise -- so the condition here is the
+# other way round (issue #457): tools/ci_changes.py skips the suite ONLY when
+# every changed path is positively recognised as agent tooling or as prose no
+# suite names, and anything it does not recognise, including a path that did
+# not exist when it was written, runs everything. A push to main always runs
+# everything. No workflow-level `paths:` either: a path-skipped workflow never
+# reports, which would leave a required check waiting forever (#287).
 name: nodes
 
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
+  # Which suites this change can affect: tools/ci_changes.py. Every job below
+  # needs it and skips only on an explicit `none` or `docs`, so a failure here
+  # (no output) runs everything. A job skipped by its `if:` reports success,
+  # so a required check is never left waiting.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.classify.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: classify
+        run: python3 tools/ci_changes.py
+
   pulse2x-rtl:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     concurrency:
@@ -53,6 +76,8 @@ jobs:
             build/pulse-evidence/
 
   reference-controls:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -78,6 +103,8 @@ jobs:
           path: build/reference-controls.json
 
   m5a-fast:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     # The explicitly scoped sound-development gate stays independent of the
     # broad model suite below, so a long repository run cannot hide its result.
     runs-on: ubuntu-latest
@@ -95,8 +122,70 @@ jobs:
         run: make verify-fast
 
   python:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    # GitHub-hosted (free on a public repo) since the 2026-09-30 Blacksmith
+    # outage and the operator's move of every public repo off Blacksmith (D5).
+    runs-on: ubuntu-24.04
+    # 30 was already marginal before the claim-checker steps below: the two
+    # runs on this PR took 14m39s and 27m20s, so the job's own variance nearly
+    # spends the cap on its own. The claim checker and its controls measured
+    # 22s + 45s locally; adding them under a 30-minute cap would buy a gate at
+    # the price of an intermittent red, which is the trade
+    # docs/failure-modes.md says not to make.
+    #
+    # 70, not 40, since the move to GitHub-hosted (2026-09-30). On Blacksmith
+    # this job measured 17-23 min over 34 runs; the first two hosted runs
+    # (PR #489, push + pull_request) took 36.4 and 40.3 min -- the second
+    # would already have been cancelled at 40. 70 is ~1.75x the hosted max,
+    # the same headroom 40 gave over Blacksmith's 23. Re-measure once more
+    # hosted runs accumulate.
+    timeout-minutes: 70
+
+    # Issue #422. On 2026-09-28 the `everything else` step below exited 139 --
+    # SIGSEGV, core dumped -- 12m40s in, at 30 % collected, with the innermost
+    # Python frame at model/drums_fx.py's `Env.out`:
+    #
+    #     return self.level >> (ENV_BITS - 15)
+    #
+    # A shift of two ints cannot fault, and the traceback's ~30 Python frames run
+    # unbroken into pytest's runner, so it is neither our arithmetic nor runaway
+    # recursion: the interpreter or a native extension died and surfaced at
+    # whatever frame happened to be innermost. The SAME COMMIT passed this job on
+    # its other trigger -- push 36377452558 crashed, pull_request 36377455006
+    # passed -- so it is non-deterministic, established rather than assumed.
+    #
+    # The full measurement is docs/ci-segfault-2026-09-28.md. What is pinned here
+    # does NOT claim to fix it -- nothing reproduced it in 120 runs -- and is
+    # justified by two numbers rather than by plausibility:
+    #
+    #   - `tools/crash_rate.py --runs 60`, twice, on the exact failing nodeid and
+    #     the exact stack that crashed (Python 3.12, numpy 2.5.3, scipy 1.18.1):
+    #     0 crashes in 120 runs that reached the code. So the honest status is
+    #     "bounded and instrumented", not "repaired", and the reason for pinning
+    #     is the second number, not the first.
+    #   - that same path takes the process from 1 OS thread to 15 under those pip
+    #     wheels, and to 1 under Ubuntu's apt numpy. The thread count of a job
+    #     that died in its main interpreter thread is therefore a function of the
+    #     runner tier and of whatever pip resolved that morning, neither of which
+    #     is in the commit. Pinning makes the numeric environment a property of
+    #     the commit, which is what makes a future crash rate comparable at all.
+    #     Cost, from the 60+60 paired runs under one load: median 12.86 s pinned
+    #     against 13.26 s unpinned -- 3 % FASTER, because these are least-squares
+    #     fits over a few hundred samples, where starting a thread pool costs
+    #     more than it returns.
+    #
+    # Deliberately NOT applied to the other jobs in this file, which run the same
+    # wheels unpinned. That leaves a control: a recurrence in `m5a-fast` or `rtl`
+    # but never here is evidence about threading, and a recurrence in both is
+    # evidence against it. Pinning everything would have destroyed the only
+    # comparison this repository can run without reproducing the crash.
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -174,8 +263,148 @@ jobs:
         run: python -m pytest model/test_audio_measure.py -q
       - name: M2 -- the voice is musically a Minimoog
         run: python -m pytest model/test_moog_acceptance.py -q
+      # The two instruments issue #422 added live under tools/, which
+      # `pytest model/ spec/` does not collect and which no job runs in full --
+      # exactly the gap #390 found, where the SN tone-stage derivation was
+      # carried by a file no workflow collected. Named here, and named BEFORE the
+      # step it guards: tools/run_with_rss.py stands in front of the one step
+      # that has already died of SIGSEGV, so an unexercised copy of it is a false
+      # green waiting to happen. Its load-bearing control is a child that really
+      # does segfault and must still exit 139 through the wrapper.
+      # Measured 7.7 s + 8.3 s on the 8-vCPU worker, so the 40-minute cap above
+      # is untouched.
+      - name: the crash instruments' controls
+        run: |
+          python -m pytest tools/test_run_with_rss.py -q
+          python -m pytest tools/test_crash_rate.py -q
+
+      # Wrapped for issue #422. The crash could not be classified after the fact
+      # because this job recorded neither peak RSS nor `ulimit -s`, and an OOM
+      # kill (137) and a native fault (139) are different problems with different
+      # fixes. The wrapper prints both, plus MemTotal/MemAvailable and which
+      # thread limits are in force, BEFORE the command runs -- so the envelope
+      # survives a child that takes the runner down with it -- and passes the
+      # child's status through unchanged: a SIGSEGV still exits 139 here.
+      # Measured on the 8-vCPU worker: 98 MB peak for the failing test alone and
+      # 245 MB for this whole step, so on a runner with GB of headroom memory was
+      # never near the edge, which is what makes 139 rather than 137 coherent.
+      # The runner's OWN ulimit and MemTotal have never been recorded; the next
+      # run of this job is the first that will print them.
+      #
+      # `--require-thread-pins` asserts the job-level env: block above is
+      # actually in force, at the one step whose numeric environment it changes.
+      # Measured (docs/ci-segfault-2026-09-28.md §2, replicated on a second
+      # host): this path runs 15 OS threads unpinned and 1 pinned, and the two
+      # logs are otherwise identical -- so a mitigation that silently stopped
+      # applying (a renamed key, a step-level env: shadowing it, the job split in
+      # two) would leave every future crash rate incomparable with no signal at
+      # all. It refuses with 126 WITHOUT running the suite rather than measuring
+      # an environment nobody checked; 126 and 127 are used because no pytest run
+      # produces either. Both directions are controlled in
+      # tools/test_run_with_rss.py, including that the refusal cannot launder a
+      # SIGSEGV -- with the pin in force a segfaulting child still exits 139.
       - name: everything else
-        run: python -m pytest model/ spec/ -q
+        run: >-
+          python tools/run_with_rss.py --require-thread-pins --
+          python -m pytest model/ spec/ -q
+
+      # The claim checker gates prose against the tree, so it has to RUN on a
+      # pull request or it gates nothing -- the list it was commissioned to fix
+      # stayed wrong for a week because nothing was re-deriving it, and a gate
+      # nothing invokes fails exactly the same way. Its own controls first: an
+      # unexercised checker measures the checker, not the docs.
+      - name: the claim checker's controls
+        run: python -m pytest tools/test_check_doc_claims.py -q
+      - name: documented claims match the evidence
+        run: python tools/check_doc_claims.py
+
+      # The classifier that decides whether this job runs at all. It can only
+      # change through tools/, which is always `full`, so this job is where
+      # its controls are guaranteed to run.
+      - name: the CI change classifier and its wiring
+        run: python -m pytest tools/test_ci_changes.py -q
+
+      # Same argument, one file over: the oscillator-1 Shape/Width table in
+      # model/reference_rigs.py is a hand transcription of
+      # docs/surge-waveform-mapping.txt, and that comment now says outright that
+      # the two "cannot drift silently again". It could not say that while the
+      # checker ran only under `make verify` (build box) and `make controls`
+      # (not what nightly.yml's controls job invokes) -- a comment asserting an
+      # enforcement no CI job performs is issue #271's own defect, one level up.
+      # Controls first, for the reason above: an unexercised checker measures
+      # the checker. Measured 0.72s + <0.1s, so the 40-minute cap and the
+      # variance note at the top of this job are untouched.
+      - name: the Shape/Width transcription checker's controls
+        run: python -m pytest tools/test_check_surge_waveform_comment.py -q
+      - name: the oscillator-1 comment still transcribes the sweep
+        run: python tools/check_surge_waveform_comment.py
+
+      # Decision-record numbering, and this one has to run ON THE PULL REQUEST
+      # or it gates nothing: the next free DR number cannot be read off your own
+      # branch, so two PRs each took 0017 within two minutes and both merges
+      # were clean because the filenames differ (issue #250). The pull request is
+      # the only place the collision is visible before it is on main. `make
+      # verify` is invoked by no workflow, so the Makefile job alone would not
+      # have caught either of the two collisions that shipped. Controls first,
+      # same reason as above. Measured 0.9s + 0.05s.
+      - name: the DR-numbering checker's controls
+        run: python -m pytest tools/test_check_decision_record_numbers.py -q
+      - name: every decision record owns its number
+        run: python tools/check_decision_record_numbers.py
+
+      # Same argument again, and #390 found it the hard way: the SN p.13 tone
+      # stage's most structural claim ("five capacitors, no cap-only loop,
+      # therefore fifth-order with ONE shared denominator") was carried by a
+      # test file NO workflow collected. Not skipped -- absent. This job runs a
+      # named list, `pytest tools/` in full runs only under `make verify` (which
+      # no workflow invokes; rungs.yml runs `make verify-fast`), and docs/dag.json
+      # has no node under tools/. Naming the two files here is what makes the
+      # question "does this check run in CI, or only on a build box?" answer YES
+      # for them. The `sympy` witness inside the first file still skips, because
+      # sympy is deliberately not installed above -- but it is now a visible skip
+      # BESIDE two numpy-only witnesses of the same fact that do run, rather than
+      # the sole evidence in a file nothing collected.
+      # Measured 4.0 s + 2.3 s, so the 40-minute cap above is untouched. Neither
+      # needs the network: the ~6 MB SN scan is not a test dependency (the tests
+      # cover the refusal paths), and the digitised Figure 9 evidence artifact is
+      # committed.
+      - name: the SN p.13 tone-stage derivation and its controls
+        run: python -m pytest tools/test_tone_stage_schematic.py -q
+      - name: the Figure 9 digitiser and its controls
+        run: python -m pytest tools/test_werner_fig9.py -q
+      # Same argument a third time (#369 step 9). The TONE knob law's headline
+      # property runs off the COMMITTED docs/scorecard/cymbal-369/fischer.json,
+      # so the 25 measurements it is judged against are here even though the
+      # ~30 MB corpus is not: 9 tests and parametrised cases that need the WAVs
+      # skip visibly, and the two corpus-gated controls report NO VERDICT.
+      #
+      # NO VERDICT is not a pass, but be exact about what this job does with
+      # it: BOTH steps below exit 0 with those two controls undecided. They are
+      # enforced by `make reference-integration`, which runs the same file with
+      # GF180_REQUIRE_TR808_REFS=1 and the same tool with --require-corpus, on
+      # the box that has the corpus. This job is the part of the argument that
+      # can be made without 30 MB of WAVs -- all 25 settings in the 1 s window,
+      # and 5 of the 7 injected defects -- and not all of it.
+      #
+      # Measured on the 8-vCPU worker: 31 s / 4.8 s here without the corpus,
+      # 45 s / 9.2 s with it.
+      - name: the VR4 TONE knob law and its controls
+        run: python -m pytest tools/test_cymbal_tone_knob.py -q
+      - name: the TONE knob gate itself, as the tool issues it
+        run: python tools/cymbal_tone_knob.py --check
+
+      # Same argument a fourth time (#369 step 11, the Q16/Q17/Q18 read). Every
+      # number here comes from component values already committed in the module
+      # plus the committed docs/scorecard/cymbal-369/balance/balance.json, so
+      # all 46 tests and the gate run with NO network and NO scan: the ~6 MB SN
+      # p.13 download is not a test dependency, and the tests that concern it
+      # exercise the REFUSAL paths (absent file, wrong hash, --require-source
+      # reachable from the command line and refusing) rather than skipping.
+      # Measured on the 8-vCPU worker: 2.3 s + 2.4 s.
+      - name: the SN p.13 swing-VCA drive read and its controls
+        run: python -m pytest tools/test_cymbal_vca_drive.py -q
+      - name: the swing-VCA drive gate itself, as the tool issues it
+        run: python tools/cymbal_vca_drive.py --check
 
       # A green run must be capable of being red -- and this control has to
       # test the SUITE, not the Python parser. An earlier version of this file
@@ -233,10 +462,33 @@ jobs:
           print("negative control OK -- wrong arithmetic turns the suite red")
           PY
 
+  # A prose-only change still carries claim markers backed by real tests
+  # (docs/claim-markers.md), so it runs the claim checker -- the whole default
+  # document set, not just the changed files, because the checker's own
+  # include-list control only runs in default mode. Under `full` the python
+  # job runs the same two steps.
+  doc-claims:
+    needs: changes
+    if: ${{ needs.changes.outputs.scope == 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      - name: the claim checker's controls
+        run: python -m pytest tools/test_check_doc_claims.py -q
+      - name: documented claims match the evidence
+        run: python tools/check_doc_claims.py
+
   # RTL bit-exactness. Separate job because iverilog is slow: the ladder is
   # ~1 min, the full voice is ~20 and does not belong on every push.
   rtl:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -284,7 +536,7 @@ jobs:
   # rather than per push.
   rtl-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

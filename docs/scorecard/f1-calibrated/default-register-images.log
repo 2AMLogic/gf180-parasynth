@@ -1,0 +1,9 @@
+M1A        patch_regs 4b366a58a63e2c65 ==  spi load ==  res knob ==  gain/ogain [127795, 27727]
+M5A-pulse  patch_regs c7a5141b093f013f ==  spi load ==  res knob ==  gain/ogain [127795, 25206]
+M5A-saw    patch_regs 67f3fc8516c97632 ==  spi load ==  res knob ==  gain/ogain [127795, 25206]
+M5B-pulse  patch_regs dcf957bb253b9ca0 ==  spi load ==  res knob ==  gain/ogain [127795, 25206]
+M5B-saw    patch_regs d0e9ae3978dd185a ==  spi load ==  res knob ==  gain/ogain [127795, 25206]
+default    patch_regs 03b09492a5437144 ==  spi load ==  res knob ==  gain/ogain [272630, 56462]
+wrote docs/scorecard/f1-calibrated/default-register-images.json
+IDENTICAL  6 images x 3 parts, baseline 4c26c410e854
+exit=0

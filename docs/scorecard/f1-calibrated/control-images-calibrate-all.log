@@ -1,0 +1,8 @@
+M1A        patch_regs 90d5c715bb0aab82 !=  spi load !=  res knob !=  gain/ogain [127795, 27727]
+M5A-pulse  patch_regs f29e00cee38da34a !=  spi load !=  res knob !=  gain/ogain [127795, 25206]
+M5A-saw    patch_regs 66f4472a5aaca151 !=  spi load !=  res knob !=  gain/ogain [127795, 25206]
+M5B-pulse  patch_regs 248ac540cf64f51b !=  spi load !=  res knob !=  gain/ogain [127795, 25206]
+M5B-saw    patch_regs 10e65ade049a7dc4 !=  spi load !=  res knob !=  gain/ogain [127795, 25206]
+default    patch_regs eb3020bbc6cb22b0 !=  spi load !=  res knob !=  gain/ogain [272630, 56462]
+DIFFERENT  18 item(s): ['M1A.patch_regs', 'M1A.spi_load_voice_writes', 'M1A.spi_resonance_knob_writes', 'M5A-pulse.patch_regs', 'M5A-pulse.spi_load_voice_writes', 'M5A-pulse.spi_resonance_knob_writes', 'M5A-saw.patch_regs', 'M5A-saw.spi_load_voice_writes', 'M5A-saw.spi_resonance_knob_writes', 'M5B-pulse.patch_regs', 'M5B-pulse.spi_load_voice_writes', 'M5B-pulse.spi_resonance_knob_writes', 'M5B-saw.patch_regs', 'M5B-saw.spi_load_voice_writes', 'M5B-saw.spi_resonance_knob_writes', 'default.patch_regs', 'default.spi_load_voice_writes', 'default.spi_resonance_knob_writes']
+exit=1

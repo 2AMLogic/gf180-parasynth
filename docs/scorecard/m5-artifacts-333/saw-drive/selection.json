@@ -1,0 +1,1353 @@
+{
+ "engine": "pulse2x",
+ "rows": {
+  "0.75": {
+   "drive": 0.75,
+   "vol_factor": 1.0,
+   "saw_vol": 0.42707,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 7.56136,
+     "Foldback energy": 2.20593,
+     "Envelope attack": 5.27083,
+     "Envelope release": -8.9375,
+     "Gain": -1.54373,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -1.7681,
+       "h3": -5.1166,
+       "h4": -5.5636,
+       "h5": -4.6617,
+       "h6": -5.6897,
+       "h7": -5.9621,
+       "h8": -5.1495,
+       "h9": -5.3112,
+       "h10": -5.1394,
+       "h11": -4.3443,
+       "h12": -3.2533
+      },
+      "foldback_excess_db": 1.9173,
+      "gain_dbfs": {
+       "model": -17.7663,
+       "reference": -19.1871
+      },
+      "envelope_ms": {
+       "attack_model": 8.7292,
+       "attack_reference": 7.3333,
+       "release_model": 1234.2917,
+       "release_reference": 1243.2292
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -4.26,
+       "h3": -7.5614,
+       "h4": -4.6031,
+       "h5": -5.2717,
+       "h6": -3.5746,
+       "h7": -2.1439,
+       "h8": -2.7394,
+       "h9": -2.7023,
+       "h10": -2.8007,
+       "h11": 1.8192
+      },
+      "foldback_excess_db": 2.2059,
+      "gain_dbfs": {
+       "model": -18.9138,
+       "reference": -19.5125
+      },
+      "envelope_ms": {
+       "attack_model": 8.5625,
+       "attack_reference": 3.4167,
+       "release_model": 1240.125,
+       "release_reference": 1243.0208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7585,
+       "h3": -2.1375,
+       "h4": -2.6396,
+       "h5": -3.3451,
+       "h6": -3.6394,
+       "h7": -4.5542,
+       "h8": -4.0659,
+       "h9": -4.9574,
+       "h10": -3.8044,
+       "h11": -4.1999,
+       "h12": -3.2832
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1464,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.5833,
+       "attack_reference": 7.4583,
+       "release_model": 1242.5625,
+       "release_reference": 1247.5208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.4059,
+       "h3": -3.3433,
+       "h4": -2.981,
+       "h5": -3.6755,
+       "h6": -2.2447,
+       "h7": -3.0747,
+       "h8": -2.7257,
+       "h9": -5.2968,
+       "h10": -4.6909,
+       "h11": -3.1714
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -16.1635,
+       "reference": -14.6197
+      },
+      "envelope_ms": {
+       "attack_model": 8.6042,
+       "attack_reference": 3.3333,
+       "release_model": 1246.6667,
+       "release_reference": 1247.4792
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14828,
+     "Harmonic shape": 5.96219,
+     "Foldback energy": 1.91296,
+     "Envelope attack": 6.125,
+     "Envelope release": -30.0,
+     "Gain": 2.04851,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.9155,
+       "h3": -2.482,
+       "h4": -3.8055,
+       "h5": -4.1228,
+       "h6": -4.1611,
+       "h7": -4.553,
+       "h8": -5.0291,
+       "h9": -5.3356,
+       "h10": -5.5103,
+       "h11": -5.2955,
+       "h12": -5.3608
+      },
+      "foldback_excess_db": 1.4469,
+      "gain_dbfs": {
+       "model": -17.0756,
+       "reference": -19.1241
+      },
+      "envelope_ms": {
+       "attack_model": 9.7917,
+       "attack_reference": 7.7083,
+       "release_model": 1196.125,
+       "release_reference": 1222.3542
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -1.7681,
+       "h3": -5.1167,
+       "h4": -5.5636,
+       "h5": -4.6616,
+       "h6": -5.6898,
+       "h7": -5.9622,
+       "h8": -5.1497,
+       "h9": -5.3113,
+       "h10": -5.1392,
+       "h11": -4.345,
+       "h12": -3.2535
+      },
+      "foldback_excess_db": 1.913,
+      "gain_dbfs": {
+       "model": -17.7665,
+       "reference": -19.1876
+      },
+      "envelope_ms": {
+       "attack_model": 8.875,
+       "attack_reference": 3.2083,
+       "release_model": 1213.25,
+       "release_reference": 1243.25
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.7403,
+       "h3": -1.9033,
+       "h4": -1.8059,
+       "h5": -2.6379,
+       "h6": -2.7744,
+       "h7": -3.8623,
+       "h8": -3.7226,
+       "h9": -4.3652,
+       "h10": -3.9493,
+       "h11": -4.9073,
+       "h12": -4.7635
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.0134,
+       "reference": -14.3429
+      },
+      "envelope_ms": {
+       "attack_model": 9.0625,
+       "attack_reference": 7.8542,
+       "release_model": 1218.625,
+       "release_reference": 1245.6667
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7586,
+       "h3": -2.1375,
+       "h4": -2.6398,
+       "h5": -3.3452,
+       "h6": -3.6395,
+       "h7": -4.5545,
+       "h8": -4.066,
+       "h9": -4.9573,
+       "h10": -3.804,
+       "h11": -4.1997,
+       "h12": -3.2836
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1465,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.9792,
+       "attack_reference": 2.8542,
+       "release_model": 1221.5208,
+       "release_reference": 1247.5208
+      }
+     }
+    ]
+   },
+   "probe": {
+    "84": {
+     "unwanted_rel_db": -48.2033,
+     "unwanted_dbfs": -65.9704,
+     "upper_wanted_rel_db": -15.5259,
+     "intended_dbfs": -17.7671,
+     "output_rail": 0
+    },
+    "96": {
+     "unwanted_rel_db": -47.18,
+     "unwanted_dbfs": -66.0937,
+     "upper_wanted_rel_db": -13.9572,
+     "intended_dbfs": -18.9136,
+     "output_rail": 0
+    },
+    "36": {
+     "unwanted_rel_db": -69.5714,
+     "unwanted_dbfs": -85.8077,
+     "upper_wanted_rel_db": -28.1452,
+     "intended_dbfs": -16.2363,
+     "output_rail": 0
+    },
+    "48": {
+     "unwanted_rel_db": -64.5044,
+     "unwanted_dbfs": -80.8826,
+     "upper_wanted_rel_db": -25.2839,
+     "intended_dbfs": -16.3782,
+     "output_rail": 0
+    },
+    "60": {
+     "unwanted_rel_db": -56.0951,
+     "unwanted_dbfs": -72.7224,
+     "upper_wanted_rel_db": -22.3688,
+     "intended_dbfs": -16.6273,
+     "output_rail": 0
+    },
+    "72": {
+     "unwanted_rel_db": -52.3748,
+     "unwanted_dbfs": -69.4468,
+     "upper_wanted_rel_db": -19.2653,
+     "intended_dbfs": -17.0719,
+     "output_rail": 0
+    },
+    "108": {
+     "unwanted_rel_db": -40.9916,
+     "unwanted_dbfs": -61.777,
+     "upper_wanted_rel_db": -12.5647,
+     "intended_dbfs": -20.7854,
+     "output_rail": 0
+    },
+    "120": {
+     "unwanted_rel_db": -34.9929,
+     "unwanted_dbfs": -59.2429,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -24.2499,
+     "output_rail": 0
+    }
+   },
+   "r1_binding": {
+    "pinned": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "current_tree": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "candidate": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "tree_matches_pin": true,
+    "candidate_changes_r1_bytes": false
+   }
+  },
+  "0.5": {
+   "drive": 0.5,
+   "vol_factor": 1.38938,
+   "saw_vol": 0.59336,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 5.29678,
+     "Foldback energy": 2.31297,
+     "Envelope attack": 5.4375,
+     "Envelope release": -7.95833,
+     "Gain": -1.54373,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.5819,
+       "h3": -1.8848,
+       "h4": -3.4099,
+       "h5": -3.9167,
+       "h6": -4.5268,
+       "h7": -4.2175,
+       "h8": -3.376,
+       "h9": -4.1174,
+       "h10": -4.0649,
+       "h11": -2.7427,
+       "h12": -2.04
+      },
+      "foldback_excess_db": 2.313,
+      "gain_dbfs": {
+       "model": -17.7667,
+       "reference": -19.1871
+      },
+      "envelope_ms": {
+       "attack_model": 8.6875,
+       "attack_reference": 7.3333,
+       "release_model": 1235.2708,
+       "release_reference": 1243.2292
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -2.1665,
+       "h3": -4.6363,
+       "h4": -4.5511,
+       "h5": -3.8311,
+       "h6": -3.0069,
+       "h7": -1.7581,
+       "h8": -0.2809,
+       "h9": -1.9828,
+       "h10": -2.8963,
+       "h11": 3.5093
+      },
+      "foldback_excess_db": 1.8121,
+      "gain_dbfs": {
+       "model": -18.654,
+       "reference": -19.5125
+      },
+      "envelope_ms": {
+       "attack_model": 8.8542,
+       "attack_reference": 3.4167,
+       "release_model": 1238.6667,
+       "release_reference": 1243.0208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7585,
+       "h3": -2.1375,
+       "h4": -2.6396,
+       "h5": -3.3451,
+       "h6": -3.6394,
+       "h7": -4.5542,
+       "h8": -4.0659,
+       "h9": -4.9574,
+       "h10": -3.8044,
+       "h11": -4.1999,
+       "h12": -3.2832
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1464,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.5833,
+       "attack_reference": 7.4583,
+       "release_model": 1242.5625,
+       "release_reference": 1247.5208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.4059,
+       "h3": -3.3433,
+       "h4": -2.981,
+       "h5": -3.6755,
+       "h6": -2.2447,
+       "h7": -3.0747,
+       "h8": -2.7257,
+       "h9": -5.2968,
+       "h10": -4.6909,
+       "h11": -3.1714
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -16.1635,
+       "reference": -14.6197
+      },
+      "envelope_ms": {
+       "attack_model": 8.6042,
+       "attack_reference": 3.3333,
+       "release_model": 1246.6667,
+       "release_reference": 1247.4792
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14828,
+     "Harmonic shape": 4.95726,
+     "Foldback energy": 2.31222,
+     "Envelope attack": 6.125,
+     "Envelope release": -33.91667,
+     "Gain": 1.84497,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.3687,
+       "h3": -0.7999,
+       "h4": -1.1982,
+       "h5": -1.6848,
+       "h6": -2.2937,
+       "h7": -2.7923,
+       "h8": -3.0835,
+       "h9": -3.4462,
+       "h10": -3.9756,
+       "h11": -4.3265,
+       "h12": -4.4335
+      },
+      "foldback_excess_db": 1.8403,
+      "gain_dbfs": {
+       "model": -17.2791,
+       "reference": -19.1241
+      },
+      "envelope_ms": {
+       "attack_model": 9.7292,
+       "attack_reference": 7.7083,
+       "release_model": 1188.4375,
+       "release_reference": 1222.3542
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.5819,
+       "h3": -1.885,
+       "h4": -3.4098,
+       "h5": -3.9168,
+       "h6": -4.5269,
+       "h7": -4.2175,
+       "h8": -3.3759,
+       "h9": -4.1176,
+       "h10": -4.0646,
+       "h11": -2.7427,
+       "h12": -2.04
+      },
+      "foldback_excess_db": 2.3122,
+      "gain_dbfs": {
+       "model": -17.7671,
+       "reference": -19.1876
+      },
+      "envelope_ms": {
+       "attack_model": 8.8542,
+       "attack_reference": 3.2083,
+       "release_model": 1215.1458,
+       "release_reference": 1243.25
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.7403,
+       "h3": -1.9033,
+       "h4": -1.8059,
+       "h5": -2.6379,
+       "h6": -2.7744,
+       "h7": -3.8623,
+       "h8": -3.7226,
+       "h9": -4.3652,
+       "h10": -3.9493,
+       "h11": -4.9073,
+       "h12": -4.7635
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.0134,
+       "reference": -14.3429
+      },
+      "envelope_ms": {
+       "attack_model": 9.0625,
+       "attack_reference": 7.8542,
+       "release_model": 1218.625,
+       "release_reference": 1245.6667
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7586,
+       "h3": -2.1375,
+       "h4": -2.6398,
+       "h5": -3.3452,
+       "h6": -3.6395,
+       "h7": -4.5545,
+       "h8": -4.066,
+       "h9": -4.9573,
+       "h10": -3.804,
+       "h11": -4.1997,
+       "h12": -3.2836
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1465,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.9792,
+       "attack_reference": 2.8542,
+       "release_model": 1221.5208,
+       "release_reference": 1247.5208
+      }
+     }
+    ]
+   },
+   "probe": {
+    "84": {
+     "unwanted_rel_db": -47.8057,
+     "unwanted_dbfs": -65.5724,
+     "upper_wanted_rel_db": -14.7255,
+     "intended_dbfs": -17.7667,
+     "output_rail": 0
+    },
+    "96": {
+     "unwanted_rel_db": -47.5722,
+     "unwanted_dbfs": -66.2255,
+     "upper_wanted_rel_db": -12.5811,
+     "intended_dbfs": -18.6533,
+     "output_rail": 0
+    },
+    "36": {
+     "unwanted_rel_db": -69.4655,
+     "unwanted_dbfs": -86.278,
+     "upper_wanted_rel_db": -27.417,
+     "intended_dbfs": -16.8125,
+     "output_rail": 0
+    },
+    "48": {
+     "unwanted_rel_db": -63.4941,
+     "unwanted_dbfs": -80.3792,
+     "upper_wanted_rel_db": -24.4814,
+     "intended_dbfs": -16.8851,
+     "output_rail": 0
+    },
+    "60": {
+     "unwanted_rel_db": -55.3661,
+     "unwanted_dbfs": -72.3884,
+     "upper_wanted_rel_db": -21.6115,
+     "intended_dbfs": -17.0223,
+     "output_rail": 0
+    },
+    "72": {
+     "unwanted_rel_db": -51.9454,
+     "unwanted_dbfs": -69.2203,
+     "upper_wanted_rel_db": -18.4237,
+     "intended_dbfs": -17.2749,
+     "output_rail": 0
+    },
+    "108": {
+     "unwanted_rel_db": -42.6513,
+     "unwanted_dbfs": -62.8575,
+     "upper_wanted_rel_db": -10.5377,
+     "intended_dbfs": -20.2062,
+     "output_rail": 0
+    },
+    "120": {
+     "unwanted_rel_db": -39.2901,
+     "unwanted_dbfs": -62.5918,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -23.3017,
+     "output_rail": 0
+    }
+   },
+   "r1_binding": {
+    "pinned": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "current_tree": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "candidate": "aa6784d767a5476726733e575e1297db41c3d4d03b76f96c110fd1c72d509e57",
+    "tree_matches_pin": true,
+    "candidate_changes_r1_bytes": true
+   }
+  },
+  "0.35": {
+   "drive": 0.35,
+   "vol_factor": 1.92308,
+   "saw_vol": 0.82129,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 5.29678,
+     "Foldback energy": 0.31556,
+     "Envelope attack": 5.4375,
+     "Envelope release": -7.02083,
+     "Gain": -1.54373,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.2385,
+       "h3": -0.8914,
+       "h4": -1.8874,
+       "h5": -2.2709,
+       "h6": -2.9293,
+       "h7": -3.0253,
+       "h8": -3.0675,
+       "h9": -3.6489,
+       "h10": -2.9479,
+       "h11": -2.2099,
+       "h12": -1.3345
+      },
+      "foldback_excess_db": 0.3156,
+      "gain_dbfs": {
+       "model": -17.7665,
+       "reference": -19.1871
+      },
+      "envelope_ms": {
+       "attack_model": 8.6875,
+       "attack_reference": 7.3333,
+       "release_model": 1236.2083,
+       "release_reference": 1243.2292
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.3615,
+       "h3": -2.8681,
+       "h4": -3.4175,
+       "h5": -3.2736,
+       "h6": -1.2031,
+       "h7": 0.4029,
+       "h8": -0.4282,
+       "h9": -1.7296,
+       "h10": -2.6349,
+       "h11": 1.0813
+      },
+      "foldback_excess_db": 0.0599,
+      "gain_dbfs": {
+       "model": -18.5,
+       "reference": -19.5125
+      },
+      "envelope_ms": {
+       "attack_model": 8.8542,
+       "attack_reference": 3.4167,
+       "release_model": 1238.1875,
+       "release_reference": 1243.0208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7585,
+       "h3": -2.1375,
+       "h4": -2.6396,
+       "h5": -3.3451,
+       "h6": -3.6394,
+       "h7": -4.5542,
+       "h8": -4.0659,
+       "h9": -4.9574,
+       "h10": -3.8044,
+       "h11": -4.1999,
+       "h12": -3.2832
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1464,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.5833,
+       "attack_reference": 7.4583,
+       "release_model": 1242.5625,
+       "release_reference": 1247.5208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.4059,
+       "h3": -3.3433,
+       "h4": -2.981,
+       "h5": -3.6755,
+       "h6": -2.2447,
+       "h7": -3.0747,
+       "h8": -2.7257,
+       "h9": -5.2968,
+       "h10": -4.6909,
+       "h11": -3.1714
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -16.1635,
+       "reference": -14.6197
+      },
+      "envelope_ms": {
+       "attack_model": 8.6042,
+       "attack_reference": 3.3333,
+       "release_model": 1246.6667,
+       "release_reference": 1247.4792
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14828,
+     "Harmonic shape": 4.95726,
+     "Foldback energy": 0.3165,
+     "Envelope attack": 6.20833,
+     "Envelope release": -35.85417,
+     "Gain": 1.72804,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.2582,
+       "h3": -0.4562,
+       "h4": -0.5592,
+       "h5": -0.7463,
+       "h6": -1.1214,
+       "h7": -1.5931,
+       "h8": -1.9882,
+       "h9": -2.2316,
+       "h10": -2.4533,
+       "h11": -2.8265,
+       "h12": -3.1818
+      },
+      "foldback_excess_db": 0.0317,
+      "gain_dbfs": {
+       "model": -17.3961,
+       "reference": -19.1241
+      },
+      "envelope_ms": {
+       "attack_model": 9.7083,
+       "attack_reference": 7.7083,
+       "release_model": 1186.5,
+       "release_reference": 1222.3542
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.2385,
+       "h3": -0.8915,
+       "h4": -1.8873,
+       "h5": -2.2709,
+       "h6": -2.9293,
+       "h7": -3.0254,
+       "h8": -3.0677,
+       "h9": -3.649,
+       "h10": -2.9476,
+       "h11": -2.2104,
+       "h12": -1.3343
+      },
+      "foldback_excess_db": 0.3165,
+      "gain_dbfs": {
+       "model": -17.767,
+       "reference": -19.1876
+      },
+      "envelope_ms": {
+       "attack_model": 9.4167,
+       "attack_reference": 3.2083,
+       "release_model": 1215.1875,
+       "release_reference": 1243.25
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.7403,
+       "h3": -1.9033,
+       "h4": -1.8059,
+       "h5": -2.6379,
+       "h6": -2.7744,
+       "h7": -3.8623,
+       "h8": -3.7226,
+       "h9": -4.3652,
+       "h10": -3.9493,
+       "h11": -4.9073,
+       "h12": -4.7635
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.0134,
+       "reference": -14.3429
+      },
+      "envelope_ms": {
+       "attack_model": 9.0625,
+       "attack_reference": 7.8542,
+       "release_model": 1218.625,
+       "release_reference": 1245.6667
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7586,
+       "h3": -2.1375,
+       "h4": -2.6398,
+       "h5": -3.3452,
+       "h6": -3.6395,
+       "h7": -4.5545,
+       "h8": -4.066,
+       "h9": -4.9573,
+       "h10": -3.804,
+       "h11": -4.1997,
+       "h12": -3.2836
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1465,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.9792,
+       "attack_reference": 2.8542,
+       "release_model": 1221.5208,
+       "release_reference": 1247.5208
+      }
+     }
+    ]
+   },
+   "probe": {
+    "84": {
+     "unwanted_rel_db": -49.8037,
+     "unwanted_dbfs": -67.57,
+     "upper_wanted_rel_db": -13.6837,
+     "intended_dbfs": -17.7664,
+     "output_rail": 0
+    },
+    "96": {
+     "unwanted_rel_db": -49.3242,
+     "unwanted_dbfs": -67.8233,
+     "upper_wanted_rel_db": -11.3213,
+     "intended_dbfs": -18.4992,
+     "output_rail": 0
+    },
+    "36": {
+     "unwanted_rel_db": -71.8247,
+     "unwanted_dbfs": -88.8858,
+     "upper_wanted_rel_db": -26.8482,
+     "intended_dbfs": -17.0611,
+     "output_rail": 0
+    },
+    "48": {
+     "unwanted_rel_db": -65.8894,
+     "unwanted_dbfs": -82.9987,
+     "upper_wanted_rel_db": -23.9285,
+     "intended_dbfs": -17.1093,
+     "output_rail": 0
+    },
+    "60": {
+     "unwanted_rel_db": -57.39,
+     "unwanted_dbfs": -74.594,
+     "upper_wanted_rel_db": -20.9661,
+     "intended_dbfs": -17.204,
+     "output_rail": 0
+    },
+    "72": {
+     "unwanted_rel_db": -53.945,
+     "unwanted_dbfs": -71.3368,
+     "upper_wanted_rel_db": -17.5297,
+     "intended_dbfs": -17.3918,
+     "output_rail": 0
+    },
+    "108": {
+     "unwanted_rel_db": -45.3362,
+     "unwanted_dbfs": -65.2059,
+     "upper_wanted_rel_db": -9.2051,
+     "intended_dbfs": -19.8697,
+     "output_rail": 0
+    },
+    "120": {
+     "unwanted_rel_db": -43.6483,
+     "unwanted_dbfs": -66.4149,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -22.7666,
+     "output_rail": 0
+    }
+   },
+   "r1_binding": {
+    "pinned": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "current_tree": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "candidate": "c843d2c7e3ae473c2ecdcf5384e92a83d3fe1b95385aaf3fe7707c28d7ba937d",
+    "tree_matches_pin": true,
+    "candidate_changes_r1_bytes": true
+   }
+  },
+  "0.3": {
+   "drive": 0.3,
+   "vol_factor": 2.22896,
+   "saw_vol": 0.95192,
+   "M5A": {
+    "errors": {
+     "Pitch": -0.14813,
+     "Harmonic shape": 5.29678,
+     "Foldback energy": 0.41318,
+     "Envelope attack": 5.4375,
+     "Envelope release": -7.0,
+     "Gain": -1.54373,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.1749,
+       "h3": -0.6873,
+       "h4": -1.5227,
+       "h5": -1.9254,
+       "h6": -2.8545,
+       "h7": -3.0465,
+       "h8": -2.7333,
+       "h9": -2.9605,
+       "h10": -1.915,
+       "h11": -1.315,
+       "h12": -1.3752
+      },
+      "foldback_excess_db": 0.4132,
+      "gain_dbfs": {
+       "model": -17.7665,
+       "reference": -19.1871
+      },
+      "envelope_ms": {
+       "attack_model": 8.6875,
+       "attack_reference": 7.3333,
+       "release_model": 1236.2292,
+       "release_reference": 1243.2292
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.1409,
+       "h3": -2.2801,
+       "h4": -2.53,
+       "h5": -2.8213,
+       "h6": -2.0811,
+       "h7": -0.436,
+       "h8": -0.443,
+       "h9": -1.939,
+       "h10": -2.4651,
+       "h11": 1.0344
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -18.4283,
+       "reference": -19.5125
+      },
+      "envelope_ms": {
+       "attack_model": 8.8542,
+       "attack_reference": 3.4167,
+       "release_model": 1237.7083,
+       "release_reference": 1243.0208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7585,
+       "h3": -2.1375,
+       "h4": -2.6396,
+       "h5": -3.3451,
+       "h6": -3.6394,
+       "h7": -4.5542,
+       "h8": -4.0659,
+       "h9": -4.9574,
+       "h10": -3.8044,
+       "h11": -4.1999,
+       "h12": -3.2832
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1464,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.5833,
+       "attack_reference": 7.4583,
+       "release_model": 1242.5625,
+       "release_reference": 1247.5208
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 96,
+      "harmonic_error_db": {
+       "h2": -1.4059,
+       "h3": -3.3433,
+       "h4": -2.981,
+       "h5": -3.6755,
+       "h6": -2.2447,
+       "h7": -3.0747,
+       "h8": -2.7257,
+       "h9": -5.2968,
+       "h10": -4.6909,
+       "h11": -3.1714
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -16.1635,
+       "reference": -14.6197
+      },
+      "envelope_ms": {
+       "attack_model": 8.6042,
+       "attack_reference": 3.3333,
+       "release_model": 1246.6667,
+       "release_reference": 1247.4792
+      }
+     }
+    ]
+   },
+   "M5B": {
+    "errors": {
+     "Pitch": -0.14828,
+     "Harmonic shape": 4.95726,
+     "Foldback energy": 0.40664,
+     "Envelope attack": 6.20833,
+     "Envelope release": -35.875,
+     "Gain": 1.6999,
+     "Clipping": 0.0
+    },
+    "events": [
+     {
+      "wave": "saw",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.2406,
+       "h3": -0.4011,
+       "h4": -0.4625,
+       "h5": -0.6466,
+       "h6": -1.0536,
+       "h7": -1.5224,
+       "h8": -1.8069,
+       "h9": -1.8832,
+       "h10": -1.9325,
+       "h11": -2.2747,
+       "h12": -2.813
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -17.4242,
+       "reference": -19.1241
+      },
+      "envelope_ms": {
+       "attack_model": 9.7083,
+       "attack_reference": 7.7083,
+       "release_model": 1186.4792,
+       "release_reference": 1222.3542
+      }
+     },
+     {
+      "wave": "saw",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.1749,
+       "h3": -0.6874,
+       "h4": -1.5226,
+       "h5": -1.9254,
+       "h6": -2.8545,
+       "h7": -3.0465,
+       "h8": -2.7335,
+       "h9": -2.9606,
+       "h10": -1.9151,
+       "h11": -1.3159,
+       "h12": -1.375
+      },
+      "foldback_excess_db": 0.4066,
+      "gain_dbfs": {
+       "model": -17.7669,
+       "reference": -19.1876
+      },
+      "envelope_ms": {
+       "attack_model": 9.4167,
+       "attack_reference": 3.2083,
+       "release_model": 1216.1042,
+       "release_reference": 1243.25
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 72,
+      "harmonic_error_db": {
+       "h2": -0.7403,
+       "h3": -1.9033,
+       "h4": -1.8059,
+       "h5": -2.6379,
+       "h6": -2.7744,
+       "h7": -3.8623,
+       "h8": -3.7226,
+       "h9": -4.3652,
+       "h10": -3.9493,
+       "h11": -4.9073,
+       "h12": -4.7635
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -13.0134,
+       "reference": -14.3429
+      },
+      "envelope_ms": {
+       "attack_model": 9.0625,
+       "attack_reference": 7.8542,
+       "release_model": 1218.625,
+       "release_reference": 1245.6667
+      }
+     },
+     {
+      "wave": "pulse",
+      "midi": 84,
+      "harmonic_error_db": {
+       "h2": -0.7586,
+       "h3": -2.1375,
+       "h4": -2.6398,
+       "h5": -3.3452,
+       "h6": -3.6395,
+       "h7": -4.5545,
+       "h8": -4.066,
+       "h9": -4.9573,
+       "h10": -3.804,
+       "h11": -4.1997,
+       "h12": -3.2836
+      },
+      "foldback_excess_db": 0.0,
+      "gain_dbfs": {
+       "model": -14.1465,
+       "reference": -14.3201
+      },
+      "envelope_ms": {
+       "attack_model": 8.9792,
+       "attack_reference": 2.8542,
+       "release_model": 1221.5208,
+       "release_reference": 1247.5208
+      }
+     }
+    ]
+   },
+   "probe": {
+    "84": {
+     "unwanted_rel_db": -49.7104,
+     "unwanted_dbfs": -67.4767,
+     "upper_wanted_rel_db": -13.4589,
+     "intended_dbfs": -17.7663,
+     "output_rail": 0
+    },
+    "96": {
+     "unwanted_rel_db": -51.0935,
+     "unwanted_dbfs": -69.5209,
+     "upper_wanted_rel_db": -10.8893,
+     "intended_dbfs": -18.4274,
+     "output_rail": 0
+    },
+    "36": {
+     "unwanted_rel_db": -72.0507,
+     "unwanted_dbfs": -89.1638,
+     "upper_wanted_rel_db": -26.4378,
+     "intended_dbfs": -17.1131,
+     "output_rail": 0
+    },
+    "48": {
+     "unwanted_rel_db": -66.0906,
+     "unwanted_dbfs": -83.2477,
+     "upper_wanted_rel_db": -23.4549,
+     "intended_dbfs": -17.157,
+     "output_rail": 0
+    },
+    "60": {
+     "unwanted_rel_db": -57.7196,
+     "unwanted_dbfs": -74.9644,
+     "upper_wanted_rel_db": -20.5028,
+     "intended_dbfs": -17.2448,
+     "output_rail": 0
+    },
+    "72": {
+     "unwanted_rel_db": -54.049,
+     "unwanted_dbfs": -71.469,
+     "upper_wanted_rel_db": -17.0921,
+     "intended_dbfs": -17.4199,
+     "output_rail": 0
+    },
+    "108": {
+     "unwanted_rel_db": -47.8626,
+     "unwanted_dbfs": -67.6048,
+     "upper_wanted_rel_db": -8.8646,
+     "intended_dbfs": -19.7422,
+     "output_rail": 0
+    },
+    "120": {
+     "unwanted_rel_db": -46.4184,
+     "unwanted_dbfs": -69.0078,
+     "upper_wanted_rel_db": 0.0,
+     "intended_dbfs": -22.5894,
+     "output_rail": 0
+    }
+   },
+   "r1_binding": {
+    "pinned": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "current_tree": "316934c73f8f101d11cae6f88d59207d1d43db0e0cebab89ab2a3e83787590b8",
+    "candidate": "2031831b992a4bb12e5cad1dc06ee19714bb5bc1851f5bdb89e1403ca5cee395",
+    "tree_matches_pin": true,
+    "candidate_changes_r1_bytes": true
+   }
+  }
+ },
+ "selection": {
+  "baseline_harmonic_shape": 7.56136,
+  "verdicts": {
+   "0.5": {
+    "harmonic_shape": 5.29678,
+    "admissible": true,
+    "reasons": []
+   },
+   "0.35": {
+    "harmonic_shape": 5.29678,
+    "admissible": true,
+    "reasons": []
+   },
+   "0.3": {
+    "harmonic_shape": 5.29678,
+    "admissible": true,
+    "reasons": []
+   }
+  },
+  "chosen": "0.3",
+  "confirmation": {
+   "M5B": {
+    "Pitch": -0.14828,
+    "Harmonic shape": 4.95726,
+    "Foldback energy": 0.40664,
+    "Envelope attack": 6.20833,
+    "Envelope release": -35.875,
+    "Gain": 1.6999,
+    "Clipping": 0.0
+   },
+   "M5B_baseline": {
+    "Pitch": -0.14828,
+    "Harmonic shape": 5.96219,
+    "Foldback energy": 1.91296,
+    "Envelope attack": 6.125,
+    "Envelope release": -30.0,
+    "Gain": 2.04851,
+    "Clipping": 0.0
+   },
+   "untouched": {
+    "36": {
+     "d_unwanted_rel_db": -2.479,
+     "d_upper_wanted_rel_db": 1.707,
+     "output_rail": 0
+    },
+    "48": {
+     "d_unwanted_rel_db": -1.586,
+     "d_upper_wanted_rel_db": 1.829,
+     "output_rail": 0
+    },
+    "60": {
+     "d_unwanted_rel_db": -1.624,
+     "d_upper_wanted_rel_db": 1.866,
+     "output_rail": 0
+    },
+    "72": {
+     "d_unwanted_rel_db": -1.674,
+     "d_upper_wanted_rel_db": 2.173,
+     "output_rail": 0
+    },
+    "108": {
+     "d_unwanted_rel_db": -6.871,
+     "d_upper_wanted_rel_db": 3.7,
+     "output_rail": 0
+    },
+    "120": {
+     "d_unwanted_rel_db": -11.425,
+     "d_upper_wanted_rel_db": 0.0,
+     "output_rail": 0
+    }
+   },
+   "passes": true
+  }
+ },
+ "commit": "69523c3d11711a8d23c8ed3a79635bfad5f9ca2b",
+ "sources_dirty": false
+}

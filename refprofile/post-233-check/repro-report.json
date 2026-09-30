@@ -1,0 +1,50 @@
+{
+ "what": "independent re-renders of the frozen reference profile, compared byte for byte. A clip that does not reproduce is not frozen.",
+ "at": "2026-09-25T21:54:06Z",
+ "runs": 2,
+ "independent": "each run is a separate `tools/refprofile.py --render` process: the VST3 bundle is reloaded and the rig re-qualified every time. The machine, OS, plugin build, sample rate and block size are NOT varied and no claim is made about them.",
+ "workdir": "/private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/repro2",
+ "clips": 16,
+ "bit_identical": 16,
+ "not_reproducible": [],
+ "vs_committed": {
+  "reproduced": [
+   "surge-type2/drive-100hz-cut250-res0.50-in+0dbfs",
+   "surge-type2/drive-100hz-cut250-res0.50-in-12dbfs",
+   "surge-type2/drive-100hz-cut250-res0.50-in-6dbfs",
+   "surge-type2/lp-cut1000-res0.00",
+   "surge-type2/lp-cut250-res0.00",
+   "surge-type2/lp-cut250-res0.70",
+   "surge-type2/lp-cut250-res0.80",
+   "surge-type2/lp-cut250-res0.86",
+   "surge-type2/lp-cut250-res0.90",
+   "surge-type2/lp-cut250-res0.93",
+   "surge-type2/lp-cut250-res0.95",
+   "surge-type2/lp-cut250-res0.97",
+   "surge-type2/lp-cut250-res0.99",
+   "surge-type2/lp-cut250-res1.00",
+   "surge-type2/lp-cut4000-res0.00",
+   "surge-type2/lp-open20k-res0.00"
+  ],
+  "changed": [],
+  "new": [],
+  "dropped": []
+ },
+ "built": {
+  "at": "2026-09-25T21:52:56Z",
+  "worktree": {
+   "commit": "9f106f7",
+   "branch": "fix/refprofile-post-render-checks",
+   "dirty": false,
+   "uncommitted_sha256": "e3b0c44298fc1c14",
+   "untracked_files": 0
+  },
+  "command": "tools/refprofile.py --render --out /private/tmp/claude-501/-Users-joseph--superset-worktrees-gf180-parasynth-feature-the-next-milestone-should-be-a/16a4b09c-00aa-426c-a4b5-f9172c553e4a/scratchpad/repro2/profile.run2.json",
+  "python": "3.14.7",
+  "numpy": "2.5.3",
+  "dawdreamer": "0.9.0",
+  "platform": "darwin",
+  "rig_source_sha256": "99b1c862857a34a8689e9389010aabc86e3ec790c37da1ee5de84b88e449dce9",
+  "builder_sha256": "bde30e5f0a93e3e47e4b4227457505c1290f5b64b7e0c8ee3cc6bce9c371a0d3"
+ }
+}

@@ -24,10 +24,17 @@ no-verdict with the reason (we tried, the apparatus said no) or listed by
 `--list` as deliberately not run with the reason (we did not try, and why).
 Both are in `COVERAGE` below; neither is silent.
 
-**Every result names its engine.** `fixed-model` for everything here: the
-integer models `model/drums_fx.py` and `model/voice_fx.py`, in this process,
-never a committed WAV. No case here has been measured on the integrated RTL,
-and `tools/scorecard.py` says so out loud on the board.
+**Every result names its engine.** `fixed-model` for everything *this runner*
+produces: the integer models `model/drums_fx.py` and `model/voice_fx.py`, in
+this process, never a committed WAV. A case measured on the chip is scored
+elsewhere -- `tools/score_m5a_i2s.py` for the mono anchor,
+`tools/score_ensemble_i2s.py` for the ensemble one -- and carries
+`integrated-rtl`; `tools/scorecard.py` prints which engines the board holds and
+says so out loud when the instrument is absent from it. **This runner will not
+overwrite one of those anchors with a model result**: see `result_destination`,
+which keeps the anchor and writes the model's measurement beside it. A model
+result replacing a measurement of the instrument, silently, is the one way this
+file could make the board less true than it was.
 
 **Tolerances are frozen before the measurement, from the reference's own
 documentation, and are never per case.** Three classes, chosen before any
@@ -39,6 +46,19 @@ look green.
 rather than reports.** The reference corpus must be present, the named file
 must exist, the sound must be in the kit, and the reference clip must not be
 silent. Each failure produces a stated no-verdict, never a number.
+
+**A `Holdout`-split case is REFUSED unless its settings were committed before
+this render.** `docs/scorecard/cases.csv` marks twenty cases `Holdout` and
+`docs/scorecard/README.md` states the policy they exist for; until `tools/
+holdout.py` there was nothing between that policy and an agent picking a
+setting, rendering it and reading the error in one pass -- with, as this file's
+own `NOT_RUN` table put it, "no way to tell afterwards which it was". The gate is
+in `run_case` rather than in each family's runner so a future scorer cannot route
+around it: the seal must be tracked and clean in git, the record carries what it
+was measured against (`holdout.seal_commit`, `holdout.seal_core_sha256`), the
+read is appended to `docs/scorecard/holdout/LEDGER.json`, and a SECOND read taken
+after the model moved is refused until the transition is recorded. A holdout with
+no seal is a stated no-verdict naming the missing seal, never a score.
 
 **And it asserts the premise of the BATCH before any of it runs.** An earlier
 run of this file returned eight honest per-case refusals -- "the eight-stop kit
@@ -96,7 +116,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import datetime
 import hashlib
 import json
 import math
@@ -118,8 +137,11 @@ from scipy.signal import butter, sosfiltfilt                         # noqa: E40
 
 import audio_measure as am                                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
+import holdout                                                       # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
+import provenance                                                    # noqa: E402
+import partial_trajectory as PT                                      # noqa: E402
 
 CASES_CSV = ROOT / "docs" / "scorecard" / "cases.csv"
 RESULTS = ROOT / "docs" / "scorecard" / "results"
@@ -132,6 +154,16 @@ SR_OURS = 48000
 #   git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer /tmp/tr808-ref
 REFS_ENV = "GF180_TR808_REFS"
 REFS_DEFAULT = "/tmp/tr808-ref"
+# Set to 1 where the reference-integration tests are a REQUIRED gate: a missing
+# corpus then fails them (REFUSED) instead of skipping, because a required
+# job that goes green through skips has checked nothing.
+REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
+
+
+def configured_refs() -> pathlib.Path:
+    """The one place the corpus location is decided: ${GF180_TR808_REFS}, else
+    /tmp/tr808-ref. The CLI default and the tests both read it here."""
+    return pathlib.Path(os.environ.get(REFS_ENV) or REFS_DEFAULT)
 REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
           "s/n 103852, individual voice outputs, 16-bit/44.1 kHz")
 
@@ -189,6 +221,28 @@ def tol_fixed(value: float, basis: str):
     return f
 
 
+# WHAT EACH METRIC'S ERROR MEANS (plan075 section 6; decision record 0017).
+# Every metric not named here is a two-sided MATCH. A metric named here is
+# scored by `scorecard.metric_distance` in its declared direction, and the
+# direction is written into every record so the board and compare() read it
+# from the evidence rather than from this file.
+#
+# "unwanted difference tone" (the cowbell, D13A) is a DEFECT CEILING. It exists
+# to catch DR 0010's structural defect -- one swing gate on the SUM of the two
+# squares, nl(a + b), which put the tone 42 dB ABOVE the machine's. Having less
+# of it than the machine (ours -102 dB against its -68 dB) is not a defect,
+# and scoring that deficit two-sided was #141: an 11.34x headline pointing at
+# the wrong defect. The `CB_GATE_THE_SUM` control shows the ceiling still
+# fails the defect it exists for.
+METRIC_PURPOSE = {
+    "unwanted difference tone": "defect ceiling",
+}
+
+
+def metric_purpose(name: str) -> str:
+    return METRIC_PURPOSE.get(name, "match")
+
+
 # ===========================================================================
 # 2. Estimators
 #
@@ -199,6 +253,17 @@ def tol_fixed(value: float, basis: str):
 # written, and an estimator that has never met a signal with a known answer is
 # not a measurement.
 # ===========================================================================
+#: How far either side of a NOMINAL partial frequency a real one is looked for.
+#: 10 % is the TR-808's own component tolerance on an oscillator's f0
+#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
+#: the search covers exactly the range a unit is allowed to sit in.
+LINE_SEARCH_FRAC = 0.10
+
+#: How far above its own measured floor a reading has to sit before it is a
+#: measurement rather than the estimator. 6 dB, which is the margin
+#: `audio_measure.harmonic_signature` already uses for the same decision.
+FLOOR_MARGIN_DB = 6.0
+
 def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
                   hi: float | None = None, *, floor_db: float = -80.0) -> am.Estimate:
     """10*log10(energy above `split_hz` / energy below it), both inside
@@ -233,21 +298,471 @@ def band_ratio_db(x, sr: int, split_hz: float, lo: float = 0.0,
     return am.Estimate(r, True, "", dict(e_lo=e_lo, e_hi=e_hi))
 
 
-def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0) -> am.Estimate:
+#: How much of the fixed-window band ratio may be the DECAY rather than the
+#: balance before the answer is refused. DERIVED: a matched-decay pair already
+#: costs 0.41 dB at rimshot speed (`tools/probes/estimator_domains.py` 2, with
+#: the pre-onset lead `band_energy` requires), which is the irreducible cost of
+#: handing a fixed-window integral a decaying signal at all. A decay-rate
+#: mismatch adds 10*log10(tau_a/tau_b) on top of that, so the bound is the
+#: mismatch that adds no more than the matched pair already costs -- 0.5 dB,
+#: i.e. a tau ratio of 1.12. Above it the number is mostly the decay, and
+#: `balance_trajectory_db` is the estimator that has no window to fold in.
+BAND_PAIR_MAX_DECAY_BIAS_DB = 0.5
+
+#: How far inside its band a partial must sit. The TR-808's own component
+#: tolerance, +-10 % (docs/tr808-reference.md 1.7), the same figure
+#: `LINE_SEARCH_FRAC` and `tol_frequency` use: a band that does not hold the
+#: partial with that much margin cannot hold it for a DIFFERENT unit of the
+#: same machine. Measured cost at exactly that margin: 0.011 dB; at 2 % of the
+#: band's half-width from the edge, 5.3 dB.
+BAND_PAIR_EDGE_MARGIN = LINE_SEARCH_FRAC
+
+BAND_PAIR_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="band_pair_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="stationary is where it is exact (0.032 dB worst over "
+                            "a 54 dB range); decaying is inside the domain only "
+                            "with the decay-rate axis below satisfied, and costs "
+                            "0.41 dB even then"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, lo=-BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      hi=BAND_PAIR_MAX_DECAY_BIAS_DB,
+                      units="dB of A^2*tau bias the record's own two bands imply",
+                      basis="a fixed-window band ratio is A^2*tau, not A^2 (#109), "
+                            "so unequal decay puts 10*log10(tau_a/tau_b) into the "
+                            "answer. Measured -6.0 dB of bias at a 4:1 tau ratio "
+                            "and -11.4 dB at 10:1, against a truth of 0 dB "
+                            "(tools/probes/estimator_domains.py 2). The bound is "
+                            "the mismatch that adds no more than the 0.41 dB a "
+                            "MATCHED decaying pair already costs"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=BAND_PAIR_EDGE_MARGIN, hi=None,
+                      units="fraction of the band edge a resolved line must clear",
+                      basis="the TR-808's own +-10 % component tolerance. A 4th-order "
+                            "Butterworth is -3 dB AT its edge: measured 0.011 dB of "
+                            "loss with 10 % of margin, 1.3 dB at 0.2 of the band's "
+                            "half-width and 6.0 dB sitting on the edge "
+                            "(tools/probes/estimator_domains.py 3). Enforced only "
+                            "when the band holds a resolvable line -- a cymbal band "
+                            "holds broadband content and has nothing to be detuned"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=0.0, units="Hz of overlap between "
+                      "the two bands",
+                      basis="two overlapping bands share energy, so the ratio counts "
+                            "the same partial on both sides; refused outright"),
+        am.DomainAxis(am.AXIS_SNR, lo=-80.0, hi=80.0, units="dB of band ratio",
+                      basis="the pre-existing `floor_db` gate: a ratio past it is an "
+                            "absence rather than a balance"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=0.050, units="s", enforced=False,
+                      basis="band_energy's own docstring: it filters rather than "
+                            "summing bins, and below about 50 ms a rectangular-FFT "
+                            "Parseval split is the better instrument. Declared, not "
+                            "enforced, because the caller windows the record"),
+    ),
+    worst_error="0.032 dB over a 54 dB range on stationary two-sine signals; "
+                "0.41 dB on a matched-decay pair at rimshot speed",
+    evidence=("tools/probes/estimator_domains.py sections 1-3",
+              "tools/test_run_case.py::test_band_pair_db_of_two_sines_is_their_amplitude_ratio",
+              "docs/conga-body-spectrum-spread.md section 2 -- the band-split "
+              "family's original closed-form validation, worst 0.088 dB over a "
+              "30 dB range, re-run against band_pair_db itself in section 1"),
+    notes="#115 relocated docs/conga-body-spectrum-spread.md's 0.088 dB check "
+          "onto this estimator and re-measured it here (0.032 dB on these "
+          "bands). The issue's own 'holds to 1.4 dB over +-10 % detuning' was "
+          "carried forward unverified by its curation pass and is NOT encoded: "
+          "the measured cost at +-10 % of band-edge margin is 0.011 dB, and "
+          "the 1.4 dB figure does not correspond to anything measured here.",
+))
+
+
+def _centroid_s(p, sr: int) -> float:
+    p = np.asarray(p, dtype=np.float64)
+    total = float(p.sum())
+    if total <= 0.0:
+        return 0.0
+    return float((np.arange(len(p)) / sr * p).sum()) / total
+
+
+def _band_ring_centroid_s(sr: int, band, n: int) -> float:
+    """The centroid of the BAND-PASS'S OWN power impulse response.
+
+    A 4th-order Butterworth of bandwidth B rings for about 1/B, so a narrow
+    band's filtered power lasts materially longer than a wide one's for the
+    same input. Measured on the two bands this file uses for the rimshot, that
+    alone put -1.03 dB of apparent decay mismatch into a signal whose two
+    partials decay at exactly the same rate. Centroids add under convolution,
+    so subtracting the filter's own is the correction -- and it is MEASURED
+    from the filter rather than derived from its bandwidth, so it stays right
+    if the order or the band edges change."""
+    from scipy.signal import sosfiltfilt
+    sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+    m = max(n, 8 * _sosfiltfilt_padlen(sos))
+    imp = np.zeros(m)
+    imp[0] = 1.0
+    return _centroid_s(sosfiltfilt(sos, imp) ** 2, sr)
+
+
+def _effective_span_s(p, sr: int, *, centroid_s: float | None = None) -> float:
+    """The EFFECTIVE integration length of one band's instantaneous power `p`,
+    in seconds: `E / p(0)` for a decaying band, the record length for a
+    stationary one, and the right thing in between.
+
+    For p(t) = P*exp(-t/theta) on [0, L] -- theta = tau/2, because power decays
+    twice as fast as amplitude -- the two things a fixed window can see are
+
+        g = E/P        = theta*(1 - exp(-L/theta))
+        c = centroid   = theta - L*exp(-L/theta)/(1 - exp(-L/theta))
+
+    and both are strictly monotone in theta/L, so measuring `c` and inverting
+    gives `g` without ever needing P. **The centroid is the estimator that
+    works at both ends**, which is why it is here rather than the obvious
+    first-half/second-half energy ratio: with tau = 6 ms in a 260 ms record the
+    second half holds nothing but the filter's own numerical floor, and the
+    ratio estimator saturates there -- measured, it read -0.8 dB of bias where
+    the truth was -6.0 dB. This one reads -6.0.
+
+    `c/L` is bounded by 1/2 (a stationary band), which is the degenerate case
+    the bisection is clamped to."""
+    p = np.asarray(p, dtype=np.float64)
+    n = len(p)
+    total = float(p.sum())
+    if n < 2 or total <= 0.0:
+        return n / sr
+    length_s = n / sr
+    c = _centroid_s(p, sr) if centroid_s is None else centroid_s
+    frac = c / length_s
+    if frac >= 0.5 - 1e-9:
+        return length_s
+    if frac <= 1e-9:
+        return 0.0
+
+    def centroid_frac(u):                        # u = theta / L
+        if u > 1e6:
+            return 0.5
+        e = math.exp(-1.0 / u)
+        return u - e / max(1.0 - e, 1e-300)
+
+    lo, hi = 1e-9, 1e6
+    for _ in range(200):
+        mid = math.sqrt(lo * hi)
+        if centroid_frac(mid) < frac:
+            lo = mid
+        else:
+            hi = mid
+    u = math.sqrt(lo * hi)
+    return length_s * u * (1.0 - math.exp(-1.0 / u))
+
+
+def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float:
+    """How much of a fixed-window `band_pair_db` is the DECAY rather than the
+    balance, estimated from the record itself.
+
+    A fixed-window band ratio is A^2*tau, not A^2 (#109): what it integrates is
+    each band's own effective span, so the answer carries
+    10*log10(span_a/span_b) on top of the amplitude ratio it is read as.
+    `_effective_span_s` measures each span from the band-filtered power, so
+    subtracting the returned bias from the reported ratio recovers the
+    amplitude ratio.
+
+    Both spans are measured FROM THE RECORD'S OWN ONSET (`_onset_index`), not
+    from sample zero: a record that arrives with the pre-onset lead
+    `band_energy` requires would otherwise charge that lead to both bands and
+    pull every span towards the record length.
+
+    Validated against known tau pairs in `tools/probes/estimator_domains.py` 2."""
+    from scipy.signal import sosfiltfilt
+    x = np.asarray(x, dtype=np.float64)
+    if len(x) < 8:
+        return 0.0
+    i0 = _onset_index(x)
+    seg = x[i0:]
+    if len(seg) < 8:
+        return 0.0
+    spans = []
+    for band in (band_a, band_b):
+        sos = _bandpass_sos(sr, float(band[0]), float(band[1]))
+        if len(seg) <= _sosfiltfilt_padlen(sos):
+            return 0.0
+        p = sosfiltfilt(sos, seg) ** 2
+        c = _centroid_s(p, sr) - _band_ring_centroid_s(sr, band, len(seg))
+        spans.append(_effective_span_s(p, sr, centroid_s=max(c, 0.0)))
+    return 10.0 * math.log10(max(spans[0], 1e-300) / max(spans[1], 1e-300))
+
+
+def _line_edge_margin(x, sr: int, band) -> tuple:
+    """(fractional margin of the band's strongest line from the nearer edge,
+    the line's frequency), or (None, None) when the band holds no resolvable
+    line -- which is not a failure: a cymbal band holds broadband content and
+    has no line to be detuned."""
+    lo, hi = float(band[0]), float(band[1])
+    e = am.dominant_frequency(x, lo, hi, sr, min_prominence_db=6.0)
+    if not e.ok or e.value is None:
+        return None, None
+    f = float(e.value)
+    return min(f / lo - 1.0, hi / f - 1.0), f
+
+
+def band_pair_db(x, sr: int, band_a, band_b, *, floor_db: float = -80.0,
+                 min_decay_bias_db: float | None = BAND_PAIR_MAX_DECAY_BIAS_DB,
+                 edge_margin: float | None = BAND_PAIR_EDGE_MARGIN) -> am.Estimate:
     """10*log10(energy in `band_a` / energy in `band_b`), for a voice whose
     balance is between two named partials rather than either side of one
     split -- the rimshot's two bridged-T modes, the cymbal's bands.
 
-    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio."""
+    IT DECLARES A DOMAIN AND REFUSES OUTSIDE IT (#115)
+    --------------------------------------------------
+    `BAND_PAIR_DOMAIN` is this function's validated envelope as data, and the
+    two axes it enforces are the two ways this measure is read as something it
+    is not:
+
+      * **decay rate.** A fixed-window band ratio is A^2*tau, not A^2 -- the
+        thing `balance_trajectory_db`'s docstring has said since #109 and
+        which nothing checked. `band_pair_decay_bias_db` estimates that term
+        FROM THE RECORD, and a record whose two bands decay far enough apart
+        to put more than `min_decay_bias_db` into the answer is refused
+        rather than reported: measured bias reaches -6.0 dB at a 4:1 tau ratio
+        and -11.4 dB at 10:1, against a 3 dB energy-ratio tolerance.
+      * **detuning.** A 4th-order Butterworth is -3 dB at its own edge, so a
+        partial that has drifted towards one reads low -- 6.0 dB low sitting
+        on the edge. A band whose strongest line does not clear both edges by
+        `edge_margin` (the TR-808's own +-10 %) is refused. A band with no
+        resolvable line is not checked, because broadband content has nothing
+        to detune.
+
+    Pass `min_decay_bias_db=None` / `edge_margin=None` to measure the
+    out-of-domain case deliberately -- which is what
+    `tools/probes/estimator_domains.py` does to produce the numbers above, and
+    the only honest way to ask an estimator what it does where it is wrong.
+
+    Ground truth: test_band_pair_db_of_two_sines_is_their_amplitude_ratio,
+    test_band_pair_db_refuses_partials_that_decay_at_different_rates,
+    test_band_pair_db_refuses_a_partial_sitting_on_a_band_edge."""
+    lo_a, hi_a = float(band_a[0]), float(band_a[1])
+    lo_b, hi_b = float(band_b[0]), float(band_b[1])
+    overlap = min(hi_a, hi_b) - max(lo_a, lo_b)
+    if overlap > 0.0:
+        return BAND_PAIR_DOMAIN.refuse(am.AXIS_PARTIAL_SEPARATION, -overlap,
+                                       band_a=(lo_a, hi_a), band_b=(lo_b, hi_b))
     e_a, e_b = am.band_energy(x, (tuple(band_a), tuple(band_b)), sr)
     if e_a <= 0.0 or e_b <= 0.0:
         return am.Estimate(None, False, "one of the two bands holds no energy",
-                           dict(e_a=e_a, e_b=e_b))
+                           dict(e_a=e_a, e_b=e_b), BAND_PAIR_DOMAIN)
     r = 10.0 * math.log10(e_a / e_b)
     if r < floor_db or r > -floor_db:
         return am.Estimate(None, False, "band ratio past the stated floor",
-                           dict(ratio_db=r, floor_db=floor_db))
-    return am.Estimate(r, True, "", dict(e_a=e_a, e_b=e_b))
+                           dict(ratio_db=r, floor_db=floor_db), BAND_PAIR_DOMAIN)
+    detail = dict(e_a=e_a, e_b=e_b)
+    if edge_margin is not None:
+        for tag, band in (("a", band_a), ("b", band_b)):
+            margin, f = _line_edge_margin(x, sr, band)
+            if margin is None:
+                continue
+            detail[f"line_{tag}_hz"], detail[f"edge_margin_{tag}"] = f, margin
+            if margin < edge_margin:
+                return BAND_PAIR_DOMAIN.refuse(
+                    am.AXIS_DETUNING, margin, lo=edge_margin, ratio_db=r,
+                    band=tag, line_hz=f, band_lo=float(band[0]), band_hi=float(band[1]),
+                    **detail)
+    if min_decay_bias_db is not None:
+        bias = band_pair_decay_bias_db(x, sr, band_a, band_b)
+        detail["decay_bias_db"] = bias
+        if abs(bias) > min_decay_bias_db:
+            return BAND_PAIR_DOMAIN.refuse(
+                am.AXIS_DECAY_RATE, bias, lo=-min_decay_bias_db, hi=min_decay_bias_db,
+                ratio_db=r, balance_db=r - bias, **detail)
+    else:
+        detail["decay_bias_db"] = band_pair_decay_bias_db(x, sr, band_a, band_b)
+    return am.Estimate(r, True, "", detail, BAND_PAIR_DOMAIN)
+
+
+def _joint_headroom(al, ah, floor_lo, floor_hi):
+    """How far ABOVE both partials' own measured floors a single instant sits,
+    the SMALLER of the two headrooms -- the instant is only trustworthy when
+    NEITHER partial is buried. Returns (headroom_db array, headroom_lo, headroom_hi)."""
+    la = 20.0 * np.log10(np.clip(al, 1e-300, None) / np.clip(floor_lo, 1e-300, None))
+    lh = 20.0 * np.log10(np.clip(ah, 1e-300, None) / np.clip(floor_hi, 1e-300, None))
+    return np.minimum(la, lh), la, lh
+
+
+BALANCE_TRAJECTORY_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="balance_trajectory_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary", "decaying"),
+                      enforced=False,
+                      basis="both, and that is the point of it: a ratio at ONE "
+                            "INSTANT has no duration to fold a decay into, where "
+                            "band_pair_db's fixed window has"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="UNBOUNDED, by construction rather than by permission. "
+                            "This is the axis band_pair_db has to refuse on -- "
+                            "A^2*tau, not A^2 (#109) -- and it is the reason this "
+                            "estimator exists"),
+        am.DomainAxis(am.AXIS_SNR, lo=FLOOR_MARGIN_DB,
+                      units="dB above the record's own floor, on BOTH partials at "
+                            "once",
+                      basis="the joint-headroom gate. The floor is measured on the "
+                            "same record at guard frequencies known to hold neither "
+                            "partial (#92), never quoted"),
+        am.DomainAxis(am.AXIS_DETUNING, enforced=True,
+                      units="the caller's own f_lo_range / f_hi_range",
+                      basis="the lines are FOUND (partial_trajectory.find_partial) "
+                            "inside the ranges the operating point declares, not "
+                            "probed at a nominal; a range holding no line refuses"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, enforced=True,
+                      basis="line_is_resolved (#389): find_partial returns the "
+                            "STRONGEST line in its range, which on a record holding "
+                            "no partial is the pick's own selection bias -- white "
+                            "noise cleared the floor gate at both shipping "
+                            "operating points before this was added. The "
+                            "precondition is on the line's SHAPE, where that bias "
+                            "divides out"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, enforced=True,
+                      units="the caller's own t_end, in s",
+                      basis="t_end is an outer bound on the SEARCH, not a span that "
+                            "gets integrated, so a reference swap to a longer or "
+                            "shorter take does not change how much floor is "
+                            "averaged in -- there is no averaging"),
+    ),
+    worst_error="2.4 dB for RS and 1.1 dB for CB against known two-partial "
+                "signals at the shipping operating points; 2.37 dB worst over "
+                "true balances 0 to -24 dB at the shipped (1000, 1100) guard set",
+    evidence=("tools/measure_partial_balance.py `cmd_validate`",
+              "tools/probes/rs_guard_band.py",
+              "tools/test_run_case.py::test_balance_trajectory_db_* (six cases)"),
+    notes="#115 asked for the three ad-hoc validation measurements sitting "
+          "BESIDE the estimators to be relocated INTO them. This is one of the "
+          "three: the 2.4 dB figure was a comment in this file's "
+          "RS_BALANCE_OP block, reachable only by reading the comment.",
+))
+
+
+def balance_trajectory_db(x, sr: int, f_lo_range, f_hi_range, *, win_ms: float,
+                          hop_ms: float, t_end: float, guards, min_gap_ms: float,
+                          floor_margin_db: float = 6.0) -> am.Estimate:
+    """The two partials' amplitude ratio at the EARLIEST instant the record can
+    support measuring it, not `band_pair_db`/`tone_ratio_db`'s single window
+    integrated over a fixed span (#109).
+
+    `band_pair_db` over a fixed window is A^2*tau, not A^2: a filtered band's
+    energy over a span includes how long the band rings, so it silently
+    carries the same information a separate `tail decay`/`decay` row already
+    scores. This is a raw amplitude ratio at ONE INSTANT -- decay-invariant by
+    construction, because an instant has no duration to fold in.
+
+    A single instant still cannot show a trajectory that MOVES (the rimshot's
+    high mode leads for ~5 ms and then falls behind; the cowbell's balance
+    falls all the way through the note) -- see `test_run_case.py`'s ground
+    truth for a sign-changing-balance signal a one-point read cannot resolve
+    on its own. So this reports the EARLIEST and LATEST instants the record
+    supports (`t1`/`balance1` scored; `t2`/`balance2`/`slope_db_per_ms` carried
+    as evidence, not scored, because two points is a trajectory and a third
+    scored number two windows wide is the disease this function exists to
+    cure), rather than reducing the whole trajectory to one integral.
+
+    THE WINDOW IS THE RECORD'S OWN, not a quoted span (#92): `f_lo`/`f_hi` are
+    the real lines (`partial_trajectory.find_partial`, not a nominal chart
+    value), and every instant is checked against a FLOOR measured on the same
+    record at `guards` -- frequencies known to hold neither partial
+    (`partial_trajectory.floor_at`). An instant where either partial is within
+    `floor_margin_db` of that floor is not evidence and is excluded, exactly
+    as #92 asks; `t_end` is a generous outer bound on the search, not the
+    thing being integrated, so a reference swap to a shorter or longer take
+    does not change how much floor gets averaged in -- there is no averaging.
+
+    REFUSES when no instant in [0, t_end] clears the floor on BOTH partials at
+    once, with the best margin actually found, rather than reporting a
+    contaminated ratio.
+
+    AND REFUSES WHEN EITHER "PARTIAL" IS NOT A RESOLVED LINE (#389), which the
+    floor gate on its own could not see. `find_partial` returns the STRONGEST
+    line in its search range -- a maximum over ~4800 and ~14000 grid points --
+    while `floor_at` reads FIXED guard frequencies, so on a record that holds no
+    partial the headroom between the two is the pick's own selection bias, and
+    it cleared 6 dB at some instant out of the 240 this trajectory visits: white
+    noise was REPORTED a balance at both shipping operating points, for most
+    seeds. The floor gate cannot be tightened to close that, because our own
+    rimshot clears it by 0.4 dB and noise clears it by 6 dB and more, so any
+    raised floor or margin silences D10A -- a real record with a real defect in
+    it -- before it silences noise. The precondition is on the line's SHAPE
+    instead, where the pick's bias divides out:
+    `partial_trajectory.line_is_resolved`.
+
+    THE FLOOR GATE RUNS FIRST, so a record with no energy at all keeps naming
+    the floor, which is that case's own ground truth
+    (test_..._refuses_when_no_instant_clears_the_floor).
+
+    Ground truth: test_balance_trajectory_db_reports_two_points_not_one,
+    test_balance_trajectory_db_a_flat_balance_reads_flat,
+    test_balance_trajectory_db_excludes_a_point_below_the_floor,
+    test_balance_trajectory_db_refuses_when_no_instant_clears_the_floor,
+    test_balance_trajectory_db_refuses_white_noise_at_both_operating_points."""
+    f_lo = PT.find_partial(x, sr, *f_lo_range, seconds=t_end)
+    f_hi = PT.find_partial(x, sr, *f_hi_range, seconds=t_end)
+    if f_lo is None or f_hi is None:
+        return am.Estimate(None, False, "no line found for one of the two partials",
+                           dict(f_lo_range=f_lo_range, f_hi_range=f_hi_range),
+                           BALANCE_TRAJECTORY_DOMAIN)
+    ts, al = PT.trajectory(x, sr, f_lo, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    _, ah = PT.trajectory(x, sr, f_hi, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    fl_lo = PT.floor_at(x, sr, f_lo, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    fl_hi = PT.floor_at(x, sr, f_hi, guards, win_ms=win_ms, hop_ms=hop_ms, t_end=t_end)
+    headroom, hlo, hhi = _joint_headroom(al, ah, fl_lo, fl_hi)
+    ok = (headroom >= floor_margin_db) & (al > 0) & (ah > 0)
+    idxs = np.nonzero(ok)[0]
+    if len(idxs) == 0:
+        i = int(np.argmax(headroom))
+        return am.Estimate(None, False,
+                           f"no instant in [0, {t_end*1e3:.0f}] ms clears the record's own "
+                           f"floor by {floor_margin_db:.0f} dB on both partials at once "
+                           f"(best joint headroom {headroom[i]:.1f} dB at t={ts[i]*1e3:.1f} ms: "
+                           f"low partial {hlo[i]:.1f} dB, high partial {hhi[i]:.1f} dB)",
+                           dict(f_lo=f_lo, f_hi=f_hi, best_t_ms=float(ts[i] * 1e3),
+                                best_headroom_db=float(headroom[i])),
+                           BALANCE_TRAJECTORY_DOMAIN)
+    shapes = {}
+    for tag, f in (("low", f_lo), ("high", f_hi)):
+        shape = PT.line_is_resolved(x, sr, f, seconds=t_end)
+        if not shape["ok"]:
+            return am.Estimate(None, False,
+                               f"the {tag} partial is not a resolved line: "
+                               f"{shape['reason']}",
+                               dict(f_lo=f_lo, f_hi=f_hi, unresolved=tag,
+                                    unresolved_hz=float(f),
+                                    line_resid_db=shape["resid_db"],
+                                    line_tau_ms=shape["tau_ms"],
+                                    line_drop1_db=shape["drop1_db"]),
+                               BALANCE_TRAJECTORY_DOMAIN)
+        shapes[tag] = shape
+    i1 = int(idxs[0])
+    balance1 = 20.0 * math.log10(ah[i1] / al[i1])
+    # THE SHAPE EVIDENCE TRAVELS WITH AN ACCEPTED VERDICT TOO, not only with a
+    # refusal (review of #405). `line_is_resolved`'s own docstring tells a reader
+    # to watch the residual against its tolerance -- the margin is 1.29x on the
+    # worst real partial measured -- and a verdict that records the number only
+    # when it fails cannot show that margin moving. The gate's value is recorded
+    # beside the two residuals so the pair is readable without going to look up
+    # which default was in force; `max_resid_db` and `n_bins` are still
+    # `partial_trajectory` defaults rather than members of the OP dicts, and
+    # `detail` is not serialised on the accepted path, so the scorecard JSON
+    # still cannot show this (Judge's non-blocking (2)/(3) on PR #405 -- the
+    # remaining half is plumbing `detail` into `diagnostics`, which touches every
+    # metric and is not this change).
+    detail = dict(f_lo=f_lo, f_hi=f_hi, t1_ms=float(ts[i1] * 1e3),
+                 balance1_db=balance1, headroom1_db=float(headroom[i1]),
+                 n_points_above_floor=int(len(idxs)), n_points_total=int(len(ts)),
+                 lo_resid_db=shapes["low"]["resid_db"],
+                 lo_tau_ms=shapes["low"]["tau_ms"],
+                 hi_resid_db=shapes["high"]["resid_db"],
+                 hi_tau_ms=shapes["high"]["tau_ms"],
+                 line_max_resid_db=shapes["low"]["max_resid_db"])
+    later = idxs[ts[idxs] > ts[i1] + min_gap_ms * 1e-3]
+    if len(later):
+        i2 = int(later[-1])
+        balance2 = 20.0 * math.log10(ah[i2] / al[i2])
+        dt_ms = float((ts[i2] - ts[i1]) * 1e3)
+        detail.update(t2_ms=float(ts[i2] * 1e3), balance2_db=balance2,
+                     headroom2_db=float(headroom[i2]),
+                     slope_db_per_ms=(balance2 - balance1) / dt_ms)
+    return am.Estimate(balance1, True, "", detail, BALANCE_TRAJECTORY_DOMAIN)
 
 
 def pitch_drop_hz(x, sr: int, band, *, early=(0.004, 0.018), late=(0.060, 0.150),
@@ -333,17 +848,6 @@ def attack_ms(x, sr: int, *, window_ms: float = 4.0,
     return am.Estimate(ms, True, "", dict(peak_index=pk, window_ms=window_ms))
 
 
-#: How far either side of a NOMINAL partial frequency a real one is looked for.
-#: 10 % is the TR-808's own component tolerance on an oscillator's f0
-#: (docs/tr808-reference.md 1.7) and the same figure `tol_frequency` uses, so
-#: the search covers exactly the range a unit is allowed to sit in.
-LINE_SEARCH_FRAC = 0.10
-
-#: How far above its own measured floor a reading has to sit before it is a
-#: measurement rather than the estimator. 6 dB, which is the margin
-#: `audio_measure.harmonic_signature` already uses for the same decision.
-FLOOR_MARGIN_DB = 6.0
-
 
 def find_line(x, sr: int, hz_nominal: float, *,
               search: float = LINE_SEARCH_FRAC) -> am.Estimate:
@@ -390,8 +894,79 @@ def _amplitude_at(x, sr: int, hz: float, label: str) -> am.Estimate:
     return e
 
 
+#: How many FFT bins apart the two lines must sit. MEASURED, against the
+#: 8-bin figure `windowed_tone_amplitude`'s docstring states for itself: over a
+#: full sweep of relative phase the ratio is exact to 0.0000 dB at 4 bins,
+#: costs 0.22 dB at 3 and 3.45 dB at 2 (tools/probes/estimator_domains.py 4b).
+#: So the docstring's bound is conservative by 2x and 4 bins is where the
+#: measurement puts the last exact point -- encoding 8 would refuse readings
+#: that are exact, which is the over-aggressive half of this failure.
+TONE_RATIO_MIN_SEPARATION_BINS = 4.0
+
+TONE_RATIO_DOMAIN = am.register_domain(am.ValidatedDomain(
+    estimator="tone_ratio_db",
+    axes=(
+        am.DomainAxis(am.AXIS_SIGNAL_CLASS, values=("stationary",), enforced=False,
+                      basis="a coherent projection over one fixed window. On a "
+                            "DECAYING pair at rimshot speed (tau ~ 6 ms) the lines "
+                            "are too broad for find_line to resolve and this "
+                            "refuses -- measured, both for matched and for 4:1 "
+                            "mismatched decay (tools/probes/estimator_domains.py 4d "
+                            "and tools/probes/verify_109_claims.py 1b). It does not "
+                            "report a biased ratio, which is the pre-#108 behaviour "
+                            "the issue that asked for this file withdrew"),
+        am.DomainAxis(am.AXIS_DETUNING, lo=-LINE_SEARCH_FRAC, hi=LINE_SEARCH_FRAC,
+                      units="fraction off the nominal frequency",
+                      basis="the TR-808's own +-10 % component tolerance, which is "
+                            "find_line's search band. Measured EXACT to 0.0008 dB "
+                            "at 0/1/5/9/9.9 % off nominal, and a REFUSAL at 15 % "
+                            "(tools/probes/estimator_domains.py 4a). This is the "
+                            "post-#108 behaviour; the pre-#108 losses of 7.3 dB at "
+                            "1 % and 16.0 dB at 5 % are withdrawn and are NOT what "
+                            "this domain describes"),
+        am.DomainAxis(am.AXIS_PARTIAL_SEPARATION, lo=TONE_RATIO_MIN_SEPARATION_BINS,
+                      units="FFT bins between the two found lines",
+                      basis="measured over a full sweep of relative phase: 0.0000 dB "
+                            "of error at 4 bins and wider, 0.22 dB at 3, 3.45 dB at "
+                            "2, 5.24 dB at 1 (tools/probes/estimator_domains.py 4b). "
+                            "windowed_tone_amplitude's docstring claims 8 bins; the "
+                            "measurement says that is conservative by 2x"),
+        am.DomainAxis(am.AXIS_RECORD_LENGTH, lo=4.0,
+                      units="FFT bins the +-search band spans",
+                      basis="what binds is find_line's search band holding a "
+                            "resolvable peak, not windowed_tone_amplitude's 12 "
+                            "periods: measured exact at 4.3 bins of search band "
+                            "(40 ms at 540 Hz) and REFUSED at 3.2 "
+                            "(tools/probes/estimator_domains.py 4c)"),
+        am.DomainAxis(am.AXIS_SNR, lo=6.0, units="dB of peak prominence in the "
+                      "search band",
+                      basis="dominant_frequency's own min_prominence_db, which is "
+                            "what find_line refuses on"),
+        am.DomainAxis(am.AXIS_DECAY_RATE, enforced=False,
+                      basis="not separately bounded: differential decay shows up "
+                            "here as lines too broad to resolve, and the "
+                            "signal_class axis above is where that is recorded"),
+    ),
+    worst_error="0.0008 dB over +-10 % of detuning on stationary two-tone "
+                "signals, at 4 bins of separation and wider",
+    evidence=("tools/probes/estimator_domains.py section 4",
+              "tools/probes/verify_109_claims.py section 1",
+              "tools/test_run_case.py::test_tone_ratio_db_of_two_known_sines",
+              "tools/test_run_case.py::"
+              "test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses"),
+    notes="#108 replaced the nominal-probe estimator with this find_line-based "
+          "one. The figures in #115's own table (-7.3 dB at 1 % detuning, "
+          "-16.0 at 5 %, -8.7 on differential decay) describe the ESTIMATOR "
+          "THAT WAS REPLACED and were withdrawn by that issue's own verified "
+          "corrections; verify_109_claims.py is the regression guard against "
+          "them being reinstated as a baseline.",
+))
+
+
 def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
-                  search: float = LINE_SEARCH_FRAC) -> am.Estimate:
+                  search: float = LINE_SEARCH_FRAC,
+                  min_separation_bins: float | None = TONE_RATIO_MIN_SEPARATION_BINS
+                  ) -> am.Estimate:
     """Level of the partial NEAR `hz_num` over the partial NEAR `hz_den`, in
     dB: both lines are found in the record and then measured between (#108).
 
@@ -400,28 +975,55 @@ def tone_ratio_db(x, sr: int, hz_num: float, hz_den: float, *,
     now, while it is a no-op, rather than after a reference swap makes it a
     mystery.
 
+    ITS DOMAIN IS `TONE_RATIO_DOMAIN`, AND IT REFUSES OUTSIDE IT (#115)
+    -------------------------------------------------------------------
+    Three of its four axes were already enforced, by machinery that did not
+    say what it was enforcing: detuning past +-10 % and a search band too
+    narrow to hold a peak both come back from `find_line`, and a record too
+    short to project comes back from `windowed_tone_amplitude`. The one that
+    was NOT checked is PARTIAL SEPARATION -- two nominal frequencies close
+    enough that both searches land on the SAME line return 0.0 dB, a number
+    with no refusal anywhere in it. That is now refused, at the separation
+    measurement puts the last exact reading at rather than the one the window's
+    docstring claims.
+
+    Pass `min_separation_bins=None` to measure the unresolved case on purpose.
+
     Ground truth: test_tone_ratio_db_of_two_known_sines,
-    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses."""
+    test_tone_ratio_db_finds_a_detuned_line_the_nominal_probe_misses,
+    test_tone_ratio_db_refuses_two_lines_inside_one_main_lobe."""
     fn, fd = find_line(x, sr, hz_num, search=search), find_line(x, sr, hz_den, search=search)
     if not fn.ok:
-        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail)
+        return am.Estimate(None, False, f"numerator: {fn.reason}", fn.detail,
+                           TONE_RATIO_DOMAIN)
     if not fd.ok:
-        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail)
+        return am.Estimate(None, False, f"denominator: {fd.reason}", fd.detail,
+                           TONE_RATIO_DOMAIN)
+    if min_separation_bins is not None and len(x):
+        bins = abs(fn.value - fd.value) * len(x) / sr
+        if bins < min_separation_bins:
+            return TONE_RATIO_DOMAIN.refuse(
+                am.AXIS_PARTIAL_SEPARATION, bins, lo=min_separation_bins,
+                num_hz=fn.value, den_hz=fd.value,
+                num_nominal_hz=hz_num, den_nominal_hz=hz_den,
+                bin_hz=sr / len(x))
     a = _amplitude_at(x, sr, fn.value, "numerator")
     b = _amplitude_at(x, sr, fd.value, "denominator")
     if not a.ok:
-        return a
+        return am.Estimate(None, False, a.reason, a.detail, TONE_RATIO_DOMAIN)
     if not b.ok:
-        return b
+        return am.Estimate(None, False, b.reason, b.detail, TONE_RATIO_DOMAIN)
     if a.value <= 0 or b.value <= 0:
         return am.Estimate(None, False, "a line measured at zero amplitude",
-                           dict(num=a.value, den=b.value))
+                           dict(num=a.value, den=b.value), TONE_RATIO_DOMAIN)
     return am.Estimate(20.0 * math.log10(a.value / b.value), True, "",
                        dict(num=a.value, den=b.value,
                             num_hz=fn.value, den_hz=fd.value,
                             num_nominal_hz=hz_num, den_nominal_hz=hz_den,
                             num_offset_pct=fn.detail["offset_pct"],
-                            den_offset_pct=fd.detail["offset_pct"]))
+                            den_offset_pct=fd.detail["offset_pct"],
+                            separation_bins=abs(fn.value - fd.value) * len(x) / sr),
+                       TONE_RATIO_DOMAIN)
 
 
 def difference_tone_db(x, sr: int, hz_hi: float, hz_lo: float, *,
@@ -790,7 +1392,31 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
 SOLO_SECONDS = {"CY": 3.6, "OH": 3.6}
 
 
-def render_drum_solo(sound: str, accent: float = 1.0) -> tuple:
+def _gate_the_sum(kit: list) -> list:
+    """INJECTED CONTROL `CB_GATE_THE_SUM`: DR 0010's defect put back. The
+    cowbell's two per-oscillator paths become ONE path taking SRC_SQPAIR --
+    the two squares summed before a single swing gate, nl(a + b) -- and the
+    other path is switched off. SQPAIR is SQ 4 + SQ 5 term for term, so the
+    level is unchanged and only the intermodulation is new. The one-sided
+    "unwanted difference tone" must still fail this."""
+    import drums_fx as dx
+    img = dict(kit)
+    cb = sorted(a for a in range(dx.A_PATH, dx.A_PATH + dx.N_PATH)
+                if a in img and ((img[a] >> 20) & 31) == dx.M_CBBP
+                and (img[a] & 31) in (dx.SRC_SQ + dx.SQPAIR[0], dx.SRC_SQ + dx.SQPAIR[1]))
+    if len(cb) != 2:
+        raise Refused(f"CB_GATE_THE_SUM expects the cowbell's two per-oscillator "
+                      f"paths and found {len(cb)}: the kit is not the one DR 0010 describes")
+    img[cb[0]] = (img[cb[0]] & ~31) | dx.SRC_SQPAIR
+    img[cb[1]] = dx.path_word(dx.SRC_OFF, dx.ENV_NONE, dest=dx.DEST_MIX)
+    return sorted(img.items())
+
+
+DRUM_SOLO_HIT_FRAME = 480               # int(0.01 * dx.SR); the lead the windower needs
+
+
+def render_drum_solo(sound: str, accent: float = 1.0, inject: str | None = None,
+                     hit_frame: int | None = None, frames: int | None = None) -> tuple:
     """One hit of one SOUND from the kit that ships, rendered here and now
     through the register interface -- never a committed WAV, so what is
     measured is the design as it stands.
@@ -798,17 +1424,34 @@ def render_drum_solo(sound: str, accent: float = 1.0) -> tuple:
     Sixteen sounds sit on eleven circuits and five of them are pairs sharing
     one, so the circuit is switched to the named sound with `kit_with_sounds`
     before the hit: rendering LC by striking the LT stop would measure the
-    low tom and call it a conga."""
+    low tom and call it a conga.
+
+    `hit_frame` and `frames` move the strike and the render length; both
+    default to the scorecard's own render and no case uses anything else. They
+    exist for the integrated-RTL anchor (tools/score_drum_i2s.py), where the
+    chip's strike lands wherever the SPI link puts it and the CONTROLLED
+    comparison -- is the decoded wire the fixed model? -- has to be made at the
+    frame the strike actually landed in. The noise LFSR free-runs, so a render
+    whose strike is in a different frame is a different waveform even when the
+    engine is bit-identical, which is precisely what this parameter isolates."""
     import drums_fx as dx
     if sound not in dx.SOUND_NAMES:
         raise Refused(f"{sound} is not one of the sixteen sounds the kit implements "
                       f"({', '.join(dx.SOUND_NAMES)})")
     stop = dx.SOUND_STOP[sound]
     seconds = SOLO_SECONDS.get(sound, 2.2)
-    n = int(seconds * dx.SR)
+    n = int(seconds * dx.SR) if frames is None else int(frames)
+    hit = DRUM_SOLO_HIT_FRAME if hit_frame is None else int(hit_frame)
+    if hit < 0 or hit >= n:
+        raise Refused(f"the strike must fall inside the render ({hit} of {n} frames)")
     d = dx.DrumsFx()
-    dm, bd = d.play(dx.hit_writes([(int(0.01 * dx.SR), stop, accent)],
-                                  dx.kit_with_sounds(sound)), n)
+    kit = dx.kit_with_sounds(sound)
+    if inject == "CB_GATE_THE_SUM":
+        if sound != "CB":
+            raise Refused(f"CB_GATE_THE_SUM is a cowbell control; {sound} does not "
+                          f"strike the cowbell, so it would inject nothing")
+        kit = _gate_the_sum(kit)
+    dm, bd = d.play(dx.hit_writes([(hit, stop, accent)], kit), n)
     g = dx.accent_reg(0.45)
     out = dx.output_fx(np.zeros(n), 0, dm, g, bd, g)
     return np.asarray(out, dtype=np.float64) / 32768.0, dx.SR
@@ -1045,6 +1688,35 @@ def _burst_span_ms(sound: str):
     return f
 
 
+#: Metrics whose estimator is shown UNQUALIFIED for the voice's domain. The
+#: value is still computed and kept in the record (`unqualified_value`), but the
+#: metric is REFUSED -- valid: false -- so it can neither pass nor fail and the
+#: case cannot be a whole-case pass by it (plan084 section 5: "Do not claim a
+#: whole-case pass by dropping the problematic property"). A measurement-version
+#: change: `carry_rubric_history` keeps the verdict it replaces.
+UNQUALIFIED = {
+    ("CP", "Burst timing"): (
+        "UNQUALIFIED for noise-excited clap envelopes (measurement version 2026-09-26): "
+        "the accepted-peak span of a 4 ms RMS envelope misreads noise inside a sustained "
+        "strike as extra strikes -- it failed every condition of an independent known-schedule "
+        "check at both rates, and is exact on a noise-free carrier "
+        "(docs/scorecard/clap-d12a/burst-timing-qual.json, plan081 B). Programmed strike "
+        "times are model/RTL state and are not a comparison with the recording"),
+}
+
+
+def unqualified_metric(units: str, why: str, measured: dict) -> dict:
+    """An UNQUALIFIED metric: refused (valid false, no `error` key -- no distance,
+    not zero), with what the estimator read kept beside it, labelled, so the
+    number is on record without being usable as evidence either way."""
+    m = invalid_metric(units, why, measured.get("tolerance"))
+    m["qualification"] = "UNQUALIFIED"
+    for k in ("value", "reference", "error"):
+        if k in measured:
+            m[f"unqualified_{k}"] = measured[k]
+    return m
+
+
 def _early_late_db(t_split: float, t_end: float):
     def f(y, sr):
         e_early = float(np.sum(window(y, sr, 0.0, t_split) ** 2))
@@ -1057,21 +1729,30 @@ def _early_late_db(t_split: float, t_end: float):
     return f
 
 
-def _line_ratio(hz_num: float, hz_den: float, t1: float = 0.100):
-    def f(y, sr):
-        return tone_ratio_db(window(y, sr, 0.0, t1), sr, hz_num, hz_den)
-    return f
-
-
 def _difference_tone(hz_hi: float, hz_lo: float, t1: float = 0.100):
     def f(y, sr):
         return difference_tone_db(window(y, sr, 0.0, t1), sr, hz_hi, hz_lo)
     return f
 
 
-def _band_pair(band_a, band_b, t1: float | None = None):
+# `_line_ratio`/`_band_pair`, the fixed-window wrappers around
+# `tone_ratio_db`/`band_pair_db` that D10A/D13A's "Partial balance" used
+# before #109, are gone: nothing in `DRUM_PLAN` calls them any more (checked
+# by grep, not assumed -- both were exactly zero call sites once RS and CB
+# moved to `_balance_trajectory` below). `tone_ratio_db`/`band_pair_db`
+# themselves stay -- `_difference_tone` above still uses `difference_tone_db`,
+# and both remain ground-truthed and available should a future case want a
+# fixed-window ratio again.
+def _balance_trajectory(f_lo_range, f_hi_range, *, win_ms: float, hop_ms: float,
+                        t_end: float, guards, min_gap_ms: float):
+    """Wraps `balance_trajectory_db` (#109) on the FULL prepared record -- it
+    searches its own window internally (`t_end` bounds the search, it is not a
+    span to integrate), so this passes `y` unsliced rather than through
+    `window()`/`_energy_window()`."""
     def f(y, sr):
-        return band_pair_db(_energy_window(y, sr, 0.0, t1), sr, band_a, band_b)
+        return balance_trajectory_db(y, sr, f_lo_range, f_hi_range, win_ms=win_ms,
+                                     hop_ms=hop_ms, t_end=t_end, guards=guards,
+                                     min_gap_ms=min_gap_ms)
     return f
 
 
@@ -1092,6 +1773,86 @@ def _tom_plan(sound: str, drop: bool):
     return [first,
             ("body spectrum", "dB", _split_db(sound, 0.0, 0.150), tol_db),
             ("decay", "ms", _t20_ms(0.005), tol_time)]
+
+
+# RS/CB "Partial balance" operating points for `balance_trajectory_db` (#109).
+# `win_ms`/`hop_ms`/`t_end` match the validated diagnostic in
+# measure_partial_balance.py's OP table (its own cmd_validate proves a worst
+# balance error of 2.4 dB for RS and 1.1 dB for CB against known two-partial
+# signals at these settings). `guards` are frequencies MEASURED to hold
+# neither partial, chosen in the gap between the two search ranges rather than
+# below or above them -- both references and both of our own renders were
+# checked against candidate guard sets before this pair was picked; a guard
+# below the low partial picked up broadband attack-transient leakage large
+# enough to swamp the floor on our own render (tools/measure_partial_balance.py
+# `apparatus`-style check, run by hand during #109's investigation).
+# `min_gap_ms` is how far apart the reported t1/t2 must be for a slope to be
+# worth reporting at all -- a few hops, not a fraction of a fast rimshot's own
+# decay.
+#
+# RS's LOWER guard moved 900 -> 1000 Hz (#380), because at 900 Hz it was still
+# reading THE STRIKE rather than the record's floor -- the same
+# attack-transient-leakage failure mode the paragraph above says the gap was
+# chosen to escape, just not escaped on the gap's low side.
+#
+# Measured on a struck synthetic carrying ONLY the low partial, so it has zero
+# steady energy at any guard and every reading there is leakage: 900 Hz reads
+# -17.5 dB re the low partial, 1000 Hz -19.9, 1100 Hz -21.5, falling
+# monotonically with distance from the partial across the whole gap. It is the
+# onset STEP's broadband splash and not the window's stationary sidelobes -- the
+# same partial with no onset step reads -35.2 dB at 900 Hz, 18 dB lower. Since
+# `floor_at` takes the MAX over guards, the lowest member sets the floor for the
+# whole set, so 900 Hz was putting it 2.4 dB above what the rest of the gap
+# warranted.
+#
+# On our own RS render that 2.4 dB was the whole difference between a verdict and
+# a refusal, because our high mode is nearly buried to begin with: it sits
+# -12.1 dB re our low mode where the machine's sits +6.6 dB, leaving it 0.5 dB
+# above the 900 Hz floor and 5.4 dB above the 1100 Hz one -- under the 6 dB gate
+# either way, so D10A could not report the 15.6 dB balance error it exists to
+# score.
+#
+# This is NOT the gate loosened to manufacture a pass, and the two measurements
+# that establish that are in `tools/probes/rs_guard_band.py`:
+#   - CONTAMINATION SENSITIVITY IS UNCHANGED. Injecting a real mid-band
+#     component into a clean two-partial signal, (1000, 1100) refuses at exactly
+#     the same level as (900, 1100) for every injection frequency across the
+#     gap: -15 dB re the low partial at 900 Hz, -18 dB at 1000 and 1100 Hz,
+#     -15 dB at 1200 Hz. The 900 Hz guard was buying no sensitivity it did not
+#     already have from 1000/1100.
+#   - THE SCORED NUMBER IS A PROPERTY OF THE VOICE, NOT OF THE GUARD. Every
+#     in-gap candidate that clears at all reports the same `balance1`: the
+#     reference +3.85 dB and our render -11.7 dB, for (1000,1100), (1050,1150),
+#     (1100,1150) and (1100,) alike. D10A therefore now reports a large FAIL
+#     (error -15.5 dB against a 3.0 dB tolerance, worst 5.17), not a pass.
+#   - Accuracy on signals of CHOSEN balance is 2.37 dB worst over true balances
+#     0 to -24 dB, inside the +-2.4 dB this operating point declares. Moving the
+#     guard further up (1100, 1150) costs 2.85 dB and leaves that envelope,
+#     which is why the smallest move that clears the sidelobe was taken.
+# #380 also refuted the hypothesis it was filed on: our render's 900-1100 Hz
+# content is 4.9 dB QUIETER than the machine's relative to each record's own low
+# partial, so the refusal was never excess mid-band in our model.
+RS_BALANCE_OP = dict(f_lo_range=(380, 620), f_hi_range=(1450, 2150),
+                     win_ms=6.0, hop_ms=0.25, t_end=0.060,
+                     guards=(1000.0, 1100.0), min_gap_ms=2.0)
+CB_BALANCE_OP = dict(f_lo_range=(460, 700), f_hi_range=(700, 1000),
+                     win_ms=20.0, hop_ms=2.0, t_end=0.600,
+                     guards=(300.0, 350.0, 1150.0, 1300.0), min_gap_ms=20.0)
+
+# #109 item 4 ("do not compare `worst` across cases that use different
+# estimators -- D10A and D13A share a name, a tolerance, and nothing else")
+# is resolved for THIS pair as a side effect of the trajectory fix, not as a
+# separate change: before #109, D10A's "Partial balance" was `_band_pair`
+# (a fixed-window filtered-energy ratio) and D13A's was `_line_ratio` (a
+# fixed-window coherent-projection ratio) -- two different functions with
+# different arithmetic. Both now call the SAME function, `_balance_trajectory`
+# / `balance_trajectory_db`, parameterised per voice by the OP dicts above.
+# `scorecard.py`'s `worst` for these two rows is therefore now a ratio of the
+# same estimator's error to the same estimator's own tolerance, which is the
+# comparability item 4 asks for. The GENERAL board-level rule -- grouping
+# `worst` comparability by estimator family for every case, not just this
+# pair -- is #116/#143's scope (both open, unclaimed, as of 2026-09-27) and is
+# deliberately not duplicated here; see this issue's PR description.
 
 
 # name -> (units, estimator, tolerance rule). Names match cases.csv exactly,
@@ -1128,9 +1889,12 @@ DRUM_PLAN = {
     ],
     "RS": [
         # Two bridged-T networks on one circuit: reference section 5 gives the
-        # low mode at 455 Hz Q 6.7 and the high at 1786 Hz Q 13.5, so the
-        # balance is asked as the energy in a band around each.
-        ("Partial balance", "dB", _band_pair((1500, 2100), (380, 560), 0.060), tol_db),
+        # low mode at 455 Hz Q 6.7 and the high at 1786 Hz Q 13.5. #109: the
+        # balance is the two REAL lines' amplitude ratio at the earliest
+        # floor-clearing instant, not a fixed window's filtered energy ratio
+        # (which is A^2*tau and double-charges the decay already scored by
+        # "tail decay" below).
+        ("Partial balance", "dB", _balance_trajectory(**RS_BALANCE_OP), tol_db),
         ("attack", "ms", _attack("RS", 0.060), tol_time),
         ("tail decay", "ms", _t20_ms(0.002), tol_time),
     ],
@@ -1148,8 +1912,12 @@ DRUM_PLAN = {
         # Nominal frequencies, used as SEARCH CENTRES and not as probe points
         # (#108). This machine's lines are 558.35 and 823.70 Hz; the difference
         # tone is at their measured difference, not at the 260 Hz the chart
-        # implies.
-        ("Partial balance", "dB", _line_ratio(800.0, 540.0), tol_db),
+        # implies. #109: the balance is the two lines' amplitude ratio at the
+        # earliest floor-clearing instant, not a fixed 0-100 ms window's
+        # coherent-projection ratio, which cannot show that the machine's
+        # balance falls through the whole note while a single window can only
+        # match it at one accidental instant.
+        ("Partial balance", "dB", _balance_trajectory(**CB_BALANCE_OP), tol_db),
         ("unwanted difference tone", "dB", _difference_tone(800.0, 540.0), tol_db),
         ("decay", "ms", _t20_ms(0.005), tol_time),
     ],
@@ -1186,9 +1954,16 @@ ENSEMBLE_CASES = {
 # plugin updates and moves silently, because the number coming out looks the
 # same.
 #
-# Our side is `reference_rigs.OurLadder`, the integer ladder at the host's own
-# operating point -- the same device `model/reference_compare.py` measures, at
-# the same drive, through the same stimulus. No plugin is involved on either
+# Our side (plan074 C) is the SELECTED Mono filter path -- the causal 2x
+# `RateConvertedLadder` the M5A/M5B engine ships -- under the named, frozen
+# calibration `surge-type2-clean-v1`, whose gain/ogain words come from the
+# production host conversion (`voice_fx.ladder_regs`). `tools/f1_filter_path.py`
+# builds it, checks its identity and proves it bit-exact against a real
+# selected-voice note before any number is read. Until plan074 it was
+# `reference_rigs.OurLadder`, the legacy base-rate standalone component with
+# the global words; that reading is kept on every record as
+# `diagnostics.legacy_standalone`, and the superseded records are under
+# docs/scorecard/f1-calibrated/legacy-records/. No plugin is involved on either
 # side of this comparison at run time.
 # ===========================================================================
 #: Below this, relative to the same curve's passband plateau, the stepped-tone
@@ -1402,6 +2177,62 @@ _CUTOFF_RESPONSE_PLAN = [
 
 FILTER_PLAN = {cid: _CUTOFF_RESPONSE_PLAN for cid in FILTER_CASES}
 
+#: What a filter case needs stated before it can be measured. `FILTER_CASES`
+#: above holds the DEVELOPMENT cases, written in this file; a Holdout case's
+#: entries are the same keys read out of its committed seal
+#: (`docs/scorecard/holdout/<case>.json`) instead, which is the whole point --
+#: the party tuning the model cannot edit a setting and read its error in one
+#: pass, because `tools/holdout.py` refuses a seal that is not committed and
+#: clean. `tools/probes/hihat/hh_probe5.py`'s module-level `HOLDOUT` dict is the
+#: pattern this generalises; a dict inside one probe cannot be checked from
+#: outside it, and a file in the repository can.
+FILTER_SPEC_KEYS = ("ref_clip", "ref_open_clip", "cut_hz", "open_hz",
+                    "res_ref", "res_ours")
+
+
+def sealed_settings(case_id: str) -> dict | None:
+    """The committed settings for a sealed Holdout case, or None.
+
+    A seal that does not load at all (absent, malformed, wrong schema) returns
+    None here on purpose: `run_case` then REFUSES the case with the seal's OWN
+    reason, which is more use than this function guessing a plan from a seal the
+    gate is about to reject."""
+    try:
+        return holdout.load_seal(case_id).get("settings") or None
+    except holdout.Refused:
+        return None
+
+
+def sealed_plans() -> dict:
+    """case id -> the plan its seal says it takes ('filter', ...). Only cases
+    whose seal names a plan this runner implements can leave `NOT_RUN`."""
+    out = {}
+    if not holdout.SEAL_DIR.is_dir():
+        return out
+    for path in sorted(holdout.SEAL_DIR.glob("*.json")):
+        if path.name == holdout.LEDGER.name:
+            continue
+        settings = sealed_settings(path.stem) or {}
+        if settings.get("plan"):
+            out[path.stem] = settings["plan"]
+    return out
+
+
+def filter_spec(case_id: str) -> dict:
+    """The frozen clips and control values one filter case is measured at --
+    from `FILTER_CASES` for a development case, from the committed seal for a
+    holdout one. REFUSES a seal that does not state the whole spec: a partially
+    specified holdout would be completed by a default nobody sealed."""
+    if case_id in FILTER_CASES:
+        return FILTER_CASES[case_id]
+    settings = sealed_settings(case_id) or {}
+    missing = [k for k in FILTER_SPEC_KEYS if k not in settings]
+    if missing:
+        raise Refused(f"the seal for {case_id} takes the filter plan but does not "
+                      f"state {', '.join(missing)}; a holdout completed by a default "
+                      f"is not a sealed setting")
+    return {k: settings[k] for k in FILTER_SPEC_KEYS}
+
 
 def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     """The frozen reference response curve, derived from cached audio whose
@@ -1436,11 +2267,22 @@ def load_filter_reference(clip_id: str, inject: str = "") -> tuple:
     g = np.asarray(g, dtype=np.float64)
     if inject == "REF_CORNER_2X":
         # The measured curve for a reference whose filter corner is an octave
-        # lower. This is equivalent to time-stretching the original audio by
+        # lower. ONLY the reference's axis moves: the device under test keeps
+        # the frozen probe grid (`dut_probe_grid`, plan075 4). Before that
+        # repair our side was rendered on this halved axis too, which left
+        # F1C's rolloff band with 3 points and the control NO-VERDICT. This is equivalent to time-stretching the original audio by
         # 2 before projection, but keeping the already-projected response makes
         # the mutation independently testable without a plugin/cache.
         freqs = freqs / 2.0
     return freqs, g, meta
+
+
+def dut_probe_grid(meta: dict) -> np.ndarray:
+    """The stepped-tone frequencies the DEVICE UNDER TEST is driven with: the
+    frozen profile's own grid, read from the clip's metadata, never from the
+    (possibly mutated) reference axis. A reference-side control must not be
+    able to change the DUT's stimulus -- asserted in `run_filter_case`."""
+    return np.asarray([float(f) for f in meta["freqs_hz"]], dtype=np.float64)
 
 
 def our_filter_curve(freqs, cut_hz: float, res: float, amp: float):
@@ -1457,16 +2299,81 @@ def our_filter_curve(freqs, cut_hz: float, res: float, amp: float):
     return np.asarray(g, dtype=np.float64)
 
 
-def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
+#: plan074 C. The official F1 model side is the SELECTED Mono filter path
+#: (causal 2x `RateConvertedLadder`) under the named, frozen calibration, built
+#: and identity-checked by `tools/f1_filter_path.py`. The legacy standalone
+#: `OurLadder` reading is kept on every record as named history
+#: (`diagnostics.legacy_standalone`), never as the scored value.
+#: `F1_LEGACY_SUBSTITUTE` asks for the legacy base-rate component under the
+#: selected label and must REFUSE (no verdict), however close its numbers.
+F1_INJECTS = ("F1_LEGACY_SUBSTITUTE",)
+
+
+def _legacy_reads(ref_f, cut, res, amp, open_f, open_hz):
+    """The pre-plan074 model side (OurLadder), read by the same estimators."""
+    g = our_filter_curve(ref_f, cut, res, amp)
+    og = our_filter_curve(open_f, open_hz, res, amp)
+    pl = am.plateau_db(open_f, og, _ref_band(open_f, cut))
+    return {"engine": "reference_rigs.OurLadder (legacy base-rate standalone component, "
+                      "global gain/ogain words)",
+            "corner_hz": _est_value(filt_corner(cut)(ref_f, g)),
+            "lowband_db": _est_value(filt_lowband_gain(cut, pl)(ref_f, g)),
+            "rolloff_db_oct": _est_value(filt_rolloff(cut)(ref_f, g)),
+            "wide_open_plateau_db": round(float(pl), 4)}
+
+
+def run_filter_case(case: dict, inject: str, keep_audio: bool, *,
+                    engine_path=None, engine: str | None = None,
+                    artifact_tag: str = "") -> dict:
+    """One F1 case, scored against its frozen Surge clip.
+
+    `engine_path` replaces the model filter path with any object offering
+    `SelectedFilterPath`'s interface (`curve`, `record`, `probe_profile`,
+    `calibration`, `match`, `path_version`). That is how a case is anchored on
+    another engine -- `tools/score_f1_rtl.py` passes the RTL filter chain -- and
+    it exists so the RTL reading and the `fixed-model` reading it is compared
+    with come out of the SAME estimators, references and tolerance policy. A
+    second copy of this function would have been free to drift from its twin.
+    `engine` names what produced the numbers and lands on the record; a caller
+    that swaps the path and forgets the label is refused below.
+    """
+    # Asserted before anything is loaded or rendered, so a caller that swaps the
+    # engine and forgets to say so cannot spend twenty minutes of simulation
+    # producing a record labelled with the wrong engine.
+    if engine_path is not None and (engine or ENGINE) == ENGINE:
+        raise Refused(f"a substituted filter path must name its engine; this one would "
+                      f"have been recorded as {ENGINE!r}")
+    if engine_path is not None and inject:
+        raise Refused("a substituted filter path and a reference-side injection cannot be "
+                      "combined: the control would not say which side moved")
+    record_engine = engine or ENGINE
     cid = case["case_id"]
-    spec = FILTER_CASES[cid]
+    spec = filter_spec(cid)
     required = [m.strip() for m in case["required_measurements"].split(";") if m.strip()]
     cut, amp = spec["cut_hz"], rp.PROBE_AMP
 
     ref_f, ref_g, meta = load_filter_reference(spec["ref_clip"], inject)
     open_f, open_g, open_meta = load_filter_reference(spec["ref_open_clip"])
-    ours_g = our_filter_curve(ref_f, cut, spec["res_ours"], amp)
-    ours_open_g = our_filter_curve(open_f, spec["open_hz"], spec["res_ours"], amp)
+    # The DUT's grid is the frozen probe grid whatever a reference-side control
+    # does to the reference axis. Without an injection the two are identical.
+    dut_f = dut_probe_grid(meta)
+    if not inject and not np.array_equal(dut_f, ref_f):
+        raise Refused("the reference axis differs from the frozen probe grid with no injection")
+    if not np.array_equal(dut_f, dut_probe_grid(open_meta)):
+        raise Refused("the cutoff clip and the wide-open clip do not share one probe grid")
+    import f1_filter_path as fp
+    try:
+        path = engine_path if engine_path is not None else fp.SelectedFilterPath(
+            substitute_profile="legacy" if inject == "F1_LEGACY_SUBSTITUTE" else None)
+        ours_g, ours_info = path.curve(dut_f, cut, spec["res_ours"], amp)
+        ours_open_g, ours_open_info = path.curve(open_f, spec["open_hz"], spec["res_ours"], amp)
+    except fp.Refused as e:
+        raise Refused(f"F1 selected filter path: {e}")
+    except Exception as e:                      # a substituted path's own refusal
+        if engine_path is not None and type(e).__name__ == "Refused":
+            raise Refused(f"F1 {record_engine} filter path: {e}")
+        raise
+    legacy = _legacy_reads(dut_f, cut, spec["res_ours"], amp, open_f, spec["open_hz"])
 
     ref_open_plateau = am.plateau_db(open_f, open_g, _ref_band(open_f, cut))
     ours_open_plateau = am.plateau_db(open_f, ours_open_g, _ref_band(open_f, cut))
@@ -1478,9 +2385,12 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
         "rolloff": (filt_rolloff(cut), filt_rolloff(cut)),
     }
     metrics = {}
-    for name, units, key, tol_rule in FILTER_PLAN[cid]:
+    # A sealed holdout case takes the family's plan (`_CUTOFF_RESPONSE_PLAN`);
+    # anything it requires that the plan does not measure is marked invalid by
+    # the `required` loop below, never dropped from the maximum.
+    for name, units, key, tol_rule in FILTER_PLAN.get(cid, _CUTOFF_RESPONSE_PLAN):
         e_ours, e_ref = ests[key]
-        metrics[name] = measure_pair(name, units, e_ours, (ref_f, ours_g),
+        metrics[name] = measure_pair(name, units, e_ours, (dut_f, ours_g),
                                      (ref_f, ref_g), tol_rule, {}, est_ref=e_ref)
     for m in required:
         metrics.setdefault(m, invalid_metric("", "this runner has no estimator for it"))
@@ -1488,9 +2398,13 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     audio = f"reference {spec['ref_clip']} (frozen, sha256 {meta['sha256'][:12]})"
     audio_path = "not written (--no-audio)"
     if keep_audio:
-        pth = AUDIO_OUT / f"{cid}-ours-response.json"
+        pth = AUDIO_OUT / f"{cid}-ours-response{artifact_tag}.json"
         pth.parent.mkdir(parents=True, exist_ok=True)
-        pth.write_text(json.dumps({"freqs_hz": [float(f) for f in ref_f],
+        pth.write_text(json.dumps({"freqs_hz": [float(f) for f in dut_f],
+                                   "reference_freqs_hz": [float(f) for f in ref_f],
+                                   "engine": record_engine,
+                                   "engine_profile": path.probe_profile["name"],
+                                   "filter_calibration": path.calibration,
                                    "ours_gain_db": [float(v) for v in ours_g],
                                    "reference_gain_db": [float(v) for v in ref_g],
                                    "cut_hz": cut, "res_ours": spec["res_ours"],
@@ -1503,17 +2417,26 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
     prof = rp.load_profile()
     rig = prof["rigs"][meta["rig"]]
     base = {
-        "engine": ENGINE, "case_id": cid, "subject": case["subject"],
+        "engine": record_engine, "case_id": cid, "subject": case["subject"],
         "source_commit": source_commit(), "analysis_run": analysis_run(),
         "provenance": provenance(
             model_input_hashes({
                 f"frozen:{spec['ref_clip']}": "sha256:" + meta["sha256"][:16],
                 f"frozen:{spec['ref_open_clip']}": "sha256:" + open_meta["sha256"][:16],
+                "tools/f1_filter_path.py": _file_sha(ROOT / "tools/f1_filter_path.py"),
+                "tools/probes/f1_selected_path.py":
+                    _file_sha(ROOT / "tools/probes/f1_selected_path.py"),
+                "model/filter_rate_chain.py": _file_sha(ROOT / "model/filter_rate_chain.py"),
+                "model/fixed.py": _file_sha(ROOT / "model/fixed.py"),
             }),
             {"ours": audio_path, "reference": meta["file"]},
             dict(cut_hz=cut, res_ours=spec["res_ours"], res_reference=spec["res_ref"],
                  probe_amp=amp, probe_level_dbfs=rp.PROBE_LEVEL_DBFS,
-                 n_probe_tones=len(ref_f), inject=inject or None)),
+                 n_probe_tones=len(ref_f), inject=inject or None,
+                 engine_profile=path.probe_profile["name"],
+                 filter_calibration=path.calibration,
+                 gain=ours_info["regs"]["gain"], ogain=ours_info["regs"]["ogain"],
+                 sr_hz=rp.SR)),
         "reference_profile": (f"{meta['rig']}:{spec['ref_clip']} "
                               f"(commanded {cut:.0f} Hz, readback "
                               f"{meta['cutoff_readback_hz']} Hz, resonance "
@@ -1526,8 +2449,15 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
             f"subtype Type 2 = sst-filters VintageLadder::Huov, Huovilainen DAFx-04, "
             f"the same paper DR 0001 implements. Rendered once through the qualified "
             f"rig of #87 and frozen: this result did not run a plugin."),
-        "render_run": (f"reference_rigs.OurLadder@{_sha(ROOT / 'model' / 'reference_rigs.py')} "
-                       f"stepped tone, {len(ref_f)} frequencies {ref_f[0]:.0f}-{ref_f[-1]:.0f} Hz, "
+        "model_path": path.record() | {"cut_registers": ours_info,
+                                       "open_registers": ours_open_info},
+        "render_run": (f"selected Mono filter path {path.probe_profile['name']} "
+                       f"({getattr(path, 'render_label', f'causal 2x RateConvertedLadder, tools/f1_filter_path.py {fp.PATH_VERSION}')})"
+                       f" under filter calibration {path.calibration} "
+                       f"(gain {ours_info['regs']['gain']}, ogain {ours_info['regs']['ogain']} "
+                       f"from VoiceFx.patch_regs; exact match to a selected-voice note "
+                       f"{path.match['frames']} frames, 0 mismatches); "
+                       f"stepped tone, {len(dut_f)} frequencies {dut_f[0]:.0f}-{dut_f[-1]:.0f} Hz, "
                        f"amp {amp} ({rp.PROBE_LEVEL_DBFS:+.2f} dBFS), cutoff {cut:.0f} Hz, "
                        f"resonance {spec['res_ours']} (k = 4*res, so this is our zero), "
                        f"{rp.SR} Hz, no resampling anywhere"),
@@ -1536,10 +2466,14 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
         "estimator_floors": rp.ESTIMATOR_FLOORS,
         "metrics": metrics,
         "diagnostics": {
-            "ours_corner_hz": _est_value(filt_corner(cut)(ref_f, ours_g)),
+            "ours_corner_hz": _est_value(filt_corner(cut)(dut_f, ours_g)),
+            "dut_probe_grid_sha256": hashlib.sha256(dut_f.tobytes()).hexdigest()[:16],
+            "reference_axis_sha256": hashlib.sha256(
+                np.asarray(ref_f, dtype=np.float64).tobytes()).hexdigest()[:16],
             "reference_corner_hz": _est_value(filt_corner(cut)(ref_f, ref_g)),
             "ours_wide_open_plateau_db": round(float(ours_open_plateau), 4),
             "reference_wide_open_plateau_db": round(float(ref_open_plateau), 4),
+            "legacy_standalone": legacy,
             "reference_commanded_cutoff_hz": meta["commanded"]["cut_hz"],
             "reference_cutoff_readback_hz": meta["cutoff_readback_hz"],
             "probe_level_dbfs": rp.PROBE_LEVEL_DBFS,
@@ -1549,6 +2483,11 @@ def run_filter_case(case: dict, inject: str, keep_audio: bool) -> dict:
                      "absolute levels are still on the record."),
         },
     }
+    # `provenance()` stamps this module's own engine. A substituted path makes
+    # that label wrong, and a result whose provenance disagrees with its headline
+    # about what produced the audio is exactly the kind of record #94 was filed
+    # about (`tools/score_m5a_i2s.py` overrides the same field for the same reason).
+    base["provenance"]["engine"] = record_engine
     if inject:
         base["INJECTED_CONTROL"] = inject
     return base
@@ -1576,19 +2515,51 @@ NOT_RUN = {}
 # profile froze from the start. Nothing about that case was ever out of scope
 # for the cutoff reason it was given.
 
-#: The holdout trajectories. Not a tooling gap -- a sequencing rule.
-for _c in ("F1D", "F2D", "F3D", "F5D"):
-    NOT_RUN[_c] = (
-        "a Holdout-20 case whose settings are not sealed yet. Its stimulus is "
-        "'seal an unseen cutoff/resonance/drive trajectory', and the sealing is "
-        "the measurement's whole value: docs/scorecard/README.md, 'once a holdout "
-        "case's detailed errors have guided a change, it has become development "
-        "data'. An agent that picks the setting, freezes the clip and reads the "
-        "error in one pass has produced a development case wearing a holdout's "
-        "label, and there is no way to tell afterwards which it was. The rig, the "
-        "profile and the estimators are all ready -- what is missing is somebody "
-        "OTHER than the party tuning the model choosing the trajectory and "
-        "committing it before it is rendered.")
+#: The holdout trajectories. The SEQUENCING rule these four were held on is now
+#: a mechanism rather than a sentence: `tools/holdout.py` refuses a Holdout-split
+#: case whose settings are not committed and clean, records every read, and
+#: refuses a second read taken after the model moved. F1D is sealed
+#: (docs/scorecard/holdout/F1D.json) and therefore out of this table -- it is
+#: attempted, and it is a stated no-verdict until its reference clip is rendered.
+#:
+#: The other three stay here, AND THE REASON THEY STAY IS NOT SEALING. The
+#: sentence this entry used to carry -- "the rig, the profile and the estimators
+#: are all ready" -- was one plausible line covering four cases, which is exactly
+#: what the comment at the top of this table says a not-run table exists to
+#: prevent. It was false for three of them: F2D, F3D and F5D are blocked on the
+#: same things their A/B/C rungs are blocked on, none of which is a sequencing
+#: rule. Sealing them now would produce three seals nothing can read.
+NOT_RUN["F2D"] = (
+    "blocked on exactly what F2A/F2B/F2C are blocked on, and NOT on sealing: the "
+    "case requires 'Bass loss; Playing weight; peak frequency; peak gain', and a "
+    "peak gain quoted at a fixed input level is a statement about that level "
+    "because Surge Type 2 is level-independent over the whole probed range and "
+    "our fixed-point ladder is not (+32.1 dB at -60 dBFS against +10.0 at -12, at "
+    "res 1.20). See NOT_RUN['F2A'] for the measurement and for why "
+    "reference_compare.stage_peakdrive's matched-drive answer is not available to "
+    "us. A holdout needs a setting whose reading MEANS something; sealing a "
+    "resonance trajectory before that definition exists would seal a number "
+    "nobody can interpret. The sealing mechanism it will use when the definition "
+    "lands is tools/holdout.py, and docs/scorecard/holdout/F1D.json is its "
+    "worked example.")
+NOT_RUN["F3D"] = (
+    "blocked on exactly what F3A/F3B/F3C are blocked on, and NOT on sealing: the "
+    "case requires separating MIXER DRIVE from output gain, Surge's mixer drive is "
+    "Pre-Filter Gain (parameter 316), and the qualified rig PINS it at '0.00 dB' "
+    "as a setting that is not the thing under test. Making 316 the thing under "
+    "test is a change to reference_rigs.SurgeRig and to what 'the qualified rig' "
+    "means, and it has to be re-qualified after -- not a clip this profile can "
+    "render, and not a setting a seal can conjure. Seal it (tools/holdout.py) "
+    "once the rig can drive it.")
+NOT_RUN["F5D"] = (
+    "blocked on exactly what F5A/F5B/F5C are blocked on, and NOT on sealing: no "
+    "clip in this profile automates a parameter, deliberately, and our side has no "
+    "swept-cutoff render at all -- reference_rigs.OurLadder answers three "
+    "questions (tone_gain_db, ring, drive_tone) and a sweep is not one of them. "
+    "'Stepping' also cannot be attributed between plugin and host without the "
+    "host's automation block size pinned (docs/failure-modes.md: all three plugins "
+    "appeared to step at 94 Hz because that was the host's block rate). A sealed "
+    "cutoff-motion trajectory would be a setting neither side can produce.")
 
 #: The resonance family. Unblocked on audio since this commit; still blocked on
 #: the same definition F2A is.
@@ -1749,6 +2720,14 @@ def plan_for(case_id: str) -> str:
         return "mono"
     if case_id in NOT_RUN:
         return "not-run"
+    # A Holdout case with a committed seal is ATTEMPTED, under the plan its seal
+    # names. Whether it produces a number is then a question about the apparatus
+    # (F1D's reference clip is not frozen yet, so it is a stated no-verdict) and
+    # no longer a question about sequencing, which is what `NOT_RUN` was holding
+    # these four cases on.
+    sealed = sealed_plans().get(case_id)
+    if sealed:
+        return sealed
     if case_id in DRUM_CASE_VOICE:
         return "drum"
     if case_id in ENSEMBLE_CASES:
@@ -1761,19 +2740,19 @@ def plan_for(case_id: str) -> str:
 # ===========================================================================
 # 7. Running one case
 # ===========================================================================
-def _sha(*paths) -> str:
-    h = hashlib.sha256()
-    for p in paths:
-        h.update(pathlib.Path(p).read_bytes())
-    return h.hexdigest()[:12]
-
-
-def _git(*args) -> str:
-    try:
-        return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True,
-                                       stderr=subprocess.DEVNULL)
-    except Exception:
-        return ""
+# The commit/uncommitted-tree/content-hash primitives below used to be
+# defined here. They now live in `tools/provenance.py` so the
+# render/analyse/accept manifest scheme (`tools/manifest.py`, issue #68) can
+# produce provenance blocks in the same shape without a second, competing
+# format -- this is a pure extraction, re-exported under the same names so
+# every call site below (and every existing test that reaches for
+# `run_case.worktree_state` etc.) is unchanged.
+_sha = provenance.sha_of
+_git = provenance.git
+source_commit = provenance.source_commit
+worktree_state = provenance.worktree_state
+_file_sha = provenance.file_sha
+_now = provenance.now
 
 
 def mono_reference_pulse_mapping(manifest: dict) -> str:
@@ -1784,43 +2763,6 @@ def mono_reference_pulse_mapping(manifest: dict) -> str:
               for measurement in segment["measurements"]
               if measurement.get("waveform") is not None}
     return ", ".join(sorted(values)) or "waveform not classified in frozen reference"
-
-
-def source_commit() -> str:
-    return (_git("rev-parse", "--short", "HEAD").strip() or "?")
-
-
-def worktree_state() -> dict:
-    """The commit is not enough. Fourteen worktrees are live on this repository
-    at once and a clean SHA that silently means "plus whatever was in the tree"
-    is worse than no SHA: a stale result is indistinguishable from a current
-    one. So the uncommitted diff is hashed too -- tracked modifications from
-    `git diff HEAD`, and every untracked file git would not ignore, by content.
-    `dirty` says which of the two kinds of record this is."""
-    h = hashlib.sha256()
-    diff = _git("diff", "HEAD")
-    h.update(diff.encode())
-    untracked = [f for f in _git("ls-files", "--others", "--exclude-standard").split("\n") if f]
-    for rel in sorted(untracked):
-        f = ROOT / rel
-        try:
-            h.update(rel.encode())
-            h.update(hashlib.sha256(f.read_bytes()).digest())
-        except OSError:
-            h.update(b"?")
-    return {"commit": source_commit(),
-            "described": _git("describe", "--always", "--dirty").strip() or "?",
-            "branch": _git("rev-parse", "--abbrev-ref", "HEAD").strip() or "?",
-            "dirty": bool(diff.strip() or untracked),
-            "uncommitted_sha256": h.hexdigest()[:16],
-            "untracked_files": len(untracked)}
-
-
-def _file_sha(path) -> str:
-    try:
-        return "sha256:" + hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()[:16]
-    except OSError:
-        return "missing"
 
 
 # 0 match, 1 mismatch (a result), 2 did not run (no evidence). The repository's
@@ -2004,15 +2946,120 @@ def model_input_hashes(extra: dict | None = None) -> dict:
     return d
 
 
-def _now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def analysis_run() -> str:
     return (f"run_case@{_sha(__file__)} + audio_measure@{_sha(ROOT / 'model' / 'audio_measure.py')}"
             f" + mono_m5a_score@{_sha(ROOT / 'tools' / 'mono_m5a_score.py')}"
             f" + scorecard@{_sha(ROOT / 'tools' / 'scorecard.py')}"
             f" at {_now()}")
+
+
+RUBRIC_CHANGE = "rubric change (measurement-version change), not a sound change"
+
+
+#: Where a `fixed-model` result goes when the case it names is already anchored
+#: on the integrated RTL. A SUBDIRECTORY of results/ rather than a sibling file,
+#: because `tools/scorecard.py` reads `results/<case>.json` and
+#: `tools/scorecard_delta.py` globs `results/*.json` -- a sibling
+#: `E1A-fixed-model.json` would read as a case called "E1A-fixed-model".
+MODEL_TWIN_DIR = "model-twin"
+
+
+def result_destination(dest: pathlib.Path, res: dict) -> pathlib.Path:
+    """Where this result may be written, which is not always where it was asked
+    to go.
+
+    A MODEL RESULT MUST NOT SILENTLY REPLACE AN INTEGRATED-RTL ANCHOR. Every
+    case here is scored `fixed-model`, and the board has exactly one result path
+    per case -- so `run_case.py --batch "First 32"` (which `make board` runs)
+    would overwrite an anchor measured on the chip with a measurement of the
+    model of the chip, leave no trace, and the board would go back to saying no
+    case has been measured on the instrument. That is the expensive direction of
+    the mistake: the model can be re-derived in seconds, the anchor is a
+    twenty-five-minute RTL run.
+
+    So an anchor is kept and the model result is written beside it under
+    `results/model-twin/`, with the swap announced. Neither is discarded, and
+    `tools/compare_ensemble_candidate.py` is the tool that compares them."""
+    if res.get("engine") == "integrated-rtl" or not dest.is_file():
+        return dest
+    try:
+        held = json.loads(dest.read_text())
+    except (OSError, ValueError):
+        return dest
+    if held.get("engine") != "integrated-rtl":
+        return dest
+    twin = dest.parent / MODEL_TWIN_DIR / dest.name
+    twin.parent.mkdir(parents=True, exist_ok=True)
+    print(f"{dest.stem}: {dest.name} holds an integrated-rtl measurement "
+          f"({held.get('source_commit', '?')}); this {res.get('engine')} result is written to "
+          f"{twin.relative_to(dest.parent.parent) if dest.parent.parent in twin.parents else twin}"
+          f" rather than replacing it. Neither is discarded.")
+    return twin
+
+
+def carry_rubric_history(case: dict, dest: pathlib.Path, res: dict) -> None:
+    """Keep a record's earlier scores when the RUBRIC under it changes.
+
+    When the record being replaced was scored under a different measurement
+    policy -- a metric's purpose, tolerance, units or the required set -- its
+    verdict is appended to `rubric_history`, labelled as a rubric change, so a
+    headline that moves because the ruler moved cannot be read as the sound
+    improving (#141: the cowbell's 11.34 -> 2.82 is exactly that). Earlier
+    history is carried forward unchanged. Same policy: history is only
+    carried, never added to, because a re-measurement is not a rubric change."""
+    import scorecard
+    old = None
+    if dest.exists():
+        try:
+            old = json.loads(dest.read_text())
+        except Exception:
+            old = None
+    history = list((old or {}).get("rubric_history") or [])
+    if old is not None:
+        before, after = scorecard.evaluate(case, old), scorecard.evaluate(case, res)
+        # A property newly marked UNQUALIFIED is a measurement-version change too.
+        # The new record is then a no-verdict and carries no measurement_policy,
+        # so the comparison below cannot see it; this does (plan084 section 5:
+        # "preserve history").
+        newly_unq = sorted(n for n, m in (res.get("metrics") or {}).items()
+                           if m.get("qualification") == "UNQUALIFIED"
+                           and (old.get("metrics") or {}).get(n, {}).get("qualification") != "UNQUALIFIED")
+        if newly_unq and before.get("measurement_policy"):
+            history.append({
+                "kind": RUBRIC_CHANGE,
+                "changed": {n: {"before": "qualified (estimator in use)", "after": "UNQUALIFIED"}
+                            for n in newly_unq},
+                "superseded_at": _now(),
+                "state": before["state"], "worst": before["worst"], "why": before["why"],
+                "properties": before.get("properties"),
+                "measurement_policy": before["measurement_policy"],
+                "source_commit": old.get("source_commit"),
+                "analysis_run": old.get("analysis_run"),
+                "metrics": old.get("metrics"),
+                "note": ("the superseded record may also predate a SOUND change; compare its "
+                         "source_commit and provenance.inputs with the new record's"),
+            })
+        elif (before.get("measurement_policy") and after.get("measurement_policy")
+                and before["measurement_policy"] != after["measurement_policy"]):
+            bp, ap = before["measurement_policy"], after["measurement_policy"]
+            changed = {n: {"before": bp["metrics"].get(n), "after": ap["metrics"].get(n)}
+                       for n in sorted(set(bp["metrics"]) | set(ap["metrics"]))
+                       if bp["metrics"].get(n) != ap["metrics"].get(n)}
+            if bp["required"] != ap["required"]:
+                changed["(required)"] = {"before": bp["required"], "after": ap["required"]}
+            history.append({
+                "kind": RUBRIC_CHANGE,
+                "changed": changed,
+                "superseded_at": _now(),
+                "state": before["state"], "worst": before["worst"], "why": before["why"],
+                "properties": before.get("properties"),
+                "measurement_policy": before["measurement_policy"],
+                "source_commit": old.get("source_commit"),
+                "analysis_run": old.get("analysis_run"),
+                "metrics": old.get("metrics"),
+            })
+    if history:
+        res["rubric_history"] = history
 
 
 def invalid_metric(units: str, why: str, tolerance: float | None = None) -> dict:
@@ -2034,6 +3081,18 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
     one estimator and it is used on both sides, which is the rule."""
     a = est(*ours)
     b = (est if est_ref is None else est_ref)(*ref)
+    # An estimate that says ok with a non-finite number is refused HERE, at
+    # the point of use: json writes NaN happily and the board must never be
+    # handed one as an error (review of #241).
+    def _finite(v) -> bool:
+        try:
+            return math.isfinite(float(v))
+        except (TypeError, ValueError):
+            return False
+    for side, e in (("reference", b), ("ours", a)):
+        if e.ok and not _finite(e.value):
+            return invalid_metric(units, f"{side}: estimator returned a non-finite "
+                                         f"value {e.value!r}")
     if not b.ok:
         return invalid_metric(units, f"reference: {b.reason} {b.detail}")
     tol, basis = tol_rule(b.value, ctx)
@@ -2047,7 +3106,7 @@ def measure_pair(name, units, est, ours, ref, tol_rule, ctx, est_ref=None) -> di
             "reference": round(float(b.value), 4),
             "error": round(float(a.value) - float(b.value), 4),
             "tolerance": round(float(tol), 4), "valid": True,
-            "tolerance_basis": basis}
+            "tolerance_basis": basis, "purpose": metric_purpose(name)}
 
 
 def write_wav16(path: pathlib.Path, x, sr: int):
@@ -2058,6 +3117,40 @@ def write_wav16(path: pathlib.Path, x, sr: int):
         w.setsampwidth(2)
         w.setframerate(sr)
         w.writeframes(y.tobytes())
+
+
+def drum_measurements(voice: str, ours_x, ours_sr: int, ref_x, ref_sr: int,
+                      rel: str, required: list) -> tuple:
+    """The drum plan applied to one pair of recordings: the metrics and the
+    windowing convention both sides were measured under.
+
+    Split out of `run_drum_case` so that an engine OTHER than the fixed model
+    can be scored through exactly this estimator chain -- the integrated-RTL
+    anchor (tools/score_drum_i2s.py) passes the samples it decoded off the I2S
+    pins as `ours_x`. Nothing here knows which engine produced them, which is
+    the point: a second copy of this loop is a second measurement contract."""
+    # Each side names itself, so a refused lead says WHICH recording could not
+    # supply one. A reference that was cut into the strike and a render that
+    # was need opposite responses.
+    ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
+    ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
+    ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
+    windowing = {"ours": lead_report(ours_x, ours_sr),
+                 "reference": lead_report(ref_x, ref_sr)}
+
+    ctx = {}
+    f0 = _f0(voice, 0.010, 0.200)(*ref)
+    if f0.ok:
+        ctx["ref_f0"] = f0.value
+
+    metrics = {}
+    for name, units, est, tol_rule in DRUM_PLAN[voice]:
+        metrics[name] = measure_pair(name, units, est, ours, ref, tol_rule, ctx)
+        if (voice, name) in UNQUALIFIED:
+            metrics[name] = unqualified_metric(units, UNQUALIFIED[(voice, name)], metrics[name])
+    for m in [m for m in required if m not in metrics]:
+        metrics[m] = invalid_metric("", "this runner has no estimator for it")
+    return metrics, windowing
 
 
 def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: bool) -> dict:
@@ -2083,28 +3176,8 @@ def run_drum_case(case: dict, refdir: pathlib.Path, inject: str, keep_audio: boo
         return base
 
     ref_x, ref_sr, rel, setting = load_reference(voice, refdir, inject)
-    ours_x, ours_sr = render_drum_solo(voice)
-
-    # Each side names itself, so a refused lead says WHICH recording could not
-    # supply one. A reference that was cut into the strike and a render that
-    # was need opposite responses.
-    ref_y = prepare(ref_x, ref_sr, side=f"the reference recording {rel}")
-    ours_y = prepare(ours_x, ours_sr, side=f"our {voice} render")
-    ref, ours = (ref_y, ref_sr), (ours_y, ours_sr)
-    windowing = {"ours": lead_report(ours_x, ours_sr),
-                 "reference": lead_report(ref_x, ref_sr)}
-
-    ctx = {}
-    f0 = _f0(voice, 0.010, 0.200)(*ref)
-    if f0.ok:
-        ctx["ref_f0"] = f0.value
-
-    metrics = {}
-    for name, units, est, tol_rule in DRUM_PLAN[voice]:
-        metrics[name] = measure_pair(name, units, est, ours, ref, tol_rule, ctx)
-    missing = [m for m in required if m not in metrics]
-    for m in missing:
-        metrics[m] = invalid_metric("", "this runner has no estimator for it")
+    ours_x, ours_sr = render_drum_solo(voice, inject=inject or None)
+    metrics, windowing = drum_measurements(voice, ours_x, ours_sr, ref_x, ref_sr, rel, required)
 
     import drums_fx as dx
     audio_path, audio = "not written (--no-audio)", f"reference {rel}; ours not written"
@@ -2230,18 +3303,84 @@ def run_ensemble_case(case: dict, keep_audio: bool) -> dict:
     }
 
 
-def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
-             keep_audio: bool = True) -> dict | None:
-    """One case's result dict, or None when the case is deliberately not run."""
+def is_holdout(case: dict) -> bool:
+    return (case.get("split") or "").strip().lower() == "holdout"
+
+
+def _empty_record(case: dict, refdir: pathlib.Path, inject: str) -> dict:
     cid = case["case_id"]
-    kind = plan_for(cid)
-    if kind == "not-run":
-        return None
-    base = {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
+    return {"engine": ENGINE, "case_id": cid, "subject": case.get("subject", ""),
             "source_commit": source_commit(), "analysis_run": analysis_run(),
             "reference_profile": "", "render_run": "", "audio": "",
             "provenance": provenance(model_input_hashes(), {},
                                      dict(refs=str(refdir), inject=inject or None))}
+
+
+def run_case(case: dict, refdir: pathlib.Path, inject: str = "",
+             keep_audio: bool = True, *, record_reads: bool = True,
+             results_dir: str = "") -> dict | None:
+    """One case's result dict, or None when the case is deliberately not run.
+
+    **A `Holdout`-split case is REFUSED unless its settings are already
+    committed.** That gate is here rather than in each family's runner so no
+    future scorer can route around it: `tools/holdout.py` asserts that the seal
+    is tracked and clean, puts what it was measured against on the record, and
+    records the read. A holdout scored like an ordinary development case is the
+    failure this repository could not detect after the fact -- "there is no way
+    to tell afterwards which it was" -- and it costs one function call to make
+    impossible."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    block = None
+    if is_holdout(case):
+        model_state = holdout.model_state_sha256(model_input_hashes())
+        try:
+            block = holdout.assert_readable(cid, model_state=model_state)
+        except holdout.Refused as e:
+            required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
+                        if m.strip()]
+            res = _empty_record(case, refdir, inject)
+            res["note"] = f"REFUSED: {e}"
+            res["holdout"] = {"state": "unsealed", "holdout_claim": False,
+                              "why": str(e), "how_to_check": holdout.HOW_TO_CHECK}
+            res["metrics"] = {m: invalid_metric("", f"holdout not sealed: {e}")
+                              for m in required}
+            if inject:
+                res["INJECTED_CONTROL"] = inject
+            return res
+    res = _measure_case(case, refdir, inject, keep_audio)
+    if res is None:
+        return None
+    if block is not None:
+        res["holdout"] = block
+        if record_reads and not inject and holdout.was_read(res):
+            # A number was taken off a sealed holdout. THAT is the act the policy
+            # is about, so it goes in the ledger before anybody reads the record:
+            # a second reading at a different model state is refused from here on
+            # until the transition is recorded.
+            state, worst, _why = verdict_of(case, res)
+            entry = holdout.record_read(
+                cid, block, engine=res.get("engine", ENGINE), state=state,
+                worst=worst, result_path=results_dir or "(not stated by the caller)",
+                command=" ".join([os.path.relpath(sys.argv[0], ROOT)] + sys.argv[1:])
+                        if sys.argv and sys.argv[0] else "(imported)")
+            res["holdout"]["ledger_read"] = entry["n"]
+            res["holdout"]["ledger"] = str(holdout.LEDGER.relative_to(ROOT)) \
+                if ROOT in holdout.LEDGER.parents else str(holdout.LEDGER)
+    return res
+
+
+def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
+                  keep_audio: bool = True) -> dict | None:
+    """The measurement itself. `run_case` is the entry point: it holds the
+    holdout gate, which must not be reachable around."""
+    cid = case["case_id"]
+    kind = plan_for(cid)
+    if kind == "not-run":
+        return None
+    base = _empty_record(case, refdir, inject)
     required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
                 if m.strip()]
     try:
@@ -2387,6 +3526,7 @@ CONTROL_CAUSE = {
     "REF_MISSING": "no-such-file.wav",
     "REF_PROFILE_MISSING": "no-such-clip",
     "REF_PROFILE_TAMPERED": "hashes",
+    "F1_LEGACY_SUBSTITUTE": "not the selected filter",
 }
 
 
@@ -2463,13 +3603,21 @@ def cmd_list(cases: list[dict]) -> int:
             p, d = ENSEMBLE_CASES[c["case_id"]]
             why = f"{p}, {'dense' if d else 'sparse'} 808 groove, stems vs final output"
         elif kind == "filter":
-            f = FILTER_CASES[c["case_id"]]
-            why = (f"ours vs frozen {f['ref_clip']} "
-                   f"(cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            try:
+                f = filter_spec(c["case_id"])
+                why = (f"selected 2x path + surge-type2-clean-v1 vs frozen "
+                       f"{f['ref_clip']} (cut {f['cut_hz']:.0f} Hz, res {f['res_ref']})")
+            except Refused as e:
+                why = f"REFUSED: {e}"
+            if is_holdout(c):
+                why = f"[sealed holdout] {why}"
         elif kind == "mono":
             why = ("fixed integer-model phrase vs frozen Mini V3; " +
                    ("includes SPI-to-I2S smoke" if c["case_id"] == "M5A"
                     else "model-only; no integrated RTL claim"))
+        elif is_holdout(c):
+            why = ("Holdout with no committed seal: REFUSED rather than scored "
+                   "(tools/holdout.py)")
         else:
             why = "no plan in this runner"
         print(f"{c['case_id']:<7}{c['family']:<10}{c['batch']:<14}{kind:<11}{why[:70]}")
@@ -2486,13 +3634,14 @@ def main(argv=None) -> int:
     ap.add_argument("--family", help="Drums | Mono | Filters | Ensemble")
     ap.add_argument("--all", action="store_true", help="every case in cases.csv")
     ap.add_argument("--list", action="store_true", help="print the plan and stop")
-    ap.add_argument("--refs", default=os.environ.get(REFS_ENV, REFS_DEFAULT),
+    ap.add_argument("--refs", default=str(configured_refs()),
                     help=f"the Fischer TR-808 corpus (default {REFS_DEFAULT}, ${REFS_ENV})")
     ap.add_argument("--results", default=None, help="where result JSON goes")
     ap.add_argument("--inject", default="",
                     choices=["", "REF_F0_20PCT", "REF_MISSING", "REF_CORNER_2X",
-                             "MONO_PITCH_UP_25_CENTS",
-                             "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED"],
+                             "MONO_PITCH_UP_25_CENTS", "CB_GATE_THE_SUM",
+                             "REF_PROFILE_MISSING", "REF_PROFILE_TAMPERED",
+                             *F1_INJECTS],
                     help="an injected control; requires --results outside the board")
     ap.add_argument("--expect", default="",
                     choices=["", "pass", "fail", "no verdict", "changed"],
@@ -2583,7 +3732,9 @@ def main(argv=None) -> int:
             return 2
         print("CONTROL BASELINE: measuring the same cases without the injection")
         for c in chosen:
-            clean = run_case(c, refdir, "", keep_audio=False)
+            # A control's baseline is not evidence about the instrument, so it
+            # does not consume a sealed holdout's reading either.
+            clean = run_case(c, refdir, "", keep_audio=False, record_reads=False)
             clean_verdicts[c["case_id"]] = (*verdict_of(c, clean), clean.get("note", ""))
         print("CONTROL BASELINE: complete\n")
     injected_verdicts = {}
@@ -2594,14 +3745,18 @@ def main(argv=None) -> int:
             code = max(code, OUTCOME_CODE["not run"])
             print(f"{cid:<7}{'not run':<12}{'--':>7}  {NOT_RUN[cid][:60]}")
             continue
-        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio)
+        res = run_case(c, refdir, a.inject, keep_audio=not a.no_audio,
+                       record_reads=not a.dry_run, results_dir=str(outdir))
         # Judge BEFORE writing, so the outcome code on the record is the board's
         # verdict and not this runner's opinion of it.
         state, worst, why = verdict_of(c, res)
         injected_verdicts[cid] = (state, worst, why, res.get("note", ""))
         res.setdefault("provenance", {})["outcome_code"] = OUTCOME_CODE[state]
         if not a.dry_run:
-            (outdir / f"{cid}.json").write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
+            dest = result_destination(outdir / f"{cid}.json", res)
+            if not a.inject:
+                carry_rubric_history(c, dest, res)
+            dest.write_text(json.dumps(res, indent=2, sort_keys=False) + "\n")
         states[state] = states.get(state, 0) + 1
         code = max(code, OUTCOME_CODE[state])
         if "traceback" in res:

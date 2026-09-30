@@ -331,6 +331,25 @@ def report_osc(rows):
     print("  ours is a lower bound.")
     report_margins(good, notes, floors)
 
+    print("\n" + "=" * 100)
+    print("4. TARGET: the shark-tooth we do not have (Mini V3's 'saw-triangular')")
+    print("=" * 100)
+    sh = [r for r in rows if r["device"] == "miniv3" and r["wave"] == "shark" and r["steady"]]
+    for r in sorted(sh, key=lambda r: r["note"]):
+        print(f"  {vf.note_hz(r['note']):7.1f} Hz  "
+              + " ".join(f"h{k} {_fmt(r.get(f'h{k}'), 6)}" for k in range(2, 8))
+              + f"   inharmonic {_fmt(r.get('inharmonic_db'), 6)}")
+    print("  These rows are STEADY but not VERIFIED, and the two are different claims: the")
+    print("  apparatus made one clean cycle per period at the commanded pitch, and the shape")
+    print("  it made has no closed form to be checked against. That is why the shark-tooth")
+    print("  appears here, as a target description, and not in the aliasing comparison.")
+    print("  A saw has h_n = 1/n (-6.0, -9.5, -12.0 dB) and a triangle 1/n^2 on odd harmonics")
+    print("  only (-19.1 at h3). A hybrid sits between them and has BOTH an amplitude and a")
+    print("  slope discontinuity, so a generator needs BLEP and BLAMP. WE NOW HAVE BOTH:")
+    print("  PolyBLEP on the saw share's step and polyBLAMP on the triangle share's two")
+    print("  corners (DR 0017, issue #48), worth up to 6.3 dB of inharmonic energy at the")
+    print("  top of the register -- measured by tools/measure_shark_blamp.py, not here.")
+
 
 def alias_floor(good, notes):
     """The aliasing estimator's floor, per waveform and pitch, measured from
@@ -352,22 +371,6 @@ def _floor_fmt(v, floor, is_ideal=False):
     if floor is not None and not is_ideal and v <= floor + 3.0:
         return f"<{v:6.1f}"
     return f"{v:7.1f}"
-
-    print("\n" + "=" * 100)
-    print("4. TARGET: the shark-tooth we do not have (Mini V3's 'saw-triangular')")
-    print("=" * 100)
-    sh = [r for r in rows if r["device"] == "miniv3" and r["wave"] == "shark" and r["steady"]]
-    for r in sorted(sh, key=lambda r: r["note"]):
-        print(f"  {vf.note_hz(r['note']):7.1f} Hz  "
-              + " ".join(f"h{k} {_fmt(r.get(f'h{k}'), 6)}" for k in range(2, 8))
-              + f"   inharmonic {_fmt(r.get('inharmonic_db'), 6)}")
-    print("  These rows are STEADY but not VERIFIED, and the two are different claims: the")
-    print("  apparatus made one clean cycle per period at the commanded pitch, and the shape")
-    print("  it made has no closed form to be checked against. That is why the shark-tooth")
-    print("  appears here, as a target description, and not in the aliasing comparison.")
-    print("  A saw has h_n = 1/n (-6.0, -9.5, -12.0 dB) and a triangle 1/n^2 on odd harmonics")
-    print("  only (-19.1 at h3). A hybrid sits between them and has BOTH an amplitude and a")
-    print("  slope discontinuity, so a generator needs BLEP and BLAMP; we have PolyBLEP only.")
 
 
 def report_margins(good, notes, floors):

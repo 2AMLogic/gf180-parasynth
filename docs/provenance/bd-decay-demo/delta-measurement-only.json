@@ -1,0 +1,62 @@
+{
+ "before": "BD-solo-7156d23-ac67474d-1ea24350ebf5-drum-decay-moving-average-v1-withdrawn-7b2a7480aefe",
+ "after": "BD-solo-7156d23-ac67474d-1ea24350ebf5-drum-decay-rms-v2-50de99714990",
+ "renders": [
+  "BD-solo-7156d23-ac67474d-1ea24350ebf5",
+  "BD-solo-7156d23-ac67474d-1ea24350ebf5"
+ ],
+ "analysers": [
+  "drum-decay-moving-average@v1-withdrawn",
+  "drum-decay-rms@v2"
+ ],
+ "attributable": true,
+ "attribution": "measurement changed",
+ "metrics": {
+  "fundamental": {
+   "metric": "fundamental",
+   "verdict": "measurement changed",
+   "why": "same audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5); analyser drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2",
+   "value_a": 49.4084,
+   "value_b": 49.4084,
+   "delta": 0.0,
+   "tolerance": 2.0,
+   "saw": "BLIND",
+   "attributable": true
+  },
+  "decay tau": {
+   "metric": "decay tau",
+   "verdict": "measurement changed",
+   "why": "same audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5); analyser drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2",
+   "value_a": 149.315,
+   "value_b": 144.0924,
+   "delta": -5.2226,
+   "tolerance": 36.0,
+   "saw": "BLIND",
+   "attributable": true
+  },
+  "T20": {
+   "metric": "T20",
+   "verdict": "measurement changed",
+   "why": "same audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5); analyser drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2",
+   "value_a": 207.0417,
+   "value_b": 307.9792,
+   "delta": 100.9375,
+   "tolerance": 36.0,
+   "saw": "MOVED",
+   "attributable": true
+  },
+  "attack": {
+   "metric": "attack",
+   "verdict": "measurement changed",
+   "why": "same audio (render BD-solo-7156d23-ac67474d-1ea24350ebf5); analyser drum-decay-moving-average@v1-withdrawn -> drum-decay-rms@v2",
+   "value_a": 9.9375,
+   "value_b": 14.5625,
+   "delta": 4.625,
+   "tolerance": 3.0,
+   "saw": "MOVED",
+   "attributable": true
+  }
+ },
+ "recorded_at": "2026-09-26T12:11:56Z",
+ "comparison": "v1 -> v2 on the SAME retained audio"
+}

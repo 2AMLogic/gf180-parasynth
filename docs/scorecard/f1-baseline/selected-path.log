@@ -1,0 +1,27 @@
+engine profile under test: selected-m5a-reconstructed-filter2x
+identity: RateConvertedLadder factor=2 causal=True headroom=True latency=20 out_bits=19
+exact match vs selected voice trace: 12000 frames, g 0 / k 0 / ladder 0 mismatches
+case   cmd |   ref Hz   leg Hz    leg%   sel Hz    sel% |   ref r   leg r   sel r leg r@531 |  ref g  leg g  sel g | repro
+--------------------------------------------------------------------------------------------------------------------------
+F1A    250 |   117.63    97.85  -16.82    97.88  -16.80 |  -18.69  -16.87  -16.88    -18.54 |  -0.91  -1.28  -1.28 | True
+F1B   1000 |   450.53   376.35  -16.47   376.41  -16.45 |  -17.92  -15.99  -15.98    -15.99 |  -0.26  -0.23  -0.23 | True
+F1C   4000 |  1718.58  1433.50  -16.59  1437.05  -16.38 |  -16.41  -15.32  -15.11    -15.32 |  -0.14  -0.06  -0.07 | True
+level F1A -36.12 dBFS  corner 108.6448 (-7.64 %)  legacy 108.633  rolloff -17.8224  
+level F1A -30.10 dBFS  corner 108.6471 (-7.64 %)  legacy 108.6499  rolloff -17.8206  
+level F1A -24.08 dBFS  corner 108.6587 (-7.63 %)  legacy 108.6583  rolloff -17.7993  
+level F1A -18.06 dBFS  corner 106.4519 (-9.51 %)  legacy 106.4436  rolloff -17.0328  
+level F1A -12.04 dBFS  corner 97.8757 (-16.80 %)  legacy 97.8537  rolloff -16.8752  
+level F1A  -6.02 dBFS  corner 78.6646 (-33.13 %)  legacy 78.6684  rolloff -13.7541  
+level F1B -36.12 dBFS  corner 431.6234 (-4.20 %)  legacy 430.0358  rolloff -17.9897  
+level F1B -30.10 dBFS  corner 431.6646 (-4.19 %)  legacy 430.0774  rolloff -17.925  
+level F1B -24.08 dBFS  corner 431.7178 (-4.18 %)  legacy 430.1315  rolloff -17.906  
+level F1B -18.06 dBFS  corner 419.1941 (-6.95 %)  legacy 417.9366  rolloff -17.8914  
+level F1B -12.04 dBFS  corner 376.4061 (-16.45 %)  legacy 376.3466  rolloff -15.9762  
+level F1B  -6.02 dBFS  corner 266.1839 (-40.92 %)  legacy 265.014  rolloff -11.8092  
+level F1C -36.12 dBFS  corner 1655.6876 (-3.66 %)  legacy 1650.2628  rolloff -16.3356  
+level F1C -30.10 dBFS  corner 1655.9251 (-3.65 %)  legacy 1650.5903  rolloff -16.2956  
+level F1C -24.08 dBFS  corner 1656.1285 (-3.63 %)  legacy 1650.7785  rolloff -16.2789  
+level F1C -18.06 dBFS  corner 1616.839 (-5.92 %)  legacy 1611.8914  rolloff -16.2649  
+level F1C -12.04 dBFS  corner 1437.0466 (-16.38 %)  legacy 1433.4968  rolloff -15.1079  
+level F1C  -6.02 dBFS  corner 977.308 (-43.13 %)  legacy 976.4866  rolloff -11.0549  
+wrote docs/scorecard/f1-baseline/selected-path.json

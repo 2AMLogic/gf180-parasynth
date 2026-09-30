@@ -67,9 +67,13 @@ def make_artifact(tmp):
         dest = art / "inputs" / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / rel, dest)
+    # #315: an honest build now writes constraint_matches.rpt (every XDC
+    # object query bound exactly its objects); the fixture predates it
+    write_constraint_report(art)
     record = json.loads((art / "report.json").read_text())
     record["artifact_sha256"] = {name: sha(art / name) for name in
-                                 record["artifact_sha256"]}
+                                 list(record["artifact_sha256"]) + ["constraint_matches.rpt",
+                                                                    "exceptions.rpt"]}
     # re-bind sources to the CURRENT tree: the committed fixture predates
     # later source-set changes (e.g. uart_bridge.v joining the compiled
     # set), and the publisher must refuse artifacts that are not
@@ -96,6 +100,28 @@ def make_artifact(tmp):
     (art / "report.json").write_text(json.dumps(record, indent=2) + "\n")
     rehash_script(art)
     return art
+
+
+def write_constraint_report(art, counts=None, failed=None, extra_exceptions=None):
+    """The report a build that bound every XDC query exactly would write
+    (fpga/xdc_bindings.tcl_assertions' format); `counts` overrides the match
+    count of chosen XDC lines, for the cases that must be refused."""
+    import build_arty as build
+    import xdc_bindings as xb
+    text = build.XDC.read_text()
+    rows, bad = [], 0
+    for n, kind, rx, exp, ar in xb.object_queries(text):
+        c = (counts or {}).get(n, exp)
+        bad += c != exp
+        rows.append(f"MATCH\t{n}\t{kind}\t{c}\t{exp}\t{c if ar else '-'}\t{xb.query_id(rx)}")
+    route = [f"CHECK\t{c}\t{0 if c in (failed or ()) else 1}\tfixture" for c in xb.ROUTE_CHECKS]
+    (art / xb.REPORT).write_text("\n".join(
+        rows + [f"END\t{bad}"] + route + [f"ROUTE_END\t{len(failed or ())}"]) + "\n")
+    exc = xb.expected_exceptions(text) + list(extra_exceptions or ())
+    table = ["Exceptions Report", "", "Position  From  Through  To  Setup  Hold  Status",
+             "--------  ----  -------  --  -----  ----  ------"]
+    table += [f"{i + 2}         {f}    *    {t}    false    false" for i, (f, t) in enumerate(exc)]
+    (art / xb.EXCEPTIONS).write_text("\n".join(table) + "\n")
 
 
 def rehash_script(art):
