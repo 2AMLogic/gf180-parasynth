@@ -1,0 +1,15 @@
+{
+ "what": "Claims about external tools, each with its environment tuple (issue #123). Validated by tools/external_claim.py. Negative claims need a second route. binary_sha256 'unrecorded' is not accepted; add entries only when the tuple is known.",
+ "claims": [],
+ "host_per_plugin": {
+  "note": "Which host produces audio per plugin. Every entry below is UNVERIFIED: observed once, with no environment tuple and no second route. external_claim.host_result() refuses them. An entry becomes 'verified' only by naming a claim id above that passes.",
+  "Model D": {
+   "dawdreamer 0.9.0": {"observed": "silent", "status": "unverified"},
+   "pedalboard": {"observed": "audio at full level", "status": "unverified"}
+  },
+  "Mini V3": {
+   "dawdreamer 0.9.0": {"observed": "audio", "status": "unverified"},
+   "pedalboard": {"observed": "silent", "status": "unverified"}
+  }
+ }
+}

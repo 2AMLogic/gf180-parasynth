@@ -67,13 +67,20 @@ W14B_SHA256 = "0e75e26df59d8117939fbb253935d648cf969d43988c6a97fdc19061df453a02"
 # from SN p.13 R/C values via reference §1.2; Hh1 from the unity-gain
 # Sallen-Key high-pass on R124/R127/C48/C59 via reference §10.
 KNOWN = {
+    # The designators below were crossed until 2026-09-28 and were not even
+    # self-consistent: "3450 Hz ... C13=C14 3.3 nF" is impossible on this
+    # network (3.3 nF with R 560/82k is 7117 Hz). Read off the hash-pinned scan
+    # by `tools/cymbal_vca_drive.py`, the 6.8 nF pair is C13/C14 with R56/R57 on
+    # IC3 pin 1, and the 3.3 nF pair is C15/C16 with R58/R59 on IC3 pin 7.
+    # `tools/test_cymbal_vca_drive.py` recomputes f0 from these strings so the
+    # pairing cannot silently re-cross. `f0`/`q` below are unchanged.
     "Hbp1": {
         "reader": "geometric_bp", "f0": 3450.0, "q": 6.0,
-        "source": "SN p.13 R56 560 / R57 82k / C13=C14 3.3 nF, bridged-T (ref §1.2, §10)",
+        "source": "SN p.13 R56 560 / R57 82k / C13=C14 6.8 nF, bridged-T (ref §1.2, §10)",
     },
     "Hbp2": {
         "reader": "geometric_bp", "f0": 7100.0, "q": 6.0,
-        "source": "SN p.13 R58 560 / R59 82k / C15=C16 6.8 nF, bridged-T (ref §1.2, §10)",
+        "source": "SN p.13 R58 560 / R59 82k / C15=C16 3.3 nF, bridged-T (ref §1.2, §10)",
     },
     "Hh1": {
         "reader": "fit_hp2", "f0": 2500.0, "q": 0.97, "rms_tol_db": 0.05,

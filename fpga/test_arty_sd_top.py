@@ -81,6 +81,43 @@ def test_direct_plug_table_is_the_breakout_header_order():
         {k: v for k, v in sd.DIRECT_PLUG_PINS.items() if k in port_for.values()}
 
 
+def test_effective_pins_refuses_a_dict_form_package_pin_line():
+    # #471: Vivado's -dict form (`set_property -dict { PACKAGE_PIN ... }`) is
+    # not one of the forms the single-line regex parses. Silently dropping
+    # the assignment would leave an incomplete pin map with no error; this
+    # must REFUSE instead (docs/verification-rules.md: loud over silent).
+    dict_form = ("set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } "
+                "[get_ports clk_100mhz]\n")
+    with pytest.raises(ValueError, match="unparseable PACKAGE_PIN"):
+        sd.effective_pins([dict_form])
+
+
+def test_effective_pins_refuses_any_unparseable_package_pin_line():
+    # a made-up malformed form, distinct from -dict, to confirm the refusal
+    # is general (any set_property line naming PACKAGE_PIN it cannot parse)
+    # rather than special-cased to -dict specifically
+    malformed = "set_property PACKAGE_PIN[E3] [get_ports clk_100mhz]\n"
+    with pytest.raises(ValueError, match="unparseable PACKAGE_PIN"):
+        sd.effective_pins([malformed])
+
+
+def test_effective_pins_ignores_non_package_pin_set_property_lines():
+    # lines that set other properties (IOSTANDARD, PULLUP, ...) are not
+    # PACKAGE_PIN assignments and must not trip the new refusal
+    text = ("set_property PACKAGE_PIN D9 [get_ports btn_reset]\n"
+           "set_property IOSTANDARD LVCMOS33 [get_ports btn_reset]\n"
+           "set_property CONFIG_VOLTAGE 3.3 [current_design]\n")
+    assert sd.effective_pins([text]) == {"btn_reset": "D9"}
+
+
+def test_no_xdc_this_project_reads_uses_the_dict_form():
+    # scope check from #471: confirm this is hardening, not an active bug --
+    # if any XDC this build reads ever grows a -dict PACKAGE_PIN line, this
+    # test (not just effective_pins) goes red first
+    for path in (build.XDC, sd.SD_XDC):
+        assert "-dict" not in path.read_text(), path
+
+
 def test_an_override_onto_an_occupied_site_is_refused():
     bad = sd.SD_XDC.read_text().replace(
         "set_property PACKAGE_PIN D12 [get_ports i2s_lrclk]\n"
@@ -205,9 +242,38 @@ endmodule
 
 
 def test_constant_port_evidence_matches_vivados_own_warning():
+    # this calls sd.constant_port_evidence -- the SAME function check_implementation
+    # (the build gate) calls -- so a change to the gate's pattern is exercised
+    # here too. A regex re-written inside this test would go stale silently;
+    # see the control below for what that failure mode looks like.
+    #
     # the line Vivado 2025.1 printed for this port on the first direct-plug build
-    import re
     line = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
-    assert re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0", line)
-    assert not re.search(r"Synth 8-3917\].* port dac_sck driven by constant 0",
-                         line.replace("dac_sck", "sd_left"))
+    assert sd.constant_port_evidence(line, "dac_sck")
+    # the same line, naming a port that was never asked about
+    assert not sd.constant_port_evidence(line, "sd_left")
+    # a different message ID entirely must not be mistaken for this evidence
+    other_id = line.replace("Synth 8-3917", "Synth 8-7080")
+    assert not sd.constant_port_evidence(other_id, "dac_sck")
+
+
+def test_constant_port_evidence_control_catches_a_broken_gate_pattern(monkeypatch):
+    # injected-bug control (docs/verification-rules.md: start red, carry
+    # injected-bug controls). Break the gate's pattern the way a plausible
+    # bad edit would -- requiring "constant 1" instead of "constant 0" -- and
+    # confirm that the assertion the test above makes on the real Vivado
+    # warning line now goes red.
+    #
+    # Before this issue, test_constant_port_evidence_matches_vivados_own_warning
+    # asserted a regex written independently inside the test, so this exact
+    # break in build_arty_sd.check_implementation's pattern would NOT have
+    # been caught: the test's own copy would keep matching regardless of what
+    # the gate's copy did. Now both call constant_port_evidence, so breaking
+    # it here breaks the real evidence check too.
+    def broken_evidence(log_text: str, port: str) -> bool:
+        return re.search(r"Synth 8-3917\].* port " + re.escape(port) + r" driven by constant 1",
+                         log_text) is not None
+    monkeypatch.setattr(sd, "constant_port_evidence", broken_evidence)
+    real_warning = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
+    with pytest.raises(AssertionError):
+        assert sd.constant_port_evidence(real_warning, "dac_sck")

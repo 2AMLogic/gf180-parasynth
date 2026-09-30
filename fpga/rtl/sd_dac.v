@@ -27,6 +27,15 @@
 // becoming a limit cycle (INJECT_BUG_SD_NO_SAT removes it and turns the
 // square test red).
 //
+// At idle the loop settles into a period-4 pattern, 0011, whose only energy is
+// at 12.288/4 = 3.072 MHz -- exactly the 16th null of the verifier's R = 64
+// CIC -- and whose mean is zero, so a correct modulator's silence error
+// decimates to EXACTLY zero. That is what the silence bound is measuring, and
+// INJECT_BUG_SD_DC_BIAS is its negative control: one LSB added to the loop
+// input, which the loop turns into a DC offset on the output (mean(y) =
+// mean(x7)). Measured at -104.7 dBFS: buried under every signal case's own
+// error floor, but 5.3 dB above the silence bound, so it reds silence alone.
+//
 // `sample` is read every clock; hold it between updates (the wrapper's
 // i2s_rx does). Measured in-band SNR and its bounds: fpga/verify_sd_dac.py.
 `default_nettype none
@@ -43,7 +52,14 @@ module sd_dac (
 
     reg signed [W-1:0] i1, i2;
     wire signed [W:0] y  = pdm ? FB : -FB;
+`ifdef INJECT_BUG_SD_DC_BIAS
+    // NEGATIVE CONTROL: one LSB of DC at the loop input. The loop forces
+    // mean(y) = mean(x7), so this puts a DC offset of 1 part in 2^18 on the
+    // output. It turns the silence test red and nothing else. See the header.
+    wire signed [W:0] x7 = $signed({{(W-15){sample[15]}}, sample}) * 25'sd7 + 25'sd1;
+`else
     wire signed [W:0] x7 = $signed({{(W-15){sample[15]}}, sample}) * 25'sd7;
+`endif
 
     function signed [W-1:0] sat(input signed [W+1:0] v);
 `ifdef INJECT_BUG_SD_NO_SAT

@@ -38,13 +38,34 @@ from the Python prototype of the same loop):
             release to the end)
   square    full-scale 1 kHz square         >= 75 dB   (84): the overload case;
                                                         the integrator clamp
-  silence   all-zero input: in-band noise   <= -110 dBFS
+  silence   all-zero input: in-band noise   <= -110 dBFS (exactly zero)
 
 Negative controls (each must turn the named case red):
 
   SD_FIRST_ORDER   quantise the first integrator      sine-6, held
   SD_NO_SAT        integrators wrap instead of clamp  square
   I2S_RX_SHIFT     receiver captures one bit early    every signal case
+  SD_DC_BIAS       one LSB of DC at the loop input    silence
+
+The silence case needs its own control because the other three cannot reach
+it: I2S_RX_SHIFT moves a bit that is the same bit on a constant-zero sample,
+SD_NO_SAT's clamp never engages near zero, and SD_FIRST_ORDER's quantiser
+still idles on a mean-zero pattern. Without SD_DC_BIAS a bench wired to the
+wrong signal entirely -- or an estimator that reported quiet whatever it was
+fed -- would pass the silence case exactly as the real one does.
+
+SD_DC_BIAS is sized from the clean measurement, not guessed. A correct
+modulator idles in a period-4 pattern on the 16th CIC null, so its silence
+error is EXACTLY zero, while the signal cases carry -111.0 (sine-6), -112.5
+(held) and -82.5 dBFS (square) of their own error against bounds that allow
+8.9, 9.5 and 9.3 dB more. Measured under the injection: silence reads -104.68
+dBFS, 5.3 dB above its bound, while sine-6/held/square fall only to 97.10 /
+91.53 / 83.02 dB against bounds of 95 / 90 / 75. So one LSB turns silence red
+and only silence. The usable window is roughly 0.55 to 1.2 LSB -- below it
+silence stays green, above it `held` goes red too and the required set would
+have to be widened rather than the extra red ignored. `held`, at 1.5 dB, is
+the margin to watch if its stimulus ever changes; every control's per-case
+measurement is recorded in verification.json so that erosion is visible.
 
 Also asserted: the wire path's latency. The sample strobed in frame k reaches
 the modulator LAG_CYCLES after frame k starts (i2s_tx's D = 1 period, then
@@ -87,7 +108,7 @@ SOURCES = [ROOT / "fpga/rtl/tb_sd_dac.v", ROOT / "rtl-sketch/i2s_tx.v",
 BOUNDS = {"sine-6": ("snr_db", ">=", 95.0), "held": ("snr_db", ">=", 90.0),
           "square": ("snr_db", ">=", 75.0), "silence": ("noise_dbfs", "<=", -110.0)}
 CONTROLS = {"SD_FIRST_ORDER": {"sine-6", "held"}, "SD_NO_SAT": {"square"},
-            "I2S_RX_SHIFT": {"sine-6", "held", "square"}}
+            "I2S_RX_SHIFT": {"sine-6", "held", "square"}, "SD_DC_BIAS": {"silence"}}
 
 
 class Refused(Exception):
@@ -279,9 +300,14 @@ def main(argv=None) -> int:
     record["clean"] = clean
     controls = {}
     for inject, must in CONTROLS.items():
-        red = sorted(c for c in stim if not verdict(c, measure(streams[(inject, c)], stim[c])))
+        ms = {c: measure(streams[(inject, c)], stim[c]) for c in stim}
+        red = sorted(c for c in stim if not verdict(c, ms[c]))
         caught = must <= set(red)
-        controls[inject] = {"red": red, "required_red": sorted(must), "caught": caught}
+        # the metric each case read under the injection, so a control's margin
+        # is auditable from the record: a control that only just goes red is
+        # one stimulus change away from silently ceasing to be a control
+        controls[inject] = {"red": red, "required_red": sorted(must), "caught": caught,
+                            "measured": {c: ms[c][BOUNDS[c][0]] for c in stim}}
         ok &= caught
         print(f"{'CAUGHT' if caught else 'MISSED'} {inject}: red {red}, required {sorted(must)}")
     record["controls"] = controls

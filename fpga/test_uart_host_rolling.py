@@ -123,6 +123,71 @@ def test_every_control_turns_the_verifier_red_for_its_reason(control):
     assert c["caught"], c
 
 
+# ---- the 16-bit frame log: an unwrap is a precondition, not an assumption ----
+def _log16(frames, p0):
+    """What the device would log for writes at `frames` after `p0`."""
+    return [(p0 + f) & 0xFFFF for f in frames]
+
+
+def test_the_unwrap_refuses_a_schedule_it_cannot_step():
+    """CONTROL: bar808-rest's rest is longer than half the frame counter, so
+    the log cannot say whether a step went forward or back. _unwrap must
+    refuse -- and if it did not, it would not merely be imprecise: the
+    timeline it returns is wrong (#474)."""
+    want = [w[0] for w in vrp.intended("bar808-rest")["timed"]]
+    assert max(b - a for a, b in zip(want, want[1:])) >= vrp.UNWRAP_GAP_BOUND
+    p0 = 1000
+    with pytest.raises(vrp.UnwrapRefused, match="16-bit frame log"):
+        vrp._unwrap(_log16(want, p0), p0, [0] + want)
+    prev, acc, bad = p0 & 0xFFFF, p0, []
+    for f in _log16(want, p0):
+        d = (f - prev) & 0xFFFF
+        acc += d if d < 0x8000 else d - 0x10000
+        prev = f
+        bad.append(acc - p0)
+    assert bad != want
+
+
+def test_the_unwrap_answers_for_the_fixtures_it_is_used_on():
+    # the other half of the control: a schedule inside the bound is unwrapped
+    # exactly, across a wrap
+    for name in ("bar808-full", "demo"):
+        want = [w[0] for w in vrp.intended(name)["timed"]]
+        assert max(b - a for a, b in zip(want, want[1:])) < vrp.UNWRAP_GAP_BOUND
+        assert vrp._unwrap(_log16(want, 65000), 65000, [0] + want) == \
+            [65000 + f for f in want]
+
+
+def test_the_gap_bound_is_where_this_unwraps_own_branch_is():
+    """0x8000, not the 0x10000 of test_play_song's forward-only naive_unwrap:
+    _unwrap reads a step of 0x8000 as one BACK, so that step is already
+    ambiguous and 0x7fff is the last one that is not."""
+    assert vrp._unwrap(_log16([0, 0x7FFF], 0), 0, [0, 0x7FFF]) == [0, 0x7FFF]
+    with pytest.raises(vrp.UnwrapRefused):
+        vrp._unwrap(_log16([0, 0x8000], 0), 0, [0, 0x8000])
+
+
+def test_the_unwrap_is_checked_against_the_devices_own_unwrapped_log():
+    """The sim logs each write's UNWRAPPED frame beside the 16-bit one, so
+    the harness can check its unwrap against a timeline that is not derived
+    from it: every step read correctly is one constant offset."""
+    # a held note, so the phrase has a performance origin to unwrap from; the
+    # short fixture, so this costs a tenth of a second
+    run = vrp.run_cli("bar808", epoch=65300, note=45)
+    r = vrp.check(run)
+    assert r["ok"], r["reasons"]
+    sim = run["h"].sim
+    assert len(sim.write_frames) == len(sim.writes)
+    assert sim.write_frames == sorted(sim.write_frames)
+    assert [f & 0xFFFF for f in sim.write_frames] == [w[0] for w in sim.writes]
+    assert sim.write_frames[-1] > 0xFFFF                  # it crossed a wrap
+    assert len(r["unwrap_offsets"]) == 1, r["unwrap_offsets"]
+    # CONTROL: one step read as its alias is not a constant offset any more
+    truth = [0, 1000, 2000]
+    assert vrp._unwrap_offsets([5, 1005, 2005], truth) == [5]
+    assert vrp._unwrap_offsets([5, 1005, 2005 - 0x10000], truth) == [5 - 0x10000, 5]
+
+
 def test_note_off_during_queued_traffic_lands_at_accept_plus_one():
     """A live gate-off sent while a window's events fill the queue applies
     at accept+1, and every scheduled event still lands on its frame."""
@@ -159,8 +224,9 @@ def test_note_off_during_queued_traffic_lands_at_accept_plus_one():
         assert frame == (acc + 1) & 0xFFFF
     ev = [w for w in h.sim.writes if w[5] == "event"]
     p0 = br.performance_origin
-    got = [f - p0 for f in vrp._unwrap([w[0] for w in ev], p0)]
-    assert got == [t[0] for t in want["timed"]]
+    exp = [t[0] for t in want["timed"]]
+    got = [f - p0 for f in vrp._unwrap([w[0] for w in ev], p0, [0] + exp)]
+    assert got == exp
 
 
 def _run_commands(name):

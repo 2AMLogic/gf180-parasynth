@@ -213,3 +213,30 @@ Python rejects syntax errors.
 And per `CLAUDE.md`: **run the gate against the current state before committing
 it.** An unsatisfiable gate is worse than no gate — it trains everyone to
 ignore gates, including the working ones.
+
+## 6. A claim about an external tool is a claim about a configuration
+
+"Model D renders silence" was true of `dawdreamer` 0.9.0 and false under
+`pedalboard`; unlicensed Diva clicks; Surge parameter 265 depends on oscillator
+type; "94 Hz stepping" was our host block rate; "Mini V3 plays an octave down"
+was a defaulted Range parameter (Model D does the same). Each recorded a tool
+property that was a property of (host, version, binary hash, block size, sample
+rate, licence state, preset). Rules (#123), checked by `tools/external_claim.py`
+over `docs/external-tool-claims.json` in `make verify` and, through its test,
+`make verify-fast`. A record with no polarity or environment is REFUSED:
+
+1. **No external-tool claim without its environment tuple** -- host and version,
+   loader, machine, binary sha256, block size, sample rate, licence state, preset. Negative
+   claims included, especially.
+2. **A negative result needs a second route** (different host, loader or
+   machine) that reproduces it before it is believed.
+3. **Which host works per plugin is data** (`host_per_plugin` in that file).
+   Each entry is `unverified` or names a passing claim; `host_result()` refuses
+   unverified entries. Today every entry is unverified.
+4. **Assert what defaults wrongly, every time**: pitch, level (silence is not
+   data) and pin readback, via `external_claim.assert_readback`. Plugin defaults
+   are chosen for demos, not measurement. This rule is not yet enforced: no
+   render harness calls `assert_readback` yet. Wiring it in is follow-up work.
+
+The same applies to yosys, iverilog, ORFS and scipy defaults (`sosfiltfilt`
+`padtype`, #101).
