@@ -137,7 +137,8 @@ verify:
 	  "$(PY) tools/holdout.py check" \
 	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) tools/external_claim.py" \
-	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi"
+	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi" \
+	  "$(PY) tools/sensitivity.py check"
 
 ## Fast sound-development checks, separate from the broad repository suite.
 ## A valid M5A mismatch remains a passing verification job: this checks that
@@ -479,7 +480,13 @@ controls:
 	  "$(PY) tools/f1_rtl_filter_path.py --frames 30000 --inject F1_CHAIN_DROP_DECIM --expect-mismatch" \
 	  "$(PY) fpga/verify_xdc_binding.py --matrix" \
 	  "$(PY) fpga/verify_xdc_binding.py --inject UART_SLASH_JOIN --expect-fail" \
-	  "$(PY) tools/probe_arty_constraint_scope.py"
+	  "$(PY) tools/probe_arty_constraint_scope.py" \
+	  "$(PY) tools/sensitivity.py check --inject VERDICT_ASSERTED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject POINT_TRANSCRIBED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject GRID_CHERRY_PICKED --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
+	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q

@@ -1,0 +1,72 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "modal-bank-nums",
+  "parameter": {
+    "name": "NUMS",
+    "source": "rtl-sketch/drum_kit.v",
+    "kind": "verilog-parameter",
+    "what": "how many of the bank's modes carry a numerator, i.e. how many can be band-pass or high-pass filters rather than bare bodies. The dial the mode-count debate never looked at, and the one the objective is actually sensitive to."
+  },
+  "objective": {
+    "name": "modal_dp cell area",
+    "units": "um2",
+    "lower_is_better": true,
+    "why": "the same objective as drum-kit-modes, measured on the block the dial acts on. modal_dp rather than drum_kit because the artefact sweeps NUMS across three values only on modal_dp; drum_kit has two, which cannot show a shape."
+  },
+  "grid": {
+    "stated_before_results": false,
+    "values": [6, 11, 16],
+    "range_basis": [
+      "Every value fpga/scripts/mode_sweep.sh synthesised for modal_dp at MODES = 16, MW = 4. As with drum-kit-modes, the grid is asserted to BE that set, not chosen from it.",
+      "6 is what the kit shipped at when the debate happened; 11 is what a complete 808 needs (docs/integration-area.md section 3) and what the tree ships today; 16 is the dial at its maximum, every mode a filter.",
+      "The endpoints bracket the whole usable range, so a flat verdict here could not be an artefact of a narrow grid."
+    ],
+    "held_fixed": {
+      "MODES": 16,
+      "MW": 4
+    }
+  },
+  "decision_rule": {
+    "stated_before_results": false,
+    "flat_within_relative": 0.02,
+    "why": "the same rule as drum-kit-modes, deliberately: the two dials are being compared, so scoring them by different thresholds would decide the comparison by choosing the thresholds. ~6,400 um2 per mode against drum_kit at MODES = 12 is 1.06 %, rounded up to 2 %."
+  },
+  "evidence": {
+    "artifact": "fpga/reports/mode_sweep.txt",
+    "format": "fixed-width-table",
+    "table": "modal_dp",
+    "value_column": "NUMS",
+    "objective_column": "um2",
+    "held_fixed": {
+      "MODES": 16,
+      "MW": 4
+    },
+    "regenerate": "GF180_PDK_REF=<pdk>/gf180mcuD/libs.ref fpga/scripts/mode_sweep.sh",
+    "instrument": "yosys synth + abc -liberty via rtl-sketch/area/synth_area.py, klt's recipe, gf180mcu_fd_sc_mcu7t5v0 tt_025C_5v00, CELL area only. NOT placed, NOT routed."
+  },
+  "points": [
+    {"value": 6, "objective": 329712.5},
+    {"value": 11, "objective": 350652.5},
+    {"value": 16, "objective": 377036.6}
+  ],
+  "prediction": {
+    "runs": [[6], [11], [16]],
+    "basis": "Stated from the RTL, not from these numbers. modal_dp gives the excitation-history pair h1, h2 only to modes below NUMS (21 bits each, 42 flops per slot) and yosys genuinely prunes them above it -- unlike the y1/y2/exc state arrays, which every mode has and which are what gets padded to a power of two. A pruned per-slot resource is a slope, so no two grid points can coincide and every adjacent pair must separate. Three runs.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "SENSITIVE",
+    "runs": [[6], [11], [16]],
+    "summary": "A slope: +6.35 % from 6 to 11 and +7.52 % from 11 to 16, both far outside the 2 % rule, ~4,190 um2 per numerator slot. Set beside drum-kit-modes this is the whole finding of failure-modes mechanism 5 in two lines -- the dial that was argued about is flat across the range that was argued about, and the dial nobody looked at is the one the objective responds to."
+  },
+  "limits": [
+    "Held at MODES = 16, which the tree ships; the slope was not measured at other mode counts. h1/h2 are per-slot and pruned above NUMS, so the slope should not depend on MODES, but that is a prediction here rather than a measurement.",
+    "modal_dp alone, not drum_kit. The drum_kit rows at MODES = 16 give 607,051.8 at NUMS = 6 and 630,432.9 at NUMS = 11 -- +3.85 %, still outside the rule, so the verdict does not change at kit level, but the kit sweep has only two points and is not this record's evidence.",
+    "Cell area, not routed area, and not correctness."
+  ],
+  "retrofit": {
+    "of": "the variable docs/failure-modes.md mechanism 5 names as the one that actually mattered",
+    "why": "the measurements predate the record, so the grid and rule were written knowing the answer. The prediction block is the part that is not retrospective.",
+    "prospective_from": "tools/sweep_m1a_attack.py's pattern -- grid committed and clean before any point is rendered; see docs/sensitivity-sweeps.md."
+  }
+}

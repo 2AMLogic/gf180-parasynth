@@ -1,0 +1,72 @@
+{
+  "schema": "sensitivity-sweep-v1",
+  "id": "drum-kit-modes",
+  "parameter": {
+    "name": "MODES",
+    "source": "rtl-sketch/drum_kit.v",
+    "kind": "verilog-parameter",
+    "what": "how many resonator slots the modal bank holds. The dial a 2026-08 debate spent hours on, arguing 8 against 12, before anyone swept it."
+  },
+  "objective": {
+    "name": "drum_kit cell area",
+    "units": "um2",
+    "lower_is_better": true,
+    "why": "the objective the 8-vs-12 argument was actually about: area on a 3x3 mm gf180 die. Not correctness -- docs/verification-rules.md rule 3 -- and not the only objective the dial has, which is the point of the FLAT-MOVE line: a flat objective does not make a change wrong, it makes THIS objective unable to justify it."
+  },
+  "grid": {
+    "stated_before_results": false,
+    "values": [8, 11, 12, 14, 16],
+    "range_basis": [
+      "Every value fpga/scripts/mode_sweep.sh synthesised for drum_kit at NUMS = 6. The grid is not a selection from that set: tools/sensitivity.py asserts the grid IS the set of rows the artefact holds under held_fixed, so a point cannot be dropped to flatten the curve.",
+      "8 is the bracket below (the 5-8 power-of-two bracket of the MW-bit-addressed state arrays); 11-16 sit in the 9-16 bracket. The pair of brackets is what makes the dial's shape visible at all.",
+      "17 and 18 were synthesised but only at NUMS = 11 and MW = 5, so they move three dials at once and are not controlled points of THIS sweep. They are the cliff, measured, in docs/integration-area.md; they are deliberately not on this grid because a confounded point is not evidence about MODES."
+    ],
+    "held_fixed": {
+      "NUMS": 6
+    }
+  },
+  "decision_rule": {
+    "stated_before_results": false,
+    "flat_within_relative": 0.02,
+    "why": "the decision this dial serves is 'how many modes', so the objective can only resolve differences bigger than what one mode costs. One mode of configuration storage measures ~6,400 um2 (fpga/reports/mode_sweep.txt, mode_cfg_regs, 66 flops x ~92 um2/bit -- docs/area-budget.md's own per-bit rule), which is 1.06 % of drum_kit at MODES = 12. Rounded up to 2 %: a gap smaller than the cost of one mode cannot decide how many modes to build. The threshold comes from the granularity of the decision, not from the spread of these measurements -- a threshold fitted to its own data would make any curve flat."
+  },
+  "evidence": {
+    "artifact": "fpga/reports/mode_sweep.txt",
+    "format": "fixed-width-table",
+    "table": "drum_kit",
+    "value_column": "MODES",
+    "objective_column": "um2",
+    "held_fixed": {
+      "NUMS": 6
+    },
+    "regenerate": "GF180_PDK_REF=<pdk>/gf180mcuD/libs.ref fpga/scripts/mode_sweep.sh",
+    "instrument": "yosys synth + abc -liberty via rtl-sketch/area/synth_area.py, klt's recipe, gf180mcu_fd_sc_mcu7t5v0 tt_025C_5v00, CELL area only. NOT placed, NOT routed."
+  },
+  "points": [
+    {"value": 8, "objective": 519777.3},
+    {"value": 11, "objective": 607141.8},
+    {"value": 12, "objective": 603118.0},
+    {"value": 14, "objective": 606843.3},
+    {"value": 16, "objective": 607051.8}
+  ],
+  "prediction": {
+    "runs": [[8], [11, 12, 14, 16]],
+    "basis": "Stated from the RTL and from how yosys maps arrays, not from these numbers. modal_dp's state arrays y1, y2, exc, h1, h2 are all [0:MODES-1] and all addressed by the MW-bit mode counter, so yosys maps them to memories padded to 2^MW words. At MW = 4 every MODES in 9..16 buys sixteen words of state and must therefore cost the same; MODES = 8 sits in the eight-word bracket and must cost less. Two runs, splitting between 8 and 11. A measurement that disagreed would mean the mapping assumption is wrong, and the tool goes red rather than quietly recording a different shape.",
+    "independent_of_measurement": true
+  },
+  "verdict": {
+    "state": "MIXED",
+    "runs": [[8], [11, 12, 14, 16]],
+    "summary": "A staircase, not a slope. 11, 12, 14 and 16 are one value of the objective to within 0.67 % -- so the 8-vs-12 argument was two arguments glued together: 8-vs-the-bracket is real and worth 14.4 %, and 11-vs-12-vs-14-vs-16 is not an area question at all. The dial's real choices are 8, 16 and 32."
+  },
+  "limits": [
+    "Held at NUMS = 6 while the tree now ships NUMS = 11. The two dials were swept separately on purpose (fpga/scripts/mode_sweep.sh: 'every naive sweep moves both'), and modal-bank-nums.json shows the numerator cost is an additive slope of ~4,190 um2 per slot, so the plateau's SHAPE carries to NUMS = 11 while its absolute numbers do not.",
+    "Cell area, not routed area. klt allows *_1 cells and ORFS excludes them, a 22-42 % difference on the same RTL (docs/verification-rules.md rule 3).",
+    "drum_kit takes its mode configuration as INPUT PORTS -- no module in rtl-sketch/ holds those registers -- so every row here excludes the ~6,400 um2 per mode that configuration storage would add. Inside the 9-16 plateau that storage is the entire marginal cost of a mode."
+  ],
+  "retrofit": {
+    "of": "the 8-vs-12 mode debate recorded in docs/failure-modes.md mechanism 5 and issue #45 item 5",
+    "why": "the measurements existed (fpga/reports/mode_sweep.txt) before this record did, so the grid and the decision rule were written knowing the answer. That is weaker evidence than a grid stated first, and the record says so rather than implying otherwise. The prediction block is the part that is not retrospective: it is derivable from the RTL and yosys's array mapping without looking at a single measured number, and the gate checks the measurement against it.",
+    "prospective_from": "tools/sweep_m1a_attack.py's pattern -- grid committed and clean before any point is rendered -- is what a sweep opened from now on should follow; see docs/sensitivity-sweeps.md."
+  }
+}

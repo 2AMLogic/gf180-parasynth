@@ -125,6 +125,24 @@ objective was actually sensitive.
 > **Automate:** before a parameter debate is allowed to consume time, sweep it.
 > A one-line sweep would have ended the modes argument in minutes. Make
 > sensitivity analysis a gate on optimisation work, not an afterthought.
+>
+> **In place.** `tools/sensitivity.py check`, in `make verify` and in the
+> `python` job of `rungs.yml`. A parameter joins
+> `docs/sensitivity/registry.json` when someone *proposes* changing it; from
+> then on the gate asserts that the value which ships is a point on a committed
+> grid, that the grid **is** the set of points the measurement artefact holds
+> (so a plateau cannot be manufactured by dropping one), that every recorded
+> point re-extracts from that artefact, that the flat/sensitive verdict is
+> recomputed rather than asserted, and that the measured shape matches a
+> prediction derived **independently of the measurement**. Six injected
+> controls in `make controls`. `MODES` and `NUMS` are retrofitted — the
+> argument, recomputed, is a step of +16.8 % from 8 into the 9–16 bracket and
+> then a plateau of 0.67 % across 11–16, against +6.35 % and +7.52 % for the
+> dial nobody swept. Convention and limits: `docs/sensitivity-sweeps.md`.
+>
+> **What it still cannot do:** see an argument. It gates the artefact the
+> argument should have been settled by, and it only watches parameters someone
+> registered.
 
 ## A sixth, different in kind: rejecting imperfect evidence
 
@@ -190,6 +208,12 @@ document that names mechanism 4.
   checker flags one whose backing test is missing, passes when it is cited as
   failing, or predates the file it describes.
   <!-- claim: test=tools/test_check_doc_claims.py::test_a_claim_backed_by_a_passing_test_is_ok -->
+- **Sensitivity sweeps as a gate** on optimisation work (mechanism 5, #224).
+  `tools/sensitivity.py check` recomputes every registered parameter's
+  flat/sensitive verdict from its committed sweep and refuses a shipped value
+  off that sweep's grid. Registry-scoped: it watches the parameters someone
+  registered, not every parameter.
+  <!-- claim: test=tools/test_sensitivity.py::test_the_gate_passes_against_the_tree_it_ships_with -->
 
 **Not yet.**
 
@@ -198,13 +222,11 @@ document that names mechanism 4.
   ground-truth suite; `model/test_audio_measure.py` is the suite, but its
   coverage of that reachable set is maintained by hand.
   <!-- claim: absent="estimator_meta|reachable_estimators" in=model/*.py,tools/*.py issue=222 -->
-- **Sensitivity sweeps as a gate** on optimisation work (mechanism 5, #224).
-  <!-- claim: absent="check_sensitivity|sensitivity_gate" in=tools/*.py,model/*.py issue=224 -->
 
-Two, not five — and the arithmetic of that sentence is the finding, not the
-good news. Those two remain the difference between a process that catches this
+One, not five — and the arithmetic of that sentence is the finding, not the
+good news. That one remains the difference between a process that catches this
 class of error and one that relies on someone reading carefully at the right
-moment. Two of the three that closed did so within hours of being listed, and
+moment. Two of the four that closed did so within hours of being listed, and
 this document was the last thing to know.
 
 ---
