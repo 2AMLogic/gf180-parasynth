@@ -81,14 +81,47 @@ PRECONDITIONS, ASSERTED AT THE POINT OF USE, REFUSED WHEN UNMET:
     moved is the "correct instrument in a wrong state" failure this repository
     keeps meeting.
 
+THE COLLECTOR SUPPLY (#432, step 12), AND THE HYPOTHESIS IT REFUTES. Step 11
+left one per-band freedom open: the three envelope generators' peak collector
+voltages. The plausible shape was "equal at the peak, different only in decay",
+because all three reservoirs are charged from Q19's emitter through their own
+diode. Read off the same scan and solved as a transient, that is HALF true and
+the half that fails is the half that matters:
+
+  * EQUAL AT THE RESERVOIR -- CONFIRMED. C38, C40 and C41 are all 1 uF, all
+    charged from Q19's emitter follower through D6/D7/D8, and the 1 ms trigger
+    is long enough that each reaches V_trig - V_BE - V_f. They agree to within
+    the diodes' own forward-drop spread at their different load currents,
+    which this module computes rather than assumes.
+  * NOT EQUAL AT THE COLLECTOR -- REFUTED, and by a lot. Only the SHORT band's
+    collector load hangs on its own reservoir (R94 straight off C38). The
+    DECAY band's hangs behind R88 33 k into C39 0.47 uF and then a resistive
+    divider (R90/R91/R89/R92); the LOW band's hangs behind Q20's emitter
+    follower and R105 33 k into C45 2.2 uF. Both lags are 10-70 ms against a
+    1 ms trigger, so neither node is anywhere near its reservoir when the
+    reservoir peaks.
+
+AND THE DECAY KNOB IS NOT WHERE THE REFERENCE PUTS IT. VR2's wiper is tied to
+its pin 3 and R93 470 k is in SERIES with it, not in parallel -- so the timing
+resistance is 470 k to 2.47 M, never zero, and C41's tail is 0.47-2.47 s rather
+than the reference's "up to 0.38 s". That reservoir feeds the LOW band's
+collector supply at full weight through Q20 and R105, and reaches the DECAY
+band only through R92/R89/R91. Which is exactly what the Fischer recordings
+already said and the reference's own S10 denies: "the low band's own decay
+tracks DECAY ... the recordings contradict S10" (`../docs/scorecard/
+cymbal-369/README.md`). The span is the external known answer below.
+
 WHAT THIS MODULE DOES NOT SETTLE, stated rather than left to be assumed:
 
-  * the three envelope generators' PEAK voltages. All three reservoirs are
-    charged from Q19 through their own diode (D6, D7, D8), but each sits
-    behind a different smoothing network (R87+C37/C38, R88+C39/C40,
-    R105+C45), and the collector's DC operating point -- which is what sets
-    where the swing VCA clips -- depends on it. This module reports the
-    SIGNAL-path term only, which is the term the band balance multiplies.
+  * the swing VCA's LOWER edge. Werner's "a lower edge that is itself a
+    function of the envelope" needs the transistor's large-signal model and
+    the base drive amplitude; neither is read here. This module settles the
+    UPPER edge -- the ceiling the collector node reaches when the stage cuts
+    off -- which is the level a band can never exceed, not the level it
+    reaches.
+  * the conduction duty of the three swing VCAs, which loads the envelope
+    nodes. It is bracketed (0.25 to 1.0) rather than chosen, and every
+    envelope number is reported across that bracket.
   * the high-pass input loading on the two HIGH bands. Hh1's input network is
     fully read here (C48/C59/R124/R127, a unity-gain Sallen-Key whose f0 and Q
     reproduce §10's 2.5 kHz / 0.97), so the low band's loaded collector
@@ -162,6 +195,16 @@ SN_CROPS = {
     # both bridged-T band-passes with their INPUT networks, and IC3 pins 1/7
     # feeding C46 and C42/C44.
     "bandpass": {"dpi": 400, "x": 700, "y": 3250, "w": 1100, "h": 1100},
+    # #432: the attack buffer Q19 (R84 10 k base, R85 100 collector, R86 100 /
+    # C35 47 u supply decoupling) and the D6/D7/D8 common-anode bus off its
+    # EMITTER -- the arrow points away from the base, so Q19 is an NPN
+    # follower and the three reservoirs are charged, not discharged, through
+    # it. Read at 1800 dpi before the direction was written down.
+    "env-q19": {"dpi": 600, "x": 3550, "y": 4150, "w": 950, "h": 950},
+    # #432: Q20 (the second follower), R91/R92/R89, R93 470 k IN SERIES with
+    # VR2 2 M(B) whose wiper is tied to its own pin 3, C41 1 uF, and the low
+    # band's R105 33 k / C45 2.2 uF / R104 22 k chain down to D12.
+    "env-q20": {"dpi": 600, "x": 2800, "y": 5150, "w": 1150, "h": 1000},
 }
 
 
@@ -297,6 +340,124 @@ HH1 = {"c_in_f": 0.0015e-6, "c_in": "C48", "c_mid_f": 0.0015e-6, "c_mid": "C59",
        "r_fb_ohm": 22e3, "r_fb": "R124", "r_gnd_ohm": 82e3, "r_gnd": "R127",
        "f0_hz": 2500.0, "q": 0.97}
 
+# ---------------------------------------------------------------------------
+# #432: the three envelope generators, SN p.13, crops `env-q19` / `env-q20`.
+#
+# NODE NAMES, so the netlist below can be checked against the scan by anyone:
+#
+#   E  Q19's emitter -- the common anode of D6/D7/D8
+#   A  C38 1 uF, the SHORT band's reservoir.  R94 leaves it for the VCA.
+#   B  C37 2.2 uF, behind R87 22 k: a shunt lag on A, not a supply
+#   S  C47 + C49, the SHORT band's VCA output node (D5's anode, Hh3's input)
+#   P  C40 1 uF, the DECAY band's reservoir
+#   Q  C39 0.47 uF, behind R88 33 k.  R90 leaves THIS node, not P.
+#   Z  C50 + C51, the DECAY band's VCA output node (D11's anode, Hh2's input)
+#   X  R89 10 k to ground, fed by R91 from Z and R92 from Q20's emitter
+#   F  C41 1 uF, the LOW band's reservoir AND Q20's base
+#   V  the top of VR2, reached from F through R93 -- SERIES, see below
+#   G  Q20's emitter
+#   W  C45 2.2 uF, behind R105 33 k.  R104 leaves THIS node.
+#   Y  C48, the LOW band's VCA output node (D12's anode, Hh1's input)
+#
+# THE ONE READ THAT CONTRADICTS A COMMITTED DOCUMENT. `docs/tr808-reference.md`
+# S10 records "DECAY VR2 2 MOhm || R93 470 kOhm x C41 1 uF: RC up to ~0.38 s".
+# The scan prints them in SERIES: R93 runs from F down to VR2's pin 3, VR2's
+# wiper (pin 2) is strapped to that same pin 3, and pin 1 goes to ground. So
+# the timing resistance is R93 + p*2 M, i.e. 470 k to 2.47 M, and it is never
+# zero. A parallel pair would be 0 to 380 k -- a DECAY knob whose minimum kills
+# the low band outright, which is not a design. `VR2_PARALLEL_NOT_SERIES`
+# injects the reference's reading and the span properties go red.
+ENV_RES = (
+    ("A", "B", 22e3, "R87"),
+    ("A", "S", 39e3, "R94"),
+    ("P", "Q", 33e3, "R88"),
+    ("Q", "Z", 33e3, "R90"),
+    ("Z", "X", 33e3, "R91"),
+    ("X", "0", 10e3, "R89"),
+    ("X", "G", 33e3, "R92"),
+    ("F", "V", 470e3, "R93"),
+    ("G", "W", 33e3, "R105"),
+    ("W", "Y", 22e3, "R104"),
+)
+ENV_POT = {"node": "V", "ohm": 2.0e6, "designator": "VR2", "taper": "B",
+           "wiper_strapped_to": "pin 3"}
+ENV_CAP = {
+    "A": (1.0e-6, "C38"), "B": (2.2e-6, "C37"), "P": (1.0e-6, "C40"),
+    "Q": (0.47e-6, "C39"), "F": (1.0e-6, "C41"), "W": (2.2e-6, "C45"),
+    # The three VCA output nodes carry only their own coupling capacitors.
+    # They are four orders of magnitude smaller than the reservoirs and change
+    # nothing; they are included because a node with no capacitor and no
+    # resistive path to ground makes the matrix singular, and inventing one
+    # would be a fitted parameter.
+    "S": (0.0015e-6 + 0.0033e-6, "C47+C49"),
+    "Z": (0.0015e-6 + 0.001e-6, "C50+C51"),
+    "Y": (0.0015e-6, "C48"),
+}
+ENV_DIODE = (("A", "D6"), ("P", "D7"), ("F", "D8"))
+# band -> (VCA output node, collector-load designator, the node that SUPPLIES
+# that load).  Only the short band's supply is its own reservoir.
+ENV_BAND = {
+    "short": {"out": "S", "load": "R94", "supply": "A", "reservoir": "A"},
+    "decay": {"out": "Z", "load": "R90", "supply": "Q", "reservoir": "P"},
+    "low": {"out": "Y", "load": "R104", "supply": "W", "reservoir": "F"},
+}
+ENV_NODES = ("A", "B", "S", "P", "Q", "Z", "X", "F", "V", "G", "W", "Y")
+
+# Device and drive constants. Every one is either printed on the scan, quoted
+# in `docs/tr808-reference.md`, or a textbook constant -- none is fitted, and
+# the three that could plausibly move (duty, beta, V_f) are swept.
+ENV_TRIG_MS = 1.0             # S1.1 / SN p.5 Fig. 7, p.14
+ENV_TRIG_V = (4.0, 14.0)      # S1.1: accent sets the common trigger 4-14 V
+ENV_V_BE = 0.6                # Q19 and Q20, silicon
+ENV_V_F = 0.6                 # D6/D7/D8, 1S1588 at a few hundred uA
+ENV_N_DIODE = 1.9             # 1S1588 emission coefficient, for the spread bound
+ENV_V_THERMAL = 0.02585
+ENV_R_DIODE_ON = 10.0
+ENV_V_CLAMP = 0.7             # the swing VCA's lower edge: V_CEsat + its series diode
+ENV_R_SAT = 100.0             # R95 / R98 / R101, the emitter degeneration
+ENV_BETA = 200.0              # 2SC945 mid-band; swept 100-400
+ENV_DUTY = (0.25, 0.5, 1.0)   # swing-VCA conduction duty: bracketed, not chosen
+ENV_DUTY_NOMINAL = 1.0
+ENV_VR2 = (0.0, 0.5, 1.0)     # DECAY at minimum, 12 o'clock and maximum
+
+# THE EXTERNAL KNOWN ANSWERS FOR THE ENVELOPE, and their bound, both stated
+# here before any derived number appears anywhere in this file.
+#
+# Three artifacts outside this module state how far the CY decay moves when
+# DECAY is swept end to end:
+#
+#   Roland's own chart      SN p.14, 350 -> 1200 ms          span 3.43
+#   Fischer, low band       Ln EDT10 400 -> 1280 ms          span 3.20
+#   Fischer, high bands     late T20 250 -> 1090 ms          span 4.36
+#
+# (the two Fischer figures are `docs/scorecard/cymbal-369/README.md` S1, measured
+# off the 808 recordings by `tools/cymbal_bands.py` in an earlier step, with no
+# knowledge of this schematic read.)
+#
+# THE BOUND: a factor of 1.6 either way. That is not chosen to fit -- it is the
+# spread of the three external sources against each OTHER (4.36 / 3.20 = 1.36)
+# rounded up. A model that reproduces the machine no better than the machine's
+# own three measurements agree is as much as this derivation can claim.
+ENV_SPAN_EXTERNAL = {"chart": 1200.0 / 350.0, "low": 1280.0 / 400.0,
+                     "decay": 1090.0 / 250.0}
+ENV_SPAN_FACTOR = 1.6
+# The short band's reservoir is not on VR2 at all, so its span must be 1.
+ENV_BLIND_SPAN_TOL = 0.01
+# How far apart the three RESERVOIR peaks may be and still count as "equal at
+# the peak": the diodes' own forward-drop spread at their own load currents,
+# n*Vt*ln(I_hi/I_lo), computed from the transient rather than assumed.
+ENV_PEAK_EQUAL_SLACK_V = 0.02  # arithmetic slack on top of that spread
+# How far apart the three COLLECTOR peaks must be for the hypothesis to count
+# as refuted, at every duty in the bracket.
+ENV_PEAK_UNEQUAL_DB = 3.0
+# The DECAY band's ceiling sits BELOW the low band's, which is the opposite
+# direction to its collector load (R90 33 k against R104 22 k, +3.5 dB in step
+# 11). Required at every duty, so it is a statement about the network.
+ENV_DECAY_BELOW_LOW_DB = -1.0
+# The two smoothed bands do not even peak when their reservoirs do. Required
+# ratio of the low band's ceiling-peak time to the short band's.
+ENV_PEAK_TIME_RATIO = 20.0
+
 # Where each band's level is actually set, taken from the committed balance
 # record rather than chosen here (`../balance/balance.json` `centre_hz`).
 LEVEL_CENTRE_HZ = {"low": 3175.0, "decay": 10079.0, "short": 10079.0}
@@ -310,7 +471,10 @@ LOAD_MARGIN_DB = 20.0 # printed vs required collector load
 
 DEFECTS = ("SWAP_BP_CAPS", "DROP_INPUT_NETWORK", "UNEQUAL_EMITTER",
            "SPLIT_HIGH_FEED", "EQUAL_COLLECTOR_LOADS", "HUGE_SHORT_LOAD",
-           "HH1_WRONG_RATIO")
+           "HH1_WRONG_RATIO",
+           # #432, the envelope side
+           "VR2_PARALLEL_NOT_SERIES", "WRONG_C41", "FAST_SMOOTHING",
+           "NO_SMOOTHING_CAPS", "MISMATCHED_D8", "R89_OPEN")
 
 
 def config(defect=None) -> dict:
@@ -325,6 +489,33 @@ def config(defect=None) -> dict:
     stages = {b: dict(v) for b, v in STAGES.items()}
     bp = {k: dict(v) for k, v in BANDPASS.items()}
     hh1 = dict(HH1)
+    env = {"res": [list(r) for r in ENV_RES],
+           "pot": dict(ENV_POT),
+           "pot_series": True,
+           "cap": {k: list(v) for k, v in ENV_CAP.items()},
+           "vf": {d: ENV_V_F for _, d in ENV_DIODE}}
+
+    if defect == "VR2_PARALLEL_NOT_SERIES":
+        # The reading `docs/tr808-reference.md` S10 currently carries.
+        env["pot_series"] = False
+    elif defect == "WRONG_C41":
+        env["cap"]["F"] = [0.1e-6, "C41"]
+    elif defect == "FAST_SMOOTHING":
+        # Collapse the two lags that separate a reservoir from its collector
+        # load, so all three bands look like the short band.
+        for row in env["res"]:
+            if row[3] in ("R88", "R105"):
+                row[2] = 100.0
+    elif defect == "NO_SMOOTHING_CAPS":
+        env["cap"]["Q"] = [1e-12, "C39"]
+        env["cap"]["W"] = [1e-12, "C45"]
+        env["cap"]["B"] = [1e-12, "C37"]
+    elif defect == "MISMATCHED_D8":
+        env["vf"]["D8"] = ENV_V_F + 0.4
+    elif defect == "R89_OPEN":
+        for row in env["res"]:
+            if row[3] == "R89":
+                row[2] = 10e6
 
     if defect == "SWAP_BP_CAPS":
         bp["low"]["cap_f"], bp["high"]["cap_f"] = bp["high"]["cap_f"], bp["low"]["cap_f"]
@@ -346,7 +537,8 @@ def config(defect=None) -> dict:
     elif defect == "HH1_WRONG_RATIO":
         hh1 = dict(hh1, r_fb_ohm=82e3, r_gnd_ohm=22e3)   # swapped -> Q moves
 
-    return {"stages": stages, "bandpass": bp, "hh1": hh1, "defect": defect}
+    return {"stages": stages, "bandpass": bp, "hh1": hh1, "env": env,
+            "defect": defect}
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +672,346 @@ def hh1_f0_q(cfg=None) -> tuple[float, float]:
                                           * h["r_fb_ohm"] * h["r_gnd_ohm"]))
     q = 0.5 * math.sqrt(h["r_gnd_ohm"] / h["r_fb_ohm"])
     return f0, q
+
+
+# ---------------------------------------------------------------------------
+# #432: the envelope section, as a piecewise-linear transient.
+#
+# Two formulations again, for the same reason the band-pass has two: the
+# closed-form modes below are the ones a reader can check by hand, and the MNA
+# transient is the one that is hard to get subtly wrong. The tests assert that
+# the transient's late slope reproduces the closed-form eigenvalue of the same
+# sub-network to 2 %, on a sub-network simple enough to solve on paper.
+# ---------------------------------------------------------------------------
+
+
+def _env_index(cfg):
+    return {n: i for i, n in enumerate(ENV_NODES)}
+
+
+def env_resistors(cfg, vr2_pos):
+    """The resistor list with VR2 resolved at wiper position `vr2_pos`.
+
+    The wiper is strapped to pin 3, so the two-terminal element between the
+    strapped pair and pin 1 is `vr2_pos * 2 MOhm` -- the pin-3-to-wiper section
+    is shorted out, not added.
+    """
+    env = cfg["env"]
+    out = [tuple(r) for r in env["res"]]
+    pot = vr2_pos * env["pot"]["ohm"]
+    if env["pot_series"]:
+        out.append(("V", "0", max(pot, 1.0), "VR2"))
+    else:
+        # The reference's reading: R93 and VR2 both straight to ground from F.
+        r93 = next(r[2] for r in out if r[3] == "R93")
+        out = [r for r in out if r[3] != "R93"]
+        out.append(("F", "0", r93, "R93"))
+        out.append(("F", "0", max(pot, 1.0), "VR2"))
+        out.append(("V", "0", 1e9, "VR2-open"))   # keeps the matrix non-singular
+    return out
+
+
+def _env_stamp(G, b, idx, a, c, g, src=0.0):
+    if a != "0":
+        G[idx[a], idx[a]] += g
+        b[idx[a]] += g * src
+    if c != "0":
+        G[idx[c], idx[c]] += g
+    if a != "0" and c != "0":
+        G[idx[a], idx[c]] -= g
+        G[idx[c], idx[a]] -= g
+
+
+def _env_base(cfg, vr2_pos, duty):
+    """The time-invariant part: (G, b, C) with the swing VCAs averaged in.
+
+    THE SWING VCA'S AVERAGE LOAD, and why it is a bracket and not a choice.
+    The stage switches at the band-pass frequency (>= 3.45 kHz), which is two
+    to three orders of magnitude faster than every envelope time constant
+    here, so the reservoirs see only its average. A switch that clamps its
+    collector to `ENV_V_CLAMP` for a fraction `duty` of each cycle and opens
+    for the rest draws the same average current as a fixed resistance
+    R_load*(1/duty - 1) + R_SAT from the collector node to that clamp -- that
+    identity is what `duty` means here. duty is NOT known from the schematic,
+    so every number below is reported across `ENV_DUTY`.
+    """
+    idx = _env_index(cfg)
+    n = len(ENV_NODES)
+    G, b = np.zeros((n, n)), np.zeros(n)
+    for a, c, r, _d in env_resistors(cfg, vr2_pos):
+        _env_stamp(G, b, idx, a, c, 1.0 / r)
+    loads = {r[3]: r[2] for r in env_resistors(cfg, vr2_pos)}
+    for band, spec in ENV_BAND.items():
+        r_sw = loads[spec["load"]] * (1.0 / duty - 1.0) + ENV_R_SAT
+        _env_stamp(G, b, idx, spec["out"], "0", 1.0 / r_sw, ENV_V_CLAMP)
+    C = np.zeros((n, n))
+    for k, (cv, _d) in cfg["env"]["cap"].items():
+        C[idx[k], idx[k]] += cv
+    return G, b, C, idx
+
+
+def _env_steps(t_end):
+    """Time grid: 5 us through the trigger, then 0.2 ms, then 1 ms."""
+    out = []
+    t = 0.0
+    while t < t_end:
+        h = 5e-6 if t < 3e-3 else (2e-4 if t < 0.2 else 1e-3)
+        t += h
+        out.append((t, h))
+    return out
+
+
+_ENV_CACHE: dict = {}
+
+
+def _env_key(cfg, vr2_pos, duty, v_trig, beta, t_end):
+    env = cfg["env"]
+    return (json.dumps([env["res"], env["pot"], env["pot_series"],
+                        env["cap"], env["vf"]], sort_keys=True),
+            vr2_pos, duty, v_trig, beta, t_end)
+
+
+def envelope_transient(cfg=None, vr2_pos=1.0, duty=ENV_DUTY_NOMINAL,
+                       v_trig=None, beta=ENV_BETA, t_end=4.0) -> dict:
+    """Backward-Euler transient of the whole CY envelope section.
+
+    Nonlinear elements, all piecewise linear and all resolved by a fixed point
+    on their own state rather than by a tolerance on the answer:
+
+      * Q19, NPN emitter follower. Its emitter is the common anode of
+        D6/D7/D8; the arrow on the scan points AWAY from the base, which is
+        what makes the three reservoirs charge rather than discharge through
+        it. Modelled as `max(v_trig(t) - V_BE, 0)`.
+      * D6/D7/D8, each `V_f` + `R_DIODE_ON`, on only while forward current is
+        positive. This is what blocks the reservoirs from discharging back
+        into Q19 when the 1 ms pulse ends.
+      * Q20, NPN emitter follower on C41. Its base current is taken off F as
+        `I_E / beta`, which is a real discharge path on the LOW band's
+        reservoir and is swept over beta 100-400 rather than assumed.
+    """
+    cfg = cfg if cfg is not None else config()
+    v_trig = ENV_TRIG_V[1] if v_trig is None else v_trig
+    key = _env_key(cfg, vr2_pos, duty, v_trig, beta, t_end)
+    hit = _ENV_CACHE.get(key)
+    if hit is not None:
+        return hit
+
+    G0, b0, C, idx = _env_base(cfg, vr2_pos, duty)
+    vf = cfg["env"]["vf"]
+    n = len(ENV_NODES)
+    v = np.zeros(n)
+    ts, rows = [], []
+    # DC load Q20's emitter sees, used only for its base current.
+    r_e20 = 23.4e3
+    for t, h in _env_steps(t_end):
+        e_v = max((v_trig if t <= ENV_TRIG_MS * 1e-3 else 0.0) - ENV_V_BE, 0.0)
+        state = None
+        nv = v
+        for _ in range(12):
+            G = G0 + C / h
+            b = b0 + C.dot(v) / h
+            on = {}
+            for node, des in ENV_DIODE:
+                want = True if state is None else state[node]
+                if want:
+                    g = 1.0 / ENV_R_DIODE_ON
+                    G[idx[node], idx[node]] += g
+                    b[idx[node]] += g * (e_v - vf[des])
+                on[node] = want
+            if v[idx["F"]] > ENV_V_BE + 0.05:
+                gg = 1.0 / 20.0
+                G[idx["G"], idx["G"]] += gg
+                b[idx["G"]] += gg * (v[idx["F"]] - ENV_V_BE)
+                G[idx["F"], idx["F"]] += 1.0 / (beta * r_e20)
+            nv = np.linalg.solve(G, b)
+            new = {}
+            for node, des in ENV_DIODE:
+                drive = e_v - vf[des]
+                new[node] = ((drive - nv[idx[node]]) / ENV_R_DIODE_ON > 0.0
+                             if on[node] else drive > nv[idx[node]])
+            if new == on:
+                break
+            state = new
+        v = nv
+        ts.append(t)
+        rows.append(v.copy())
+    out = {"t": np.array(ts), "v": np.array(rows), "idx": idx,
+           "vr2_pos": vr2_pos, "duty": duty, "v_trig": v_trig, "beta": beta}
+    out["clip"] = _env_clip(cfg, out, vr2_pos)
+    _ENV_CACHE[key] = out
+    return out
+
+
+def _env_clip(cfg, tr, vr2_pos):
+    """Each band's UPPER clip: the collector node with the stage cut off.
+
+    S1.3: the swing VCA "clips wildly between the envelope voltage and a lower
+    edge". This is that envelope voltage, at the collector rather than at the
+    reservoir -- the level the band cannot exceed.
+
+    Short and low are trivial (no current through R94 / R104 when the stage is
+    off, so the output node sits at its supply). The DECAY band is not: Z sees
+    R90 back to its own supply AND R91 down into the R89/R92 network, so its
+    ceiling is a divider between C39's node and Q20's emitter and has to be
+    solved. That solve is done here rather than hard-coded so that `R89_OPEN`
+    moves it.
+    """
+    idx, v = tr["idx"], tr["v"]
+    res = {r[3]: r for r in env_resistors(cfg, vr2_pos)}
+    g90 = 1.0 / res["R90"][2]
+    g91 = 1.0 / res["R91"][2]
+    g89 = 1.0 / res["R89"][2]
+    g92 = 1.0 / res["R92"][2]
+    m = np.array([[g90 + g91, -g91], [-g91, g91 + g89 + g92]])
+    mi = np.linalg.inv(m)
+    vq, vg = v[:, idx["Q"]], v[:, idx["G"]]
+    vz = mi[0, 0] * g90 * vq + mi[0, 1] * g92 * vg
+    return {"short": v[:, idx["A"]], "decay": vz, "low": v[:, idx["W"]]}
+
+
+def env_tau_ms(t, y, lo_db=-10.0, hi_db=-30.0) -> float:
+    """1/e time constant of the SWING above the clamp, from -10 to -30 dB.
+
+    The swing, not the node: the swing VCA's lower edge is `ENV_V_CLAMP`, so a
+    trace that settles there has decayed to nothing. Fitting the node voltage
+    instead reports tens of seconds for a 140 ms network, which is the first
+    thing this function got wrong (wrong-then-right 2).
+    """
+    y = np.maximum(np.asarray(y) - ENV_V_CLAMP, 1e-12)
+    i0 = int(np.argmax(y))
+    pk = y[i0]
+    seg = (y[i0:] < pk * 10 ** (lo_db / 20.0)) & (y[i0:] > pk * 10 ** (hi_db / 20.0))
+    if int(seg.sum()) < 5:
+        return float("nan")
+    slope = np.polyfit(t[i0:][seg], np.log(y[i0:][seg]), 1)[0]
+    return float(-1.0 / slope * 1e3)
+
+
+def env_short_band_modes(cfg=None, duty=ENV_DUTY_NOMINAL) -> list:
+    """THE SECOND FORMULATION, on the one sub-network that stands alone.
+
+    C38 touches exactly two resistors -- R87 up to C37 and R94 out to the
+    VCA -- and nothing else in the cymbal reaches it. So the SHORT band's
+    envelope is a three-node linear network whose modes can be written down:
+
+        A: C38, R87 to B, R94 to S        B: C37       S: C47+C49, R_sw to gnd
+
+    `eig(-C^-1 G)` on those three nodes gives its time constants in closed
+    form, and `test_the_transient_reproduces_the_closed_form_short_band_modes`
+    requires the MNA transient's deep tail to reproduce the slowest one. Two
+    formulations where one would do, for the same reason the band-pass carries
+    two: the hand-checkable one and the one that is hard to get subtly wrong.
+    """
+    cfg = cfg if cfg is not None else config()
+    res = {r[3]: r[2] for r in env_resistors(cfg, 1.0)}
+    caps = cfg["env"]["cap"]
+    r_sw = res["R94"] * (1.0 / duty - 1.0) + ENV_R_SAT
+    g87, g94, gsw = 1.0 / res["R87"], 1.0 / res["R94"], 1.0 / r_sw
+    g = np.array([[g87 + g94, -g87, -g94],
+                  [-g87, g87, 0.0],
+                  [-g94, 0.0, g94 + gsw]])
+    c = np.diag([caps["A"][0], caps["B"][0], caps["S"][0]])
+    ev = np.linalg.eigvals(-np.linalg.solve(c, g))
+    return sorted(float(-1.0 / e.real * 1e3) for e in ev if e.real < 0)
+
+
+def envelope_peaks(cfg=None, duty=ENV_DUTY_NOMINAL, vr2_pos=1.0,
+                   v_trig=None, beta=ENV_BETA) -> dict:
+    """Peak reservoir and peak collector voltage per band, plus the times."""
+    cfg = cfg if cfg is not None else config()
+    tr = envelope_transient(cfg, vr2_pos, duty, v_trig, beta)
+    idx, v = tr["idx"], tr["v"]
+    out = {}
+    for band, spec in ENV_BAND.items():
+        res = v[:, idx[spec["reservoir"]]]
+        clip = tr["clip"][band]
+        i = int(np.argmax(clip))
+        out[band] = {
+            "reservoir_node": spec["reservoir"],
+            "reservoir_peak_v": float(res.max()),
+            "collector_peak_v": float(clip[i]),
+            "collector_peak_ms": float(tr["t"][i] * 1e3),
+            "tau_ms": env_tau_ms(tr["t"], clip),
+        }
+    lowpk = out["low"]["collector_peak_v"]
+    for band in ENV_BAND:
+        out[band]["collector_peak_db_re_low"] = round(
+            20.0 * math.log10(out[band]["collector_peak_v"] / lowpk), 3)
+    return out
+
+
+def envelope_peak_spread(cfg=None, duty=ENV_DUTY_NOMINAL, vr2_pos=1.0,
+                         v_trig=None, beta=ENV_BETA) -> dict:
+    """Are the three RESERVOIRS equal at the peak, and to what bound?
+
+    The bound is not a tolerance: it is the diodes' own forward-drop spread at
+    their own load currents, n*Vt*ln(I_hi/I_lo), with the currents taken off
+    the transient at the instant each reservoir peaks. D6 feeds R87 and R94;
+    D7 feeds R88; D8 feeds R93+VR2 and Q20's base -- currents that differ by
+    two orders of magnitude, which is the whole reason this is not zero.
+    """
+    cfg = cfg if cfg is not None else config()
+    tr = envelope_transient(cfg, vr2_pos, duty, v_trig, beta)
+    idx, v = tr["idx"], tr["v"]
+    res = env_resistors(cfg, vr2_pos)
+    g = {}
+    for a, c, r, _d in res:
+        g.setdefault(a, []).append((c, 1.0 / r))
+        if c != "0":
+            g.setdefault(c, []).append((a, 1.0 / r))
+    i_peak, v_peak = {}, {}
+    for band, spec in ENV_BAND.items():
+        node = spec["reservoir"]
+        k = int(np.argmax(v[:, idx[node]]))
+        row = v[k]
+        cur = sum(gg * (row[idx[node]] - (0.0 if other == "0" else row[idx[other]]))
+                  for other, gg in g.get(node, []))
+        if node == "F":                     # Q20's base current, on C41 only
+            cur += max(row[idx["G"]], 0.0) / 23.4e3 / tr["beta"]
+        i_peak[band] = float(max(cur, 1e-12))
+        v_peak[band] = float(row[idx[node]])
+    hi, lo = max(i_peak.values()), min(i_peak.values())
+    bound = ENV_N_DIODE * ENV_V_THERMAL * math.log(hi / lo) + ENV_PEAK_EQUAL_SLACK_V
+    spread = max(v_peak.values()) - min(v_peak.values())
+    return {"reservoir_peak_v": v_peak, "load_current_a": i_peak,
+            "spread_v": round(spread, 4), "bound_v": round(bound, 4),
+            "ok": spread <= bound}
+
+
+def envelope_spans(cfg=None, duty=ENV_DUTY_NOMINAL, beta=ENV_BETA) -> dict:
+    """tau at DECAY maximum / tau at DECAY minimum, per band.
+
+    This is the quantity the three external artifacts constrain, and it is a
+    RATIO -- so C41's absolute value, the undefined meaning of the chart's
+    "decay time", and the amplitude calibration of an EDT all cancel.
+    """
+    cfg = cfg if cfg is not None else config()
+    lo = envelope_peaks(cfg, duty, ENV_VR2[0], None, beta)
+    mid = envelope_peaks(cfg, duty, ENV_VR2[1], None, beta)
+    hi = envelope_peaks(cfg, duty, ENV_VR2[-1], None, beta)
+    out = {}
+    for band in ENV_BAND:
+        a, b = lo[band]["tau_ms"], hi[band]["tau_ms"]
+        out[band] = {"tau_min_ms": round(a, 1), "tau_mid_ms": round(mid[band]["tau_ms"], 1),
+                     "tau_max_ms": round(b, 1),
+                     "span": round(b / a, 3) if a and a == a and a > 0 else float("nan")}
+    # "composite" is the longer of the two bands VR2 actually reaches. The
+    # SHORT band is deliberately excluded and that is not a convenience: its
+    # reservoir is not on VR2, so it contributes a FIXED tail that shortens the
+    # span a chart measurement can see at both ends. Leaving it out therefore
+    # makes this an UPPER bound on the observable span -- the direction that
+    # matters, since the observed 3.43 is below the prediction.
+    knob = ("low", "decay")
+    longest = {}
+    for pos, rec in (("min", lo), ("mid", mid), ("max", hi)):
+        longest[pos] = max(rec[b]["tau_ms"] for b in knob
+                           if rec[b]["tau_ms"] == rec[b]["tau_ms"])
+    out["composite"] = {"tau_min_ms": round(longest["min"], 1),
+                        "tau_mid_ms": round(longest["mid"], 1),
+                        "tau_max_ms": round(longest["max"], 1),
+                        "span": round(longest["max"] / longest["min"], 3),
+                        "bands": list(knob)}
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -677,7 +1209,107 @@ def properties(cfg=None, targets=None) -> dict:
         "ok": bool(same_pin),
         "what": "this read and the VR4 read are pinned to the same printing and page"}
 
+    out.update(envelope_properties(cfg))
     return out
+
+
+def envelope_properties(cfg=None) -> dict:
+    """#432: the three envelope generators' peak collector voltages."""
+    cfg = cfg if cfg is not None else config()
+    out = {}
+
+    # 10. EQUAL AT THE RESERVOIR. The half of the hypothesis that holds.
+    sp = envelope_peak_spread(cfg)
+    out["env-reservoirs-equal-at-the-peak"] = {
+        "spread_v": sp["spread_v"], "bound_v": sp["bound_v"], "ok": bool(sp["ok"]),
+        "reservoir_peak_v": {k: round(v, 4) for k, v in sp["reservoir_peak_v"].items()},
+        "what": "C38/C40/C41 reach the same peak, to within the diodes' own "
+                "forward-drop spread at their own load currents"}
+
+    # 11. NOT EQUAL AT THE COLLECTOR. The half that fails, required to fail at
+    #     EVERY duty in the bracket -- otherwise it is a statement about the
+    #     duty rather than about the schematic.
+    per_duty, worst, worst_decay = {}, None, None
+    times = {}
+    for duty in ENV_DUTY:
+        pk = envelope_peaks(cfg, duty)
+        d = pk["short"]["collector_peak_db_re_low"]
+        per_duty[str(duty)] = {b: pk[b]["collector_peak_db_re_low"] for b in ENV_BAND}
+        worst = d if worst is None else min(worst, d)
+        dd = pk["decay"]["collector_peak_db_re_low"]
+        worst_decay = dd if worst_decay is None else max(worst_decay, dd)
+        if duty == ENV_DUTY_NOMINAL:
+            times = {b: pk[b]["collector_peak_ms"] for b in ENV_BAND}
+    out["env-collector-peaks-are-not-equal"] = {
+        "min_short_re_low_db": round(worst, 3), "bound_db": ENV_PEAK_UNEQUAL_DB,
+        "ok": worst >= ENV_PEAK_UNEQUAL_DB, "per_duty_db": per_duty,
+        "what": "the short band's collector ceiling is >= 3 dB above the low "
+                "band's at every duty in the bracket"}
+
+    # 11b. ...and the DECAY band's ceiling is BELOW the low band's, which is the
+    #      opposite direction to its collector load. Step 11's +3.52 dB and this
+    #      sign do not compose into one number, and saying so is the point.
+    out["env-decay-band-ceiling-below-the-low-band"] = {
+        "max_decay_re_low_db": round(worst_decay, 3),
+        "bound_db": ENV_DECAY_BELOW_LOW_DB,
+        "ok": worst_decay <= ENV_DECAY_BELOW_LOW_DB,
+        "what": "the DECAY band's ceiling is below the low band's at every duty, "
+                "although its collector load is 1.5x larger"}
+
+    # 11c. The two smoothed bands do not peak when their reservoirs do -- the
+    #      lag networks are 10-70 ms against a 1 ms trigger.
+    ratio = times["low"] / max(times["short"], 1e-9)
+    out["env-ceilings-peak-at-different-times"] = {
+        "peak_ms": {b: round(times[b], 2) for b in ENV_BAND},
+        "low_over_short": round(ratio, 2), "bound": ENV_PEAK_TIME_RATIO,
+        "ok": ratio >= ENV_PEAK_TIME_RATIO,
+        "what": "the low band's ceiling peaks >= 20x later than the short "
+                "band's, because C45 is behind R105 and C38 is behind nothing"}
+
+    # 12. ...and the large-signal version of step 11's negative. The ceiling is
+    #     an UPPER bound on what a band can deliver, so the largest admissible
+    #     value is the one to argue against.
+    ceiling = max(per_duty[str(d)]["short"] for d in ENV_DUTY)
+    margin = targets_gap_short(cfg) - ceiling
+    out["env-collector-ceiling-still-below-the-gap"] = {
+        "ceiling_db": round(ceiling, 3), "margin_db": round(margin, 3),
+        "bound_db": GAP_MARGIN_DB, "ok": margin >= GAP_MARGIN_DB,
+        "what": "the short band's clip ceiling, at its most favourable duty, is "
+                "still >= 20 dB below the balance's gap"}
+
+    # 13/14/15. THE EXTERNAL KNOWN ANSWER: how far the DECAY knob moves each
+    #     band, against Roland's chart and the Fischer recordings. Bounds in
+    #     ENV_SPAN_EXTERNAL / ENV_SPAN_FACTOR, stated before any number here.
+    spans = envelope_spans(cfg)
+    for key, band, label in (("low", "low", "the low band"),
+                             ("decay", "decay", "the DECAY band"),
+                             ("chart", "composite", "the longest envelope")):
+        want = ENV_SPAN_EXTERNAL[key]
+        got = spans[band]["span"]
+        ok = (got == got and want / ENV_SPAN_FACTOR <= got <= want * ENV_SPAN_FACTOR)
+        out[f"env-decay-knob-span-{key}"] = {
+            "span": got, "external_span": round(want, 3),
+            "bound": [round(want / ENV_SPAN_FACTOR, 3), round(want * ENV_SPAN_FACTOR, 3)],
+            "tau_ms": [spans[band]["tau_min_ms"], spans[band]["tau_mid_ms"],
+                       spans[band]["tau_max_ms"]],
+            "ok": bool(ok),
+            "what": f"DECAY moves {label}'s decay by the factor the machine moves it"}
+
+    # 16. ...and the band VR2 does NOT reach, asserted and verified blind.
+    short_span = spans["short"]["span"]
+    out["env-short-band-blind-to-the-decay-knob"] = {
+        "span": short_span, "bound": ENV_BLIND_SPAN_TOL,
+        "ok": bool(short_span == short_span
+                   and abs(short_span - 1.0) <= ENV_BLIND_SPAN_TOL),
+        "what": "the short band's reservoir is not on VR2 at all, so its decay "
+                "must not move with DECAY"}
+
+    return out
+
+
+def targets_gap_short(cfg=None) -> float:
+    """#396's short-band gap, re-read through the refusing accessor."""
+    return float(balance_targets()["gap_db"]["short"])
 
 
 def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
@@ -725,9 +1357,29 @@ BLIND = {
     # ...nor can an emitter resistor.
     "UNEQUAL_EMITTER": ("bp-peak-matches-figure4", "vca-term-far-below-the-gap",
                         "required-load-not-printed"),
-    # Swapping the band-pass capacitors cannot move the VCA stages.
+    # Swapping the band-pass capacitors cannot move the VCA stages -- nor,
+    # #432, anything in the envelope section, which shares no component with
+    # either filter.
     "SWAP_BP_CAPS": ("only-collector-load-differs", "high-bands-share-one-node",
-                     "vca-term-far-below-the-gap"),
+                     "vca-term-far-below-the-gap",
+                     "env-reservoirs-equal-at-the-peak",
+                     "env-collector-peaks-are-not-equal",
+                     "env-decay-band-ceiling-below-the-low-band",
+                     "env-ceilings-peak-at-different-times",
+                     "env-decay-knob-span-low", "env-decay-knob-span-chart"),
+    # #432. VR2 is on C41, which reaches the SHORT band through nothing at all:
+    # its reservoir is C38, charged by its own diode. Reading the pot the
+    # reference's way, or getting C41 wrong, must leave the short band exactly
+    # where it was -- and must leave both filters alone as well.
+    "VR2_PARALLEL_NOT_SERIES": ("env-short-band-blind-to-the-decay-knob",
+                                "env-reservoirs-equal-at-the-peak",
+                                "bp-peak-matches-figure4",
+                                "only-collector-load-differs"),
+    "WRONG_C41": ("env-short-band-blind-to-the-decay-knob",
+                  "bp-peak-matches-figure4", "hh1-matches-reference"),
+    # A change inside the envelope section cannot move a filter.
+    "FAST_SMOOTHING": ("bp-peak-matches-figure4", "bp-f0-matches-reference",
+                       "hh1-matches-reference", "only-collector-load-differs"),
 }
 
 
@@ -760,7 +1412,75 @@ def record(cfg=None) -> dict:
         "required_collector_load": required_collector_load(cfg, targets),
         "properties": properties(cfg, targets),
         "defects": list(DEFECTS),
+        "envelope": envelope_record(cfg),
         "gate": {"ok": ok, "lines": lines},
+    }
+
+
+def envelope_record(cfg=None) -> dict:
+    """#432's own machine-readable half: the collector-supply derivation."""
+    cfg = cfg if cfg is not None else config()
+    peaks = {str(d): {p: envelope_peaks(cfg, d, p) for p in ENV_VR2}
+             for d in ENV_DUTY}
+    accent = {str(v): envelope_peaks(cfg, ENV_DUTY_NOMINAL, 1.0, v)
+              for v in ENV_TRIG_V}
+    beta_sweep = {str(b): envelope_spans(cfg, ENV_DUTY_NOMINAL, b)
+                  for b in (100.0, 200.0, 400.0)}
+    return {
+        "netlist": {
+            "resistors": [list(r) for r in cfg["env"]["res"]],
+            "pot": dict(cfg["env"]["pot"], series_with="R93",
+                        in_series=cfg["env"]["pot_series"]),
+            "capacitors": {k: list(v) for k, v in cfg["env"]["cap"].items()},
+            "diodes": [list(d) for d in ENV_DIODE],
+            "bands": ENV_BAND,
+        },
+        "drive": {"trigger_ms": ENV_TRIG_MS, "trigger_v": list(ENV_TRIG_V),
+                  "v_be": ENV_V_BE, "v_f": cfg["env"]["vf"],
+                  "v_clamp": ENV_V_CLAMP, "r_sat": ENV_R_SAT,
+                  "beta": ENV_BETA, "duty_bracket": list(ENV_DUTY)},
+        "peaks_by_duty_and_vr2": peaks,
+        "peaks_by_accent": accent,
+        "reservoir_spread": envelope_peak_spread(cfg),
+        "spans": envelope_spans(cfg),
+        "spans_by_beta": beta_sweep,
+        "external_spans": ENV_SPAN_EXTERNAL,
+        "span_bound_factor": ENV_SPAN_FACTOR,
+        "properties": envelope_properties(cfg),
+    }
+
+
+def supply_record(cfg=None) -> dict:
+    """The step-12 artifact: `../vca-supply/vca-supply.json`."""
+    cfg = cfg if cfg is not None else config()
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                            capture_output=True, text=True).stdout.strip() or None
+    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
+                           cwd=ROOT, capture_output=True).returncode != 0
+    env = envelope_record(cfg)
+    ok = all(p["ok"] for p in env["properties"].values())
+    return {
+        "commit": commit,
+        "sources_dirty": bool(dirty),
+        "tool": "tools/cymbal_vca_drive.py",
+        "question": "the three envelope generators' peak collector voltages "
+                    "(Q16/Q17/Q18), SN p.13",
+        "source": {"url": SN_PDF_URL, "url_node": SN_PDF_URL_NODE,
+                   "sha256": SN_PDF_SHA256, "page": SN_PDF_PAGE,
+                   "crops": {k: SN_CROPS[k] for k in ("env-q19", "env-q20")}},
+        "reference_correction": {
+            "document": "docs/tr808-reference.md S10",
+            "was": "DECAY VR2 2 MOhm || R93 470 kOhm x C41 1 uF: RC up to ~0.38 s",
+            "is": "R93 470 kOhm in SERIES with VR2 2 M(B) (wiper strapped to "
+                  "pin 3), x C41 1 uF: RC 0.47 s to 2.47 s",
+            "how_it_is_gated": "VR2_PARALLEL_NOT_SERIES turns the three span "
+                               "properties red",
+        },
+        "envelope": env,
+        "defects": [d for d in DEFECTS if d in (
+            "VR2_PARALLEL_NOT_SERIES", "WRONG_C41", "FAST_SMOOTHING",
+            "NO_SMOOTHING_CAPS", "MISMATCHED_D8", "R89_OPEN")],
+        "gate": {"ok": bool(ok)},
     }
 
 
@@ -769,6 +1489,9 @@ def main(argv=None) -> int:
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--json", type=pathlib.Path, default=None)
+    ap.add_argument("--json-supply", type=pathlib.Path, default=None,
+                    metavar="PATH",
+                    help="#432's own record: the collector-supply derivation")
     ap.add_argument("--verify-source", type=pathlib.Path, default=None,
                     metavar="SN.PDF",
                     help="assert the file is the pinned scan and re-render the crops")
@@ -777,8 +1500,8 @@ def main(argv=None) -> int:
                     help="make the scan check BINDING: refuse (exit 1) rather than "
                          "report if it is absent or does not match")
     args = ap.parse_args(argv)
-    if not (args.report or args.check or args.json or args.verify_source
-            or args.require_source):
+    if not (args.report or args.check or args.json or args.json_supply
+            or args.verify_source or args.require_source):
         args.report = True
 
     if args.verify_source is not None:
@@ -791,7 +1514,7 @@ def main(argv=None) -> int:
         print(f"  sha256 {info['sha256']} (matches SN_PDF_SHA256)")
         for p in info["crops"]:
             print(f"  wrote {p}")
-        if not (args.report or args.check or args.json):
+        if not (args.report or args.check or args.json or args.json_supply):
             return 0
 
     if args.require_source is not None:
@@ -838,6 +1561,28 @@ def main(argv=None) -> int:
             print(f"  {w:5s} {f_hz:7.0f} Hz  {db:+.2f} dB  "
                   f"(figure 4: {cc.BP_PEAK_DB[w]:+.2f})")
 
+        print("\n#432 -- the three envelope generators, DECAY at maximum:")
+        sp = envelope_peak_spread(cfg)
+        print(f"  reservoirs (C38/C40/C41): "
+              + "  ".join(f"{b} {sp['reservoir_peak_v'][b]:.3f} V" for b in BANDS)
+              + f"   spread {sp['spread_v']:.3f} V, bound {sp['bound_v']:.3f} V "
+                f"({'EQUAL' if sp['ok'] else 'UNEQUAL'})")
+        for duty in ENV_DUTY:
+            pk = envelope_peaks(cfg, duty)
+            print(f"  duty {duty:4.2f}  collector ceiling  " + "  ".join(
+                f"{b} {pk[b]['collector_peak_v']:6.3f} V "
+                f"({pk[b]['collector_peak_db_re_low']:+.2f} dB)" for b in BANDS))
+        spans = envelope_spans(cfg)
+        print("\n  DECAY knob span (tau at max / tau at min), vs the machine:")
+        for key, band in (("low", "low"), ("decay", "decay"), ("chart", "composite")):
+            s = spans[band]
+            print(f"    {band:9s} {s['tau_min_ms']:7.1f} -> {s['tau_mid_ms']:7.1f} "
+                  f"-> {s['tau_max_ms']:7.1f} ms   span {s['span']:.2f}  "
+                  f"(external {ENV_SPAN_EXTERNAL[key]:.2f})")
+        print(f"    short     {spans['short']['tau_min_ms']:7.1f} -> "
+              f"{spans['short']['tau_max_ms']:7.1f} ms   span "
+              f"{spans['short']['span']:.3f}  (asserted blind to DECAY)")
+
     rc = 0
     if args.check:
         ok, lines = check(targets=targets)
@@ -849,6 +1594,12 @@ def main(argv=None) -> int:
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(json.dumps(record(), indent=2, sort_keys=True) + "\n")
         print(f"wrote {args.json}")
+
+    if args.json_supply is not None:
+        args.json_supply.parent.mkdir(parents=True, exist_ok=True)
+        args.json_supply.write_text(
+            json.dumps(supply_record(), indent=2, sort_keys=True) + "\n")
+        print(f"wrote {args.json_supply}")
 
     return rc
 
