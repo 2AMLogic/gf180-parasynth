@@ -1805,9 +1805,15 @@ class ModelDPedalboardRig(_PedalboardPlugin):
         try:
             for v in self.RANGE_GRID:
                 self.set(idx, float(v))
+                # What the plugin HOLDS, not what was written to it. A discrete
+                # control snaps, so the two differ, and a table of commanded
+                # values would name positions the plugin was never in -- the
+                # same reason every readback in this file is read back.
+                held = float(self.p.get_parameter(idx))
                 y = self.steady(self.render_note(self.note))
                 pk = float(np.abs(y).max()) if y.size else 0.0
-                row = {"raw": float(v), "text": self.text(idx), "peak": pk}
+                row = {"raw": float(v), "raw_held": held, "text": self.text(idx),
+                       "peak": pk}
                 if y.size and pk > rq.SILENCE_FLOOR:
                     e = am.refine_f0(y, cmd, self.sr, max_cents=self.RANGE_MAX_CENTS)
                     row["f0_hz"] = float(e.value) if e.ok else None
@@ -1837,9 +1843,24 @@ class ModelDPedalboardRig(_PedalboardPlugin):
                 f"reference", det)
         best = min(good, key=lambda r: abs(r["cents"] or 0.0))
         self.set(idx, best["raw"])
+        # REFUSE rather than report if the write did not land where the sweep
+        # measured. Every number in `best` was measured with the plugin holding
+        # `raw_held`; leaving it holding anything else would qualify one state
+        # and ship another.
+        landed = float(self.p.get_parameter(idx))
+        det["selected_raw_held"] = landed
+        if abs(landed - best["raw_held"]) > self.p.raw_tolerance(idx):
+            det["selected"] = best
+            return rq.Check(
+                "osc range calibration", rq.FAIL,
+                f"the selected Osc 1 Range was measured with the plugin holding "
+                f"{best['raw_held']:.6f} and re-writing it left the plugin holding "
+                f"{landed:.6f}: the rig cannot be put back into the state it "
+                f"qualified in", det)
         det["selected"] = best
-        det["default_was_correct"] = bool(abs(best["raw"] - float(was)) <= 1e-9)
-        why = (f"Osc 1 Range {best['raw']:.4f} ({best['text']!r}) sounds "
+        det["default_was_correct"] = bool(
+            abs(best["raw_held"] - float(was)) <= self.p.raw_tolerance(idx))
+        why = (f"Osc 1 Range {best['raw_held']:.4f} ({best['text']!r}) sounds "
                f"{best['f0_hz']:.2f} Hz for note {self.note} "
                f"({best['cents']:+.1f} cents)")
         why += (" -- which is where the default already was"
@@ -1865,7 +1886,8 @@ class ModelDPedalboardRig(_PedalboardPlugin):
                 self.set(idx, float(v))
                 y = self.render_note(self.note)
                 lv = rq.check_level(y)
-                row = {"raw": float(v), "text": self.text(idx),
+                row = {"raw": float(v), "raw_held": float(self.p.get_parameter(idx)),
+                       "text": self.text(idx),
                        "peak": lv.detail.get("peak"),
                        "clipped_fraction": lv.detail.get("clipped_fraction"),
                        "outcome": lv.outcome}
@@ -1888,9 +1910,18 @@ class ModelDPedalboardRig(_PedalboardPlugin):
                 f"The clipping is NOT correctable through this plugin's own "
                 f"parameters, so no clip from it can be frozen as a reference", det)
         self.set(idx, chosen["raw"])
+        landed = float(self.p.get_parameter(idx))
         det["selected"] = chosen
+        det["selected_raw_held"] = landed
+        if abs(landed - chosen["raw_held"]) > self.p.raw_tolerance(idx):
+            return rq.Check(
+                "level trim", rq.FAIL,
+                f"the selected master volume was measured with the plugin holding "
+                f"{chosen['raw_held']:.6f} and re-writing it left the plugin holding "
+                f"{landed:.6f}: the rig cannot be put back into the state it "
+                f"qualified in", det)
         return rq.Check("level trim", rq.PASS,
-                        f"master volume {chosen['raw']:.4f} ({chosen['text']!r}) peaks "
+                        f"master volume {chosen['raw_held']:.4f} ({chosen['text']!r}) peaks "
                         f"at {chosen['peak']:.6f} with "
                         f"{100 * (chosen['clipped_fraction'] or 0.0):.2f} % at the rail",
                         det)
