@@ -1,0 +1,735 @@
+{
+ "ruler": "raw dB / ms of the named estimator on conditioned clips; NOT voice_scale or ours_distance",
+ "commit": "08068a79adc13a5910ea26bf6041fcbb3e254d1d",
+ "dirty": false,
+ "machine_floor": {},
+ "ceilings": {
+  "lowband_level_db/BD": {
+   "ceiling": 0.25201993101413755,
+   "n": 25,
+   "of": 25,
+   "refused": 0
+  },
+  "dominant_period_ms/BD": {
+   "ceiling": null,
+   "n": 0,
+   "of": 25,
+   "refused": 25
+  },
+  "lowband_level_db/SD": {
+   "ceiling": 16.691016101878375,
+   "n": 25,
+   "of": 25,
+   "refused": 0
+  },
+  "dominant_period_ms/SD": {
+   "ceiling": null,
+   "n": 0,
+   "of": 25,
+   "refused": 25
+  },
+  "lowband_level_db/LT": {
+   "ceiling": 0.008446252321438247,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "dominant_period_ms/LT": {
+   "ceiling": 2.260650711424887,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/HT": {
+   "ceiling": 29.620051110108253,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "dominant_period_ms/HT": {
+   "ceiling": 1.169619553583468,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/CH": {
+   "ceiling": null,
+   "n": 1,
+   "of": 1,
+   "refused": 0
+  },
+  "dominant_period_ms/CH": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "lowband_level_db/OH": {
+   "ceiling": null,
+   "n": 0,
+   "of": 5,
+   "refused": 5
+  },
+  "dominant_period_ms/OH": {
+   "ceiling": null,
+   "n": 0,
+   "of": 5,
+   "refused": 5
+  },
+  "lowband_level_db/CP": {
+   "ceiling": null,
+   "n": 1,
+   "of": 1,
+   "refused": 0
+  },
+  "dominant_period_ms/CP": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "lowband_level_db/CB": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "dominant_period_ms/CB": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "lowband_level_db/MT": {
+   "ceiling": 0.023872975709839116,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "dominant_period_ms/MT": {
+   "ceiling": 1.5396337063067023,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/LC": {
+   "ceiling": 54.8036115643118,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "dominant_period_ms/LC": {
+   "ceiling": 0.9655495553285975,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/MC": {
+   "ceiling": 6.653039865294581,
+   "n": 4,
+   "of": 5,
+   "refused": 1
+  },
+  "dominant_period_ms/MC": {
+   "ceiling": 0.7287535692052312,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/HC": {
+   "ceiling": 2.1760047306342756,
+   "n": 2,
+   "of": 5,
+   "refused": 3
+  },
+  "dominant_period_ms/HC": {
+   "ceiling": 0.5220738394271112,
+   "n": 5,
+   "of": 5,
+   "refused": 0
+  },
+  "lowband_level_db/CY": {
+   "ceiling": null,
+   "n": 0,
+   "of": 25,
+   "refused": 25
+  },
+  "dominant_period_ms/CY": {
+   "ceiling": null,
+   "n": 0,
+   "of": 25,
+   "refused": 25
+  },
+  "lowband_level_db/RS": {
+   "ceiling": null,
+   "n": 1,
+   "of": 1,
+   "refused": 0
+  },
+  "dominant_period_ms/RS": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "lowband_level_db/CL": {
+   "ceiling": null,
+   "n": 1,
+   "of": 1,
+   "refused": 0
+  },
+  "dominant_period_ms/CL": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  },
+  "lowband_level_db/MA": {
+   "ceiling": null,
+   "n": 1,
+   "of": 1,
+   "refused": 0
+  },
+  "dominant_period_ms/MA": {
+   "ceiling": null,
+   "n": 0,
+   "of": 1,
+   "refused": 1
+  }
+ },
+ "held_out": [
+  {
+   "voice": "BD",
+   "knobs": [
+    0.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.0033306598724584164
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    0.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.0003066776582660864
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    2.5,
+    0.0
+   ],
+   "lowband_ours_minus_real_db": 0.2023085208301232
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    2.5,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.0039690972420355995
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    2.5,
+    5.0
+   ],
+   "lowband_ours_minus_real_db": 0.000326094745530239
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    2.5,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.00033283858581101104
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    2.5,
+    10.0
+   ],
+   "lowband_ours_minus_real_db": 0.0004066853943416693
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    5.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.00371022358568545
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    5.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.00037038279099925247
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    7.5,
+    0.0
+   ],
+   "lowband_ours_minus_real_db": 0.20272448570544835
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    7.5,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.0036959017011228184
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    7.5,
+    5.0
+   ],
+   "lowband_ours_minus_real_db": 0.0003873771074206863
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    7.5,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.00038193688246895954
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    7.5,
+    10.0
+   ],
+   "lowband_ours_minus_real_db": 0.0004937221392546465
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    10.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.0031791427371895397
+  },
+  {
+   "voice": "BD",
+   "knobs": [
+    10.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.0003828186975954357
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    0.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.34039968231397083
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    0.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": -4.857004181509428
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    2.5,
+    0.0
+   ],
+   "lowband_ours_minus_real_db": -0.009327259800287244
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    2.5,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.3364031083572507
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    2.5,
+    5.0
+   ],
+   "lowband_ours_minus_real_db": -2.8011875717937724
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    2.5,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": -3.8750199049527705
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    2.5,
+    10.0
+   ],
+   "lowband_ours_minus_real_db": -1.193508458724497
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    5.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.2890299792474406
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    5.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": -1.2242972969874861
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    7.5,
+    0.0
+   ],
+   "lowband_ours_minus_real_db": 0.09490871508020693
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    7.5,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.0954524561632224
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    7.5,
+    5.0
+   ],
+   "lowband_ours_minus_real_db": 2.0123925692099034
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    7.5,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 3.5142294374701386
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    7.5,
+    10.0
+   ],
+   "lowband_ours_minus_real_db": 6.785948868806619
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    10.0,
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.0884068913023961
+  },
+  {
+   "voice": "SD",
+   "knobs": [
+    10.0,
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 5.018445814683487
+  },
+  {
+   "voice": "LT",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.010375814658400042,
+   "period_ours_over_real_pct": -1.676653580828713,
+   "freq_pct_sharp": 1.7052446259109288,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "LT",
+   "knobs": [
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.005555325697918666,
+   "period_ours_over_real_pct": -1.9663707454736779,
+   "freq_pct_sharp": 2.0058124547938094,
+   "freq_pct_sharp_study_f0": 4.545454545454541
+  },
+  {
+   "voice": "HT",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.03875812293977646,
+   "period_ours_over_real_pct": -0.9351734266709988,
+   "freq_pct_sharp": 0.9440014776372463,
+   "freq_pct_sharp_study_f0": 2.3809523809523947
+  },
+  {
+   "voice": "HT",
+   "knobs": [
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 4.839025161896543,
+   "period_ours_over_real_pct": 0.9629239958133695,
+   "freq_pct_sharp": -0.953740202545339,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "OH",
+   "knobs": [
+    2.5
+   ]
+  },
+  {
+   "voice": "OH",
+   "knobs": [
+    7.5
+   ]
+  },
+  {
+   "voice": "MT",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.0261108268190613,
+   "period_ours_over_real_pct": -1.541706957688227,
+   "freq_pct_sharp": 1.565847741262072,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "MT",
+   "knobs": [
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.010163771199946195,
+   "period_ours_over_real_pct": -0.6041856229605291,
+   "freq_pct_sharp": 0.6078582149029677,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "LC",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.007306222310929775,
+   "period_ours_over_real_pct": -0.7496432866496927,
+   "freq_pct_sharp": 0.7553053827451528,
+   "freq_pct_sharp_study_f0": 2.2222222222222365
+  },
+  {
+   "voice": "LC",
+   "knobs": [
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 3.525956661453719,
+   "period_ours_over_real_pct": 0.4402298257608406,
+   "freq_pct_sharp": -0.43830029712650376,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "MC",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": -0.4817071113131277,
+   "period_ours_over_real_pct": -1.006451828630428,
+   "freq_pct_sharp": 1.0166842660171538,
+   "freq_pct_sharp_study_f0": 0.0
+  },
+  {
+   "voice": "MC",
+   "knobs": [
+    7.5
+   ],
+   "lowband_ours_minus_real_db": 0.5645244933000839,
+   "period_ours_over_real_pct": 1.0022054346663811,
+   "freq_pct_sharp": -0.9922609415837669,
+   "freq_pct_sharp_study_f0": -1.3888888888888729
+  },
+  {
+   "voice": "HC",
+   "knobs": [
+    2.5
+   ],
+   "lowband_ours_minus_real_db": 0.1960158204904161,
+   "period_ours_over_real_pct": -1.456247089370244,
+   "freq_pct_sharp": 1.4777670287135614,
+   "freq_pct_sharp_study_f0": 1.0752688172043001
+  },
+  {
+   "voice": "HC",
+   "knobs": [
+    7.5
+   ],
+   "period_ours_over_real_pct": 1.1017995522589974,
+   "freq_pct_sharp": -1.0897922263881088,
+   "freq_pct_sharp_study_f0": -0.943396226415083
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    0.0,
+    2.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    0.0,
+    7.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    2.5,
+    0.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    2.5,
+    2.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    2.5,
+    5.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    2.5,
+    7.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    2.5,
+    10.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    5.0,
+    2.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    5.0,
+    7.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    7.5,
+    0.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    7.5,
+    2.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    7.5,
+    5.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    7.5,
+    7.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    7.5,
+    10.0
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    10.0,
+    2.5
+   ]
+  },
+  {
+   "voice": "CY",
+   "knobs": [
+    10.0,
+    7.5
+   ]
+  }
+ ],
+ "tolerances": {
+  "lowband_level_db/BD": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for BD lowband_level_db)",
+  "dominant_period_ms/BD": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for BD dominant_period_ms)",
+  "lowband_level_db/SD": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for SD lowband_level_db)",
+  "dominant_period_ms/SD": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for SD dominant_period_ms)",
+  "lowband_level_db/LT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for LT lowband_level_db)",
+  "dominant_period_ms/LT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for LT dominant_period_ms)",
+  "lowband_level_db/HT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for HT lowband_level_db)",
+  "dominant_period_ms/HT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for HT dominant_period_ms)",
+  "lowband_level_db/CH": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CH lowband_level_db)",
+  "dominant_period_ms/CH": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CH dominant_period_ms)",
+  "lowband_level_db/OH": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for OH lowband_level_db)",
+  "dominant_period_ms/OH": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for OH dominant_period_ms)",
+  "lowband_level_db/CP": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CP lowband_level_db)",
+  "dominant_period_ms/CP": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CP dominant_period_ms)",
+  "lowband_level_db/CB": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CB lowband_level_db)",
+  "dominant_period_ms/CB": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CB dominant_period_ms)",
+  "lowband_level_db/MT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MT lowband_level_db)",
+  "dominant_period_ms/MT": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MT dominant_period_ms)",
+  "lowband_level_db/LC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for LC lowband_level_db)",
+  "dominant_period_ms/LC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for LC dominant_period_ms)",
+  "lowband_level_db/MC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MC lowband_level_db)",
+  "dominant_period_ms/MC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MC dominant_period_ms)",
+  "lowband_level_db/HC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for HC lowband_level_db)",
+  "dominant_period_ms/HC": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for HC dominant_period_ms)",
+  "lowband_level_db/CY": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CY lowband_level_db)",
+  "dominant_period_ms/CY": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CY dominant_period_ms)",
+  "lowband_level_db/RS": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for RS lowband_level_db)",
+  "dominant_period_ms/RS": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for RS dominant_period_ms)",
+  "lowband_level_db/CL": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CL lowband_level_db)",
+  "dominant_period_ms/CL": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for CL dominant_period_ms)",
+  "lowband_level_db/MA": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MA lowband_level_db)",
+  "dominant_period_ms/MA": "measured band (floor from repeat takes, ceiling from knob travel) (REFUSED: no repeat-take floor measured for MA dominant_period_ms)"
+ }
+}
