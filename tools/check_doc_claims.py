@@ -23,6 +23,15 @@ HTML comment on the line after the claim it backs:
     <!-- claim: grep="^srccheck:" in=fpga/Makefile covers=fpga/Makefile -->
     <!-- claim: absent="thing_not_built_yet" in=tools/*.py -->
     <!-- claim: commit=693b4e6 -->
+    <!-- claim: grep="the wall-clock story" in=docs/x.md mechanism=unverified issue=135 -->
+
+A MEASURED EFFECT AND ITS MECHANISM ARE SEPARATE CLAIMS (issue #135). The
+`mechanism=<status>` modifier above declares, from a closed vocabulary
+(`measured`, `derived`, `inferred`, `fitted`, `unverified`), how a claim's
+*explanation* -- not the effect it explains -- came to be believed. A missing
+or unrecognised status is REFUSED exactly like any other malformed marker; see
+docs/verification-rules.md rule 7 and docs/claim-markers.md for the vocabulary
+and the worked example.
 
 THREE OUTCOMES, AND THE THIRD IS THE POINT.
 
@@ -94,7 +103,24 @@ KINDS = ("test", "grep", "absent", "commit")
 # are listed so that a TYPO in a real key cannot hide as free-form prose --
 # every unrecognised key is REFUSED, not ignored.
 ANNOTATION_KEYS = ("issue", "why", "note")
-MODIFIER_KEYS = ("in", "expect", "covers")
+MODIFIER_KEYS = ("in", "expect", "covers", "mechanism")
+
+# Closed vocabulary for `mechanism=<status>` (issue #135). A measured EFFECT
+# and its proposed MECHANISM are separate claims, and the mechanism's half must
+# say where it stands -- this checker cannot re-derive "was this mechanism
+# really measured", only that the marker DECLARES a status from a fixed set,
+# exactly the way #114's constant-provenance registry (model/drums_fx.py)
+# requires a status for a numeric constant rather than leaving it implicit.
+#
+# The first four are #114's own vocabulary, carried over unchanged because
+# issue #135 asks for that explicitly ("mark the mechanism's evidence ...
+# exactly as #114 asks for constants"). `unverified` is new: #114's domain
+# assumes SOME computation produced the value (even a bad one); #135's
+# motivating case -- "the cause is an artefact inserted on a wall-clock
+# timer" -- was asserted with ZERO measurement of any kind, which is weaker
+# than `inferred` (a reading of indirect evidence that does exist) and needs
+# its own word rather than being folded into it.
+MECHANISM_STATUSES = ("measured", "derived", "inferred", "fitted", "unverified")
 
 OK, STALE, REFUSED = "OK", "STALE", "REFUSED"
 
@@ -220,6 +246,22 @@ def validate(c: Claim) -> None:
             return
         if attrs["expect"] not in ("pass", "fail"):
             c.refuse(f"expect={attrs['expect']!r} is not pass or fail")
+            return
+    if "mechanism" in attrs:
+        status = attrs["mechanism"]
+        # A mechanism claim with no status, or one outside the closed set, is
+        # REFUSED rather than silently accepted -- the same rule this file
+        # already applies to every other key. This is a REQUIRED-PRESENCE
+        # check, not a re-derivation: the checker confirms a status was
+        # DECLARED, not that the declared status is itself true (see
+        # docs/claim-markers.md, "What this cannot catch").
+        if not status:
+            c.refuse(f"mechanism= is empty; expected one of "
+                     f"{', '.join(MECHANISM_STATUSES)}")
+            return
+        if status not in MECHANISM_STATUSES:
+            c.refuse(f"mechanism={status!r} is not one of "
+                     f"{', '.join(MECHANISM_STATUSES)}")
             return
     c.status, c.detail = "", "pending"
 
@@ -581,6 +623,14 @@ def check(docs: list[pathlib.Path], python: str) -> list[Claim]:
     for c in live:
         if c.status == OK:
             check_covers(c)
+
+    # mechanism= never changes the verdict -- it is a required-presence check
+    # already enforced in validate() -- but an OK claim's detail should say
+    # which status was declared, so a reader scanning `make claims` output can
+    # see it without opening the document (issue #135).
+    for c in live:
+        if c.status == OK and "mechanism" in c.attrs:
+            c.detail += f" [mechanism={c.attrs['mechanism']}]"
     return claims
 
 

@@ -332,12 +332,72 @@ def test_an_edited_document_counts_as_changed_now(monkeypatch):
     ("grep=x in=Makefile expect=fail",     "applies only to test="),
     ("test=a.py::b expect=maybe",          "is not pass or fail"),
     ('test="unbalanced',                   "unparseable"),
+    # mechanism= (issue #135): a required-presence check, not a
+    # re-derivation -- missing or unrecognised status is REFUSED exactly
+    # like any other key on this marker, never silently accepted.
+    ("commit=abc mechanism",               "is not key=value"),
+    ("commit=abc mechanism=",              "is empty"),
+    ("commit=abc mechanism=guessed",       "is not one of"),
+    ("commit=abc mechanism=Measured",      "is not one of"),  # case-sensitive
 ])
 def test_a_marker_that_cannot_be_understood_is_refused(body, fragment):
     c = cdc.Claim(doc=ROOT / "x.md", line=1, raw=body, prose="")
     cdc.validate(c)
     assert c.status == cdc.REFUSED, (body, c.detail)
     assert fragment in c.detail, (body, c.detail)
+
+
+# --------------------------------------------------------------------------
+# mechanism=<status> -- a measured effect and its mechanism are different
+# claims (issue #135). The modifier never changes test=/grep=/absent=/commit='s
+# own verdict; it only adds a required-presence check on its own value.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("status", cdc.MECHANISM_STATUSES)
+def test_every_closed_vocabulary_status_validates(status):
+    """One case per status value, so a future edit to the closed set names
+    the regression rather than silently losing coverage of one entry."""
+    c = cdc.Claim(doc=ROOT / "x.md", line=1, raw=f"commit=abc mechanism={status}",
+                  prose="")
+    cdc.validate(c)
+    assert c.status == "", c.detail
+    assert c.attrs["mechanism"] == status
+
+
+def test_a_mechanism_claim_with_no_status_is_refused_not_silently_accepted(fixtures):
+    """The REFUSED-over-silent-pass case the issue asks for by name: a
+    marker that declares `mechanism` but supplies no status must not pass
+    as if the modifier were simply absent."""
+    v = verdicts(write_doc(fixtures, {
+        "no-status": "commit=HEAD mechanism=",
+        "bad-status": "commit=HEAD mechanism=hunch",
+    }))
+    assert v["no-status"].status == cdc.REFUSED, v["no-status"].detail
+    assert "mechanism=" in v["no-status"].detail and "empty" in v["no-status"].detail
+    assert v["bad-status"].status == cdc.REFUSED, v["bad-status"].detail
+    assert "hunch" in v["bad-status"].detail
+
+
+def test_a_mechanism_claim_with_a_valid_status_is_checked_like_any_other_claim(fixtures):
+    """mechanism= rides alongside a real kind -- here grep= -- and never
+    changes that kind's own verdict; it only annotates an OK claim's detail
+    with the declared status, so a reviewer reading `make claims` output
+    does not have to open the document to see it."""
+    v = verdicts(write_doc(fixtures, {
+        "measured-and-true": 'grep="^srccheck:" in=fpga/Makefile mechanism=measured',
+        "unverified-and-true": 'grep="^srccheck:" in=fpga/Makefile mechanism=unverified',
+        "measured-and-false": 'grep="not in this makefile at all" in=fpga/Makefile '
+                               'mechanism=measured',
+    }))
+    assert v["measured-and-true"].status == cdc.OK
+    assert "[mechanism=measured]" in v["measured-and-true"].detail
+    assert v["unverified-and-true"].status == cdc.OK
+    assert "[mechanism=unverified]" in v["unverified-and-true"].detail
+    # mechanism= does not rescue or interfere with the kind's own verdict: a
+    # valid status on a claim whose grep= does not find its string is still
+    # STALE, and the mechanism annotation is only appended to OK details.
+    assert v["measured-and-false"].status == cdc.STALE
+    assert "[mechanism=" not in v["measured-and-false"].detail
 
 
 def test_a_marker_can_carry_a_value_with_spaces():
