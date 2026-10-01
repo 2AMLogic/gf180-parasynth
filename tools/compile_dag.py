@@ -21,6 +21,9 @@ Status is derived, never asserted:
   BLOCKED   the node declares what it is waiting for
   TODO      no evidence yet; an issue number if one is filed
 
+A GREEN/STAMPED node above a RED or BLOCKED dependency is reported BLOCKED
+(see classify_all).
+
 Run with --check to fail when anything is STALE, which is the state that
 matters: a green claim whose evidence has gone out from under it.
 """
@@ -188,6 +191,56 @@ def classify(nid: str, n: dict) -> tuple[str, str]:
     return "GREEN", rec.get("detail", "passed")
 
 
+def classify_all(nodes: dict) -> dict:
+    """Status for every node: own evidence first, then dependency propagation.
+
+    classify() judges a node on its OWN evidence only. A node that is GREEN or
+    STAMPED above a RED or BLOCKED prerequisite is a claim resting on a failing
+    foundation, so it is reported BLOCKED ("blocked by <dep>"), transitively,
+    in dependency order. Deliberate limits:
+
+      * only GREEN/STAMPED are downgraded; a node's own RED/BLOCKED/TODO/STALE
+        is never overwritten (it is already not a green claim);
+      * only RED/BLOCKED deps propagate. TODO and STALE are not known-failing,
+        and propagating them would turn most of the graph red on a stale stamp;
+      * a cycle or an unknown dep is REFUSED (BLOCKED with the reason), never
+        guessed past.
+    """
+    own: dict[str, tuple[str, str]] = {}
+    out: dict[str, tuple[str, str]] = {}
+    state: dict[str, int] = {}          # 1 = in progress, 2 = done
+
+    def resolve(i: str, path: tuple[str, ...]) -> None:
+        if state.get(i) == 2:
+            return
+        state[i] = 1
+        if i not in own:
+            own[i] = classify(i, nodes[i])
+        st, note = own[i]
+        reason = None
+        for d in nodes[i].get("deps", []):
+            if d not in nodes:
+                reason = f"unknown dependency {d!r}"
+                break
+            if state.get(d) == 1:
+                cyc = " -> ".join(path[path.index(d):] + (d,)) if d in path else d
+                reason = f"dependency cycle: {cyc}"
+                break
+            resolve(d, path + (d,))
+            if st in ("GREEN", "STAMPED") and out[d][0] in ("RED", "BLOCKED"):
+                dn = out[d][1]
+                reason = reason or (dn if dn.startswith("dependency cycle") else
+                                    f"blocked by dependency {d} ({out[d][0]})")
+        if reason and (st in ("GREEN", "STAMPED") or reason.startswith(("unknown", "dependency cycle"))):
+            st, note = "BLOCKED", reason
+        out[i] = (st, note)
+        state[i] = 2
+
+    for i in nodes:
+        resolve(i, (i,))
+    return {i: out[i] for i in nodes}
+
+
 def mermaid(nodes: dict, status: dict) -> str:
     fill = {"STAMPED": "#0E6B5E,color:#fff", "GREEN": "#3f8f5f,color:#fff",
             "STALE": "#9A6510,color:#fff", "BLOCKED": "#8E2438,color:#fff",
@@ -253,7 +306,7 @@ def main() -> int:
             print(f"  {'PASS' if ok else 'FAIL'}  {i:3s} {detail}", file=sys.stderr)
         RESULTS.write_text(json.dumps(res, indent=2, sort_keys=True) + "\n")
 
-    status = {i: classify(i, n) for i, n in nodes.items()}
+    status = classify_all(nodes)
 
     # The fidelity audit: a subsystem whose only evidence is against our own
     # model is UNVALIDATED, however many tests pass. Issue #45.
