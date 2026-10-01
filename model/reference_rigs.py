@@ -318,10 +318,62 @@ class _Plugin:
         else:
             self.pb = None
             self.eng.load_graph([(self.p, [])])
+        self.qualification = None
         self.setup()
         self.qualify()
 
+    # -- causality battery (#137) -------------------------------------------
+    host = "dawdreamer"
+    RENDER_S = 0.70
+    STEADY_FROM_S, STEADY_LEN_S = 0.10, 0.40
+    CUTOFF_KNOBS = (0.3, 0.5, 0.7, 0.9)
+    EXPECT_WAVE = None
+
+    def steady(self, y):
+        a = int(self.STEADY_FROM_S * SR)
+        n = int(self.STEADY_LEN_S * SR)
+        return np.asarray(y, dtype=np.float64).ravel()[a:a + n]
+
+    def render_note(self, note: int, seconds: float | None = None):
+        """One note at the rig's current patch. A rig that can answer this
+        overrides it; the base refuses to guess."""
+        raise NotImplementedError
+
+    def render_cutoff(self, knob: float, seconds: float | None = None):
+        """One note with the cutoff control at normalised position `knob`."""
+        raise NotImplementedError
+
+    @classmethod
+    def has_causality_adapters(cls) -> bool:
+        return (cls.render_note is not _Plugin.render_note
+                and cls.render_cutoff is not _Plugin.render_cutoff)
+
     def qualify(self):
+        """Pins first (unchanged contract: RuntimeError), then -- for any rig
+        that defines `render_note`/`render_cutoff` -- the signal-side causality
+        battery of `model/rig_qualification.py`, so a rig whose commands cause
+        nothing REFUSES construction with the record attached (#137). A rig
+        with no adapters keeps `self.qualification = None`: NOT MEASURED, which
+        is not the same as qualified. The battery drives the patch away from
+        its measurement state, so `setup()` is re-run afterwards."""
+        self._qualify_pins()
+        if not self.has_causality_adapters():
+            return
+        try:
+            battery = rq.qualify_voice(
+                rig=self.name, host=self.host, render_note=self.render_note,
+                render_cutoff=self.render_cutoff, note_hz=vf.note_hz,
+                note=self.note, sr=SR, expect_wave=self.EXPECT_WAVE,
+                steady=self.steady, cutoff_knobs=self.CUTOFF_KNOBS)
+        finally:
+            self.setup()
+        checks = [rq.Check("pins", rq.PASS, "pinned settings held",
+                           {"n_pins": len(self.PINS)})]
+        checks.extend(battery.checks)
+        self.qualification = rq.Qualification(self.name, self.host, tuple(checks))
+        self.qualification.require()
+
+    def _qualify_pins(self):
         """Render once, then hold every pinned setting to its NAME and its
         READBACK. Both halves are needed and neither is decoration:
 
@@ -550,6 +602,32 @@ class SurgeRig(_Plugin):
 
     def cut_value(self, hz):
         return math.log2(hz / self.CUT_LO) * 12.0 / self.CUT_SEMIS
+
+    # -- causality adapters (#137) -------------------------------------------
+    # Oscillator 1 is Audio In, so this rig's pitch is the HOST-FED source and
+    # not the MIDI note: `render_note` feeds a saw at the note's frequency.
+    # That makes pitch causality a check of the input path through the filter,
+    # which is the path every Surge measurement here uses; it cannot test MIDI
+    # transposition and does not claim to.
+    def _saw_in(self, hz, seconds, amp=0.25):
+        t = np.arange(int(seconds * SR)) / SR
+        return amp * (2.0 * ((hz * t) % 1.0) - 1.0)
+
+    def render_note(self, note: int, seconds: float | None = None):
+        sec = self.RENDER_S if seconds is None else seconds
+        self.set(self.I['f1_cut'], 1.0)
+        self.set(self.I['f1_res'], 0.0)
+        was, self.note = self.note, int(note)
+        try:
+            return self.render(self._saw_in(vf.note_hz(int(note)), sec), sec)
+        finally:
+            self.note = was
+
+    def render_cutoff(self, knob: float, seconds: float | None = None):
+        sec = self.RENDER_S if seconds is None else seconds
+        self.set(self.I['f1_cut'], float(knob))
+        self.set(self.I['f1_res'], 0.0)
+        return self.render(self._saw_in(vf.note_hz(self.note), sec), sec)
 
     def set_point(self, cut_hz, res):
         self.set(self.I['f1_cut'], self.cut_value(cut_hz))
@@ -864,6 +942,30 @@ class MiniV3Rig(_Plugin):
         self.set(self.I['cutoff'], cut)
         self.set(self.I['emphasis'], res)
         return cut
+
+    # -- causality adapters (#137) -------------------------------------------
+    # Oscillator 1 as a saw at 8', its own MIDI note setting the pitch, so
+    # this DOES test MIDI transposition. The qualify() wrapper re-runs
+    # `setup()` afterwards, because this turns the external input off.
+    def _osc_patch(self, cutoff):
+        I = self.I
+        self.set(48, self.WAVES["saw"])
+        self.set(45, 0.575)                              # Range Osc1 "8'"
+        self.set(I['lvl_ext'], 0.0); self.set(I['ext_sw'], 0.0)
+        self.set(I['lvl_o1'], 0.9); self.set(I['o1'], 1.0)
+        self.set(I['cutoff'], float(cutoff)); self.set(I['emphasis'], 0.0)
+
+    def render_note(self, note: int, seconds: float | None = None):
+        self._osc_patch(1.0)
+        was, self.note = self.note, int(note)
+        try:
+            return self.render(np.zeros(1), self.RENDER_S if seconds is None else seconds)
+        finally:
+            self.note = was
+
+    def render_cutoff(self, knob: float, seconds: float | None = None):
+        self._osc_patch(knob)
+        return self.render(np.zeros(1), self.RENDER_S if seconds is None else seconds)
 
     def tone_gain_db(self, freqs, cut, res, amp):
         self.set_point(cut, res)
