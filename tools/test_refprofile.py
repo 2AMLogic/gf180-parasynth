@@ -857,6 +857,41 @@ def test_the_profile_states_its_estimator_floors():
 # against the silence threshold, so they defeated the one content check there
 # was and loaded as references.
 
+def _plant_raw(path: pathlib.Path, y, sr=SR):
+    """Write a cache file WITHOUT going through `rp.write_clip`.
+
+    #134 made `write_clip` refuse non-finite audio, which is the right place to
+    stop it -- but it means these tests can no longer use `write_clip` to plant
+    the bad file they are about `load_clip` catching. That is not a hole: a
+    reader's job is to distrust what is on disk however it got there (a restore
+    from elsewhere, a truncated copy, a filesystem fault), so planting the file
+    out-of-band is a MORE faithful test of `load_clip` than planting it through
+    the writer that now vouches for it."""
+    from scipy.io import wavfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wavfile.write(str(path), sr, np.asarray(y, dtype=np.float32))
+
+
+@pytest.mark.parametrize("name,fill", [
+    ("all NaN", np.nan),
+    ("all +Inf", np.inf),
+    ("all -Inf", -np.inf),
+])
+def test_write_clip_refuses_to_freeze_non_finite_audio(profile, name, fill):
+    """The freeze side of the same question (#134). A hash vouches for BYTES, so
+    once non-finite samples are in the cache and in the profile the integrity
+    record certifies the defect forever. The cheapest place to not have that
+    problem is to never write it."""
+    prof, dest = profile
+    y = np.full(prof["clips"]["fake/clip"]["frames"], fill, dtype=np.float32)
+    with pytest.raises(rp.Refused) as e:
+        rp.write_clip(dest, y)
+    assert "non-finite" in str(e.value), f"{name}: refused for the wrong reason"
+    # and the cache still holds the GOOD audio -- a refused write writes nothing
+    good, _sr = rp.read_clip_file(dest)
+    assert np.isfinite(good).all()
+
+
 @pytest.mark.parametrize("name,fill", [
     ("all NaN", np.nan),
     ("all +Inf", np.inf),
@@ -866,7 +901,7 @@ def test_non_finite_audio_is_refused_even_though_it_hashes_correctly(
         profile, name, fill):
     prof, dest = profile
     y = np.full(prof["clips"]["fake/clip"]["frames"], fill, dtype=np.float32)
-    rp.write_clip(dest, y)
+    _plant_raw(dest, y)
     # re-freeze the integrity fields so ONLY finiteness can refuse it
     meta = json.loads((rp.PROFILE_DIR / "profile.json").read_text())
     c = meta["clips"]["fake/clip"]
@@ -885,7 +920,7 @@ def test_one_non_finite_sample_among_good_audio_is_refused(profile):
     prof, dest = profile
     y = _tone().astype(np.float32)
     y[len(y) // 2] = np.nan
-    rp.write_clip(dest, y)
+    _plant_raw(dest, y)
     meta = json.loads((rp.PROFILE_DIR / "profile.json").read_text())
     c = meta["clips"]["fake/clip"]
     c["bytes"], c["sha256"] = dest.stat().st_size, rp.file_sha256(dest)

@@ -398,7 +398,18 @@ class _Plugin:
     def render(self, x, seconds, note_at=0.02, note_len=None):
         """Render `seconds` with `x` (mono, already at SR) in the audio input
         when the plugin has one, a note held throughout, and the plugin's own
-        latency removed. Returns mono float."""
+        latency removed. Returns mono float.
+
+        **The buffer the host hands back is asserted to be made of numbers
+        before it is returned (#134).** This is the boundary where audio enters
+        this repository from code nobody here wrote, and the failures this module
+        exists to catch are all of one shape: a correct instrument in a wrong
+        state. An unlicensed Diva inserted clicks for hours; a Model D rendered
+        exact silence; Surge renamed parameter 265 by oscillator type. A plugin
+        that returns NaN -- an unresolved denormal, an uninitialised delay line,
+        a filter rung past stability -- belongs on that list, and a NaN is the
+        one member of it that no threshold guard downstream can see: `nan <=
+        floor` is False, so it reads as a healthy, comfortably loud render."""
         n = int(seconds * SR)
         if self.have_input:
             buf = np.zeros((2, n), dtype=np.float32)
@@ -411,6 +422,7 @@ class _Plugin:
         self.eng.render(seconds)
         a = self.eng.get_audio()
         y = a[0].astype(np.float64)
+        am.require_finite(y, f"{self.name}'s {seconds:.3f} s render")
         lat = self.p.get_latency_samples()
         return y[lat:] if lat else y
 
