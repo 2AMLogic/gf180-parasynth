@@ -1,37 +1,37 @@
 {
   "D2": {
-    "detail": "105 passed in 411.48s (0:06:51)",
+    "detail": "105 passed in 421.81s (0:07:01)",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "D3": {
     "detail": "model/sound_report.py exit 1",
     "passed": false,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "F3": {
-    "detail": "146 passed in 3.16s",
+    "detail": "146 passed in 3.18s",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "M2": {
-    "detail": "115 passed in 240.05s (0:04:00)",
+    "detail": "115 passed in 241.34s (0:04:01)",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "M3": {
     "detail": "docs/reference-compare-results.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "S1": {
     "detail": "pnr/orfs/evidence/synth_top/joined-d1e5068/6_report.json EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   },
   "S3": {
     "detail": "fpga/reports/ecp5_25f.txt EXISTS ONLY -- no verdict declared",
     "passed": true,
-    "sha": "5742aeeeb68700fe19aa2b4c2f194e7e0d0b7134"
+    "sha": "ddeae6226a0b71d31d651eb895896c88df10e45a"
   }
 }
