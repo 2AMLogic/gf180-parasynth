@@ -79,6 +79,81 @@ class InsufficientEvidence(AssertionError):
     """An estimator was asked for a number it cannot honestly supply."""
 
 
+class NonFiniteAudio(InsufficientEvidence):
+    """The input held NaN or Inf, so nothing here can answer (#134).
+
+    Distinct from every other refusal in this module because it is not a
+    judgement about the signal -- it is the observation that the input is not
+    a signal. A refusal, not a failure, and raised rather than returned as a
+    `not ok` `Estimate` for one reason: half the entry points here return a
+    bare `float`, an `int`, a `bool` or an array, and have nowhere to put a
+    refusal. `rms`, `peak`, `is_silent`, `spectrum` and `band_energy` can only
+    hand back a number, so the only honest way for them to refuse is to raise.
+
+    A subclass of `InsufficientEvidence` so that the harnesses already written
+    around `am.InsufficientEvidence` -- `model/reference_compare.py`,
+    `model/sound_report.py` -- turn a non-finite input into the no-verdict they
+    already turn a weak-evidence input into, rather than crashing."""
+
+
+def nonfinite_report(x) -> dict | None:
+    """`None` when every sample of `x` is a number; otherwise what is wrong with
+    it, in enough detail to find the sample.
+
+    Separate from `require_finite` so that a caller which wants to RECORD the
+    diagnosis (a provenance block, a scorecard's `why`) does not have to catch
+    an exception to read it."""
+    a = np.asarray(x)
+    if a.dtype.kind not in "fc":
+        # An integer or boolean array has no NaN to find, and `np.isfinite` on
+        # an object array raises. Saying so is cheaper than guessing.
+        return None
+    bad = ~np.isfinite(a)
+    n = int(np.count_nonzero(bad))
+    if not n:
+        return None
+    nan = int(np.count_nonzero(np.isnan(a)))
+    return dict(non_finite=n, samples=int(a.size), nan=nan, inf=n - nan,
+                first_index=int(np.argmax(bad.reshape(-1))))
+
+
+def require_finite(x, what: str = "the signal"):
+    """`x` back, or `NonFiniteAudio`. The one place this repository asserts that
+    audio is made of numbers.
+
+    **This exists because the check that should catch bad data is the check bad
+    data slips through.** IEEE says every ordering comparison against NaN is
+    False, so the refusal guard
+
+        if float(np.abs(y).max()) <= 1e-9:
+            raise Refused("silent")
+
+    does not merely miss an all-NaN record, it is INVERTED by one: NaN <= 1e-9
+    is False, so the record is pronounced "not silent" and measured. #133 is the
+    worked example -- all-NaN audio passed seven checks in
+    `tools/refprofile.py::load_clip` (profile membership, file present, byte
+    count, sha256, sample rate, frame count, not-silent) and loaded as a
+    reference. #134 generalised it: at the time there were of the order of a
+    hundred comparison guards across the measurement code and four finiteness
+    checks, so a NaN was maximally invisible to exactly the guards written to
+    catch bad values.
+
+    The answer is NOT to rewrite a hundred comparisons. It is to assert this
+    once per boundary where audio ENTERS -- `tools/nan_guard_audit.py` keeps the
+    register of those boundaries and `--check`s that each still asserts it --
+    so that nothing downstream ever has to wonder. `_as_float` below is the
+    boundary for this entire module."""
+    r = nonfinite_report(x)
+    if r is None:
+        return x
+    raise NonFiniteAudio(
+        f"{what} holds {r['non_finite']} non-finite samples of {r['samples']} "
+        f"({r['nan']} NaN, {r['inf']} Inf; first at index {r['first_index']}): "
+        f"this is not audio. Every threshold guard downstream of here would be "
+        f"DEFEATED by it rather than tripped, because NaN compares False "
+        f"against any bound (#133, #134)")
+
+
 # ---------------------------------------------------------------------------
 # VALIDATED DOMAINS (#115): where an estimator was SHOWN to be right
 #
@@ -318,10 +393,21 @@ def _fail(reason: str, **detail) -> Estimate:
     return Estimate(None, False, reason, detail)
 
 
-def _as_float(x) -> np.ndarray:
+def _as_float(x, *, finite: bool = True, what: str = "the signal") -> np.ndarray:
+    """Every estimator in this module ingests its signal through here, which is
+    what makes this module's NaN boundary ONE line rather than forty-eight.
+
+    `finite=False` is the explicit opt-out, and there are exactly six call
+    sites: the dB axis of a measured response curve (`gain_db`), where
+    20*log10(0) is -inf by construction and all five curve readers already mask
+    with `np.isfinite`, and `glide_law`'s frequency TRAJECTORY, which documents
+    dropping unvoiced frames. `model/test_nan_invariance.py` pins that list, so
+    a seventh opt-out cannot be added without saying why in the table."""
     x = np.asarray(x, dtype=np.float64)
     if x.ndim != 1:
         raise ValueError("expected a 1-D signal")
+    if finite:
+        require_finite(x, what)
     return x
 
 
@@ -1573,7 +1659,14 @@ def longest_plateau(x) -> int:
     """Longest run of identical consecutive values -- a stair-step detector.
     An envelope that holds still for 500 frames and then jumps is a staircase
     whatever its average slope."""
+    # NOT through `_as_float`: this is a run-length question, answerable on an
+    # integer array and on a 2-D one, and forcing float64 would change what it
+    # measures. So the module's boundary check is made here explicitly instead.
+    # Found by `model/test_nan_invariance.py`, which is the point of that file:
+    # `_as_float` covers forty-eight ingestion sites and this was not one of
+    # them, and no amount of reading the module would have said so (#134).
     x = np.asarray(x)
+    require_finite(x, "the signal")
     if x.size == 0:
         return 0
     change = np.nonzero(np.diff(x))[0]
@@ -1839,7 +1932,7 @@ def slope_db_oct(freqs, gain_db, band, *, max_residual_db: float = 1.5) -> Estim
     quoting one is the same error as quoting a centroid for a cutoff: the
     band is probably still on the resonant skirt, or already in the noise."""
     f = _as_float(freqs)
-    g = _as_float(gain_db)
+    g = _as_float(gain_db, finite=False, what="the dB axis")
     sel = (f >= band[0]) & (f <= band[1]) & np.isfinite(g)
     if sel.sum() < 4:
         return _fail("fewer than 4 measured points in the band", n=int(sel.sum()))
@@ -1857,7 +1950,7 @@ def plateau_db(freqs, gain_db, band) -> float:
     """The passband level a corner and a peak are measured against: the median
     of the curve over `band`. A median, not a mean, so one bad point does not
     move the reference every later number is relative to."""
-    f, g = _as_float(freqs), _as_float(gain_db)
+    f, g = _as_float(freqs), _as_float(gain_db, finite=False, what="the dB axis")
     sel = (f >= band[0]) & (f <= band[1]) & np.isfinite(g)
     if not sel.any():
         raise InsufficientEvidence("plateau_db: no measured points in the reference band")
@@ -1942,7 +2035,7 @@ def dc_plateau_db(freqs, gain_db, band, *, scale_hz: float) -> Estimate:
 
     Ground truth: test_dc_plateau_db_recovers_the_dc_gain_of_an_ideal_filter,
     test_run_case.py::test_filt_corner_ratio_is_constant_across_the_range."""
-    f, g = _as_float(freqs), _as_float(gain_db)
+    f, g = _as_float(freqs), _as_float(gain_db, finite=False, what="the dB axis")
     top_ratio = float(band[1]) / float(scale_hz)
     if top_ratio > MAX_PLATEAU_BAND_TOP_RATIO:
         return _fail(
@@ -2000,7 +2093,7 @@ def corner_from_curve(freqs, gain_db, *, ref_band=None, kind: str = "lowpass",
     is biased by a different amount at each cutoff -- 15 % at 250 Hz against
     0 % at 4 kHz on this project's grid, read as the filter's. `ref_band` is
     still used for `detail` and is unchanged for every existing caller."""
-    f, g = _as_float(freqs), _as_float(gain_db)
+    f, g = _as_float(freqs), _as_float(gain_db, finite=False, what="the dB axis")
     o = np.argsort(f)
     f, g = f[o], g[o]
     if kind != "lowpass":
@@ -2029,7 +2122,7 @@ def peak_from_curve(freqs, gain_db, *, ref_band=None, min_peak_db: float = 0.5) 
     actually falls 3 dB below the peak on BOTH sides inside the measured
     range. Refuses when there is no peak, instead of calling the argmax of a
     monotonic curve a resonance."""
-    f, g = _as_float(freqs), _as_float(gain_db)
+    f, g = _as_float(freqs), _as_float(gain_db, finite=False, what="the dB axis")
     o = np.argsort(f)
     f, g = f[o], g[o]
     ref = plateau_db(f, g, ref_band or (f[0], f[0] * 2.0))
@@ -2762,7 +2855,12 @@ def glide_law(f_hz, sr: int = SR_DEFAULT, *, min_ratio: float = 1.05) -> Estimat
     `detail` carries all three R^2 values, because a short glide fits every
     law well and the useful output is the MARGIN between them, not the winner.
     Refuses a trajectory that does not move at least `min_ratio`."""
-    f = _as_float(f_hz)
+    # `finite=False`, and this is the ONE estimator here where that is right:
+    # the argument is a frequency TRAJECTORY, not audio, and a trajectory
+    # legitimately carries NaN for the frames where there was no pitch to read.
+    # The filter on the next line is the documented behaviour, not an oversight,
+    # so the module's boundary check is opted out of here deliberately (#134).
+    f = _as_float(f_hz, finite=False, what="the frequency trajectory")
     f = f[np.isfinite(f) & (f > 0)]
     if len(f) < 16:
         return _fail("fewer than 16 usable frequency samples", n=len(f))

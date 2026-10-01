@@ -125,6 +125,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 
+# ONE implementation of "is this audio made of numbers", shared with every other
+# boundary (#134). `audio_measure` imports nothing but `math` and `numpy`, so
+# this costs a reader of the profile nothing.
+import audio_measure as am                                          # noqa: E402
+
 PROFILE_DIR = ROOT / "refprofile"
 PROFILE_JSON = PROFILE_DIR / "profile.json"
 #: The prose sibling (#129). Never named in `tools/run_case.py`'s
@@ -705,8 +710,19 @@ def write_clip(path: pathlib.Path, y: np.ndarray, sr: int = SR) -> None:
 
     Written through a `.part` and renamed, so an interrupted render can never
     leave a short file that every downstream tool will happily open --
-    `tools/refaudio_fetch.py` was built around exactly that defect."""
+    `tools/refaudio_fetch.py` was built around exactly that defect.
+
+    **Non-finite audio is refused here, not only on the way back in (#134).**
+    `load_clip` already refuses it, and had to: #133 found all-NaN audio that
+    passed seven checks there. But a hash vouches for BYTES, so once non-finite
+    samples are in the cache and in the profile the hash says they are the right
+    bytes forever -- the integrity record certifies the defect. The cheapest
+    place to not have that problem is to never write it."""
     from scipy.io import wavfile
+    try:
+        am.require_finite(y, f"the audio for {path.name}")
+    except am.NonFiniteAudio as why:
+        raise Refused(f"refusing to freeze {path.name}: {why}") from why
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(path.name + ".part")
     try:
@@ -845,12 +861,18 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
     # A matching hash says the bytes are the ones the profile describes. It says
     # nothing about whether those bytes are numbers. Found by review, reproduced
     # against this function before it was fixed.
-    bad = int(np.count_nonzero(~np.isfinite(y)))
-    if bad:
-        where = int(np.argmax(~np.isfinite(y)))
-        raise Refused(f"{clip_id!r} holds {bad} non-finite samples "
-                      f"(first at index {where}): the file hashes correctly, so "
-                      f"this is what was frozen -- it is not usable as audio")
+    #
+    # #134: one shared implementation now (`audio_measure.require_finite`), used
+    # by every boundary where audio enters -- this reader, `write_clip`,
+    # `render`'s freeze decision, `run_case.load_reference`, `run_case.prepare`,
+    # `reference_rigs._Plugin.render` and `audio_measure._as_float`. Which
+    # boundaries those are is written down in `tools/nan_guard_audit.py`, whose
+    # `--check` asserts each one still makes the assertion.
+    try:
+        am.require_finite(y, f"{clip_id!r}")
+    except am.NonFiniteAudio as why:
+        raise Refused(f"{why} The file hashes correctly, so this is what was "
+                      f"frozen -- it is not usable as audio.") from why
     # #481: this used to compare against a bare 1e-9, `is_silent`'s default,
     # which is the "did the host hand back zeros" question, and refused only
     # a buffer of zeros. A clip at 1e-7 passed it -- hashing correctly, 140 dB
@@ -858,7 +880,11 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
     # LEVEL floor now; `level_refusal` still names silence separately when that
     # is what it is.
     pk = float(np.abs(y).max())
-    if pk <= LEVEL_FLOOR:
+    # `not (pk > LEVEL_FLOOR)`, not `pk <= LEVEL_FLOOR`: identical for every real
+    # number and opposite for a NaN, which is the whole of #134. The explicit
+    # check above already refused a NaN, so this is the fails-closed shape rather
+    # than a second gate -- it means this guard stays right if that one moves.
+    if not (pk > LEVEL_FLOOR):
         raise Refused(level_refusal(f"{clip_id!r}", pk))
     return y, sr, meta
 
@@ -1174,8 +1200,21 @@ def render(probe_disqualified: bool = True) -> dict:
         # be written, hashed and committed by a `--render` that reports
         # success, and then be refused by every consumer forever afterwards.
         # The two gates are one number because they are one question.
+        # ...and BEFORE that floor, finiteness, for the reason #134 is about: a
+        # NaN does not fail the floor test, it is INVISIBLE to it. `nan <=
+        # LEVEL_FLOOR` is False, so an all-NaN render reads as "comfortably
+        # above the floor" and is frozen, hashed and committed.
+        try:
+            am.require_finite(y, f"{cid}'s render")
+        except am.NonFiniteAudio as why:
+            raise Refused(f"{cid}: refusing to freeze it -- {why}") from why
         pk = float(np.abs(y).max())
-        if pk <= LEVEL_FLOOR:
+        # `not (pk > LEVEL_FLOOR)` rather than `pk <= LEVEL_FLOOR`: the two
+        # differ ONLY for a non-finite `pk`, which is exactly the case that
+        # matters, and this shape refuses it instead of passing it. Belt and
+        # braces behind the explicit check above -- written this way so that the
+        # guard is still correct if somebody ever moves that check (#134 §4).
+        if not (pk > LEVEL_FLOOR):
             raise Refused(f"{cid}: refusing to freeze it -- "
                           + level_refusal("the rig's output", pk))
         write_clip(dest, y)

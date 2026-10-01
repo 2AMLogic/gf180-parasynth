@@ -1416,6 +1416,18 @@ def prepare(x, sr: int, *, side: str = "the recording") -> np.ndarray:
     normalisation; the original-gain peak and RMS are recorded in the result's
     diagnostics so the discarded information is still on record."""
     x = np.asarray(x, dtype=np.float64)
+    # BOTH sides of every comparison pass through here before any metric sees
+    # them, so this is where this runner asserts that what it was handed is made
+    # of numbers -- BEFORE `is_silent`, which a NaN DEFEATS rather than trips
+    # (NaN <= 1e-9 is False, so a NaN record is pronounced "not silent"; #133,
+    # #134). Without this the refusal below still fired, but for the WRONG
+    # reason: `np.abs(x) > ONSET_FRAC * nan` is False everywhere, so the onset
+    # landed at index 0 and a NaN render was reported as "cut into the strike".
+    # A misdiagnosis in a refusal is how an hour goes into the wrong apparatus.
+    try:
+        am.require_finite(x, side)
+    except am.NonFiniteAudio as why:
+        raise Refused(str(why)) from why
     if am.is_silent(x):
         return x
     pk = float(np.abs(x).max())
@@ -1540,6 +1552,14 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
     if x.ndim > 1:
         x = x.mean(axis=1)
     x = x / 32768.0
+    # The external corpus is a WAV this repository did not write, so finiteness
+    # is a precondition to assert, not to assume -- and it is asserted BEFORE
+    # the silence test because a NaN defeats that test instead of tripping it
+    # (#133's seven-check miss, generalised by #134).
+    try:
+        am.require_finite(x, f"reference recording {rel}")
+    except am.NonFiniteAudio as why:
+        raise Refused(str(why)) from why
     if am.is_silent(x):
         raise Refused(f"reference recording {rel} is silent")
     if inject == "REF_F0_20PCT":
