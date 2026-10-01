@@ -47,6 +47,42 @@ the host's block rate.
   all caught by controls rather than inspection. That rate is how a reader
   calibrates any single figure.
 
+**And a third root cause, from the claim rather than the evidence or the
+apparatus: a claim has a TYPE, each type has a check that costs seconds, and the
+check is skipped because by the time the claim is written it already feels
+established.** A valid derivation from an unverified premise is
+indistinguishable from a verified one and is *faster to produce*, so work drifts
+there — the same gradient, pointed at claims instead of artefacts (#155, which
+counted the skips: four, four, three and two in one session). "Be careful"
+cannot fix this; attaching the check to the claim's type can.
+
+- **A fact about `main` is read from `origin/main`, never from the working
+  tree.** `git show origin/main:path`, `git log origin/main`, `git diff
+  HEAD..origin/main` — not `cat path`, not `git log`. Merges here land
+  server-side through `gh`, so **a local checkout never advances on its own**
+  and every read between merges is potentially stale: one session diagnosed a
+  merged commit as *vanished* (`04c38d3` was on `origin/main`; the checkout was
+  three behind). This is why `tools/scorecard.py`, `tools/r1_scorecard.py` and
+  `tools/compile_dag.py` each print how far behind `origin/main` their tree is
+  before they print anything you might quote. Nothing can print that warning
+  for a claim you typed into an issue or a PR, which is why it is a rule here.
+- **A guard ships with the input that defeats it**, or with a stated reason none
+  exists — `docs/verification-rules.md` rule 8. Ask it at write time: *what
+  satisfies this check while violating its intent?* Four guards here were
+  defeated by the exact pathology they were written to catch.
+- **Closing an issue as fixed includes searching for the same shape
+  elsewhere.** Before you close, `grep`/`rg` for the defect's *class* — the
+  comparison, the threshold, the assumption — not for the one call site you
+  repaired, and record what the search found in the closing comment (including
+  "no other instances", which is a result). #134 exists only because somebody
+  asked whether the NaN case generalised: it did, from one silence check to
+  **~108 comparison guards against 4 finite checks**, which is a different
+  engineering problem from the one-line fix it looked like. **Nothing enforces
+  this mechanically** — no tool in this repository can tell whether you
+  searched, so unlike the rule above it has no check behind it and lives or
+  dies on being written in the closing comment where a reader can see it was
+  done.
+
 This file is about how to work, not what to build.
 
 ## Current milestone priority (read before choosing work)
