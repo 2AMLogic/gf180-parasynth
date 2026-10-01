@@ -2881,14 +2881,225 @@ for _c in ("M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
         "one of its parameters is a bare 0..1 with no units and no readback: its "
         "cutoff can be calibrated against its own self-oscillation "
         "(reference_compare.calibrate_knob) and its ENVELOPE knobs cannot, because "
-        "nothing in this repository maps a Mini V3 envelope knob to a time. Every "
-        "Mono case requires envelope timing, so a Mini V3 patch frozen today would "
-        "compare our envelope against an arbitrary knob position and publish the "
-        "difference as a result. The envelope-knob calibration is the missing "
-        "piece and it is a deliverable of its own.")
+        "nothing in this repository maps a Mini V3 envelope knob to a time. EACH "
+        "OF THESE SIX CASES NAMES 'envelope' IN ITS OWN required_measurements "
+        "(capabilities_for() derives it), so a Mini V3 patch frozen at a stated "
+        "envelope setting would compare our envelope against an arbitrary knob "
+        "position and publish the difference as a result. The envelope-knob "
+        "calibration is the missing piece and it is a deliverable of its own. "
+        "WHAT THIS ENTRY NO LONGER CLAIMS (#136): it used to say 'Every Mono case "
+        "requires envelope timing', which was false and which parked work that was "
+        "never blocked. M5C/M5D ask for 'Pitch; harmonic shape; foldback energy' "
+        "and name no envelope at all, and M1A/M5A/M5B run TODAY by comparing "
+        "against the measured envelope of a frozen Mini V3 recording -- no "
+        "knob-to-time mapping anywhere in the path. The blocker is per-capability "
+        "and is recorded as one: refprofile.RIG_VERDICTS['miniv3']['capabilities'] "
+        "is envelope_timing False with pitch, waveform and sustained_filter True.")
 NOT_RUN["E3A"] = ("no shipped patch uses the noise source or oscillator-3 "
                   "modulation, so the stimulus cannot be built from frozen "
                   "material without inventing a patch.")
+
+
+# ===========================================================================
+# what a case consumes FROM THE REFERENCE RIG (#136)
+# ===========================================================================
+# `refprofile.RIG_VERDICTS` now records a verdict per (rig, host, CAPABILITY).
+# That is only half of the fix: a runner can ask "is this rig qualified for what
+# this case needs" only if the case says what it needs. This is that half.
+#
+# **Derived from the case's own `required_measurements` cell, not authored
+# beside it.** `docs/scorecard/cases.csv` is the committed spec and it already
+# declares, per case, the list of measurements the case is made of. A second
+# hand-written table of required capabilities would be a parallel decision
+# record free to drift from the spec -- and a capability list that disagrees
+# with the case's own measurement list is worse than none, because both look
+# authoritative. So the mapping is from MEASUREMENT TERM to capability, the
+# terms come out of the spec, and `test_run_case.py` refuses a term that this
+# table does not classify.
+#
+# The partition is complete for the families whose reference is a plugin rig
+# (Mono, Filters) and is deliberately not attempted for the ones whose
+# reference is frozen audio -- see `REFERENCE_WITHOUT_A_RIG`.
+
+#: Measurement term -> the capabilities measuring it consumes from the rig.
+#: Lowercased and stripped, matched EXACTLY against one semicolon-separated
+#: field of `required_measurements` -- not by substring. A substring match makes
+#: "tracking" (F5, cutoff motion) and "frequency tracking" (F4, self
+#: oscillation) the same term, and they are two different capabilities.
+CAPABILITY_TERMS = {
+    # --- pitch: the rig sounds the note commanded ---------------------------
+    "pitch": ("pitch",),
+    "pitch trajectory": ("pitch",),
+    "pitch/glide trajectory": ("pitch",),
+    "frequency tracking": ("pitch",),
+    "fundamental/harmonics": ("pitch", "waveform"),
+    # --- waveform: what the rig is producing, identified from its output ----
+    "harmonic distribution": ("waveform",),
+    "harmonic ratios": ("waveform",),
+    "harmonic shape": ("waveform",),
+    "timbre": ("waveform",),
+    "spectrum": ("waveform",),
+    "spectral bands": ("waveform",),
+    "sidebands": ("waveform",),
+    "foldback": ("waveform",),
+    "foldback energy": ("waveform",),
+    "noise statistics": ("waveform",),
+    # --- sustained_filter: a stated operating point, held ------------------
+    "corner frequency": ("sustained_filter",),
+    "rolloff": ("sustained_filter",),
+    "low-band gain": ("sustained_filter",),
+    "bass level": ("sustained_filter",),
+    "bass loss": ("sustained_filter",),
+    "bass retention": ("sustained_filter",),
+    "peak frequency": ("sustained_filter",),
+    "peak gain": ("sustained_filter",),
+    "playing weight": ("sustained_filter",),
+    "compression": ("sustained_filter",),
+    "dc": ("sustained_filter",),
+    "stability": ("sustained_filter",),
+    # A trajectory is a value that MOVES, so it needs both the operating point
+    # and the proof that commanding it causes the move.
+    "resonance trajectory": ("sustained_filter", "filter_causality"),
+    "modulation sidebands": ("waveform", "filter_causality"),
+    # --- envelope_timing: a COMMANDED time, in seconds ---------------------
+    "envelope": ("envelope_timing",),
+    "envelope attack": ("envelope_timing",),
+    "envelope release": ("envelope_timing",),
+    "attack": ("envelope_timing",),
+    "decay": ("envelope_timing",),
+    "rise/decay": ("envelope_timing",),
+    "residual tail": ("envelope_timing",),
+    # --- filter_causality: commanding the control causes the effect --------
+    "tracking": ("filter_causality",),
+    "stepping": ("filter_causality",),
+    # Oscillator 3 on a Minimoog can be routed to filter cutoff, to oscillator
+    # pitch, or to both. Mapped to `filter_causality` alone because that is the
+    # destination M8's own stimulus names; a case that pins the destination to
+    # pitch instead should add `pitch_causality` to this entry rather than
+    # relying on the reader to infer it.
+    "modulation rate/depth": ("filter_causality",),
+}
+
+#: Terms that consume NO rig capability, each with the reason -- because "this
+#: term is not on the capability axis" and "I forgot to classify this term" look
+#: identical in an empty result, and the second one silently shrinks a
+#: requirement set.
+TERMS_WITHOUT_CAPABILITY = {
+    "gain": "a level comparison. Level and clipping are "
+            "`rig_qualification.check_level`'s question, which is a PRECONDITION "
+            "of every capability (a reference at the rail has lost information "
+            "for all of them) rather than a capability of its own. Promoting it "
+            "to the axis would make every case require it, which states nothing.",
+    "clipping": "the same precondition as `gain`: `check_level` reports the "
+                "fraction of samples at the rail, and 8.57 % of Model D's default "
+                "patch sits there. An apparatus precondition, not a capability.",
+}
+
+#: Families whose reference is FROZEN AUDIO and not a rig under our control, so
+#: no rig capability is consumed at all, whatever the case measures. Keyed on
+#: the `reference_target` cell so this follows the spec rather than a second
+#: list of case ids.
+REFERENCE_WITHOUT_A_RIG = {
+    "Fischer hardware sample":
+        "a hardware recording from the Fischer TR-808 corpus. Nothing commands "
+        "it; every measurement is read off the record, so there is no rig whose "
+        "capabilities could gate the case.",
+    "Second documented hardware setting":
+        "the same, at a second documented setting (the Holdout rung).",
+    "Qualified mono and drum stems":
+        "our own per-bus stems and the written hit schedule. The reference is "
+        "this repository's output, not a plugin's.",
+}
+
+#: Capabilities a case's TERMS imply but which the case does not actually
+#: consume, with the measurement that makes that true. This is the exemption
+#: mechanism and it exists because of exactly one distinction, which is the
+#: whole of #136: measuring an envelope OFF A RECORD needs no knob-to-time
+#: mapping, while commanding one does.
+#:
+#: Keyed by case id, and every entry must name its evidence -- an exemption
+#: without one is how a requirement gets dropped because it was inconvenient.
+WITHOUT_CAPABILITY = {
+    cid: {"envelope_timing":
+          "this case does not command the reference's envelope: it compares our "
+          "envelope against the MEASURED envelope of a frozen Mini V3 recording. "
+          "The provenance record says so in its own words -- "
+          "`envelope_calibration_source` reads 'frozen " + cid + " Mini V3 "
+          "measurements' (tools/mono_m5a_score.py) -- and the case runs and "
+          "scores today, which is the evidence that no knob-to-time mapping is "
+          "in the path. Mini V3's envelope knobs are uncalibrated and that is "
+          "irrelevant here, which is the distinction one boolean per rig could "
+          "not express."}
+    for cid in ("M1A", "M5A", "M5B")
+}
+
+
+def _case_row(case_id: str) -> dict:
+    for c in load_cases():
+        if c["case_id"] == case_id:
+            return c
+    raise KeyError(case_id)
+
+
+def measurement_terms(case: dict) -> list:
+    """The case's own `required_measurements` cell, as terms."""
+    return [t.strip().lower()
+            for t in (case.get("required_measurements") or "").split(";")
+            if t.strip()]
+
+
+def capabilities_for(case_id: str, case: dict | None = None) -> tuple:
+    """Which rig capabilities this case consumes -- `refprofile.CAPABILITIES`
+    names, sorted into that table's order.
+
+    `()` is a real answer and means "no reference RIG is in this case's path"
+    (`REFERENCE_WITHOUT_A_RIG`). An unclassified term RAISES rather than
+    shrinking the set: a requirement that vanishes because nobody mapped its
+    term is how one boolean came to park 32 cases in the first place."""
+    case = case if case is not None else _case_row(case_id)
+    target = (case.get("reference_target") or "").strip()
+    if target in REFERENCE_WITHOUT_A_RIG:
+        return ()
+    want: set = set()
+    for term in measurement_terms(case):
+        if term in CAPABILITY_TERMS:
+            want.update(CAPABILITY_TERMS[term])
+        elif term in TERMS_WITHOUT_CAPABILITY:
+            continue
+        else:
+            raise rp.Refused(
+                f"{case_id}'s required_measurements names {term!r}, which "
+                f"CAPABILITY_TERMS does not classify. Add it there with the "
+                f"capabilities measuring it consumes, or to "
+                f"TERMS_WITHOUT_CAPABILITY with why it consumes none. An "
+                f"unclassified term must not silently shrink a case's "
+                f"requirements")
+    for cap, _why in (WITHOUT_CAPABILITY.get(case_id) or {}).items():
+        want.discard(cap)
+    return tuple(c for c in rp.CAPABILITIES if c in want)
+
+
+def capability_refusal(case_id: str, rig: str, host: str,
+                       case: dict | None = None) -> str | None:
+    """`None` if `rig` under `host` is qualified for everything `case_id`
+    consumes; otherwise the refusal, NAMING THE CAPABILITY.
+
+    #136's item 3 at the case level. "Mini V3 is not qualified" sent a reader
+    looking for a missing qualification run and parked 32 cases; "M3A needs
+    envelope_timing and Mini V3 is not qualified for it (it IS qualified for
+    pitch, waveform, sustained_filter)" sends them to the one calibration that
+    is missing, and tells the next person which cases do not need it."""
+    want = capabilities_for(case_id, case)
+    missing = []
+    for cap in want:
+        try:
+            rp.require_capability(rig, host, cap)
+        except rp.Refused as why:
+            missing.append(str(why))
+    if not missing:
+        return None
+    return (f"{case_id} consumes {', '.join(want)} from its reference rig and "
+            f"{len(missing)} of those is not available: " + " | ".join(missing))
 
 
 def plan_for(case_id: str) -> str:

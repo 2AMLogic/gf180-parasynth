@@ -346,6 +346,262 @@ def test_render_refuses_rather_than_writing_an_empty_profile(monkeypatch):
 
 
 # ===========================================================================
+# the per-(rig, host, capability) verdict (#136)
+# ===========================================================================
+#
+# One boolean per rig forced the MOST RESTRICTIVE capability to gate every other
+# one, and that cost 32 cases: Mini V3's uncalibrated envelope knobs were read as
+# blocking a waveform comparison and a sustained-filter comparison that need no
+# envelope timing at all. These tests are about the two ways the fix can be
+# undone -- the map collapsing back into the boolean, and `None` collapsing into
+# `False` one axis down from where #123 fixed it.
+
+def test_every_rig_records_every_capability():
+    """A missing entry is not the same as a False, and `verdict_for` refuses one
+    rather than guessing -- so an author who adds a rig and forgets the map gets
+    a refusal at every call site instead of a wrong answer at one. This is the
+    gate that says the omission is caught here instead."""
+    for name, v in rp.RIG_VERDICTS.items():
+        caps = v.get("capabilities")
+        assert isinstance(caps, dict), f"{name} has no capability map"
+        assert set(caps) == set(rp.CAPABILITIES), \
+            f"{name} records {sorted(caps)}, the axis is {sorted(rp.CAPABILITIES)}"
+        for c, q in caps.items():
+            assert q is True or q is False or q is None, f"{name}/{c} is {q!r}"
+
+
+def test_every_capability_verdict_says_which_measurement_produced_it():
+    """`test_every_rig_the_profile_rejects_says_why` one axis down. A verdict
+    with no reason is what this table exists to prevent: "we did not use Model D"
+    and "Model D cannot be used" are different facts and only one of them tells
+    the next person not to try."""
+    for name, v in rp.RIG_VERDICTS.items():
+        why = v.get("capability_why") or {}
+        for c in rp.CAPABILITIES:
+            assert why.get(c), f"{name}/{c} has a verdict and no reason"
+
+
+def test_the_capability_map_is_not_collapsible_to_the_rig_boolean():
+    """**The regression this issue is about.** If every capability always agreed
+    with its rig's overall verdict, the map would be a more expensive way to
+    write one boolean and the next simplification pass would be right to delete
+    it. At least one rig must disagree with itself -- today Mini V3 does, which
+    is the entire reason #136 exists."""
+    disagree = [(n, c) for n, v in rp.RIG_VERDICTS.items()
+                for c, q in (v.get("capabilities") or {}).items()
+                if q is not v.get("qualified")]
+    assert disagree, ("every capability agrees with its rig's overall verdict, so "
+                      "the map carries no information the boolean did not. #136 "
+                      "was filed because Mini V3 disagrees with itself")
+
+
+def test_an_overall_yes_never_hides_a_measured_no():
+    """The flattening in the other direction. `qualified is True` is the
+    conservative AND -- "this rig's clips may be frozen, full stop" -- so a rig
+    carrying a known-bad capability must not read as qualified overall, or
+    `qualified_rigs()` is an overclaim."""
+    for name, v in rp.RIG_VERDICTS.items():
+        if v.get("qualified") is not True:
+            continue
+        bad = [c for c, q in (v["capabilities"]).items() if q is False]
+        assert not bad, f"{name} is qualified overall and {bad} is measured False"
+
+
+def test_a_rig_with_no_verdict_at_all_claims_no_capability():
+    """`None` at the rig level means nobody has run it. Nothing measured means
+    nothing qualified, so a `True` under a `None` rig would be a measurement that
+    exists for a rig that has not been measured."""
+    for name, v in rp.RIG_VERDICTS.items():
+        if v.get("qualified") is not None:
+            continue
+        yes = [c for c, q in v["capabilities"].items() if q is True]
+        assert not yes, f"{name} has no rig-level verdict and claims {yes}"
+
+
+def test_a_rig_disqualified_at_the_apparatus_level_is_false_everywhere():
+    """A capability-scoped query must not be able to route around an apparatus
+    that answers nothing. Model D under dawdreamer renders peak 0.0 and Diva was
+    found unlicensed and inserting clicks; both are written out as a measured
+    False on every capability rather than left blank, so
+    `qualified_rigs(capability=...)` cannot pick them up."""
+    for name in ("modeld", "diva"):
+        caps = rp.RIG_VERDICTS[name]["capabilities"]
+        assert set(caps.values()) == {False}, f"{name}: {caps}"
+    for c in rp.CAPABILITIES:
+        got = rp.qualified_rigs(capability=c)
+        assert "modeld" not in got and "diva" not in got, (c, got)
+
+
+def test_a_capability_query_finds_a_rig_its_rig_level_verdict_rejects():
+    """**#136's payoff, as an assertion.** Mini V3's rig-level verdict is False
+    -- on envelope timing alone -- and it must still come back as qualified for
+    waveform, pitch and the sustained filter, or the refactor bought nothing."""
+    assert rp.RIG_VERDICTS["miniv3"]["qualified"] is False
+    assert "miniv3" not in rp.qualified_rigs()
+    for c in ("pitch", "waveform", "sustained_filter"):
+        assert "miniv3" in rp.qualified_rigs(capability=c), c
+    assert "miniv3" not in rp.qualified_rigs(capability="envelope_timing")
+    assert rp.qualified_rigs(capability="envelope_timing") == []
+
+
+def test_qualified_rigs_still_answers_the_old_question_unchanged():
+    """The additive half of the contract: a caller that only cares whether a rig
+    can be a reference full stop keeps the answer it had."""
+    assert rp.qualified_rigs() == ["surge-type2"]
+    assert rp.qualified_rigs(host="pedalboard") == []
+    assert rp.qualified_rigs(host="dawdreamer") == ["surge-type2"]
+
+
+def test_qualified_rigs_composes_host_and_capability():
+    """#123's axis and #136's axis are independent, and the key is the triple.
+    Mini V3 is qualified for waveform UNDER DAWDREAMER and the same question
+    under pedalboard must not pick it up -- it is silent there."""
+    assert rp.qualified_rigs(host="dawdreamer", capability="waveform") == \
+        ["miniv3", "surge-type2"]
+    assert rp.qualified_rigs(host="pedalboard", capability="waveform") == []
+
+
+def test_verdict_for_with_a_capability_reports_that_capabilitys_verdict():
+    v = rp.verdict_for("miniv3", "dawdreamer", "waveform")
+    assert v["qualified"] is True
+    assert v["capability"] == "waveform"
+    assert v["rig_qualified"] is False, "the rig-level AND must survive, not be overwritten"
+    assert "pulse:47.9%" in v["why"], "the why must be the CAPABILITY's, not the rig's"
+
+    e = rp.verdict_for("miniv3", "dawdreamer", "envelope_timing")
+    assert e["qualified"] is False
+    assert e["rig_qualified"] is False
+
+
+def test_verdict_for_without_a_capability_is_byte_for_byte_the_old_answer():
+    """Additive, per the comment the old `RIG_VERDICTS` carried: every existing
+    caller keeps working untouched."""
+    v = rp.verdict_for("modeld", "dawdreamer")
+    assert v["qualified"] is False
+    assert "capability" not in v and "rig_qualified" not in v
+    assert v["why"] == rp.RIG_VERDICTS["modeld"]["why"]
+
+
+def test_an_unmeasured_capability_is_REFUSED_and_never_returned_as_False():
+    """`None` must not collapse into `False` one axis down from where #123 fixed
+    it. Surge's pitch has never been measured here, and a caller that reads that
+    as "Surge is not qualified for pitch" would publish a rejection nobody
+    measured."""
+    assert rp.capability_verdict("surge-type2", "dawdreamer", "pitch") is None
+    with pytest.raises(rp.Refused) as e:
+        rp.require_capability("surge-type2", "dawdreamer", "pitch")
+    why = str(e.value)
+    assert "NO VERDICT" in why, why
+    assert "nobody has measured it" in why, why
+    assert "NOT QUALIFIED" not in why, f"an unmeasured capability is not a rejection: {why}"
+
+
+def test_a_capability_nobody_recorded_is_REFUSED_and_not_a_False():
+    """A rig whose map is missing an entry entirely -- the shape an added
+    capability or an added rig has before somebody fills it in. The refusal must
+    say the verdict is ABSENT; returning False here would invent one."""
+    patched = dict(rp.RIG_VERDICTS["miniv3"])
+    patched["capabilities"] = {k: v for k, v in patched["capabilities"].items()
+                               if k != "waveform"}
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setitem(rp.RIG_VERDICTS, "miniv3", patched)
+        with pytest.raises(rp.Refused) as e:
+            rp.verdict_for("miniv3", "dawdreamer", "waveform")
+    why = str(e.value)
+    assert "NO RECORDED VERDICT" in why, why
+    assert "waveform" in why and "miniv3" in why, why
+
+
+def test_a_capability_that_is_not_on_the_axis_is_REFUSED():
+    with pytest.raises(rp.Refused) as e:
+        rp.verdict_for("miniv3", "dawdreamer", "envelope-timing")
+    assert "not a capability" in str(e.value)
+    with pytest.raises(rp.Refused):
+        rp.qualified_rigs(capability="loudness")
+
+
+def test_the_host_refusal_still_fires_before_the_capability_is_even_read():
+    """The triple is (rig, host, capability) and the host is still part of the
+    KEY, not a field beside it: asking Mini V3 about waveform under pedalboard
+    must refuse on the host, because under pedalboard Mini V3 is silent."""
+    with pytest.raises(rp.Refused) as e:
+        rp.verdict_for("miniv3", "pedalboard", "waveform")
+    assert "scoped to host" in str(e.value)
+
+
+def test_a_capability_refusal_names_the_capability_and_what_does_work():
+    """**#136's item 3.** "Mini V3 is not qualified" sent a reader looking for a
+    missing qualification run and parked 32 cases. The refusal has to name the
+    capability, and naming what the rig IS good for is what tells the next person
+    which cases were never blocked."""
+    with pytest.raises(rp.Refused) as e:
+        rp.require_capability("miniv3", "dawdreamer", "envelope_timing")
+    why = str(e.value)
+    assert "envelope_timing" in why, why
+    assert "NOT QUALIFIED" in why, why
+    assert "waveform" in why and "sustained_filter" in why, \
+        f"the refusal must name what IS qualified: {why}"
+    assert why != "miniv3 is not qualified"
+
+
+def test_require_capability_returns_the_verdict_when_it_holds():
+    v = rp.require_capability("miniv3", "dawdreamer", "sustained_filter")
+    assert v["qualified"] is True and v["capability"] == "sustained_filter"
+
+
+def test_capability_prose_is_split_out_of_the_hashed_file():
+    """#129 one axis down. `split_profile` pops TOP-LEVEL keys only, so a `why`
+    nested inside the `capabilities` map would ride into `profile.json` -- the
+    file that IS a hashed input -- and correcting a capability's sentence would
+    start invalidating measurements again."""
+    assert "capability_why" in rp.RIG_PROSE_KEYS
+    combined = {
+        "schema": rp.SCHEMA, "clips": {}, "rigs": {
+            "a": {"qualified": False, "why": "a rig reason", "host": "x",
+                  "capabilities": {"pitch": True},
+                  "capability_why": {"pitch": "a capability reason"}}},
+    }
+    evidence, notes = rp.split_profile(combined)
+    assert "capability_why" not in evidence["rigs"]["a"]
+    assert evidence["rigs"]["a"]["capabilities"] == {"pitch": True}, \
+        "the VERDICTS are evidence and stay in the hashed file"
+    assert notes["rigs"]["a"]["capability_why"]["pitch"] == "a capability reason"
+    assert rp.merge_notes(evidence, notes) == combined
+
+
+def test_no_capability_verdict_carries_prose_nested_beside_it():
+    """The gate for the mistake the test above describes: a future author adding
+    `capabilities={"pitch": {"qualified": True, "why": "..."}}` would put prose
+    back inside the hashed file, and `split_profile` could not reach it."""
+    for name, v in rp.RIG_VERDICTS.items():
+        for c, q in v["capabilities"].items():
+            assert not isinstance(q, (dict, str)), \
+                (f"{name}/{c} is {q!r}: a capability verdict is a bool or None, "
+                 f"and its prose belongs in capability_why where the #129 split "
+                 f"can reach it")
+
+
+def test_the_capability_matrix_prints_a_None_as_no_verdict_and_never_as_NO():
+    """The renderer defect that leaked #123's whole point straight back out, one
+    axis down: `"yes" if q else "NO"` announces a rejection nobody measured in
+    the one place a reader goes to find out what is rejected."""
+    rows = {r["rig"]: r for r in rp.capability_matrix()}
+    assert rp.verdict_word(rows["surge-type2"]["capabilities"]["pitch"]) == "no verdict"
+    assert rp.verdict_word(rows["miniv3"]["capabilities"]["envelope_timing"]) == "NO"
+    assert rp.verdict_word(rows["miniv3"]["capabilities"]["waveform"]) == "yes"
+    # an unrecorded entry must render as `?`, not as a verdict
+    assert rp.verdict_word("unrecorded") == "?"
+
+
+def test_cmd_capabilities_answers_with_no_profile_and_no_cache(tmp_path, monkeypatch):
+    """Most hosts in this fleet have neither the plugins nor the cache. The
+    matrix is read from `RIG_VERDICTS`, so it must still answer there -- a tool
+    that refuses to say what it knows is a tool nobody consults."""
+    monkeypatch.setattr(rp, "PROFILE_JSON", tmp_path / "nope.json")
+    assert rp.main(["--capabilities"]) == rp.OK
+
+
+# ===========================================================================
 # the split in model/reference_rigs.py, pinned with no plugin in the path
 # ===========================================================================
 import reference_rigs as rr                                           # noqa: E402

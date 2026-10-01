@@ -144,7 +144,15 @@ SCHEMA_NOTES = "refprofile-notes/1"
 #: judges what the evidence next to it means. Never grown ad hoc -- a future
 #: free-text key belongs in one of these three tables, not as a fourth split
 #: point, so `split_profile`/`merge_notes` stay each other's exact inverse.
-RIG_PROSE_KEYS = ("why", "verdict_source")
+#: `capability_why` is prose for the same reason `why` is, one axis down: a
+#: per-capability verdict is evidence (a bool or a None) and the sentence that
+#: says WHICH MEASUREMENT produced it is commentary. #136 added it here on
+#: purpose rather than nesting the sentence inside the `capabilities` map --
+#: `split_profile` pops TOP-LEVEL keys only, so a `why` nested one level down
+#: would ride into `profile.json` and reintroduce #129's defect (correcting a
+#: sentence invalidates every measurement hashed against that file) at the
+#: capability level.
+RIG_PROSE_KEYS = ("why", "verdict_source", "capability_why")
 DISQUALIFIED_PROSE_KEYS = ("verdict",)
 CLIP_PROSE_KEYS = ("why", "readback_note", "stimulus", "parts_note")
 
@@ -263,6 +271,55 @@ def clip_specs() -> list[dict]:
     return specs
 
 
+#: The capability axis of a verdict (#136). A capability is one thing a
+#: reference rig can be TRUSTED TO DELIVER, and it is deliberately a property of
+#: the rig as an instrument rather than of a case or of a measurement:
+#:
+#:   pitch              the rig sounds the note that was commanded. Mini V3's
+#:                      Range default and Model D's default patch both answer a
+#:                      commanded note an octave down, so this is a real axis and
+#:                      not a formality.
+#:   waveform           WHICH waveform the rig is producing is identifiable from
+#:                      its output -- never from what was requested. The rig
+#:                      asked Surge for a saw and a study published a 50 % pulse.
+#:   sustained_filter   the rig's cutoff and resonance can be put at a stated
+#:                      operating point and HELD there for a whole record, so a
+#:                      sustained response can be read off it. Commanded in Hz
+#:                      with readback (Surge) or calibrated against the rig's own
+#:                      self-oscillation (Mini V3) both qualify; a bare 0..1 knob
+#:                      with neither does not.
+#:   envelope_timing    a COMMANDED envelope time -- attack/decay/release in
+#:                      seconds -- is honoured and readable, so our envelope can
+#:                      be compared against a KNOWN one.
+#:
+#:                      **This is not the same thing as measuring an envelope off
+#:                      a record, and the difference is the whole of #136.**
+#:                      M1A/M5A/M5B compare our envelope against the measured
+#:                      envelope of a FROZEN Mini V3 recording
+#:                      (`envelope_calibration_source` in their provenance reads
+#:                      "frozen M5A Mini V3 measurements"), which needs no
+#:                      knob-to-time mapping at all and is why those cases run
+#:                      today. A case needs THIS capability only when it requires
+#:                      the reference to be AT a stated envelope setting.
+#:   pitch_causality    commanding +N semitones moves the MEASURED pitch to the
+#:                      ratio it should (#137). Distinct from `pitch`: a rig an
+#:                      octave down at every note still doubles correctly, and a
+#:                      rig whose pitch command does nothing still plays the right
+#:                      note at the base.
+#:   filter_causality   commanding the cutoff measurably moves the spectrum,
+#:                      monotonically, by a stated amount (#137).
+#:
+#: The last two are here because #137's causality checks are per-(rig,
+#: capability) facts of exactly this shape -- "Mini V3's pitch causality holds,
+#: its envelope timing is unmeasured" -- so the axis accommodates them rather
+#: than being re-cut when they land. `model/rig_qualification.qualify_voice`
+#: already runs both as named checks; nothing has run that battery on a
+#: dawdreamer-hosted rig yet, which is why both read `None` for Surge and
+#: Mini V3 instead of being inferred from the checks' existence.
+CAPABILITIES = ("pitch", "waveform", "sustained_filter", "envelope_timing",
+                "pitch_causality", "filter_causality")
+
+
 #: Rigs this profile knows about, and the verdict on each. A rig that is not
 #: qualified is named here with the measurement that disqualified it, because
 #: "we did not use Model D" and "Model D cannot be used" are different facts
@@ -292,11 +349,36 @@ def clip_specs() -> list[dict]:
 #: (#129). #129 split the prose into `refprofile/profile-notes.json`, which is
 #: not hashed, and corrected the stale sentence there.
 #:
-#: **Not a capability map, deliberately.** #136 asks for a per-(rig, host,
-#: capability) verdict -- "Mini V3's cutoff is answerable, its envelope timing
-#: is not" is really two verdicts about one rig -- and that is a separate,
-#: smaller change. Nothing here forecloses it: the entries are keyed by a
-#: string and carry a `host` field, so a later `capability` field is additive.
+#: **AND EVERY VERDICT IS ALSO SCOPED TO A CAPABILITY (#136).** This table used
+#: to carry one boolean per rig, and the comment that stood here said a
+#: capability map was "a separate, smaller change". It was -- and leaving it
+#: undone cost 32 cases. #122 asserted that Mini V3's uncalibrated envelope
+#: knobs block every Mono case, because a single boolean forces the MOST
+#: RESTRICTIVE capability to gate all the others. An oscillator-waveform
+#: comparison and a sustained-filter comparison need no envelope timing at all,
+#: and both were parked behind a calibration they do not depend on.
+#:
+#: So the key is now **(rig, host, capability)**. `qualified` survives as the
+#: conservative AND -- "may this rig's clips be frozen into the profile, full
+#: stop" -- and `capabilities` is what a caller should ask when it knows what it
+#: actually needs. `verdict_for(rig, host, capability=...)`,
+#: `capability_verdict` and `require_capability` are the accessors; a refusal
+#: from them names the capability, not just the rig.
+#:
+#: Each capability is `True` / `False` / `None` and the three are NOT
+#: interchangeable, exactly as at the rig level: `None` is "nothing in this
+#: repository has measured it", `False` is "measured and rejected". Collapsing
+#: them is the mistake #123 fixed at the rig level, and a capability map is a
+#: fresh chance to make it one level down.
+#:
+#: Entries here are not guesses. Every `True` and every `False` names the
+#: measurement in `capability_why`, and the honest answer for a capability
+#: nobody has probed is `None` even where the plugin would obviously pass --
+#: Surge's `pitch` is `None` because nothing here has read Surge's fundamental
+#: against a commanded note, while Mini V3's is `True` because its Range
+#: default was BROKEN and somebody therefore had to measure it (MIDI 48 at
+#: 65.42 Hz, exactly half of 130.81). That asymmetry is informative and it is
+#: the shape of this table: what is recorded is what was measured.
 RIG_VERDICTS = {
     "surge-type2": dict(
         qualified=True, host="dawdreamer",
@@ -304,7 +386,47 @@ RIG_VERDICTS = {
         why="Surge XT is open source and its LP Vintage Ladder subtype Type 2 is "
             "sst-filters' VintageLadder::Huov -- Huovilainen's DAFx-04 model, the "
             "same paper DR 0001 implements. It is the only reference here whose "
-            "cutoff is commanded in Hz and reads back in Hz."),
+            "cutoff is commanded in Hz and reads back in Hz.",
+        capabilities=dict(
+            pitch=None, waveform=True, sustained_filter=True,
+            envelope_timing=None, pitch_causality=None, filter_causality=True),
+        capability_why=dict(
+            pitch="NOT MEASURED HERE, and None rather than True for that reason "
+                  "alone. Surge's note is a MIDI note and nothing in this "
+                  "repository has read its fundamental back against a commanded "
+                  "one -- every clip this profile freezes from Surge drives the "
+                  "filter through the Audio In oscillator, where the note is not "
+                  "the thing under test. `SurgeRig.osc_tone` can produce the "
+                  "stimulus; nobody has pointed `rig_qualification.check_pitch` "
+                  "at it.",
+            waveform="MEASURED, and enforced by readback. `SurgeRig.select_osc` "
+                     "refuses unless the plugin agrees which oscillator is "
+                     "selected AND its Shape/Width read the values the mapping "
+                     "was measured at -- the check that caught index 265 "
+                     "renaming from 'Unison Voices' to the Audio In high cut, "
+                     "and the one whose absence let a 'square' publish with h2 "
+                     "at +79.6 dB.",
+            sustained_filter="MEASURED, and it is the capability this rig is in "
+                             "the profile for. Cutoff is commanded in Hz and "
+                             "reads back in Hz, and the frozen tone_train clips "
+                             "hold the response at three cutoff regions "
+                             "(CUT_REGIONS_HZ) at a stated input level.",
+            envelope_timing="NOT MEASURED. Surge's envelope times ARE in units "
+                            "and would read back, so this is very likely "
+                            "answerable -- but no clip here exercises it and no "
+                            "calibration has been run, so the entry is None. "
+                            "'Probably fine' is not a verdict.",
+            pitch_causality="NOT MEASURED. "
+                            "`rig_qualification.check_pitch_causality` exists "
+                            "and is wired into `_PedalboardPlugin.qualify`; no "
+                            "dawdreamer-hosted rig runs that battery yet.",
+            filter_causality="MEASURED, by the frozen clips rather than by "
+                             "`check_filter_causality`: CUT_REGIONS_HZ freezes "
+                             "the response at 250 / 1000 / 4000 Hz commanded and "
+                             "the corner tracks the command across all three "
+                             "(F1A/F1B/F1C read it). That is the same claim the "
+                             "centroid-monotonicity check makes, taken off audio "
+                             "this profile commits.")),
     "modeld": dict(
         qualified=False, host="dawdreamer",
         builder="reference_rigs.ModelDRig()",
@@ -312,7 +434,20 @@ RIG_VERDICTS = {
             "`--render`'s disqualification probe. The rig BUILDS (its pins hold); "
             "it produces no audio under this host, so nothing downstream of it "
             "can be a reference. This verdict is about the (plugin, host) pair "
-            "and not about the plugin: see `modeld-pedalboard`."),
+            "and not about the plugin: see `modeld-pedalboard`.",
+        capabilities=dict(
+            pitch=False, waveform=False, sustained_filter=False,
+            envelope_timing=False, pitch_causality=False, filter_causality=False),
+        capability_why={c: "False for every capability, and MEASURED rather than "
+                           "inferred: under dawdreamer 0.9.0 this bundle renders "
+                           "a buffer whose peak is exactly 0.0, with oscillator 1 "
+                           "on at full level and the filter wide open, and again "
+                           "with the filter self-oscillating. An apparatus that "
+                           "returns no signal answers no question, so a "
+                           "capability-scoped query must not be able to resurrect "
+                           "it -- which is why each entry is written out as a "
+                           "measured False and not left None."
+                        for c in CAPABILITIES}),
     "modeld-pedalboard": dict(
         qualified=None, host="pedalboard",
         builder="reference_rigs.ModelDPedalboardRig()",
@@ -338,7 +473,20 @@ RIG_VERDICTS = {
             "which no venv produces -- so this stays None, and it stays None "
             "rather than False for the same reason as before: nothing has "
             "measured the plugin.",
-        verdict_source="docs/pedalboard-rig.md"),
+        verdict_source="docs/pedalboard-rig.md",
+        capabilities={c: None for c in CAPABILITIES},
+        capability_why={c: "None, like the rig-level verdict and for the same "
+                           "reason: no operator has run this rig on a machine "
+                           "with the licensed Model D bundle, so nothing has "
+                           "measured ANY capability of it. The default patch's "
+                           "two measured defects (peak 1.000 with 8.57 % of "
+                           "samples at the rail, and 131.00 Hz for a commanded "
+                           "261.63 Hz) are facts about the DEFAULT PATCH, which "
+                           "this rig exists to correct through Model D's own "
+                           "parameters and then measure. Writing them in here as "
+                           "capability Falses would publish a rejection of the "
+                           "corrected rig that nobody has measured."
+                        for c in CAPABILITIES}),
     "miniv3": dict(
         qualified=False, host="dawdreamer",
         builder="reference_rigs.MiniV3Rig()",
@@ -348,26 +496,101 @@ RIG_VERDICTS = {
             "can be calibrated "
             "against its own self-oscillation (reference_compare.calibrate_knob); "
             "its ENVELOPE knobs cannot -- nothing in this repository maps a Mini "
-            "V3 envelope knob to a time. The Mono cases require envelope timing, "
-            "so a Mini V3 patch frozen here would compare our envelope against an "
-            "arbitrary knob position and report the difference as a result."),
+            "V3 envelope knob to a time, so a Mini V3 patch frozen AT A STATED "
+            "ENVELOPE SETTING would compare our envelope against an arbitrary "
+            "knob position and report the difference as a result. `qualified` is "
+            "False on that basis and on that basis ONLY -- see `capabilities`. "
+            "This sentence used to end 'The Mono cases require envelope timing', "
+            "which was the wrong assertion #136 is a postmortem of: it is false "
+            "of M5C/M5D (Pitch; harmonic shape; foldback energy -- no envelope "
+            "term at all) and it is the wrong reading of M1A/M5A/M5B, which "
+            "compare against the MEASURED envelope of a frozen Mini V3 recording "
+            "and need no knob-to-time mapping. One restrictive capability was "
+            "gating three that hold.",
+        capabilities=dict(
+            pitch=True, waveform=True, sustained_filter=True,
+            envelope_timing=False, pitch_causality=None, filter_causality=None),
+        capability_why=dict(
+            pitch="MEASURED, and measured because it was BROKEN: Range Osc1 "
+                  "defaults to the Model D's sub-audio 'Low' position, so MIDI 48 "
+                  "sounded at 65.42 Hz, exactly half of 130.81 Hz. "
+                  "`MiniV3Rig.osc_tone` writes parameter 45 to 0.575 ('8\\'') and "
+                  "the commanded note then sounds. The defect, the number and the "
+                  "correction are all on the record; this is the best-evidenced "
+                  "entry in the table.",
+            waveform="MEASURED from the record. `MiniV3Rig.WAVES` selects the "
+                     "Model D's six panel waveforms by parameter 48, and the "
+                     "frozen M5A/M5B reference is classified from its own audio "
+                     "-- `run_case.mono_reference_pulse_mapping` reads it as "
+                     "'pulse:47.9%' (pinned in tools/test_run_case.py), not as "
+                     "whatever the patch asked for.",
+            sustained_filter="MEASURED, by calibration rather than by readback. "
+                             "The cutoff knob is a bare 0..1 with no units, and "
+                             "`reference_compare.calibrate_knob` bisects it "
+                             "against the rig's OWN self-oscillation to put a "
+                             "stated frequency on it; M5A/M5B carry the result as "
+                             "`cutoff_calibration` in their diagnostics. The "
+                             "knob's taper between calibrated points is unknown "
+                             "and is reported, never assumed -- which is why this "
+                             "capability is `sustained_filter` and not 'cutoff "
+                             "accuracy'.",
+            envelope_timing="MEASURED ABSENT, and this is the one that disqualifies "
+                            "the rig overall. VCF and VCA attack/decay/sustain are "
+                            "parameters 26-31, each a bare 0..1 with no units and "
+                            "no readback, and nothing in this repository maps any "
+                            "of them to a time. There is no bisection to run "
+                            "either: self-oscillation gives the cutoff knob a "
+                            "frequency to aim at and no envelope knob has an "
+                            "equivalent. A number published against a commanded "
+                            "Mini V3 envelope time would be a number about a knob "
+                            "position.",
+            pitch_causality="NOT MEASURED. `check_pitch_causality` would answer "
+                            "it in two renders; no dawdreamer-hosted rig runs the "
+                            "`qualify_voice` battery yet.",
+            filter_causality="NOT MEASURED as the monotonicity check states it. "
+                             "`calibrate_knob` converging at all is weak evidence "
+                             "that the knob does something, and weak evidence of a "
+                             "related claim is not this claim: the check asks for "
+                             "a monotonic centroid across a stated knob grid and "
+                             "nobody has run it here.")),
     "diva": dict(
         qualified=False, host="dawdreamer",
         builder="reference_rigs.DivaRig()",
         why="found running unlicensed and inserting clicks (docs/reference-integrity.md "
             "section 1); it is also a general analogue-modelling synth rather than a "
             "Minimoog emulation, and is excluded from the oscillator study for that "
-            "reason already."),
+            "reason already.",
+        capabilities={c: False for c in CAPABILITIES},
+        capability_why={c: "False for every capability. The disqualification is at "
+                           "the INTEGRITY level, not the capability level: this "
+                           "plugin was found running unlicensed and inserting "
+                           "clicks into its own output "
+                           "(docs/reference-integrity.md section 1), so every "
+                           "measurement taken through it is a measurement of an "
+                           "instrument in an undeclared state. Nothing it answers "
+                           "is evidence, which is a stronger statement than any "
+                           "per-capability gap and is written across all of them so "
+                           "no capability-scoped query can route around it."
+                        for c in CAPABILITIES}),
 }
 
 
-def verdict_for(rig: str, host: str) -> dict:
-    """The verdict for one (rig, host) pair, or a REFUSAL.
+def verdict_for(rig: str, host: str, capability: str | None = None) -> dict:
+    """The verdict for one (rig, host) pair -- or one (rig, host, capability)
+    triple -- or a REFUSAL.
 
     Reading `RIG_VERDICTS[rig]` and using it under whatever host happens to be
     loaded is the mistake #123 found: `modeld`'s verdict is about dawdreamer and
     says nothing about the same bundle under pedalboard. This accessor makes the
-    host part of the lookup, so a caller cannot forget it."""
+    host part of the lookup, so a caller cannot forget it.
+
+    `capability` makes the same move on the axis #136 found. With it, the
+    returned dict's `qualified` is the verdict FOR THAT CAPABILITY -- which is
+    what a caller that knows what it needs should branch on -- and the rig-level
+    AND is preserved as `rig_qualified` rather than overwritten. Asking for a
+    capability this rig has no entry for is a REFUSAL and never a False: "we did
+    not record it" and "we measured it and it is unusable" are the two facts
+    this whole table exists to keep apart."""
     v = RIG_VERDICTS.get(rig)
     if v is None:
         raise Refused(f"{rig!r} is not a rig this profile knows about "
@@ -379,17 +602,103 @@ def verdict_for(rig: str, host: str) -> dict:
             f"evidence about another: Model D renders silence under dawdreamer "
             f"0.9.0 and peak 1.000 under pedalboard (#123). Re-derive it, or use "
             f"the rig whose host matches")
-    return dict(v)
+    out = dict(v)
+    if capability is None:
+        return out
+    if capability not in CAPABILITIES:
+        raise Refused(
+            f"{capability!r} is not a capability this profile knows about "
+            f"({', '.join(CAPABILITIES)}). A capability nobody has defined cannot "
+            f"be qualified for: add it to CAPABILITIES with what it means and what "
+            f"would measure it, and give every rig an entry")
+    caps = out.get("capabilities") or {}
+    if capability not in caps:
+        raise Refused(
+            f"{rig!r} under {host!r} has NO RECORDED VERDICT for {capability!r}. "
+            f"That is a refusal and not a False: nothing has measured this rig's "
+            f"{capability}, so there is no verdict to report. It records "
+            f"{', '.join(sorted(caps)) or '(nothing)'}")
+    out["rig_qualified"] = out.get("qualified")
+    out["capability"] = capability
+    out["qualified"] = caps[capability]
+    out["why"] = (out.get("capability_why") or {}).get(capability, out.get("why", ""))
+    return out
 
 
-def qualified_rigs(host: str | None = None) -> list:
+def capability_verdict(rig: str, host: str, capability: str):
+    """`True` / `False` / `None` for one (rig, host, capability) triple, or a
+    REFUSAL if the triple is not recorded. The three-state value is returned as
+    itself -- a caller that wants a boolean has to decide what to do with
+    "nobody measured it", which is the decision this returns rather than makes."""
+    return verdict_for(rig, host, capability)["qualified"]
+
+
+def require_capability(rig: str, host: str, capability: str) -> dict:
+    """The verdict for one (rig, host, capability), or a REFUSAL THAT NAMES THE
+    CAPABILITY.
+
+    #136's item 3, and the reason it is a function rather than a convention: a
+    refusal that says "Mini V3 is not qualified" sends the reader to look for a
+    missing qualification run, and the true statement -- "Mini V3 is not
+    qualified for envelope timing; it IS qualified for pitch, waveform and
+    sustained filter" -- sends them to the one calibration that is actually
+    missing. The first wording parked 32 cases."""
+    v = verdict_for(rig, host, capability)
+    q = v["qualified"]
+    if q is True:
+        return v
+    state = ("is NOT QUALIFIED for" if q is False
+             else "has NO VERDICT for (nobody has measured it)")
+    ok = [c for c in CAPABILITIES
+          if (v.get("capabilities") or {}).get(c) is True]
+    raise Refused(
+        f"{rig} under {host} {state} {capability}. "
+        f"It IS qualified for: {', '.join(ok) or '(nothing)'}. "
+        f"Why: {v.get('why') or '(no reason recorded)'}")
+
+
+def qualified_rigs(host: str | None = None, capability: str | None = None) -> list:
     """Rig names whose verdict is `qualified is True` -- never the ones whose
     verdict is None. A rig nobody has qualified yet is not a qualified rig, and
     `None or False` collapsing to "not usable" is the same conflation in the
-    other direction."""
-    return sorted(n for n, v in RIG_VERDICTS.items()
-                  if v.get("qualified") is True
-                  and (host is None or v.get("host") == host))
+    other direction.
+
+    With `capability`, the question becomes "which rigs are qualified for THIS"
+    and **the rig-level `qualified` flag is deliberately not consulted**. That
+    is the whole point of #136: Mini V3's rig-level verdict is False because of
+    envelope timing alone, and `qualified_rigs(capability="waveform")` must
+    include it or the capability map has bought nothing. A rig disqualified at
+    the apparatus level cannot slip through, because its capability entries are
+    written out as measured Falses (`modeld`, `diva`) rather than left blank."""
+    if capability is not None and capability not in CAPABILITIES:
+        raise Refused(f"{capability!r} is not a capability this profile knows "
+                      f"about ({', '.join(CAPABILITIES)})")
+    out = []
+    for n, v in sorted(RIG_VERDICTS.items()):
+        if host is not None and v.get("host") != host:
+            continue
+        if capability is None:
+            if v.get("qualified") is True:
+                out.append(n)
+        elif (v.get("capabilities") or {}).get(capability) is True:
+            out.append(n)
+    return out
+
+
+def capability_matrix() -> list:
+    """`--capabilities`' rows: one per rig, in the `CAPABILITIES` column order.
+    Rendered through `verdict_word`, so a `None` prints as "no verdict" and
+    never as "NO" -- the renderer defect that leaked #123's whole point straight
+    back out, one axis down."""
+    rows = []
+    for name, v in sorted(RIG_VERDICTS.items()):
+        caps = v.get("capabilities") or {}
+        rows.append({
+            "rig": name, "host": v.get("host"),
+            "rig_qualified": v.get("qualified"),
+            "capabilities": {c: caps.get(c, "unrecorded") for c in CAPABILITIES},
+        })
+    return rows
 
 
 #: The three words `--list` may print in the `qualified` column, and there are
@@ -1230,6 +1539,38 @@ def render(probe_disqualified: bool = True) -> dict:
 # ===========================================================================
 # 6. CLI
 # ===========================================================================
+def cmd_capabilities() -> int:
+    """The (rig, host, capability) matrix. Sourced from `RIG_VERDICTS` and NOT
+    from the committed profile, deliberately: this has to answer on the hosts
+    that have neither the plugins nor the cache, which is most of this fleet,
+    and a `--render` only copies this table into `profile.json` anyway."""
+    print("per-(rig, host, capability) verdicts -- tools/refprofile.py "
+          "RIG_VERDICTS (#136)")
+    print("a render copies this into refprofile/profile.json; this table is the "
+          "source")
+    print()
+    short = {"pitch": "pitch", "waveform": "wave", "sustained_filter": "sus-filt",
+             "envelope_timing": "env-time", "pitch_causality": "pitch-caus",
+             "filter_causality": "filt-caus"}
+    head = f"{'rig':<20}{'host':<12}{'overall':<11}"
+    head += "".join(f"{short.get(c, c):<12}" for c in CAPABILITIES)
+    print(head)
+    print("-" * len(head))
+    for row in capability_matrix():
+        line = (f"{row['rig']:<20}{str(row['host']):<12}"
+                f"{verdict_word(row['rig_qualified']):<11}")
+        line += "".join(f"{verdict_word(row['capabilities'][c]):<12}"
+                        for c in CAPABILITIES)
+        print(line)
+    print("-" * len(head))
+    print("'no verdict' is NOT 'NO': nothing has measured it. "
+          "`capability_why` in RIG_VERDICTS says which measurement produced each "
+          "entry.")
+    for c in CAPABILITIES:
+        print(f"qualified for {c:<18}{', '.join(qualified_rigs(capability=c)) or '(none)'}")
+    return OK
+
+
 def cmd_list() -> int:
     try:
         prof = load_profile()
@@ -1278,10 +1619,17 @@ def main(argv=None) -> int:
                    help="re-render every clip and rewrite the profile. Needs the "
                         "plugins and dawdreamer; produces a diff on purpose")
     g.add_argument("--list", action="store_true", help="what the profile holds")
+    g.add_argument("--capabilities", action="store_true",
+                   help="the per-(rig, capability) verdict matrix (#136). Read "
+                        "from RIG_VERDICTS, so it answers on a host with no "
+                        "profile and no cache at all")
     ap.add_argument("--out", default=None,
                     help="write the rendered evidence here instead of "
                          "refprofile/profile.json (notes go to its -notes.json sibling)")
     a = ap.parse_args(argv)
+
+    if a.capabilities:
+        return cmd_capabilities()
 
     if a.list:
         return cmd_list()
