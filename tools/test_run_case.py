@@ -43,6 +43,7 @@ sys.path.insert(0, str(ROOT / "model"))
 
 import audio_measure as am                                          # noqa: E402
 import partial_trajectory as pt                                     # noqa: E402
+import refprofile as rp                                             # noqa: E402
 import run_case as rc                                               # noqa: E402
 import scorecard as sb                                              # noqa: E402
 
@@ -2074,6 +2075,158 @@ def test_every_not_run_reason_says_something():
     sentence is the second one wearing the first one's label."""
     for cid, why in rc.NOT_RUN.items():
         assert len(why) > 80, (cid, why)
+
+
+# ===========================================================================
+# what a case consumes from its reference rig (#136)
+# ===========================================================================
+#
+# `refprofile` now records a verdict per (rig, host, capability). A runner can
+# only use that if the CASE says what it needs, and `capabilities_for` derives
+# that from the case's own `required_measurements` cell rather than from a second
+# hand-written table beside it.
+
+def test_every_measurement_term_of_every_rig_backed_case_is_classified():
+    """The gate that makes the derivation trustworthy. An unclassified term would
+    silently shrink a case's requirements, and a requirement that vanishes
+    because nobody mapped its term is how one boolean came to park 32 cases.
+
+    `capabilities_for` RAISES on an unknown term, so this is the test that says
+    the raise never fires in the committed tree."""
+    for c in rc.load_cases():
+        rc.capabilities_for(c["case_id"], c)          # must not raise
+
+
+def test_a_case_whose_reference_is_frozen_audio_consumes_no_rig_capability():
+    """A hardware recording and our own stems have no capabilities: nothing
+    commands them. Returning `()` here rather than deriving pitch/decay from the
+    drum terms is the difference between "this case needs no rig" and "this case
+    needs a rig that can do everything a drum measurement names"."""
+    for cid in ("D01A", "D01B", "E1A", "E3D"):
+        case = next(c for c in rc.load_cases() if c["case_id"] == cid)
+        assert rc.capabilities_for(cid, case) == (), cid
+        assert case["reference_target"] in rc.REFERENCE_WITHOUT_A_RIG
+        assert rc.REFERENCE_WITHOUT_A_RIG[case["reference_target"]]
+
+
+def test_the_terms_are_matched_exactly_and_not_by_substring():
+    """`tracking` (F5, cutoff motion) and `frequency tracking` (F4, self
+    oscillation) are two different capabilities, and a substring match makes them
+    one. F4 must come back with pitch and NOT with filter_causality."""
+    assert "pitch" in rc.capabilities_for("F4A")
+    assert "filter_causality" not in rc.capabilities_for("F4A")
+    assert "filter_causality" in rc.capabilities_for("F5A")
+    assert "pitch" not in rc.capabilities_for("F5A")
+
+
+def test_every_derived_capability_is_on_the_axis():
+    for c in rc.load_cases():
+        for cap in rc.capabilities_for(c["case_id"], c):
+            assert cap in rp.CAPABILITIES, (c["case_id"], cap)
+    for term, caps in rc.CAPABILITY_TERMS.items():
+        for cap in caps:
+            assert cap in rp.CAPABILITIES, (term, cap)
+
+
+def test_every_term_classified_as_consuming_nothing_says_why():
+    """"not on the capability axis" and "I forgot to classify it" look identical
+    in an empty result."""
+    for term, why in rc.TERMS_WITHOUT_CAPABILITY.items():
+        assert len(why) > 60, (term, why)
+        assert term not in rc.CAPABILITY_TERMS, f"{term} is in both tables"
+
+
+def test_every_capability_exemption_names_its_evidence():
+    """An exemption without evidence is how a requirement gets dropped because it
+    was inconvenient. Each must name the measurement that makes the case genuinely
+    independent of the capability its own terms imply."""
+    assert rc.WITHOUT_CAPABILITY, "the exemption mechanism with no entries is untested"
+    for cid, caps in rc.WITHOUT_CAPABILITY.items():
+        for cap, why in caps.items():
+            assert cap in rp.CAPABILITIES, (cid, cap)
+            assert len(why) > 120, (cid, cap, why)
+            assert "envelope_calibration_source" in why or "measured" in why, (cid, cap)
+
+
+def test_the_mono_family_is_not_uniformly_blocked_on_envelope_timing():
+    """**The assertion #122 got wrong, as a test.** "Every Mono case requires
+    envelope timing" was one plausible sentence covering 32 cases. It is false of
+    M5C/M5D, whose own required_measurements name no envelope term at all."""
+    mono = [c["case_id"] for c in rc.load_cases() if c["family"] == "Mono"]
+    needs = {cid for cid in mono if "envelope_timing" in rc.capabilities_for(cid)}
+    assert needs, "if no Mono case needed envelope timing the derivation is broken"
+    assert set(mono) - needs, ("every Mono case derives envelope_timing, which is "
+                               "the flattening #136 was filed about")
+    for cid in ("M5C", "M5D"):
+        assert "envelope_timing" not in rc.capabilities_for(cid), cid
+        assert rc.capabilities_for(cid) == ("pitch", "waveform"), cid
+
+
+def test_the_capability_gate_agrees_with_which_mono_cases_actually_RUN_today():
+    """**The cross-check that is not against our own decision record.**
+
+    Every assertion above reads tables this change introduced, so between them
+    they can only say the refactor is self-consistent. This one compares the
+    capability gate against a fact settled long before it and by other means:
+    which Mono cases produce numbers today. `plan_for` says M1A, M5A and M5B are
+    attempted and the other six anchors are `not-run`; that split was decided
+    case by case, from measurements, by people who had no capability map.
+
+    The gate must reproduce it exactly. If it refuses a case that runs, it would
+    park working work -- which is the #122 failure. If it clears a case that is
+    blocked, it would license a comparison against an uncalibrated knob -- which
+    is worse. Neither direction is checkable from inside the new tables."""
+    mono = [c["case_id"] for c in rc.load_cases() if c["family"] == "Mono"]
+    attempted = {cid for cid in mono if rc.plan_for(cid) != "not-run"
+                 and rc.plan_for(cid) != "unplanned"}
+    blocked = {cid for cid in mono if rc.plan_for(cid) == "not-run"}
+    assert attempted == {"M1A", "M5A", "M5B"}, attempted
+    assert blocked == {"M2A", "M3A", "M4A", "M6A", "M7A", "M8A"}, blocked
+
+    for cid in attempted:
+        assert rc.capability_refusal(cid, "miniv3", "dawdreamer") is None, (
+            f"{cid} RUNS and scores today, and the capability gate refuses it. "
+            f"The gate is wrong, not the case")
+    for cid in blocked:
+        why = rc.capability_refusal(cid, "miniv3", "dawdreamer")
+        assert why is not None, f"{cid} is not-run and the gate clears it"
+        assert "envelope_timing" in why, (cid, why)
+
+
+def test_a_capability_refusal_for_a_case_names_the_capability_and_the_case():
+    """#136's item 3 at the case level: the refusal has to be actionable. "Mini V3
+    is not qualified" sends the reader looking for a missing qualification run."""
+    why = rc.capability_refusal("M3A", "miniv3", "dawdreamer")
+    assert "M3A" in why and "envelope_timing" in why, why
+    assert "pitch" in why, "it must say what the rig IS qualified for"
+    assert why != "miniv3 is not qualified"
+
+
+def test_the_same_rig_clears_a_case_that_needs_only_what_it_can_do():
+    """The payoff, through the case path: Mini V3 is refused for M3A and cleared
+    for M5C with no change to the rig, because the two cases consume different
+    capabilities. One boolean per rig could not express that."""
+    assert rc.capability_refusal("M5C", "miniv3", "dawdreamer") is None
+    assert rc.capability_refusal("M3A", "miniv3", "dawdreamer") is not None
+
+
+def test_a_filter_case_is_cleared_by_surge_and_refused_by_an_unmeasured_rig():
+    """The other family, and the `None` direction: Surge holds the frozen filter
+    clips F1A reads, and `modeld-pedalboard` has no verdict for anything -- which
+    must refuse, naming the capability, and must NOT read as a rejection."""
+    assert rc.capability_refusal("F1A", "surge-type2", "dawdreamer") is None
+    why = rc.capability_refusal("F1A", "modeld-pedalboard", "pedalboard")
+    assert "sustained_filter" in why, why
+    assert "NO VERDICT" in why, why
+
+
+def test_a_case_that_needs_a_capability_nothing_is_qualified_for_says_so():
+    """`qualified_rigs(capability=...)` is empty for envelope timing across every
+    rig and every host. That is the real state of this instrument and the one
+    number that says what the missing deliverable is."""
+    assert rp.qualified_rigs(capability="envelope_timing") == []
+    for cid in ("M2A", "M3A", "M4A", "M6A", "M7A", "M8A"):
+        assert "envelope_timing" in rc.capabilities_for(cid), cid
 
 
 # ===========================================================================

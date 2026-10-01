@@ -83,8 +83,32 @@ is the mistake #123 found.
 | **Surge XT 1.2.3** Type 2 | `dawdreamer` | ✅ | open source; its LP Vintage Ladder subtype Type 2 is `sst-filters`' `VintageLadder::Huov` — Huovilainen's DAFx-04 model, the same paper DR 0001 implements. The **only** reference here whose cutoff is commanded in Hz and reads back in Hz |
 | **Moog Model D** | `dawdreamer` | ❌ | **renders exact silence under `dawdreamer` 0.9.0.** Measured, not inherited: peak 0.0 with oscillator 1 on at full level and the filter wide open, and peak 0.0 with the filter self-oscillating. The rig builds and its pins hold. This verdict is about the (plugin, host) pair and **not** about the plugin — see the row below. `profile-notes.json`'s `disqualified.modeld.verdict` and `rigs.modeld.why` now carry this same host-scoped wording (#129 corrected the unscoped "renders exact silence headlessly" that used to live in `profile.json` itself — a prose edit, and it no longer touches a hashed input) |
 | **Moog Model D** | `pedalboard` | ⏳ **no verdict yet** | **NOT silent under `pedalboard`** — peak 1.000, 8.57 % of samples at the rail, strongest partial 131.00 Hz for a commanded MIDI 60 (261.63 Hz, so an octave down — the same default as Mini V3, which is itself the exact reverse: it sounds under dawdreamer and is silent under pedalboard). Both of those disqualify the **default patch**, so `reference_rigs.ModelDPedalboardRig` (#124) exists to try to correct them through Model D's own parameters and measure whether it worked: it sweeps Osc 1 Range and selects the position that *sounds* the commanded note, and steps the master volume to the loudest setting with zero samples at the rail. `qualified` is **`None`, not `false`** — no operator has run it on a machine with the bundle. Run `python tools/qualify_modeld_pedalboard.py`; see [`docs/pedalboard-rig.md`](../docs/pedalboard-rig.md). **What is missing narrowed on 2026-09-30:** the *host* is no longer part of it — `pedalboard` 0.9.25 installs cleanly from a wheel on Linux / CPython 3.12 into an isolated venv, the rig's API surface has been read against that install and holds, and the refusal on this fleet is now `Moog Model D is not installed at …` rather than `no pedalboard on this machine`. The one remaining blocker is the **licensed Model D binary**, which no venv produces |
-| **Arturia Mini V3** | `dawdreamer` | ❌ | makes sound under this host (it is **silent** under `pedalboard`), and every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (`reference_compare.calibrate_knob`); its **envelope** knobs cannot, because nothing here maps a Mini V3 envelope knob to a time. Its Range control also defaults an octave down — note 48 reads 65.42 Hz until parameter 45 is written |
+| **Arturia Mini V3** | `dawdreamer` | ❌ | makes sound under this host (it is **silent** under `pedalboard`), and every parameter is a bare 0..1 with no units and no readback. Its cutoff can be calibrated against its own self-oscillation (`reference_compare.calibrate_knob`); its **envelope** knobs cannot, because nothing here maps a Mini V3 envelope knob to a time. Its Range control also defaults an octave down — note 48 reads 65.42 Hz until parameter 45 is written. **The ❌ is `envelope_timing` alone** — see the capability matrix below, where this rig is ✅ for pitch, waveform and the sustained filter |
 | **u-he Diva** | `dawdreamer` | ❌ | found running unlicensed and inserting clicks (`docs/reference-integrity.md` §1), and is a general analogue-modelling synth rather than a Minimoog emulation |
+
+**And every verdict is scoped to a CAPABILITY (#136).** One boolean per rig
+forces the most restrictive capability to gate every other one, which is how one
+missing calibration came to be recorded as a 32-case blocker. `python
+tools/refprofile.py --capabilities` prints this on any host, and
+`capability_why` in `RIG_VERDICTS` names the measurement behind every cell:
+
+| rig | overall | pitch | waveform | sustained filter | envelope timing | pitch causality | filter causality |
+|---|---|---|---|---|---|---|---|
+| **Surge XT** Type 2 | ✅ | ⏳ | ✅ | ✅ | ⏳ | ⏳ | ✅ |
+| **Mini V3** | ❌ | ✅ | ✅ | ✅ | ❌ | ⏳ | ⏳ |
+| **Model D** / `dawdreamer` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Model D** / `pedalboard` | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| **Diva** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+⏳ is **no verdict**, not ❌ — and the asymmetry is the point. **Mini V3's pitch is
+measured and Surge's is not**, because Mini V3's Range default was *broken* and
+somebody therefore had to measure it (MIDI 48 at 65.42 Hz, exactly half of
+130.81) while nobody ever doubted Surge's. What is recorded is what was measured,
+and "probably fine" is not a verdict. The two all-❌ rows are disqualified at the
+**apparatus** level — Model D returns peak 0.0 under this host, Diva was found
+unlicensed and inserting clicks — so their rejections are written out across
+every capability rather than left blank, and no capability-scoped query can route
+around them.
 
 **No clip in this profile comes from a pedalboard-hosted rig.** All sixteen are
 Surge XT Type 2 under `dawdreamer`, and adding the pedalboard entry to
@@ -257,6 +281,40 @@ constant withdrew a whole column of #61.)
 - **`qualified: None` is not `qualified: false`.** "Nobody has run it" and "it
   cannot be used" are different facts. `refprofile.qualified_rigs()` returns only
   the `True` entries, and nothing may read a `None` as a rejection.
+- **A verdict also belongs to a CAPABILITY, and the three-state rule applies
+  there too (#136).** One boolean per rig forces the most restrictive capability
+  to gate every other one: Mini V3's uncalibrated envelope knobs were recorded as
+  blocking 32 Mono cases, when an oscillator-waveform comparison and a
+  sustained-filter comparison need no envelope timing at all. So the key is
+  (rig, host, capability):
+
+  ```
+  python tools/refprofile.py --capabilities      # the matrix, on any host
+  ```
+
+  `verdict_for(rig, host, capability)` returns that capability's verdict and
+  keeps the rig-level AND as `rig_qualified`; `require_capability` raises a
+  refusal **naming the capability** and saying what the rig *is* qualified for;
+  `qualified_rigs(capability=...)` deliberately does **not** consult the
+  rig-level boolean, which is the whole point — Mini V3's overall verdict is
+  `NO` and it is qualified for `pitch`, `waveform` and `sustained_filter`.
+  Asking for a capability a rig has no entry for is a **refusal**, never a
+  `False`. A rig disqualified at the apparatus level (`modeld` renders silence,
+  `diva` was found unlicensed) carries a measured `False` on *every* capability,
+  written out rather than left blank, so no capability-scoped query can route
+  around it. `capability_why` is prose and lives in `profile-notes.json` with
+  the rest (#129).
+- **A case says what it consumes, so the runner can ask the right question.**
+  `run_case.capabilities_for(case_id)` derives it from the case's own
+  `required_measurements` cell in `docs/scorecard/cases.csv` rather than from a
+  second table beside it, and `run_case.capability_refusal(case, rig, host)`
+  names the capability. The derivation independently reproduces which Mono cases
+  run today: M1A/M5A/M5B need only capabilities Mini V3 has, and the six
+  `NOT_RUN` anchors are exactly the ones that need envelope timing.
+  `tools/capability_pack.py` is the pack that was parked behind that
+  calibration — two waveforms at two pitches plus an open/closed filter pair —
+  with the gate it passes and the apparatus refusal it still hits on a host
+  with no plugins.
 - **Every clip's environment tuple goes through `refprofile.environment_tuple`,
   whichever host rendered it.** One recorder — host and version, plugin and
   binary hash, block size *and its rate in Hz*, sample rate, licence state,
