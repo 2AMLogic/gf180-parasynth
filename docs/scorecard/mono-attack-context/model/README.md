@@ -33,3 +33,37 @@ The WAVs were first rendered at `1ae5071b038d93df507efb50b76cb3c83eb6d228`, with
 The evidence is now bound to `85f46ec7f0ce831d12c5a652643f57692af823f8`, a merge commit on this branch that stays reachable because the branch is updated by merge, not rebase. [Linux CI](https://github.com/2AMLogic/gf180-parasynth/actions/runs/36660843540) re-ran `tools/compare_mono_attack_context.py` at that commit. It reproduced **all 12 WAVs byte-for-byte**, and every timing row and history contrast is identical to the original report. Only `source_commit` and `source_sha256` changed. Merging #192's engine changes did not change the selected baseline's audio: pulse 2× is still not selected. `ci-import.json` keeps the original run, commit and report hash under `rebound_from`.
 
 The verifier still checks every recorded source hash against the bound Git commit and lists differences from today's checkout. It separately requires the audio-analysis modules to keep their recorded hashes: changed analysis refuses. It reproduces the audio measurements without rendering. No verifier check was loosened for the re-bind.
+
+## Second re-bind: `a10a510`, because #134 changed the analysis basis
+
+**The "changed analysis refuses" check above then fired for real.** #134 added
+a finiteness assertion to `model/audio_measure.py` -- a NaN defeats every
+threshold guard shaped `if bad: refuse`, because IEEE comparisons against NaN
+are always False -- and the verifier correctly refused the new hash. It was the
+only thing in the repository that noticed, and it noticed a *docstring-and-
+assertion* change, which is the behaviour this record wants.
+
+The evidence is now bound to `a10a51056de1bf55b8d37bbfc63eeafab9744cbd`.
+`tools/compare_mono_attack_context.py` re-ran at that commit and **re-rendered
+all 12 WAVs byte-identically** (`git status` reported only `report.json`
+modified). Every attack and release crossing, every other `model_timing` field,
+and all six history contrasts are identical. Six of the twelve `held_rms`
+values differ in the last one or two ulp, **max 1.11e-16** against the
+diagnostic's recorded 1e-14 relative tolerance. So `source_commit`,
+`source_sha256` and those six values are the entire delta: the new finiteness
+assertion is a no-op on finite audio, measured rather than asserted.
+
+That one-ulp difference is worth a note. The first time it appeared it was
+recorded as an ARM/x86 property; this re-run was **Linux x86_64 to Linux
+x86_64**, so it is a summation-order or library-version property, not an
+architecture one. The tolerance was already right; the explanation was too
+narrow.
+
+**This re-bind was produced locally, not in CI**, which the two before it were.
+The agent's token could not dispatch `attack_context_model.yml`
+(HTTP 403, `Resource not accessible by integration`). A maintainer with
+`actions: write` can dispatch that workflow on this branch and replace
+`report.json`; the re-render above is the evidence that the content does not
+depend on which of the two it is. `produced_by` in `ci-import.json` records the
+host, the command and the reason, and `workflow_url` is `null` rather than
+carrying a stale link.
