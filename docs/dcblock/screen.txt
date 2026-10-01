@@ -1,8 +1,16 @@
-commit 714dac6dcc6b-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+commit fa92b8d2be7f-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
-THE SCREEN. phi is the share of a voice's sub-20 Hz energy in the f = 0 bin --
-the part a zero at z = 1 removes exactly. The rest is the onset envelope's own
-skirt, which the blocker only attenuates by |H(f)|. So
+THE SCREEN. beta is the share of a voice's sub-20 Hz energy BELOW the
+blocker's own corner -- the part the filter attenuates. The rest is the onset
+envelope's skirt, which straddles the corner and is passed. beta is the CLASS
+DISCRIMINATOR and is window-stable; phi (the f = 0 bin alone) is printed
+beside it as a diagnostic and is NOT, because that bin's width is 1/T: the
+CY's phi fell 0.888 -> 0.391 when the clip went 0.60 -> 2.40 s and nothing
+about the cymbal changed. The floor below is still read off phi, so it is a
+window-dependent floor on a window-independent conclusion.
+
+phi is the share in the f = 0 bin -- the part a zero at z = 1 removes
+exactly. The rest the blocker only attenuates by |H(f)|. So
 
     attenuation >= -10 log10(1 - phi)   (floor, from the DC bin alone)
 
@@ -11,17 +19,18 @@ computed from the uncoupled spectrum and the filter's own transfer function,
 with NOTHING rendered; MEASURED is the integer filter run inside the block.
 STEADY is an UPPER bound: a causal filter starting from rest answers the
 clip's opening step with a tail of its own, and that tail is sub-20 Hz energy
-too -- the same 21 ms tail that triples the rimshot's decay. MEASURED must
+too -- the same 21 ms tail that triples the rimshot's GLOBAL T20 while leaving
+its audible band alone (--decay). MEASURED must
 land between the two, which is a two-sided check of a model against an
 implementation neither was fitted to.
 
-            phi    floor   steady  measured   slack    K for 6 dB  origin of the sub-20 Hz energy
-                      dB       dB        dB      dB
-  CY     0.3907     2.15    14.93     14.85  +12.70          K=12  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
-  RS     0.0104     0.05     2.71      2.70   +2.65           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
-  BD     0.2097     1.02     3.34      3.25   +2.23           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
-  HT     0.0021     0.01     2.58      2.57   +2.56           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
-  CH     0.0879     0.40    11.66      5.03   +4.63          K=11  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
+           beta     phi    floor   steady  measured   slack    K for 6 dB  where the sub-20 Hz energy IS
+            <fc     f=0       dB       dB        dB      dB
+  CY     0.9828  0.3907     2.15    14.93     14.85  +12.70          K=12  BELOW the corner: a blocker removes it
+  RS     0.3802  0.0104     0.05     2.71      2.70   +2.65           K=8  the ONSET ENVELOPE'S SKIRT, across the corner: it cannot
+  BD     0.4549  0.2097     1.02     3.34      3.25   +2.23           K=8  the ONSET ENVELOPE'S SKIRT, across the corner: it cannot
+  HT     0.3592  0.0021     0.01     2.58      2.57   +2.56           K=8  the ONSET ENVELOPE'S SKIRT, across the corner: it cannot
+  CH     0.9733  0.0879     0.40    11.66      5.03   +4.63          K=11  BELOW the corner: a blocker removes it
 
   'K for 6 dB' is the LOWEST corner (largest K) that reaches the
   required improvement. K is a shift, so these are the only corners the

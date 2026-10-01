@@ -1031,7 +1031,8 @@ def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
     print("with NOTHING rendered; MEASURED is the integer filter run inside the block.")
     print("STEADY is an UPPER bound: a causal filter starting from rest answers the")
     print("clip's opening step with a tail of its own, and that tail is sub-20 Hz energy")
-    print("too -- the same 21 ms tail that triples the rimshot's decay. MEASURED must")
+    print("too -- the same 21 ms tail that triples the rimshot's GLOBAL T20 while leaving")
+    print("its audible band alone (--decay). MEASURED must")
     print("land between the two, which is a two-sided check of a model against an")
     print("implementation neither was fitted to.\n")
     print(f"  {'':5s} {'beta':>7s} {'phi':>7s} {'floor':>8s} {'steady':>8s} {'measured':>9s} "
