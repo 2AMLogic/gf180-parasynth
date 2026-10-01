@@ -10,7 +10,10 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tools" / "probes"))
 sys.path.insert(0, str(ROOT / "model"))
+import check_doc_claims as cdc
+import edge_leak_flatness as elf
 import measure_promoted_bands as mpb
 import measure_repeatability as mr
 import promoted_bands as pb
@@ -250,6 +253,174 @@ def test_the_whole_clip_reading_reports_its_edge_leak_but_does_not_refuse():
     # A 240 ms window's half-width is 8.3 Hz, which does clear 50 from 40 --
     # which is exactly why the whole-clip reading did not expose this at all.
     assert e.detail["main_lobe_half_hz"] == pytest.approx(8.33, abs=0.05)
+
+
+# --- #515: the SECOND reason the edge guard fires, which is not a straddle ---
+
+def test_flat_spectrum_content_refuses_without_any_line_near_an_edge():
+    """The structural cause, pinned with fixed seeds so it is deterministic in
+    the suite even though it is realization-dependent on arbitrary input.
+
+    White noise has no line anywhere, let alone near an edge, and all five
+    seeds refuse: `edge_leak` runs 0.070-0.649 against a 0.05 threshold. The
+    cause is bin COUNTS -- 4 adjacent bins against 12 in-band ones at the
+    40-200 Hz default in an 80 ms window -- so the expectation is 0.333 with no
+    straddle available to explain it. `detail["flat_leak_ref"]` carries that
+    number on every reading, which is the only way a reader can tell this cause
+    from the #111 one.
+
+    Reproduces #515's measured table exactly (0.402/0.183/0.182/0.070/0.649 for
+    seeds 0-4), re-confirmed against origin/main 9c4587a under numpy 1.26.4
+    where the issue measured it under 2.5.2 -- `default_rng` is version-stable,
+    so the two agree to three decimals."""
+    n = int(0.24 * SR)
+    want = [0.402, 0.183, 0.182, 0.070, 0.649]
+    for seed, leak in enumerate(want):
+        x = np.random.default_rng(seed).standard_normal(n)
+        e = pm.lowband_onset_db(x, SR)
+        assert not e.ok and "main lobe" in e.reason, (seed, e)
+        assert e.detail["edge_leak"] == pytest.approx(leak, abs=0.001), seed
+        assert e.detail["flat_leak_ref"] == pytest.approx(1 / 3, abs=1e-9)
+    # the arithmetic, so "structural" is checked and not asserted
+    adj, inb, half, df = elf._bins(int(round(pm.ONSET_WINDOW_MS * SR / 1000.0)))
+    assert (adj, inb) == (4, 12) and half == pytest.approx(25.0)
+    assert adj / inb > 6.0 * pm.EDGE_LEAK_MAX
+    # ...and the refusal must not blame the straddle, because it cannot know
+    assert "straddling an edge, or of a band flat enough" in e.reason, e.reason
+
+
+def test_flat_content_needs_band_width_times_window_length_over_80_hz_s():
+    """The closed form that generalises the case above to any band and window,
+    and the control that proves the verdict is the WIDTH RATIO rather than a
+    straddle: the SAME white noise, the SAME 40 Hz lower edge and the SAME
+    80 ms window refuse 5/5 at 40-200 Hz and answer 5/5 at 40-2000 Hz.
+
+    No straddle explanation survives that -- the lower edge and the window did
+    not move. What moved is W x T: 12.8 Hz.s against 156.8, either side of the
+    4 / EDGE_LEAK_MAX = 80 Hz.s crossing, because a Hann leak ring is always
+    two bins per side."""
+    assert 4.0 / pm.EDGE_LEAK_MAX == pytest.approx(80.0)
+    n = int(0.24 * SR)
+    seeds = [np.random.default_rng(s).standard_normal(n) for s in range(5)]
+    narrow = [pm.lowband_onset_db(x, SR, (40.0, 200.0)) for x in seeds]
+    wide = [pm.lowband_onset_db(x, SR, (40.0, 2000.0)) for x in seeds]
+    assert not any(e.ok for e in narrow)
+    assert all(e.ok for e in wide), [e.reason for e in wide if not e.ok]
+    for e, want_ref in ((narrow[0], 4 / 12), (wide[0], 4 / 156)):
+        assert e.detail["flat_leak_ref"] == pytest.approx(want_ref, abs=1e-9)
+        assert e.detail["main_lobe_half_hz"] == pytest.approx(25.0)
+    # the law, as bins rather than as Hz, for both rows
+    for band, win_ms, want in (((40.0, 200.0), 80.0, 12),
+                               ((40.0, 2000.0), 80.0, 156)):
+        adj, inb, _half, _df = elf._bins(int(round(win_ms * SR / 1000.0)), band)
+        assert (adj, inb) == (4, want), (band, adj, inb)
+        assert (inb > 4.0 / pm.EDGE_LEAK_MAX) == (want == 156)
+
+
+def test_the_verdict_near_the_noise_boundary_depends_on_the_realization():
+    """Why #515 matters to #138's floor rather than to anything shipping today:
+    a floor is a session-to-session spread, so it needs the estimator to answer
+    on BOTH takes at one setting. Near the noise/tonal boundary it does not.
+
+    A 180 Hz line -- clear of both edges by more than one main-lobe half-width,
+    so its own skirt is not the subject -- plus `a x` broadband noise. At
+    a = 2.0 three of five realizations of the SAME distribution answer and two
+    refuse. Pinned per-seed, so the split is deterministic here while remaining
+    realization-dependent on arbitrary input, which is the thing to know before
+    the corpus run rather than after it."""
+    def verdicts(a):
+        return [pm.lowband_onset_db(elf._shell_plus_noise(a, s), SR).ok
+                for s in range(5)]
+    assert verdicts(0.5) == [True] * 5
+    assert verdicts(2.0) == [False, True, True, False, True]
+    assert verdicts(5.0) == [False] * 5
+
+
+def test_a_fast_decaying_line_defeats_the_edge_guard():
+    """RULE 8 for the edge guard: the input that satisfies it while violating
+    its intent, constructed by searching for one rather than waiting for one
+    (`tools/probes/edge_leak_flatness.py` part D).
+
+    The guard sums energy within ONE main lobe of each edge. A line whose own
+    bandwidth exceeds that ring leaks past it, so the ratio stays small while
+    the share is corrupted -- and the corruption is LARGER than the #111
+    straddle the guard was built to catch (1.32 dB against 0.798 dB), and is
+    accepted.
+
+    The reference is external to the estimator: the signal has decayed to
+    1e-47 of its peak long before the 240 ms record ends, so the whole record's
+    unwindowed spectrum IS the signal's spectrum and its band share is the true
+    answer. The 80 ms Hann reading differs from it because the taper's rising
+    ramp reshapes a pulse that is over in a few ms -- a reading of the window,
+    which is exactly what this guard claims to prevent."""
+    t = np.arange(int(0.24 * SR)) / SR
+    x = np.sin(2 * np.pi * 120 * t) * np.exp(-t / 0.002)
+    assert abs(x[-1000:]).max() / abs(x).max() < 1e-30   # the reference's premise
+    e = pm.lowband_onset_db(x, SR)
+    assert e.ok, e.reason
+    assert e.detail["edge_leak"] == pytest.approx(0.0443, abs=0.001)
+    assert e.detail["edge_leak"] <= pm.EDGE_LEAK_MAX
+    truth = elf._true_band_fraction(x)
+    assert truth == pytest.approx(-1.5975, abs=0.005)
+    assert e.value - truth == pytest.approx(1.3173, abs=0.005)
+    assert abs(e.value - truth) > 0.798, "smaller than the straddle it catches"
+
+
+def test_normalising_the_edge_leak_would_admit_the_111_straddle():
+    """#515 AC2's decision, as a control rather than a sentence: EDGE_LEAK_MAX
+    stays an ABSOLUTE 0.05 and is not normalised by `flat_leak_ref`.
+
+    The measured reason, which this test pins so the decision cannot be
+    reversed without something going red: normalising INVERTS the two
+    populations. The #111 straddle's leak is 0.200 and the flat expectation is
+    0.333, so the straddle sits at 0.60 of flat -- any normalised threshold at
+    or above 1.0 would answer on the one case the guard exists for, while white
+    noise at 1.21 of flat would still refuse."""
+    y = rc.prepare(mr.synthetic_bd(44100, f0=50.0), 44100)
+    # the REGISTERED estimator, which conditions the clip first -- the same path
+    # `test_the_onset_metric_refuses_the_one_voice_that_has_a_repeat_session`
+    # reads 0.200 through. Called bare on the prepared clip it reads 0.243, and
+    # the number quoted in `EDGE_LEAK_MAX`'s note is the registered one.
+    bd = mr.metrics()["lowband_onset_db"][1](y, 44100)
+    assert not bd.ok and "main lobe" in bd.reason
+    flat = bd.detail["flat_leak_ref"]
+    assert flat == pytest.approx(1 / 3, abs=1e-9)
+    assert bd.detail["edge_leak"] == pytest.approx(0.200, abs=0.005)
+    assert bd.detail["edge_leak"] / flat == pytest.approx(0.60, abs=0.02)
+    assert bd.detail["edge_leak"] < flat, "a straddle leaks LESS than flat noise"
+    noise = pm.lowband_onset_db(
+        np.random.default_rng(0).standard_normal(int(0.24 * SR)), SR)
+    assert noise.detail["edge_leak"] / flat == pytest.approx(1.21, abs=0.02)
+    assert pm.EDGE_LEAK_MAX == 0.05, "the decision: absolute, not normalised"
+
+
+def test_the_sd_readability_claim_is_marked_inferred_rather_than_stated():
+    """#515 AC4, and the mechanism that keeps it true. PR #514's docstring said
+    flatly that SD "is readable"; nothing about SD has been measured -- it needs
+    the reference corpus -- and docs/discrimination.md 5c is hedged about the
+    same thing. So the sentence is now a `mechanism=inferred` claim.
+
+    `check_doc_claims.py` scans `.md` only (its DEFAULT_INCLUDES), so a marker
+    inside a Python docstring is NOT machine-checked by `make claims`. This test
+    is what checks it: the marker must parse, its status must come from the
+    closed vocabulary, it must be `inferred`, and its grep target must still be
+    present in the file. Without this the marker would be decoration."""
+    src = ROOT / "model" / "promoted_measures.py"
+    body = src.read_text(encoding="utf-8")
+    assert "A voice whose lines sit clear of both edges" not in body, (
+        "the unmarked flat claim is back")
+    claims = [c for c in cdc.find_claims(src) if "promoted_measures" in c.raw]
+    assert len(claims) == 1, [c.raw for c in claims]
+    c = claims[0]
+    cdc.validate(c)
+    assert c.status != cdc.REFUSED, c.detail
+    assert c.attrs["mechanism"] in cdc.MECHANISM_STATUSES
+    assert c.attrs["mechanism"] == "inferred", c.attrs
+    cdc.check_grep(c)
+    assert c.status == cdc.OK, (c.status, c.detail)
+    # ...and 5c's own hedge, which this now matches instead of contradicting
+    d5c = (ROOT / "docs" / "discrimination.md").read_text(encoding="utf-8")
+    assert 'Do not read "the estimator exists" as "the route is available."' in d5c
 
 
 def test_the_stub_allowance_list_is_derived_from_the_metric_list():

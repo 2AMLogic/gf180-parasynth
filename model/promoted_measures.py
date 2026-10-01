@@ -138,6 +138,73 @@ ONSET_WINDOW_MS = 80.0
 #: 6e-6 for lines well inside the band, 2e-3 for a 60 Hz line (0.8 half-widths
 #: above a 40 Hz edge at 80 ms), and 0.20-0.74 once a line is inside the lobe.
 #: 0.05 is 25x the worst passing case and a quarter of the worst failing one.
+#:
+#: THE SECOND REASON IT FIRES, WHICH IS NOT A STRADDLE (#515). The statistic is
+#: adjacent-bin energy over in-band energy, and both are FIXED BIN COUNTS once
+#: the band and the window are chosen -- at 40-200 Hz and 80 ms, 4 adjacent bins
+#: (12.5 Hz apart, a 25 Hz half-width on each side) against 12 in-band ones. So
+#: FLAT-SPECTRUM CONTENT EXCEEDS THE THRESHOLD BY CONSTRUCTION, with no line
+#: anywhere near an edge: the expectation is 4/12 = 0.333, 6.7x the 0.05
+#: threshold. Measured on white noise at the default band and window
+#: (`tools/probes/edge_leak_flatness.py` part A, 400 seeds): mean 0.371, 5-95 %
+#: 0.088-0.909, and 396 of 400 refused.
+#: AND IT GENERALISES IN CLOSED FORM, which is the part a caller needs: a Hann
+#: leak ring is TWO BINS PER SIDE whatever the band and window are (the ring is
+#: one main-lobe half-width = 2 bins wide by construction), so
+#: `flat_leak_ref` = 4 / (W x T) with W the band's width in Hz and T the window
+#: in seconds, and FLAT CONTENT IS REFUSED UNLESS W x T > 4 / EDGE_LEAK_MAX =
+#: 80 Hz.s. The default 40-200 Hz at 80 ms is 12.8 Hz.s, 6.25x inside that, so
+#: the refusal is not marginal there. Swept against measured refusal rates in
+#: part A2 (white noise, 60 seeds per row): 1/60 answered at 12.8 Hz.s, 9/60 at
+#: 38.4, 36/60 at exactly 80, 53/60 at 157. The crossing is a MEDIAN and not a
+#: boundary -- the statistic is a ratio of 4 bins to W x T bins, so its spread
+#: does not shrink as its mean falls, and even at twice the crossing one flat
+#: window in eight still refuses. `test_flat_content_needs_band_width_times_
+#: window_length_over_80_hz_s` pins both the arithmetic and two of the rates.
+#: What that does to a MIXED signal is the part that matters for a floor run: a
+#: 180 Hz line (clear of both edges) plus `a x` broadband noise refuses 0/5
+#: realizations at a<=1, 2/5 at a=2, 4/5 at a=3 and 5/5 at a>=5 (part B). Near
+#: the noise/tonal boundary the verdict depends on the REALIZATION, not on the
+#: voice, so two takes of one voice can split -- which is a way for #138's
+#: session-to-session floor to be uncomputable for a reason that is neither the
+#: machine's spread nor a straddle.
+#:
+#: WHAT THIS GUARD IS BLIND TO (rule 4 -- a guard reports what it does NOT
+#: catch, not only what it catches). Three things, all measured:
+#:   1. IT CANNOT TELL WHICH OF THE TWO CAUSES FIRED. A straddle and a flat band
+#:      both raise the same number, and the straddle raises it LESS: a damped
+#:      50 Hz line reads 0.202 (the #111 fixture itself 0.200) where white noise
+#:      averages 0.371 and reaches 2.33. The refusal message therefore names
+#:      both causes, and `detail["flat_leak_ref"]` carries the flat expectation
+#:      so a reader can tell them apart; the guard itself does not.
+#:   2. A LINE BROADENED PAST THE RING PASSES. The ring is one main lobe wide,
+#:      so a line whose own bandwidth exceeds it leaks outside the ring and the
+#:      ratio stays small. Rule 8's defeating input, found by searching for one
+#:      (part D): a 120 Hz line -- dead centre of the band -- with a 2 ms decay
+#:      reads -0.280 dB in the 80 ms window against the -1.598 dB the whole
+#:      record's own spectrum gives, a 1.32 dB error, at leak 0.044. That is
+#:      LARGER than the 0.798 dB the #111 straddle was refused for, and it is
+#:      accepted. Pinned by `test_a_fast_decaying_line_defeats_the_edge_guard`.
+#:   3. IT IS NOT A NOISE REJECTER EITHER. 4 of 400 white-noise clips are
+#:      ANSWERED (leak down to 0.022), so "the guard passed" is not evidence
+#:      that the content was tonal.
+#:
+#: DECISION: THE THRESHOLD STAYS ABSOLUTE, NOT NORMALISED BY THE WIDTH RATIO
+#: (#515 AC2). The tempting repair is to compare `leak` against the flat
+#: expectation (4/12 here) instead of against 0.05, which would make the
+#: threshold track the band and window. Measured reason not to
+#: (`edge_leak_flatness.py` part C): the #111 straddle's leak is 0.202 and white
+#: noise's is 0.371, so NORMALISING INVERTS THE TWO POPULATIONS -- any
+#: normalised threshold at or above 1.0 admits the exact case this guard was
+#: built from, and a normalised threshold below 1.0 (0.150 = 0.05/0.333) is the
+#: absolute number rewritten, identical at the default band and window. The
+#: width ratio is the scale of the thing the share CANNOT read (flat content),
+#: not the scale of the thing the guard is for (a straddle), so it is the wrong
+#: denominator. The cost of keeping 0.05 is stated rather than hidden: at a band
+#: or window whose adjacent/in-band bin ratio is much smaller -- a wide band, a
+#: long window -- 0.05 is a weaker guard in units of that band, and a caller
+#: changing either should re-read `detail["flat_leak_ref"]` rather than assume
+#: 0.05 means the same thing there.
 EDGE_LEAK_MAX = 0.05
 
 
@@ -164,19 +231,34 @@ def _band_share_db(seg, sr: int, lo: float, hi: float, floor_db: float, *,
     tot = float(P.sum())
     if tot <= 0.0:
         return _fail("zero total power", **detail)
-    in_band = float(P[(f >= lo) & (f < hi)].sum())
+    in_sel = (f >= lo) & (f < hi)
+    in_band = float(P[in_sel].sum())
     # Hann main-lobe half-width. A line nearer than this to an edge has its own
     # skirt on the far side of that edge.
     half = 2.0 * sr / len(seg)
-    adjacent = float(P[(f >= max(0.0, lo - half)) & (f < lo)].sum()
-                     + P[(f >= hi) & (f < hi + half)].sum())
+    adj_sel = (((f >= max(0.0, lo - half)) & (f < lo))
+               | ((f >= hi) & (f < hi + half)))
+    adjacent = float(P[adj_sel].sum())
     leak = (adjacent / in_band) if in_band > 0.0 else math.inf
-    detail = dict(detail, edge_leak=leak, main_lobe_half_hz=half)
+    # What `leak` would be for a FLAT spectrum: the bin counts themselves, which
+    # is 4/12 = 0.333 at the 40-200 Hz default in an 80 ms window. Reported
+    # because `leak` has two causes and the threshold only sees their sum --
+    # a reading near this number is flat content, one well below it with a line
+    # inside the lobe is a straddle, and EDGE_LEAK_MAX cannot tell them apart
+    # (see its note). Bin counts, not the nominal widths: 50/160 = 0.312 is the
+    # width answer and 0.333 is the one the statistic actually has.
+    n_in = int(in_sel.sum())
+    flat_ref = (float(adj_sel.sum()) / n_in) if n_in > 0 else math.inf
+    detail = dict(detail, edge_leak=leak, main_lobe_half_hz=half,
+                  flat_leak_ref=flat_ref)
     if edge_guard and not leak <= EDGE_LEAK_MAX:
         return _fail(f"energy within one main lobe ({half:.1f} Hz) of a band "
                      f"edge is {leak:.3f} of the band's own, over the "
                      f"{EDGE_LEAK_MAX:g} this window can resolve: the share "
-                     f"would be a reading of the straddle, not of the band",
+                     f"would be a reading of a line straddling an edge, or of "
+                     f"a band flat enough that the edges carry a fixed share of "
+                     f"it ({flat_ref:.3f} here), and this guard cannot tell "
+                     f"those two apart -- not a reading of the band",
                      band=(lo, hi), **detail)
     frac = in_band / tot
     v = 10.0 * math.log10(frac) if frac > 0.0 else -math.inf
@@ -224,32 +306,85 @@ def lowband_onset_db(x, sr: int, band=DEFAULT_LOWBAND_HZ,
     both numbers so a record cannot lose them.
 
     Four preconditions, each a REFUSAL rather than a number, because every one
-    of them is a way to get an answer that looks like data:
+    of them is a way to get an answer that looks like data. Each carries its
+    rule-8 statement -- *what input satisfies this check while violating its
+    intent?* -- because a guard with no named adversary is indistinguishable
+    from one whose adversary nobody looked for (`docs/verification-rules.md`
+    rule 8; the three marked RULE 8 below were shipped without it in PR #514
+    and are labelled here, #515):
 
     * the band must be inside (0, Nyquist);
     * **the window must hold `MIN_CYCLES_OF_LOWER_EDGE` cycles of the band's
       lower edge.** This is the one that matters: it refuses the 30 ms x 40 Hz
       reading the trajectory report's own resolution would suggest, which is
       arithmetically impossible rather than merely noisy (header, and
-      `tools/probes/lowband_onset_window.py` measures both failure modes);
+      `tools/probes/lowband_onset_window.py` measures both failure modes).
+      RULE 8: the check counts CYCLES OF THE LOWER EDGE, and its intent is that
+      the band holds a line the window can resolve. **A band wide enough
+      satisfies it with nothing resolvable in it** -- 150-600 Hz passes at 30 ms
+      (`test_a_30_ms_window_cannot_read_a_40_hz_edge_and_says_so` asserts that
+      pass deliberately), and so would 150-20000 Hz, where the share is a
+      broadband total. The window/edge pair is bounded; the band's own width is
+      not bounded at all, by this check or any other here;
     * **the window must fit inside the clip.** Truncating it silently would
       answer for a shorter window than the caller named, and the caller would
-      compare it with a full-length one;
+      compare it with a full-length one.
+      RULE 8: it compares SAMPLE COUNTS, and its intent is that the window holds
+      the signal the caller meant. **Padding the clip satisfies it** -- the
+      defeating input that beat the decay-length guard in #139, rule 8's own
+      worked example. Measured here, because which check stops it is not
+      obvious: zero padding is caught by the silence check; padding at -60 dB
+      with NOISE is not silent, clears the floor, and is caught by the EDGE
+      GUARD in 200 of 200 realizations -- by the flatness mechanism in
+      `EDGE_LEAK_MAX`, not by anything about the window. The same mechanism
+      answers ~1 % of flat windows (4 of 400, part A), so this is a strong
+      defence and not a sound one, and the thing that actually bounds it is that
+      a caller must name `start_ms` deliberately. The same holds for a window
+      over a clip's quiet tail: `known_cases`' "onset window after the low band
+      refuses" is refused by the edge guard (leak 0.433 of a flat residue), and
+      by the floor at -152.9 dB if the guard is switched off;
     * **no line may sit within one Hann main lobe of a band edge.** The one
       that was not foreseen and was found by a test: the #111 synthetic bass
       drum's 50 Hz line is 10 Hz above the 40 Hz edge, and an 80 ms window's
       half-width is 25 Hz, so 16.8 % of its energy lands below the edge and the
       reading was -0.798 dB where the whole-clip one is -0.0007. See
       `EDGE_LEAK_MAX`. This is the precondition the 3-cycle rule does NOT
-      imply, and it is why a short window needs two of them;
+      imply, and it is why a short window needs two of them.
+      RULE 8: the statistic is edge-adjacent energy over in-band energy inside
+      ONE main lobe of each edge, and its intent is that no line's skirt crosses
+      an edge. **A line whose own bandwidth exceeds that lobe satisfies it while
+      corrupting the share by more than the #111 straddle did** -- a 120 Hz line
+      with a 2 ms decay, dead centre of the band, passes at leak 0.044 and reads
+      1.32 dB away from the whole record's own spectrum
+      (`test_a_fast_decaying_line_defeats_the_edge_guard`, found by searching for
+      a defeating input rather than by waiting for one). `EDGE_LEAK_MAX`'s note
+      carries this and the two other blind spots, including the one that is NOT
+      a straddle at all: flat-spectrum content exceeds the threshold by
+      construction;
     * the window must not be silent, and its band must stand above the
       estimator's own leakage floor.
 
     So THIS ESTIMATOR REFUSES THE BASS DRUM at the default band and window, and
     that is the correct answer rather than a limitation to work around: a 50 Hz
     fundamental cannot be separated from a 40 Hz band edge in 80 ms by any
-    window. A voice whose lines sit clear of both edges -- SD, where the
-    -4.86..+6.79 dB finding is -- is readable.
+    window.
+
+    WHICH VOICES IT CAN READ IS NOT MEASURED, and the sentence that used to
+    stand here said it was. What is measured: a 180 Hz line clear of both edges
+    plus broadband noise is answered while the noise stays below ~1x the line
+    (`tools/probes/edge_leak_flatness.py` part B), so a tonal-shell-plus-noise
+    voice CAN be readable. What follows from that about SD -- where
+    docs/discrimination.md 5c's -4.86..+6.79 dB finding is -- is a reading of
+    indirect evidence and not a measurement of SD:
+    <!-- claim: grep="SD is READABLE AT THE DEFAULT BAND" in=model/promoted_measures.py mechanism=inferred issue=515 note="not measured for SD: needs the reference corpus. Two stated ways to be wrong, both in docs/discrimination.md 5c and EDGE_LEAK_MAX." -->
+    SD is READABLE AT THE DEFAULT BAND AND WINDOW is INFERRED, not measured, and
+    there are two measured ways for it to be false: 5c's own hedge (SD's shell
+    resonance is in the low hundreds of Hz and may sit inside one main lobe of
+    the 200 Hz upper edge) and this issue's (SD is the most noise-dominated
+    voice in the set, and a flat-enough band exceeds `EDGE_LEAK_MAX` with no
+    straddle at all). Running it needs the reference corpus; until then "the
+    estimator exists" is not "the route is available", which is 5c's wording and
+    is the status here too.
     """
     x = am._as_float(x)
     lo, hi = float(band[0]), float(band[1])
