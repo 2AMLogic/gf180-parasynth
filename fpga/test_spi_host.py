@@ -146,6 +146,64 @@ def test_the_bd_attack_window_is_four_writes_192_frames_wide():
     assert sorted(w.addr for w in hot) == [base, base + 1]
 
 
+SEQ_TAGS = ("bd-attack-hot", "bd-attack-restore", "tom-bend")
+
+
+def _seq_moves(host, link):
+    """Every coefficient-sequence write whose laid-out frame differs from the
+    frame the host asked for. `nominal` is set by spread() from the request."""
+    laid = sh.lay_out(host.w, link)
+    seq = [w for w in laid if w.tag in SEQ_TAGS]
+    return seq, [w for w in seq if w.frame != w.nominal]
+
+
+def _max_pull(moved, tag):
+    return max([w.nominal - w.frame for w in moved if w.tag == tag], default=0)
+
+
+@pytest.mark.parametrize("link", LINKS)
+def test_the_reference_fixture_moves_sequence_steps_only_by_a_few_frames(link):
+    """MEASURED, and not what the issue first assumed: steps DO move in
+    bar_808, but only earlier and only by a handful of frames, because the
+    stop-bit anchors need the frames just before them. The hot write moves
+    most (it shares the strike's frame, so it backs up in front of the stop
+    bit: the intended setup-before-strike order). A restore is pulled 2
+    frames of its 192 (42 us of 4 ms), a tom step 4 of 480. Pin those bounds
+    so growth is noticed."""
+    host, _, _ = fixtures.bar_808(short=True)
+    seq, moved = _seq_moves(host, link)
+    assert {w.tag for w in seq} == set(SEQ_TAGS), "fixture lost a sequence"
+    assert all(w.frame < w.nominal for w in moved), "spread() only moves earlier"
+    assert _max_pull(moved, "bd-attack-hot") <= 8
+    assert _max_pull(moved, "bd-attack-restore") <= 2
+    assert _max_pull(moved, "tom-bend") <= 4
+
+
+def test_the_sequence_writes_are_not_anchors():
+    host = sh.MusicHost(); host.load(0)
+    host.hits([(5000, dx.BD, 1.0), (9000, dx.LT, 1.0)])
+    assert [w for w in host.w if w.tag in SEQ_TAGS and w.anchor] == []
+
+
+@pytest.mark.parametrize("link", LINKS)
+def test_a_dense_pattern_moves_a_sequence_step_earlier(link):
+    """The adversarial case: a second hit lands inside the BD's 192-frame
+    window, so its stop bit (an anchor) needs frames that the restore holds.
+    The restore moves (here later, stretching the window), and check() says
+    nothing. Documented behaviour, not a goal."""
+    host = sh.MusicHost(); host.load(0)
+    host.hits([(5000, dx.BD, 1.0)] + [(5150 + 4 * k, dx.SD, 1.0) for k in range(20)])
+    seq, moved = _seq_moves(host, link)
+    restore = [w for w in moved if w.tag == "bd-attack-restore"]
+    # worse than anything the reference fixture does to a restore (2 frames
+    # earlier). Here the burst of anchors around the restore's frame is dense
+    # enough that the forward pass (feasible()) pushes it LATER instead, so
+    # the 4 ms window is stretched: a coefficient step is not pinned in either
+    # direction. Observed: +20 frames (5192 -> 5212), 192 -> 212 wide.
+    assert restore and max(abs(w.frame - w.nominal) for w in restore) > 2
+    assert sh.check(host.schedule(link))["conflicts"] == []
+
+
 def test_the_attack_window_restores_the_IMAGE_not_the_kit_preset():
     """The DECAY knob moves the BD's Q. If the window's restore recomputed the
     preset it would silently undo the knob -- the exact fault drums_fx's own
