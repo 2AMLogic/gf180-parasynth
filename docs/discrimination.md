@@ -643,6 +643,63 @@ and cannot buy: the only second recording session reachable here is the
 saturates on. **Getting SD — where the -4.86..+6.79 dB finding is — onto the
 board still needs a second SD recording that does not exist.**
 
+**The time-resolved low-band reading now exists (third increment,
+2026-10-01), and building it produced two results rather than one.**
+`model/promoted_measures.lowband_onset_db` is `lowband_level_db`'s ratio over
+a stated window from the onset instead of the whole clip, registered as a
+third metric in `tools/promoted_bands.py` and in the #111 harness's own
+`metrics()`. Ruler: raw dB of the named estimator. What the 80 ms window
+buys, both figures computed: the first 30 ms goes from 0.15 % of the analysis
+window's power budget to **19.8 %** (a factor of 132) and from a mean
+amplitude weight of 0.050 to **0.350** (a factor of 7.0). On a closed-form
+clip whose low band is early-only the two readings are **9.17 dB** apart.
+
+- **It cannot be a 30 ms reading, and that is arithmetic rather than
+  tuning.** 30 ms is 1.2 cycles of the 40 Hz lower edge; the shortest window
+  that edge admits is 75 ms, so the default is 80 ms (3.2 cycles) and a
+  shorter one is REFUSED. To read 30 ms the caller must raise the lower edge
+  to ≥ 100 Hz, and then it is a different band. The paragraph above asking
+  for a time-resolved estimator at the trajectory report's own resolution was
+  asking for something that does not exist.
+- **A second precondition was missed by design and found by a test:** a line
+  within one Hann main lobe of a band edge straddles it. The #111 synthetic
+  bass drum (one damped 50 Hz sinusoid) read **−0.798 dB** in an 80 ms window
+  where the whole-clip reading is −0.0007, and all 16.8 % of the "out of
+  band" energy was *below* 40 Hz — the line's own lower skirt, 10 Hz from the
+  edge against a 25 Hz half-width. Not the attack and not the fixture's click.
+  `EDGE_LEAK_MAX` refuses it.
+- **Consequence, and it is the sharpest floor gap of the three metrics:**
+  `lowband_onset_db` REFUSES the bass drum, so it **cannot be floored from
+  the only repeat-session voice this repository has, in any window** —
+  clearing a 50 Hz line of a 40 Hz edge needs ≥ 200 ms, which is not an onset
+  window. It needs a second recording of a voice whose lines sit clear of
+  both edges. Same material gap as SD's, reached by a different route.
+- **A known hole, named rather than left.** The same straddle applies to
+  `lowband_level_db` and the guard is **not** on there, because turning it on
+  would turn already-reported Fischer readings into refusals and
+  `docs/promoted-bands-results.json` can only be re-measured on a host with
+  the reference packs. Both estimators report `edge_leak` and
+  `main_lobe_half_hz` in `detail` regardless. **Prediction, stated so it can
+  be checked rather than discovered:** the "large only where the tuning
+  crosses that edge (HT 7.5 +4.8 dB, LC 7.5 +3.5 dB)" reading below is this
+  artefact, so the guard would most likely refuse those two. That needs the
+  corpus run and is not a result yet.
+
+**`dominant_period_ms` on a glide is measured now, and it changes how its
+numbers may be read.** The header's "no gliding case has been measured" is
+closed by `measure_promoted_bands.glide_cases`, against a glide whose
+instantaneous-frequency trajectory is known in closed form. **It reads the
+SETTLED frequency, not the note's mean**: within +0.02..+2.08 % of f(end) over
+0–40 % glide depth, while its error against the energy-weighted mean
+instantaneous frequency reaches **−11.3 %**. Two consequences, both gated:
+a reading of a tom is that tom's settled pitch and must not be called the
+pitch of the note; and the small bias toward the start of the glide **does not
+cancel between two arms with different glide depths** — 20 points of
+depth difference is worth ~1.1 % of apparent pitch difference with no pitch
+difference at all, which is the same order as the 0.44–2.01 % figures below.
+**A pitch difference between ours and the machine is not evidence until their
+glide depths are known to match.**
+
 All numbers below come from `docs/promoted-bands-results.json` (commit
 `08068a7`, clean), at the held-out settings. Ruler: raw dB / % of the named
 estimator, NOT knob-equivalent (§3.1). **Neither metric is on the board**, and
@@ -661,9 +718,17 @@ the reasons are results, not omissions.
   table, so no untouched Fischer condition is left. Confirming it needs (a) a
   second recording of SD at known TONE/SNAPPY, (b) a repeat-take floor showing
   that 3-7 dB exceeds the machine's own take-to-take spread, and (c) a second
-  route that agrees in sign. The time-resolved estimator below would be one
-  such route. Note that this estimator weights the middle of the clip, not the
-  attack (next item).
+  route that agrees in sign. **(c) is built but not yet run, and whether it
+  can answer for SD is an open question with a stated test.**
+  `lowband_onset_db` exists; running it on the held-out SD settings needs the
+  reference corpus. Whether it will *answer* rather than refuse depends on
+  something not measured here: an 80 ms window clears a line only 25 Hz from
+  a band edge, and SD's shell resonance is in the low hundreds of Hz, so it
+  may well sit inside one main lobe of the 200 Hz upper edge — in which case
+  the honest outcome is a refusal and SD needs a band whose edges clear it.
+  **Do not read "the estimator exists" as "the route is available."** Note
+  that `lowband_level_db` weights the middle of the clip, not the attack
+  (next item).
 - **`lowband_level_db` cannot see the onset, and saturates on three voices.**
   One Hann window spans the whole 240 ms conditioned clip. The first 30 ms
   therefore gets a mean amplitude weight of **0.05** and carries 0.15 % of the
@@ -679,7 +744,11 @@ the reasons are results, not omissions.
   fundamental, so the metric moves with TUNING (HT 29.6 dB and LC 54.8 dB
   across the knob, both crossing the 200 Hz edge). Ours minus real there is
   large only where the tuning crosses that edge (HT 7.5 +4.8 dB, LC 7.5
-  +3.5 dB). A time-resolved low-band estimator is needed and is not built.
+  +3.5 dB) — and see the edge-straddle prediction above, which says those two
+  readings are most likely the artefact rather than a finding. **A
+  time-resolved low-band estimator now exists** (`lowband_onset_db`, third
+  increment above); what it still lacks is a floor, and for this metric that
+  needs a new recording rather than a re-run.
 - **The "2-7 % sharp at every held-out position" claim did not reproduce on
   `dominant_period_ms`**, but the pattern is not noise either. At TUNING 2.5
   **all six are sharp**, by +0.76..+1.71 % (LC +0.76, HT +0.94, MC +1.02,
