@@ -394,7 +394,10 @@ normative content:
 about one core cycle of a tick may be accepted in either frame, and the
 contract is satisfied either way because the frame is defined by the
 acceptance cycle. `rtl-sketch/spi_ctl.v` implements this section and
-`rtl-sketch/tb_synth_top.v` drives it through the pins.
+`rtl-sketch/tb_synth_top.v` drives it through the pins. The one-write-per-frame
+limit above is what a host has to schedule around: the reference hosts emit
+whole bursts at one frame because the model applies writes atomically, and
+15.7.1 states the reference policy for spreading such a burst onto the wire.
 
 ### 5.5 Host-side conversions (informative)
 
@@ -1824,6 +1827,56 @@ A host that sequences coefficients itself passes `coef_seq=False` and gets
 the bare register image. Neither sequence changes the block, the buses or
 any width; both are visible to a bench only as ordinary register writes,
 which is why `verify_drums.py`'s stimulus carries them.
+
+**Atomic in the model, one write per frame on the wire.** Everything above —
+and `hit_writes`'s per-hit burst generally — is emitted *atomically*: a hit's
+accent, its stop bit's rising edge and the first two writes of whichever
+sequence it starts all carry the **same frame number**, because the model
+applies every write complete during a frame at the start of the next one, in
+order, before a sample is computed (4.3). That is the right behaviour for a
+reference and it is **not a wire schedule**. The physical layer of 5.4 completes
+at most one write per frame at the specified SCK, so a burst of more than one
+write cannot be delivered in the frame it names, at any legal clock: striking
+all eleven circuits together with both sequences running asks for **20 writes in
+one frame**, and the link carries one. A host that emits this sequence at the
+pins has to spread it over several frames.
+
+*Which way* it spreads is a musical decision rather than an implementation
+detail, which is why it is described here. The block's behaviour is defined by
+the frame each write lands in (4.3), so two hosts that spread the same burst
+differently produce audibly different instruments while both passing every
+register-level check — every write arrives, and the music differs. The reference
+policy, implemented by `fpga/spi_host.py`'s `spread()` and `feasible()`:
+
+- **The writes whose frame *is* the musical instant keep their frame.** They are
+  the "anchors": a stop bit's edges (15.2) and the voice's GATE_ON and TRIG
+  (5.2).
+- **Every other write of the burst moves earlier**, latest first, in the order
+  the reference host emitted it, until each has a frame of its own. Accents,
+  mode coefficients and kit-image writes are all of this kind: a setting that
+  arrives a frame early is the same sound, where a strike that arrives late is
+  not. The alternative — holding the coefficients and letting the strike slip —
+  moves the music instead of the setup.
+- **Two anchors closer together than the link's minimum landing gap cannot both
+  be honoured.** The later one moves later, by the minimum the link needs, so
+  the order survives; that quantises musical time to one transaction (two
+  frames, ≈ 42 µs, at both rates `fpga/link_budget.py` reports) and the
+  reference host reports it as `anchor_jitter` rather than absorbing it
+  silently.
+
+Measured, so that a host can size the lead it needs: at the DR 0007 ceiling the
+20-write worst case sends its setup **38 frames (0.79 ms) ahead of the strike**
+with no strike late, and the reference 808 pattern of this section at 118 bpm
+needs at most 14 frames (0.29 ms). Spreading never compresses either sequence
+above, because both leave far more room than a transaction: the BD's window is
+192 frames wide and the tom's steps are 480 frames apart, against the two writes
+each needs. `fpga/link_budget.py` and `fpga/reports/control_path.txt` are the
+measurement, and `fpga/verify_fixture.py` checks the host's predicted landing
+frame against the `CS_N` pin, write for write — a scheduler whose predictions
+have never met a simulator is calibrated on itself.
+<!-- claim: test=fpga/test_spi_host.py::test_a_transaction_is_longer_than_a_frame -->
+<!-- claim: test=fpga/test_spi_host.py::test_every_musical_instant_lands_in_its_own_frame -->
+<!-- claim: test=fpga/test_spi_host.py::test_two_musical_instants_in_one_frame_are_quantised_not_dropped -->
 
 ### 15.8 Reset
 
