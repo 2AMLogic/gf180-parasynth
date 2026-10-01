@@ -312,14 +312,15 @@ class DcBlockFx:
     STATE IS NOT RESET BY A HIT. A capacitor does not know a stop fired, and
     the five exclusive pairs share one circuit: a retune mid-ring must carry
     the charge across. Only A_RESET (15.8) clears it."""
-    __slots__ = ("k", "acc", "n_trunc", "acc_bits")
+    __slots__ = ("k", "acc", "n_trunc", "acc_bits", "in_bits")
 
     def __init__(self, k: int = COUPLE_K):
         self.k = int(k)
         self.n_trunc = 0            # coverage, NOT state: `reset` leaves these
         self.acc_bits = 0           # alone, as EnvFx leaves its own counters
-        self.reset()
-
+        self.in_bits = 0            # the widest INPUT seen: what the RTL word
+        self.reset()                # has to be measured AGAINST, because the
+                                    # declared bus width is not what arrives
     def reset(self):
         self.acc = 0
 
@@ -331,6 +332,9 @@ class DcBlockFx:
         n = self.acc.bit_length() + 1                # +1 for the sign
         if n > self.acc_bits:
             self.acc_bits = n
+        m = int(x).bit_length() + 1
+        if m > self.in_bits:
+            self.in_bits = m
         return y
 
 

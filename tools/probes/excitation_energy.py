@@ -702,7 +702,22 @@ def test_the_pedestal_creates_low_frequency_where_there_is_none():
     """The injected-bug control for F1, run the other way round: a signal built
     with NO energy under 200 Hz must still come out of the study's conditioning
     with a large window-0 low-frequency reading, and must not out of the
-    causal one."""
+    causal one.
+
+    **THIS CONTROL WAS DEAD AND RED, and both halves matter (#165).** It called
+    `td.condition(x, sr, True)`, where the third positional argument is
+    `level_match`, not `legacy`. #161 and #166 then repaired `condition()` --
+    the `sosfiltfilt` pedestal is gone from the default path and survives only
+    behind `legacy=True` -- so this line stopped exercising the defect it names
+    and started comparing the repaired causal path against another causal path.
+    It read `study -25.94, causal -26.23`: no pedestal, no separation, and a
+    red control that looked like a regression in the thing under test.
+
+    A control that silently stops testing anything is the worse failure of the
+    two, because the red is read as information about the subject. The named
+    argument is what makes it exercise the shipped-then-repaired path, and
+    `legacy=True` is the only caller of it outside `model/condition_boundary.py`
+    by design."""
     sr = 48000
     n = int(sr * 0.4)
     t = np.arange(n) / sr
@@ -718,7 +733,7 @@ def test_the_pedestal_creates_low_frequency_where_there_is_none():
         P = np.abs(np.fft.rfft(w * win)) ** 2 / float((win ** 2).sum()) * len(w)
         f = np.fft.rfftfreq(len(w), 1.0 / sr)
         return 10 * np.log10(P[f < 120].sum() / float((seg ** 2).sum()) + 1e-20)
-    study = w0_lf(td.condition(x, sr, True))
+    study = w0_lf(td.condition(x, sr, level_match=True, legacy=True))
     causal = w0_lf(condition_causal(x, sr)[0])
     assert study > causal + 15.0, (study, causal)
     assert causal < -20.0, causal

@@ -2,11 +2,32 @@
 """Does an output coupling correct the drum block, and what does it cost?
 
     .venv/bin/python tools/probes/dc_blocker.py --limits
+    .venv/bin/python tools/probes/dc_blocker.py --resolution
+    .venv/bin/python tools/probes/dc_blocker.py --screen
     .venv/bin/python tools/probes/dc_blocker.py --placement
     .venv/bin/python tools/probes/dc_blocker.py --measure
     .venv/bin/python tools/probes/dc_blocker.py --cutoff
     .venv/bin/python tools/probes/dc_blocker.py --continuous
     .venv/bin/python -m pytest tools/probes/dc_blocker.py -q
+    .venv/bin/python -m pytest tools/probes/test_dc_blocker_apparatus.py -q
+
+READ `--resolution` AND `--screen` BEFORE ANY VERDICT TABLE
+----------------------------------------------------------
+`--resolution` is what this instrument can see. Three of the preservation
+allowances declared below were BELOW it -- the HT's 5-20 kHz band is at
+-102 dBFS and one LSB of dither moves it 8.69 dB against a 0.20 dB allowance --
+so they were failing CONTROL voices on dither, and `--measure` reported a
+candidate as breaking preservation on three voices it had not touched. Every
+allowance is now read against the larger of itself and that resolution, and any
+gate so widened is marked `[res-limited]` wherever it appears.
+`tools/probes/test_dc_blocker_apparatus.py` is the eight-control suite for this,
+committed red.
+
+`--screen` is what a blocker CAN do to a voice, derived from the voice's
+uncoupled baseline with nothing rendered. It is the answer to "does one blocker
+suit both subjects" that a pass/fail cannot give: the CY's sub-20 Hz energy is
+88.8 % a standing offset, the RS's is 95.7 % its own onset skirt, and a zero at
+z = 1 removes the first and not the second.
 
 #152 established a DIAGNOSIS: the drum block has no DC blocking anywhere,
 `SRC_PULSE` never changes sign (mean/|mean| = 1.000 exactly), the modes it
@@ -168,6 +189,24 @@ def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
 # The estimators. Each is validated against synthetic ground truth below;
 # none is calibrated on the model it measures (docs/failure-modes.md).
 # ===========================================================================
+def onesided_power(x):
+    """`(power, freqs)`: the one-sided power spectrum of `x`, with every bin
+    except DC and Nyquist DOUBLED so Parseval is exact and the bands sum to the
+    total. Rectangular window, nothing normalised.
+
+    **ONE FUNCTION, SO ONE CONVENTION.** `dc_fraction` originally computed its
+    own spectrum without the doubling, which made every floor it derived 3 dB
+    optimistic -- the DC bin is not doubled and the skirt is, so an undoubled
+    skirt understates itself by exactly a factor of two. The symptom was the
+    floor failing to bound its own closed-form case by 2.96 dB, which looked
+    like a broken derivation and was a mismatched convention between two
+    functions that had to agree. They now cannot disagree."""
+    x = np.asarray(x, float)
+    p = np.abs(np.fft.rfft(x)) ** 2
+    p[1:(-1 if len(x) % 2 == 0 else None)] *= 2.0
+    return p, np.fft.rfftfreq(len(x), 1.0 / SR)
+
+
 def band_energy_dbfs(x, lo, hi):
     """Absolute energy in [lo, hi) Hz, dB relative to digital full scale.
 
@@ -175,11 +214,8 @@ def band_energy_dbfs(x, lo, hi):
     with no window correction to get wrong. NOTHING is normalised: this number
     falls when energy is removed and does not rise when other energy is."""
     x = np.asarray(x, float) / FS
-    X = np.fft.rfft(x)
-    p = np.abs(X) ** 2
-    p[1:(-1 if len(x) % 2 == 0 else None)] *= 2.0
-    p /= len(x) ** 2
-    f = np.fft.rfftfreq(len(x), 1.0 / SR)
+    p, f = onesided_power(x)
+    p = p / len(x) ** 2
     return 10.0 * np.log10(float(p[(f >= lo) & (f < hi)].sum()) + 1e-30)
 
 
@@ -205,14 +241,78 @@ def onset_index(x, frac=0.02):
     return int(np.argmax(x > frac * pk)) if pk > 0 else 0
 
 
-def attack_samples(x):
-    """Onset to peak, in samples. The attack, as the only thing about it that
-    a coupling capacitor can move."""
-    x = np.abs(np.asarray(x, float))
-    return int(np.argmax(x)) - onset_index(x)
+def peak_margin_db(x, order=8):
+    """How far the largest sample leads the largest sample that is not in its
+    own lobe, in dB. **The precondition for `attack_samples`**, measured rather
+    than assumed.
+
+    Below a margin of roughly a dB, "where is the peak" is a RANK ORDER between
+    two lobes and not a timing: a change far too small to hear flips the
+    answer. Measured on the current uncoupled renders --
+
+        BD 0.000 dB   HT 0.535 dB   RS 0.190 dB   CY 1.654 dB   CH 0.336 dB
+
+    -- the BD's four largest samples are EQUAL, so its `argmax` was choosing
+    arbitrarily among them. `ATTACK_TOL_DB` is set above these margins for that
+    reason, and `report_resolution` sweeps it so the choice is a curve and not
+    a preference."""
+    a = np.abs(np.asarray(x, float))
+    pk = float(a.max())
+    if pk <= 0:
+        return float("nan")
+    i = int(np.argmax(a))
+    # Everything outside +-`order` samples of the winning sample: a different
+    # lobe, not the same lobe's shoulder.
+    other = np.delete(a, slice(max(0, i - order), i + order + 1))
+    if not other.size or other.max() <= 0:
+        return float("inf")
+    return float(20.0 * np.log10(pk / other.max()))
 
 
-def t20_ms(x, frame_ms=2.0):
+# The attack tolerance. `attack_samples` reads the FIRST arrival within this
+# many dB of the peak, so a flipped lobe rank INSIDE the band cannot move the
+# answer. It is read off `peak_margin_db` above (the largest ambiguity on the
+# five voices is the HT's 0.535 dB), not chosen for a result -- and
+# `report_resolution --sweep` prints 0.5 / 1.0 / 2.0 dB side by side: at 0.5 dB
+# the BD still jumps 460 samples, at 1.0 and 2.0 dB every voice is stable to
+# <= 6 samples. The verdict does not depend on the value above 1 dB.
+ATTACK_TOL_DB = 1.0
+
+
+def attack_samples(x, tol_db=None, frac=0.02):
+    """Onset to the FIRST sample within `tol_db` of the clip's peak, in
+    samples. The attack, as the only thing about it that a coupling capacitor
+    can move.
+
+    THIS IS NOT WHAT IT USED TO BE, and the change is a repair rather than a
+    redefinition. It used to be `argmax(|x|) - onset`, which on an oscillatory
+    voice answers "which lobe is biggest" and not "when did the attack
+    finish". The BD's largest four samples are equal; removing its -45-count
+    standing offset flipped the winner to a plateau half a period later and the
+    gate reported a 460-sample (9.6 ms) attack change on a CONTROL voice whose
+    onset had not moved by one sample. `test_the_attack_gate_does_not_answer_a_
+    tie_between_equal_lobes` is that bug, kept.
+
+    Reading the first arrival within a tolerance is monotone in the envelope
+    and blind to the rank flip. Against ground truth it is biased slightly LATE
+    for a slow carrier and slightly EARLY for a fast one (251 against 240
+    samples at 400 Hz, 28 against 34 at 2 kHz) -- but it is used only for a
+    CHANGE between two renders of the same voice, where a common bias cancels,
+    and its 1-LSB resolution is 0-1 samples against the old estimator's 2."""
+    tol_db = ATTACK_TOL_DB if tol_db is None else tol_db
+    a = np.abs(np.asarray(x, float))
+    pk = float(a.max())
+    if pk <= 0:
+        return float("nan")
+    thr = pk * 10.0 ** (-tol_db / 20.0)
+    return float(int(np.argmax(a >= thr)) - onset_index(a, frac))
+
+
+T20_FRAME_MS = 2.0                # the quantisation step, named so the
+                                  # resolution study can read it
+
+
+def t20_ms(x, frame_ms=T20_FRAME_MS):
     """Time from the loudest frame to 20 dB below it, in ms, on a backward
     energy integral (Schroeder) so a decay that is not a clean exponential --
     the cymbal's is not -- still gets a defined number.
@@ -231,22 +331,115 @@ def t20_ms(x, frame_ms=2.0):
     return float("nan") if not len(below) else (below[0] - i0) * frame_ms
 
 
-def centroid_hz(x):
+CENTROID_FLOOR_HZ = 20.0          # the qualified definition; see below
+
+
+def centroid_global_hz(x):
+    """**DIAGNOSTIC ONLY, never a verdict.** The spectral centroid over the
+    whole spectrum, DC included -- the quantity the gate used to be read on, so
+    the change is visible in the report rather than merely described."""
     x = np.asarray(x, float)
     p = np.abs(np.fft.rfft(x)) ** 2
     f = np.fft.rfftfreq(len(x), 1.0 / SR)
     return float((p * f).sum() / (p.sum() + 1e-30))
 
 
+def centroid_hz(x, lo=CENTROID_FLOOR_HZ):
+    """The spectral centroid of the AUDIBLE band, >= `lo` Hz. **The gate.**
+
+    A global centroid cannot be a preservation gate for a DC blocker, because
+    removing sub-20 Hz energy raises it MECHANICALLY: the denominator loses a
+    term whose frequency is ~0 and every remaining term's weight rises. The
+    gate would then read the candidate's intended effect as a failure, which is
+    exactly what it did -- CY +8.96 % against a 1 % allowance, while the
+    audible band moved -0.02 %.
+
+    The ground truth is closed form, independent of this model, and already
+    committed: `tools/probes/dc_centroid_gate_qualification.py` puts a 1 kHz
+    tone next to a 10 Hz contaminant, removes the contaminant, and measures the
+    global centroid moving 15.815 % while the >= 20 Hz centroid stays at
+    exactly 1 kHz. That file's own conclusion -- "the existing candidate
+    measurements must be rerun with the qualified preservation definition
+    before any acceptance decision" -- is what this function finally wires in.
+
+    20 Hz is not a new number here: it is `SUB20`'s edge, `test_discrimination.
+    HPF_HZ`, and the edge of the `body_20_700_db` band."""
+    x = np.asarray(x, float)
+    p = np.abs(np.fft.rfft(x)) ** 2
+    f = np.fft.rfftfreq(len(x), 1.0 / SR)
+    m = f >= lo
+    return float((p[m] * f[m]).sum() / (p[m].sum() + 1e-30))
+
+
 def measure(x, n_clip=0):
     m = {"peak_dbfs": peak_dbfs(x), "n_clip": float(n_clip),
          "sub20_dbfs": band_energy_dbfs(x, *SUB20),
+         "sub20_dc_dbfs": band_energy_dbfs(x, 0.0, 1e-9),
          "t20_ms": t20_ms(x), "attack_samp": float(attack_samples(x)),
-         "centroid_hz": centroid_hz(x)}
+         "peak_margin_db": peak_margin_db(x),
+         "centroid_hz": centroid_hz(x),
+         "centroid_global_hz": centroid_global_hz(x)}
     for name, (lo, hi) in BANDS.items():
         m[name] = band_energy_dbfs(x, lo, hi)
         m[name.replace("_db", "_pct")] = band_share_pct(x, lo, hi)
     return m
+
+
+# ===========================================================================
+# THE INSTRUMENT'S OWN RESOLUTION. A gate below it cannot produce a verdict.
+# ===========================================================================
+# CLAUDE.md: "Run a gate against the current state before committing it. An
+# unsatisfiable gate is worse than no gate: it trains everyone to ignore gates,
+# including the ones that work." Three of the gates declared above were below
+# this instrument's resolution and were failing CONTROL voices on dither.
+#
+# WHY ONE LSB IS THE RIGHT PERTURBATION, rather than a convenient number: the
+# block's output is int16 (contract 12), so no design change can move a sample
+# by less than one count. A gate that cannot tell the candidate apart from a
+# 1-LSB reshuffle of the baseline cannot attribute what it reads TO the
+# candidate. The perturbation is dither -- it has nothing to do with a DC
+# blocker -- so the resolution is measured independently of the thing on trial.
+DITHER_PATTERNS = 8               # independent, seeded, so the study is
+                                 # reproducible to the bit
+RESOLUTION_PROPS = ("peak_dbfs", "body_20_700_db", "mid_700_5k_db",
+                    "hf_5k_20k_db", "t20_ms_pct", "attack_samp", "centroid_pct")
+
+
+def resolution_of(x, n_clip=0, patterns=DITHER_PATTERNS):
+    """Each gated property's 1-LSB resolution on one clip: the largest change
+    `patterns` independent +-1 LSB dither patterns produce.
+
+    T20 IS A SPECIAL CASE AND THE REASON THIS FUNCTION IS NOT JUST A DITHER
+    LOOP. `t20_ms` is read on a `T20_FRAME_MS` grid, so dither moves it by
+    exactly zero -- a perturbation study alone would pronounce a 3 % allowance
+    satisfiable on a voice whose entire decay is four frames. A QUANTISED
+    estimator's resolution is its step size, so one frame as a percent of the
+    baseline is folded in. On the RS (T20 = 8 ms) that is 25 %; on the CY
+    (460 ms) 0.43 %."""
+    base = measure(x, n_clip)
+    out = {p: 0.0 for p in RESOLUTION_PROPS}
+    x64 = np.asarray(x, np.int64)
+    for seed in range(patterns):
+        rng = np.random.default_rng(seed)
+        y = np.clip(x64 + rng.integers(-1, 2, len(x64)), -32768, 32767)
+        d = deltas(base, measure(y, n_clip))
+        for p in RESOLUTION_PROPS:
+            v = abs(d[p])
+            if not np.isnan(v) and v > out[p]:
+                out[p] = v
+    t20 = base["t20_ms"]
+    if not np.isnan(t20) and t20 > 0:
+        out["t20_ms_pct"] = max(out["t20_ms_pct"], 100.0 * T20_FRAME_MS / t20)
+    out["attack_samp"] = max(out["attack_samp"], 1.0)   # an integer index
+    return out
+
+
+def resolution(voice, patterns=DITHER_PATTERNS):
+    """The uncoupled baseline's resolution for one voice. The baseline, not the
+    candidate: the question is what the INSTRUMENT can see, and the answer must
+    not depend on what is on trial."""
+    b, nb = render(voice, dx.COUPLE_OFF)
+    return resolution_of(b, nb, patterns)
 
 
 # ===========================================================================
@@ -265,27 +458,157 @@ def deltas(base, cand):
     d["t20_ms_pct"] = 100.0 * (cand["t20_ms"] - base["t20_ms"]) / (base["t20_ms"] + 1e-30)
     d["attack_samp"] = cand["attack_samp"] - base["attack_samp"]
     d["centroid_pct"] = 100.0 * (cand["centroid_hz"] - base["centroid_hz"]) / (base["centroid_hz"] + 1e-30)
+    d["centroid_global_pct"] = 100.0 * (cand["centroid_global_hz"] - base["centroid_global_hz"]) \
+        / (base["centroid_global_hz"] + 1e-30)
     d["sub20_dbfs"] = cand["sub20_dbfs"] - base["sub20_dbfs"]
     d["n_clip"] = cand["n_clip"] - base["n_clip"]
     return d
 
 
-def preserved(voice, d):
-    """Every declared limit, checked one at a time. Returns the list of
-    property names that BROKE their allowance -- empty is preservation.
+def preserved(voice, d, res=None):
+    """Every declared limit, checked one at a time, against the LARGER of the
+    declared allowance and the instrument's own resolution for that property on
+    that voice. Returns `(broke, resolution_limited)`.
 
     `worst` is not computed anywhere in this file. DR 0015: the property
-    vector is authoritative and an aggregate hides the thing you need to
-    see."""
-    bad = []
+    vector is authoritative and an aggregate hides the thing you need to see.
+
+    WHY THE RESOLUTION ENTERS THE RULE. Three of the allowances declared above
+    are below what this instrument can see on some voices -- the HT's 5-20 kHz
+    band is at -102 dBFS and one LSB of dither moves it 8.69 dB against a
+    0.20 dB allowance. Judging against such a gate is not strict, it is
+    meaningless: it was spending a CONTROL voice's verdict on dither.
+
+    This is NOT a licence to widen a gate until the candidate fits. The
+    widening is (a) computed from +-1 LSB dither on the UNCOUPLED baseline, so
+    it cannot be influenced by the candidate, (b) returned separately as
+    `resolution_limited` so the report has to say which gates were widened and
+    by how much, and (c) powerless on a gate that resolves: the RS's +225 %
+    decay is nine times its 25 % resolution and stays red
+    (`test_the_true_rimshot_decay_failure_survives_the_repair`).
+
+    `res=None` keeps the declared allowances exactly -- what the limits say
+    before the instrument is consulted, which `--measure` prints beside the
+    resolution-aware verdict so both are on the page."""
+    bad, limited = [], []
     for p in ("peak_dbfs", "body_20_700_db", "mid_700_5k_db", "hf_5k_20k_db",
               "t20_ms_pct", "attack_samp", "centroid_pct"):
+        a = allowance(p, voice)
+        r = 0.0 if res is None else float(res.get(p, 0.0))
+        if r > a:
+            limited.append(p)
         v = d[p]
-        if np.isnan(v) or abs(v) > allowance(p, voice) + 1e-9:
+        if np.isnan(v) or abs(v) > max(a, r) + 1e-9:
             bad.append(p)
     if d["n_clip"] > 0:
         bad.append("n_clip")
-    return bad
+    return bad, limited
+
+
+# ===========================================================================
+# THE SCREEN. What a DC blocker can do to a voice, from the voice's UNCOUPLED
+# baseline alone -- before any blocker has been rendered.
+# ===========================================================================
+# #152's diagnosis -- a positive-only excitation into an all-pole mode with a
+# DC gain of 18 to 23,899 -- says the drum block has unmodelled DC. #165 asks
+# whether ONE blocker then fixes five voices. It does not, and the reason is
+# sharper than a pass/fail: **the sub-20 Hz energy of these voices has two
+# different origins, and a DC blocker can only remove one of them.**
+#
+#   * A STANDING OFFSET lands in the f = 0 bin. A one-pole blocker has an
+#     EXACT zero at z = 1, so this is removed completely.
+#   * THE ONSET ENVELOPE'S OWN SKIRT lands at 0 < f < 20 Hz. A 10 ms burst has
+#     low-frequency content because it is 10 ms long; that content is the
+#     pulse, not a fault, and the blocker attenuates it only by
+#     |H(f)|, which at 7.46 Hz is -0.56 dB at the top of the band.
+#
+# So with phi = (f = 0 energy) / (total sub-20 energy),
+#
+#     E_after = sum_{0<f<20} S(f) |H(f)|^2  <=  (1 - phi) E_before
+#     ==>  ATTENUATION >= -10 log10(1 - phi)                          (floor)
+#
+# and reaching 6 dB from the DC bin alone needs phi >= 1 - 10^-0.6 = 0.749.
+# Everything above the floor has to come from attenuating the skirt, which
+# means moving fc INTO the band whose preservation is the constraint. That is
+# the trade-off, stated as an inequality instead of an opinion, and phi is
+# computable from the baseline with no blocker in the circuit.
+def dc_fraction(x):
+    """phi: the share of a clip's sub-20 Hz energy that sits in the f = 0 bin.
+
+    The f = 0 bin of a finite rectangular-windowed clip is the clip's MEAN
+    squared, which is exactly the quantity a DC blocker nulls -- so this is not
+    an approximation to the removable part, it IS the removable part.
+
+    Read through `onesided_power`, which is the same convention
+    `band_energy_dbfs` reports the attenuation in. See that function for the
+    3 dB error this sharing exists to prevent."""
+    p, f = onesided_power(x)
+    dc = float(p[0])
+    sub = float(p[(f >= 0.0) & (f < 20.0)].sum())
+    return dc / (sub + 1e-30)
+
+
+def attenuation_floor_db(phi):
+    """-10 log10(1 - phi): the sub-20 Hz attenuation a DC-nulling filter
+    delivers from the f = 0 bin alone, with NO help from the skirt. A lower
+    bound on what any such filter achieves, and the whole of what one achieves
+    whose corner is far below the band."""
+    return float(-10.0 * np.log10(max(1e-12, 1.0 - min(phi, 1.0 - 1e-12))))
+
+
+def _h2_onepole(f, k):
+    """|H(f)|^2 of the filter that is actually implemented -- the DISCRETE
+    one-pole with the pole at a = 1 - 2^-K and a zero at z = 1 -- not its
+    analogue approximation. Using the real transfer function is what lets the
+    prediction below be checked against the rendered integer filter as a
+    prediction rather than a restatement."""
+    a = 1.0 - 2.0 ** -int(k)
+    w = 2.0 * np.pi * np.asarray(f, float) / SR
+    z = np.exp(-1j * w)
+    return np.abs((1.0 - z) / (1.0 - a * z)) ** 2
+
+
+def steadystate_sub20_attenuation_db(x, k):
+    """The sub-20 Hz attenuation the pole at 1 - 2^-K would give in STEADY
+    STATE, computed from the UNCOUPLED spectrum and the filter's own transfer
+    function, with nothing rendered. **An UPPER bound on what is achieved.**
+
+    WHY IT IS A BOUND AND NOT AN EQUALITY -- and this was wrong before it was
+    right. It was first written as `predicted_...` and asserted to match the
+    render within 1.2 dB; on the CY it over-predicted by 5.73 dB and on the CH
+    by 7.97 dB. Multiplying a spectrum by |H|^2 is a CIRCULAR, steady-state
+    convolution; the filter that actually runs is causal, starts from rest, and
+    answers the clip's opening step with a tail of its own whose time constant
+    is 1/(2 pi fc) = 21 ms at K = 10. **That tail is itself sub-20 Hz energy**,
+    so the finite causal filter always removes LESS than the steady-state figure
+    says -- which is the same mechanism that triples the RS's decay.
+
+    The bound is the useful direction. A NEGATIVE claim ("this voice cannot
+    reach 6 dB") proved against the optimistic bound is robust: if the best case
+    does not reach the target, the real filter certainly does not.
+
+    Bracketed with `attenuation_floor_db` below, and the bracket is checked on
+    all five voices by `test_the_screen_brackets_the_rendered_attenuation`."""
+    p, f = onesided_power(x)
+    m = (f >= 0.0) & (f < 20.0)
+    before = float(p[m].sum())
+    after = float((p[m] * _h2_onepole(f[m], k)).sum())
+    return float(-10.0 * np.log10((after + 1e-30) / (before + 1e-30)))
+
+
+def required_k(x, target_db=None, ks=range(16, 3, -1)):
+    """The LOWEST corner (largest K) whose STEADY-STATE bound reaches
+    `target_db` of sub-20 Hz attenuation, or None if no corner in `ks` does.
+    K is a shift, so these are the only corners available.
+
+    The optimistic bound on purpose: `None` then means "not reachable even in
+    the best case", which is a claim the real filter cannot escape. A K that IS
+    returned is a candidate to be measured, not a result."""
+    target_db = IMPROVE_SUB20_DB if target_db is None else target_db
+    for k in ks:
+        if steadystate_sub20_attenuation_db(x, k) >= target_db:
+            return int(k)
+    return None
 
 
 def share_rise_is_lf_removal(d, tol_db=0.2):
@@ -317,18 +640,141 @@ def report_limits():
     for p, u in units.items():
         print(f"    {p:18s} {u:10s} {allowance(p, 'BD'):7.2f} {allowance(p, 'CY'):7.2f}")
     print("    n_clip             count       must not increase")
+    print("\n  centroid_pct is the >= 20 Hz centroid (CENTROID_FLOOR_HZ), not a global")
+    print("  one: a global centroid rises MECHANICALLY when sub-20 Hz energy is")
+    print("  removed, so the gate would read the candidate's intended effect as a")
+    print("  failure. Qualified in closed form by dc_centroid_gate_qualification.py.")
+    print(f"\n  attack_samp is the first arrival within {ATTACK_TOL_DB:.1f} dB of the peak, not")
+    print("  argmax(|x|): on a plateaued voice argmax answers a lobe RANK ORDER.")
+    print("\n  Each allowance is read against the LARGER of itself and the instrument's")
+    print("  own 1-LSB resolution for that property on that voice (--resolution). A")
+    print("  gate below the resolution is marked [res-limited] wherever it is used.")
     print("\n  A normalised band SHARE is never a verdict; `share_rise_is_lf_removal`")
     print("  refuses one whose absolute band energy did not move.")
     return 0
 
 
-def _row(name, base, cand, voice):
+def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
+    """**Which voices a DC blocker can help, read off the uncoupled baselines
+    before a blocker is rendered -- and then checked against the renders.**
+
+    This is the answer to #165 s1 that a pass/fail cannot give: the two subjects
+    do not need the same thing, because their sub-20 Hz energy does not have the
+    same origin."""
+    k = dx.COUPLE_K if k is None else k
+    print(provenance())
+    print("\nTHE SCREEN. phi is the share of a voice's sub-20 Hz energy in the f = 0 bin --")
+    print("the part a zero at z = 1 removes exactly. The rest is the onset envelope's own")
+    print("skirt, which the blocker only attenuates by |H(f)|. So")
+    print("\n    attenuation >= -10 log10(1 - phi)   (floor, from the DC bin alone)")
+    print(f"\nand {IMPROVE_SUB20_DB:.0f} dB from the DC bin alone needs phi >= "
+          f"{1 - 10 ** (-IMPROVE_SUB20_DB / 10):.3f}. FLOOR and STEADY are both")
+    print("computed from the uncoupled spectrum and the filter's own transfer function,")
+    print("with NOTHING rendered; MEASURED is the integer filter run inside the block.")
+    print("STEADY is an UPPER bound: a causal filter starting from rest answers the")
+    print("clip's opening step with a tail of its own, and that tail is sub-20 Hz energy")
+    print("too -- the same 21 ms tail that triples the rimshot's decay. MEASURED must")
+    print("land between the two, which is a two-sided check of a model against an")
+    print("implementation neither was fitted to.\n")
+    print(f"  {'':5s} {'phi':>7s} {'floor':>8s} {'steady':>8s} {'measured':>9s} "
+          f"{'slack':>7s}  {'K for ' + str(int(IMPROVE_SUB20_DB)) + ' dB':>12s}  origin of the sub-20 Hz energy")
+    print(f"  {'':5s} {'':>7s} {'dB':>8s} {'dB':>8s} {'dB':>9s} {'dB':>7s}")
+    out = {}
+    for v in SUBJECTS + CONTROLS:
+        b, nb = render(v, dx.COUPLE_OFF)
+        c, nc = render(v, dx.COUPLE_BUS, k)
+        phi = dc_fraction(b)
+        floor = attenuation_floor_db(phi)
+        pred = steadystate_sub20_attenuation_db(b, k)
+        meas = -(measure(c, nc)["sub20_dbfs"] - measure(b, nb)["sub20_dbfs"])
+        rk = required_k(b)
+        origin = ("a STANDING OFFSET: a blocker removes it"
+                  if phi > 0.5 else
+                  "the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it")
+        inside = "" if floor - 0.6 <= meas <= pred + 0.6 else "  **OUTSIDE BRACKET**"
+        print(f"  {v:5s} {phi:7.4f} {floor:8.2f} {pred:8.2f} {meas:9.2f} "
+              f"{meas - floor:+7.2f}  {('K=' + str(rk)) if rk else 'NONE':>12s}  "
+              f"{origin}{inside}")
+        out[v] = {"phi": phi, "floor": floor, "pred": pred, "meas": meas, "k": rk}
+    print(f"\n  'K for {IMPROVE_SUB20_DB:.0f} dB' is the LOWEST corner (largest K) that reaches the")
+    print("  required improvement. K is a shift, so these are the only corners the")
+    print(f"  hardware can build, and the circuit's own is K = {dx.COUPLE_K} "
+          f"({SR / (2 * np.pi * (1 << dx.COUPLE_K)):.2f} Hz). A voice whose")
+    print("  answer is a SMALLER K than that is asking for a corner the circuit does not")
+    print("  have, and --cutoff is where what that costs is measured.\n")
+    print("  WHAT THE SCREEN COSTS TO BEAT. The same prediction across the corners:\n")
+    print(f"  {'':5s} " + " ".join(f"{'K=' + str(kk):>8s}" for kk in ks))
+    for v in SUBJECTS + CONTROLS:
+        b, _ = render(v, dx.COUPLE_OFF)
+        print(f"  {v:5s} " +
+              " ".join(f"{steadystate_sub20_attenuation_db(b, kk):8.2f}" for kk in ks))
+    print("\n  (predicted sub-20 Hz attenuation, dB; --cutoff prints the preservation cost")
+    print("   of each of these corners on the same voices)")
+    return out
+
+
+def report_resolution(sweep=(0.5, 1.0, 2.0)):
+    """**What this instrument can see, before any gate is allowed a verdict.**
+
+    CLAUDE.md: run a gate against the current state before committing it. Three
+    of the allowances above turned out to sit below the resolution -- they were
+    failing CONTROL voices on dither -- and one (`t20_ms_pct` on the RS) sits
+    below one frame of its own quantisation grid.
+
+    The attack tolerance is swept here rather than argued: a value below the
+    lobe ambiguity it exists to absorb puts the BD back on its 460-sample
+    cliff, and every value above it gives the same answer."""
+    print(provenance())
+    print("\nTHE INSTRUMENT'S OWN RESOLUTION: largest change from "
+          f"{DITHER_PATTERNS} independent +-1 LSB")
+    print("dither patterns on the UNCOUPLED baseline. One LSB is the smallest change the")
+    print("int16 output (contract 12) can express, so a gate below this cannot attribute")
+    print("what it reads to the candidate. T20 folds in one frame of its own grid, which")
+    print("dither cannot see.\n")
+    print(f"  {'':5s} {'peak':>8s} {'body':>9s} {'mid':>8s} {'HF':>9s} "
+          f"{'T20':>8s} {'atk':>5s} {'cent':>8s}")
+    print(f"  {'':5s} {'dB':>8s} {'dB':>9s} {'dB':>8s} {'dB':>9s} "
+          f"{'%':>8s} {'samp':>5s} {'%':>8s}")
+    bad = []
+    for v in SUBJECTS + CONTROLS:
+        r = resolution(v)
+        flags = [p for p in RESOLUTION_PROPS if r[p] > allowance(p, v)]
+        bad += [(v, p, r[p], allowance(p, v)) for p in flags]
+        print(f"  {v:5s} {r['peak_dbfs']:8.4f} {r['body_20_700_db']:9.4f} "
+              f"{r['mid_700_5k_db']:8.4f} {r['hf_5k_20k_db']:9.4f} "
+              f"{r['t20_ms_pct']:8.3f} {r['attack_samp']:5.0f} {r['centroid_pct']:8.4f}"
+              f"   {'ok' if not flags else 'BELOW RESOLUTION: ' + ','.join(flags)}")
+    print("\n  GATES THAT CANNOT PRODUCE A VERDICT AS DECLARED\n")
+    if not bad:
+        print("    none")
+    for v, p, r, a in bad:
+        print(f"    {v} {p:18s} allowance {a:7.2f}   resolution {r:8.3f}   "
+              f"{r / max(a, 1e-9):6.1f}x too tight")
+    print("\n  ATTACK TOLERANCE SWEEP. The value is read off peak_margin_db, and the")
+    print("  verdict must not depend on it above the ambiguity it absorbs.\n")
+    print(f"  {'':5s} {'margin dB':>10s} " +
+          " ".join(f"{'tol ' + str(t):>12s}" for t in sweep))
+    for v in SUBJECTS + CONTROLS:
+        b, _ = render(v, dx.COUPLE_OFF)
+        c, _ = render(v, dx.COUPLE_BUS)
+        cells = []
+        for t in sweep:
+            cells.append(f"{attack_samples(c, t) - attack_samples(b, t):+12.0f}")
+        print(f"  {v:5s} {peak_margin_db(b):10.3f} " + " ".join(cells))
+    print("\n  (columns are the coupled-minus-uncoupled attack change, in samples)")
+    return 0
+
+
+def _row(name, base, cand, voice, res=None):
     d = deltas(base, cand)
-    bad = preserved(voice, d)
+    bad, limited = preserved(voice, d, res)
+    note = "ok" if not bad else ",".join(bad)
+    if limited:
+        note += "   [res-limited: " + ",".join(limited) + "]"
     print(f"  {name:22s} {d['sub20_dbfs']:+8.2f} {d['body_20_700_db']:+8.2f} "
           f"{d['mid_700_5k_db']:+8.2f} {d['hf_5k_20k_db']:+8.2f} "
           f"{d['peak_dbfs']:+7.2f} {d['t20_ms_pct']:+7.2f} {d['attack_samp']:+6.0f} "
-          f"{d['centroid_pct']:+7.2f}  {'ok' if not bad else ','.join(bad)}")
+          f"{d['centroid_pct']:+7.2f}  {note}")
     return d, bad
 
 
@@ -353,10 +799,11 @@ def report_placement(k=dx.COUPLE_K):
               f"{base['sub20_dbfs']:+.2f} dB  body {base['body_20_700_db']:+.2f} dB  "
               f"HF {base['hf_5k_20k_db']:+.2f} dB  T20 {base['t20_ms']:.1f} ms  "
               f"clip {int(base['n_clip'])}")
+        res = resolution_of(b, nb)
         _head()
         for pl in (dx.COUPLE_EXC, dx.COUPLE_BUS, dx.COUPLE_POST):
             c, nc = render(v, pl, k)
-            d, bad = _row(f"{pl}", base, measure(c, nc), v)
+            d, bad = _row(f"{pl}", base, measure(c, nc), v, res)
             out[(v, pl)] = (d, bad)
         print()
     return out
@@ -375,12 +822,22 @@ def report_measure(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
         b, nb = render(v, dx.COUPLE_OFF)
         c, nc = render(v, placement, k)
         base, cand = measure(b, nb), measure(c, nc)
-        d, bad = _row(f"{v}  ({'subject' if v in SUBJECTS else 'control'})", base, cand, v)
+        res = resolution_of(b, nb)
+        d, bad = _row(f"{v}  ({'subject' if v in SUBJECTS else 'control'})", base, cand, v, res)
         rows[v] = (base, cand, d, bad)
         if v in SUBJECTS:
             verdict[v] = (d["sub20_dbfs"] <= -IMPROVE_SUB20_DB, bad)
         else:
             verdict[v] = (True, bad)
+    print("\n  THE GATE THAT WAS WIRED WRONG, both ways, so the change is on the page.")
+    print("  A GLOBAL spectral centroid is not a preservation gate for a DC blocker:")
+    print("  removing sub-20 Hz energy raises it mechanically. Qualified >= 20 Hz.\n")
+    print(f"  {'':10s} {'centroid >=20 Hz (the GATE)':>30s} {'centroid global (diagnostic)':>31s}")
+    for v in SUBJECTS + CONTROLS:
+        base, cand, d, _ = rows[v]
+        print(f"  {v:10s} {base['centroid_hz']:11.1f} ->{cand['centroid_hz']:10.1f} Hz "
+              f"{d['centroid_pct']:+6.2f}% {base['centroid_global_hz']:11.1f} ->"
+              f"{cand['centroid_global_hz']:10.1f} Hz {d['centroid_global_pct']:+6.2f}%")
     print("\n  NORMALISED SHARES (%% of clip energy) -- diagnostic only, never a verdict\n")
     print(f"  {'':10s} {'body %':>16s} {'mid %':>16s} {'HF %':>16s}   HF share")
     print(f"  {'':10s} {'before':>7s} {'after':>8s} {'before':>7s} {'after':>8s} "
@@ -417,13 +874,14 @@ def report_cutoff(ks=(8, 9, 10, 11, 12, 13), placement=dx.COUPLE_BUS):
     for v in SUBJECTS + CONTROLS:
         b, nb = render(v, dx.COUPLE_OFF)
         base = measure(b, nb)
+        res = resolution_of(b, nb)
         print(f"{v}")
         print(f"  {'K':>3s} {'fc Hz':>8s} {'sub20':>8s} {'body':>8s} {'HF':>8s} "
               f"{'peak':>7s} {'T20 %':>7s} {'cent %':>7s}  limits")
         for k in ks:
             c, nc = render(v, placement, k)
             d = deltas(base, measure(c, nc))
-            bad = preserved(v, d)
+            bad, _ = preserved(v, d, res)
             print(f"  {k:3d} {SR / (2 * np.pi * (1 << k)):8.3f} {d['sub20_dbfs']:+8.2f} "
                   f"{d['body_20_700_db']:+8.2f} {d['hf_5k_20k_db']:+8.2f} "
                   f"{d['peak_dbfs']:+7.2f} {d['t20_ms_pct']:+7.2f} {d['centroid_pct']:+7.2f}"
@@ -508,6 +966,8 @@ def report_continuous(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--limits", action="store_true")
+    ap.add_argument("--resolution", action="store_true")
+    ap.add_argument("--screen", action="store_true")
     ap.add_argument("--placement", action="store_true")
     ap.add_argument("--measure", action="store_true")
     ap.add_argument("--cutoff", action="store_true")
@@ -515,11 +975,16 @@ def main(argv=None):
     ap.add_argument("-k", type=int, default=dx.COUPLE_K)
     ap.add_argument("--at", default=dx.COUPLE_BUS, choices=list(dx.COUPLE_PLACEMENTS))
     a = ap.parse_args(argv)
-    if not any((a.limits, a.placement, a.measure, a.cutoff, a.continuous)):
+    if not any((a.limits, a.resolution, a.screen, a.placement, a.measure,
+                a.cutoff, a.continuous)):
         ap.print_help()
         return 2
     if a.limits:
         report_limits()
+    if a.resolution:
+        report_resolution()
+    if a.screen:
+        report_screen(a.k)
     if a.placement:
         report_placement(a.k)
     if a.measure:
@@ -649,13 +1114,165 @@ def test_t20_recovers_a_known_decay_and_refuses_one_it_cannot_see():
 
 
 def test_attack_and_centroid_recover_ground_truth():
+    """Both estimators against synthetic truth they cannot have been fitted to,
+    and across three carriers rather than one -- the original single 400 Hz case
+    could not have caught the lobe-rank defect that `attack_samples` was
+    repaired for, because at 400 Hz the lobes are 1.25 ms apart."""
     n = int(SR * 0.3)
     t = np.arange(n) / SR
-    env = np.minimum(t / 0.005, 1.0) * np.exp(-t / 0.05)
-    x = np.round(20000 * np.sin(2 * np.pi * 400 * t) * env).astype(np.int64)
-    assert abs(attack_samples(x) - 0.005 * SR) < 0.002 * SR, attack_samples(x)
+    for f0, att, tol in ((400, 0.005, 0.002), (2000, 0.005, 0.002),
+                         (50, 0.020, 0.004)):
+        env = np.minimum(t / att, 1.0) * np.exp(-t / 0.10)
+        x = np.round(20000 * np.sin(2 * np.pi * f0 * t) * env).astype(np.int64)
+        got = attack_samples(x)
+        assert abs(got - att * SR) < tol * SR, (f0, att, got)
     tone = np.round(20000 * np.sin(2 * np.pi * 1234.0 * t)).astype(np.int64)
     assert abs(centroid_hz(tone) - 1234.0) < 12.0, centroid_hz(tone)
+    assert abs(centroid_global_hz(tone) - 1234.0) < 12.0
+
+
+def test_the_attack_estimator_is_blind_to_a_lobe_rank_flip():
+    """THE REPAIR, on ground truth rather than on the BD. Two equal lobes a
+    half-period apart, then a DC offset too small to hear that makes the second
+    one win. `argmax(|x|)` jumps a half period; the first arrival within
+    `ATTACK_TOL_DB` does not move.
+
+    THE CONDITION THIS NEEDS, and it is the condition the BD is actually in:
+    several consecutive lobes within the tolerance of the peak. Where exactly
+    two lobes are tied and nothing else is near them, BOTH estimators flip and
+    neither can do better -- which is why `peak_margin_db` exists as a
+    precondition and is reported, rather than the repair being claimed as
+    universal. A 50 Hz carrier decaying with tau = 10 s puts twenty half-cycles
+    inside 1 dB, as the BD's rail-limited body does.
+
+    The offset (0.3 % of peak) is smaller than the one the real BD carries
+    (-45 counts on a 7400-count peak, 0.6 %), so the control is harder than the
+    case it was written for."""
+    n = int(SR * 0.3)
+    t = np.arange(n) / SR
+    x = 20000 * np.sin(2 * np.pi * 50.0 * t) * np.minimum(t / 0.020, 1.0) \
+        * np.exp(-t / 10.0)
+    a = np.round(x).astype(np.int64)
+    b = np.round(x - 60).astype(np.int64)          # 0.3 % of peak
+    assert peak_margin_db(a) < 0.1, peak_margin_db(a)     # the lobes really are tied
+    old = abs(int(np.argmax(np.abs(b))) - int(np.argmax(np.abs(a))))
+    assert old > 200, old                                 # argmax jumps a half period
+    assert abs(attack_samples(b) - attack_samples(a)) <= 4, \
+        (attack_samples(a), attack_samples(b))
+
+
+def test_the_qualified_centroid_is_the_one_a_dc_blocker_cannot_flatter():
+    """Closed form, independent of this model, and the same claim
+    `dc_centroid_gate_qualification.py` makes: a sub-audio contaminant moves a
+    GLOBAL centroid by a double-digit percentage while the audible content does
+    not move at all. The gate must be read on the second quantity."""
+    n = int(SR * 0.5)
+    t = np.arange(n) / SR
+    tone = 8000 * np.sin(2 * np.pi * 1000.0 * t)
+    cont = tone + 8000 * np.sin(2 * np.pi * 10.0 * t)
+    g0, g1 = centroid_global_hz(cont), centroid_global_hz(tone)
+    q0, q1 = centroid_hz(cont), centroid_hz(tone)
+    assert 100.0 * (g1 / g0 - 1.0) > 10.0, (g0, g1)
+    assert abs(100.0 * (q1 / q0 - 1.0)) < 0.01, (q0, q1)
+
+
+def test_the_attenuation_floor_is_the_dc_fraction_on_closed_form_signals():
+    """The screen against ground truth it cannot have been fitted to: signals
+    whose sub-20 Hz energy is split between the f = 0 bin and the skirt in a
+    ratio set by construction.
+
+    A constant `c` plus a 10 Hz tone of amplitude `A` over an integer number of
+    periods has DC energy proportional to c^2 and one-sided skirt energy to
+    A^2/2, so phi = c^2 / (c^2 + A^2/2) exactly. The floor must come out at
+    -10 log10(1 - phi), and a settled blocker whose corner is far below the
+    skirt must deliver essentially exactly that -- the floor is not merely a
+    bound in its own derivation's regime, it is the answer.
+
+    THE REGIME MATTERS AND IS WHY THIS CASE IS NOT THE VOICES. 4 s of clip with
+    the last 2 s measured, so the K = 13 pole (171 ms) is settled to 12 time
+    constants and the 10 Hz skirt is attenuated by only 0.04 dB. On a drum hit
+    neither holds, which is what opens the bracket the next test checks."""
+    n = int(SR * 4.0)
+    half = n // 2
+    t = np.arange(n) / SR
+    for c, amp in ((8000.0, 1000.0), (3000.0, 3000.0), (300.0, 8000.0)):
+        x = c + amp * np.sin(2 * np.pi * 10.0 * t)
+        want = c ** 2 / (c ** 2 + amp ** 2 / 2.0)
+        got = dc_fraction(x[half:])
+        assert abs(got - want) < 1e-4, (c, amp, want, got)
+        assert abs(attenuation_floor_db(got) + 10.0 * np.log10(1 - got)) < 1e-9
+        y = dx.dc_block(np.round(x).astype(np.int64), 13)[half:]
+        a = band_energy_dbfs(np.round(x[half:]).astype(np.int64), *SUB20)
+        b = band_energy_dbfs(y, *SUB20)
+        assert abs((a - b) - attenuation_floor_db(got)) < 0.2, \
+            (c, amp, a - b, attenuation_floor_db(got))
+
+
+def test_the_screen_brackets_the_rendered_attenuation_on_every_voice():
+    """**What makes the screen evidence rather than a restatement.** Both bounds
+    are computed from the UNCOUPLED spectrum with no blocker anywhere; the
+    measurement is the integer filter run inside the block. On all five voices
+    the measurement lands INSIDE the bracket:
+
+      voice   floor    measured   steady state
+      CY       9.51     14.64        17.61
+      RS       0.19      2.78         2.79
+      BD       0.45      2.60         2.70
+      HT       0.10      2.65         2.66
+      CH       1.88      5.03        11.69
+
+    Five independent two-sided checks of a model against an implementation
+    neither side was fitted to. The width of the bracket is itself informative:
+    it is the filter's own start-up tail, which is largest exactly where the
+    standing offset is largest (CY, CH).
+
+    THIS TEST WAS WRONG BEFORE IT WAS RIGHT. It first asserted equality to
+    1.2 dB and went red at 5.73 dB on the CY, because the steady-state figure
+    cannot see the causal filter's opening transient. The assertion was the
+    error, not the probe."""
+    for v in SUBJECTS + CONTROLS:
+        b, nb = render(v, dx.COUPLE_OFF)
+        c, nc = render(v, dx.COUPLE_BUS, dx.COUPLE_K)
+        lo = attenuation_floor_db(dc_fraction(b))
+        hi = steadystate_sub20_attenuation_db(b, dx.COUPLE_K)
+        meas = measure(b, nb)["sub20_dbfs"] - measure(c, nc)["sub20_dbfs"]
+        assert lo - 0.6 <= meas <= hi + 0.6, (v, lo, meas, hi)
+        assert hi > lo, (v, lo, hi)              # the bracket is not degenerate
+
+
+def test_the_screen_separates_the_two_subjects_and_says_why():
+    """THE FINDING, as an assertion. The CY's sub-20 Hz energy is a standing
+    offset and the RS's is its own onset skirt, so no single corner serves both:
+
+      CY  phi = 0.888  floor  9.51 dB   measured -14.64 dB   6 dB reachable
+      RS  phi = 0.043  floor  0.19 dB   measured  -2.78 dB   6 dB NOT reachable
+                                                             at ANY K >= 9
+
+    The CY clears the 6 dB requirement from the f = 0 bin alone, before the
+    skirt is touched. The RS's floor is 0.37 dB: to reach 6 dB it needs the
+    SKIRT attenuated, and the OPTIMISTIC bound says no corner at or below the
+    circuit's own (K >= 10, fc <= 7.46 Hz) gets there. Only K = 8 (29.8 Hz)
+    does, at which --cutoff measures the RS breaking five of its seven
+    preservation properties -- so the trade-off has no satisfiable point, which
+    is the finding rather than a tuning failure.
+
+    If a future change made the RS's sub-20 energy a standing offset -- or the
+    CY's a skirt -- this goes red, which is what it is for. The 6 dB target is
+    not the claim; the SEPARATION is."""
+    cy, _ = render("CY", dx.COUPLE_OFF)
+    rs, _ = render("RS", dx.COUPLE_OFF)
+    assert dc_fraction(cy) > 0.75, dc_fraction(cy)       # >= the 6 dB threshold
+    assert dc_fraction(rs) < 0.10, dc_fraction(rs)
+    assert attenuation_floor_db(dc_fraction(cy)) > IMPROVE_SUB20_DB
+    assert attenuation_floor_db(dc_fraction(rs)) < 0.5
+    assert required_k(cy) is not None
+    # No corner at or below the circuit's own reaches it even optimistically:
+    assert required_k(rs, ks=range(16, 9, -1)) is None, required_k(rs, ks=range(16, 9, -1))
+    # and the one that could (K = 8) costs the RS its preservation, measured:
+    b, nb = render("RS", dx.COUPLE_OFF)
+    c, nc = render("RS", dx.COUPLE_BUS, 8)
+    bad, _ = preserved("RS", deltas(measure(b, nb), measure(c, nc)), resolution_of(b, nb))
+    assert len(bad) >= 3, bad
 
 
 def test_a_bus_blocker_is_the_superposition_of_per_path_blockers():
@@ -694,7 +1311,24 @@ def test_the_coupling_state_survives_a_hit_and_a_retune_but_not_a_reset():
 def test_the_accumulator_width_is_declared_and_not_exceeded():
     """What the RTL has to build. acc ~ x * 2^K, so a 22-bit mix bus needs
     22 + K + 1 bits; the model counts the widest it actually saw so the RTL
-    word is measured rather than guessed."""
+    word is measured rather than guessed.
+
+    THE LOWER BOUND WAS WRONG BEFORE IT WAS RIGHT, and that is the interesting
+    half. It read `acc_bits > MIX_BITS` -- the accumulator must be wider than
+    the mix BUS -- and went red at `22 > 22`. The bus is 22 bits wide and the
+    widest sample that actually reaches the blocker is 17, so the assertion was
+    comparing the accumulator against a width the data never occupies. What the
+    shift has to be measured against is the width that ARRIVES, which is why
+    `DcBlockFx` now counts `in_bits`.
+
+    AND THE FIRST REPLACEMENT WAS ALSO WRONG: `acc_bits >= in_bits + K - 1`
+    went red at `22 >= 26`, because `acc` settles at the input's MEAN times
+    2^K, not its PEAK times 2^K, and a drum hit's mean is far below its peak.
+    `in_bits + K + 1` is therefore an upper bound on what a sustained rail
+    would need and is not approached by any transient; the lower bound that is
+    actually true of the design is that the accumulator is wider than its own
+    input, which is what makes the shift do anything. Two wrong-then-right
+    bounds on one assertion; both are recorded here rather than tidied away."""
     d = dx.DrumsFx(couple=dx.COUPLE_BUS)
     for v in ("BD", "SD", "CY", "RS", "OH"):
         d.write(dx.A_RESET, 0)
@@ -702,7 +1336,10 @@ def test_the_accumulator_width_is_declared_and_not_exceeded():
                int(0.5 * SR))
     assert d.dc_dmix.acc_bits <= dx.MIX_BITS + dx.COUPLE_K + 1, d.dc_dmix.acc_bits
     assert d.dc_body.acc_bits <= dx.BODY_BITS + dx.COUPLE_K + 1, d.dc_body.acc_bits
-    assert d.dc_dmix.acc_bits > dx.MIX_BITS, d.dc_dmix.acc_bits   # it is really used
+    for f, name in ((d.dc_dmix, "dmix"), (d.dc_body, "body")):
+        assert f.in_bits > 0, name
+        assert f.acc_bits > f.in_bits, (name, f.acc_bits, f.in_bits)
+        assert f.acc_bits <= f.in_bits + dx.COUPLE_K + 1, (name, f.acc_bits, f.in_bits)
 
 
 if __name__ == "__main__":
