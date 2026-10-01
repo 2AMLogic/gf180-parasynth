@@ -1,40 +1,40 @@
-commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit 714dac6dcc6b-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 PLACEMENT. Every number is a change from the uncoupled baseline of the
 SAME voice on the SAME instrument (DR 0015: same qualified basis).
 
-CY   baseline: peak -13.36 dBFS  sub20 -46.88 dB  body -56.46 dB  HF -34.09 dB  T20 460.0 ms  clip 0
+CY   baseline: peak -13.36 dBFS  sub20 -52.58 dB  body -61.94 dB  HF -40.11 dB  T20 558.0 ms  clip 0
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  exc                       +0.00    -0.00    +0.00    +0.01   -0.00   +0.00     +0   +0.01  ok   [res-limited: attack_samp]
-  bus                      -14.64    +0.20    +0.00    +0.00   +0.06   -6.96     +0   -0.02  t20_ms_pct   [res-limited: attack_samp]
-  post                     -14.64    +0.19    +0.00    +0.00   +0.06   -6.96     +0   -0.02  t20_ms_pct   [res-limited: attack_samp]
+  exc                       +0.00    -0.00    +0.00    +0.01   -0.00   -0.36     +0   +0.01  ok   [res-limited: attack_samp]
+  bus                      -14.85    -0.02    +0.00    +0.00   +0.06   -0.36     +0   +0.00  ok   [res-limited: attack_samp]
+  post                     -14.87    -0.02    +0.00    +0.00   +0.06   -0.36     +0   +0.00  ok   [res-limited: attack_samp]
 
-RS   baseline: peak -14.29 dBFS  sub20 -53.84 dB  body -46.39 dB  HF -72.46 dB  T20 8.0 ms  clip 0
+RS   baseline: peak -14.29 dBFS  sub20 -59.73 dB  body -52.44 dB  HF -78.48 dB  T20 2398.0 ms  clip 0
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  exc                       -0.25    -0.13    -0.04    -0.04   -0.08   +0.00     +0   +1.13  centroid_pct   [res-limited: t20_ms_pct]
-  bus                       -2.78    -0.06    +0.00    +0.00   -0.17 +225.00     +0   +1.04  t20_ms_pct,centroid_pct   [res-limited: t20_ms_pct]
-  post                      -2.79    -0.06    +0.00    +0.01   -0.17 +225.00     +0   +1.04  t20_ms_pct,centroid_pct   [res-limited: t20_ms_pct]
+  exc                       -0.24    -0.13    -0.04    -0.04   -0.08   +0.00     +0   +1.12  centroid_pct   [REFUSED: t20_ms_pct]
+  bus                       -2.70    -0.06    +0.00    +0.00   -0.17   -0.08     +0   +1.00  ok   [REFUSED: t20_ms_pct]
+  post                      -2.71    -0.06    +0.00    +0.01   -0.17   -0.08     +0   +0.99  ok   [REFUSED: t20_ms_pct]
 
-BD   baseline: peak -12.93 dBFS  sub20 -47.13 dB  body -24.85 dB  HF -76.68 dB  T20 334.0 ms  clip 0
+BD   baseline: peak -12.93 dBFS  sub20 -52.44 dB  body -30.87 dB  HF -82.71 dB  T20 348.0 ms  clip 0
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  exc                       +5.58    +0.24    -0.00    +0.01   +1.17   +0.00    +10   -0.54  peak_dbfs   [res-limited: attack_samp]
-  bus                       -2.60    -0.10    +0.10    +0.00   -0.21   +0.00     +6   +0.06  ok   [res-limited: attack_samp]
-  post                      -2.60    -0.10    +0.10    +0.00   -0.21   +0.00     +6   +0.06  ok   [res-limited: attack_samp]
+  exc                       +5.10    +0.24    +0.01    +0.01   +1.17   +4.60    +10   -0.53  peak_dbfs,t20_ms_pct   [res-limited: hf_5k_20k_db,attack_samp]
+  bus                       -3.25    -0.10    +0.11    +0.01   -0.21   -1.15     +6   +0.05  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  post                      -3.25    -0.10    +0.11    +0.01   -0.21   -1.15     +6   +0.06  ok   [res-limited: hf_5k_20k_db,attack_samp]
 
-HT   baseline: peak -12.95 dBFS  sub20 -56.14 dB  body -30.19 dB  HF -102.08 dB  T20 100.0 ms  clip 0
+HT   baseline: peak -12.95 dBFS  sub20 -62.01 dB  body -36.21 dB  HF -108.11 dB  T20 104.0 ms  clip 0
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  exc                       -2.52    -0.01    +0.00    -0.03   -0.22   +0.00     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
-  bus                       -2.65    -0.00    +0.01    +0.30   -0.22   +0.00     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
-  post                      -2.66    -0.00    +0.01    +1.08   -0.22   +0.00     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  exc                       -2.44    -0.01    +0.00    -0.03   -0.22   -1.92     +0   +0.02  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  bus                       -2.57    -0.00    +0.01    +0.30   -0.22   -1.92     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  post                      -2.58    -0.00    +0.01    +1.08   -0.22   -1.92     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
 
-CH   baseline: peak -14.22 dBFS  sub20 -97.15 dB  body -109.64 dB  HF -40.80 dB  T20 48.0 ms  clip 0
+CH   baseline: peak -14.22 dBFS  sub20 -103.17 dB  body -115.72 dB  HF -46.82 dB  T20 48.0 ms  clip 0
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  exc                       +0.00    -0.13    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok   [res-limited: body_20_700_db,t20_ms_pct]
-  bus                       -5.03    -0.75    +0.00    +0.00   +0.01   +0.00     +0   -0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
-  post                     -20.87    -1.62    +0.01    +0.00   +0.01   +0.00     +0   +0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
+  exc                       +0.00    -0.14    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok   [res-limited: body_20_700_db,t20_ms_pct]
+  bus                       -5.03    -0.72    +0.00    +0.00   +0.01   +0.00     +0   -0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
+  post                     -20.86    -1.56    +0.01    +0.00   +0.01   +0.00     +0   +0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
 

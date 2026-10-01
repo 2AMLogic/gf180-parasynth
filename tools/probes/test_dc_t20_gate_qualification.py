@@ -58,6 +58,27 @@ def test_this_file_and_dc_blocker_measure_t20_identically():
         assert (np.isnan(a) and np.isnan(b)) or a == b, (a, b)
 
 
+def test_a_decay_that_fits_the_clip_is_clip_invariant():
+    r = q.clip_invariance(q.TRUE_T20_MS)
+    assert r["invariant"], r
+
+
+def test_a_decay_that_does_not_fit_the_clip_is_rejected_by_the_doubling_test():
+    """The cymbal's own defect, in closed form: a Schroeder integral normalised
+    by the energy inside the clip reads SHORT when the voice is still ringing
+    at the end. 464 ms at 0.60 s against 500 at 1.20."""
+    r = q.clip_invariance(q.TRUNCATED_T20_MS)
+    assert not r["invariant"], r
+    assert r["short_t20_ms"] < r["long_t20_ms"], r
+
+
+def test_the_doubling_test_is_the_criterion_the_probe_enforces():
+    """Both legs, through main(): the probe must refuse if the criterion either
+    rejects a case it must accept or accepts the truncation it must reject."""
+    assert q.INVARIANCE_PCT > 0.0
+    assert q.main([]) == 0
+
+
 def test_the_qualification_refuses_rather_than_reports_when_its_premise_fails():
     """A pedestal of zero removes the premise. The probe must REFUSE (exit 1),
     not print a number that looks like a qualification."""

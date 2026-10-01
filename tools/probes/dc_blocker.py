@@ -1,18 +1,48 @@
 #!/usr/bin/env python3
 """Does an output coupling correct the drum block, and what does it cost?
 
-    .venv/bin/python tools/probes/dc_blocker.py --limits
-    .venv/bin/python tools/probes/dc_blocker.py --resolution
-    .venv/bin/python tools/probes/dc_blocker.py --screen
-    .venv/bin/python tools/probes/dc_blocker.py --placement
-    .venv/bin/python tools/probes/dc_blocker.py --measure
-    .venv/bin/python tools/probes/dc_blocker.py --cutoff
-    .venv/bin/python tools/probes/dc_blocker.py --continuous
-    .venv/bin/python -m pytest tools/probes/dc_blocker.py -q
-    .venv/bin/python -m pytest tools/probes/test_dc_blocker_apparatus.py -q
+    python3 tools/probes/dc_blocker.py --limits      the declared allowances
+    python3 tools/probes/dc_blocker.py --decay       the decay gate's precondition
+    python3 tools/probes/dc_blocker.py --resolution  what the instrument can see
+    python3 tools/probes/dc_blocker.py --screen      what a blocker CAN do, per voice
+    python3 tools/probes/dc_blocker.py --clipping    s2's placement, where it is testable
+    python3 tools/probes/dc_blocker.py --placement   four placements, measured
+    python3 tools/probes/dc_blocker.py --measure     improvement AND preservation
+    python3 tools/probes/dc_blocker.py --cutoff      the corner sweep
+    python3 tools/probes/dc_blocker.py --continuous  repeated hits, chokes, retunes
+    python3 tools/probes/dc_blocker.py --records     regenerate docs/dcblock/ entirely
+    python3 -m pytest tools/probes/dc_blocker.py tools/probes/test_dc_blocker_apparatus.py -q
 
-READ `--resolution` AND `--screen` BEFORE ANY VERDICT TABLE
-----------------------------------------------------------
+THE ANSWER, SO IT IS NOT BURIED IN NINE RECORDS
+-----------------------------------------------
+**ONE BLOCKER DOES NOT SUIT BOTH SUBJECTS, AND NOT BECAUSE IT HARMS THE
+RIMSHOT: BECAUSE THE RIMSHOT HAS NO DC DEFECT TO REMOVE.**
+
+  * THE CYMBAL is a standing offset. phi = 0.888 of its sub-20 Hz energy is in
+    the f = 0 bin, which a zero at z = 1 nulls exactly. At the circuit's own
+    corner (K = 10, 7.46 Hz) the blocker removes 14.85 dB of it and every
+    declared preservation gate passes, decay included (-0.36 %). ACCEPTED.
+  * THE RIMSHOT is its own onset skirt. phi = 0.043, so 95.7 % of its sub-20 Hz
+    energy is the Fourier content of a 10 ms burst -- the pulse, not a fault --
+    and a DC-nulling filter attenuates it only by |H(f)|. It reaches 2.70 dB
+    against the declared 6.0, and `--screen` shows that no corner the hardware
+    can build reaches 6 dB without moving fc into the band whose preservation
+    is the constraint. NOT MET, and the requirement was the wrong one for this
+    voice rather than the blocker being the wrong filter.
+
+So #152's "one DC block fixes five voices" is refuted for at least one of the
+five, and `--screen` says which of the others are in which class before anything
+is rendered: BD 0.098, HT 0.023, CH 0.352 are all skirt, not offset.
+
+READ `--decay`, `--resolution` AND `--screen` BEFORE ANY VERDICT TABLE
+---------------------------------------------------------------------
+`--decay` is the decay gate's precondition: a decay does not depend on how long
+you watched. It rejected two defects that the verdict table could not show --
+the CY's T20 was biased 23 % short by Schroeder truncation at the 0.60 s clip
+every earlier record used, and the RS's banded T20 tracks the clip's length to
+three figures (598 / 1198 / 2398 ms), so that gate is REFUSED on the RS rather
+than answered. `RENDER_S` is 2.40 s because that is where the CY stops moving.
+
 `--resolution` is what this instrument can see. Three of the preservation
 allowances declared below were BELOW it -- the HT's 5-20 kHz band is at
 -102 dBFS and one LSB of dither moves it 8.69 dB against a 0.20 dB allowance --
@@ -129,8 +159,15 @@ SUB20 = (0.0, 20.0)
 BANDS = {"body_20_700_db": (20.0, 700.0), "mid_700_5k_db": (700.0, 5000.0),
          "hf_5k_20k_db": (5000.0, 20000.0)}
 
-RENDER_S = 0.60                   # long enough for the CY tail; a 0.24 s window
-                                  # would cut the decay this file has to report
+RENDER_S = 2.40                   # WAS 0.60, AND 0.60 WAS NOT LONG ENOUGH.
+                                  # A Schroeder integral normalises by the
+                                  # energy inside the clip, so a voice still
+                                  # ringing at the end reads SHORT: the CY's own
+                                  # T20 reads 428 / 540 / 558 / 558 ms at 0.60 /
+                                  # 1.20 / 2.40 / 4.80 s, so every record taken
+                                  # at 0.60 s was biased 23 % short. 2.40 s is
+                                  # where it stops moving, which is a measured
+                                  # choice (`--decay`), not a generous one.
 RENDER_GAIN = 0.45                # the reference drum-bus gain (DR 0005), as
                                   # `test_discrimination.RENDER_GAIN`
 LEAD_FRAMES = 10                  # the hit lands at frame 10, as every other probe
@@ -152,8 +189,11 @@ def provenance() -> str:
 # ===========================================================================
 # Rendering: one sound, one placement
 # ===========================================================================
+_RENDER_MEMO: dict = {}
+
+
 def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
-           hits=None, kit=None, extra=None):
+           hits=None, kit=None, extra=None, gain=None):
     """The block's int16 output for one sound, at one coupling placement.
 
     Returns (out_int16, n_clip). `n_clip` is how many samples the output
@@ -164,7 +204,19 @@ def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
     where it cannot be applied inside the block: it is the control that shows
     whether removing DC after clipping recovers the waveform the clipping
     destroyed. Same filter, same arithmetic (`dx.dc_block`), different side of
-    the rail."""
+    the rail.
+
+    MEMOISED for the default single-hit case only, and that is safe for exactly
+    one reason: the model is integer and deterministic, so two renders of the
+    same configuration are bit-identical --
+    `test_the_measurement_has_no_uncertainty_to_hide_behind` is that claim as a
+    test. The records need the same baseline a hundred times over and a 2.40 s
+    render is not free."""
+    gain = RENDER_GAIN if gain is None else gain
+    memo = (sound, couple, int(k), round(float(seconds), 6), round(float(gain), 6)) \
+        if hits is None and kit is None and extra is None else None
+    if memo is not None and memo in _RENDER_MEMO:
+        return _RENDER_MEMO[memo]
     n = int(seconds * SR)
     kit = kit if kit is not None else dx.kit_with_sounds(sound)
     hits = hits if hits is not None else [(LEAD_FRAMES, dx.SOUND_STOP[sound], 1.0)]
@@ -174,7 +226,7 @@ def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
     if extra:
         w = sorted(list(w) + list(extra), key=lambda t: t[0])
     dmix, body = d.play(w, n)
-    g = dx.accent_reg(RENDER_GAIN)
+    g = dx.accent_reg(gain)
     acc = (np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g) >> 15
     n_clip = int(((acc > 32767) | (acc < -32768)).sum())
     out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
@@ -182,6 +234,8 @@ def render(sound, couple=dx.COUPLE_OFF, k=dx.COUPLE_K, seconds=RENDER_S,
         y = dx.dc_block(out, k)
         n_clip += int(((y > 32767) | (y < -32768)).sum())
         out = np.clip(y, -32768, 32767).astype(np.int16)
+    if memo is not None:
+        _RENDER_MEMO[memo] = (out, n_clip)
     return out, n_clip
 
 
@@ -322,7 +376,10 @@ def t20_ms(x, frame_ms=T20_FRAME_MS):
     the cymbal's is not -- still gets a defined number.
 
     Returns nan when the clip never falls 20 dB, which is a REFUSAL and not a
-    zero: a number that cannot be measured must not be reported as one."""
+    zero: a number that cannot be measured must not be reported as one.
+
+    **THIS IS THE DIAGNOSTIC, NOT THE GATE.** It integrates the whole spectrum,
+    DC included, so a sub-20 Hz pedestal inflates it -- see `t20_band_ms`."""
     x = np.asarray(x, float)
     h = max(1, int(SR * frame_ms / 1e3))
     e = np.add.reduceat(x ** 2, np.arange(0, len(x) - len(x) % h, h))
@@ -336,6 +393,99 @@ def t20_ms(x, frame_ms=T20_FRAME_MS):
 
 
 CENTROID_FLOOR_HZ = 20.0          # the qualified definition; see below
+
+
+def band_limited(x, lo=CENTROID_FLOOR_HZ):
+    """`x` with every FFT bin below `lo` zeroed. Zero-phase and STATELESS.
+
+    A causal high-pass used as the analysis instrument would answer with a
+    settling tail of its own, which is precisely the quantity under test. A
+    brick wall in the same FFT the band energies are read from cannot."""
+    x = np.asarray(x, float)
+    X = np.fft.rfft(x)
+    X[np.fft.rfftfreq(len(x), 1.0 / SR) < lo] = 0.0
+    return np.fft.irfft(X, n=len(x))
+
+
+def t20_band_ms(x, lo=CENTROID_FLOOR_HZ):
+    """**THE DECAY GATE: T20 of the AUDIBLE band, >= `lo` Hz.**
+
+    A global T20 cannot be a preservation gate for a DC blocker, for the same
+    reason a global centroid cannot. `t20_ms` is a backward ENERGY integral, so
+    a sub-20 Hz pedestal contributes to it at every instant -- and contributes
+    MOST where the gate reads, late in the clip, where the backward integral is
+    small and the pedestal's share of it is large. Removing the pedestal then
+    moves the -20 dB crossing earlier for a reason that is not an audible decay
+    change, and the gate reads the candidate's intended effect as a failure.
+
+    THE GROUND TRUTH IS CLOSED FORM AND INDEPENDENT OF THIS MODEL:
+    `tools/probes/dc_t20_gate_qualification.py` builds a tone whose T20 is
+    200.0 ms by construction, adds a standing offset carrying 4 % of clip energy
+    (the cymbal's own measured DC share), and measures the global estimator
+    reading 452 ms against the >= 20 Hz estimator's 202 ms. Removing the
+    pedestal and nothing else moves the global gate -55.75 % and the banded one
+    +0.00 %.
+
+    AND IT IS NOT A LOOSENED GATE. The same file feeds the repaired estimator a
+    genuinely 10 % faster decay and it still reads -9.90 % against the 3 %
+    allowance (`test_the_repaired_gate_still_sees_a_real_decay_regression`).
+    A sub-20 Hz settling tail is not thereby ignored, either: it is exactly what
+    `sub20_dbfs` measures, in its own column, as the improvement figure.
+
+    **IT HAS A PRECONDITION OF ITS OWN AND IT IS NOT ALWAYS MET** -- see
+    `decay_gate_refuses`. On a voice that reaches exact silence quickly the
+    brick wall's sinc leaks onto the whole clip and this returns the clip's
+    length, not a decay. That is REFUSED, not reported."""
+    return t20_ms(band_limited(x, lo))
+
+
+# ---------------------------------------------------------------------------
+# THE DECAY GATE'S PRECONDITION: a decay does not depend on how long you watched
+# ---------------------------------------------------------------------------
+DECAY_INVARIANCE_PCT = 1.0        # how much doubling the clip may move the
+                                  # estimate before the gate has no verdict
+_DECAY_REFUSAL_CACHE: dict = {}
+
+
+def decay_gate_refuses(sound, seconds=RENDER_S):
+    """`(refuses, short_ms, long_ms)` for one voice's UNCOUPLED baseline.
+
+    THE DOUBLING TEST. A decay is a property of the signal, so an estimate that
+    moves when the observation window doubles is measuring the window. It is a
+    NECESSARY condition only -- it cannot prove an estimate right -- and it was
+    enough to reject two different defects on this instrument:
+
+      * THE CYMBAL, by truncation. 428 ms at 0.60 s against 558 at 2.40 s. Fixed
+        by the clip length, not by a refusal; `RENDER_S` is where it stops
+        moving.
+      * THE RIMSHOT, by leakage, and this one cannot be fixed by a longer clip:
+        598 / 1198 / 2398 ms at 0.60 / 1.20 / 2.40 s is the clip's length to
+        three figures. The rimshot reaches exact silence (to the LSB) about
+        25 ms in, and the 20 Hz brick wall's kernel is a sinc spanning the clip,
+        so the smeared onset ripple at -45 dB outweighs a tail that is not
+        there. **The gate therefore has NO VERDICT on the rimshot's audible
+        decay**, which is reported as REFUSED and is NOT a preservation
+        failure. What bounds the rimshot instead is the absolute band energies
+        (body/mid/HF all within 0.06 dB) and its peak.
+
+    Qualified in closed form, both legs, by `dc_t20_gate_qualification.py`:
+    a 200 ms decay in a 600 ms clip is invariant, a 500 ms decay in the same
+    clip is not (464 against 500 ms).
+
+    Measured on the baseline only and cached: it is a property of the voice and
+    the estimator, not of the candidate, so the candidate cannot influence it --
+    the same discipline `resolution_of` follows."""
+    key = (sound, round(float(seconds), 6))
+    if key in _DECAY_REFUSAL_CACHE:
+        return _DECAY_REFUSAL_CACHE[key]
+    a, _ = render(sound, dx.COUPLE_OFF, seconds=seconds)
+    b, _ = render(sound, dx.COUPLE_OFF, seconds=2.0 * seconds)
+    ta, tb = t20_band_ms(a), t20_band_ms(b)
+    moved = float("inf") if (np.isnan(ta) or np.isnan(tb) or ta <= 0) \
+        else abs(100.0 * (tb - ta) / ta)
+    out = (moved > DECAY_INVARIANCE_PCT, ta, tb)
+    _DECAY_REFUSAL_CACHE[key] = out
+    return out
 
 
 def centroid_global_hz(x):
@@ -379,7 +529,9 @@ def measure(x, n_clip=0):
     m = {"peak_dbfs": peak_dbfs(x), "n_clip": float(n_clip),
          "sub20_dbfs": band_energy_dbfs(x, *SUB20),
          "sub20_dc_dbfs": band_energy_dbfs(x, 0.0, 1e-9),
-         "t20_ms": t20_ms(x), "attack_samp": float(attack_samples(x)),
+         "t20_ms": t20_band_ms(x),          # THE GATE: >= 20 Hz, qualified
+         "t20_global_ms": t20_ms(x),        # diagnostic: the whole spectrum
+         "attack_samp": float(attack_samples(x)),
          "peak_margin_db": peak_margin_db(x),
          "centroid_hz": centroid_hz(x),
          "centroid_global_hz": centroid_global_hz(x)}
@@ -471,6 +623,8 @@ def deltas(base, cand):
     for p in ("peak_dbfs", "body_20_700_db", "mid_700_5k_db", "hf_5k_20k_db"):
         d[p] = cand[p] - base[p]
     d["t20_ms_pct"] = 100.0 * (cand["t20_ms"] - base["t20_ms"]) / (base["t20_ms"] + 1e-30)
+    d["t20_global_pct"] = 100.0 * (cand["t20_global_ms"] - base["t20_global_ms"]) \
+        / (base["t20_global_ms"] + 1e-30)
     d["attack_samp"] = cand["attack_samp"] - base["attack_samp"]
     d["centroid_pct"] = 100.0 * (cand["centroid_hz"] - base["centroid_hz"]) / (base["centroid_hz"] + 1e-30)
     d["centroid_global_pct"] = 100.0 * (cand["centroid_global_hz"] - base["centroid_global_hz"]) \
@@ -480,7 +634,7 @@ def deltas(base, cand):
     return d
 
 
-def preserved(voice, d, res=None):
+def preserved(voice, d, res=None, refuse=()):
     """Every declared limit, checked one at a time, against the LARGER of the
     declared allowance and the instrument's own resolution for that property on
     that voice. Returns `(broke, resolution_limited)`.
@@ -504,10 +658,19 @@ def preserved(voice, d, res=None):
 
     `res=None` keeps the declared allowances exactly -- what the limits say
     before the instrument is consulted, which `--measure` prints beside the
-    resolution-aware verdict so both are on the page."""
+    resolution-aware verdict so both are on the page.
+
+    `refuse` NAMES PROPERTIES WITH NO VERDICT, and they are a third outcome
+    rather than a quiet pass. A gate whose precondition fails (the rimshot's
+    decay: `decay_gate_refuses`) is excluded from `bad` -- calling it a
+    preservation failure would be inventing a result -- and every caller prints
+    it as REFUSED. A refusal is NOT acceptance: it is a gate the candidate was
+    never actually judged on, and it has to stay visible for that reason."""
     bad, limited = [], []
     for p in ("peak_dbfs", "body_20_700_db", "mid_700_5k_db", "hf_5k_20k_db",
               "t20_ms_pct", "attack_samp", "centroid_pct"):
+        if p in refuse:
+            continue
         a = allowance(p, voice)
         r = 0.0 if res is None else float(res.get(p, 0.0))
         if r > a:
@@ -561,6 +724,36 @@ def dc_fraction(x):
     dc = float(p[0])
     sub = float(p[(f >= 0.0) & (f < 20.0)].sum())
     return dc / (sub + 1e-30)
+
+
+def sub20_below_fc_frac(x, k=dx.COUPLE_K):
+    """**THE CLASS DISCRIMINATOR: what share of a voice's sub-20 Hz energy sits
+    BELOW the blocker's own corner.** Above fc the filter passes; below it, it
+    attenuates at 6 dB/octave. So this, and not phi, is what decides whether a
+    blocker can help a voice.
+
+    IT REPLACED phi FOR THAT JOB, AND THE REASON IS A MEASUREMENT ERROR WORTH
+    KEEPING. `dc_fraction`'s f = 0 bin has a width of 1/T, so phi depends on the
+    ANALYSIS WINDOW, not only on the signal: lengthening the clip from 0.60 s to
+    2.40 s (which the decay gate's precondition forced) moved the CY's phi from
+    0.8881 to 0.3907 and the CH's from 0.3518 to 0.0879, and a phi > 0.5 class
+    label therefore reclassified the CY from "standing offset" to "skirt" with
+    nothing about the cymbal having changed. The screen's conclusion was right
+    and its statistic was wrong.
+
+    This one is an integral over a FIXED band, so it is window-stable to a few
+    percent across the same change --
+
+        CY 0.991 -> 0.983    CH 0.976 -> 0.973     (blocker removes it)
+        RS 0.403 -> 0.380    HT 0.381 -> 0.359     (blocker cannot)
+        BD 0.375 -> 0.455
+
+    -- and it separates the two classes by more than a factor of two at either
+    window. phi is still printed, as a diagnostic, with its window stated."""
+    p, f = onesided_power(np.asarray(x, float))
+    fc = SR / (2.0 * np.pi * (1 << int(k)))
+    sub = float(p[(f >= 0.0) & (f < 20.0)].sum())
+    return float(p[(f >= 0.0) & (f < fc)].sum()) / (sub + 1e-30)
 
 
 def attenuation_floor_db(phi):
@@ -659,6 +852,12 @@ def report_limits():
     print("  one: a global centroid rises MECHANICALLY when sub-20 Hz energy is")
     print("  removed, so the gate would read the candidate's intended effect as a")
     print("  failure. Qualified in closed form by dc_centroid_gate_qualification.py.")
+    print("\n  t20_ms_pct is READ ON THE SAME >= 20 Hz BAND, for the same reason: a")
+    print("  global T20 is a backward energy integral, so a sub-20 Hz pedestal")
+    print("  inflates it most exactly where the gate reads. Qualified in closed form")
+    print("  by dc_t20_gate_qualification.py, which also checks the repaired gate")
+    print("  still goes red on a genuinely 10 % faster decay. The sub-20 Hz settling")
+    print("  tail a blocker adds is not thereby ignored: it is the sub20 column.")
     print(f"\n  attack_samp is the first arrival within {ATTACK_TOL_DB:.1f} dB of the peak, not")
     print("  argmax(|x|): on a plateaued voice argmax answers a lobe RANK ORDER.")
     print("\n  Each allowance is read against the LARGER of itself and the instrument's")
@@ -666,6 +865,143 @@ def report_limits():
     print("  gate below the resolution is marked [res-limited] wherever it is used.")
     print("\n  A normalised band SHARE is never a verdict; `share_rise_is_lf_removal`")
     print("  refuses one whose absolute band energy did not move.")
+    return 0
+
+
+def report_clipping(k=dx.COUPLE_K, gains=(0.45, 0.75, 0.95, 1.0)):
+    """**#165 s2's placement argument, as a measurement instead of a sentence.**
+
+    The argument is "removing DC after clipping cannot recover the waveform the
+    clipping destroyed", and at the reference gain it CANNOT BE TESTED: nothing
+    rails, `n_clip` is 0 on all five voices, and `bus` and `post` agree to
+    0.02 dB. Reporting that agreement as support for the placement would be
+    taking a null condition for evidence -- the two placements were never
+    actually distinguished.
+
+    So the condition is created: raise the bus gain until the output stage's
+    clamp fires, then ask what each placement does. `bus` runs the blocker
+    BEFORE the clamp (where a hardware coupling capacitor sits, ahead of the
+    output amplifier's rail) and `post` after it.
+
+    What to read. `clip` is how many samples railed; `restored dB` is how much
+    sub-20 Hz energy each placement removes; `wave dB` is the RMS difference
+    between the placement's output and the uncoupled-then-ideally-blocked
+    reference -- the waveform error, which is the quantity the argument is
+    about, not the DC reading. A placement that reduces the DC reading while
+    leaving a larger waveform error is exactly the failure s2 warns about: both
+    placements reduce the DC number, and that number alone cannot choose
+    between them."""
+    print(provenance())
+    print("\nPLACEMENT UNDER CLIPPING. One voice at the reference gain never rails --")
+    print("`n_clip` is 0 on all five -- so `bus` and `post` agree to 0.02 dB and the")
+    print("s2 argument is UNTESTED there. A stack of simultaneous voices at full bus")
+    print("gain is the condition the argument is about, and a player makes it.\n")
+    print("  IDEAL = the same filter applied to the unclamped accumulator: the answer")
+    print("  with no rail anywhere. Both placements are read against it.\n")
+    print(f"  {'stack':26s} {'clip bus':>8s} {'clip post':>9s} {'err bus':>8s} "
+          f"{'err post':>9s} {'sub20 bus':>9s} {'sub20 post':>10s}")
+    print(f"  {'':26s} {'count':>8s} {'count':>9s} {'dBFS':>8s} {'dBFS':>9s} "
+          f"{'dB':>9s} {'dB':>10s}")
+    out = {}
+    for stack in (("CY",), ("CY", "RS"), ("CY", "BD", "RS"),
+                  ("CY", "BD", "RS", "CH", "HT")):
+        off, n_off, acc_off = _stack(stack, dx.COUPLE_OFF, k)
+        bus, n_bus, _ = _stack(stack, dx.COUPLE_BUS, k)
+        post, n_post, _ = _stack(stack, dx.COUPLE_POST, k)
+        ideal = dx.dc_block(np.asarray(acc_off, np.int64), k).astype(float)
+
+        def err_db(y):
+            e = np.asarray(y, float) - ideal
+            return 20.0 * np.log10(float(np.sqrt((e ** 2).mean())) / FS + 1e-30)
+        s0 = band_energy_dbfs(off, *SUB20)
+        print(f"  {'+'.join(stack):26s} {n_bus:8d} {n_post:9d} {err_db(bus):8.2f} "
+              f"{err_db(post):9.2f} {band_energy_dbfs(bus, *SUB20) - s0:+9.2f} "
+              f"{band_energy_dbfs(post, *SUB20) - s0:+10.2f}")
+        out["+".join(stack)] = {"clip_off": n_off, "clip_bus": n_bus,
+                                "clip_post": n_post, "err_bus": err_db(bus),
+                                "err_post": err_db(post)}
+    print("\n  WHAT SEPARATES THEM, and it is not the DC reading: both placements")
+    print("  remove the same sub-20 Hz energy to a hundredth of a dB, at every stack.")
+    print("  **A blocker in the wrong place still reduces the DC number** -- s2's")
+    print("  warning, measured rather than repeated. What separates them is the rail:")
+    print("  removing the standing offset BEFORE the clamp buys back the headroom the")
+    print("  offset was consuming, so `bus` rails on fewer samples and lands closer to")
+    print("  the unclamped ideal. `post` filters a waveform the clamp has already")
+    print("  flattened and cannot recover it. `bus` is the placement that ships.")
+    print("\n  THE REFERENCE IS BIASED TOWARDS `post`, AND THAT IS STATED RATHER THAN")
+    print("  HIDDEN. `ideal` = dc_block(unclamped accumulator) is exactly what `post`")
+    print("  computes when nothing rails, so `post` reads -600 dBFS (bit-identical)")
+    print("  on every stack that does not clip, while `bus` differs by about half an")
+    print("  LSB (-96 dBFS) purely from the order of the integer rounding. The")
+    print("  conclusion survives a reference that favours the loser: once the rail")
+    print("  fires, `bus` is 1.21 dB closer to the ideal and rails 18 samples against")
+    print("  25. A reference built the other way round would only widen that.")
+    return out
+
+
+def _stack(sounds, couple, k=dx.COUPLE_K, gain=1.0, seconds=0.50):
+    """Several voices struck on the same frame at full bus gain, plus the
+    PRE-CLAMP accumulator so an unclamped ideal can be computed.
+
+    Rendered here rather than through `render` because the ideal needs `acc`,
+    which `render` discards after counting rails -- and the ideal is the whole
+    point: without it both placements are only comparable to each other."""
+    n = int(seconds * SR)
+    kit = dx.kit_with_sounds(*sounds)
+    hits = sorted((LEAD_FRAMES, dx.SOUND_STOP[s], 1.0) for s in sounds)
+    inner = couple if couple in (dx.COUPLE_EXC, dx.COUPLE_BUS) else dx.COUPLE_OFF
+    d = dx.DrumsFx(couple=inner, couple_k=k)
+    dmix, body = d.play(dx.hit_writes(hits, kit), n)
+    g = dx.accent_reg(gain)
+    acc = (np.asarray(dmix, np.int64) * g + np.asarray(body, np.int64) * g) >> 15
+    n_clip = int(((acc > 32767) | (acc < -32768)).sum())
+    out = dx.output_fx(np.zeros(n), 0, dmix, g, body, g)
+    if couple == dx.COUPLE_POST:
+        y = dx.dc_block(out, k)
+        n_clip += int(((y > 32767) | (y < -32768)).sum())
+        out = np.clip(y, -32768, 32767).astype(np.int16)
+    return out, n_clip, acc.astype(float)
+
+
+def report_decay(seconds=RENDER_S, clips=(0.60, 1.20, 2.40, 4.80)):
+    """**The decay gate's precondition, per voice, before any decay number is
+    read off it.** A decay does not depend on how long you watched.
+
+    This report exists because the gate failed its own precondition on two of
+    the five voices, for two different reasons, and both were invisible in the
+    verdict table: the CY read 23 % short by Schroeder truncation and the RS read
+    the clip's length by brick-wall leakage. Qualified in closed form, both legs,
+    by `dc_t20_gate_qualification.py`."""
+    print(provenance())
+    print("\nTHE DECAY GATE'S PRECONDITION. A decay is a property of the signal, so an")
+    print("estimate that MOVES when the observation window doubles is measuring the")
+    print("window. Necessary, not sufficient -- it cannot prove an estimate right, and")
+    print(f"it rejected two defects here. Allowance: {DECAY_INVARIANCE_PCT:.1f} % across a doubling.\n")
+    print(f"  {'':5s} " + " ".join(f"{str(c) + ' s':>9s}" for c in clips) +
+          f" {'verdict':>10s}  what the number is")
+    for v in SUBJECTS + CONTROLS:
+        vals = []
+        for c in clips:
+            b, _ = render(v, dx.COUPLE_OFF, seconds=c)
+            vals.append(t20_band_ms(b))
+        ref, ta, tb = decay_gate_refuses(v, seconds)
+        # does it track the clip? compare the two longest clips it answered on
+        seen = [(c, x) for c, x in zip(clips, vals) if not np.isnan(x)]
+        tracks = len(seen) >= 2 and abs(
+            seen[-1][1] / (seen[0][1] + 1e-30) - seen[-1][0] / seen[0][0]) < 0.25
+        what = ("the CLIP, to within 25 % of the doubling ratio: LEAKAGE"
+                if tracks else
+                ("the voice's decay" if not ref else "not clip-invariant"))
+        print(f"  {v:5s} " + " ".join(
+            ("      nan" if np.isnan(x) else f"{x:9.1f}") for x in vals) +
+            f" {'REFUSED' if ref else 'ok':>10s}  {what}")
+    print(f"\n  The gates are measured at RENDER_S = {seconds:.2f} s, which is where the CY")
+    print("  stops moving. The RS never does, so `t20_ms_pct` has NO VERDICT on the RS:")
+    print("  it reaches exact silence about 25 ms in, and a 20 Hz brick wall's sinc")
+    print("  spans the clip, so what the estimator integrates is its own smearing.")
+    print("  WHAT BOUNDS THE RS INSTEAD: its absolute band energies (body, mid, HF),")
+    print("  its peak, its attack and its >= 20 Hz centroid -- six gates that do")
+    print("  produce verdicts. A refusal removes one gate, not the acceptance test.")
     return 0
 
 
@@ -678,9 +1014,16 @@ def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
     same origin."""
     k = dx.COUPLE_K if k is None else k
     print(provenance())
-    print("\nTHE SCREEN. phi is the share of a voice's sub-20 Hz energy in the f = 0 bin --")
-    print("the part a zero at z = 1 removes exactly. The rest is the onset envelope's own")
-    print("skirt, which the blocker only attenuates by |H(f)|. So")
+    print("\nTHE SCREEN. beta is the share of a voice's sub-20 Hz energy BELOW the")
+    print("blocker's own corner -- the part the filter attenuates. The rest is the onset")
+    print("envelope's skirt, which straddles the corner and is passed. beta is the CLASS")
+    print("DISCRIMINATOR and is window-stable; phi (the f = 0 bin alone) is printed")
+    print("beside it as a diagnostic and is NOT, because that bin's width is 1/T: the")
+    print("CY's phi fell 0.888 -> 0.391 when the clip went 0.60 -> 2.40 s and nothing")
+    print("about the cymbal changed. The floor below is still read off phi, so it is a")
+    print("window-dependent floor on a window-independent conclusion.\n")
+    print("phi is the share in the f = 0 bin -- the part a zero at z = 1 removes")
+    print("exactly. The rest the blocker only attenuates by |H(f)|. So")
     print("\n    attenuation >= -10 log10(1 - phi)   (floor, from the DC bin alone)")
     print(f"\nand {IMPROVE_SUB20_DB:.0f} dB from the DC bin alone needs phi >= "
           f"{1 - 10 ** (-IMPROVE_SUB20_DB / 10):.3f}. FLOOR and STEADY are both")
@@ -691,9 +1034,9 @@ def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
     print("too -- the same 21 ms tail that triples the rimshot's decay. MEASURED must")
     print("land between the two, which is a two-sided check of a model against an")
     print("implementation neither was fitted to.\n")
-    print(f"  {'':5s} {'phi':>7s} {'floor':>8s} {'steady':>8s} {'measured':>9s} "
-          f"{'slack':>7s}  {'K for ' + str(int(IMPROVE_SUB20_DB)) + ' dB':>12s}  origin of the sub-20 Hz energy")
-    print(f"  {'':5s} {'':>7s} {'dB':>8s} {'dB':>8s} {'dB':>9s} {'dB':>7s}")
+    print(f"  {'':5s} {'beta':>7s} {'phi':>7s} {'floor':>8s} {'steady':>8s} {'measured':>9s} "
+          f"{'slack':>7s}  {'K for ' + str(int(IMPROVE_SUB20_DB)) + ' dB':>12s}  where the sub-20 Hz energy IS")
+    print(f"  {'':5s} {'<fc':>7s} {'f=0':>7s} {'dB':>8s} {'dB':>8s} {'dB':>9s} {'dB':>7s}")
     out = {}
     for v in SUBJECTS + CONTROLS:
         b, nb = render(v, dx.COUPLE_OFF)
@@ -703,14 +1046,16 @@ def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
         pred = steadystate_sub20_attenuation_db(b, k)
         meas = -(measure(c, nc)["sub20_dbfs"] - measure(b, nb)["sub20_dbfs"])
         rk = required_k(b)
-        origin = ("a STANDING OFFSET: a blocker removes it"
-                  if phi > 0.5 else
-                  "the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it")
+        beta = sub20_below_fc_frac(b, k)
+        origin = ("BELOW the corner: a blocker removes it"
+                  if beta > 0.5 else
+                  "the ONSET ENVELOPE'S SKIRT, across the corner: it cannot")
         inside = "" if floor - 0.6 <= meas <= pred + 0.6 else "  **OUTSIDE BRACKET**"
-        print(f"  {v:5s} {phi:7.4f} {floor:8.2f} {pred:8.2f} {meas:9.2f} "
+        print(f"  {v:5s} {beta:7.4f} {phi:7.4f} {floor:8.2f} {pred:8.2f} {meas:9.2f} "
               f"{meas - floor:+7.2f}  {('K=' + str(rk)) if rk else 'NONE':>12s}  "
               f"{origin}{inside}")
-        out[v] = {"phi": phi, "floor": floor, "pred": pred, "meas": meas, "k": rk}
+        out[v] = {"phi": phi, "beta": beta, "floor": floor, "pred": pred,
+                  "meas": meas, "k": rk}
     print(f"\n  'K for {IMPROVE_SUB20_DB:.0f} dB' is the LOWEST corner (largest K) that reaches the")
     print("  required improvement. K is a shift, so these are the only corners the")
     print(f"  hardware can build, and the circuit's own is K = {dx.COUPLE_K} "
@@ -780,10 +1125,19 @@ def report_resolution(sweep=ATTACK_TOL_SWEEP):
     return 0
 
 
-def _row(name, base, cand, voice, res=None):
+def _refused_props(voice, seconds=RENDER_S):
+    """Which declared gates have no verdict on this voice, measured on its own
+    uncoupled baseline. Today that is only the decay gate."""
+    return ("t20_ms_pct",) if decay_gate_refuses(voice, seconds)[0] else ()
+
+
+def _row(name, base, cand, voice, res=None, refuse=None):
     d = deltas(base, cand)
-    bad, limited = preserved(voice, d, res)
+    refuse = _refused_props(voice) if refuse is None else refuse
+    bad, limited = preserved(voice, d, res, refuse)
     note = "ok" if not bad else ",".join(bad)
+    if refuse:
+        note += "   [REFUSED: " + ",".join(refuse) + "]"
     if limited:
         note += "   [res-limited: " + ",".join(limited) + "]"
     print(f"  {name:22s} {d['sub20_dbfs']:+8.2f} {d['body_20_700_db']:+8.2f} "
@@ -853,6 +1207,20 @@ def report_measure(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
         print(f"  {v:10s} {base['centroid_hz']:11.1f} ->{cand['centroid_hz']:10.1f} Hz "
               f"{d['centroid_pct']:+6.2f}% {base['centroid_global_hz']:11.1f} ->"
               f"{cand['centroid_global_hz']:10.1f} Hz {d['centroid_global_pct']:+6.2f}%")
+    print("\n  THE SECOND GATE WITH THE SAME DEFECT, found after the first was repaired.")
+    print("  A GLOBAL T20 is a backward ENERGY integral over the whole spectrum, so a")
+    print("  sub-20 Hz pedestal inflates it -- most where the gate reads, late in the")
+    print("  clip. Removing the pedestal then shortens it for a reason that is not an")
+    print("  audible decay change. Qualified >= 20 Hz by dc_t20_gate_qualification.py:")
+    print("  a tone whose T20 is 200.0 ms by construction reads 452 ms globally and")
+    print("  202 ms banded when a 4 % standing offset is present, and the repaired gate")
+    print("  still reads -9.90 % on a genuinely 10 % faster decay.\n")
+    print(f"  {'':10s} {'T20 >=20 Hz (the GATE)':>30s} {'T20 global (diagnostic)':>31s}")
+    for v in SUBJECTS + CONTROLS:
+        base, cand, d, _ = rows[v]
+        print(f"  {v:10s} {base['t20_ms']:11.1f} ->{cand['t20_ms']:10.1f} ms "
+              f"{d['t20_ms_pct']:+6.2f}% {base['t20_global_ms']:11.1f} ->"
+              f"{cand['t20_global_ms']:10.1f} ms {d['t20_global_pct']:+6.2f}%")
     print("\n  NORMALISED SHARES (%% of clip energy) -- diagnostic only, never a verdict\n")
     print(f"  {'':10s} {'body %':>16s} {'mid %':>16s} {'HF %':>16s}   HF share")
     print(f"  {'':10s} {'before':>7s} {'after':>8s} {'before':>7s} {'after':>8s} "
@@ -868,15 +1236,25 @@ def report_measure(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
     for v in SUBJECTS:
         imp, bad = verdict[v]
         ok &= imp and not bad
+        ref = _refused_props(v)
         print(f"  {v:4s} improvement >= {IMPROVE_SUB20_DB:.1f} dB sub-20: "
               f"{'MET' if imp else 'NOT MET'} ({rows[v][2]['sub20_dbfs']:+.2f} dB)   "
-              f"preservation: {'ok' if not bad else 'BROKE ' + ','.join(bad)}")
+              f"preservation: {'ok' if not bad else 'BROKE ' + ','.join(bad)}"
+              f"{'   NO VERDICT on ' + ','.join(ref) if ref else ''}")
     for v in CONTROLS:
         _, bad = verdict[v]
         ok &= not bad
+        ref = _refused_props(v)
         print(f"  {v:4s} control, must be preserved: "
-              f"{'ok' if not bad else 'BROKE ' + ','.join(bad)}")
+              f"{'ok' if not bad else 'BROKE ' + ','.join(bad)}"
+              f"{'   NO VERDICT on ' + ','.join(ref) if ref else ''}")
+    refused_any = {v: _refused_props(v) for v in SUBJECTS + CONTROLS}
+    refused_any = {v: r for v, r in refused_any.items() if r}
     print(f"\n  {'ACCEPTED' if ok else 'NOT ACCEPTED'} against the limits declared in this file.")
+    if refused_any:
+        print("  A REFUSED gate is not a passed one. " + "; ".join(
+            f"{v}: {','.join(r)}" for v, r in refused_any.items()) +
+            " -- see `--decay` for why, and what bounds the voice instead.")
     return rows
 
 
@@ -893,14 +1271,16 @@ def report_cutoff(ks=(8, 9, 10, 11, 12, 13), placement=dx.COUPLE_BUS):
         print(f"{v}")
         print(f"  {'K':>3s} {'fc Hz':>8s} {'sub20':>8s} {'body':>8s} {'HF':>8s} "
               f"{'peak':>7s} {'T20 %':>7s} {'cent %':>7s}  limits")
+        refuse = _refused_props(v)
         for k in ks:
             c, nc = render(v, placement, k)
             d = deltas(base, measure(c, nc))
-            bad, _ = preserved(v, d, res)
+            bad, _ = preserved(v, d, res, refuse)
             print(f"  {k:3d} {SR / (2 * np.pi * (1 << k)):8.3f} {d['sub20_dbfs']:+8.2f} "
                   f"{d['body_20_700_db']:+8.2f} {d['hf_5k_20k_db']:+8.2f} "
                   f"{d['peak_dbfs']:+7.2f} {d['t20_ms_pct']:+7.2f} {d['centroid_pct']:+7.2f}"
-                  f"  {'ok' if not bad else ','.join(bad)}")
+                  f"  {'ok' if not bad else ','.join(bad)}"
+                  f"{'   [REFUSED: ' + ','.join(refuse) + ']' if refuse else ''}")
         print()
     return 0
 
@@ -978,6 +1358,49 @@ def report_continuous(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
     return 0
 
 
+RECORDS = (
+    ("limits.txt", report_limits, ()),
+    ("decay.txt", report_decay, ()),
+    ("clipping.txt", report_clipping, ()),
+    ("resolution.txt", report_resolution, ()),
+    ("screen.txt", report_screen, ()),
+    ("placement.txt", report_placement, ()),
+    ("measure-exc.txt", report_measure, (dx.COUPLE_EXC,)),
+    ("measure-bus.txt", report_measure, (dx.COUPLE_BUS,)),
+    ("measure-post.txt", report_measure, (dx.COUPLE_POST,)),
+    ("cutoff.txt", report_cutoff, ()),
+    ("continuous.txt", report_continuous, ()),
+)
+
+
+def write_records(outdir, k=dx.COUPLE_K):
+    """Regenerate every committed record with ONE command.
+
+    The records were produced by nine separate shell redirections, which is how
+    a record set ends up half-stale: three of them were regenerated after a gate
+    repair and the other six were not, so the same directory held two different
+    instruments' numbers under one provenance line. One entry point cannot do
+    that. The render memo makes it affordable -- the baselines are shared across
+    every report."""
+    import contextlib
+    import io
+    outdir = pathlib.Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    for name, fn, args in RECORDS:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            if fn is report_measure:
+                fn(k, *args)
+            elif fn in (report_screen, report_placement, report_continuous,
+                        report_clipping):
+                fn(k)
+            else:
+                fn()
+        (outdir / name).write_text(buf.getvalue())
+        print(f"wrote {outdir / name}  ({len(buf.getvalue().splitlines())} lines)")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--limits", action="store_true")
@@ -987,15 +1410,31 @@ def main(argv=None):
     ap.add_argument("--measure", action="store_true")
     ap.add_argument("--cutoff", action="store_true")
     ap.add_argument("--continuous", action="store_true")
+    ap.add_argument("--decay", action="store_true",
+                    help="the decay gate's own precondition, per voice")
+    ap.add_argument("--clipping", action="store_true",
+                    help="s2's placement argument, under the clipping condition "
+                         "that is the only one where it can be tested")
     ap.add_argument("-k", type=int, default=dx.COUPLE_K)
     ap.add_argument("--at", default=dx.COUPLE_BUS, choices=list(dx.COUPLE_PLACEMENTS))
+    ap.add_argument("--records", metavar="DIR", nargs="?",
+                    const=str(ROOT / "docs" / "dcblock"),
+                    help="write EVERY report to its own file under DIR, so the "
+                         "committed records are regenerated by one command "
+                         "rather than by nine redirections")
     a = ap.parse_args(argv)
+    if a.records:
+        return write_records(pathlib.Path(a.records), a.k)
     if not any((a.limits, a.resolution, a.screen, a.placement, a.measure,
-                a.cutoff, a.continuous)):
+                a.cutoff, a.continuous, a.decay, a.clipping)):
         ap.print_help()
         return 2
     if a.limits:
         report_limits()
+    if a.decay:
+        report_decay()
+    if a.clipping:
+        report_clipping(a.k)
     if a.resolution:
         report_resolution()
     if a.screen:
@@ -1256,38 +1695,50 @@ def test_the_screen_brackets_the_rendered_attenuation_on_every_voice():
 
 
 def test_the_screen_separates_the_two_subjects_and_says_why():
-    """THE FINDING, as an assertion. The CY's sub-20 Hz energy is a standing
-    offset and the RS's is its own onset skirt, so no single corner serves both:
+    """THE FINDING, as an assertion. The CY's sub-20 Hz energy sits below the
+    blocker's corner and the RS's straddles it, so no single corner serves both:
 
-      CY  phi = 0.888  floor  9.51 dB   measured -14.64 dB   6 dB reachable
-      RS  phi = 0.043  floor  0.19 dB   measured  -2.78 dB   6 dB NOT reachable
-                                                             at ANY K >= 9
+      CY  beta = 0.983  steady 14.93 dB   measured -14.85 dB   6 dB reachable
+      RS  beta = 0.380  steady  2.71 dB   measured  -2.70 dB   6 dB NOT reachable
+                                                               at ANY K >= 9
 
-    The CY clears the 6 dB requirement from the f = 0 bin alone, before the
-    skirt is touched. The RS's floor is 0.37 dB: to reach 6 dB it needs the
-    SKIRT attenuated, and the OPTIMISTIC bound says no corner at or below the
-    circuit's own (K >= 10, fc <= 7.46 Hz) gets there. Only K = 8 (29.8 Hz)
-    does, at which --cutoff measures the RS breaking five of its seven
+    The CY clears the 6 dB requirement at the circuit's own corner. To reach it
+    the RS needs the SKIRT attenuated, and the OPTIMISTIC bound says no corner
+    at or below the circuit's own (K >= 10, fc <= 7.46 Hz) gets there. Only
+    K = 8 (29.8 Hz) does, at which --cutoff measures the RS breaking four of its
     preservation properties -- so the trade-off has no satisfiable point, which
     is the finding rather than a tuning failure.
 
-    If a future change made the RS's sub-20 energy a standing offset -- or the
-    CY's a skirt -- this goes red, which is what it is for. The 6 dB target is
+    READ ON beta, NOT phi, AND THAT IS A CORRECTION. This test used to assert
+    phi > 0.75 on the CY and it went RED when the clip length changed, at
+    0.3907: the f = 0 bin is 1/T wide, so phi is a property of the ANALYSIS
+    WINDOW as much as of the voice. The conclusion was unaffected and the
+    statistic was wrong -- see `sub20_below_fc_frac`.
+
+    If a future change moved the RS's sub-20 energy below the corner -- or the
+    CY's above it -- this goes red, which is what it is for. The 6 dB target is
     not the claim; the SEPARATION is."""
     cy, _ = render("CY", dx.COUPLE_OFF)
     rs, _ = render("RS", dx.COUPLE_OFF)
-    assert dc_fraction(cy) > 0.75, dc_fraction(cy)       # >= the 6 dB threshold
-    assert dc_fraction(rs) < 0.10, dc_fraction(rs)
-    assert attenuation_floor_db(dc_fraction(cy)) > IMPROVE_SUB20_DB
-    assert attenuation_floor_db(dc_fraction(rs)) < 0.5
+    assert sub20_below_fc_frac(cy) > 0.90, sub20_below_fc_frac(cy)
+    assert sub20_below_fc_frac(rs) < 0.50, sub20_below_fc_frac(rs)
+    # and the discriminator is window-stable where phi is not
+    cy_short, _ = render("CY", dx.COUPLE_OFF, seconds=0.60)
+    assert abs(sub20_below_fc_frac(cy_short) - sub20_below_fc_frac(cy)) < 0.05
+    assert abs(dc_fraction(cy_short) - dc_fraction(cy)) > 0.20     # phi is not
+    # the optimistic bound reaches the target on the CY and cannot on the RS
+    assert steadystate_sub20_attenuation_db(cy, dx.COUPLE_K) > IMPROVE_SUB20_DB
+    assert steadystate_sub20_attenuation_db(rs, dx.COUPLE_K) < 0.5 * IMPROVE_SUB20_DB
+    assert attenuation_floor_db(dc_fraction(rs)) < 0.5     # phi still bounds below
     assert required_k(cy) is not None
     # No corner at or below the circuit's own reaches it even optimistically:
     assert required_k(rs, ks=range(16, 9, -1)) is None, required_k(rs, ks=range(16, 9, -1))
     # and the one that could (K = 8) costs the RS its preservation, measured:
     b, nb = render("RS", dx.COUPLE_OFF)
     c, nc = render("RS", dx.COUPLE_BUS, 8)
-    bad, _ = preserved("RS", deltas(measure(b, nb), measure(c, nc)), resolution_of(b, nb))
-    assert len(bad) >= 3, bad
+    bad, _ = preserved("RS", deltas(measure(b, nb), measure(c, nc)),
+                       resolution_of(b, nb), _refused_props("RS"))
+    assert len(bad) >= 2, bad
 
 
 def test_a_bus_blocker_is_the_superposition_of_per_path_blockers():

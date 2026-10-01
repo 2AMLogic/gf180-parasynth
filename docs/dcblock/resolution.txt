@@ -1,4 +1,4 @@
-commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit 714dac6dcc6b-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 THE INSTRUMENT'S OWN RESOLUTION: largest change from 8 independent +-1 LSB
 dither patterns on the UNCOUPLED baseline. One LSB is the smallest change the
@@ -8,20 +8,20 @@ dither cannot see.
 
             peak      body      mid        HF      T20   atk     cent
               dB        dB       dB        dB        %  samp        %
-  CY      0.0012    0.0019   0.0003    0.0001    0.435     7   0.0005   BELOW RESOLUTION: attack_samp
-  RS      0.0014    0.0004   0.0008    0.0374   25.000     2   0.0335   BELOW RESOLUTION: t20_ms_pct
-  BD      0.0012    0.0000   0.0080    0.0944    0.599    48   0.0051   BELOW RESOLUTION: attack_samp
-  HT      0.0012    0.0001   0.0090    8.6873    2.000    13   0.0043   BELOW RESOLUTION: hf_5k_20k_db,attack_samp
-  CH      0.0014    4.2638   0.0075    0.0003    4.167     1   0.0015   BELOW RESOLUTION: body_20_700_db,t20_ms_pct
+  CY      0.0012    0.0022   0.0004    0.0001    0.358     7   0.0006   BELOW RESOLUTION: attack_samp
+  RS      0.0014    0.0004   0.0009    0.1245    0.083     2   0.1305   ok
+  BD      0.0012    0.0000   0.0180    0.3174    0.575    48   0.0186   BELOW RESOLUTION: hf_5k_20k_db,attack_samp
+  HT      0.0012    0.0001   0.0240   14.1839    1.923    13   0.0165   BELOW RESOLUTION: hf_5k_20k_db,attack_samp
+  CH      0.0014    8.8743   0.0229    0.0002    4.167     1   0.0015   BELOW RESOLUTION: body_20_700_db,t20_ms_pct
 
   GATES THAT CANNOT PRODUCE A VERDICT AS DECLARED
 
     CY attack_samp        allowance    2.00   resolution    7.000      3.5x too tight
-    RS t20_ms_pct         allowance    3.00   resolution   25.000      8.3x too tight
+    BD hf_5k_20k_db       allowance    0.20   resolution    0.317      1.6x too tight
     BD attack_samp        allowance    2.00   resolution   48.000     24.0x too tight
-    HT hf_5k_20k_db       allowance    0.20   resolution    8.687     43.4x too tight
+    HT hf_5k_20k_db       allowance    0.20   resolution   14.184     70.9x too tight
     HT attack_samp        allowance    2.00   resolution   13.000      6.5x too tight
-    CH body_20_700_db     allowance    0.30   resolution    4.264     14.2x too tight
+    CH body_20_700_db     allowance    0.30   resolution    8.874     29.6x too tight
     CH t20_ms_pct         allowance    3.00   resolution    4.167      1.4x too tight
 
   ATTACK TOLERANCE SWEEP. The value is read off peak_margin_db, and the

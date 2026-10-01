@@ -34,6 +34,13 @@ in t at -20/ln(100) dB per tau). Add a sub-20 Hz pedestal of a realistic size
 -- 4 % of clip energy, the cymbal's own DC share -- and ask each candidate
 estimator for the decay it can see.
 
+AND THE REPAIR WAS NECESSARY WITHOUT BEING SUFFICIENT. The >= 20 Hz estimator
+has a precondition of its own -- a decay must not depend on how long you
+watched -- and on the instrument it failed that precondition on two of the five
+voices for two different reasons. See "THE PRECONDITION" below: the rule is
+the doubling test, it is what `dc_blocker` REFUSES on, and it is why the
+cymbal's clip length changed from 0.60 s to 2.40 s between records.
+
 `case()` reports four numbers and `main()` refuses unless all four hold:
 
   1. the global T20 of the contaminated signal is INFLATED well past the truth
@@ -180,6 +187,58 @@ def case(energy_frac: float = PEDESTAL_ENERGY_FRAC,
     return out
 
 
+# ===========================================================================
+# THE PRECONDITION: A DECAY DOES NOT DEPEND ON HOW LONG YOU WATCHED
+# ===========================================================================
+# The repair above is necessary and NOT sufficient, and the instrument said so
+# within minutes of it landing: the >= 20 Hz gate read the RIMSHOT's T20 as
+# 598.0 ms in a 600 ms clip, for a voice whose whole decay is 8 ms. Doubling
+# the render doubled the answer -- 1198.0 ms in 1.2 s, 2398.0 ms in 2.4 s. That
+# is not a decay, it is the clip's length wearing a decay's units.
+#
+# TWO DIFFERENT MECHANISMS PRODUCE IT, and one rule catches both:
+#
+#   * TRUNCATION. A Schroeder backward integral normalises by the energy
+#     INSIDE the clip, so a voice still ringing at the end reads SHORT. The
+#     cymbal's own T20 read 428 ms at 0.60 s, 540 at 1.20 s and 558 at both
+#     2.40 and 4.80 -- the 0.60 s figure every earlier record was taken at was
+#     biased 23 % short. Reproduced in closed form by `clip_invariance` below.
+#   * LEAKAGE. Zeroing bins below 20 Hz is zero-phase and stateless, but its
+#     kernel is a sinc spanning the clip, and for a voice that goes to exact
+#     silence after 25 ms (the rimshot does, to the LSB) the smeared onset
+#     ripple at -45 dB carries more energy than the tail. The band-limited
+#     rimshot's frame energies never fall 20 dB and even RISE at the clip's end
+#     (circular wrap). A 0.6 s clip has only 12 bins below 20 Hz, so the cut is
+#     a rank-12 edit of a smooth spectrum and its time-domain support is the
+#     whole clip. This one has no closed form here; it is demonstrated on the
+#     instrument by the doubling test, which is why the RULE and not a
+#     mechanism is what gets qualified.
+#
+# THE RULE. Double the observation window. If the estimate moves by more than
+# `INVARIANCE_PCT`, the gate has no verdict for that voice and must REFUSE.
+# It is a NECESSARY condition, not a sufficient one -- it cannot prove an
+# estimate right, only reject one that is measuring the window. That is enough
+# to have rejected both of the above.
+INVARIANCE_PCT = 1.0              # how much a doubled clip may move the answer
+TRUNCATED_T20_MS = 500.0          # a decay that does not fit in CLIP_S
+
+
+def clip_invariance(t20_ms_target: float, clip_s: float = CLIP_S,
+                    energy_frac: float = PEDESTAL_ENERGY_FRAC,
+                    pedestal_hz: float = PEDESTAL_HZ) -> dict[str, float]:
+    """The doubling test on a constructed decay: the banded estimate at
+    `clip_s` and at `2 * clip_s`, and the percentage between them."""
+    out = {"true_t20_ms": t20_ms_target, "clip_s": clip_s}
+    for tag, s in (("short", clip_s), ("long", 2.0 * clip_s)):
+        x, _ = with_pedestal(carrier(t20_ms_target, n=int(s * SR)),
+                             energy_frac, pedestal_hz)
+        out[f"{tag}_t20_ms"] = t20_ms(band_limited(x))
+    out["invariance_pct"] = 100.0 * (out["long_t20_ms"] - out["short_t20_ms"]) \
+        / (out["short_t20_ms"] + 1e-30)
+    out["invariant"] = float(abs(out["invariance_pct"]) <= INVARIANCE_PCT)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json")
@@ -212,8 +271,33 @@ def main(argv: list[str] | None = None) -> int:
           f" -- the repaired gate must still go RED")
     print(f"    >=20 Hz reads {r['faster_banded_pct']:+.2f} %"
           f"   against the 3 % allowance")
+    print()
+    print("  THE PRECONDITION: a decay does not depend on how long you watched.")
+    print("  Double the window; an estimate that moves is measuring the window.")
+    print()
+    fits = clip_invariance(TRUE_T20_MS)
+    trunc = clip_invariance(TRUNCATED_T20_MS)
+    print(f"    {'true T20':>10s} {'at 0.60 s':>10s} {'at 1.20 s':>10s} {'move':>9s}")
+    for tag, row in (("fits the clip", fits), ("does NOT fit", trunc)):
+        print(f"    {row['true_t20_ms']:9.1f} {row['short_t20_ms']:10.1f} "
+              f"{row['long_t20_ms']:10.1f} {row['invariance_pct']:+8.2f} %   {tag}"
+              f"{'' if row['invariant'] else '  -> the gate must REFUSE'}")
+    print()
+    print("  On the instrument the same rule rejected two different defects: the")
+    print("  cymbal's 0.60 s T20 was biased 23 % short by truncation (428 / 540 /")
+    print("  558 / 558 ms at 0.60 / 1.20 / 2.40 / 4.80 s), and the rimshot's banded")
+    print("  T20 tracked the clip exactly (598 / 1198 / 2398 ms) because the brick")
+    print("  wall's sinc leaks onto a voice that reaches exact silence in 25 ms.")
 
     ok = True
+    if not fits["invariant"]:
+        print("REFUSED: a decay that fits the clip was not clip-invariant, so the "
+              "criterion rejects the cases it must accept")
+        ok = False
+    if trunc["invariant"]:
+        print("REFUSED: a decay that does NOT fit the clip passed the criterion, "
+              "so it cannot reject the truncation it exists to catch")
+        ok = False
     if not r["global_error_pct"] >= 10.0:
         print("REFUSED: the global estimator was not inflated; "
               "the premise of this qualification does not hold")

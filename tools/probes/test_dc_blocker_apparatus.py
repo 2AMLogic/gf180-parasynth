@@ -44,15 +44,35 @@ filter read by gates in a wrong state, which is the second root cause
      these two were failing a control voice on dither.
 
   5. `t20_ms_pct` carries a 3 % allowance and is computed on a 2 ms frame grid.
-     The RS's T20 is 8 ms -- four frames -- so one frame is 25 %. Dither cannot
-     see this (the quantisation hides it: the dithered spread is exactly 0), so
-     the resolution of a quantised estimator must come from its step size, not
-     from a perturbation. The RS's measured +225 % still exceeds that, so this
-     one failure IS real, and the repair must keep it red.
+     Dither cannot see a quantised estimator's step, so the resolution of one
+     must come from its step size and not from a perturbation.
 
 The shape to notice: tests 1-4 turn a FALSE RED into a pass, and test 5 keeps a
 TRUE RED red. A repair that only did the first four would be a repair tuned to
 let the candidate through.
+
+A CLAIM THIS FILE USED TO MAKE AND NO LONGER DOES, kept here because the
+withdrawal is the more useful record (CLAUDE.md: publish the wrong-then-right
+rate). It said the CY's -6.96 % and the RS's +225 % decay changes were REAL
+failures the repair had to keep red, and it was wrong on both counts for one
+reason: `t20_ms` integrated the WHOLE spectrum.
+
+  * The CY's -6.96 % was a sub-20 Hz pedestal inside a backward energy
+    integral, not an audible decay change. On the >= 20 Hz band the CY's decay
+    moves -0.36 %. Qualified in closed form by
+    `dc_t20_gate_qualification.py` (452 ms global against a constructed 200).
+  * The RS's +225 % is real and clip-invariant, but it is the blocker's own
+    21 ms sub-20 Hz undershoot tail -- the quantity `sub20_dbfs` reports -- and
+    the >= 20 Hz gate has NO VERDICT on the RS at all: a brick wall at 20 Hz
+    leaks across a clip on a voice that reaches exact silence 25 ms in, so the
+    estimate tracks the clip length (598 / 1198 / 2398 ms at 0.60 / 1.20 /
+    2.40 s). That is REFUSED, and a refusal is not a pass.
+
+So the anti-rescue control moved to where it can be stated without the
+instrument: `test_the_repaired_gate_still_sees_a_real_decay_regression` in
+`test_dc_t20_gate_qualification.py` feeds the repaired estimator a genuinely
+10 % faster decay and requires it to stay red. The three tests below hold the
+instrument side.
 """
 from __future__ import annotations
 
@@ -94,7 +114,10 @@ def test_the_centroid_gate_judges_above_the_band_it_is_removing():
     (b, _), (c, _) = _pair("CY")
     glob = 100.0 * (P.centroid_global_hz(c) / P.centroid_global_hz(b) - 1.0)
     qual = 100.0 * (P.centroid_hz(c) / P.centroid_hz(b) - 1.0)
-    assert glob > 8.0, glob          # the global centroid really does move
+    assert glob > 5.0, glob          # the global centroid really does move
+    # (+8.96 % at the 0.60 s clip these records used to be taken at, +7.03 % at
+    #  2.40 s -- the magnitude depends on how much silence the clip carries,
+    #  which is itself a reason a GLOBAL centroid is a poor gate)
     assert abs(qual) < 0.10, qual    # and the audible band really does not
     # ...so the gate, read the qualified way, must not fire on the CY:
     m = P.measure(c)
@@ -176,24 +199,65 @@ def test_the_resolution_of_a_quantised_estimator_is_its_step_not_its_jitter():
 
     The repair must take the quantisation step into the resolution. If it did
     not, this would stay the unsatisfiable gate CLAUDE.md warns about."""
-    res = P.resolution("RS")
-    assert res["t20_ms_pct"] > 20.0, res          # one frame of an 8 ms decay
+    res = P.resolution("CH")
+    assert res["t20_ms_pct"] > 3.0, res           # one frame of a 48 ms decay
     assert P.resolution("CY")["t20_ms_pct"] < 1.0, P.resolution("CY")
 
 
-def test_the_true_rimshot_decay_failure_survives_the_repair():
-    """**The repair must not rescue the candidate.** The RS's T20 really does
-    go from 8 ms to 26 ms under a 7.46 Hz coupling -- the blocker's own 21 ms
-    undershoot tail -- and +225 % is nine times the 25 % the instrument can
-    resolve. Widening the gate to the resolution must leave this red.
-
-    This is the test that distinguishes a repair from a tuning."""
-    res = P.resolution("RS")
+def test_the_decay_gate_refuses_the_rimshot_rather_than_answering():
+    """**The withdrawn claim, pinned as a refusal.** The >= 20 Hz decay estimate
+    on the RS tracks the clip's length, so it is not a decay and the gate must
+    REFUSE. A refusal is a third outcome: it must NOT appear as a preservation
+    failure (that would be inventing a result) and it must NOT be silent."""
+    refuses, short_ms, long_ms = P.decay_gate_refuses("RS")
+    assert refuses, (short_ms, long_ms)
+    # it tracks the doubling, which is what makes it the clip and not the voice.
+    # At 4.80 s it does not fall 20 dB at all and the estimator returns nan,
+    # which is the same refusal arriving by the other route.
+    assert np.isnan(long_ms) or long_ms / short_ms > 1.8, (short_ms, long_ms)
     (b, nb), (c, nc) = _pair("RS")
     d = P.deltas(P.measure(b, nb), P.measure(c, nc))
-    assert d["t20_ms_pct"] > 100.0, d["t20_ms_pct"]
-    bad, _ = P.preserved("RS", d, res)
-    assert "t20_ms_pct" in bad, (bad, d["t20_ms_pct"], res["t20_ms_pct"])
+    bad, _ = P.preserved("RS", d, P.resolution("RS"), P._refused_props("RS"))
+    assert "t20_ms_pct" not in bad, bad          # not a failure
+    assert P._refused_props("RS") == ("t20_ms_pct",)   # and not silent
+
+
+def test_the_rimshot_sub20_undershoot_is_real_and_reported_as_improvement_not_decay():
+    """The +225 % was not imaginary -- it is the blocker's own 21 ms sub-20 Hz
+    undershoot tail, and the clip-invariance of the GLOBAL estimate is what says
+    so. It belongs in the sub20 column, which is where it now is."""
+    (b, nb), (c, nc) = _pair("RS")
+    base, cand = P.measure(b, nb), P.measure(c, nc)
+    d = P.deltas(base, cand)
+    assert d["t20_global_pct"] > 100.0, d["t20_global_pct"]
+    # and the sub-20 Hz column shows the energy that tail is made of: the
+    # blocker removes LESS than its steady-state bound because of it.
+    assert d["sub20_dbfs"] < 0.0, d["sub20_dbfs"]
+    assert d["sub20_dbfs"] > -P.IMPROVE_SUB20_DB, d["sub20_dbfs"]
+
+
+def test_the_cymbal_decay_was_truncated_at_the_clip_length_records_used_to_use():
+    """The other half of the withdrawal: a Schroeder integral normalised by the
+    energy inside the clip reads SHORT on a voice still ringing at the end. The
+    CY's own T20 is 23 % longer at the clip length the records now use, and the
+    only reason the old number looked stable is that nobody doubled the clip."""
+    short, _ = P.render("CY", dx.COUPLE_OFF, seconds=0.60)
+    long, _ = P.render("CY", dx.COUPLE_OFF, seconds=P.RENDER_S)
+    t_short, t_long = P.t20_band_ms(short), P.t20_band_ms(long)
+    assert t_long > 1.2 * t_short, (t_short, t_long)
+    assert not P.decay_gate_refuses("CY")[0]     # and at RENDER_S it is stable
+
+
+def test_a_refusal_cannot_hide_a_real_decay_failure_on_a_voice_that_resolves():
+    """The control for the refusal machinery. On a voice whose decay gate DOES
+    produce a verdict, a 10 % decay change must still be caught -- a refusal
+    must remove one voice's gate, never the gate."""
+    assert not P.decay_gate_refuses("CY")[0]
+    d = {"peak_dbfs": 0.0, "body_20_700_db": 0.0, "mid_700_5k_db": 0.0,
+         "hf_5k_20k_db": 0.0, "t20_ms_pct": -10.0, "attack_samp": 0.0,
+         "centroid_pct": 0.0, "n_clip": 0.0}
+    bad, _ = P.preserved("CY", d, P.resolution("CY"), P._refused_props("CY"))
+    assert bad == ["t20_ms_pct"], bad
 
 
 # ---------------------------------------------------------------------------

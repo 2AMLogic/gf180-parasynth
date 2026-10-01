@@ -1,4 +1,4 @@
-commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit 714dac6dcc6b-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
 
@@ -21,6 +21,13 @@ DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
   one: a global centroid rises MECHANICALLY when sub-20 Hz energy is
   removed, so the gate would read the candidate's intended effect as a
   failure. Qualified in closed form by dc_centroid_gate_qualification.py.
+
+  t20_ms_pct is READ ON THE SAME >= 20 Hz BAND, for the same reason: a
+  global T20 is a backward energy integral, so a sub-20 Hz pedestal
+  inflates it most exactly where the gate reads. Qualified in closed form
+  by dc_t20_gate_qualification.py, which also checks the repaired gate
+  still goes red on a genuinely 10 % faster decay. The sub-20 Hz settling
+  tail a blocker adds is not thereby ignored: it is the sub20 column.
 
   attack_samp is the first arrival within 1.0 dB of the peak, not
   argmax(|x|): on a plateaued voice argmax answers a lobe RANK ORDER.

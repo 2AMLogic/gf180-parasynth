@@ -1,4 +1,4 @@
-commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit 714dac6dcc6b-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 IMPROVEMENT AND PRESERVATION, placement 'bus', K = 10 (7.460 Hz)
 
@@ -7,39 +7,56 @@ IMPROVEMENT AND PRESERVATION, placement 'bus', K = 10 (7.460 Hz)
 
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  CY  (subject)            -14.64    +0.20    +0.00    +0.00   +0.06   -6.96     +0   -0.02  t20_ms_pct   [res-limited: attack_samp]
-  RS  (subject)             -2.78    -0.06    +0.00    +0.00   -0.17 +225.00     +0   +1.04  t20_ms_pct,centroid_pct   [res-limited: t20_ms_pct]
-  BD  (control)             -2.60    -0.10    +0.10    +0.00   -0.21   +0.00     +6   +0.06  ok   [res-limited: attack_samp]
-  HT  (control)             -2.65    -0.00    +0.01    +0.30   -0.22   +0.00     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
-  CH  (control)             -5.03    -0.75    +0.00    +0.00   +0.01   +0.00     +0   -0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
+  CY  (subject)            -14.85    -0.02    +0.00    +0.00   +0.06   -0.36     +0   +0.00  ok   [res-limited: attack_samp]
+  RS  (subject)             -2.70    -0.06    +0.00    +0.00   -0.17   -0.08     +0   +1.00  ok   [REFUSED: t20_ms_pct]
+  BD  (control)             -3.25    -0.10    +0.11    +0.01   -0.21   -1.15     +6   +0.05  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  HT  (control)             -2.57    -0.00    +0.01    +0.30   -0.22   -1.92     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  CH  (control)             -5.03    -0.72    +0.00    +0.00   +0.01   +0.00     +0   -0.00  ok   [res-limited: body_20_700_db,t20_ms_pct]
 
   THE GATE THAT WAS WIRED WRONG, both ways, so the change is on the page.
   A GLOBAL spectral centroid is not a preservation gate for a DC blocker:
   removing sub-20 Hz energy raises it mechanically. Qualified >= 20 Hz.
 
                 centroid >=20 Hz (the GATE)    centroid global (diagnostic)
-  CY              8176.2 ->    8174.2 Hz  -0.02%      7489.3 ->    8160.5 Hz  +8.96%
-  RS               683.7 ->     690.9 Hz  +1.04%       603.0 ->     646.8 Hz  +7.27%
-  BD                50.3 ->      50.3 Hz  +0.06%        50.0 ->      50.2 Hz  +0.34%
-  HT               188.3 ->     188.3 Hz  +0.03%       187.8 ->     188.1 Hz  +0.14%
+  CY              8137.9 ->    8138.1 Hz  +0.00%      7590.8 ->    8124.4 Hz  +7.03%
+  RS               686.4 ->     693.2 Hz  +1.00%       605.2 ->     646.8 Hz  +6.87%
+  BD                50.3 ->      50.3 Hz  +0.05%        49.9 ->      50.2 Hz  +0.53%
+  HT               188.3 ->     188.4 Hz  +0.03%       187.8 ->     188.1 Hz  +0.14%
   CH             12323.6 ->   12323.6 Hz  -0.00%     12323.5 ->   12323.6 Hz  +0.00%
+
+  THE SECOND GATE WITH THE SAME DEFECT, found after the first was repaired.
+  A GLOBAL T20 is a backward ENERGY integral over the whole spectrum, so a
+  sub-20 Hz pedestal inflates it -- most where the gate reads, late in the
+  clip. Removing the pedestal then shortens it for a reason that is not an
+  audible decay change. Qualified >= 20 Hz by dc_t20_gate_qualification.py:
+  a tone whose T20 is 200.0 ms by construction reads 452 ms globally and
+  202 ms banded when a 4 % standing offset is present, and the repaired gate
+  still reads -9.90 % on a genuinely 10 % faster decay.
+
+                     T20 >=20 Hz (the GATE)         T20 global (diagnostic)
+  CY               558.0 ->     556.0 ms  -0.36%       632.0 ->     552.0 ms -12.66%
+  RS              2398.0 ->    2396.0 ms  -0.08%         8.0 ->      26.0 ms +225.00%
+  BD               348.0 ->     344.0 ms  -1.15%       344.0 ->     334.0 ms  -2.91%
+  HT               104.0 ->     102.0 ms  -1.92%       100.0 ->     100.0 ms  +0.00%
+  CH                48.0 ->      48.0 ms  +0.00%        48.0 ->      48.0 ms  +0.00%
 
   NORMALISED SHARES (%% of clip energy) -- diagnostic only, never a verdict
 
                        body %            mid %             HF %   HF share
               before    after  before    after  before    after
-  CY            0.51     0.56    6.77     7.08   88.04    92.14   LF removal, NOT new HF
-  RS           64.12    67.49   24.19    25.85    0.16     0.17   LF removal, NOT new HF
-  BD           99.41    99.66    0.00     0.00    0.00     0.00   LF removal, NOT new HF
-  HT           99.73    99.85    0.01     0.01    0.00     0.00   absolute HF moved
+  CY            0.57     0.60    7.32     7.69   87.13    91.50   LF removal, NOT new HF
+  RS           63.78    67.17   24.18    25.84    0.16     0.17   LF removal, NOT new HF
+  BD           99.30    99.66    0.00     0.00    0.00     0.00   LF removal, NOT new HF
+  HT           99.72    99.84    0.01     0.01    0.00     0.00   absolute HF moved
   CH            0.00     0.00    0.11     0.11   98.55    98.55   LF removal, NOT new HF
 
 VERDICT (DR 0015: property vector, no aggregate)
 
-  CY   improvement >= 6.0 dB sub-20: MET (-14.64 dB)   preservation: BROKE t20_ms_pct
-  RS   improvement >= 6.0 dB sub-20: NOT MET (-2.78 dB)   preservation: BROKE t20_ms_pct,centroid_pct
+  CY   improvement >= 6.0 dB sub-20: MET (-14.85 dB)   preservation: ok
+  RS   improvement >= 6.0 dB sub-20: NOT MET (-2.70 dB)   preservation: ok   NO VERDICT on t20_ms_pct
   BD   control, must be preserved: ok
   HT   control, must be preserved: ok
   CH   control, must be preserved: ok
 
   NOT ACCEPTED against the limits declared in this file.
+  A REFUSED gate is not a passed one. RS: t20_ms_pct -- see `--decay` for why, and what bounds the voice instead.
