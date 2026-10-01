@@ -603,3 +603,75 @@ def test_the_waveform_check_is_handed_the_measured_fundamental():
     assert by["waveform"].outcome == rq.PASS
     assert by["waveform"].detail["label"] == "saw"
     assert by["waveform"].detail["f0_measured_hz"] == pytest.approx(NOTE_HZ / 2, rel=1e-3)
+
+
+# ===========================================================================
+# the wiring (#137): `_Plugin.qualify()` itself runs the battery
+#
+# The tests above prove the checks. These prove the shipping base class CALLS
+# them: a dawdreamer-hosted rig whose cutoff or pitch command is disconnected
+# must REFUSE construction, with the record attached. No plugin or host is
+# needed -- the fake supplies only the calls `_Plugin.qualify` makes on the
+# engine, and its signals are the closed-form ones used above.
+# ===========================================================================
+import reference_rigs as rr                                         # noqa: E402
+
+
+class _Stub:
+    def __getattr__(self, _name):
+        return lambda *a, **k: None
+
+
+def _fake_rig(*, cutoff="normal", transposes=True, adapters=True):
+    synth = _SynthRig(cutoff=cutoff, transposes=transposes)
+
+    class Fake(rr._Plugin):
+        name = "fake"
+        have_input = False
+        setups = 0
+
+        def __init__(self):                 # no dawdreamer: skip the host
+            self.p, self.eng, self.qualification = _Stub(), _Stub(), None
+            self.setup()
+            self.qualify()
+
+        def setup(self):
+            type(self).setups += 1
+
+        if adapters:
+            def render_note(self, note, seconds=None):
+                return synth.render_note(note)
+
+            def render_cutoff(self, knob, seconds=None):
+                return synth.render_cutoff(knob)
+
+    return Fake
+
+
+def test_wiring_a_connected_rig_qualifies_and_carries_the_battery():
+    rig = _fake_rig()()
+    names = {c.name for c in rig.qualification.checks}
+    assert rig.qualification.qualified
+    assert {"pitch causality", "filter causality"} <= names
+
+
+def test_wiring_a_disconnected_cutoff_refuses_construction_with_the_record():
+    with pytest.raises(rq.RigRefusal, match="filter causality") as e:
+        _fake_rig(cutoff="dead")()
+    assert "pitch causality: " not in str(e.value)      # only the broken one
+
+
+def test_wiring_a_dead_pitch_command_refuses_construction():
+    with pytest.raises(rq.RigRefusal, match="pitch causality"):
+        _fake_rig(transposes=False)()
+
+
+def test_wiring_restores_the_measurement_patch_after_the_battery():
+    cls = _fake_rig()
+    cls()
+    assert cls.setups == 2          # once to build, once after the battery
+
+
+def test_wiring_a_rig_without_adapters_is_not_measured_rather_than_qualified():
+    rig = _fake_rig(adapters=False)()
+    assert rig.qualification is None
