@@ -119,16 +119,43 @@ DEFAULT_LOWBAND_HZ = (40.0, 200.0)   # the study's `cqt.0-200Hz`: CQT_FMIN..200
 #: `tools/probes/lowband_onset_window.py` is where the boundary was measured.
 ONSET_WINDOW_MS = 80.0
 
+#: Largest edge-adjacent energy, as a fraction of the band's own energy, at
+#: which a band share is still a reading of the BAND rather than of the WINDOW.
+#:
+#: WHY THERE IS A SECOND PRECONDITION AT ALL. The 3-cycle rule above bounds the
+#: window against the band's LOWER EDGE; it does not bound it against where the
+#: signal's lines actually are, and that is the failure that matters. A Hann
+#: window of length T has a main lobe +-2/T wide, so a line within 2/T of a band
+#: edge has part of its own energy on the far side of that edge and the share is
+#: a reading of the straddle. FOUND, not foreseen: the #111 synthetic bass drum
+#: (one damped 50 Hz sinusoid) read -0.798 dB in an 80 ms window where the
+#: whole-clip reading is -0.0007, and all 16.8 % of the "out of band" energy was
+#: BELOW 40 Hz -- the 50 Hz line's own lower skirt, 10 Hz from a band edge with
+#: a 25 Hz half-width. Not an attack transient: the fixture's click contributes
+#: nothing to it (click=0 reads -0.798 too).
+#:
+#: 0.05 is measured, not picked. Edge-adjacent energy over in-band energy is
+#: 6e-6 for lines well inside the band, 2e-3 for a 60 Hz line (0.8 half-widths
+#: above a 40 Hz edge at 80 ms), and 0.20-0.74 once a line is inside the lobe.
+#: 0.05 is 25x the worst passing case and a quarter of the worst failing one.
+EDGE_LEAK_MAX = 0.05
 
-def _band_share_db(seg, sr: int, lo: float, hi: float, floor_db: float,
-                   **detail) -> Estimate:
+
+def _band_share_db(seg, sr: int, lo: float, hi: float, floor_db: float, *,
+                   edge_guard: bool, **detail) -> Estimate:
     """10*log10(power in [lo, hi) / total power) of ONE Hann-windowed segment.
 
     Shared by both low-band estimators so the quantity cannot drift apart
     between the whole-clip and the windowed reading; a difference of the two
     then isolates WHEN the energy is, which is the whole point of the second
     one. `np.hanning` is looked up on this module's `np` on purpose -- that is
-    what the rectangular-window control replaces."""
+    what the rectangular-window control replaces.
+
+    `edge_leak` is ALWAYS computed and always reported in `detail`, so the
+    straddle `EDGE_LEAK_MAX` describes is visible in every record either way.
+    `edge_guard` decides whether exceeding it REFUSES; see each caller for why
+    they differ, which is a statement about what can be re-measured on this
+    host and not about what is correct."""
     if am.is_silent(seg):
         return _fail("silent", **detail)
     w = np.hanning(len(seg))
@@ -137,7 +164,21 @@ def _band_share_db(seg, sr: int, lo: float, hi: float, floor_db: float,
     tot = float(P.sum())
     if tot <= 0.0:
         return _fail("zero total power", **detail)
-    frac = float(P[(f >= lo) & (f < hi)].sum()) / tot
+    in_band = float(P[(f >= lo) & (f < hi)].sum())
+    # Hann main-lobe half-width. A line nearer than this to an edge has its own
+    # skirt on the far side of that edge.
+    half = 2.0 * sr / len(seg)
+    adjacent = float(P[(f >= max(0.0, lo - half)) & (f < lo)].sum()
+                     + P[(f >= hi) & (f < hi + half)].sum())
+    leak = (adjacent / in_band) if in_band > 0.0 else math.inf
+    detail = dict(detail, edge_leak=leak, main_lobe_half_hz=half)
+    if edge_guard and not leak <= EDGE_LEAK_MAX:
+        return _fail(f"energy within one main lobe ({half:.1f} Hz) of a band "
+                     f"edge is {leak:.3f} of the band's own, over the "
+                     f"{EDGE_LEAK_MAX:g} this window can resolve: the share "
+                     f"would be a reading of the straddle, not of the band",
+                     band=(lo, hi), **detail)
+    frac = in_band / tot
     v = 10.0 * math.log10(frac) if frac > 0.0 else -math.inf
     if not v > floor_db:
         return _fail("band is below the estimator's own floor", level_db=v,
@@ -156,7 +197,19 @@ def lowband_level_db(x, sr: int, band=DEFAULT_LOWBAND_HZ, *,
     if len(x) < need:
         return _fail("clip shorter than three cycles of the band's lower edge",
                      n=len(x), need=need)
-    return _band_share_db(x, sr, lo, hi, floor_db)
+    # edge_guard=False, and this is a KNOWN HOLE rather than a judgement that
+    # the guard does not apply here -- it applies to any band share. Turning it
+    # on would turn some already-reported Fischer readings into refusals, and
+    # `docs/promoted-bands-results.json` can only be re-measured on a host with
+    # the reference packs. `detail["edge_leak"]` is populated regardless, so the
+    # straddle is visible in every record taken meanwhile.
+    # WHAT THE GUARD PREDICTS, stated so it can be checked rather than
+    # discovered later: docs/discrimination.md 5c reports ours-minus-real as
+    # "large only where the tuning crosses that edge (HT 7.5 +4.8 dB, LC 7.5
+    # +3.5 dB)". A fundamental crossing the 200 Hz edge is exactly this
+    # artefact, so the guard would most likely REFUSE those two readings. That
+    # is a prediction, not a result: it needs the corpus run.
+    return _band_share_db(x, sr, lo, hi, floor_db, edge_guard=False)
 
 
 def lowband_onset_db(x, sr: int, band=DEFAULT_LOWBAND_HZ,
@@ -182,8 +235,21 @@ def lowband_onset_db(x, sr: int, band=DEFAULT_LOWBAND_HZ,
     * **the window must fit inside the clip.** Truncating it silently would
       answer for a shorter window than the caller named, and the caller would
       compare it with a full-length one;
+    * **no line may sit within one Hann main lobe of a band edge.** The one
+      that was not foreseen and was found by a test: the #111 synthetic bass
+      drum's 50 Hz line is 10 Hz above the 40 Hz edge, and an 80 ms window's
+      half-width is 25 Hz, so 16.8 % of its energy lands below the edge and the
+      reading was -0.798 dB where the whole-clip one is -0.0007. See
+      `EDGE_LEAK_MAX`. This is the precondition the 3-cycle rule does NOT
+      imply, and it is why a short window needs two of them;
     * the window must not be silent, and its band must stand above the
       estimator's own leakage floor.
+
+    So THIS ESTIMATOR REFUSES THE BASS DRUM at the default band and window, and
+    that is the correct answer rather than a limitation to work around: a 50 Hz
+    fundamental cannot be separated from a 40 Hz band edge in 80 ms by any
+    window. A voice whose lines sit clear of both edges -- SD, where the
+    -4.86..+6.79 dB finding is -- is readable.
     """
     x = am._as_float(x)
     lo, hi = float(band[0]), float(band[1])
@@ -207,7 +273,7 @@ def lowband_onset_db(x, sr: int, band=DEFAULT_LOWBAND_HZ,
                      "is a reading of a different window",
                      start_ms=float(start_ms), window_ms=float(window_ms),
                      clip_ms=1000.0 * len(x) / sr)
-    return _band_share_db(x[a:a + n], sr, lo, hi, floor_db,
+    return _band_share_db(x[a:a + n], sr, lo, hi, floor_db, edge_guard=True,
                           window_ms=float(window_ms), start_ms=float(start_ms))
 
 

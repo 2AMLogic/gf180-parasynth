@@ -222,9 +222,18 @@ def metrics() -> dict:
     # closed-form case they are 9.17 dB apart. Sharing a floor between them
     # would be the "a floor measured on a different window is a floor for a
     # different quantity" mistake committed inside the fix for it.
+    # AND IT WILL RECORD A REFUSAL HERE, NOT A NUMBER, which is the point of
+    # registering it rather than an argument against. The bass drum's 50 Hz
+    # fundamental sits 10 Hz above the 40 Hz band edge and an 80 ms Hann's
+    # main lobe is 25 Hz wide, so `promoted_measures.EDGE_LEAK_MAX` refuses it
+    # (0.20 against 0.05). Clearing that straddle needs a half-width under
+    # 10 Hz, i.e. a window of 200 ms or more -- which is not an onset window.
+    # So THIS metric cannot be floored from the only repeat-session voice this
+    # repository has, in any window, and the record says so in its own reason
+    # field instead of the gap living in somebody's head.
     m["lowband_onset_db"] = ("dB", _promoted("lowband_onset_db"),
                              _promoted_tol("lowband_onset_db"),
-                             "#138 promotion, not yet on the board")
+                             "#138 promotion; REFUSES on BD, see EDGE_LEAK_MAX")
     return m
 
 

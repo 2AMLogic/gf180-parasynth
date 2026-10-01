@@ -167,6 +167,9 @@ def onset_cases() -> list:
     estimator cannot do and is the only reason this one exists."""
     out = []
     t = np.arange(int(0.24 * SR)) / SR
+    #: the closed-form share of two sines of amplitude 1 and 0.3, used by
+    #: several cases below: 10*log10(1 / (1 + 0.3**2)).
+    want_lo = 10 * np.log10(1.0 / (1.0 + 0.3 ** 2))
     # (1) the ratio, unchanged by windowing. Same closed form as the whole-clip
     # cases: the band share of two sines is the amplitude-squared ratio.
     for a_hi in (0.2, 0.3, 1.0):
@@ -183,7 +186,7 @@ def onset_cases() -> list:
     # case whose answer is near 0, and the second alone passes it too (0.0 is
     # "more than 3 dB above" nothing). Measured: +9.17 dB apart.
     x = _early_low_band_clip()
-    want = 10 * np.log10(1.0 / (1.0 + 0.3 ** 2))
+    want = want_lo
     on, whole = pm.lowband_onset_db(x, SR), pm.lowband_level_db(x, SR)
     out.append(("onset 0-80 ms reads an early low band the whole clip misses",
                 on.ok and whole.ok and abs(on.value - want) < LOWBAND_TOL_DB
@@ -201,6 +204,45 @@ def onset_cases() -> list:
                 not e.ok and "fit inside" in e.reason, e.reason))
     e = pm.lowband_onset_db(x, SR, start_ms=160.0)
     out.append(("onset window after the low band refuses", not e.ok, e.reason))
+    # (3b) the precondition that was NOT foreseen, found by a registration test
+    # rather than by design: a line within one Hann main lobe of a band edge
+    # straddles it, and the share becomes a reading of the straddle. A 50 Hz
+    # line 10 Hz above a 40 Hz edge in an 80 ms window (25 Hz half-width) is the
+    # case, and it is the #111 bass drum fixture, not a contrived signal.
+    bd = _tone(50.0, tau=0.12)
+    e = pm.lowband_onset_db(bd, SR)
+    out.append(("onset refuses a 50 Hz line against a 40 Hz edge",
+                not e.ok and "main lobe" in e.reason, e.reason))
+    # ...and the SAME line against the SAME edge is readable in a LONGER
+    # window, so the refusal is about window-versus-edge resolution rather than
+    # about 50 Hz, about this band, or about bass drums -- and it names its own
+    # remedy. 150 ms halves the main lobe to 13.3 Hz, which clears 50 Hz of a
+    # 40 Hz edge (measured edge/in-band 0.0005).
+    #
+    # WRONG-THEN-RIGHT, 2: this case first moved the BAND EDGE down to 20 Hz
+    # instead of lengthening the window. That is impossible for a different
+    # reason -- 80 ms holds 1.6 of the 3 cycles a 20 Hz edge needs -- so the
+    # case failed on the OTHER precondition and demonstrated nothing. Found by
+    # running validate, not by reading it. The two preconditions pull opposite
+    # ways on the lower edge, which is worth knowing and is why this is here.
+    # The high partial carries THE SAME ENVELOPE as the 50 Hz one. WRONG-THEN-
+    # RIGHT, 3: it was first an undamped sine beside a tau=0.12 s damped one, so
+    # over a 150 ms window their energy ratio was not the amplitude ratio and
+    # the closed form was wrong by 0.75 dB. The case failed; the estimator was
+    # right. An envelope shared by both components cancels out of a ratio
+    # exactly, which is what makes the closed form a closed form.
+    bd_hi = bd + 0.3 * np.sin(2 * np.pi * 1500 * t) * np.exp(-t / 0.12)
+    e = pm.lowband_onset_db(bd_hi, SR, window_ms=150.0)
+    out.append(("onset reads the same 50 Hz line in a 150 ms window",
+                e.ok and abs(e.value - want_lo) < LOWBAND_TOL_DB,
+                f"want {want_lo:.3f} got {e.value if e.ok else e.reason}"))
+    # The whole-clip estimator does NOT refuse it (a 240 ms window's half-width
+    # is 8.3 Hz), and the known hole is pinned here rather than only in prose:
+    # it reports the straddle in `detail` and answers anyway.
+    e = pm.lowband_level_db(bd, SR)
+    out.append(("the whole clip reports its edge leak without refusing",
+                e.ok and "edge_leak" in e.detail and e.detail["edge_leak"] < 0.05,
+                f"edge_leak {e.detail.get('edge_leak') if e.ok else e.reason}"))
     # (4) ...and the refusal is a property of the band/window PAIR, not a ban
     # on short windows. Raise the lower edge and 30 ms becomes legal, with the
     # same closed-form answer. Without this case the gate above would read as
@@ -442,6 +484,8 @@ MUTANTS = (
      lambda: 0.0, "onset 30 ms on a 40 Hz edge refuses"),
     ("window truncated to the clip instead of refusing", pm, "lowband_onset_db",
      _onset_truncating_the_window, "onset window past the clip end refuses"),
+    ("edge-straddle guard disabled (answers over a band edge)", pm, "EDGE_LEAK_MAX",
+     lambda: np.inf, "onset refuses a 50 Hz line against a 40 Hz edge"),
     ("dominant line not interpolated (raw argmax bin)", am, "dominant_frequency",
      _frequency_without_parabolic_interpolation,
      "glide 20 % reads the settled frequency"),

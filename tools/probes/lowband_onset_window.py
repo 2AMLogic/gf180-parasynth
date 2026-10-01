@@ -151,8 +151,47 @@ def part_c():
               f"err vs f(end) {100*(got_hz/f_end-1):+6.2f} %")
 
 
+def part_d():
+    """The precondition this probe did NOT find, and the test that did.
+
+    Parts A-C were run before `lowband_onset_db` was written and the estimator
+    shipped with one precondition: three cycles of the band's lower edge. That
+    is not sufficient, and this part exists because a REGISTRATION TEST caught
+    it, not because the probe did -- which is the honest record of how the
+    second precondition arrived.
+
+    The miss: A bounds the window against the band EDGE and says nothing about
+    where the signal's LINES are. A line within one Hann main-lobe half-width
+    (2/T) of an edge has its own skirt on the far side, and the share is a
+    reading of that straddle. The #111 bass drum fixture is exactly this case.
+    """
+    print("\nD. edge straddle: a line within one main lobe of a band edge "
+          f"(band {BAND[0]:g}-{BAND[1]:g} Hz)")
+    t = np.arange(int(0.24 * SR)) / SR
+    for win_ms in (80.0, 150.0, 240.0):
+        half = 2.0 * SR / int(round(win_ms * SR / 1000.0))
+        print(f"   {win_ms:5.1f} ms window: Hann main-lobe half-width "
+              f"{half:5.2f} Hz -> clears a line {half + BAND[0]:6.1f} Hz and above")
+    for f_line in (45.0, 50.0, 60.0, 70.0, 90.0, 120.0):
+        x = np.sin(2 * np.pi * f_line * t) * np.exp(-t / 0.12)
+        seg = x[:int(0.080 * SR)]
+        w = np.hanning(len(seg))
+        P = np.abs(np.fft.rfft(seg * w)) ** 2
+        f = np.fft.rfftfreq(len(seg), 1.0 / SR)
+        half = 2.0 * SR / len(seg)
+        inb = P[(f >= BAND[0]) & (f < BAND[1])].sum()
+        adj = (P[(f >= max(0.0, BAND[0] - half)) & (f < BAND[0])].sum()
+               + P[(f >= BAND[1]) & (f < BAND[1] + half)].sum())
+        e = pm.lowband_onset_db(x, SR)
+        print(f"   line {f_line:5.1f} Hz, 80 ms: edge-adjacent / in-band "
+              f"{adj / inb:8.5f}  -> "
+              f"{'refused' if not e.ok else f'{e.value:+.4f} dB'}"
+              f"   {'(threshold %g)' % pm.EDGE_LEAK_MAX if adj/inb > pm.EDGE_LEAK_MAX else ''}")
+
+
 if __name__ == "__main__":
     os.environ.setdefault("PYTHONHASHSEED", "0")
     part_a()
     part_b()
     part_c()
+    part_d()
