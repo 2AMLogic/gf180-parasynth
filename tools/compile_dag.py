@@ -31,6 +31,17 @@ from __future__ import annotations
 import argparse, json, os, pathlib, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# The checkout-staleness banner is IMPORTED, not reimplemented (#155). It lives
+# in tools/scorecard.py because that is the report it was written for (#98), and
+# ten tools in this directory already import that module, so there is no "leaf"
+# convention here for this import to violate. NB this is a different question
+# from `stale_against()` below: that one asks whether a node's EVIDENCE is older
+# than the files it covers; this one asks whether the whole TREE is older than
+# the branch the reader will assume it describes.
+sys.path.insert(0, str(ROOT / "tools"))
+import scorecard as sc                                              # noqa: E402
+
 DAG = ROOT / "docs" / "dag.json"
 README = ROOT / "README.md"
 RESULTS = ROOT / "docs" / "dag-results.json"
@@ -289,6 +300,14 @@ def main() -> int:
     ap.add_argument("--slow", action="store_true",
                     help="with --run, also execute nodes marked slow (iverilog; hours)")
     args = ap.parse_args()
+
+    # stderr UNCONDITIONALLY, unlike tools/scorecard.py's tty-conditional
+    # mirroring: stdout here is the DOCUMENT (under --print it is piped), so the
+    # banner cannot go there without contaminating the block, and it must not go
+    # into the block itself for the reason the comment further down records.
+    stale = sc.checkout_staleness()
+    if stale:
+        print(stale, file=sys.stderr)
 
     nodes = json.loads(DAG.read_text())["nodes"]
 

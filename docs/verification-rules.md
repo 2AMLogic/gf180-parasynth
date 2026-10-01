@@ -1,8 +1,10 @@
 # Verification rules
 
-Short, because there are only five, and they exist because each was learned
-the expensive way in this repository — the first three on 2026-09-17, rules 4
-and 5 on 2026-09-26 (issue #52).
+Short, and every one of them was learned the expensive way in this repository —
+the first three on 2026-09-17, rules 4 and 5 on 2026-09-26 (issue #52), rule 6
+from #123, rule 7 from #135, and rule 8 on 2026-10-01 (#155). This sentence read
+"there are only five" for as long as there were seven — `docs/failure-modes.md`
+mechanism 4, a claim outliving its evidence, in the file that argues against it.
 
 ---
 
@@ -292,3 +294,83 @@ Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1
 
 Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore non-deterministic relative to the note, therefore Diva is a positive control for a demo-artefact detector.
 <!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/verification-rules.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing; #135's own example of exactly this rule" -->
+
+## 8. A guard ships with the input that defeats it, or with a stated reason none exists
+
+**Four guards in this repository have been satisfied by the exact pathology they
+were written to catch** (#155): the silence check defeated by NaN, because IEEE
+comparisons with NaN are always False (#134); `tail_db` defeated by the backward
+integral's own shape, which falls toward −∞ at the last sample of any finite
+record (#118); the decay *length* criterion defeated by zero-padding (#139); and
+the DAG verdict defeated by a node's evidence file merely existing (#140). In
+every case the criterion was correct **for well-formed input** and blind outside
+the domain it assumed — and in every case the question that would have found it
+is askable in seconds, at the moment the guard is written:
+
+> *What input satisfies this check while violating its intent?*
+
+So that question is now part of writing one. **A new guard, threshold or refusal
+criterion ships with the adversarial input that defeats it**, in one of exactly
+two forms:
+
+1. **A committed control** — the defeating input as a test or an `--inject`
+   mutant that must stay red, per rule 5's pattern. This is the preferred form,
+   because an input that lives only in a commit message stops being checked the
+   moment the guard is next edited.
+2. **An explicit stated reason none exists** — in the PR or the commit, naming
+   what was tried. "No defeating input was constructed" is an acceptable answer;
+   *silence* is not, because a guard with no stated adversary is
+   indistinguishable from a guard whose adversary nobody looked for. A reason
+   that turns out to be wrong is a finding, which is worth more than a blank.
+
+**This is not rule 5 restated, and the distinction is the whole point.** Rule 5
+is retrospective: a bug *this project actually made* becomes a permanent control
+so the fix cannot silently regress. Its input set is the history of real
+defects. Rule 8 is prospective, and applies to guards that have **never** been
+defeated by anything — the input is *constructed adversarially at write time*
+and need not correspond to any bug that has happened. A guard can satisfy rule 5
+trivially by never having failed, and still be wide open; the four above all
+were. Where a rule-8 input later turns out to describe a real bug, it graduates
+into a rule-5 control and the two rules agree.
+
+### Worked example: the decay-length guard and zero-padding (#139)
+
+One example, worked through; **this is not a licence to retrofit every existing
+guard in the tree**, the same scope-guard rule 7 uses.
+
+The guard: a decay estimate is refused unless the record holds at least
+`min_tail_t20` times the fitted T20 *after* the −25 dB point. It replaced a
+*level* criterion (`tail_db`) that the backward integral defeats — so it was
+already the second attempt at this guard, written by someone who had just been
+burned by exactly this class of failure.
+
+The defeating input is four words long: **append digital silence.**
+
+```
+full 2.0 s                   ok=True    T20 = 0.4605 s
+truncated to 0.30 s          ok=False   REFUSED, correctly
+truncated + 1.7 s of SILENCE ok=True    T20 = 0.2387 s      <-- 48 % error
+```
+<!-- claim: test=model/test_audio_measure.py::test_appending_silence_cannot_rescue_a_refused_decay -->
+
+Zeros carry no information and cannot change what the decay was, so padding
+converted a correct refusal into an accepted answer wrong by 48 %. The criterion
+counted **samples in the array**; its intent was **signal in the tail**. Nobody
+needed a corpus or a render to find this — only the question above, asked once,
+before the guard shipped.
+
+What the repair looks like under this rule: the estimate is read off the
+record's *sounding* extent, which makes appending silence an exact **invariance**
+of the function rather than a threshold that might hold, and both directions of
+that invariance are committed controls — the pad cannot rescue a refusal, and it
+cannot move an accepted answer either.
+<!-- claim: test=model/test_audio_measure.py::test_appending_silence_cannot_change_an_accepted_decay_either -->
+
+And the repair ships with form 2 as well, for the adversary it does **not**
+stop: a record padded with **low-level noise** is still accepted, because that
+pad is signal by every measure the function has. That is stated rather than
+left to be discovered, with the measurement behind it — a −60 dB noise pad reads
+−24.8 dB where `bd8/BD5050.WAV`, the board's own bass-drum reference, reads
+−33.6, so any threshold that refused the pad would refuse the references first.
+A known, bounded, *written-down* blind spot is rule 4's discipline applied to a
+guard: report what it is blind to, not only what it catches.

@@ -205,6 +205,28 @@ def main(argv=None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args(argv)
+
+    # A STALE CHECKOUT IS WHY A STATUS REPORT LIES WITH CONFIDENCE (#98, #155).
+    # `sc.checkout_staleness()` is reused, not reimplemented: the warning is a
+    # property of the CLASS of tools that report status, and it had existed for
+    # exactly one of them (tools/scorecard.py) since #98 -- which is itself the
+    # failure #155 names, a guard written for one instance of a type instead of
+    # the type.
+    #
+    # It goes in THIS tool's terminal output and NEVER into OUT. The rendered
+    # view is committed and --check compares it byte for byte, so a banner
+    # inside `text` would make the document stale the instant anything merged
+    # and --check unsatisfiable on main -- the trap tools/compile_dag.py's main()
+    # records talking itself out of over an embedded `git rev-parse HEAD`.
+    #
+    # Printed BEFORE the REFUSED check below, because a missing input is one of
+    # the things a tree several commits behind main explains.
+    stale = sc.checkout_staleness()
+    if stale:
+        print(stale)
+        if not sys.stdout.isatty():     # ... and again where a redirected run can see it
+            print(stale, file=sys.stderr)
+
     for p in (CANDIDATE, SUMMARY):
         if not p.exists():
             print(f"r1_scorecard: REFUSED -- missing {p.relative_to(ROOT)}")
