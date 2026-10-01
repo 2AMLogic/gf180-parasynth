@@ -606,7 +606,37 @@ recommendation is to drop them.** Of the three borrowed views, the
 constant-Q ladder and the multi-scale windows pay for themselves and the
 multi-period fold does not.
 
-**Promotable to named measurements, with tolerances and floors:**
+**Promotion status (#138, 2026-10-01).** Estimators exist
+(`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`),
+validated against closed-form signals with injected-bug controls
+(`python tools/measure_promoted_bands.py validate`,
+`tools/test_promoted_bands.py`). **Neither is on the board**, and the reasons
+are results, not omissions:
+
+- **No floor exists.** A `TOLERANCE_POLICY` band needs the machine's
+  repeat-take spread (floor) and its knob travel (ceiling). The ceiling is
+  measured (`docs/promoted-bands-results.json`); the floor is not measurable
+  for any voice here (one take per setting, §4). `tools/promoted_bands.py`
+  therefore REFUSES for every voice rather than invent one.
+- **`cqt.0-200Hz` as a whole-window ratio does not isolate the excitation
+  excess it was promoted for.** For the toms and congas the 40-200 Hz band
+  holds the fundamental, so the metric moves with TUNING (HT 29.6 dB, LC 54.8 dB
+  across the knob; HT/LC cross the 200 Hz edge) and ours-minus-real is 0.0 at
+  most settings except where a tuning error moves the fundamental across the
+  edge (HT 7.5 +4.8 dB, LC 7.5 +3.5 dB). The excess in the first 30 ms
+  (`docs/discrimination-trajectory.txt`) needs a time-resolved estimator.
+  Not built here.
+- **The 2-7 % sharp claim did not reproduce on `dominant_period_ms`.** Ours
+  reads +0.6..+2.0 % sharp at 2.5 and -1.1..-0.4 % (flat) at 7.5, so the sign is
+  not systematic on this estimator. The study's own f0 reader (argmax FFT bin,
+  ~4 Hz quantised) gives 0..4.6 %, also unsystematic. The cross-check is
+  therefore NOT corroborated by either reader; do not quote "2-7 % sharp"
+  from these. Ruler: raw % of the named estimator, not knob-equivalent.
+- **MPD**: kept as code, not carried as columns; see
+  `model/discrimination_features.py` docstring.
+- `jit.phasejit_ppm` is not promoted, alone or otherwise.
+
+**Original promotion list (unexecuted as written):**
 
 - **`cqt.0-200Hz`** — the low-band excess. It is the most promotable thing
   here: it is in the top five, it is corroborated by the trajectory report
