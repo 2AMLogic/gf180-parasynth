@@ -607,31 +607,74 @@ constant-Q ladder and the multi-scale windows pay for themselves and the
 multi-period fold does not.
 
 **Promotion status (#138, 2026-10-01).** Estimators exist
-(`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`),
-validated against closed-form signals with injected-bug controls
-(`python tools/measure_promoted_bands.py validate`,
-`tools/test_promoted_bands.py`). **Neither is on the board**, and the reasons
-are results, not omissions:
+(`model/promoted_measures.py`: `lowband_level_db`, `dominant_period_ms`).
+They are DERIVED FROM the study's candidates, not identical to them: the
+study's `cqt.0-200Hz` is a group of 6-band-per-octave constant-Q sub-bands over
+`CQT_SEGS=2` time segments, and its `jit.period_ms` is `dominant_period` over a
+fixed 120-1200 Hz band on segment 0. Here the low band is one whole-clip Hann
+ratio, and the period is a spectral peak in a per-voice band. Both are
+validated against closed-form signals (`python tools/measure_promoted_bands.py
+validate`, `tools/test_promoted_bands.py`). Validation includes a start-red run
+against two stubs and five mutants of the shipped code, each of which turns a
+named known case red. Wrong-then-right, found by those controls: the first
+stub run showed that `lowband a_hi=0.1` passed a stub answering 0.0, because
+its answer (-0.043 dB) lay inside the 0.05 dB tolerance. The rectangular-window
+mutant also failed only one of four low-band cases, by 0.002 dB. The case is
+now a_hi=0.2 and the tolerance is 0.01 dB, against Hann's own error of under
+0.0004 dB.
 
-- **No floor exists.** A `TOLERANCE_POLICY` band needs the machine's
-  repeat-take spread (floor) and its knob travel (ceiling). The ceiling is
-  measured (`docs/promoted-bands-results.json`); the floor is not measurable
-  for any voice here (one take per setting, §4). `tools/promoted_bands.py`
-  therefore REFUSES for every voice rather than invent one.
-- **`cqt.0-200Hz` as a whole-window ratio does not isolate the excitation
-  excess it was promoted for.** For the toms and congas the 40-200 Hz band
-  holds the fundamental, so the metric moves with TUNING (HT 29.6 dB, LC 54.8 dB
-  across the knob; HT/LC cross the 200 Hz edge) and ours-minus-real is 0.0 at
-  most settings except where a tuning error moves the fundamental across the
-  edge (HT 7.5 +4.8 dB, LC 7.5 +3.5 dB). The excess in the first 30 ms
-  (`docs/discrimination-trajectory.txt`) needs a time-resolved estimator.
-  Not built here.
-- **The 2-7 % sharp claim did not reproduce on `dominant_period_ms`.** Ours
-  reads +0.6..+2.0 % sharp at 2.5 and -1.1..-0.4 % (flat) at 7.5, so the sign is
-  not systematic on this estimator. The study's own f0 reader (argmax FFT bin,
-  ~4 Hz quantised) gives 0..4.6 %, also unsystematic. The cross-check is
-  therefore NOT corroborated by either reader; do not quote "2-7 % sharp"
-  from these. Ruler: raw % of the named estimator, not knob-equivalent.
+All numbers below come from `docs/promoted-bands-results.json` (commit
+`08068a7`, clean), at the held-out settings. Ruler: raw dB / % of the named
+estimator, NOT knob-equivalent (§3.1). **Neither metric is on the board**, and
+the reasons are results, not omissions.
+
+- **Largest finding: SD's low-band balance is wrong in a structured way.**
+  Ours minus real runs from **-4.86 to +6.79 dB**, against a machine knob
+  travel of 16.7 dB. The difference follows SNAPPY (the second knob), and TONE
+  (the first knob) sets its sign. At SNAPPY 0-2.5 it stays within ±0.34 dB at
+  every TONE. At SNAPPY 5-10 it is negative at TONE 0-5: (0, 7.5) -4.86,
+  (2.5, 7.5) -3.88, (2.5, 5) -2.80, (5, 7.5) -1.22, (2.5, 10) -1.19. It is
+  positive at TONE 7.5-10: (7.5, 5) +2.01, (7.5, 7.5) +3.51, (10, 7.5) +5.02,
+  (7.5, 10) +6.79. With SNAPPY up, our 40-200 Hz share sits below the
+  machine's at low TONE and above it at high TONE. That is the effect. **No mechanism is claimed** (rule 7). **Not yet
+  confirmed.** Every Fischer SD setting with a held-out knob is already in this
+  table, so no untouched Fischer condition is left. Confirming it needs (a) a
+  second recording of SD at known TONE/SNAPPY, (b) a repeat-take floor showing
+  that 3-7 dB exceeds the machine's own take-to-take spread, and (c) a second
+  route that agrees in sign. The time-resolved estimator below would be one
+  such route. Note that this estimator weights the middle of the clip, not the
+  attack (next item).
+- **`lowband_level_db` cannot see the onset, and saturates on three voices.**
+  One Hann window spans the whole 240 ms conditioned clip. The first 30 ms
+  therefore gets a mean amplitude weight of **0.05** and carries 0.15 % of the
+  window's power budget (12.5 % if the window were flat; pinned by
+  `test_the_whole_clip_hann_all_but_ignores_the_first_30_ms`). The
+  excitation-pulse excess that `cqt.0-200Hz` was promoted for lives in that
+  region (`docs/discrimination-trajectory.txt`), so this estimator suppresses
+  it **by construction**. It is not a measurement of that excess. **BD, LT and
+  MT read about 0.0 dB because the metric saturates, not because ours
+  agrees.** The band holds nearly all the energy on both sides, and the
+  machine's own knob moves it only 0.25 (BD), 0.008 (LT) and 0.024 (MT) dB.
+  For these voices the metric is blind. For HT and LC the band holds the
+  fundamental, so the metric moves with TUNING (HT 29.6 dB and LC 54.8 dB
+  across the knob, both crossing the 200 Hz edge). Ours minus real there is
+  large only where the tuning crosses that edge (HT 7.5 +4.8 dB, LC 7.5
+  +3.5 dB). A time-resolved low-band estimator is needed and is not built.
+- **The "2-7 % sharp at every held-out position" claim did not reproduce on
+  `dominant_period_ms`**, but the pattern is not noise either. At TUNING 2.5
+  **all six are sharp**, by +0.76..+1.71 % (LC +0.76, HT +0.94, MC +1.02,
+  HC +1.48, MT +1.57, LT +1.71). At TUNING 7.5 the result is **mixed**: LT
+  +2.01 % and MT +0.61 % are sharp, while HT -0.95, MC -0.99, HC -1.09 and
+  LC -0.44 % are flat. On what it was validated on, the estimator's own error
+  is at most **0.068 %**: steady exponentially decaying sines, 60-440 Hz,
+  `period_error_on_known_cases`. Those differences are 6-30 times that.
+  **However, no gliding-pitch case has been measured**, and an 808 tom glides
+  downward through its first tens of ms. The reader's error on a tom is
+  therefore unknown, and so is the machine's take-to-take pitch spread (no
+  floor). The study's own f0 reader (`measure_f0`: an un-interpolated argmax
+  bin, 4.2 Hz wide on a 240 ms clip, i.e. 4.6 % at LT's ~90 Hz) gives
+  -1.4..+4.5 %. That is within one bin of zero everywhere, so it corroborates
+  nothing in either direction. Do not quote "2-7 % sharp" from these.
 - **MPD**: kept as code, not carried as columns; see
   `model/discrimination_features.py` docstring.
 - `jit.phasejit_ppm` is not promoted, alone or otherwise.

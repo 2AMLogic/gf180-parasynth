@@ -6,15 +6,37 @@ view pointed at: the low-band excess (`cqt.0-200Hz`) and the dominant
 partial's period (`jit.period_ms`). The study harness
 (`model/discrimination_features.py`) exists to FIND candidates; it computes
 them as columns of a 190-column vector and is not a measurement you can hang a
-tolerance on. These are the same two quantities as named, refusing estimators.
+tolerance on. These two estimators are DERIVED FROM those candidates; they are
+NOT the same quantities, and a reading of one is not a reading of the other:
 
     lowband_level_db        10*log10( power in [lo, hi) / total power ), one
                             Hann-windowed spectrum of the whole clip. A RATIO,
                             so a pure gain cancels exactly.
+                            The study's `cqt.0-200Hz` is a GROUP: 6-band-per-
+                            octave constant-Q sub-bands up to 200 Hz, each over
+                            `CQT_SEGS=2` time segments.
     dominant_period_ms      1000 / frequency of the strongest line in a
                             per-voice search band, parabolically interpolated.
+                            The study's `jit.period_ms` is `dominant_period`
+                            over a fixed 120-1200 Hz band on segment 0 only.
 
 READ THIS BEFORE QUOTING EITHER NUMBER.
+
+* `lowband_level_db` CANNOT SEE THE ONSET. One Hann window spans the whole
+  240 ms clip, so the first 30 ms gets a mean amplitude weight of 0.05 and
+  carries 0.15 % of the window's power budget (12.5 % if it were flat;
+  pinned by `test_the_whole_clip_hann_all_but_ignores_the_first_30_ms`). The
+  excitation-pulse excess `cqt.0-200Hz` was promoted for lives in exactly that
+  region (docs/discrimination-trajectory.txt). This estimator is a whole-clip
+  spectral balance, not a measure of that excess.
+* It also SATURATES where the band holds nearly all the energy on both sides:
+  BD, LT and MT read ~0 dB on the machine at every setting (knob travel 0.25,
+  0.008 and 0.024 dB), so ours-minus-real of 0.0 there means the metric is
+  blind, not that we agree (docs/promoted-bands-results.json).
+* `dominant_period_ms` is validated on STEADY exponentially decaying sines
+  (worst error 0.068 %, `measure_promoted_bands.period_error_on_known_cases`).
+  An 808 tom glides downward over its first tens of ms; no gliding case has
+  been measured, so its error on a tom is not known.
 
 * They are measured on the CONDITIONED clip (`test_discrimination.condition`:
   onset-aligned, 240 ms, DC removed, 20 Hz high-passed). On a raw record the

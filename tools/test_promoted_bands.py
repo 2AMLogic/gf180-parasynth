@@ -24,18 +24,65 @@ def test_every_known_signal_is_read_correctly():
     assert not bad, bad
 
 
-def test_every_injected_bug_is_caught():
-    """Start red: a control that is not caught proves nothing."""
-    missed = [l for l, caught in mpb.injected_bugs() if not caught]
+def test_the_harness_starts_red_against_stubs():
+    """Rule 1, run rather than claimed: against a stub that answers a constant
+    and one that always refuses, every case outside STUB_MAY_PASS is red. The
+    first run of this found `lowband a_hi=0.1` passing the 0.0 stub."""
+    for name, red, green in mpb.start_red():
+        assert set(green) <= mpb.STUB_MAY_PASS[name], (name, sorted(set(green) - mpb.STUB_MAY_PASS[name]))
+        assert red, name
+
+
+@pytest.mark.parametrize("label,attr,make,case", mpb.MUTANTS, ids=[m[0] for m in mpb.MUTANTS])
+def test_each_mutant_turns_its_named_case_red(monkeypatch, label, attr, make, case):
+    """Rule 5's three conditions, per mutant: the named case passes clean, the
+    mutant is what known_cases() executes, and THAT case goes red."""
+    clean = {l: ok for l, ok, _d in mpb.known_cases()}
+    assert clean[case], f"{case} must pass clean"
+    calls = []
+    repl = make()
+    if callable(repl):
+        def spy(*a, _r=repl, **k):
+            calls.append(1)
+            return _r(*a, **k)
+        repl = spy
+    monkeypatch.setattr(pm, attr, repl)
+    broken = {l: ok for l, ok, _d in mpb.known_cases()}
+    if callable(repl):
+        assert calls, f"mutant for {label} never executed"
+    assert not broken[case], f"{label}: {case} stayed green"
+
+
+def test_the_shipped_controls_report_caught():
+    missed = [(l, c, d) for l, c, caught, d in mpb.injected_bugs() if not caught]
     assert not missed, missed
 
 
-def test_a_broken_estimator_turns_the_known_cases_red(monkeypatch):
-    """The known cases have power: swap in a band-edge bug and they fail."""
-    real = pm.lowband_level_db
-    monkeypatch.setattr(pm, "lowband_level_db",
-                        lambda x, sr, band=pm.DEFAULT_LOWBAND_HZ, **k: real(x, sr, band=(100.0, 400.0), **k))
-    assert any(not ok for _l, ok, _d in mpb.known_cases())
+def test_a_rectangular_window_cannot_pass_any_lowband_case(monkeypatch):
+    """The tolerance has margin: at 0.05 dB a rectangular window passed three
+    of four cases; at 0.01 it passes none, while Hann is within 0.0004 dB."""
+    monkeypatch.setattr(pm, "np", mpb._NumpyWithRectangularWindow())
+    lb = [ok for l, ok, _d in mpb.known_cases() if l.startswith("lowband a_hi")]
+    assert lb and not any(lb)
+
+
+def test_period_error_on_steady_tones_is_far_below_a_one_percent_difference():
+    """What the period estimator's own error is, on what it was validated on:
+    steady decaying sines (no glide). Pinned so the text quoting it is true."""
+    err = mpb.period_error_on_known_cases()
+    assert 0.0 < err < 0.1, err
+
+
+def test_the_whole_clip_hann_all_but_ignores_the_first_30_ms():
+    """The single Hann taper over the 240 ms conditioned clip: mean amplitude
+    weight 0.05 over the first 30 ms, and that region carries 0.15 % of the
+    window's power budget (12.5 % if flat). The onset excess `cqt.0-200Hz`
+    was promoted for lives there, so lowband_level_db cannot see it."""
+    n = int(0.24 * SR)
+    w = np.hanning(n)
+    k = int(0.03 * SR)
+    assert w[:k].mean() == pytest.approx(0.050, abs=0.001)
+    assert (w[:k] ** 2).sum() / (w ** 2).sum() == pytest.approx(0.0015, abs=0.0001)
 
 
 def test_nonfinite_audio_is_refused_by_raising():
