@@ -482,11 +482,20 @@ sounds the note or no master position clears the rail.
   because no Model D wave mapping has been measured on any host. Asserting one
   would be the `SurgeRig` defect again — it asked for a saw, received a 50 %
   pulse, and published it for a whole study.
-- **Per-capability verdicts (#136).** `RIG_VERDICTS` is still one verdict per
-  (rig, host). "Mini V3's cutoff is answerable, its envelope timing is not" is
-  really two verdicts about one rig. Nothing here forecloses that change: the
-  entries are keyed by a string and carry a `host` field, so a `capability`
-  field is additive.
+- **Per-capability verdicts (#136) — landed, and this rig's row is all `None`.**
+  `RIG_VERDICTS` now records a verdict per (rig, host, capability), so "Mini V3's
+  cutoff is answerable, its envelope timing is not" is two verdicts about one
+  rig. `modeld-pedalboard` records `None` for every capability in
+  `refprofile.CAPABILITIES`, for the same reason its rig-level verdict is `None`:
+  nobody has run it on a machine with the licensed bundle, so nothing has
+  measured any capability of it. **The default patch's two measured defects —
+  peak 1.000 with 8.57 % of samples at the rail, and 131.00 Hz for a commanded
+  261.63 Hz — are deliberately NOT written in as capability `False`s.** They are
+  facts about the default patch, which this rig exists to correct through Model
+  D's own parameters and then measure; recording them as capability rejections
+  would publish a verdict on the corrected rig that nobody has taken. When
+  `tools/qualify_modeld_pedalboard.py` runs, it fills in the capabilities its
+  battery actually measured and leaves the rest `None`.
 - **`profile.json` carried the unscoped wording** ("renders exact silence
   headlessly", no host named) for a while after `RIG_VERDICTS` and
   `tools/run_case.py`'s own prose were both host-scoped, because it was a
