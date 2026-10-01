@@ -422,9 +422,13 @@ RIG_VERDICTS = {
                             "calibration has been run, so the entry is None. "
                             "'Probably fine' is not a verdict.",
             pitch_causality="NOT MEASURED. "
-                            "`rig_qualification.check_pitch_causality` exists "
-                            "and is wired into `_PedalboardPlugin.qualify`; no "
-                            "dawdreamer-hosted rig runs that battery yet.",
+                            "`_Plugin.qualify` now runs the `qualify_voice` "
+                            "battery (#137) through `SurgeRig.render_note`, "
+                            "but no run on a host with Surge XT + dawdreamer "
+                            "has recorded a verdict yet, so the entry stays "
+                            "None. Surge's oscillator is Audio In: the pitch "
+                            "is the host-fed saw, so this tests the input "
+                            "path, not MIDI transposition.",
             filter_causality="MEASURED, by the frozen clips rather than by "
                              "`check_filter_causality`: CUT_REGIONS_HZ freezes "
                              "the response at 250 / 1000 / 4000 Hz commanded and "
@@ -549,15 +553,19 @@ RIG_VERDICTS = {
                             "equivalent. A number published against a commanded "
                             "Mini V3 envelope time would be a number about a knob "
                             "position.",
-            pitch_causality="NOT MEASURED. `check_pitch_causality` would answer "
-                            "it in two renders; no dawdreamer-hosted rig runs the "
-                            "`qualify_voice` battery yet.",
+            pitch_causality="NOT MEASURED. `_Plugin.qualify` now runs the "
+                            "`qualify_voice` battery on this rig (#137, "
+                            "`MiniV3Rig.render_note`), but no run on a host "
+                            "with Mini V3 + dawdreamer has recorded a verdict "
+                            "yet, so the entry stays None.",
             filter_causality="NOT MEASURED as the monotonicity check states it. "
                              "`calibrate_knob` converging at all is weak evidence "
                              "that the knob does something, and weak evidence of a "
                              "related claim is not this claim: the check asks for "
-                             "a monotonic centroid across a stated knob grid and "
-                             "nobody has run it here.")),
+                             "a monotonic centroid across a stated knob grid. It is "
+                             "now wired into `_Plugin.qualify` (#137, "
+                             "`MiniV3Rig.render_cutoff`) and has not been run "
+                             "on a host with the plugin.")),
     "diva": dict(
         qualified=False, host="dawdreamer",
         builder="reference_rigs.DivaRig()",
