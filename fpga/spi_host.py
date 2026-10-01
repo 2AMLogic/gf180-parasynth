@@ -512,8 +512,18 @@ class MusicHost:
              - the accent (an image write, may be sent early)
              - the stop bit's RISING EDGE, an anchor: this is the note's time
              - the BD's 4 ms attack window, or the tom's 60 ms pitch drop,
-               both as timed writes (15.7.1) and both anchored, because a
-               coefficient sequence whose steps move is a different sequence.
+               both as timed writes (15.7.1). They are NOT anchors: the
+               contract's anchors are only a stop bit's rising edge and the
+               voice's GATE_ON/TRIG, and mode coefficients are "settings"
+               that `spread()` may move EARLIER like any image write (and
+               `feasible()` may push later when anchors crowd a frame). In
+               bar_808 steps move only earlier and only a few frames (hot
+               <= 8, restore <= 2, tom <= 4); the BD window is 192 frames
+               wide and the tom's steps 480 apart, against the two writes
+               each needs (fpga/reports/control_path.txt). In a dense enough
+               pattern a step moves further, either way (a restore pushed
+               later lengthens the 4 ms window) and `check()` does not report
+               it; fpga/test_spi_host.py pins both behaviours.
         The stop bit is held `stop_hold` frames and then dropped; the block
         fires on the 0 -> 1 edge (15.2) so a longer hold does not re-strike,
         and one frame is not deliverable on this link (`min_land_gap`)."""
