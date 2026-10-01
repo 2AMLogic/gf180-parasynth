@@ -90,6 +90,57 @@ def known_cases() -> list:
                 not pm.lowband_level_db(np.sin(2 * np.pi * 1000 * t), SR).ok, ""))
     noise = np.random.default_rng(0).standard_normal(len(t))
     out.append(("noise has no period", not pm.dominant_period_ms(noise, SR, (40.0, 400.0)).ok, ""))
+    out.extend(floor_cases())
+    return out
+
+
+def _repeat_doc(metric="lowband_level_db", floor=0.04, span=0.01) -> dict:
+    """A #111 harness record, in the shape `promoted_bands.harness_floor`
+    reads, holding one metric with a stated session spread and editing noise."""
+    return {"session_to_session": {"metrics": {metric: {"abs_diff_median": floor}}},
+            "self_test": {"editing_noise": {metric: {"span": span}}}}
+
+
+def floor_cases() -> list:
+    """The FLOOR half of the tolerance, with closed-form answers.
+
+    `promoted_bands` stopped carrying a hand-entered floor table under #138's
+    second increment and now reads `tools/measure_repeatability.py`'s own
+    output. A reader is a place a number can be invented silently -- a missing
+    key read as zero, an apparatus-dominated spread used anyway, the arithmetic
+    mean in place of the geometric one -- so each of those is a case here with
+    an answer that does not come from this repository's model."""
+    out = []
+    # sqrt(0.04 * 0.25) = 0.1 and sqrt(0.25 * 1.0) = 0.5, exactly.
+    for floor, ceiling, want in ((0.04, 0.25, 0.1), (0.25, 1.0, 0.5)):
+        tol, basis = pb.band_tolerance("lowband_level_db", "BD", ceiling,
+                                       doc=_repeat_doc(floor=floor))
+        out.append((f"floor {floor} x ceiling {ceiling} -> sqrt",
+                    abs(tol - want) < 1e-12 if tol == tol else False,
+                    f"want {want} got {tol} ({basis})"))
+
+    def refuses(label, metric, voice, ceiling, doc):
+        tol, basis = pb.band_tolerance(metric, voice, ceiling, doc=doc)
+        out.append((label, tol != tol and "REFUSED" in basis, basis))
+
+    refuses("floor absent from the record refuses", "lowband_level_db", "BD", 0.25,
+            _repeat_doc(metric="band energy 20-200"))
+    # verdicts()' own machine_over_estimator < 1 rule: a session spread the
+    # estimator's editing noise could have produced is not the machine.
+    refuses("floor below the apparatus refuses", "lowband_level_db", "BD", 0.25,
+            _repeat_doc(floor=0.01, span=0.04))
+    refuses("floor with no editing-noise span refuses", "lowband_level_db", "BD", 0.25,
+            {"session_to_session": {"metrics": {"lowband_level_db":
+                                                {"abs_diff_median": 0.04}}}})
+    refuses("a voice with no second session refuses", "lowband_level_db", "SD", 0.25,
+            _repeat_doc(floor=0.04))
+    refuses("a floor at or above the knob travel refuses", "lowband_level_db", "BD", 0.04,
+            _repeat_doc(floor=0.04))
+    # THE LIVE STATE, pinned where the controls are read rather than only in a
+    # test: the committed #111 record predates the registration and holds no
+    # entry for either metric, so nothing is on the board today.
+    for metric in pb.METRICS:
+        refuses(f"the shipped #111 record has no floor for {metric}", metric, "BD", 0.25, None)
     return out
 
 
@@ -121,37 +172,94 @@ def _wrap(name, **override):
     return mutant
 
 
-#: (control, module attribute to replace, factory for its replacement, the
-#: NAMED known case that must go red). Each satisfies rule 5's three
-#: conditions, which `injected_bugs` checks rather than assumes: the clean run
-#: passes that case, the mutant executes (the replacement is what `known_cases`
-#: calls), and that case is the one that fails.
+def _floor_ignoring_missing_entry():
+    """`floor_for` that answers a number when the record has no entry -- the
+    way a reader with a `.get(metric, {}).get(k, DEFAULT)` in it would.
+
+    The real `floor_for` is captured HERE, when the factory runs, because by
+    the time the mutant is called the attribute it would otherwise look up is
+    the mutant itself."""
+    real = pb.floor_for
+
+    def mutant(metric, voice, doc=None):
+        entry, _why = real(metric, voice, doc)
+        if entry is None:
+            return dict(value=0.04, source="mutant default"), None
+        return entry, None
+    return mutant
+
+
+def _floor_without_the_apparatus_guard(metric, voice, doc=None):
+    """`harness_floor` with `verdicts`' machine_over_estimator rule removed:
+    the session spread is used even when the estimator's own editing noise
+    could have produced all of it."""
+    if voice != pb.FLOOR_VOICE:
+        return None, "not the floor voice"
+    d = pb._load(doc)
+    m = ((d or {}).get("session_to_session") or {}).get("metrics") or {}
+    if metric not in m:
+        return None, "no entry"
+    v = m[metric].get("abs_diff_median")
+    if v is None or float(v) <= 0.0:
+        return None, "not positive"
+    return dict(value=float(v), source="mutant: no apparatus guard"), None
+
+
+def _arithmetic_mean_tolerance():
+    """`band_tolerance` with (floor+ceiling)/2 in place of sqrt(floor*ceiling).
+    Both are 'between the two bounds'; only one is equidistant from them."""
+    real = pb.floor_for
+
+    def mutant(metric, voice, ceiling, doc=None):
+        fl, why = real(metric, voice, doc)
+        if fl is None:
+            return float("nan"), f"{pb.BASIS} (REFUSED: {why})"
+        floor = float(fl["value"])
+        if ceiling is None or not (0.0 < floor < ceiling):
+            return float("nan"), f"{pb.BASIS} (REFUSED: mutant)"
+        return 0.5 * (floor + ceiling), pb.BASIS
+    return mutant
+
+
+#: (control, module holding the thing replaced, its attribute, factory for the
+#: replacement, the NAMED known case that must go red). Each satisfies rule
+#: 5's three conditions, which `injected_bugs` checks rather than assumes: the
+#: clean run passes that case, the mutant executes (the replacement is what
+#: `known_cases` calls), and that case is the one that fails.
 #:
 #: Not here, on purpose: patching `pm.DEFAULT_LOWBAND_HZ` would be a control
 #: that cannot activate -- the default is bound when the function is defined,
 #: so the shipped code never reads the patched constant.
 MUTANTS = (
-    ("rectangular window in place of Hann", "np",
+    ("rectangular window in place of Hann", pm, "np",
      lambda: _NumpyWithRectangularWindow(), "lowband a_hi=1.0"),
-    ("band upper edge a decade off (2000 Hz for 200 Hz)", "lowband_level_db",
+    ("band upper edge a decade off (2000 Hz for 200 Hz)", pm, "lowband_level_db",
      lambda: _wrap("lowband_level_db", band=(40.0, 2000.0)), "lowband a_hi=0.2"),
-    ("leakage floor disabled (answers below its own floor)", "lowband_level_db",
+    ("leakage floor disabled (answers below its own floor)", pm, "lowband_level_db",
      lambda: _wrap("lowband_level_db", floor_db=-np.inf), "band below floor refuses"),
-    ("sample rate taken as 48000 for a 44100 clip", "dominant_period_ms",
+    ("sample rate taken as 48000 for a 44100 clip", pm, "dominant_period_ms",
      lambda: _wrap("dominant_period_ms", sr=48000), "period 90.0 Hz"),
-    ("prominence check disabled (any argmax is a period)", "dominant_period_ms",
+    ("prominence check disabled (any argmax is a period)", pm, "dominant_period_ms",
      lambda: _wrap("dominant_period_ms", min_prominence_db=-np.inf), "noise has no period"),
+    # The floor reader. Each of these is a way a tolerance could appear from a
+    # record that does not contain one.
+    ("floor reader defaults a missing entry to a number", pb, "floor_for",
+     _floor_ignoring_missing_entry, "floor absent from the record refuses"),
+    ("floor reader drops the apparatus guard", pb, "floor_for",
+     lambda: _floor_without_the_apparatus_guard, "floor below the apparatus refuses"),
+    ("tolerance takes the arithmetic mean of floor and ceiling", pb, "band_tolerance",
+     _arithmetic_mean_tolerance, "floor 0.04 x ceiling 0.25 -> sqrt"),
 )
 
 
-def _run_with(attr, replacement) -> dict:
-    """known_cases() with `pm.<attr>` replaced; restored afterwards."""
-    saved = getattr(pm, attr)
-    setattr(pm, attr, replacement)
+def _run_with(module, attr, replacement) -> dict:
+    """known_cases() with `<module>.<attr>` replaced; restored afterwards."""
+    saved = getattr(module, attr)
+    setattr(module, attr, replacement)
     try:
         return {label: ok for label, ok, _d in known_cases()}
     finally:
-        setattr(pm, attr, saved)
+        setattr(module, attr, saved)
 
 
 def injected_bugs() -> list:
@@ -161,11 +269,11 @@ def injected_bugs() -> list:
     mutant that broke something unrelated stand in for the intended assertion."""
     clean = {label: ok for label, ok, _d in known_cases()}
     out = []
-    for label, attr, make, case in MUTANTS:
+    for label, module, attr, make, case in MUTANTS:
         if case not in clean:
             out.append((label, case, False, "named case does not exist"))
             continue
-        broken = _run_with(attr, make())
+        broken = _run_with(module, attr, make())
         red = sorted(k for k, ok in broken.items() if not ok)
         caught = clean[case] and not broken[case]
         out.append((label, case, caught, f"{len(red)} case(s) red: {', '.join(red)}"))
@@ -183,31 +291,54 @@ def start_red() -> list:
       gain: that case has no power on its own and is not counted as a control.
     * `always refuses` -- the analogue of X. Every value case must be red; the
       refusal cases are green, correctly, and are covered by the mutants above.
-    """
+
+    The FLOOR READER is stubbed in the same two flavours and in the same run,
+    because the floor cases are part of `known_cases` and a stub that left
+    them untouched would make the harness look like it had more power against
+    a stub than it has."""
     stubs = (
-        ("answers 0.0", lambda *a, **k: pm.Estimate(0.0, True, "", {})),
-        ("always refuses", lambda *a, **k: pm.Estimate(float("nan"), False, "stub", {})),
+        ("answers 0.0", lambda *a, **k: pm.Estimate(0.0, True, "", {}),
+         lambda *a, **k: (dict(value=0.0, source="stub"), None)),
+        ("always refuses", lambda *a, **k: pm.Estimate(float("nan"), False, "stub", {}),
+         lambda *a, **k: (None, "stub")),
     )
     out = []
-    for name, stub in stubs:
-        saved = (pm.lowband_level_db, pm.dominant_period_ms)
+    for name, stub, floor_stub in stubs:
+        saved = (pm.lowband_level_db, pm.dominant_period_ms, pb.floor_for)
         pm.lowband_level_db = pm.dominant_period_ms = stub
+        pb.floor_for = floor_stub
         try:
             res = known_cases()
         finally:
-            pm.lowband_level_db, pm.dominant_period_ms = saved
+            pm.lowband_level_db, pm.dominant_period_ms, pb.floor_for = saved
         out.append((name, [l for l, ok, _ in res if not ok], [l for l, ok, _ in res if ok]))
     return out
 
+
+#: Every FLOOR case whose correct answer is a refusal. Both stubs refuse (the
+#: `answers 0.0` one by handing back a floor of 0.0, which fails the
+#: `0 < floor` guard), so a refusal case cannot distinguish a working reader
+#: from a dead one and has no power here. It is the three floor MUTANTS above
+#: that carry these, and all three are CAUGHT -- listing the cases rather than
+#: pretending to a start-red result they do not have is the point of this set.
+_FLOOR_REFUSALS = {
+    "floor absent from the record refuses",
+    "floor below the apparatus refuses",
+    "floor with no editing-noise span refuses",
+    "a voice with no second session refuses",
+    "a floor at or above the knob travel refuses",
+    "the shipped #111 record has no floor for lowband_level_db",
+    "the shipped #111 record has no floor for dominant_period_ms",
+}
 
 #: What each stub is REQUIRED to leave green; anything else green is a case
 #: the stub passes, i.e. a hole in the harness.
 STUB_MAY_PASS = {
     # a_hi=0.0's exact answer IS 0.0 dB (all power in band): it checks for
     # leakage, not for an answer, and has no power against this stub.
-    "answers 0.0": {"gain cancels", "lowband a_hi=0.0"},
+    "answers 0.0": {"gain cancels", "lowband a_hi=0.0"} | _FLOOR_REFUSALS,
     "always refuses": {"silence refuses", "short clip refuses", "band below floor refuses",
-                       "noise has no period", },
+                       "noise has no period", } | _FLOOR_REFUSALS,
 }
 
 

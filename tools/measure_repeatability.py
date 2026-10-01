@@ -83,6 +83,8 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import audio_measure as am                                        # noqa: E402
 import run_case as rc                                             # noqa: E402
+import promoted_bands as pb                                       # noqa: E402
+import promoted_measures as pm                                    # noqa: E402
 
 MEASURED, FALSE, REFUSED = 0, 1, 2
 
@@ -197,7 +199,73 @@ def metrics() -> dict:
                                "band energies")
     m["band energy 200-2000"] = ("dB", _band_frac_db("BD", 1, 0.150), rc.tol_db,
                                  "band energies")
+    # #138's two promoted estimators, registered HERE and not only in
+    # tools/promoted_bands.py, because THIS is the harness that produces a
+    # floor. Without one `band_tolerance` refuses and neither metric can join
+    # the board; with one, the three verdicts this file already applies to
+    # every other metric apply to them unchanged -- finer-than-the-machine,
+    # dominated-by-the-apparatus, and wider-than-the-whole-knob-travel, which
+    # is the guard that matters most here because `lowband_level_db`
+    # SATURATES on the bass drum (0.25 dB of travel across the Fischer grid,
+    # docs/promoted-bands-results.json). A floor that produced a usable-
+    # looking tolerance on a metric with no travel would be a gate that
+    # cannot fail, and `verdicts` is what says so.
+    m["lowband_level_db"] = ("dB", _promoted("lowband_level_db"),
+                             _promoted_tol("lowband_level_db"),
+                             "#138 promotion, not yet on the board")
+    m["dominant_period_ms"] = ("ms", _promoted("dominant_period_ms"),
+                               _promoted_tol("dominant_period_ms"),
+                               "#138 promotion, not yet on the board")
     return m
+
+
+#: The bass drum's fundamental sits at 49.2-50.6 Hz across both sessions
+#: (`session_to_session.metrics["Pitch trajectory"]`) and the TR-808 bass drum
+#: has NO tuning control, so one fixed search band holds the fundamental and
+#: excludes its second harmonic at every setting this corpus has. A per-voice
+#: band is required -- `promoted_measures.dominant_period_ms` deliberately has
+#: no default -- and this is the bass drum's.
+BD_PERIOD_HZ = (40.0, 100.0)
+
+
+def _promoted(metric: str):
+    """A #138 promoted estimator, read on the clip IT was defined on.
+
+    `model/promoted_measures.py`'s header states both estimators are measured
+    on `test_discrimination.condition`'s output: onset-aligned, 240 ms, DC
+    removed, 20 Hz high-passed. Every other metric in `metrics()` reads the
+    whole 3 s record. **A floor measured on a different window is a floor for
+    a different quantity** -- exactly the conflation that header warns about
+    -- so the conditioning is applied here rather than assumed away, and the
+    floor this harness reports is the floor of the shipped estimator.
+
+    The import is lazy because the study harness costs ~1.5 s to load and most
+    callers of `metrics()` only read the plan. A conditioning failure becomes
+    a REFUSAL, not an exception: `measure_all` records it as such and
+    `cross_session` drops the pair rather than reporting a number taken on a
+    clip it could not prepare."""
+    def f(y, sr):
+        import test_discrimination as td
+        try:
+            c = td.condition(np.asarray(y, float), sr, level_match=False)
+        except Exception as why:                        # noqa: BLE001 - see above
+            return am.Estimate(None, False, f"conditioning refused: {why}", {})
+        if metric == "lowband_level_db":
+            return pm.lowband_level_db(c, sr)
+        return pm.dominant_period_ms(c, sr, BD_PERIOD_HZ)
+    return f
+
+
+def _promoted_tol(metric: str):
+    """A `run_case`-shaped tolerance rule with no fixed number in it.
+
+    `promoted_bands.band_tolerance` derives the tolerance from this harness's
+    own floor and the voice's knob travel and REFUSES (NaN) until both exist.
+    Stored in the plan so the plan says where the tolerance comes from; the
+    plan's tolerance slot is documentation, not something this file calls."""
+    def f(ref: float, ctx: dict) -> tuple:
+        return pb.band_tolerance(metric, "BD", (ctx or {}).get("ceiling"))
+    return f
 
 
 def _split_db_padded(sound: str, t1: float):

@@ -398,9 +398,17 @@ verify-full:
 ## when either is absent, which is why it is not in the nightly's controls job:
 ## that image installs iverilog only. The area_provenance jobs are pure Python
 ## and DO run there.
+##
+## measure_promoted_bands.py validate (#138) is here because it IS a set of
+## injected controls -- eight mutants of the two promoted estimators and of
+## the floor reader, each named against the one known case it must turn red,
+## plus the two start-red stub runs. It shipped in PR #507 wired to nothing,
+## which is the state this target exists to prevent: a control nobody runs is
+## indistinguishable from a control that passes. Pure Python, no corpus, ~3 s.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \
