@@ -27,6 +27,19 @@ point: a learned judge would score better and mean less.
             `test_static_detuning_is_not_reported_as_drift`, because a mix of
             perfectly stable detuned oscillators BEATS, and a feature that
             cannot tell beating from drift is measuring beating.
+    DECISION ON MPD (#138, 2026-10-01): KEEP THE CODE, DO NOT CARRY THE COLUMNS.
+            docs/discrimination.md 5c measured all six strides at <= +0.002 of
+            pooled accuracy each (48 columns). The columns are already out of
+            every default path: `features(..., extra=False)` and
+            `discrimination_run --features base` do not call this module. Only
+            `--features plus|both` does, and that arm exists to reproduce 5c.
+            Deleting `mpd_features` would change the 190-column vector, the
+            names every recorded result was attributed against and the
+            12 self-tests, to remove code nothing on the board imports, and
+            would erase `test_mpd_would_have_caught_a_sample_indexed_fold` and
+            `test_a_fixed_stride_fold_is_not_a_drift_measure`, which are the
+            record of WHY a fixed-stride fold is not a drift measure. Nothing
+            promotes from MPD; do not add it to a new arm.
     CQT  -- constant-Q log-frequency sub-bands (BigVGAN v2). Complementary to
             the mel ladder the study already has, not better than it: 6 bands
             per octave is finer BELOW 1 kHz, where mel spacing is linear at

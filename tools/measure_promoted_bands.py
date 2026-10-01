@@ -145,7 +145,11 @@ def cmd_measure() -> int:
             per[c.knobs] = dict(
                 lowband=lb.value if lb.ok else None, lowband_why=None if lb.ok else lb.reason,
                 period=pr.value if pr is not None and pr.ok else None,
-                period_why=None if pr is None or pr.ok else pr.reason, test=c.is_test)
+                period_why=None if pr is None or pr.ok else pr.reason, test=c.is_test,
+                # the study's own f0 reader (0.3 s window, argmax bin), as the
+                # independent cross-check for the period estimator
+                f0_td=(td.measure_f0(y, sr, td.TUNING_FMAX[voice])
+                       if voice in PERIOD_VOICES else None))
         for metric, key in (("lowband_level_db", "lowband"), ("dominant_period_ms", "period")):
             v = [d[key] for d in per.values() if d[key] is not None]
             ceilings[f"{metric}/{voice}"] = dict(
@@ -167,6 +171,8 @@ def cmd_measure() -> int:
             if po is not None and po.ok and r["period"] is not None:
                 row["period_ours_over_real_pct"] = 100.0 * (po.value / r["period"] - 1.0)
                 row["freq_pct_sharp"] = 100.0 * (r["period"] / po.value - 1.0)
+                row["freq_pct_sharp_study_f0"] = 100.0 * (
+                    td.measure_f0(yo, so, td.TUNING_FMAX[voice]) / r["f0_td"] - 1.0)
             rows.append(row)
     out = dict(
         ruler="raw dB / ms of the named estimator on conditioned clips; NOT voice_scale or ours_distance",
