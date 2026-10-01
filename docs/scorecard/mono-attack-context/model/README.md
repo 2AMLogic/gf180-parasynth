@@ -67,3 +67,49 @@ The agent's token could not dispatch `attack_context_model.yml`
 depend on which of the two it is. `produced_by` in `ci-import.json` records the
 host, the command and the reason, and `workflow_url` is `null` rather than
 carrying a stale link.
+
+## How a Builder re-binds next time (#502)
+
+Any change to `model/audio_measure.py`, `tools/measure_mono_m5a_reference.py` or
+`tools/measure_mono_attack_context.py` makes the verifier refuse with
+`analysis basis changed`. That gate stays as it is. An agent token has no
+`actions: write`, so `gh workflow run attack_context_model.yml` returns HTTP 403.
+Nothing here grants that permission; widening the token is an operator decision
+and is not needed.
+
+**Preferred path (CI-produced).** The workflow now also runs on `push` to
+`feature/issue-*` when a path in its filter changes. That filter includes the
+three analysis sources, `tools/compare_mono_attack_context.py`, `model/**` and
+the workflow file. No dispatch is needed. Reading artifacts needs only read
+access:
+
+```sh
+gh run list --workflow attack_context_model.yml --branch <branch> --limit 1
+gh run download <run-id> -n attack-context-model -D docs/scorecard/mono-attack-context/model/
+```
+
+Then set `source_commit` in `ci-import.json` to the pushed commit, put the run
+URL in `workflow_url`, keep the old binding under `rebound_from`, and commit.
+The branch must stay reachable (merge, do not rebase it), as in the first
+re-bind. The widened trigger is limited by branch pattern and by path, so
+unrelated pushes do not render.
+
+**Fallback (locally produced), used only when no CI run is available.** Run
+`python3 tools/compare_mono_attack_context.py` on Linux, require `git status` to
+show only `report.json` modified (all 12 WAVs byte-identical), and record in
+`ci-import.json`: `workflow_url: null`, `produced_by.{host,command,why_not_ci}`,
+`model_wavs_byte_identical_across_rebind` equal to `model_audio_files`, and
+`rebound_from`. The byte-identical re-render is the required evidence that the
+content does not depend on the host. This is a fallback, not the norm: a
+maintainer can later replace the report with a CI-produced one.
+
+**Gate.** `python3 tools/check_attack_context_rebind.py` prints `OK-CI`,
+`OK-LOCAL`, or `REFUSED` (exit 2) for a missing byte-identical-WAV count, absent
+`produced_by`/`rebound_from`, a malformed run URL, a stale `report_sha256` or a
+`source_commit` mismatch. `tools/test_check_attack_context_rebind.py` carries
+one injected defect per refusal and runs against the current state (`OK-LOCAL`).
+
+**Not verified here.** The new `push` trigger has not run, because it can only
+fire after this change is pushed on a `feature/issue-*` branch that touches a
+filtered path. Whether `gh run download` works with the agent token is likewise
+unconfirmed; if it does not, the fallback applies.
