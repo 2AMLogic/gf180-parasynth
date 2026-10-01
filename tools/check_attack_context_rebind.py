@@ -2,9 +2,13 @@
 """Check that a re-bind record of the attack-context evidence is honest.
 
 Outcomes: OK-CI, OK-LOCAL, REFUSED (exit 2).  A record with no CI run must carry
-the byte-identical-WAV evidence; without it the tool refuses rather than
-reporting.  This does not replace verify_attack_context_model.py (content);
-it checks provenance (who produced it, and what supports it).
+a declaration that the re-render was byte-identical; without it the tool refuses
+rather than reporting.  The declaration is a claim in the record: this tool
+checks that it is present and consistent (its count equals the report's rows,
+and the WAVs on disk match the report's digests), not that an earlier render's
+bytes equalled these.  A missing or unreadable input is REFUSED, not a crash.
+This does not replace verify_attack_context_model.py (content); it checks
+provenance (who produced it, and what supports it).
 """
 from __future__ import annotations
 
@@ -17,20 +21,31 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = ROOT / "docs/scorecard/mono-attack-context/model"
-RUN_URL = re.compile(r"^https://github\.com/[^/]+/[^/]+/actions/runs/\d+$")
+RUN_URL = re.compile(r"^https://github\.com/2AMLogic/gf180-parasynth/actions/runs/\d+$")
+
+
+def _load(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except OSError as e:
+        raise ValueError(f"cannot read input {path}: {e.strerror or e}") from e
+    except json.JSONDecodeError as e:
+        raise ValueError(f"input {path} is not valid JSON: {e}") from e
 
 
 def check(ci_import: Path, report: Path) -> str:
     """Return 'OK-CI' or 'OK-LOCAL'; raise ValueError (REFUSED) otherwise."""
-    imp, rep = json.loads(ci_import.read_text()), json.loads(report.read_text())
+    imp, rep = _load(ci_import), _load(report)
     if imp.get("report_sha256") != hashlib.sha256(report.read_bytes()).hexdigest():
         raise ValueError("report_sha256 does not match report.json")
     if imp.get("source_commit") != rep.get("source_commit"):
         raise ValueError("source_commit differs between ci-import.json and report.json")
+    if not imp.get("rebound_from"):
+        raise ValueError("re-bind does not record rebound_from")
     url = imp.get("workflow_url")
     if url is not None:
         if not RUN_URL.match(str(url)):
-            raise ValueError(f"workflow_url is not an Actions run URL: {url!r}")
+            raise ValueError(f"workflow_url is not an Actions run URL of this repository: {url!r}")
         return "OK-CI"
     produced = imp.get("produced_by") or {}
     for key in ("host", "command", "why_not_ci"):
@@ -40,8 +55,17 @@ def check(ci_import: Path, report: Path) -> str:
     if not total or imp.get("model_wavs_byte_identical_across_rebind") != total:
         raise ValueError("locally produced re-bind lacks byte-identical WAV evidence "
                          "(model_wavs_byte_identical_across_rebind must equal model_audio_files)")
-    if not imp.get("rebound_from"):
-        raise ValueError("locally produced re-bind does not record rebound_from")
+    rows = rep.get("rows") or []
+    if total != len(rows):
+        raise ValueError(f"model_audio_files={total} does not match the report's {len(rows)} rows")
+    for row in rows:
+        wav = report.parent / Path(row["audio"]).name
+        try:
+            digest = hashlib.sha256(wav.read_bytes()).hexdigest()
+        except OSError as e:
+            raise ValueError(f"cannot read input {wav}: {e.strerror or e}") from e
+        if digest != row.get("sha256"):
+            raise ValueError(f"WAV on disk differs from the report digest: {wav.name}")
     return "OK-LOCAL"
 
 

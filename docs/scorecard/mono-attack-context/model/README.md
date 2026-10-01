@@ -84,9 +84,15 @@ the workflow file. No dispatch is needed. Reading artifacts needs only read
 access:
 
 ```sh
-gh run list --workflow attack_context_model.yml --branch <branch> --limit 1
+gh run list --workflow attack_context_model.yml --branch <branch> --status success \
+  --json databaseId,headSha,url --limit 1
 gh run download <run-id> -n attack-context-model -D docs/scorecard/mono-attack-context/model/
 ```
+
+Use `--status success`: the workflow uploads its artifact with `if: always()`, so
+a failed run still produces one, possibly with partly overwritten WAVs. Check
+that the run's `headSha` equals the commit you are binding before downloading.
+The checker's `source_commit` cross-check catches some mismatches, not all.
 
 Then set `source_commit` in `ci-import.json` to the pushed commit, put the run
 URL in `workflow_url`, keep the old binding under `rebound_from`, and commit.
@@ -99,17 +105,30 @@ unrelated pushes do not render.
 show only `report.json` modified (all 12 WAVs byte-identical), and record in
 `ci-import.json`: `workflow_url: null`, `produced_by.{host,command,why_not_ci}`,
 `model_wavs_byte_identical_across_rebind` equal to `model_audio_files`, and
-`rebound_from`. The byte-identical re-render is the required evidence that the
-content does not depend on the host. This is a fallback, not the norm: a
-maintainer can later replace the report with a CI-produced one.
+`rebound_from`. The byte-identical re-render is the evidence that the content
+does not depend on the host. The gate cannot see the earlier render's bytes. It
+checks that the record *declares* byte identity, that the declared count equals
+the report's rows, and that the WAVs on disk match the report's digests. This
+is a fallback, not the norm: a maintainer can later replace the report with a
+CI-produced one.
 
 **Gate.** `python3 tools/check_attack_context_rebind.py` prints `OK-CI`,
-`OK-LOCAL`, or `REFUSED` (exit 2) for a missing byte-identical-WAV count, absent
-`produced_by`/`rebound_from`, a malformed run URL, a stale `report_sha256` or a
-`source_commit` mismatch. `tools/test_check_attack_context_rebind.py` carries
-one injected defect per refusal and runs against the current state (`OK-LOCAL`).
+`OK-LOCAL`, or `REFUSED` (exit 2). It refuses for a missing or unreadable input,
+a stale `report_sha256`, a `source_commit` mismatch, a missing `rebound_from`
+(either path), or a run URL outside this repository's Actions. On the local
+path it also refuses for absent `produced_by`, a byte-identical count short of
+`model_audio_files`, a count that differs from the report's rows, or a WAV whose
+digest differs from the report. `tools/test_check_attack_context_rebind.py`
+carries one injected defect per refusal, each matched to its stated reason. It
+asserts only that the current state is not refused, so a CI re-bind (`OK-CI`)
+keeps it green.
 
-**Not verified here.** The new `push` trigger has not run, because it can only
-fire after this change is pushed on a `feature/issue-*` branch that touches a
-filtered path. Whether `gh run download` works with the agent token is likewise
-unconfirmed; if it does not, the fallback applies.
+**Verified on this branch.** The push trigger has fired. Workflow run
+[36853415460](https://github.com/2AMLogic/gf180-parasynth/actions/runs/36853415460)
+is `event: push` on `feature/issue-502` at `ca242fd`, conclusion `success`.
+`gh run download 36853415460 -n attack-context-model` worked with the shared
+agent account. All 12 WAVs in the artifact are byte-identical to the committed
+ones, and the artifact's `report.json` carries `source_commit` = `ca242fd`. This
+record was not re-bound to that run, because #502 does not change the analysis
+basis. The agent token still lacks `actions: write`, so `gh workflow run` still
+returns 403. The push trigger makes that permission unnecessary.
