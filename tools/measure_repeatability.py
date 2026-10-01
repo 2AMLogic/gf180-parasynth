@@ -216,6 +216,24 @@ def metrics() -> dict:
     m["dominant_period_ms"] = ("ms", _promoted("dominant_period_ms"),
                                _promoted_tol("dominant_period_ms"),
                                "#138 promotion, not yet on the board")
+    # The TIME-RESOLVED low-band reading (#138's third increment). A SEPARATE
+    # entry, never a view of the one above: its floor is the spread of an 80 ms
+    # window and `lowband_level_db`'s is the spread of a 240 ms one, and on the
+    # closed-form case they are 9.17 dB apart. Sharing a floor between them
+    # would be the "a floor measured on a different window is a floor for a
+    # different quantity" mistake committed inside the fix for it.
+    # AND IT WILL RECORD A REFUSAL HERE, NOT A NUMBER, which is the point of
+    # registering it rather than an argument against. The bass drum's 50 Hz
+    # fundamental sits 10 Hz above the 40 Hz band edge and an 80 ms Hann's
+    # main lobe is 25 Hz wide, so `promoted_measures.EDGE_LEAK_MAX` refuses it
+    # (0.20 against 0.05). Clearing that straddle needs a half-width under
+    # 10 Hz, i.e. a window of 200 ms or more -- which is not an onset window.
+    # So THIS metric cannot be floored from the only repeat-session voice this
+    # repository has, in any window, and the record says so in its own reason
+    # field instead of the gap living in somebody's head.
+    m["lowband_onset_db"] = ("dB", _promoted("lowband_onset_db"),
+                             _promoted_tol("lowband_onset_db"),
+                             "#138 promotion; REFUSES on BD, see EDGE_LEAK_MAX")
     return m
 
 
@@ -252,6 +270,12 @@ def _promoted(metric: str):
             return am.Estimate(None, False, f"conditioning refused: {why}", {})
         if metric == "lowband_level_db":
             return pm.lowband_level_db(c, sr)
+        if metric == "lowband_onset_db":
+            # The default band and window (40-200 Hz, 80 ms). The bass drum's
+            # fundamental is 49.2-50.6 Hz, inside the band at every setting, so
+            # the default pair is the right one here and does not need a BD
+            # special case the way the period band does.
+            return pm.lowband_onset_db(c, sr)
         return pm.dominant_period_ms(c, sr, BD_PERIOD_HZ)
     return f
 

@@ -36,6 +36,26 @@ INVENTED HERE:
   that both spares the machine its own spread and separates two of its
   settings. Refused, not clamped.
 
+THE THIRD METRIC, `lowband_onset_db`, IS THE SAME RATIO OVER AN 80 ms WINDOW
+FROM THE ONSET rather than the whole clip (#138's third increment). It is here
+for the same reason the other two are: the floor can only come from the #111
+harness, so it is registered there too. It does NOT inherit
+`lowband_level_db`'s floor and must never be given it -- a floor measured on a
+240 ms window is a floor for a different quantity, and the whole point of this
+metric is that the two readings differ (by +9.17 dB on the closed-form case
+`measure_promoted_bands.onset_cases` uses). `band_tolerance` keys on the metric
+name, so the two cannot be crossed by accident.
+
+AND ITS FLOOR CANNOT COME FROM THE #111 PAIR AT ALL, which is a sharper gap
+than the other two have. The bass drum's 50 Hz fundamental sits 10 Hz above the
+40 Hz band edge; an 80 ms Hann resolves 25 Hz, so
+`promoted_measures.EDGE_LEAK_MAX` refuses the reading rather than reporting a
+straddle (measured 0.20 against a 0.05 threshold). Clearing it needs a window of
+200 ms or more, which is no longer an onset window. So `lowband_onset_db` needs
+a second recording of a voice whose lines sit clear of both band edges -- the
+same material gap as SD's, reached by a different route, and NOT something a
+re-run of the existing harness can supply.
+
 ONE VOICE, AND IT IS NOT ONE OF THE INTERESTING ONES. The only second
 recording session reachable from this repository is the 808-From-Mars current
 / legacy BASS DRUM pair (`measure_repeatability.cross_session`); the Fischer
@@ -59,7 +79,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-METRICS = ("lowband_level_db", "dominant_period_ms")
+METRICS = ("lowband_level_db", "lowband_onset_db", "dominant_period_ms")
 
 #: The #111 harness's committed output. `measure_repeatability.py --all --json
 #: docs/bd-repeatability-results.json` rewrites it; it needs the reference
