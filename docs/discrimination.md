@@ -615,13 +615,33 @@ fixed 120-1200 Hz band on segment 0. Here the low band is one whole-clip Hann
 ratio, and the period is a spectral peak in a per-voice band. Both are
 validated against closed-form signals (`python tools/measure_promoted_bands.py
 validate`, `tools/test_promoted_bands.py`). Validation includes a start-red run
-against two stubs and five mutants of the shipped code, each of which turns a
-named known case red. Wrong-then-right, found by those controls: the first
-stub run showed that `lowband a_hi=0.1` passed a stub answering 0.0, because
-its answer (-0.043 dB) lay inside the 0.05 dB tolerance. The rectangular-window
-mutant also failed only one of four low-band cases, by 0.002 dB. The case is
-now a_hi=0.2 and the tolerance is 0.01 dB, against Hann's own error of under
-0.0004 dB.
+against two stubs and **eight** mutants of the shipped code, each of which
+turns a named known case red. Wrong-then-right, found by those controls: the
+first stub run showed that `lowband a_hi=0.1` passed a stub answering 0.0,
+because its answer (-0.043 dB) lay inside the 0.05 dB tolerance. The
+rectangular-window mutant also failed only one of four low-band cases, by
+0.002 dB. The case is now a_hi=0.2 and the tolerance is 0.01 dB, against
+Hann's own error of under 0.0004 dB. **`make controls` runs
+`measure_promoted_bands.py validate`** — it shipped wired to nothing, and a
+control nobody runs looks exactly like one that passes.
+
+**Where the floor comes from now (second increment, 2026-10-01).**
+`tools/promoted_bands.py` no longer carries a hand-entered floor table. It
+reads the session-to-session spread out of `docs/bd-repeatability-results.json`
+— the output of `tools/measure_repeatability.py`, the #111 harness that
+already produces floors — and both estimators are now registered in that
+harness's own `metrics()` plan, read on the same conditioned 240 ms clip they
+are defined on. Two guards are reused from that harness's `verdicts()` rather
+than invented: a spread that does not exceed the estimator's own editing noise
+is a reading of the apparatus and is refused, and a floor at or above the knob
+travel is refused. **The committed record still holds no entry for either
+metric** (pinned by `test_the_shipped_record_still_has_no_floor_for_either_metric`),
+because producing one needs a host with the reference packs; the harness
+re-run is the remaining step, not a new measurement design. Note what it can
+and cannot buy: the only second recording session reachable here is the
+808-From-Mars BASS DRUM pair, and BD is exactly the voice `lowband_level_db`
+saturates on. **Getting SD — where the -4.86..+6.79 dB finding is — onto the
+board still needs a second SD recording that does not exist.**
 
 All numbers below come from `docs/promoted-bands-results.json` (commit
 `08068a7`, clean), at the held-out settings. Ruler: raw dB / % of the named
@@ -677,7 +697,16 @@ the reasons are results, not omissions.
   nothing in either direction. Do not quote "2-7 % sharp" from these.
 - **MPD**: kept as code, not carried as columns; see
   `model/discrimination_features.py` docstring.
-- `jit.phasejit_ppm` is not promoted, alone or otherwise.
+- `jit.phasejit_ppm` is not promoted, alone or otherwise, and that is now
+  **enforced rather than stated**: `test_phasejit_is_not_promoted` asserts it
+  is absent from `promoted_bands.METRICS` and from `promoted_measures`, and
+  `test_nothing_names_phasejit_without_naming_its_pairing_column` asserts that
+  every file in `docs/`, `model/`, `tools/` naming `phasejit` also names
+  `dphase_ar1`, so the column that separates drift from beating is never more
+  than a search away from the one that cannot. A third test pins that
+  `jit.dphase_ar1.seg0` still exists, because a pairing rule naming a column
+  that has been renamed away is unsatisfiable and reads exactly like one that
+  is being followed.
 
 **Original promotion list (unexecuted as written):**
 
