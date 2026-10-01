@@ -240,3 +240,55 @@ over `docs/external-tool-claims.json` in `make verify` and, through its test,
 
 The same applies to yosys, iverilog, ORFS and scipy defaults (`sosfiltfilt`
 `padtype`, #101).
+
+## 7. A measured effect and its mechanism are different claims
+
+Issue #135: two renders of the same Diva patch differed in 1,763,954 of
+1,764,000 samples — measured, and real, and nobody disputes it. The conclusion
+drawn from that number — that the cause was an artefact inserted on a
+wall-clock timer, therefore non-deterministic relative to the note, therefore
+Diva is a valid *positive control* for a demo-artefact detector — was asserted
+and never tested. If the real cause were a free-running LFO or a modelled
+drift instead, Diva would be an ordinary analogue-modelled synth and a
+*terrible* positive control: non-determinism would be correct behaviour, and a
+detector calibrated on it would flag every plugin of that kind. The two
+sentences read as one finding. They are not — one is evidence, the other is a
+story that happened to sit next to it and borrowed its credibility.
+
+1. **State the effect and the mechanism in separate sentences.** Do not let a
+   connective like "because" join a measured number to an unmeasured
+   explanation inside one clause — the explanation inherits the number's
+   authority the instant they share a sentence, and a reader cannot easily
+   tell which half they are agreeing with.
+2. **Every mechanism claim carries its evidentiary status, from a closed
+   vocabulary, machine-checked.** `mechanism=<status>` is a marker modifier
+   (`docs/claim-markers.md`), usable alongside any of the existing claim kinds
+   (`test=`, `grep=`, `absent=`, `commit=`). An invalid or missing status is
+   `REFUSED`, the same discipline this file's marker convention already
+   applies to an unrecognised key — a typo must not be able to hide as a
+   confident claim. The five values, four of them #114's own
+   (`model/drums_fx.py`'s constant-provenance registry) carried over
+   unchanged because #135 asks for exactly that:
+
+   | status | what it means here |
+   |---|---|
+   | `measured` | the mechanism itself was tested, not just the effect it explains |
+   | `derived` | follows from documented behaviour (a datasheet, a spec, a known circuit) without a new measurement |
+   | `inferred` | a plausible reading of indirect evidence that does exist, but was not measured for this claim |
+   | `fitted` | chosen or tuned to match other data; it explains that data by construction, which is not independent support |
+   | `unverified` | asserted with zero evidence of any kind — weaker than `inferred`, which at least cites something indirect. This is the Diva case: nothing was measured about *why*, only *that*. |
+3. **A mechanism is load-bearing — used to justify a design decision, a
+   detector, or a go/no-go call — only at `measured`.** Everything weaker may
+   be recorded as a hypothesis worth testing later; it may not decide
+   anything in the meantime. (This third rule is policy, not something
+   `check_doc_claims.py` can enforce by itself — see
+   `docs/claim-markers.md`, "What this does and does not enforce.")
+
+The two sentences from #135 itself, marked up with the convention they argue
+for — the rule demonstrating itself:
+
+Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
+<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/verification-rules.md note="the effect -- a specific count, re-derivable from this file" -->
+
+Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore non-deterministic relative to the note, therefore Diva is a positive control for a demo-artefact detector.
+<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/verification-rules.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing; #135's own example of exactly this rule" -->

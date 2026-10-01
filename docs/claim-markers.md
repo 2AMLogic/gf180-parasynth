@@ -53,10 +53,74 @@ must not be able to hide as free-form prose.
 |---|---|
 | `expect=fail` | on a `test=` claim: this is a **tracked-defect** claim. The backing test must currently FAIL; if it starts passing, the claim is stale. |
 | `covers=<path>` | the claim describes that file. If the file has been committed **more recently than the document**, the claim is `STALE` — it predates what it describes. |
+| `mechanism=<status>` | this claim's prose is (or includes) a proposed **mechanism**, and `<status>` is its evidentiary status from a closed vocabulary. See "Mechanism claims" below. |
 
 `issue=`, `why=` and `note=` are annotations for a human reader and check
 nothing; they exist so that a marker can say *which* tracked defect or *which*
 open issue it refers to without that text being mistaken for a key typo.
+
+## Mechanism claims: a measured effect and its explanation are different claims
+
+Issue #135: two renders of the same Diva patch differed in 1,763,954 of
+1,764,000 samples — measured, and real. The conclusion drawn from it, that the
+cause was an artefact inserted on a wall-clock timer and therefore Diva was a
+valid positive control for a demo-artefact detector, was asserted and never
+tested. Nothing here re-derives whether a mechanism is *true*; `mechanism=`
+only forces whoever writes the sentence to say, in public and from a fixed
+list, how much standing the explanation has earned — a **required-presence**
+check, not a re-verification, the same distinction `covers=` already draws
+between "predates" (checked) and "is correct" (not checked).
+
+### The vocabulary is closed, and the first four are #114's
+
+A `mechanism=` claim's evidentiary status is one of:
+
+| status | what it means |
+|---|---|
+| `measured` | the mechanism itself was tested — not just the effect it is meant to explain |
+| `derived` | follows from documented behaviour (a datasheet, a spec, a changelog, a known circuit) without a new measurement |
+| `inferred` | a plausible reading of indirect evidence that does exist, but was not measured for this claim |
+| `fitted` | chosen or tuned to match other data; it explains that data by construction, which is not independent support |
+| `unverified` | asserted with zero evidence of any kind — weaker than `inferred`, which at least cites something indirect |
+
+The first four are `model/drums_fx.py`'s constant-provenance vocabulary
+(`PROV_MEASURED` / `PROV_DERIVED` / `PROV_INFERRED` / `PROV_FITTED`, #114),
+reused rather than reinvented because issue #135 asks for exactly that:
+*"mark the mechanism's evidence ... exactly as #114 asks for constants."*
+`unverified` is new. #114's domain assumes some computation produced the
+constant, even a bad one; a mechanism claim can be pure narration with no
+computation behind it at all — the Diva "wall-clock timer" story above — and
+that needs its own word rather than being folded into `inferred`.
+
+**A missing or unrecognised status is `REFUSED`**, exactly like any other key
+on this marker: `mechanism=` with no value, or a value outside the five above,
+refuses with the closed list quoted back so the fix is one edit away.
+
+### What this does and does not enforce
+
+`mechanism=` checks that a status was **declared**, not that the declared
+status is **true**. A claim marked `mechanism=measured` whose cited evidence
+only shows the claim exists (a `grep=` match on the sentence itself, say) is
+not caught by this modifier — the same limitation `covers=` already documents
+for timestamp ordering, and `grep=` for "a string is present" versus "the code
+does what the prose says." Pick `test=` over `grep=` wherever a real
+measurement exists to cite.
+
+**Whether a mechanism is load-bearing is not mechanically checked.**
+`docs/verification-rules.md` rule 7 states the policy — a mechanism may not
+decide a design call, a detector, or a go/no-go while its status is anything
+other than `measured` — but enforcing that a *specific* downstream decision
+actually obeyed the policy is a human review question, the same way `expect=`
+does not stop someone from *acting on* a tracked defect's failing test; it
+only keeps the claim about the test honest.
+
+A worked example, from issue #135 itself:
+
+Measured, and sound: two renders of the same Diva patch differ in 1,763,954 of 1,764,000 samples; Mini V3 is bit-identical across the same test.
+<!-- claim: grep="1,763,954 of 1,764,000 samples" in=docs/claim-markers.md note="the effect -- re-derivable from this file" -->
+
+Asserted, and never tested: that the cause is an artefact inserted on a wall-clock timer, therefore Diva is a positive control for a demo-artefact detector.
+<!-- claim: grep="an artefact inserted on a wall-clock timer" in=docs/claim-markers.md mechanism=unverified issue=135 note="the mechanism -- zero measurement, so not load-bearing" -->
 
 ## The three outcomes
 
