@@ -62,7 +62,7 @@ import subprocess
 import sys
 
 import numpy as np
-from scipy.signal import butter, sosfilt, sosfiltfilt
+from scipy.signal import butter, sosfilt, sosfilt_zi, sosfiltfilt
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
@@ -137,18 +137,72 @@ def _hpf_sos(sr):
     return butter(1, HPF_HZ / (sr / 2.0), btype="highpass", output="sos")
 
 
-def condition_causal(x, sr, level_match: bool = True, pretrim: bool = True):
-    """`td.condition` with the acausal filter replaced by a causal one, and the
-    pre-trim made explicit instead of inherited from whoever produced the array.
+LEADIN_S = 0.010        # the declared lead-in the initial condition is read from
 
-    A causal 20 Hz high-pass with zero initial state IS what an AC-coupled
-    output does to a signal that begins at t = 0, so its step response is
-    physics and not an artefact. `sosfiltfilt`'s pedestal is neither."""
+
+def condition_meansub(x, sr, level_match: bool = True, pretrim: bool = True):
+    """**THE DEFECT, KEPT AS A CONTROL. Do not measure with this.**
+
+    This is `condition_causal` as it was shipped up to #165: it subtracts the
+    WHOLE CLIP's mean before filtering, so the conditioned prefix depends on
+    samples that arrive after it. Appending 700 ms of silence to a 400 ms clip
+    moves the first 240 ms by 0.27 % of peak on a DC-free decaying sine, 9.58 %
+    on a rectified one and 6.42 % on a swing-VCA one -- i.e. the error scales
+    with the clip's DC and is therefore LARGEST on exactly the signals this
+    probe exists to measure. A probe investigating unmodelled DC blocking that
+    applies its own clip-length-dependent DC removal is circular.
+
+    Kept, not deleted: `test_the_old_conditioning_let_the_future_move_the_past`
+    is the injected-bug control for the fix, and a record of a number that
+    looked fine and was wrong is worth more than one that was right first
+    time (CLAUDE.md)."""
     x = np.asarray(x, dtype=float)
     x = x - x.mean()
     if pretrim:
-        x = x[td.onset(x):]                    # both sides, or neither
+        x = x[td.onset(x):]
     x = sosfilt(_hpf_sos(sr), x)
+    return _cut(x, sr, level_match)
+
+
+def condition_causal(x, sr, level_match: bool = True, pretrim: bool = True,
+                     leadin_s: float = LEADIN_S):
+    """`td.condition` with the acausal filter replaced by a causal one, the
+    pre-trim made explicit instead of inherited from whoever produced the
+    array, and **the initial condition DECLARED rather than computed from the
+    future.**
+
+    A causal 20 Hz high-pass IS what an AC-coupled output does to a signal
+    that begins at t = 0, so its step response is physics and not an artefact.
+    `sosfiltfilt`'s pedestal is neither -- and neither is a whole-clip mean
+    subtraction, which is what this function used to do (`condition_meansub`).
+
+    THE INITIAL CONDITION. The coupling is declared to be in steady state for
+    the DC level of a lead-in of `leadin_s` that ENDS where the analysis
+    begins: `zi = sosfilt_zi(sos) * dc0`. For a constant input equal to `dc0`
+    a settled high-pass emits exactly zero, so a converter's standing DC
+    offset (the refs carry about 1 LSB) is removed as completely as the mean
+    subtraction removed it -- without any sample after the window entering the
+    answer. Where there is no lead-in to read -- the Fischer files begin AT
+    their onset -- the coupling is declared AT REST (`dc0 = 0`), and the step
+    it then answers with is the physics of a signal that begins at t = 0. The
+    filter state runs CONTINUOUSLY from there; nothing is refiltered.
+
+    The property this buys, and it is tested:
+    **no sample after the window can change the window.**"""
+    x = np.asarray(x, dtype=float)
+    sos = _hpf_sos(sr)
+    i0 = td.onset(x) if pretrim else 0
+    n_lead = int(round(leadin_s * sr))
+    lead = x[max(0, i0 - n_lead):i0]
+    dc0 = float(lead.mean()) if lead.size else 0.0
+    y, _ = sosfilt(sos, x[i0:], zi=sosfilt_zi(sos) * dc0)
+    return _cut(y, sr, level_match)
+
+
+def _cut(x, sr, level_match: bool):
+    """Onset-align, cut to WINDOW_S, pad rather than lie about length, peak
+    normalise. `td.onset` reads the clip's own maximum, which appended silence
+    cannot raise, so this stage is prefix-determined too."""
     i = td.onset(x)
     n = int(round(td.WINDOW_S * sr))
     seg = x[i:i + n]
@@ -668,6 +722,81 @@ def test_the_pedestal_creates_low_frequency_where_there_is_none():
     causal = w0_lf(condition_causal(x, sr)[0])
     assert study > causal + 15.0, (study, causal)
     assert causal < -20.0, causal
+
+
+# --- F0: the conditioning must not let the future move the past -------------
+def _prefix_signals(sr=48000, secs=0.40):
+    """Three 400 ms clips with the same envelope and increasing DC content, so
+    the error a whole-clip mean subtraction makes is seen to SCALE with DC.
+
+      * `sine`      a decaying 200 Hz sine -- no DC at all
+      * `rectified` the same, half-wave rectified -- like SRC_PULSE, which
+                    never changes sign (mean/|mean| = 1.000, #152)
+      * `swing`     the same through NL_SWING's law (x4 above zero, /8 below)
+    """
+    n = int(sr * secs)
+    t = np.arange(n) / sr
+    x = np.sin(2 * np.pi * 200.0 * t) * np.exp(-t / 0.08)
+    return {"sine": x, "rectified": np.maximum(x, 0.0),
+            "swing": np.where(x > 0, 4.0 * x, x / 8.0)}
+
+
+def prefix_drift_pct(cond, sr=48000, pad_s=0.70):
+    """Largest change in the CONDITIONED first WINDOW_S, as a percent of its
+    own peak, when `pad_s` of silence is appended to the clip. Zero is the
+    only defensible answer: silence in the future is not information about the
+    past. Returns {name: percent}."""
+    out = {}
+    for name, x in _prefix_signals(sr).items():
+        a, _ = cond(x, sr)
+        b, _ = cond(np.concatenate([x, np.zeros(int(sr * pad_s))]), sr)
+        m = min(len(a), len(b))
+        pk = float(np.abs(a[:m]).max()) + 1e-20
+        out[name] = 100.0 * float(np.abs(a[:m] - b[:m]).max()) / pk
+    return out
+
+
+def test_future_silence_cannot_change_an_already_rendered_prefix():
+    """THE property the repair buys. `condition_causal` is prefix-determined:
+    every stage reads only samples at or before the one it emits (the declared
+    initial condition reads a lead-in that PRECEDES the window; `td.onset`
+    reads a maximum that appended silence cannot raise). So appending silence
+    must move the conditioned window by zero, to floating point."""
+    for name, pct in prefix_drift_pct(condition_causal).items():
+        assert pct < 1e-9, (name, pct)
+
+
+def test_the_old_conditioning_let_the_future_move_the_past():
+    """The injected-bug control for the test above: the SAME assertion run
+    against the implementation that shipped must fail, and must fail WORST on
+    the rectified signal. If a future scipy or numpy made `condition_meansub`
+    pass this, the repair would no longer be pinned to anything.
+
+    #165 quotes 0.27 % / 9.58 % / 6.42 % on ITS test signals; these are not
+    those signals, so the thresholds below are what THESE measure (0.18 /
+    4.97 / 4.80) and the shape -- error proportional to DC -- is the claim."""
+    d = prefix_drift_pct(condition_meansub)
+    assert d["sine"] > 0.1, d                      # even a DC-free clip moves
+    assert d["rectified"] > 3.0, d                 # ~5 %: it scales with DC
+    assert d["swing"] > 3.0, d
+    assert d["rectified"] > 20.0 * d["sine"], d    # the error IS the DC
+
+
+def test_a_standing_dc_offset_is_still_removed():
+    """The repair must not cost what the mean subtraction was there for. The
+    refs carry about 1 LSB of converter DC; with a lead-in to read, the
+    declared initial condition removes a constant offset as completely as
+    subtracting the mean did -- and does it causally."""
+    sr = 48000
+    n = int(sr * 0.40)
+    t = np.arange(n) / sr
+    x = np.zeros(n)
+    lead = int(sr * 0.05)
+    x[lead:] = np.sin(2 * np.pi * 200.0 * t[:n - lead]) * np.exp(-t[:n - lead] / 0.08)
+    off = 1.0 / 32768.0
+    a, _ = condition_causal(x, sr, level_match=False)
+    b, _ = condition_causal(x + off, sr, level_match=False)
+    assert float(np.abs(a - b).max()) < 0.02 * off, float(np.abs(a - b).max())
 
 
 def test_bands_with_no_bin_are_refused_not_reported():
