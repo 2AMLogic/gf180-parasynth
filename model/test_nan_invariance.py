@@ -37,27 +37,32 @@ runs first: each entry's fixture is a signal that estimator DOES answer. Without
 it the property is vacuous, and a vacuous green is the failure mode this
 repository keeps finding (docs/verification-rules.md rule 1).
 
-START RED, AS MEASURED (2026-10-01, against this file's parent commit)
+START RED, AS MEASURED (2026-10-01)
 
-    python3 tools/nan_guard_audit.py --check
-      GAP   model/audio_measure.py::_as_float
-      GAP   tools/refprofile.py::write_clip
-      GAP   tools/refprofile.py::render
-      GAP   tools/run_case.py::load_reference
-      GAP   tools/run_case.py::prepare
-      GAP   model/reference_rigs.py::_Plugin.render
-      -> 6 of 7 audio-entry boundaries did not assert finiteness
+Reproduce it exactly -- this file is written so that it COLLECTS against a
+version of `audio_measure` that has no finiteness check at all (see `REFUSALS`),
+which is what makes the red run a measurement rather than an import error:
 
-    this file, against the parent commit's model/audio_measure.py
-      -> 49 of 57 registered estimators returned a NUMBER for a signal with one
-         NaN in it; the ones that happened to refuse did so for an unrelated
-         reason (an empty band, a fit that would not converge), never because
-         the input was not audio
+    git checkout <this commit>~1 -- model/audio_measure.py tools/run_case.py \\
+        tools/refprofile.py model/reference_rigs.py tools/test_refprofile.py
+    python3 tools/nan_guard_audit.py --check          # exit 1, 6 gaps
+    python3 -m pytest model/test_nan_invariance.py -q # 334 failed, 150 passed
+    git checkout HEAD -- .                            # put it back
 
-The reproduction is in `docs/` terms: check out the parent commit's
-`model/audio_measure.py` into a scratch directory, put it first on `sys.path`,
-and run this file. `test_the_silence_guard_shape_is_what_fails_open` keeps the
-MECHANISM on record permanently, so that evidence cannot rot with the fix.
+What that red run said:
+
+    6 of 7 audio-entry boundaries asserted nothing       (only #133's load_clip)
+    52 of 57 registered estimators returned a NUMBER     for a signal with ONE
+                                                         NaN injected in it
+    29 of them returned a refusal that still CARRIED a non-finite number in
+       its `detail`, which a caller logging diagnostics prints as data
+
+The five that did refuse refused for an unrelated reason -- an empty band, a fit
+that would not converge -- never because the input was not audio.
+
+`test_the_silence_guard_shape_is_what_fails_open` keeps the MECHANISM on record
+permanently, in IEEE arithmetic rather than prose, so that evidence cannot rot
+with the fix.
 """
 from __future__ import annotations
 
@@ -240,7 +245,13 @@ FINITE_OPT_OUTS: dict[tuple[str, str], str] = {
 # ---------------------------------------------------------------------------
 # what counts as a refusal
 # ---------------------------------------------------------------------------
-REFUSALS = (am.InsufficientEvidence, am.NonFiniteAudio)
+#: `getattr`, not `am.NonFiniteAudio`, for ONE reason: start red
+#: (docs/verification-rules.md rule 1). This file must be able to COLLECT
+#: against a version of `audio_measure` that has no finiteness check at all, or
+#: the red run is an import error instead of a measurement, and an import error
+#: does not tell you how many estimators answered a NaN with a number.
+REFUSALS = tuple({am.InsufficientEvidence,
+                  getattr(am, "NonFiniteAudio", am.InsufficientEvidence)})
 
 
 def _refusal(call, y) -> str | None:
