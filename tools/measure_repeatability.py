@@ -216,6 +216,15 @@ def metrics() -> dict:
     m["dominant_period_ms"] = ("ms", _promoted("dominant_period_ms"),
                                _promoted_tol("dominant_period_ms"),
                                "#138 promotion, not yet on the board")
+    # The TIME-RESOLVED low-band reading (#138's third increment). A SEPARATE
+    # entry, never a view of the one above: its floor is the spread of an 80 ms
+    # window and `lowband_level_db`'s is the spread of a 240 ms one, and on the
+    # closed-form case they are 9.17 dB apart. Sharing a floor between them
+    # would be the "a floor measured on a different window is a floor for a
+    # different quantity" mistake committed inside the fix for it.
+    m["lowband_onset_db"] = ("dB", _promoted("lowband_onset_db"),
+                             _promoted_tol("lowband_onset_db"),
+                             "#138 promotion, not yet on the board")
     return m
 
 
@@ -252,6 +261,12 @@ def _promoted(metric: str):
             return am.Estimate(None, False, f"conditioning refused: {why}", {})
         if metric == "lowband_level_db":
             return pm.lowband_level_db(c, sr)
+        if metric == "lowband_onset_db":
+            # The default band and window (40-200 Hz, 80 ms). The bass drum's
+            # fundamental is 49.2-50.6 Hz, inside the band at every setting, so
+            # the default pair is the right one here and does not need a BD
+            # special case the way the period band does.
+            return pm.lowband_onset_db(c, sr)
         return pm.dominant_period_ms(c, sr, BD_PERIOD_HZ)
     return f
 

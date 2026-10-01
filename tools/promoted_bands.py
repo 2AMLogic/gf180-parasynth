@@ -36,6 +36,16 @@ INVENTED HERE:
   that both spares the machine its own spread and separates two of its
   settings. Refused, not clamped.
 
+THE THIRD METRIC, `lowband_onset_db`, IS THE SAME RATIO OVER AN 80 ms WINDOW
+FROM THE ONSET rather than the whole clip (#138's third increment). It is here
+for the same reason the other two are: the floor can only come from the #111
+harness, so it is registered there too. It does NOT inherit
+`lowband_level_db`'s floor and must never be given it -- a floor measured on a
+240 ms window is a floor for a different quantity, and the whole point of this
+metric is that the two readings differ (by +9.17 dB on the closed-form case
+`measure_promoted_bands.onset_cases` uses). `band_tolerance` keys on the metric
+name, so the two cannot be crossed by accident.
+
 ONE VOICE, AND IT IS NOT ONE OF THE INTERESTING ONES. The only second
 recording session reachable from this repository is the 808-From-Mars current
 / legacy BASS DRUM pair (`measure_repeatability.cross_session`); the Fischer
@@ -59,7 +69,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-METRICS = ("lowband_level_db", "dominant_period_ms")
+METRICS = ("lowband_level_db", "lowband_onset_db", "dominant_period_ms")
 
 #: The #111 harness's committed output. `measure_repeatability.py --all --json
 #: docs/bd-repeatability-results.json` rewrites it; it needs the reference
