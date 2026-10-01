@@ -411,3 +411,38 @@ def test_the_repeatability_corpus_has_no_floor_for_these_metrics():
     d = json.loads((ROOT / "docs" / "bd-repeatability-results.json").read_text())
     names = set(d["session_to_session"]["metrics"])
     assert not any("lowband" in n.lower() or "period" in n.lower() for n in names), names
+
+
+#: Spelled-out counts, because the Makefile comment is prose for a reader and
+#: an English word is what a reader writes there. Only as far as the number of
+#: mutants could plausibly reach.
+_WORDS = {
+    2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+    8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve",
+    13: "thirteen", 14: "fourteen", 15: "fifteen", 16: "sixteen",
+    17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
+}
+
+
+def test_the_makefile_controls_comment_names_the_current_control_count():
+    """`make controls` is the only place these mutants are run, and its comment
+    is where a reader learns how many there are. That count went stale the
+    first time a third estimator was promoted -- it said "eight mutants of the
+    two promoted estimators" while thirteen ran against three. A number in
+    prose beside a mechanism drifts from the mechanism unless something reads
+    both, so this reads both.
+
+    Asserting the words appear in the right CLAUSE, not merely in the file:
+    the mutant count qualifies "mutants" and the estimator count qualifies
+    "promoted estimators"."""
+    body = (ROOT / "Makefile").read_text(encoding="utf-8")
+    start = body.index("measure_promoted_bands.py validate (#138)")
+    para = body[start:body.index("\ncontrols:", start)]
+    want_mutants = f"{_WORDS[len(mpb.MUTANTS)]} mutants"
+    want_metrics = f"{_WORDS[len(pb.METRICS)]} promoted estimators"
+    assert want_mutants in para, (
+        f"Makefile's controls comment does not say {want_mutants!r}; "
+        f"measure_promoted_bands.MUTANTS has {len(mpb.MUTANTS)} entries")
+    assert want_metrics in para, (
+        f"Makefile's controls comment does not say {want_metrics!r}; "
+        f"promoted_bands.METRICS has {len(pb.METRICS)} entries")

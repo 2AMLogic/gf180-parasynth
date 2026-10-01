@@ -400,8 +400,8 @@ verify-full:
 ## and DO run there.
 ##
 ## measure_promoted_bands.py validate (#138) is here because it IS a set of
-## injected controls -- eight mutants of the two promoted estimators and of
-## the floor reader, each named against the one known case it must turn red,
+## injected controls -- thirteen mutants of the three promoted estimators and
+## of the floor reader, each named against the one known case it must turn red,
 ## plus the two start-red stub runs. It shipped in PR #507 wired to nothing,
 ## which is the state this target exists to prevent: a control nobody runs is
 ## indistinguishable from a control that passes. Pure Python, no corpus, ~3 s.
