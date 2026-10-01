@@ -46,12 +46,23 @@ which is what makes the red run a measurement rather than an import error:
     git checkout <this commit>~1 -- model/audio_measure.py tools/run_case.py \\
         tools/refprofile.py model/reference_rigs.py tools/test_refprofile.py
     python3 tools/nan_guard_audit.py --check          # exit 1, 6 gaps
-    python3 -m pytest model/test_nan_invariance.py -q # 334 failed, 150 passed
+    python3 -m pytest model/test_nan_invariance.py -q # 336 failed, 151 passed
     git checkout HEAD -- .                            # put it back
 
+`336 failed, 151 passed` (487 collected) is the figure to match with THIS
+version of the file. An earlier version of this block said `334 failed, 150
+passed`, which was the honest measurement of the file as it stood at `e3b0068`
+(484 collected); `a10a510` then added three tests --
+`test_the_table_also_covers_functions_that_bypass_as_float`,
+`test_no_stale_asarray_exemptions` and
+`test_the_as_float_call_site_counts_in_the_docstring_are_the_real_ones` -- and
+the figure was not re-measured. That is the same drift this file's own
+`test_the_as_float_call_site_counts…` exists to prevent, caught in review by
+someone running the recipe above rather than reading it. Re-measure these two
+numbers whenever you add or remove a test here.
+
 What that red run said (re-measured on the same commits before the PR, which is
-how the denominators below were corrected from 57 to 58 and "five" to "six" --
-`334 failed, 150 passed` is the figure to match):
+how the denominators below were corrected from 57 to 58 and "five" to "six"):
 
     6 of 7 audio-entry boundaries asserted nothing       (only #133's load_clip)
     52 of 58 registered estimators returned a NUMBER     for a signal with ONE
