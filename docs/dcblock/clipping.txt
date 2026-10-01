@@ -1,4 +1,4 @@
-commit fa92b8d2be7f-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+commit 7a3c35f19a01-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 PLACEMENT UNDER CLIPPING. One voice at the reference gain never rails --
 `n_clip` is 0 on all five -- so `bus` and `post` agree to 0.02 dB and the

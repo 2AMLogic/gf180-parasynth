@@ -15,12 +15,14 @@ python3 -m pytest tools/probes/dc_blocker.py tools/probes/test_dc_blocker_appara
 
 ## What the measurement says
 
+`COUPLE_K` is deliberately not in `docs/sensitivity/registry.json` yet: nothing ships (`COUPLE_OFF`), the corner is read off C49 / R176‖R177 rather than chosen, and `cutoff.txt` already sweeps K = 8…13 against a closed-form prediction; it must be registered in #510 before anything enables a corner.
+
 At the circuit's own corner (`COUPLE_K = 10`, 7.46 Hz, read off the BD's C49 /
 R176‖R177 network), coupling on the drum bus before the output stage's clamp:
 
 | voice | role | sub-20 Hz | preservation | verdict |
 |---|---|--:|---|---|
-| CY | subject | **−14.85 dB** | every declared gate inside its allowance, decay included (−0.36 %) | improvement MET, preservation ok |
+| CY | subject | **−14.85 dB** | every declared gate inside its allowance, decay included (−0.36 %); attack is `[res-limited]` (delta +0 samples, no verdict change) | improvement MET, preservation ok |
 | RS | subject | −2.70 dB | ok on the six gates that resolve; decay **REFUSED** | improvement **NOT MET** (required 6.0 dB) |
 | BD | control | −3.25 dB | ok | ok |
 | HT | control | −2.57 dB | ok | ok |
@@ -99,8 +101,13 @@ treated as suspect until its absolute HF energy is shown to have risen.
 `continuous.txt`: eight repeated hits on each subject, an overlap, a choke, and a
 retune mid-ring on each of the five exclusive-circuit pairs (LC/LT, MC/MT,
 HC/HT, CL/RS, MA/CP). The blocker's state is carried across a retune rather than
-cleared — a capacitor does not know a stop fired — and the coupled switch step
-never exceeds the uncoupled one on any pair.
+cleared — a capacitor does not know a stop fired. The coupled switch step may
+exceed the uncoupled one by at most `SWITCH_STEP_TOL_LSB` = 2 LSB (one LSB of
+truncation per blocker, two blockers on the bus — the bound
+`test_a_bus_blocker_is_the_superposition_of_per_path_blockers` asserts), and
+`test_the_coupled_switch_step_does_not_exceed_the_uncoupled_by_the_truncation_bound`
+asserts it. The worst observed excess is CP→MA at +1.00 LSB (the review's 1.02 was read off the six-digit column); the other four pairs
+are at or below the uncoupled step. `continuous.txt` prints the excess column.
 
 ## The apparatus, which was wrong twice before it was right
 

@@ -1313,6 +1313,29 @@ def _passage(sound, second=None, n_hits=8, spacing_ms=120.0, couple=dx.COUPLE_BU
     return out, nclip, step
 
 
+# The bus placement is two blockers (dmix and body), each truncating by at most
+# one LSB per sample from the shift -- the bound
+# test_a_bus_blocker_is_the_superposition_of_per_path_blockers already asserts.
+# So a coupled retune step may exceed the uncoupled one by this much and no
+# more. Declared from that bound, NOT from the spread of any measurement.
+SWITCH_STEP_TOL_LSB = 2.0
+
+
+def _switch_steps(k, placement):
+    """[(a, b, off_step, coupled_step)], the largest 1-sample step at the switch
+    frame of each exclusive pair, in full-scale units, uncoupled then coupled."""
+    rows = []
+    for a_, b_ in dx.PAIRS:
+        steps = []
+        for couple in (dx.COUPLE_OFF, placement):
+            out, _, step = _passage(a_, b_, couple=couple, k=k, switch_at=3)
+            f = LEAD_FRAMES + 3 * step + step // 2
+            w = np.asarray(out[f - 4:f + 5], float)
+            steps.append(float(np.abs(np.diff(w)).max()) / FS)
+        rows.append((a_, b_, steps[0], steps[1]))
+    return rows
+
+
 def report_continuous(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
     """Four things a one-shot cannot show: repeated hits, an overlap, a choke,
     and a retune mid-ring on a shared circuit."""
@@ -1335,15 +1358,18 @@ def report_continuous(k=dx.COUPLE_K, placement=dx.COUPLE_BUS):
               f"{drift:+.4f} dB  -- state that wandered would show here\n")
 
     print("  retune mid-ring on a shared circuit (the five exclusive pairs)")
-    print(f"  {'pair':10s} {'largest 1-sample step at the switch frame':>44s}")
-    for a_, b_ in dx.PAIRS:
-        for couple, label in ((dx.COUPLE_OFF, "off"), (placement, placement)):
-            out, _, step = _passage(a_, b_, couple=couple, k=k, switch_at=3)
-            f = LEAD_FRAMES + 3 * step + step // 2
-            w = np.asarray(out[f - 4:f + 5], float)
-            print(f"  {a_}->{b_:6s} {label:>6s} {float(np.abs(np.diff(w)).max()) / FS:44.6f}")
+    print(f"  {'pair':10s} {'off':>10s} {placement:>10s} {'excess LSB':>11s}"
+          "   largest 1-sample step at the switch frame")
+    worst = float("-inf")
+    for a_, b_, off, on in _switch_steps(k, placement):
+        ex = (on - off) * FS
+        worst = max(worst, ex)
+        print(f"  {a_}->{b_:6s} {off:10.6f} {on:10.6f} {ex:+11.3f}")
     print("\n  A blocker holds charge across a retune, so the switch must not add a")
-    print("  step of its own: the coupled column must not exceed the uncoupled one.\n")
+    print("  step of its own. The rule is: the coupled step exceeds the uncoupled one")
+    print(f"  by no more than {SWITCH_STEP_TOL_LSB:g} LSB (1 LSB per blocker, two on the bus),")
+    print(f"  the truncation bound. Worst observed excess {worst:+.3f} LSB: "
+          f"{'within' if worst <= SWITCH_STEP_TOL_LSB else 'OVER'} it.\n")
 
     print("  choke (CH chokes OH) and overlap (a hit into a ring)")
     for name, hits, sound in (
@@ -1757,6 +1783,15 @@ def test_a_bus_blocker_is_the_superposition_of_per_path_blockers():
     err = float(np.abs(one - two).max())
     assert err <= 2.0, err                    # <= 1 LSB per blocker, from the shift
     assert float(np.abs(one).max()) > 1000.0
+
+
+def test_the_coupled_switch_step_does_not_exceed_the_uncoupled_by_the_truncation_bound():
+    """#165 s5, asserted rather than printed. The rule is not 'never exceeds':
+    CP->MA exceeds by ~1 LSB, which is the filter's own declared truncation."""
+    rows = _switch_steps(dx.COUPLE_K, dx.COUPLE_BUS)
+    assert [(a, b) for a, b, _, _ in rows] == list(dx.PAIRS)
+    for a_, b_, off, on in rows:
+        assert (on - off) * FS <= SWITCH_STEP_TOL_LSB, (a_, b_, off, on)
 
 
 def test_the_coupling_state_survives_a_hit_and_a_retune_but_not_a_reset():

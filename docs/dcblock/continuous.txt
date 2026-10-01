@@ -1,4 +1,4 @@
-commit fa92b8d2be7f-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+commit 7a3c35f19a01-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
 
 CONTINUOUS PLAYING, placement 'bus', K = 10
 
@@ -13,20 +13,17 @@ CONTINUOUS PLAYING, placement 'bus', K = 10
   RS     last-minus-first of the coupled/uncoupled delta: -0.0008 dB  -- state that wandered would show here
 
   retune mid-ring on a shared circuit (the five exclusive pairs)
-  pair          largest 1-sample step at the switch frame
-  LT->LC        off                                     0.021606
-  LT->LC        bus                                     0.021606
-  MT->MC        off                                     0.062195
-  MT->MC        bus                                     0.062164
-  HT->HC        off                                     0.054993
-  HT->HC        bus                                     0.054932
-  RS->CL        off                                     0.000031
-  RS->CL        bus                                     0.000000
-  CP->MA        off                                     0.038818
-  CP->MA        bus                                     0.038849
+  pair              off        bus  excess LSB   largest 1-sample step at the switch frame
+  LT->LC       0.021606   0.021606      +0.000
+  MT->MC       0.062195   0.062164      -1.000
+  HT->HC       0.054993   0.054932      -2.000
+  RS->CL       0.000031   0.000000      -1.000
+  CP->MA       0.038818   0.038849      +1.000
 
   A blocker holds charge across a retune, so the switch must not add a
-  step of its own: the coupled column must not exceed the uncoupled one.
+  step of its own. The rule is: the coupled step exceeds the uncoupled one
+  by no more than 2 LSB (1 LSB per blocker, two on the bus),
+  the truncation bound. Worst observed excess +1.000 LSB: within it.
 
   choke (CH chokes OH) and overlap (a hit into a ring)
   choke  OH then CH    sub20  -10.36 dB   HF  +0.00 dB   peak  +0.00 dB   clip +0

@@ -361,7 +361,7 @@ class DrumsFx:
         self.tanh = LadderFx(**LADDER_CFG)
         self.floor = floor
         # EXPERIMENTAL (#165). `couple` is OFF by default, so a DrumsFx built
-        # the old way is bit for bit the old block -- test_drums_fx pins that.
+        # the old way is bit for bit the old block -- tools/probes/dc_blocker.py::test_coupling_off_is_the_block_bit_for_bit pins that.
         assert couple in COUPLE_PLACEMENTS, couple
         self.couple, self.couple_k = couple, int(couple_k)
         self.dc_exc = [DcBlockFx(couple_k) for _ in range(modes)]
