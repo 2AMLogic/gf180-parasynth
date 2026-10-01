@@ -49,16 +49,23 @@ which is what makes the red run a measurement rather than an import error:
     python3 -m pytest model/test_nan_invariance.py -q # 334 failed, 150 passed
     git checkout HEAD -- .                            # put it back
 
-What that red run said:
+What that red run said (re-measured on the same commits before the PR, which is
+how the denominators below were corrected from 57 to 58 and "five" to "six" --
+`334 failed, 150 passed` is the figure to match):
 
     6 of 7 audio-entry boundaries asserted nothing       (only #133's load_clip)
-    52 of 57 registered estimators returned a NUMBER     for a signal with ONE
-                                                         NaN injected in it
-    29 of them returned a refusal that still CARRIED a non-finite number in
-       its `detail`, which a caller logging diagnostics prints as data
+    52 of 58 registered estimators returned a NUMBER     for a signal with ONE
+       NaN injected in it -- 50 of them at all three injection positions, and
+       `line_stability` and `psd_slope_db_oct` at some positions and not others
+    29 of the refusals CARRIED a non-finite number in their `detail`, which a
+       caller logging diagnostics prints as data
 
-The five that did refuse refused for an unrelated reason -- an empty band, a fit
-that would not converge -- never because the input was not audio.
+The six that refused at every position refused for an unrelated reason --
+"nothing but silence after the first sample", "too few zero crossings",
+"maximum at the edge of the band", "response never reaches -3 dB", "0 midpoint
+crossings in one period" -- never because the input was not audio. That is the
+point: a NaN does not trip a guard, it makes the signal unrecognisable in some
+OTHER way, and the refusal names the wrong thing.
 
 `test_the_silence_guard_shape_is_what_fails_open` keeps the MECHANISM on record
 permanently, in IEEE arithmetic rather than prose, so that evidence cannot rot
@@ -390,9 +397,102 @@ def test_the_table_covers_every_signal_ingesting_function():
         f"EXEMPT why a non-finite value in its input is by design (#134).")
 
 
+#: Public functions in `audio_measure` that convert an array argument
+#: THEMSELVES -- `np.asarray(...)` rather than `_as_float(...)` -- and are
+#: deliberately not in `ESTIMATORS`, with the reason.
+#:
+#: **This table exists because of `longest_plateau`.** It takes audio, it was
+#: not in `_signal_ingesting_functions()` (it never calls `_as_float`, by
+#: design: it is a run-length question and forcing float64 would change what it
+#: measures), and it was found only because somebody happened to write it into
+#: `ESTIMATORS` by hand. The completeness test above could not have found it,
+#: because that test's definition of "ingests a signal" IS "calls `_as_float`".
+#: One class of estimator was therefore outside the property's reach, and the
+#: single historical example of a miss was in exactly that class.
+ASARRAY_EXEMPT: dict[str, str] = {
+    "nonfinite_report": (
+        "it is the finiteness check itself -- the one function here whose whole "
+        "job is to be handed non-finite values and describe them, so refusing "
+        "them would make it unable to answer its own question"),
+    "event_slices": (
+        "its argument is a boolean GATE, not audio: the caller has already "
+        "reduced a signal to above-threshold/below-threshold, and a bool array "
+        "has no NaN for this property to find"),
+}
+
+#: Array-conversion calls that mean "this function is taking raw data in".
+_ARRAY_CONVERSIONS = ("asarray", "asanyarray", "atleast_1d", "asfarray")
+
+
+def _self_converting_functions() -> set[str]:
+    """Public top-level functions that convert an array argument with numpy
+    directly and never call `_as_float` -- i.e. that take raw data in WITHOUT
+    going through the module's boundary."""
+    out = set()
+    for node in _module_tree().body:
+        if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):
+            continue
+        calls = [s for s in ast.walk(node) if isinstance(s, ast.Call)]
+        if any(getattr(c.func, "id", "") == "_as_float" for c in calls):
+            continue
+        if any(isinstance(c.func, ast.Attribute)
+               and c.func.attr in _ARRAY_CONVERSIONS for c in calls):
+            out.add(node.name)
+    return out
+
+
+def test_the_table_also_covers_functions_that_bypass_as_float():
+    """The other half of completeness, and the half that `longest_plateau`
+    proves is needed.
+
+    A function that does its own `np.asarray` is outside `_as_float`'s boundary
+    by construction, so neither the boundary check nor the completeness test
+    above can see it. Each one must therefore be registered in `ESTIMATORS` --
+    where the dynamic NaN property tests it -- or named in `ASARRAY_EXEMPT`
+    with a reason.
+
+    START RED, as measured on this tree: deleting the `longest_plateau` entry
+    from `ESTIMATORS` turns this test red naming `['longest_plateau']`, and
+    deleting its `require_finite` call turns the three NaN property tests red
+    for it. The two halves are independent, which is why both exist."""
+    registered = set(ESTIMATORS) | set(EXEMPT) | set(ASARRAY_EXEMPT)
+    missing = sorted(_self_converting_functions() - registered)
+    assert not missing, (
+        f"{len(missing)} public function(s) convert an array themselves rather "
+        f"than through `_as_float`, so the module's one boundary does not cover "
+        f"them, and they are in neither ESTIMATORS nor ASARRAY_EXEMPT: "
+        f"{missing}. This is `longest_plateau`'s shape (#134).")
+
+
+def test_no_stale_asarray_exemptions():
+    """An exemption for a function that no longer exists, or that has since been
+    routed through `_as_float`, is a comment pretending to be a check."""
+    live = _self_converting_functions()
+    stale = sorted(set(ASARRAY_EXEMPT) - live)
+    assert not stale, (
+        f"{stale} no longer bypass `_as_float`; drop them from ASARRAY_EXEMPT")
+
+
 def test_every_exemption_states_a_reason():
-    for name, why in EXEMPT.items():
+    for name, why in {**EXEMPT, **ASARRAY_EXEMPT}.items():
         assert len(why.split()) >= 8, f"{name}'s exemption is not an explanation"
+
+
+def test_the_as_float_call_site_counts_in_the_docstring_are_the_real_ones():
+    """`_as_float`'s own docstring quotes "fifty-two" ingestion sites, "forty-six"
+    of which take the check. A number in prose drifts; this is the check that
+    makes it a measurement (CLAUDE.md: a number without the code that produced
+    it is a claim)."""
+    sites = [s for s in ast.walk(_module_tree())
+             if isinstance(s, ast.Call) and getattr(s.func, "id", "") == "_as_float"]
+    off = [s for s in sites
+           if any(k.arg == "finite" and k.value.value is False for k in s.keywords)]
+    doc = am._as_float.__doc__ or ""
+    assert len(sites) == 52 and len(off) == 6, (
+        f"{len(sites)} `_as_float` call sites ({len(off)} with finite=False); "
+        f"the docstring and this assertion both say 52 and 6. Update both.")
+    assert "fifty-two" in doc and "forty-six" in doc, (
+        "`_as_float`'s docstring no longer quotes the counts this test pins")
 
 
 def test_the_finite_opt_outs_are_exactly_these():

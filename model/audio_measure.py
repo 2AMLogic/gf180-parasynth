@@ -395,7 +395,11 @@ def _fail(reason: str, **detail) -> Estimate:
 
 def _as_float(x, *, finite: bool = True, what: str = "the signal") -> np.ndarray:
     """Every estimator in this module ingests its signal through here, which is
-    what makes this module's NaN boundary ONE line rather than forty-eight.
+    what makes this module's NaN boundary ONE line rather than fifty-two.
+
+    Fifty-two is the count of `_as_float` call sites in this module, forty-six
+    of which take the check (`model/test_nan_invariance.py` counts both, so the
+    figures in this docstring cannot drift from the file).
 
     `finite=False` is the explicit opt-out, and there are exactly six call
     sites: the dB axis of a measured response curve (`gain_db`), where
@@ -1663,8 +1667,10 @@ def longest_plateau(x) -> int:
     # integer array and on a 2-D one, and forcing float64 would change what it
     # measures. So the module's boundary check is made here explicitly instead.
     # Found by `model/test_nan_invariance.py`, which is the point of that file:
-    # `_as_float` covers forty-eight ingestion sites and this was not one of
+    # `_as_float` covers fifty-two ingestion sites and this was not one of
     # them, and no amount of reading the module would have said so (#134).
+    # `test_the_table_also_covers_functions_that_bypass_as_float` now finds this
+    # SHAPE automatically, so the next one is caught by the suite, not by luck.
     x = np.asarray(x)
     require_finite(x, "the signal")
     if x.size == 0:
