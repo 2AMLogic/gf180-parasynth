@@ -1,0 +1,42 @@
+commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+
+THE SCREEN. phi is the share of a voice's sub-20 Hz energy in the f = 0 bin --
+the part a zero at z = 1 removes exactly. The rest is the onset envelope's own
+skirt, which the blocker only attenuates by |H(f)|. So
+
+    attenuation >= -10 log10(1 - phi)   (floor, from the DC bin alone)
+
+and 6 dB from the DC bin alone needs phi >= 0.749. FLOOR and STEADY are both
+computed from the uncoupled spectrum and the filter's own transfer function,
+with NOTHING rendered; MEASURED is the integer filter run inside the block.
+STEADY is an UPPER bound: a causal filter starting from rest answers the
+clip's opening step with a tail of its own, and that tail is sub-20 Hz energy
+too -- the same 21 ms tail that triples the rimshot's decay. MEASURED must
+land between the two, which is a two-sided check of a model against an
+implementation neither was fitted to.
+
+            phi    floor   steady  measured   slack    K for 6 dB  origin of the sub-20 Hz energy
+                      dB       dB        dB      dB
+  CY     0.8881     9.51    17.61     14.64   +5.13          K=16  a STANDING OFFSET: a blocker removes it
+  RS     0.0430     0.19     2.79      2.78   +2.59           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
+  BD     0.0975     0.45     2.70      2.60   +2.16           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
+  HT     0.0228     0.10     2.66      2.65   +2.55           K=8  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
+  CH     0.3518     1.88    11.69      5.03   +3.15          K=11  the ONSET ENVELOPE'S SKIRT: a blocker cannot remove it
+
+  'K for 6 dB' is the LOWEST corner (largest K) that reaches the
+  required improvement. K is a shift, so these are the only corners the
+  hardware can build, and the circuit's own is K = 10 (7.46 Hz). A voice whose
+  answer is a SMALLER K than that is asking for a corner the circuit does not
+  have, and --cutoff is where what that costs is measured.
+
+  WHAT THE SCREEN COSTS TO BEAT. The same prediction across the corners:
+
+             K=8      K=9     K=10     K=11     K=12     K=13
+  CY       26.88    21.79    17.61    14.27    11.77    10.30
+  RS        9.66     5.44     2.79     1.39     0.68     0.36
+  BD        9.28     5.17     2.70     1.45     0.85     0.58
+  HT        9.49     5.28     2.66     1.28     0.59     0.27
+  CH       21.44    16.25    11.69     7.69     4.57     2.81
+
+  (predicted sub-20 Hz attenuation, dB; --cutoff prints the preservation cost
+   of each of these corners on the same voices)

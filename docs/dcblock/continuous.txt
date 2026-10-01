@@ -1,4 +1,4 @@
-commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
 
 CONTINUOUS PLAYING, placement 'bus', K = 10
 
@@ -8,9 +8,9 @@ CONTINUOUS PLAYING, placement 'bus', K = 10
   CY        7   -13.536   -13.280  +0.256
   CY     last-minus-first of the coupled/uncoupled delta: +0.1941 dB  -- state that wandered would show here
 
-  RS        0   -14.306   -14.522  -0.216
-  RS        7   -14.304   -14.526  -0.222
-  RS     last-minus-first of the coupled/uncoupled delta: -0.0056 dB  -- state that wandered would show here
+  RS        0   -14.293   -14.467  -0.173
+  RS        7   -14.263   -14.437  -0.174
+  RS     last-minus-first of the coupled/uncoupled delta: -0.0008 dB  -- state that wandered would show here
 
   retune mid-ring on a shared circuit (the five exclusive pairs)
   pair          largest 1-sample step at the switch frame
@@ -21,9 +21,9 @@ CONTINUOUS PLAYING, placement 'bus', K = 10
   HT->HC        off                                     0.054993
   HT->HC        bus                                     0.054932
   RS->CL        off                                     0.000031
-  RS->CL        bus                                     0.000031
-  CP->MA        off                                     0.005707
-  CP->MA        bus                                     0.005707
+  RS->CL        bus                                     0.000000
+  CP->MA        off                                     0.038818
+  CP->MA        bus                                     0.038849
 
   A blocker holds charge across a retune, so the switch must not add a
   step of its own: the coupled column must not exceed the uncoupled one.

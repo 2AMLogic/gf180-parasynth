@@ -1,4 +1,4 @@
-commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
 
 IMPROVEMENT AND PRESERVATION, placement 'exc', K = 10 (7.460 Hz)
 
@@ -7,18 +7,29 @@ IMPROVEMENT AND PRESERVATION, placement 'exc', K = 10 (7.460 Hz)
 
                             sub20     body      mid       HF    peak     T20    atk    cent  limits
                            dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
-  CY  (subject)             +0.00    -0.00    +0.00    +0.01   -0.00   +0.00     +0   +0.01  ok
-  RS  (subject)             -0.46    -0.14    +0.10    -0.20   -0.03   +0.00     +0   +2.26  hf_5k_20k_db,centroid_pct
-  BD  (control)             +5.58    +0.24    -0.00    +0.01   +1.17   +0.00    +16   -1.90  peak_dbfs,attack_samp,centroid_pct
-  HT  (control)             -2.52    -0.01    +0.00    -0.03   -0.22   +0.00   +123   +0.14  attack_samp
-  CH  (control)             +0.00    -0.13    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok
+  CY  (subject)             +0.00    -0.00    +0.00    +0.01   -0.00   +0.00     +0   +0.01  ok   [res-limited: attack_samp]
+  RS  (subject)             -0.25    -0.13    -0.04    -0.04   -0.08   +0.00     +0   +1.13  centroid_pct   [res-limited: t20_ms_pct]
+  BD  (control)             +5.58    +0.24    -0.00    +0.01   +1.17   +0.00    +10   -0.54  peak_dbfs   [res-limited: attack_samp]
+  HT  (control)             -2.52    -0.01    +0.00    -0.03   -0.22   +0.00     +0   +0.03  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  CH  (control)             +0.00    -0.13    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok   [res-limited: body_20_700_db,t20_ms_pct]
+
+  THE GATE THAT WAS WIRED WRONG, both ways, so the change is on the page.
+  A GLOBAL spectral centroid is not a preservation gate for a DC blocker:
+  removing sub-20 Hz energy raises it mechanically. Qualified >= 20 Hz.
+
+                centroid >=20 Hz (the GATE)    centroid global (diagnostic)
+  CY              8176.2 ->    8176.6 Hz  +0.01%      7489.3 ->    7490.2 Hz  +0.01%
+  RS               683.7 ->     691.5 Hz  +1.13%       603.0 ->     612.1 Hz  +1.51%
+  BD                50.3 ->      50.0 Hz  -0.54%        50.0 ->      49.1 Hz  -1.90%
+  HT               188.3 ->     188.3 Hz  +0.03%       187.8 ->     188.1 Hz  +0.14%
+  CH             12323.6 ->   12322.5 Hz  -0.01%     12323.5 ->   12322.4 Hz  -0.01%
 
   NORMALISED SHARES (%% of clip energy) -- diagnostic only, never a verdict
 
                        body %            mid %             HF %   HF share
               before    after  before    after  before    after
   CY            0.51     0.51    6.77     6.76   88.04    88.06   LF removal, NOT new HF
-  RS           76.47    76.94    8.16     8.69    0.04     0.04   absolute HF moved
+  RS           64.12    63.99   24.19    24.64    0.16     0.16   LF removal, NOT new HF
   BD           99.41    98.01    0.00     0.00    0.00     0.00   LF removal, NOT new HF
   HT           99.73    99.84    0.01     0.01    0.00     0.00   LF removal, NOT new HF
   CH            0.00     0.00    0.11     0.11   98.55    98.55   LF removal, NOT new HF
@@ -26,9 +37,9 @@ IMPROVEMENT AND PRESERVATION, placement 'exc', K = 10 (7.460 Hz)
 VERDICT (DR 0015: property vector, no aggregate)
 
   CY   improvement >= 6.0 dB sub-20: NOT MET (+0.00 dB)   preservation: ok
-  RS   improvement >= 6.0 dB sub-20: NOT MET (-0.46 dB)   preservation: BROKE hf_5k_20k_db,centroid_pct
-  BD   control, must be preserved: BROKE peak_dbfs,attack_samp,centroid_pct
-  HT   control, must be preserved: BROKE attack_samp
+  RS   improvement >= 6.0 dB sub-20: NOT MET (-0.25 dB)   preservation: BROKE centroid_pct
+  BD   control, must be preserved: BROKE peak_dbfs
+  HT   control, must be preserved: ok
   CH   control, must be preserved: ok
 
   NOT ACCEPTED against the limits declared in this file.

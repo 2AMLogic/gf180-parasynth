@@ -1,4 +1,4 @@
-commit 8e7821a32805-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
+commit e3910abb3eb3-dirty  SR 48000  render 0.60s  gain 0.45  K 10 (7.460 Hz)
 
 DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
 
@@ -16,6 +16,18 @@ DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
     attack_samp        samples       2.00    2.00
     centroid_pct       %             1.00    1.00
     n_clip             count       must not increase
+
+  centroid_pct is the >= 20 Hz centroid (CENTROID_FLOOR_HZ), not a global
+  one: a global centroid rises MECHANICALLY when sub-20 Hz energy is
+  removed, so the gate would read the candidate's intended effect as a
+  failure. Qualified in closed form by dc_centroid_gate_qualification.py.
+
+  attack_samp is the first arrival within 1.0 dB of the peak, not
+  argmax(|x|): on a plateaued voice argmax answers a lobe RANK ORDER.
+
+  Each allowance is read against the LARGER of itself and the instrument's
+  own 1-LSB resolution for that property on that voice (--resolution). A
+  gate below the resolution is marked [res-limited] wherever it is used.
 
   A normalised band SHARE is never a verdict; `share_rise_is_lf_removal`
   refuses one whose absolute band energy did not move.

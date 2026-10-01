@@ -277,6 +277,10 @@ def peak_margin_db(x, order=8):
 # the BD still jumps 460 samples, at 1.0 and 2.0 dB every voice is stable to
 # <= 6 samples. The verdict does not depend on the value above 1 dB.
 ATTACK_TOL_DB = 1.0
+ATTACK_TOL_SWEEP = (0.5, 1.0, 2.0)   # the swept values; `resolution_of` takes
+                                     # the baseline's spread across them as the
+                                     # estimator's own resolution, and
+                                     # `report_resolution` prints the sweep
 
 
 def attack_samples(x, tol_db=None, frac=0.02):
@@ -415,7 +419,16 @@ def resolution_of(x, n_clip=0, patterns=DITHER_PATTERNS):
     satisfiable on a voice whose entire decay is four frames. A QUANTISED
     estimator's resolution is its step size, so one frame as a percent of the
     baseline is folded in. On the RS (T20 = 8 ms) that is 25 %; on the CY
-    (460 ms) 0.43 %."""
+    (460 ms) 0.43 %.
+
+    `attack_samp` IS THE SAME SHAPE OF PROBLEM and dither cannot see it either.
+    The estimate is referenced to the peak through `ATTACK_TOL_DB`, so on a
+    voice whose peak is a plateau the answer depends on that tolerance: the BD's
+    baseline reads 376 / 355 / 328 samples at 0.5 / 1.0 / 2.0 dB. An estimator
+    whose answer moves 48 samples when an arbitrary knob moves cannot resolve
+    6 samples, so the SPREAD ACROSS THE DECLARED SWEEP, measured on the baseline
+    alone, is the resolution. On the CY it is 7 samples, on the CH 0, and the
+    declared 2-sample allowance stands wherever the spread is below it."""
     base = measure(x, n_clip)
     out = {p: 0.0 for p in RESOLUTION_PROPS}
     x64 = np.asarray(x, np.int64)
@@ -430,7 +443,9 @@ def resolution_of(x, n_clip=0, patterns=DITHER_PATTERNS):
     t20 = base["t20_ms"]
     if not np.isnan(t20) and t20 > 0:
         out["t20_ms_pct"] = max(out["t20_ms_pct"], 100.0 * T20_FRAME_MS / t20)
-    out["attack_samp"] = max(out["attack_samp"], 1.0)   # an integer index
+    a = [attack_samples(x, t) for t in ATTACK_TOL_SWEEP]
+    out["attack_samp"] = max(out["attack_samp"], 1.0,   # 1: an integer index
+                             float(max(a) - min(a)))
     return out
 
 
@@ -713,7 +728,7 @@ def report_screen(k=None, ks=(8, 9, 10, 11, 12, 13)):
     return out
 
 
-def report_resolution(sweep=(0.5, 1.0, 2.0)):
+def report_resolution(sweep=ATTACK_TOL_SWEEP):
     """**What this instrument can see, before any gate is allowed a verdict.**
 
     CLAUDE.md: run a gate against the current state before committing it. Three
