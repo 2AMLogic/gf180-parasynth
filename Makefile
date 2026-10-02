@@ -405,6 +405,15 @@ verify-full:
 ## plus the two start-red stub runs. It shipped in PR #507 wired to nothing,
 ## which is the state this target exists to prevent: a control nobody runs is
 ## indistinguishable from a control that passes. Pure Python, no corpus, ~3 s.
+##
+## permitted_differences.py --controls (#519) is the same shape for the OTHER
+## half of #158: nine injected defects against a false-alarm suite, each
+## declaring the rows it must turn red so a control that reds nothing and a
+## control that reds the wrong row are both failures. It is ALSO in the broad
+## pytest job via tools/probes/test_permitted_differences.py -- deliberately
+## both, because `make verify` is what CI runs and this target is where a
+## reader looks for the injected-defect inventory. Pure Python, no corpus,
+## ~35 s.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
@@ -495,7 +504,8 @@ controls:
 	  "$(PY) tools/sensitivity.py check --inject GRID_CHERRY_PICKED --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject SHIPPED_OFF_GRID --expect fail" \
 	  "$(PY) tools/sensitivity.py check --inject PREDICTION_WRONG --expect fail" \
-	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused"
+	  "$(PY) tools/sensitivity.py check --inject RULE_UNSTATED --expect refused" \
+	  "$(PY) tools/probes/permitted_differences.py --controls"
 
 test:
 	@$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q
