@@ -413,7 +413,15 @@ verify-full:
 ## pytest job via tools/probes/test_permitted_differences.py -- deliberately
 ## both, because `make verify` is what CI runs and this target is where a
 ## reader looks for the injected-defect inventory. Pure Python, no corpus,
-## ~35 s.
+## 49 s measured beside one other job on 8 cores.
+##
+## Its two slow modes are NOT here and are not meant to be: `--false-alarm-rate
+## 50` (186 s alone) and `--safety-sweep 20` (765 s beside two other jobs; it is
+## seven whole false-alarm runs plus a detection pass) are the measurements BEHIND the
+## committed thresholds, quoted in the probe's docstring, and the pytest file
+## re-runs a cheap decisive slice of each on every pass. A three-minute
+## measurement that cannot change without a threshold changing does not belong
+## in a per-push target.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \

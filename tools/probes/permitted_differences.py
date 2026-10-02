@@ -6,6 +6,7 @@ the estimator, and differences that are NOT permitted must still move it.
     python3 tools/probes/permitted_differences.py --calibrate      # thresholds
     python3 tools/probes/permitted_differences.py --inject BLANKET_INVARIANCE
     python3 tools/probes/permitted_differences.py --false-alarm-rate 50
+    python3 tools/probes/permitted_differences.py --safety-sweep 20
 
 #158: "**A detector that fires on every difference is useless.** Leading
 silence must not move an onset-relative decay; polarity reversal must not move
@@ -60,6 +61,53 @@ the shipped suite and the false-alarm check draw from (`CALIBRATE_BASE` vs
     calibration report prints the measured margin between the floor and the
     smallest difference the draws actually produced, so a reader can see
     whether the floor is doing any work.
+
+AND WHY `SAFETY` IS 4, SWEPT RATHER THAN ARGUED
+-----------------------------------------------
+`SAFETY` is the one constant a per-row `how` string cannot justify, because
+every calibrated threshold inherits it. `--safety-sweep 20` re-derives the five
+calibrated thresholds at each factor and measures BOTH costs of the choice on
+360 row-level comparisons apiece -- false alarms, and whether the row still
+catches its own injected defect. False alarms alone would recommend infinity:
+
+  safety   red rows   rate    red runs   injected defects still caught
+    0.5     58/360   16.11%     20/20    5/5
+    1        3/360    0.83%      3/20    5/5
+    2        0/360    0.00%      0/20    5/5
+    4        0/360    0.00%      0/20    5/5   <- shipped
+    8        0/360    0.00%      0/20    3/5
+   64        0/360    0.00%      0/20    3/5
+  512        0/360    0.00%      0/20    3/5
+
+So the working window is 2-4x and it is bounded on both sides by measurement:
+below it the suite false-alarms, above it two rows stop detecting. 4 is the
+conservative end of a two-element window, not a number somebody liked.
+
+NOT in `docs/sensitivity/registry.json`, deliberately and recorded here so the
+decision is visible rather than missed: that gate re-extracts a grid from a
+committed fixed-width-table artefact and checks it against an independent
+prediction, which is the right shape for a synthesis dial whose measurement
+costs an hour. `SAFETY`'s measurement costs minutes and is re-RUN by
+`test_safety_is_bounded_from_below_by_false_alarms` and
+`test_safety_is_bounded_from_above_by_lost_detection` on every pytest pass, so
+a transcription gate on top of it would be the weaker of the two checks.
+`docs/sensitivity-sweeps.md`'s own "what this does not catch" makes the same
+distinction for the per-feature sweep instruments.
+
+ONE ROW BINDS BOTH ENDS, which is the part worth carrying forward:
+`noise/psd_slope` is the only row that false-alarms at 1x (3 runs of 20, every
+one of them that row) and one of the two that stops detecting at 8x. A Welch
+slope over a 2.0 s record is the least averaged estimate in the table, and the
+window is narrow there for that reason rather than for a reason about SAFETY.
+
+The pair that bounds it from above is worth knowing: at 4x,
+`SINGLE_WINDOW_SLOPE`'s residual on `noise/psd_slope` is 0.629 dB/oct against a
+0.6 threshold -- a margin of 1.05x, the thinnest in the table, and the reason
+8x loses it. `SHORT_WINDOW_SPECTRUM` on `noise/centroid` is 1.87x. The other
+three are 1,300x (`noise/decay_tau`), 11,000x (`phase/band_ratio_db`) and
+16,000x (`phase/centroid`). That thinness is detected rather than silent: a
+recalibration that pushed the slope threshold past its defect turns
+`make controls` red, which is what that target is for.
 
 Stochastic rows (independent noise realisation, free-running phase, and every
 row whose transform draws its own magnitude) are run over `--trials` draws and
@@ -587,7 +635,7 @@ def _t20_from_array_start(s: Signal) -> Meas:
     below = np.nonzero(curve <= -25.0)[0]
     if not len(below):
         return Meas(None, False, "curve never reaches -25 dB")
-    return Meas(float(below[0]) / s.sr * (20.0 / 20.0))
+    return Meas(float(below[0]) / s.sr)
 
 
 def est_onset_ms(ctx: Ctx, s: Signal) -> Meas:
@@ -666,10 +714,6 @@ def est_accent_ratio_db(ctx: Ctx, s: Signal) -> Meas:
     if ctx.hooked("PER_STRIKE_NORMALISATION"):
         # What `run_case.prepare` does per RECORD, applied per STRIKE: the
         # accent is normalised away and the test measures nothing.
-        for seg in (a, b):
-            pk = float(np.abs(seg).max())
-            if pk > 0:
-                seg = seg / pk
         a = a / max(float(np.abs(a).max()), 1e-30)
         b = b / max(float(np.abs(b).max()), 1e-30)
     ra, rb = am.rms(a), am.rms(b)
@@ -1142,9 +1186,9 @@ INJECTIONS: dict[str, Injection] = {
         tuple(c.cid for c in CASES)),
 }
 
-#: What each injection must turn red. For six of the seven that is the rows
+#: What each injection must turn red. For eight of the nine that is the rows
 #: whose pipeline it hooks; for BLANKET_INVARIANCE it is every row where a
-#: difference is NOT permitted, because a zero delta satisfies every
+#: difference is NOT permitted, because a no-difference reading satisfies every
 #: permitted-difference check by construction.
 EXPECT_RED: dict[str, tuple[str, ...]] = {
     name: (NOT_PERMITTED if name == "BLANKET_INVARIANCE" else inj.targets)
@@ -1275,8 +1319,9 @@ def clopper_pearson_upper(k: int, n: int, alpha: float = 0.05) -> float:
 # ===========================================================================
 # reporting
 # ===========================================================================
-def run_suite(trials: int, seed_base: int, inject: str | None) -> list[RowResult]:
-    return [run_case(c, trials, seed_base, inject) for c in CASES]
+def run_suite(trials: int, seed_base: int, inject: str | None,
+              cases: list[Case] | None = None) -> list[RowResult]:
+    return [run_case(c, trials, seed_base, inject) for c in (cases or CASES)]
 
 
 def print_suite(rows: list[RowResult], trials: int, inject: str | None) -> None:
@@ -1285,7 +1330,15 @@ def print_suite(rows: list[RowResult], trials: int, inject: str | None) -> None:
           + (f", inject {inject}" if inject else "") + ")")
     print("=" * 100)
     print(f"{'row':<28}{'policy':<13}{'unit':<10}{'thresh':>10}{'mean':>10}"
-          f"{'p95':>10}{'binding':>10}{'exc':>5}{'ref':>5}  verdict")
+          f"{'p95':>10}{'binding':>10}{'exc':>5}{'ref':>5}{'exc<=':>8}  verdict")
+    print("   (mean / p95 / binding are over the row's own trials; `exc<=` is the "
+          "one-sided 95 %")
+    print("    Clopper-Pearson upper bound on this row's per-trial exceedance rate "
+          "-- with 0 of 12")
+    print("    exceedances it is 22 %, which is what 12 trials can say and is "
+          "reported rather than")
+    print("    rounded to a single pass. `--false-alarm-rate N` is the same bound "
+          "over N suite runs.")
     last = None
     for r in rows:
         if r.case.transform != last:
@@ -1295,7 +1348,8 @@ def print_suite(rows: list[RowResult], trials: int, inject: str | None) -> None:
               f"{r.case.policy.threshold:>10.4g}"
               f"{(np.mean(r.residuals) if r.residuals else float('nan')):>10.4g}"
               f"{r.stat(95.0):>10.4g}{r.worst:>10.4g}"
-              f"{r.exceedances:>5}{r.refusals:>5}  {r.verdict}")
+              f"{r.exceedances:>5}{r.refusals:>5}"
+              f"{r.exceedance_upper * 100:>7.1f}%  {r.verdict}")
         if r.verdict != PASS and r.reasons:
             for why in sorted(set(r.reasons))[:3]:
                 print(f"        refused: {why}")
@@ -1433,6 +1487,150 @@ def run_controls(trials: int, seed_base: int) -> tuple[int, list[dict]]:
 # ===========================================================================
 # false-alarm rate
 # ===========================================================================
+def count_false_alarms(reps: int, trials: int,
+                       cases: list[Case]) -> tuple[int, int, int]:
+    """Red rows, refused rows and red RUNS over `reps` suite runs on FPR_BASE.
+
+    The counting half of `false_alarm_rate`, over an arbitrary case list and
+    without the per-row report. `safety_sweep` calls it rather than reimplementing
+    the count, so the row it prints for the shipped factor is the same
+    measurement `--false-alarm-rate` prints, on the same seeds."""
+    red = ref = red_runs = 0
+    for rep in range(reps):
+        rows = run_suite(trials, FPR_BASE + rep * 1000, None, cases)
+        n = sum(1 for r in rows if r.verdict == FAIL)
+        red += n
+        ref += sum(1 for r in rows if r.verdict == REFUSED)
+        red_runs += 1 if n else 0
+    return red, ref, red_runs
+
+
+def scaled_cases(safety: float) -> list[Case]:
+    """Every CALIBRATED threshold re-derived at a different safety factor.
+
+    `tightness="floor"` rows are left alone on purpose: a resolution floor is
+    not SAFETY x anything, so scaling it would sweep a parameter it does not
+    depend on and would make the sweep's own rows incomparable."""
+    out = []
+    for c in CASES:
+        if c.policy.tightness == "calibrated" and np.isfinite(c.policy.calibrated):
+            pol = Policy(c.policy.kind, _signif(c.policy.calibrated * safety),
+                         f"safety-sweep at {safety:g}x", c.policy.tightness,
+                         c.policy.predict, c.policy.calibrated)
+            out.append(Case(c.cid, c.transform, c.fixture, c.estimator, c.unit,
+                            c.fn, pol, c.permitted, c.not_permitted, c.null_delta))
+        else:
+            out.append(c)
+    return out
+
+
+#: The rows SAFETY actually moves, and the (injection, row) pairs that bound it
+#: from ABOVE: a threshold can always be made to stop false-alarming by raising
+#: it, so a sweep that only measures false alarms recommends infinity.
+CALIBRATED_ROWS = tuple(c.cid for c in CASES if c.policy.tightness == "calibrated")
+DETECTION_PAIRS = tuple((name, cid) for name, inj in INJECTIONS.items()
+                        if name != "BLANKET_INVARIANCE"
+                        for cid in inj.targets if cid in CALIBRATED_ROWS)
+
+
+def detection_at(cases: list[Case], trials: int, seed_base: int) -> int:
+    """How many of the `DETECTION_PAIRS` still go red with this case list.
+
+    The other half of the sweep. `--controls` asks this question of the shipped
+    table; here it is asked of every candidate table, so the factor is bounded
+    from both sides by measurement instead of from one side by measurement and
+    the other by taste."""
+    by_id = {c.cid: c for c in cases}
+    return sum(1 for name, cid in DETECTION_PAIRS
+               if run_case(by_id[cid], trials, seed_base, name).verdict == FAIL)
+
+
+def safety_sweep(reps: int, trials: int,
+                 factors=(0.5, 1.0, 2.0, 4.0, 8.0, 64.0, 512.0)) -> tuple[int, dict]:
+    """WHY SAFETY IS 4 AND NOT A NUMBER SOMEBODY LIKED.
+
+    `SAFETY` is the one constant in this file that a per-row `how` string
+    cannot justify: every calibrated threshold is `SAFETY x` its worst
+    calibration draw, so the whole table inherits it. CLAUDE.md's rule is to
+    sweep a parameter before arguing about it, so this mode re-derives the five
+    calibrated thresholds at each factor and measures the false-alarm rate of
+    each resulting table on the FPR_BASE stream -- the stream none of them was
+    calibrated on.
+
+    What it shows is the shape the argument needs, and it needs BOTH columns.
+    False alarms alone recommend infinity: any threshold stops false-alarming
+    if you raise it far enough. So each candidate table is also handed the
+    injected defects of the rows SAFETY moves (`DETECTION_PAIRS`), and the
+    factor is bounded from above by the first one that stops catching them."""
+    print("=" * 100)
+    print(f"SAFETY SWEEP -- {reps} suite runs x {trials} trials at each factor, "
+          f"on FPR_BASE")
+    print("=" * 100)
+    print(f"Only the {len(CALIBRATED_ROWS)} CALIBRATED thresholds move; the "
+          f"{len(CASES) - len(CALIBRATED_ROWS)} resolution floors do not")
+    print("depend on SAFETY and are held fixed. `shipped` marks the committed "
+          "factor. `caught` is")
+    print(f"how many of the {len(DETECTION_PAIRS)} (injected defect, calibrated "
+          f"row) pairs still go red:")
+    print("a table with no false alarms and no detection is the vacuous gate, not "
+          "a good one.")
+    print(f"{'safety':>8}{'red rows':>10}{'of':>8}{'rate':>9}{'upper95':>10}"
+          f"{'red runs':>10}{'refused':>9}{'caught':>9}")
+    rows = []
+    for k in factors:
+        cases = scaled_cases(k)
+        red, ref, red_runs = count_false_alarms(reps, trials, cases)
+        caught = detection_at(cases, trials, VALIDATE_BASE)
+        n = reps * len(cases)
+        print(f"{k:>8g}{red:>10}{n:>8}{red / n:>9.2%}"
+              f"{clopper_pearson_upper(red, n):>10.2%}{red_runs:>10}{ref:>9}"
+              f"{f'{caught}/{len(DETECTION_PAIRS)}':>9}"
+              + ("   <- shipped" if k == SAFETY else ""))
+        rows.append(dict(safety=k, red_rows=red, comparisons=n, rate=red / n,
+                         upper95=clopper_pearson_upper(red, n),
+                         red_runs=red_runs, refused=ref, caught=caught,
+                         detection_pairs=len(DETECTION_PAIRS)))
+    shipped = [r for r in rows if r["safety"] == SAFETY]
+    rc, notes = 0, []
+    if not shipped:
+        notes.append(f"the shipped factor {SAFETY:g} is not in the sweep")
+        rc = 1
+    else:
+        if shipped[0]["red_rows"]:
+            notes.append(f"the shipped factor {SAFETY:g} false-alarms "
+                         f"{shipped[0]['red_rows']} times")
+            rc = 1
+        if shipped[0]["caught"] != len(DETECTION_PAIRS):
+            notes.append(f"the shipped factor {SAFETY:g} catches only "
+                         f"{shipped[0]['caught']}/{len(DETECTION_PAIRS)} of its "
+                         f"own injected defects")
+            rc = 1
+    if not any(r["red_rows"] for r in rows):
+        # A sweep where nothing ever reds has not located the lower cliff, so it
+        # has not shown that SAFETY is doing anything. That is a failure of the
+        # SWEEP, not of the table: widen the factors.
+        notes.append("NO factor false-alarmed, so this sweep does not bound "
+                     "SAFETY from below -- widen `factors` downward")
+        rc = 1
+    if all(r["caught"] == len(DETECTION_PAIRS) for r in rows):
+        # Not a failure: it is a fact about these defects, which are gross
+        # compared with the estimators' own spread. It is printed because the
+        # alternative is a reader assuming the upper bound was located.
+        notes.append(f"every factor up to {max(factors):g}x still catches all "
+                     f"{len(DETECTION_PAIRS)} injected defects, so this sweep "
+                     f"bounds SAFETY from below only; the upper bound on margin "
+                     f"is outside the range swept")
+    if rc == 0:
+        notes.insert(0, f"the shipped factor {SAFETY:g} false-alarms 0 times, "
+                        f"catches all {len(DETECTION_PAIRS)} injected defects, "
+                        f"and at least one smaller factor false-alarms")
+    print()
+    for n_ in notes:
+        print(f"   {n_}")
+    return rc, dict(reps=reps, trials=trials, shipped_safety=SAFETY, sweep=rows,
+                    notes=notes)
+
+
 def false_alarm_rate(reps: int, trials: int) -> tuple[int, dict]:
     """Re-run the whole suite `reps` times on fresh seeds and count the reds.
 
@@ -1499,6 +1697,10 @@ def main(argv=None) -> int:
                     help="run every injected control and check its declared red set")
     ap.add_argument("--false-alarm-rate", type=int, default=0, metavar="N",
                     help="re-run the suite N times on fresh seeds and report the rate")
+    ap.add_argument("--safety-sweep", type=int, default=0, metavar="N",
+                    help=f"re-derive the calibrated thresholds at 0.5-8x and "
+                         f"measure each table's false-alarm rate over N suite "
+                         f"runs -- why SAFETY is {SAFETY:g}")
     ap.add_argument("--policies", action="store_true",
                     help="print what each case permits and does not permit")
     ap.add_argument("--json", type=pathlib.Path)
@@ -1514,6 +1716,12 @@ def main(argv=None) -> int:
         return calibrate(a.cal_trials)
     if a.controls:
         rc, report["controls"] = run_controls(a.trials, VALIDATE_BASE)
+        if a.json:
+            a.json.parent.mkdir(parents=True, exist_ok=True)
+            a.json.write_text(json.dumps(report, indent=2))
+        return rc
+    if a.safety_sweep:
+        rc, report["safety_sweep"] = safety_sweep(a.safety_sweep, a.trials)
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(report, indent=2))

@@ -3,14 +3,17 @@
 
     python3 -m pytest tools/probes/test_permitted_differences.py -q
 
-Collected by `make verify`'s broad pytest job (`pytest model/ spec/ tools/ ...`).
-About 90 s, nearly all of it in the nine injected controls and the deterministic
-96-draw calibration replay -- both of which are the point: a suite of
-invariance checks is trivially green if its tolerances are loose, so what has
-to be tested is that each tolerance is tight enough to catch a defect and that
-none of them false-alarms.
+Collected by `make verify`'s broad pytest job (`pytest model/ spec/ tools/ ...`)
+and by CI's `pytest tools/ -q` job (rungs.yml, "every tools/ test, by
+directory"). 51 tests, 89 s measured alone on an 8-core box and 129 s with two
+other jobs beside it, nearly all of it in the nine injected controls and the
+deterministic 96-draw calibration replay -- both of which are the point: a
+suite of invariance checks
+is trivially green if its tolerances are loose, so what has to be tested is
+that each tolerance is tight enough to catch a defect and that none of them
+false-alarms.
 
-Four things are asserted here that the probe cannot assert about itself:
+Five things are asserted here that the probe cannot assert about itself:
 
   1. **Every row states what it permits AND what it does not.** #158 is
      explicit that these differences are "not universally benign", so a row
@@ -26,9 +29,18 @@ Four things are asserted here that the probe cannot assert about itself:
      from the one they were calibrated on. The number quoted in the PR comes
      from `--false-alarm-rate 50`; this file re-measures a smaller N so the
      property is enforced on every run rather than asserted once.
+  5. **The calibration gate itself can go red.** A gate asserted green on the
+     current table is indistinguishable from a gate that cannot fail, so each
+     of its three verdicts -- too tight, vacuous, unsatisfiable floor -- is
+     driven as an input, with the unmutated row as the control.
+  6. **`SAFETY = 4` is inside a measured window.** Removing the margin
+     false-alarms; doubling it loses two of the five injected defects. Both
+     ends are re-measured here, not transcribed from the docstring's
+     `--safety-sweep` table.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 import pathlib
 import sys
@@ -230,6 +242,59 @@ def test_every_calibrated_threshold_records_the_measurement_behind_it():
             f"{c.cid}: `calibrated=` does not record the draw the threshold came from"
 
 
+# --- the calibration gate ships with the inputs that defeat it -------------
+# `test_the_committed_thresholds_are_satisfiable_and_not_vacuous` asserts the
+# gate is GREEN on the current table, which on its own is also what a gate that
+# can never go red looks like (docs/verification-rules.md 8, and the three
+# unsatisfiable gates CLAUDE.md records being written here in one day). So each
+# of the three verdicts the gate can return is driven as an input: a threshold
+# below the recommendation, one far above it, and a resolution floor on the
+# wrong side of its binding draw. Eight draws on the 0.5 s `asym` fixture
+# rather than 96, because what is under test is the GATE, not the table.
+GATE_TRIALS = 8
+
+
+def _one_row(cid: str, **policy_overrides):
+    c = pd.CASE_BY_ID[cid]
+    return [dataclasses.replace(c, policy=dataclasses.replace(c.policy,
+                                                              **policy_overrides))]
+
+
+def test_the_calibration_gate_is_green_on_the_rows_it_is_handed_unmutated(monkeypatch,
+                                                                          capsys):
+    """The control for the three below: the same row, same draw count, committed
+    threshold untouched. Without this, a gate that returned 1 unconditionally
+    would pass all three."""
+    monkeypatch.setattr(pd, "CASES", _one_row("phase/centroid"))
+    rc = pd.calibrate(GATE_TRIALS)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    monkeypatch.setattr(pd, "CASES", _one_row("phase/sample_rms_db"))
+    assert pd.calibrate(GATE_TRIALS) == 0, capsys.readouterr().out
+
+
+@pytest.mark.parametrize("cid,overrides,state,why", [
+    # A PERMITTED threshold tightened under SAFETY x the worst draw: it would
+    # false-alarm, and an unsatisfiable gate is worse than no gate.
+    ("phase/centroid", dict(threshold=1e-12), "TIGHT", "below the recommendation"),
+    # The same threshold loosened past SLACK_FACTOR x: it cannot fail, which is
+    # the defect this whole file exists to rule out.
+    ("phase/centroid", dict(threshold=1.0), "SLACK", "vacuous"),
+    # A MOVES floor moved above the smallest difference the transform produces:
+    # the row would red on a difference it is supposed to see.
+    ("phase/sample_rms_db", dict(threshold=50.0), "UNSATISFIABLE", "false-alarm"),
+])
+def test_the_calibration_gate_reds_a_threshold_that_defeats_it(
+        monkeypatch, capsys, cid, overrides, state, why):
+    monkeypatch.setattr(pd, "CASES", _one_row(cid, **overrides))
+    rc = pd.calibrate(GATE_TRIALS)
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert state in out, out
+    assert why in out, out
+    assert "every committed threshold is satisfiable" not in out
+
+
 # ---------------------------------------------------------------------------
 # 6. and does not produce a steady stream of false regressions
 # ---------------------------------------------------------------------------
@@ -245,3 +310,58 @@ def test_the_suite_does_not_false_alarm_on_fresh_seeds(capsys):
     assert summary["false_alarms"] == 0, summary["per_case"]
     assert not summary["refused"], summary["refused"]
     assert summary["comparisons"] == 8 * len(pd.CASES)
+
+
+# ---------------------------------------------------------------------------
+# 7. and SAFETY is where it is for a measured reason, in both directions
+# ---------------------------------------------------------------------------
+def test_safety_is_bounded_from_below_by_false_alarms():
+    """`SAFETY = 4` is inherited by every calibrated threshold, so it gets the
+    sweep CLAUDE.md asks for rather than a sentence. The full table is in the
+    probe's docstring (`--safety-sweep 20`, 360 comparisons per factor); this
+    is the cheap regression on the fact that makes 4 a choice rather than a
+    taste: with the margin removed the suite false-alarms on a seed stream it
+    was not calibrated on, and at 4x it does not.
+
+    WHY 0.5x AND NOT 1x, WHICH IS THE MORE INTERESTING FACTOR. This assertion
+    was written against 1x first and FAILED at `reps=3`: 1x reds on 3 of 20
+    runs and the first is run 12, so a 3-run regression on it would have been
+    an unsatisfiable gate -- the exact mistake CLAUDE.md records being made
+    three times in one day, caught here by running the gate before committing
+    it. 0.5x reds on run 0 and on all 20, so two runs are decisive. The 1x
+    figure stays a `--safety-sweep` number, where it is measured over enough
+    runs to be one."""
+    bare, _, red_runs = pd.count_false_alarms(2, QUICK, pd.scaled_cases(0.5))
+    shipped, _, _ = pd.count_false_alarms(2, QUICK, pd.scaled_cases(pd.SAFETY))
+    assert bare > 0 and red_runs == 2, \
+        f"half the margin no longer false-alarms on either run ({bare} red " \
+        f"rows, {red_runs} red runs), so this no longer bounds SAFETY from " \
+        f"below -- re-run --safety-sweep and re-derive the window"
+    assert shipped == 0, shipped
+
+
+def test_safety_is_bounded_from_above_by_lost_detection():
+    """The half a false-alarm measurement cannot give you: raising a threshold
+    always stops the false alarms, so the upper bound has to come from the
+    injected defects. At 4x all five (defect, calibrated row) pairs still go
+    red; at 8x two of them do not, and `noise/psd_slope` -- whose defect sits
+    only 1.05x above its committed threshold -- is one of them."""
+    assert pd.detection_at(pd.scaled_cases(pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
+        == len(pd.DETECTION_PAIRS)
+    assert pd.detection_at(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
+        < len(pd.DETECTION_PAIRS), \
+        "doubling SAFETY no longer loses any injected defect, so the sweep no " \
+        "longer bounds it from above and the shipped factor is unconstrained"
+
+
+def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
+    """A resolution floor is not SAFETY x anything. If the sweep scaled one, it
+    would be reporting a sensitivity to a parameter the row does not have."""
+    for a, b in zip(pd.CASES, pd.scaled_cases(100.0)):
+        assert a.cid == b.cid
+        if a.policy.tightness == "floor":
+            assert a.policy.threshold == b.policy.threshold, a.cid
+        else:
+            assert b.policy.threshold > a.policy.threshold, a.cid
+    assert len(pd.CALIBRATED_ROWS) == 5, pd.CALIBRATED_ROWS
+    assert len(pd.DETECTION_PAIRS) == 5, pd.DETECTION_PAIRS
