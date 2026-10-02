@@ -35,6 +35,30 @@ R3  A pack whose `lineage_status` is `documented` must have an established
     unit with an open field, not an undocumented lineage. Conflating the two
     would make the gate unsatisfiable on a pack whose identity is the best in
     the corpus.)
+
+    R3 is tested two ways, because the first way was itself defeated by a
+    one-word variant of the input it was written to catch (PR #523 review):
+    the original rule asked only whether `unit` held the manifest's verbose
+    `unknown_marker`, so `unit: "unknown"` or `unit: "TBD"` with
+    `lineage_status: "documented"` passed clean -- and with
+    `roles: ["held-out-validation"]` a pack with no established unit backed a
+    verdict with the checker green. So:
+
+      * R3a DENY -- `unit` may not be any recognised way of saying "I have not
+        established this" (`UNESTABLISHED_TOKENS` below, plus the canonical
+        marker). A deny-list is defeatable by the next synonym, which is why
+        it is only half the rule; and
+      * R3b POSITIVE IDENTITY -- a `documented` unit must actually IDENTIFY a
+        machine: a serial number (the form every documented pack here uses),
+        or, when identity is pinned some other way, a written
+        `unit_identity_why` saying what pins it. A positive assertion cannot
+        be routed around by a phrasing the deny-list has not met yet, which is
+        the half that closes the hole.
+
+    `unit_identity_why` is the residual weakness and it is stated rather than
+    hidden: an author can write a sentence there and satisfy R3b without a
+    serial. What the rule guarantees is that doing so is a visible, written
+    claim in the diff, not a blank field that reads as established.
 R4  Every `roles` entry is one of the three group names.
 R5  WEAK EVIDENCE (#158), and it has TWO tiers because the corpus does:
       * `unknown` -- nothing is established. `analyzer-development` only.
@@ -59,6 +83,10 @@ R8  DOCUMENT AGREEMENT: the pack ids in the document's delimited pack table and
 R9  Every group name and every target name appears verbatim in the document,
     so the three groups and the three measurement targets cannot be renamed in
     one file and left stale in the other.
+    (It is a substring test and nothing more: a name mentioned anywhere in the
+    document satisfies it, including inside a sentence saying the group is
+    unused. It catches rename drift, not staleness of what the document says
+    about the name.)
 R10 Exactly three groups and exactly three targets, with the expected names.
 R11 Every pack's `evidence` list is non-empty and names paths that exist.
 
@@ -68,6 +96,12 @@ WHAT IT CANNOT DO, stated so nobody reads more into a green run
   roles and still be loaded by a script. Nothing in this repository can see
   that; the groups are a declaration of intent that a reviewer checks against
   the diff, and R5 only has teeth because `roles` is also where a reader looks.
+* `UNESTABLISHED_TOKENS` is a deny-list and a deny-list is always one synonym
+  behind. A field whose value is an unestablished fact phrased as a sentence
+  ("we never worked this out") reads as established to R1. The one field where
+  that mattered -- the `unit` of a `documented` pack -- is therefore ALSO
+  guarded positively (R3b), and the honest statement about every other field
+  is that R1 reports the phrasings it knows and nothing more.
 * It cannot establish lineage. `descent_tested` records whether
   `model/measure_harness.descent_test` has been RUN, not what it found; the
   finding goes in `relationships` with its citation.
@@ -81,6 +115,10 @@ OUTCOMES
     1   at least one rule is FALSE
     2   --strict only: no rule is FALSE but something is still OPEN. For an
         operator who HAS the corpus mounted and is closing the gaps out.
+    3   REFUSED: the apparatus could not run at all (manifest or document
+        missing, malformed, or missing a top-level key). Distinct from 1 and 2
+        on purpose -- "I cannot answer" is not "the corpus has gaps", and a
+        caller branching on the exit code must be able to tell them apart.
 """
 from __future__ import annotations
 
@@ -111,14 +149,84 @@ REQUIRED_TEXT = ("name", "instrument", "unit", "lineage_status", "dry_or_process
                  "known_settings", "processing", "relationships", "licence",
                  "redistribution", "storage", "descent_tested")
 
+#: Fields whose value comes from a CONTROLLED VOCABULARY, where a word that
+#: looks like a placeholder is a legitimate value. `lineage_status: "unknown"`
+#: is R2's own vocabulary saying "nothing about this lineage is established" --
+#: a decision, not an unfilled field -- so R1 must not report it OPEN. R2
+#: guards these; the unestablished-ness predicate does not apply.
+VOCABULARY_FIELDS = frozenset({"lineage_status"})
+
 #: The document's pack table, delimited so the parse cannot wander into another
 #: table that happens to be nearby.
 PACK_REGION = (re.compile(r"<!--\s*corpus-lineage:packs\s*-->"),
                re.compile(r"<!--\s*/corpus-lineage:packs\s*-->"))
 
+#: Ways of writing "I have not established this" that are NOT the manifest's
+#: canonical `unknown_marker`. The marker is the form `open` reports and the
+#: form this document asks authors for; these are what an author reaches for
+#: instead, and before PR #523's review every one of them read as an
+#: established value. Matched against the WHOLE normalised field (and against
+#: the head of a `--`-separated field, which is how the canonical marker is
+#: built), never as a substring -- "None. Loops at 120-128 bpm" and
+#: "no -- never run" are stated RESULTS and must stay established.
+#:
+#: Deliberately NOT in here: `none`, `n/a`, `not applicable`, `no`,
+#: `not documented`, `undocumented`. Each is a statement about the world --
+#: no settings ship, the vendor published no chain, the test does not apply --
+#: and classifying them as unfilled fields would both be wrong and pressure
+#: the next author into deleting an honest answer. `unit` is immune to that
+#: judgement call either way, because R3b asks it a positive question.
+UNESTABLISHED_TOKENS = frozenset({
+    "unknown", "unknowns", "tbd", "tba", "todo", "to do", "fixme",
+    "unestablished", "not established", "not yet established",
+    "not determined", "undetermined", "not yet determined",
+    "to be determined", "to be established", "to be confirmed",
+    "not known", "not yet known", "no idea", "dunno",
+    "placeholder", "fill this in", "fill in", "pending",
+    "?", "??", "???", "-", "--", "---", "x", "xx", "xxx", "",
+})
+
+#: What a `documented` unit must actually carry (R3b): a serial number. Every
+#: documented pack in this corpus is identified this way -- Fischer s/n 103852,
+#: Legowelt s/n 5529 -- so the positive form is satisfiable on the committed
+#: state, which is the test an unsatisfiable gate fails.
+SERIAL_RE = re.compile(r"(?:serial|s\s*/\s*n|s\.\s*n\.)\D{0,20}(\d{3,})", re.I)
+
 
 class Refused(Exception):
     """A precondition failed: say so instead of producing findings."""
+
+
+def _normalise(value: object) -> str:
+    """Lowercase, trimmed, stripped of quoting and trailing punctuation."""
+    s = str(value if value is not None else "").strip()
+    s = s.strip("`\"'*").strip()
+    s = s.rstrip(".!:;,").strip()
+    return " ".join(s.lower().split())
+
+
+def is_unestablished(value: object, marker: str) -> bool:
+    """True when `value` is any recognised way of saying "not established yet".
+
+    The canonical `marker` (exactly, or as the head of a longer string, which
+    is how the manifest writes it) plus `UNESTABLISHED_TOKENS`, matched whole
+    rather than as a substring. The `--` head test is what makes
+    `"TBD -- operator must fill this in"` behave like the canonical marker
+    instead of like a sentence.
+    """
+    norm = _normalise(value)
+    mark = _normalise(marker)
+    if mark and (norm == mark or norm.startswith(mark)):
+        return True
+    if norm in UNESTABLISHED_TOKENS:
+        return True
+    head = _normalise(norm.split("--")[0])
+    return head in UNESTABLISHED_TOKENS
+
+
+def names_a_unit(unit: object) -> bool:
+    """True when `unit` carries a serial number -- a positive identity (R3b)."""
+    return bool(SERIAL_RE.search(str(unit or "")))
 
 
 def load(manifest: pathlib.Path = MANIFEST) -> dict:
@@ -160,6 +268,19 @@ def _finding(rule: str, status: str, what: str) -> dict:
     return {"rule": rule, "status": status, "what": what}
 
 
+def _no_justification(pack: dict, key: str, marker: str) -> bool:
+    """True when a required written justification is absent OR a placeholder.
+
+    The same hole R3 had, one rule over: R5/R6/R7 each demand a sentence, and
+    before PR #523's review `weak_evidence_why: "TBD"` satisfied all three.
+    A placeholder is not a justification -- and unlike R1's fields this is
+    FALSE, not OPEN: the field records a decision the author has already made
+    by assigning the role, so there is nothing for an operator to fill in.
+    """
+    val = str(pack.get(key, "") or "").strip()
+    return not val or is_unestablished(val, marker)
+
+
 def check(manifest: pathlib.Path = MANIFEST, doc: pathlib.Path = DOC,
           root: pathlib.Path = ROOT) -> list[dict]:
     """Every rule in the module docstring. FALSE is a violation, OPEN is a
@@ -179,8 +300,13 @@ def check(manifest: pathlib.Path = MANIFEST, doc: pathlib.Path = DOC,
         out.append(_finding("R10", "OK", f"three targets: {', '.join(TARGETS)}"))
     for name, t in m["targets"].items():
         for key in ("definition", "current_work"):
-            if not str(t.get(key, "")).strip():
+            val = str(t.get(key, "") or "").strip()
+            if not val:
                 out.append(_finding("R10", "FALSE", f"target {name} has no {key}"))
+            elif is_unestablished(val, unknown):
+                out.append(_finding("R10", "FALSE",
+                                    f"target {name}: {key} is {val!r}, which is a placeholder, "
+                                    f"not a statement of what the target is or what addresses it"))
 
     ids = [p.get("id", "<no id>") for p in m["packs"]]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -196,9 +322,14 @@ def check(manifest: pathlib.Path = MANIFEST, doc: pathlib.Path = DOC,
             val = str(p.get(key, "") or "").strip()
             if not val:
                 out.append(_finding("R1", "FALSE", f"{pid}: {key} is missing or empty"))
-            elif val == unknown or val.startswith(unknown):
+            elif key in VOCABULARY_FIELDS:
+                continue                      # R2's vocabulary, not a free-text field
+            elif is_unestablished(val, unknown):
                 marked_unknown.append(key)
-                out.append(_finding("R1", "OPEN", f"{pid}: {key} is not established yet"))
+                canonical = "" if (val == unknown or val.startswith(unknown)) \
+                    else f" (written as {val!r}; the canonical form is the manifest's unknown_marker)"
+                out.append(_finding("R1", "OPEN",
+                                    f"{pid}: {key} is not established yet{canonical}"))
 
         # R2 -- lineage vocabulary
         status = p.get("lineage_status")
@@ -206,11 +337,23 @@ def check(manifest: pathlib.Path = MANIFEST, doc: pathlib.Path = DOC,
             out.append(_finding("R2", "FALSE",
                                 f"{pid}: lineage_status {status!r} not in {LINEAGE_STATUS}"))
 
-        # R3 -- the input that defeats R2: documented, with no established unit
-        if status == "documented" and "unit" in marked_unknown:
-            out.append(_finding("R3", "FALSE",
-                                f"{pid}: lineage_status is 'documented' but the unit itself "
-                                f"is not established"))
+        # R3 -- the input that defeats R2: documented, with no established unit.
+        # Two halves: R3a denies every recognised phrasing of "not established"
+        # (not just the canonical marker, which is the hole PR #523's review
+        # found), and R3b asks the positive question a deny-list cannot answer.
+        if status == "documented":
+            unit_val = str(p.get("unit", "") or "").strip()
+            identity_why = str(p.get("unit_identity_why", "") or "").strip()
+            if "unit" in marked_unknown:
+                out.append(_finding("R3", "FALSE",
+                                    f"{pid}: lineage_status is 'documented' but the unit itself "
+                                    f"is not established (unit is {unit_val!r})"))
+            elif not names_a_unit(unit_val) and (
+                    not identity_why or is_unestablished(identity_why, unknown)):
+                out.append(_finding("R3", "FALSE",
+                                    f"{pid}: lineage_status is 'documented' but the unit names no "
+                                    f"serial number ({unit_val!r}) and no unit_identity_why says "
+                                    f"what pins the identity instead"))
 
         # R4 / R5 / R6 / R7 -- groups
         roles = p.get("roles")
@@ -232,16 +375,16 @@ def check(manifest: pathlib.Path = MANIFEST, doc: pathlib.Path = DOC,
                                     f"{pid}: lineage_status is 'claimed' -- a vendor's word -- so "
                                     f"it may never enter {VERDICT_GROUP}"))
             if (CLAIMED_OK_WITH_REASON in roles
-                    and not str(p.get("weak_evidence_why", "") or "").strip()):
+                    and _no_justification(p, "weak_evidence_why", unknown)):
                 out.append(_finding("R5", "FALSE",
                                     f"{pid}: lineage_status is 'claimed' and it is in "
                                     f"{CLAIMED_OK_WITH_REASON} with no weak_evidence_why saying "
                                     f"why the calibration does not depend on the unestablished unit"))
-        if len(roles) > 1 and not str(p.get("role_overlap_why", "") or "").strip():
+        if len(roles) > 1 and _no_justification(p, "role_overlap_why", unknown):
             out.append(_finding("R6", "FALSE",
                                 f"{pid}: in {len(roles)} groups with no role_overlap_why naming "
                                 f"the separation in force instead"))
-        if not roles and not str(p.get("group_why", "") or "").strip():
+        if not roles and _no_justification(p, "group_why", unknown):
             out.append(_finding("R7", "FALSE", f"{pid}: in no group and no group_why"))
 
         # R11 -- evidence exists
@@ -309,8 +452,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         findings = check()
     except Refused as e:
+        # 3, not 2: "the apparatus could not run" must be distinguishable from
+        # "the corpus has gaps" by a caller that only sees the exit code.
         print(f"REFUSED: {e}")
-        return 2
+        return 3
 
     if a.cmd == "open":
         rows = [f for f in findings if f["status"] == "OPEN"]

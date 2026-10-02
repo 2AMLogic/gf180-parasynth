@@ -167,7 +167,7 @@
       "dry_or_processed": "unknown -- operator with the corpus mounted must fill this in",
       "known_settings": "None.",
       "processing": "Unknown. Every file is Ableton's proprietary compressed AIFF-C (FORM...AIFC...able); neither ffmpeg nor scipy decodes it.",
-      "relationships": "Unknown.",
+      "relationships": "No relationship to any other pack here has been established, and none can be established from this repository: the container does not decode, so these files cannot be compared with the Fischer set or with anything else. A bare \"Unknown.\" stood here until tools/corpus_lineage.py learned to read that as an unestablished field; this is the same fact stated so it cannot be mistaken for a gap an operator with the corpus mounted could close.",
       "licence": "Ableton factory content. Not redistributable.",
       "redistribution": "NOT redistributable.",
       "storage": "~/Music/Ableton/Factory Packs/Drum Machines/ on an operator machine.",

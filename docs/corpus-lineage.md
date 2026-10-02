@@ -281,6 +281,31 @@ is not.
    weak material into a verdict. R3 is scoped to `unit` on purpose: a published
    serial number with an undocumented recording chain (`legowelt-minimoog-5529`)
    is a documented unit with an open field, not an undocumented lineage.
+
+   **R3 itself was defeated on review, by a one-word variant of the input it
+   was written to catch** (PR #523). Its established-ness test asked only
+   whether `unit` held the verbose `unknown_marker`, so `unit: "unknown"` or
+   `unit: "TBD"` with `lineage_status: "documented"` passed clean — and with
+   `roles: ["held-out-validation"]` a pack whose machine nobody has
+   established backed a verdict with the checker green. R3 now has two halves:
+
+   - **R3a, deny** — `unit` may not be *any* recognised phrasing of "not
+     established" (`corpus_lineage.UNESTABLISHED_TOKENS`: `unknown`, `TBD`,
+     `?`, `not established`, … matched against the whole field, plus the
+     canonical marker). A deny-list is always one synonym behind, which is why
+     it is only half the rule.
+   - **R3b, positive identity** — a `documented` unit must *identify a
+     machine*: a serial number (what every documented pack here has — Fischer
+     s/n 103852, Legowelt s/n 5529), or a written `unit_identity_why` saying
+     what pins the identity instead. A positive assertion cannot be routed
+     around by a phrasing the deny-list has not met yet.
+
+   `unit_identity_why` is the residual weakness, stated rather than hidden: a
+   sentence there satisfies R3b without a serial. What the rule guarantees is
+   that doing so is a visible written claim in the diff, not a blank that reads
+   as established. The same shape was then fixed one rule over —
+   `weak_evidence_why`, `role_overlap_why`, `group_why` and a target's
+   `current_work` were each satisfied by `"TBD"` and now are not.
 5. **Assign a group, or state why none.** Then add the row to the table above.
 6. **Never add the audio**, and never add anything from which the audio could be
    reconstructed or identified beyond its own published archive hash.
@@ -344,8 +369,10 @@ by `make verify`. Eleven rules, each with an injected-defect control in
 `tools/test_corpus_lineage.py`:
 <!-- claim: test=tools/test_corpus_lineage.py::test_the_committed_manifest_and_document_pass_every_rule -->
 
-- required fields present and non-empty (R1); lineage vocabulary (R2);
-  **`documented` with no established unit is FALSE** (R3); group vocabulary
+- required fields present and non-empty, with any recognised phrasing of "not
+  established yet" reported OPEN rather than read as a value (R1); lineage
+  vocabulary (R2); **`documented` with no established unit is FALSE — both as a
+  placeholder (R3a) and as a unit that names no machine (R3b)** (R3); group vocabulary
   (R4); **weak evidence confined, in two tiers, with a claimed lineage barred
   from verdicts and justified before it calibrates** (R5); multi-group packs
   name their separation (R6); groupless packs say why (R7); **the table in this
@@ -365,3 +392,19 @@ by `make verify`. Eleven rules, each with an injected-defect control in
   with its citation. Six of ten packs say `no -- never run`.
 - **Whether a group assignment is the right one.** The checker enforces that the
   rule was applied, not that the judgement was sound.
+- **Every phrasing of "I have not established this."**
+  `UNESTABLISHED_TOKENS` is a deny-list and a deny-list is always one synonym
+  behind: a field whose value is an unestablished fact written as a sentence
+  ("we never worked this out") still reads as established to R1. The one field
+  where that mattered — the `unit` of a `documented` pack — is therefore
+  *also* guarded positively by R3b, and `unit_identity_why` is R3b's own
+  stated escape. For every other field, R1 reports the phrasings it knows and
+  nothing more.
+- **Whether a name the document mentions is still described correctly.** R9 is
+  a substring test: a group or target name appearing anywhere in this file
+  satisfies it, including inside a sentence saying the group is unused. It
+  catches rename drift and nothing else.
+- **Whether a written justification is a good one.** R5/R6/R7/R10 now reject a
+  placeholder (`"TBD"`) as well as a blank, but any plausible sentence
+  satisfies them. They enforce that somebody wrote a reason down where a
+  reviewer reads it.

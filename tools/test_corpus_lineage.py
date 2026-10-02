@@ -76,7 +76,7 @@ def test_check_exits_zero_on_the_committed_state():
 
 
 def test_the_committed_state_still_has_open_fields_and_strict_says_so():
-    """Six fields await an operator with the corpus mounted. `--strict` is how
+    """Five fields await an operator with the corpus mounted. `--strict` is how
     that operator finds them; plain `check` must NOT fail on them, or the gate
     is red on a repository that is in its correct state."""
     assert _rules(cl.check(), "OPEN"), "no OPEN fields -- did the markers get edited away?"
@@ -114,6 +114,61 @@ def test_r1_reports_a_marked_unknown_as_open_not_false(tree):
     assert "R1" in _rules(f, "OPEN")
 
 
+@pytest.mark.parametrize("phrasing", [
+    "unknown", "Unknown", "UNKNOWN.", "TBD", "tbd", "to be determined",
+    "?", "-", "not established", "not yet established", "TODO",
+    "TBD -- operator with the corpus mounted must fill this in",
+])
+def test_r1_reports_every_phrasing_of_not_established_as_open(tree, phrasing):
+    """The hole PR #523's review found, generalised. Before the fix only the
+    verbose `unknown_marker` counted as OPEN, so every phrasing below read as
+    an established value -- a non-empty string nothing would ever question."""
+    m = tree.load()
+    tree.pack(m, "808-from-mars")["known_settings"] = phrasing
+    tree.save(m)
+    f = tree.check()
+    assert "R1" in _rules(f, "OPEN"), f"{phrasing!r} read as an established value"
+    assert "R1" not in _rules(f), f"{phrasing!r} should be OPEN, not FALSE"
+
+
+@pytest.mark.parametrize("stated_result", [
+    "None.",                                     # no settings ship: a result
+    "none of its own: byte-identical to the Fischer files.",
+    "no -- never run.",                          # the test was not run: a result
+    "not applicable -- there is no incumbent Minimoog corpus.",
+    "Not documented.",                           # the vendor published nothing
+    "Unknown. Every file is Ableton's proprietary compressed AIFF-C and nothing decodes it.",
+])
+def test_r1_does_not_turn_a_stated_result_into_an_open_field(tree, stated_result):
+    """The control for the other direction, and the reason the predicate is a
+    whole-value match rather than a substring one. An over-broad predicate
+    would mark these OPEN, pressure the next author into deleting an honest
+    answer, and make `--strict` unsatisfiable on a correct manifest. Every
+    string here is a real value from the committed manifest or a near variant."""
+    m = tree.load()
+    tree.pack(m, "808-loops-from-mars")["known_settings"] = stated_result
+    tree.save(m)
+    f = tree.check()
+    opens = [x["what"] for x in f if x["status"] == "OPEN" and "808-loops-from-mars" in x["what"]]
+    assert not opens, f"{stated_result!r} is a stated result, not an unfilled field: {opens}"
+
+
+def test_the_committed_state_has_exactly_its_five_declared_open_fields():
+    """`docs/corpus-lineage.md` names five. Widening the OPEN predicate (above)
+    must not quietly add a sixth -- "run the gate against the current state
+    before committing it". If this fails, either the manifest changed or the
+    predicate caught a field the document has not declared; declare it."""
+    opens = {f["what"].split(" is not established")[0]
+             for f in cl.check() if f["status"] == "OPEN"}
+    assert opens == {
+        "boutique-808: unit",
+        "boutique-808: dry_or_processed",
+        "ableton-factory-808: unit",
+        "ableton-factory-808: dry_or_processed",
+        "legowelt-minimoog-5529: dry_or_processed",
+    }, sorted(opens)
+
+
 # ---------------------------------------------------------------------------
 # R2 -- lineage vocabulary
 # ---------------------------------------------------------------------------
@@ -139,6 +194,95 @@ def test_r3_fires_when_a_pack_with_no_established_unit_is_declared_documented(tr
     f = tree.check()
     assert "R3" in _rules(f), "a documented pack with no established unit passed"
     assert "R5" not in _rules(f), "R5 is satisfied by the relabel -- which is why R3 exists"
+
+
+@pytest.mark.parametrize("unit", ["unknown", "Unknown", "TBD", "tbd", "?", "-",
+                                  "not established", "TBD -- fill this in later"])
+def test_r3_fires_on_a_bare_unknown_or_tbd_unit_declared_documented(tree, unit):
+    """THE input that defeated the first R3 (PR #523 review, probes A and C).
+
+    R3's established-ness test used to be `val == unknown_marker or
+    val.startswith(unknown_marker)`, so `unit: "unknown"` -- the obvious
+    one-word way to write the very thing the marker says -- was simply a
+    non-empty string: not OPEN under R1, not FALSE under R3, and R5 never got
+    a chance because the relabel to `documented` routes around it.
+    """
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = unit
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    f = tree.check()
+    assert "R3" in _rules(f), f"unit={unit!r} + documented passed clean"
+
+
+def test_r3_fires_on_the_full_chain_an_unestablished_unit_backing_a_verdict(tree):
+    """The Judge's full chain, end to end: a pack with no established unit,
+    relabelled `documented`, placed in `held-out-validation`. Before the fix
+    this reported `0 FALSE` -- a held-out verdict backed by a corpus pack whose
+    machine nobody has established, with the checker green. That is exactly
+    "an extra library establishes an extra machine", which is the one thing
+    #158, this document and R5's VERDICT_GROUP ban all exist to prevent."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = "unknown"
+    p["dry_or_processed"] = "unknown"
+    p["lineage_status"] = "documented"
+    p["roles"] = ["held-out-validation"]
+    tree.save(m)
+    f = tree.check()
+    assert "R3" in _rules(f), "the full bypass chain still passes"
+    assert "R5" not in _rules(f), "R5 is routed around by the relabel -- which is why R3 exists"
+    assert any(x["rule"] == "R3" and "boutique-808" in x["what"]
+               for x in f if x["status"] == "FALSE")
+
+
+def test_r3b_fires_when_a_documented_unit_identifies_no_machine(tree):
+    """The half a deny-list cannot cover: a phrasing that is not on any list
+    and still names no machine. `claimed` is the honest status for this text --
+    it is the vendor's own wording -- and declaring it `documented` must fail
+    even though "Samples From Mars's own machine" is not a placeholder."""
+    m = tree.load()
+    p = tree.pack(m, "808-from-mars")
+    p["unit"] = "Samples From Mars's own machine. Serial number not published."
+    p["lineage_status"] = "documented"
+    p["roles"] = ["held-out-validation"]
+    tree.save(m)
+    assert "R3" in _rules(tree.check())
+
+
+def test_r3b_permits_a_non_serial_identity_that_writes_down_what_pins_it(tree):
+    """...and it is not an unsatisfiable gate: identity can be pinned without a
+    serial number, so long as the manifest SAYS what pins it. The escape is the
+    rule's stated residual weakness, not a hole it pretends not to have."""
+    m = tree.load()
+    p = tree.pack(m, "808-from-mars")
+    p["unit"] = "the machine photographed in the vendor's studio teardown post"
+    p["unit_identity_why"] = ("No serial is published, but the teardown photographs the "
+                              "same board revision and the same modified trigger bus as "
+                              "the unit in the recording session notes.")
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert "R3" not in _rules(tree.check())
+
+
+def test_r3b_is_not_satisfied_by_a_placeholder_identity_why(tree):
+    m = tree.load()
+    p = tree.pack(m, "808-from-mars")
+    p["unit"] = "Samples From Mars's own machine"
+    p["unit_identity_why"] = "TBD"
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert "R3" in _rules(tree.check())
+
+
+def test_every_documented_pack_in_the_committed_manifest_names_a_serial():
+    """R3b run against the current state, which is how an unsatisfiable gate is
+    caught before it is committed (three were written here in one day)."""
+    docd = [p for p in cl.load()["packs"] if p["lineage_status"] == "documented"]
+    assert docd
+    for p in docd:
+        assert cl.names_a_unit(p["unit"]), f"{p['id']}: {p['unit']!r} names no serial"
 
 
 def test_r3_does_not_fire_on_a_documented_unit_with_an_open_chain(tree):
@@ -236,6 +380,34 @@ def test_r7_fires_when_a_pack_is_in_no_group_and_says_nothing(tree):
     p["group_why"] = ""
     tree.save(m)
     assert "R7" in _rules(tree.check())
+
+
+# ---------------------------------------------------------------------------
+# the same defect shape, searched for one rule over: a REQUIRED JUSTIFICATION
+# that is a placeholder is not a justification (`CLAUDE.md`: before you close,
+# grep for the defect's class, not for the call site you repaired)
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("pid,key,rule", [
+    ("808-from-mars", "weak_evidence_why", "R5"),
+    ("fischer-tr808-103852", "role_overlap_why", "R6"),
+    ("808-loops-from-mars", "group_why", "R7"),
+])
+@pytest.mark.parametrize("placeholder", ["TBD", "unknown", "?", "todo"])
+def test_a_placeholder_is_not_a_justification(tree, pid, key, rule, placeholder):
+    """R5, R6 and R7 each demanded only a non-empty string, so `"TBD"`
+    satisfied all three -- the identical hole R3 had, and it was found by
+    searching for the shape rather than for the one call site."""
+    m = tree.load()
+    tree.pack(m, pid)[key] = placeholder
+    tree.save(m)
+    assert rule in _rules(tree.check()), f"{key}={placeholder!r} passed as a justification"
+
+
+def test_a_placeholder_target_statement_is_not_a_current_work_statement(tree):
+    m = tree.load()
+    m["targets"]["hardware-variation-coverage"]["current_work"] = "TBD"
+    tree.save(m)
+    assert "R10" in _rules(tree.check())
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +519,21 @@ def test_a_manifest_missing_a_top_level_key_is_refused(tree):
     tree.save(m)
     with pytest.raises(cl.Refused):
         tree.check()
+
+
+def test_refused_has_its_own_exit_code_distinct_from_a_strict_open_field(monkeypatch):
+    """REFUSED is a first-class outcome here, so a caller reading only the exit
+    code must be able to tell "the apparatus could not run" (3) from "the
+    corpus still has gaps" (2). They shared 2 before this change."""
+    def _refuse(*_a, **_k):
+        raise cl.Refused("manifest missing: /nowhere/corpus-lineage.json")
+
+    monkeypatch.setattr(cl, "check", _refuse)
+    assert cl.main(["check"]) == 3
+    assert cl.main(["check", "--strict"]) == 3
+    # ...and 2 still means "no rule is FALSE, but a field is unestablished"
+    monkeypatch.undo()
+    assert cl.main(["check", "--strict"]) == 2
 
 
 # ---------------------------------------------------------------------------
