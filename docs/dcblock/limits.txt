@@ -1,0 +1,40 @@
+commit 7a3c35f19a01-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+
+DECLARED BEFORE THE FIRST MEASUREMENT (git: the commit that adds this file)
+
+  REQUIRED improvement, CY and RS:
+    sub-20 Hz ABSOLUTE energy falls by >= 6.0 dB
+
+  PRESERVATION allowance, every voice (controls: BD, HT, CH)
+
+    property           unit            BD  others
+    peak_dbfs          dB            0.50    0.30
+    body_20_700_db     dB(abs)       0.50    0.30
+    mid_700_5k_db      dB(abs)       0.20    0.20
+    hf_5k_20k_db       dB(abs)       0.20    0.20
+    t20_ms_pct         %             3.00    3.00
+    attack_samp        samples       2.00    2.00
+    centroid_pct       %             1.00    1.00
+    n_clip             count       must not increase
+
+  centroid_pct is the >= 20 Hz centroid (CENTROID_FLOOR_HZ), not a global
+  one: a global centroid rises MECHANICALLY when sub-20 Hz energy is
+  removed, so the gate would read the candidate's intended effect as a
+  failure. Qualified in closed form by dc_centroid_gate_qualification.py.
+
+  t20_ms_pct is READ ON THE SAME >= 20 Hz BAND, for the same reason: a
+  global T20 is a backward energy integral, so a sub-20 Hz pedestal
+  inflates it most exactly where the gate reads. Qualified in closed form
+  by dc_t20_gate_qualification.py, which also checks the repaired gate
+  still goes red on a genuinely 10 % faster decay. The sub-20 Hz settling
+  tail a blocker adds is not thereby ignored: it is the sub20 column.
+
+  attack_samp is the first arrival within 1.0 dB of the peak, not
+  argmax(|x|): on a plateaued voice argmax answers a lobe RANK ORDER.
+
+  Each allowance is read against the LARGER of itself and the instrument's
+  own 1-LSB resolution for that property on that voice (--resolution). A
+  gate below the resolution is marked [res-limited] wherever it is used.
+
+  A normalised band SHARE is never a verdict; `share_rise_is_lf_removal`
+  refuses one whose absolute band energy did not move.

@@ -1,0 +1,21 @@
+commit 7a3c35f19a01-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+
+THE DECAY GATE'S PRECONDITION. A decay is a property of the signal, so an
+estimate that MOVES when the observation window doubles is measuring the
+window. Necessary, not sufficient -- it cannot prove an estimate right, and
+it rejected two defects here. Allowance: 1.0 % across a doubling.
+
+            0.6 s     1.2 s     2.4 s     4.8 s    verdict  what the number is
+  CY        428.0     540.0     558.0     558.0         ok  the voice's decay
+  RS        598.0    1198.0    2398.0       nan    REFUSED  the CLIP, to within 25 % of the doubling ratio: LEAKAGE
+  BD        344.0     346.0     348.0     348.0         ok  the voice's decay
+  HT        104.0     104.0     104.0     104.0         ok  the voice's decay
+  CH         48.0      48.0      48.0      48.0         ok  the voice's decay
+
+  The gates are measured at RENDER_S = 2.40 s, which is where the CY
+  stops moving. The RS never does, so `t20_ms_pct` has NO VERDICT on the RS:
+  it reaches exact silence about 25 ms in, and a 20 Hz brick wall's sinc
+  spans the clip, so what the estimator integrates is its own smearing.
+  WHAT BOUNDS THE RS INSTEAD: its absolute band energies (body, mid, HF),
+  its peak, its attack and its >= 20 Hz centroid -- six gates that do
+  produce verdicts. A refusal removes one gate, not the acceptance test.

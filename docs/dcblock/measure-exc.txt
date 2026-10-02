@@ -1,0 +1,62 @@
+commit 7a3c35f19a01-dirty  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+
+IMPROVEMENT AND PRESERVATION, placement 'exc', K = 10 (7.460 Hz)
+
+  Absolute dB throughout. Shares are printed after, separately, and
+  are not part of any verdict.
+
+                            sub20     body      mid       HF    peak     T20    atk    cent  limits
+                           dB abs   dB abs   dB abs   dB abs      dB       %   samp       %
+  CY  (subject)             +0.00    -0.00    +0.00    +0.01   -0.00   -0.36     +0   +0.01  ok   [res-limited: attack_samp]
+  RS  (subject)             -0.24    -0.13    -0.04    -0.04   -0.08   +0.00     +0   +1.12  centroid_pct   [REFUSED: t20_ms_pct]
+  BD  (control)             +5.10    +0.24    +0.01    +0.01   +1.17   +4.60    +10   -0.53  peak_dbfs,t20_ms_pct   [res-limited: hf_5k_20k_db,attack_samp]
+  HT  (control)             -2.44    -0.01    +0.00    -0.03   -0.22   -1.92     +0   +0.02  ok   [res-limited: hf_5k_20k_db,attack_samp]
+  CH  (control)             +0.00    -0.14    +0.01    +0.01   -0.00   +0.00     +0   -0.01  ok   [res-limited: body_20_700_db,t20_ms_pct]
+
+  THE GATE THAT WAS WIRED WRONG, both ways, so the change is on the page.
+  A GLOBAL spectral centroid is not a preservation gate for a DC blocker:
+  removing sub-20 Hz energy raises it mechanically. Qualified >= 20 Hz.
+
+                centroid >=20 Hz (the GATE)    centroid global (diagnostic)
+  CY              8137.9 ->    8138.5 Hz  +0.01%      7590.8 ->    7591.7 Hz  +0.01%
+  RS               686.4 ->     694.0 Hz  +1.12%       605.2 ->     614.3 Hz  +1.50%
+  BD                50.3 ->      50.0 Hz  -0.53%        49.9 ->      49.0 Hz  -1.83%
+  HT               188.3 ->     188.4 Hz  +0.02%       187.8 ->     188.1 Hz  +0.13%
+  CH             12323.6 ->   12322.5 Hz  -0.01%     12323.5 ->   12322.4 Hz  -0.01%
+
+  THE SECOND GATE WITH THE SAME DEFECT, found after the first was repaired.
+  A GLOBAL T20 is a backward ENERGY integral over the whole spectrum, so a
+  sub-20 Hz pedestal inflates it -- most where the gate reads, late in the
+  clip. Removing the pedestal then shortens it for a reason that is not an
+  audible decay change. Qualified >= 20 Hz by dc_t20_gate_qualification.py:
+  a tone whose T20 is 200.0 ms by construction reads 452 ms globally and
+  202 ms banded when a 4 % standing offset is present, and the repaired gate
+  still reads -9.90 % on a genuinely 10 % faster decay.
+
+                     T20 >=20 Hz (the GATE)         T20 global (diagnostic)
+  CY               558.0 ->     556.0 ms  -0.36%       632.0 ->     632.0 ms  +0.00%
+  RS              2398.0 ->    2398.0 ms  +0.00%         8.0 ->       8.0 ms  +0.00%
+  BD               348.0 ->     364.0 ms  +4.60%       344.0 ->     342.0 ms  -0.58%
+  HT               104.0 ->     102.0 ms  -1.92%       100.0 ->     100.0 ms  +0.00%
+  CH                48.0 ->      48.0 ms  +0.00%        48.0 ->      48.0 ms  +0.00%
+
+  NORMALISED SHARES (%% of clip energy) -- diagnostic only, never a verdict
+
+                       body %            mid %             HF %   HF share
+              before    after  before    after  before    after
+  CY            0.57     0.57    7.32     7.31   87.13    87.15   LF removal, NOT new HF
+  RS           63.78    63.66   24.18    24.64    0.16     0.16   LF removal, NOT new HF
+  BD           99.30    97.90    0.00     0.00    0.00     0.00   LF removal, NOT new HF
+  HT           99.72    99.84    0.01     0.01    0.00     0.00   LF removal, NOT new HF
+  CH            0.00     0.00    0.11     0.11   98.55    98.55   LF removal, NOT new HF
+
+VERDICT (DR 0015: property vector, no aggregate)
+
+  CY   improvement >= 6.0 dB sub-20: NOT MET (+0.00 dB)   preservation: ok
+  RS   improvement >= 6.0 dB sub-20: NOT MET (-0.24 dB)   preservation: BROKE centroid_pct   NO VERDICT on t20_ms_pct
+  BD   control, must be preserved: BROKE peak_dbfs,t20_ms_pct
+  HT   control, must be preserved: ok
+  CH   control, must be preserved: ok
+
+  NOT ACCEPTED against the limits declared in this file.
+  A REFUSED gate is not a passed one. RS: t20_ms_pct -- see `--decay` for why, and what bounds the voice instead.
