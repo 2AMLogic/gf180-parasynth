@@ -30,13 +30,19 @@ import math
 import pathlib
 import sys
 
-import numpy as np
-
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tools" / "probes"))
 
 import run_case as rc                                                # noqa: E402
+#: #517 acceptance criterion 6: this file stays standalone -- it re-measures
+#: two withdrawn numeric claims from #109 and is not a per-estimator gate --
+#: but its `_damped`/`_two_tone` were copies of `estimator_fixtures`'
+#: primitives and are now imported from there. NOTE `lead_ms=0`: this file's
+#: numbers were measured WITHOUT the pre-onset lead `two_tone` adds by
+#: default, so the lead is switched off rather than silently acquired.
+import estimator_fixtures as ef                                      # noqa: E402
 
 SR = 48000
 fails: list[str] = []
@@ -48,15 +54,11 @@ def check(ok: bool, what: str):
         fails.append(what)
 
 
-def _damped(f, tau, amp, n, sr, phase=0.0):
-    t = np.arange(n) / sr
-    return amp * np.exp(-t / tau) * np.sin(2 * math.pi * f * t + phase)
+_damped = ef.damped
 
 
 def _two_tone(f1, f2, tau1, tau2, a1, a2, seconds, sr):
-    n = int(seconds * sr)
-    return (_damped(f1, tau1, a1, n, sr, 0.3)
-            + _damped(f2, tau2, a2, n, sr, 1.9))
+    return ef.two_tone(f1, f2, tau1, tau2, a1, a2, seconds, sr, lead_ms=0.0)
 
 
 # ===========================================================================

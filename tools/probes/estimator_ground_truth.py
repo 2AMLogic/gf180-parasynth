@@ -39,27 +39,67 @@ interval it measured, or report insufficient evidence. A confident number
 matching neither component is `AMBIGUOUS-CONFIDENT`, which is a FAILURE of
 this suite, not a pass. `damped_sinusoid` failed exactly this on 25 of 72
 beating pairs when the suite was first run (it reported 93.3 ms for a pair
-whose components were 200 ms and 50 ms); the repair is in `audio_measure` and
-`test_audio_measure.py`, and this is the gate that holds it.
+whose components were 200 ms and 50 ms). The repair is the half-split
+consistency check in `model/audio_measure.py`; its unit tests are
+`test_damped_sinusoid_refuses_a_tau_when_the_record_holds_two_modes` and
+`test_damped_sinusoid_still_answers_a_single_mode_at_every_level` in
+`model/test_audio_measure.py`; this suite is the gate over the swept
+catalogue, and the two `damped_sinusoid` mutants in
+`estimator_ground_truth_controls.py` are the injections that prove the gate
+can still see the defect return.
 
 WHAT THIS SUITE IS BLIND TO, and the guard that says so
 -------------------------------------------------------
-`controls` is the other half, and it is required reading before any number
-here is quoted. It runs the suite against two STUBS (rule 1: a harness nobody
-has watched fail is not a harness) and against named mutants of the
-estimators, and prints the estimators x defects matrix rule 4 asks for --
-MOVED for the checks that saw each defect, BLIND for the ones that did not.
-A check in the BLIND column for every mutant is decoration.
+`controls` (in `estimator_ground_truth_controls.py`) is the other half, and it
+is required reading before any number here is quoted. It runs the suite
+against two STUBS (rule 1: a harness nobody has watched fail is not a harness)
+and against twenty-two named mutants of the estimators, and prints the
+checks x defects matrix rule 4 asks for -- MOVED for the checks that saw each
+defect, BLIND for the ones that did not. A check reddened by no mutant AND
+neither stub is decoration, and that is the one condition it FAILS on.
+
+It found three green checks here that a dead estimator would also have passed.
+They are listed under the wrong-then-right record below, which is where a
+reader should start.
+
+`make verify` runs `check`; `make controls` runs `controls`. Before #517
+neither ran anywhere.
 
 HOW A READER CALIBRATES THESE NUMBERS
 -------------------------------------
-Wrong-then-right rate while this suite was written: five bounds were set from
-a guess, run, and corrected to the measured value before the first green run
-(`spectral_flatness` on white noise, `tonality_db` on white noise,
-`step_ratio` on a naive triangle, `band_energy`'s leakage against an analytic
-integral, and `schroeder_t20`'s required-report condition). Every one was
-caught by running the gate against the current state rather than by
-inspection, which is the only reason they are listed and not shipped.
+Wrong-then-right rate while this suite was written: ELEVEN results were wrong
+before they were right, every one caught by running something rather than by
+inspection.
+
+Five were bounds set from a guess and corrected to the measured value before
+the first green run: `spectral_flatness` on white noise, `tonality_db` on
+white noise, `step_ratio` on a naive triangle, `band_energy`'s leakage against
+an analytic integral, and `schroeder_t20`'s required-report condition.
+
+Three were CHECKS THAT PASSED AND SHOULD NOT HAVE, found by the start-red
+stubs in `estimator_ground_truth_controls.py` after the suite was already
+green -- which is the entire argument for running them:
+
+    `clipped_fraction` asserted only that nothing sits beyond the known peak,
+    which a stub answering 0.0 satisfies on six of the seven families. It now
+    also checks a nonzero fraction against a direct count.
+    `plateau_db` and `dc_plateau_db` compared a unity-gain passband against
+    0 dB, which a constant answer also gives. They now also require a known
+    gain applied to the whole curve to move the reading by exactly that gain.
+    `harmonic_signature` reported NOT-MEASURED for a signature with no
+    harmonics in it at all, so a stub answering `{"ok": True}` and nothing
+    else was green. An empty signature on a record with two or more partials
+    planted above -40 dB of its fundamental is now a failure.
+
+Five further `_ok` branches that printed a number and gated nothing were
+PASSing for the same reason; they are `_reported` (NOT-MEASURED) now.
+
+Three more were in the controls themselves: two mutants that could not
+activate (`schroeder_t20`'s fit range, which the function rescales, and
+`decay_tau`'s cycles-per-tau precondition, which this catalogue cannot make
+wrong) and a never-red gate whose first draft fired on three checks the
+reduced control set never ran. All three are recorded in that file rather than
+shipped, because a control that cannot fire reports CAUGHT for nothing.
 """
 from __future__ import annotations
 
@@ -111,6 +151,20 @@ def _bad(detail):
 
 def _nm(reason):
     return (NOT_MEASURED, reason)
+
+
+def _reported(detail):
+    """A number this check prints and does NOT gate.
+
+    `NOT-MEASURED`, not `PASS`, and the distinction is one the controls run
+    found rather than one anybody argued about: `estimator_ground_truth_controls
+    .py`'s start-red stubs left five of these branches GREEN, because a branch
+    whose only condition is `e.ok` passes for an estimator that answers a
+    confident constant. They are still worth printing -- the naive/band-limited
+    foldback contrast and the irregular-spacing autocorrelation are real
+    evidence -- but a reader must not be able to mistake them for a bound that
+    held, and neither must a control."""
+    return (NOT_MEASURED, "REPORTED, NOT GATED: " + detail)
 
 
 def _ref(reason):
@@ -264,14 +318,42 @@ def c_clipped_fraction(fx):
     got = am.clipped_fraction(fx.x, pk * 1.01 + 1e-12)
     if got != 0.0:
         return _bad(f"{got:.6g} of samples at or beyond 1.01x the known peak")
+    # A NONZERO ANSWER IS REQUIRED TOO, and the first draft of this check had
+    # only the zero above: `estimator_ground_truth_controls.py`'s start-red
+    # stub answers 0.0 for everything and PASSED this check on six of the
+    # seven families. The fraction of |x| at or above a threshold is a COUNT,
+    # so it has an exact answer on every record without consulting any
+    # estimator -- which is both an independent ground truth and the input
+    # that defeats a stub.
+    #: THE REFERENCE COUNT USES THE ESTIMATOR'S OWN FLOAT TOLERANCE, and that
+    #: is not circularity -- the tolerance IS the contract ("samples at or
+    #: beyond full_scale", `|x| >= fs * (1 - 1e-12)`), and what this check
+    #: supplies independently is the COUNTING. Two wrong-then-right results
+    #: got it here, both of them the tolerance being load-bearing on a
+    #: rational phase lattice:
+    #:
+    #:   a 220 Hz sine at 48 kHz revisits phase 11k mod 2400 = 200 exactly, so
+    #:   13 of 14400 samples are sin(pi/6) computed as 0.49999999999999994 --
+    #:   inside the estimator's tolerance, outside a naive `>= 0.5`;
+    #:   a naive saw and a naive triangle take the value 0.37 exactly on four
+    #:   samples of the same lattice, so moving the threshold off 0.5 did not
+    #:   fix it and could not have.
+    s = 0.5 * pk
+    n = np.asarray(fx.x, float)
+    want = float(np.count_nonzero(np.abs(n) >= s * (1 - 1e-12))) / len(n)
+    got = am.clipped_fraction(fx.x, s)
+    if not near(got, want, 0.0, 0.5 / len(n)):
+        return _bad(f"at half the known peak {_err(got, want)}, against a "
+                    f"direct count of the samples at or above it")
     if fx.truth.get("kind") == "sine" and not fx.truth.get("band_limited", True):
         # closed form: the fraction of a sine above s is 1 - (2/pi) asin(s)
-        s = 0.5
-        want = 1.0 - 2.0 / math.pi * math.asin(s)
-        got = am.clipped_fraction(fx.x, s * fx.truth["amp"])
-        return (_ok(f"sine at half scale {_err(got, want)}")
-                if near(got, want, 0.02) else _bad(_err(got, want)))
-    return _ok("0.0 beyond the known peak")
+        want2 = 1.0 - 2.0 / math.pi * math.asin(0.5)
+        got2 = am.clipped_fraction(fx.x, 0.5 * fx.truth["amp"])
+        return (_ok(f"0.0 beyond the known peak; sine at half scale "
+                    f"{_err(got2, want2)} against 1-(2/pi)asin(1/2)")
+                if near(got2, want2, 0.02) else _bad(_err(got2, want2)))
+    return _ok(f"0.0 beyond the known peak, and {100*want:.3f} % at or above "
+               f"half of it, matching a direct count")
 
 
 def c_quantisation_floor(fx):
@@ -671,8 +753,8 @@ def c_dominant_frequency(fx):
             e = am.dominant_frequency(fx.x, 20.0, 0.45 * fx.sr, fx.sr)
             return (_ref(f"no line in a butterworth-shaped noise band: {e.reason}")
                     if not e.ok else
-                    _ok(f"found {e.value:.0f} Hz; reported, not gated -- a "
-                        f"noise band's strongest bin is a draw"))
+                    _reported(f"found {e.value:.0f} Hz; a noise band's "
+                              f"strongest bin is a draw"))
         want = fx.truth["f_peak"]
         e = am.dominant_frequency(fx.x, want * 0.5, want * 2.0, fx.sr)
         if not e.ok:
@@ -1025,11 +1107,11 @@ def c_repeat_period(fx):
         e = am.repeat_period(fx.x, fx.sr, min_lag_s=0.03)
         if want is None:
             return (_ref(f"irregular spacing: {e.reason}") if not e.ok else
-                    _ok(f"reported {e.value*1e3:.1f} ms on an IRREGULARLY "
-                        f"spaced record whose gaps are "
-                        f"{[round(g*1e3) for g in fx.truth['gaps_s']]} ms -- "
-                        f"reported, not gated: an autocorrelation of unequal "
-                        f"gaps has a legitimate strongest lag"))
+                    _reported(f"{e.value*1e3:.1f} ms on an IRREGULARLY "
+                              f"spaced record whose gaps are "
+                              f"{[round(g*1e3) for g in fx.truth['gaps_s']]} ms: "
+                              f"an autocorrelation of unequal gaps has a "
+                              f"legitimate strongest lag"))
         if not e.ok:
             return _ref(e.reason)
         # A MULTIPLE OF THE GAP, not the gap. These hits are at UNEQUAL
@@ -1129,9 +1211,9 @@ def c_spectral_flatness(fx):
     if fx.kind == "harmonic_mixture" and fx.truth["band_limited"]:
         band = (2000.0, 20000.0)
         got = am.spectral_flatness(fx.x, band, fx.sr)
-        return _ok(f"{got:.3f} on a dense known comb -- reported, NOT gated: "
-                   f"this estimator's own docstring exists to record that it "
-                   f"does not separate a comb from noise")
+        return _reported(f"{got:.3f} on a dense known comb: this estimator's "
+                         f"own docstring exists to record that it does not "
+                         f"separate a comb from noise")
     return _nm("no closed-form flatness for this family")
 
 
@@ -1199,8 +1281,9 @@ def c_line_stability(fx):
                                      fx.truth["f_end"] * 8.0), fx.sr)
         if not e.ok:
             return _ref(e.reason)
-        return _ok(f"{e.value:.3f} on a GLIDING record (reported: the "
-                   f"contrast with the stationary comb is the ground truth)")
+        return _reported(f"{e.value:.3f} on a GLIDING record; the contrast "
+                         f"with the stationary comb is the ground truth, and "
+                         f"the comb side of it is what is gated")
     return _nm("needs five or more known lines in one band")
 
 
@@ -1234,10 +1317,13 @@ def c_harmonic_signature(fx):
     if not sig.get("ok", True):
         return _ref(str(sig.get("reason")))
     worst, where = 0.0, None
+    loud = 0
     for k in range(2, 10):
         a = amps.get(k, 0.0)
         if a <= 0 or k * f0 >= 0.45 * fx.sr:
             continue
+        if 20.0 * math.log10(a / amps[1]) > -40.0:
+            loud += 1                      # planted well clear of any floor
         got = sig.get(f"h{k}")
         if got is None or not np.isfinite(got):
             continue
@@ -1245,6 +1331,17 @@ def c_harmonic_signature(fx):
         if abs(got - want) > worst:
             worst, where = abs(got - want), k
     if where is None:
+        # AN EMPTY SIGNATURE ON A RECORD WITH LOUD PLANTED PARTIALS IS A
+        # FAILURE, not a not-measured: `estimator_ground_truth_controls.py`'s
+        # start-red run found this check green against a stub that answered
+        # `{"ok": True}` and nothing else, because every `sig.get("h2")` came
+        # back None and the loop fell through to the line below. A record with
+        # two or more partials planted above -40 dB of its fundamental has
+        # harmonics to report, so reporting none of them is wrong.
+        if loud >= 2:
+            return _bad(f"reported no harmonic at all for a record with "
+                        f"{loud} partials planted above -40 dB of its "
+                        f"fundamental (keys: {sorted(sig)[:8]})")
         return _nm("no harmonic cleared the measured floor")
     return (_ok(f"worst departure from the planted series {worst:.3f} dB "
                 f"(at h{where})") if worst < 1.0
@@ -1281,9 +1378,9 @@ def c_inharmonic_fraction_db(fx):
                     if e.value < -30.0 else
                     _bad(f"{e.value:.2f} dB of inharmonic energy in a purely "
                          f"harmonic record"))
-        return _ok(f"{e.value:.2f} dB on a NAIVE (aliasing) shape -- reported: "
-                   f"the aliases are inharmonic by construction and their "
-                   f"total is not a closed form")
+        return _reported(f"{e.value:.2f} dB on a NAIVE (aliasing) shape: the "
+                         f"aliases are inharmonic by construction and their "
+                         f"total is not a closed form")
     if not e.ok:
         return _bad(f"refused a record with a planted {want:g} dB share: {e.reason}")
     return (_ok(f"{_err(e.value, want)} against the planted share")
@@ -1719,8 +1816,20 @@ def c_plateau_db(fx):
     band = ((f[0], fx.truth["fc"] / 4) if fx.truth["kind"] == "lowpass"
             else (fx.truth["fc"] * 4, 0.45 * fx.sr))
     got = am.plateau_db(f, db_, band)
-    return (_ok(_err(got, want)) if near(got, want, 0.0, 0.3)
-            else _bad(_err(got, want)))
+    if not near(got, want, 0.0, 0.3):
+        return _bad(_err(got, want))
+    # A UNITY-GAIN PASSBAND READS 0 dB, which a stub answering 0.0 also does:
+    # this check passed the start-red run until the shift below was added. A
+    # known gain applied to the whole curve must move the reading by exactly
+    # that gain, which is a second answer the same curve knows and a constant
+    # cannot produce.
+    shift = 7.5
+    moved = am.plateau_db(f, db_ + shift, band)
+    return (_ok(f"{_err(got, want)}; a {shift:g} dB shift of the whole curve "
+                f"moves it to {moved:.4f} dB")
+            if near(moved, want + shift, 0.0, 0.3)
+            else _bad(f"a {shift:g} dB shift of the curve moved the plateau to "
+                      f"{moved:.4f} dB, not {want + shift:.4f}"))
 
 
 def c_dc_plateau_db(fx):
@@ -1735,8 +1844,21 @@ def c_dc_plateau_db(fx):
                          scale_hz=fx.truth["fc"])
     if not e.ok:
         return _ref(e.reason)
-    return (_ok(_err(e.value, want)) if near(e.value, want, 0.0, 0.5)
-            else _bad(_err(e.value, want)))
+    if not near(e.value, want, 0.0, 0.5):
+        return _bad(_err(e.value, want))
+    # the same gain-shift invariance c_plateau_db carries, and for the same
+    # reason: a unity-gain passband extrapolates to 0 dB, which a constant
+    # answer also does
+    shift = 7.5
+    m = am.dc_plateau_db(f, db_ + shift, (f[0], fx.truth["fc"] / 4),
+                         scale_hz=fx.truth["fc"])
+    if not m.ok:
+        return _bad(f"refused the same curve shifted by {shift:g} dB: {m.reason}")
+    return (_ok(f"{_err(e.value, want)}; a {shift:g} dB shift of the curve "
+                f"moves it to {m.value:.4f} dB")
+            if near(m.value, want + shift, 0.0, 0.5)
+            else _bad(f"a {shift:g} dB shift moved the DC plateau to "
+                      f"{m.value:.4f} dB, not {want + shift:.4f}"))
 
 
 def c_spectrum(fx):

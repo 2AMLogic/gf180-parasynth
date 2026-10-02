@@ -80,11 +80,30 @@ AXIS_MIN_DISTINCT = 3
 
 
 # ---------------------------------------------------------------------------
-# Synthesis primitives. THE single home for them in this package: both
-# `estimator_domains.py` and `verify_109_claims.py` import these rather than
-# keeping their own copies (#517 acceptance criterion 6, "not duplicated").
-# `estimator_domains`' lead-by-default `two_tone` behaviour is preserved
-# exactly, including the phases 0.3 / 1.9 its own numbers were measured at.
+# Synthesis primitives. THE single home for them in this package.
+#
+# #517 acceptance criterion 6 asks that `estimator_domains.py` and
+# `verify_109_claims.py` be folded in or left standalone with a reason, and
+# not duplicated. What was done, and why it is both:
+#
+#   * Their SYNTHESIS is folded in. Both files held `_damped` / `_sine` /
+#     `_two_tone` that were the same functions as these, down to the phases
+#     0.3 and 1.9 their own numbers were measured at; both now bind those
+#     names to the functions below, so a change to the synthesis cannot move
+#     their numbers and this catalogue's independently. `verify_109_claims`
+#     passes `lead_ms=0`, because its numbers were taken without the
+#     pre-onset lead `two_tone` adds by default.
+#   * Their MEASUREMENTS stay standalone, with the reason: neither is a
+#     per-estimator gate. `estimator_domains.py` measures the declared DOMAIN
+#     BOUNDS `ValidatedDomain` quotes (#115) and prints the absence of the
+#     TR-808 corpus as a result; `verify_109_claims.py` re-measures two
+#     withdrawn numeric claims from #109 against reference WAVs. Folding
+#     either into `estimator_ground_truth.py` would put a corpus dependency
+#     inside a gate that must run with no corpus at all.
+#
+# Both still exit non-zero when a bound they measure stops holding, and both
+# are wired into `make verify` alongside this suite -- which they were not
+# before #517, and which is why a change here cannot break them unnoticed.
 # ---------------------------------------------------------------------------
 def damped(f, tau, amp, n, sr=SR, phase=0.0):
     """`amp * exp(-t/tau) * sin(2 pi f t + phase)`, `n` samples at `sr`."""

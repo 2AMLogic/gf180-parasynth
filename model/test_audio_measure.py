@@ -1075,6 +1075,68 @@ def test_damped_sinusoid_refuses_a_tau_its_residual_cannot_resolve(tau):
     assert abs(env / tau - 1) <= 0.10, f"the envelope fit must still work: {env*1e3:.1f} vs {tau*1e3:.0f} ms"
 
 
+#: `fixture_ms` is what the pre-repair estimator reported for a pair of these
+#: taus in `tools/probes/estimator_fixtures.py` -- the catalogue record that
+#: found the defect, not this record, whose own pre-repair reading is 66.2 ms.
+#: It is carried here so the number and the test that holds it sit together.
+@pytest.mark.parametrize("f2,tau1,tau2,fixture_ms", [
+    (233.0, 0.200, 0.050, 93.3),
+    (233.0, 0.100, 0.100, 53.6),
+])
+def test_damped_sinusoid_refuses_a_tau_when_the_record_holds_two_modes(
+        f2, tau1, tau2, fixture_ms):
+    """Two decay constants in one record have no single tau, and the RESIDUAL
+    does not say so (#517).
+
+    An AR(2) predictor tracks a slow beat well even when its poles are a blend
+    of two it cannot represent, so the fit residual stays at 3.5e-5 -- two
+    orders inside `max_residual` -- while the tau it reads matches neither
+    component: 93.3 ms for a pair at 200 and 50 ms, 53.6 ms for a pair both
+    decaying at 100 ms whose 13 Hz beat the single-pole model absorbs. Both
+    numbers are from `tools/probes/estimator_ground_truth.py`, which found
+    them, and the mutants in
+    `tools/probes/estimator_ground_truth_controls.py` are what hold this
+    repair from the other side: with `DAMPED_HALF_TAU_RATIO` widened to
+    infinity, or `_ar2_tau` blinded, the suite goes red on the beating
+    fixtures again.
+
+    The FREQUENCY survives and must still be reported -- it is the tau that is
+    ambiguous."""
+    x = (damped(220.0, tau1, seconds=0.8, phase=0.3)
+         + damped(f2, tau2, seconds=0.8, phase=1.1))
+    d = am.damped_sinusoid(x, SR)
+    assert d.residual < 0.01, \
+        f"the premise of this test is a SMALL residual; got {d.residual:.3g}"
+    assert d.freq.ok, "the frequency must survive a two-mode record"
+    assert not d.tau.ok, (
+        f"reported a confident tau of {(d.tau.value or 0)*1e3:.1f} ms for a "
+        f"record holding {tau1*1e3:.0f} ms and {tau2*1e3:.0f} ms "
+        f"(the catalogue fixture for this tau pair read {fixture_ms} ms "
+        f"before the repair)")
+    assert "more than one decay constant" in d.tau.reason
+    assert "half_tau" in d.tau.detail
+
+
+def test_damped_sinusoid_still_answers_a_single_mode_at_every_level():
+    """The other half of the half-split check: it must not refuse a record
+    that DOES hold one decay constant.
+
+    An exponential looks the same from anywhere along it, so the two halves of
+    a single damped sinusoid read the same tau to four figures -- measured
+    worst ratio 1.0000 over the whole of
+    `tools/probes/estimator_fixtures.py`, which is where
+    `DAMPED_HALF_TAU_RATIO` = 1.25 comes from."""
+    for f, tau in ((220.0, 0.030), (56.0, 0.300), (3450.0, 0.004)):
+        x = damped(f, tau, seconds=min(10 * tau, 1.2), phase=0.3)
+        d = am.damped_sinusoid(x, SR)
+        tau_e = d.tau.require(f"{f:g} Hz / {tau*1e3:g} ms")
+        assert abs(tau_e / tau - 1) <= 0.05, \
+            f"{f:g} Hz: {tau_e*1e3:.2f} ms against {tau*1e3:g} ms"
+        a, b = d.tau.detail.get("half_tau", (None, None))
+        if a and b:
+            assert max(a, b) / min(a, b) <= am.DAMPED_HALF_TAU_RATIO
+
+
 def test_natural_frequency_from_peak_matches_the_closed_form():
     """f0, the -3 dB corner and the resonant peak are three different numbers
     for a resonant filter. At Q 2.5 the corner sits about 28 % below f0 and the
