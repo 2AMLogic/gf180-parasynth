@@ -205,7 +205,7 @@ def test_damped_mean_square_matches_numerical_integration(f, tau, phase):
     over = 32                                      # 32x oversampled trapezoid
     t = np.arange(int(dur * SR * over) + 1) / (SR * over)
     g = (np.exp(-t / tau) * np.sin(2 * math.pi * f * t + phase)) ** 2
-    want = float(np.trapz(g, t) / dur)
+    want = float((getattr(np, "trapezoid", None) or np.trapz)(g, t) / dur)
     got = ef.damped_mean_square(f, tau, 1.0, phase, dur)
     assert abs(got / want - 1.0) < 1e-5, (got, want)
     # and the record's own sample mean is close to it, but NOT equal: the gap

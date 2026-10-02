@@ -2120,9 +2120,7 @@ NOT_FIXTURE_CHECKED = {
                         "It measures nothing; its own contract (idempotent "
                         "re-declaration, conflict detection) is tested in "
                         "model/test_audio_measure.py."),
-    "spectral_lines": None,      # placeholder removed below; see SPECS
 }
-del NOT_FIXTURE_CHECKED["spectral_lines"]
 
 #: dataclasses and exceptions, which hold no measurement
 NOT_CALLABLE_ESTIMATORS = {
@@ -2132,7 +2130,6 @@ NOT_CALLABLE_ESTIMATORS = {
 
 
 def public_callables() -> list[str]:
-    import inspect
     out = []
     for n, o in vars(am).items():
         if n.startswith("_") or not callable(o):
@@ -2140,7 +2137,6 @@ def public_callables() -> list[str]:
         if getattr(o, "__module__", None) != "audio_measure":
             continue
         out.append(n)
-        _ = inspect
     return sorted(out)
 
 
@@ -2155,7 +2151,8 @@ def inventory() -> list[tuple]:
             rows.append((n, "SPECS", "checked against fixtures", True))
         elif n in NOT_FIXTURE_CHECKED:
             role, why = NOT_FIXTURE_CHECKED[n]
-            rows.append((n, role, why, True))
+            # an empty (role, reason) must not satisfy the inventory guard
+            rows.append((n, role, why, bool(role.strip() and why.strip())))
         else:
             rows.append((n, "UNDECLARED", "a public callable in audio_measure "
                                           "that this suite neither checks nor "
