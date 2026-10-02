@@ -54,9 +54,12 @@ FIVE RULES LEARNED THE EXPENSIVE WAY
     `damped_sinusoid` refuses TAU when the fit residual is comparable with the
     per-sample decay, because a least-squares fit of the two-pole recursion is
     biased towards a faster decay and on a quantised high-Q ring that bias is
-    the whole answer -- it reported 63 ms for a 127 ms bass drum; and `onsets`
-    positions are good to about 10 ms and no better, because the Hilbert
-    transform is not causal and puts a precursor ahead of every strike.
+    the whole answer -- it reported 63 ms for a 127 ms bass drum -- and ALSO
+    when the record's two halves disagree about tau, because a two-pole model
+    of a record holding two modes fits neither (#517: 93.3 ms for a pair whose
+    components were 200 ms and 50 ms); and `onsets` positions are good to
+    about 10 ms and no better, because the Hilbert transform is not causal and
+    puts a precursor ahead of every strike.
 
 Also: never normalise two signals before comparing them (that hides gain
 errors). `compare` reports waveform similarity and level difference
@@ -784,6 +787,73 @@ class Damped:
     residual: float
 
 
+def _ar2_poles(x):
+    """(a1, a2, relative residual) of the fit y[n] = a1 y[n-1] + a2 y[n-2]."""
+    A = np.vstack([x[1:-1], x[:-2]]).T
+    b = x[2:]
+    sol, *_ = np.linalg.lstsq(A, b, rcond=None)
+    resid = float(np.linalg.norm(b - A @ sol) / max(np.linalg.norm(b), 1e-300))
+    return float(sol[0]), float(sol[1]), resid
+
+
+def _ar2_tau(x, sr: int, max_residual: float, min_samples: int):
+    """(tau, why) of a two-pole fit of `x` -- `tau` is None when the fit does
+    not describe one decaying oscillation, and `why` names which gate fired.
+
+    Separate from `damped_sinusoid` so the half-split consistency check below
+    can fit a segment without recursing through that function's own gates.
+
+    No `_as_float` here on purpose: this is not an ingestion site. Its only
+    caller is `damped_sinusoid`, which hands it SLICES of an array that has
+    already taken the finiteness check at the module boundary (#134), and
+    repeating the check would make the call-site count in `_as_float`'s own
+    docstring say that one more place reads untrusted data than does."""
+    if len(x) < min_samples:
+        return None, "too few samples"
+    if is_silent(x):
+        return None, "silent"
+    a1, a2, resid = _ar2_poles(x)
+    if resid > max_residual:
+        return None, "not a single damped sinusoid"
+    if a2 >= 0:
+        return None, "no conjugate pole pair (a2 >= 0)"
+    r = math.sqrt(-a2)
+    if abs(a1 / (2 * r) if r > 0 else 2.0) > 1.0:
+        return None, "real poles: no oscillation"
+    if r >= 1.0:
+        return None, "not decaying (r >= 1)"
+    if resid > 0.2 * (1 - r):
+        return None, "residual comparable with the per-sample decay"
+    return -1.0 / (sr * math.log(r)), ""
+
+
+#: How far the two halves of a record may disagree about tau before
+#: `damped_sinusoid` refuses it. MEASURED, not chosen, over the whole of
+#: `tools/probes/estimator_fixtures.py`:
+#:
+#:   single damped sinusoids (every f, tau, duration, phase, level and SNR in
+#:   that catalogue at which the whole record resolves a tau at all) -- worst
+#:   half-to-half ratio 1.0000, to four figures, because an exponential is
+#:   scale-free and both halves see the same one;
+#:   records holding two modes at which the two-pole fit reported a confident
+#:   tau matching NEITHER component -- minimum ratio 1.915, and 6.1 to 7.6 for
+#:   a fast attack over a slow ring.
+#:
+#: 1.25 therefore sits 25 % above every true single-mode record measured and
+#: 1.5x below every wrong answer measured.
+#:
+#: WHAT DEFEATS THIS GUARD (docs/verification-rules.md rule 8): two modes
+#: whose taus are EQUAL and whose beat period divides the record so that both
+#: halves see the same beat phase. The halves then agree, and they agree on a
+#: number that is still not the pair's tau -- measured 77.1 ms for a 3 Hz-apart
+#: pair both decaying at 100 ms, which this check DOES catch (ratio 1.915), and
+#: 53.6 ms for a 13 Hz-apart pair, which it catches only through the second
+#: clause below (the far half refuses). A two-mode record whose halves both
+#: resolve and agree is not reachable from the current catalogue, and if one is
+#: found the fix is a three-way split, not a smaller ratio.
+DAMPED_HALF_TAU_RATIO = 1.25
+
+
 def damped_sinusoid(x, sr: int = SR_DEFAULT, *, max_residual: float = 0.25,
                     min_samples: int = 24) -> Damped:
     """Fit y[n] = a1*y[n-1] + a2*y[n-2] and read off frequency and tau.
@@ -799,18 +869,17 @@ def damped_sinusoid(x, sr: int = SR_DEFAULT, *, max_residual: float = 0.25,
     f = w*sr/2pi, tau = -1/(sr*ln r). Refuses when the fit residual is a large
     fraction of the signal (i.e. it is not one damped sinusoid), when a2 >= 0,
     when r >= 1 (growing, so no tau), or when |a1/2r| > 1 (real poles: a decay
-    with no oscillation)."""
+    with no oscillation).
+
+    TAU ALSO REFUSES WHEN THE RECORD HOLDS MORE THAN ONE MODE -- see
+    `DAMPED_HALF_TAU_RATIO` and the comment at the half-split check below."""
     x = _as_float(x)
     n = len(x)
     if n < min_samples:
         return Damped(_fail("too few samples", n=n), _fail("too few samples", n=n), 0.0, 0.0, 1.0)
     if is_silent(x):
         return Damped(_fail("silent"), _fail("silent"), 0.0, 0.0, 1.0)
-    A = np.vstack([x[1:-1], x[:-2]]).T
-    b = x[2:]
-    sol, *_ = np.linalg.lstsq(A, b, rcond=None)
-    a1, a2 = float(sol[0]), float(sol[1])
-    resid = float(np.linalg.norm(b - A @ sol) / max(np.linalg.norm(b), 1e-300))
+    a1, a2, resid = _ar2_poles(x)
     d = dict(a1=a1, a2=a2, residual=resid)
     if resid > max_residual:
         e = Estimate(None, False, "not a single damped sinusoid", d)
@@ -842,6 +911,50 @@ def damped_sinusoid(x, sr: int = SR_DEFAULT, *, max_residual: float = 0.25,
         return Damped(fe, Estimate(None, False,
                                    "fit residual comparable with the per-sample decay: "
                                    "tau unresolvable here, use decay_tau", d), a1, a2, resid)
+    # ONE RECORD, ONE MODE -- and the residual does not say so. A two-pole
+    # model of a record holding TWO damped modes fits neither: it reported
+    # 93.3 ms for a pair at 200 ms and 50 ms, 53.6 ms for a pair both at
+    # 100 ms, and 32 ms for an 8 ms attack over a 200 ms ring, each time with
+    # a residual (3.5e-5) comfortably inside the gate above, because an AR(2)
+    # predictor tracks a slow beat well even when its POLES are a blend of two
+    # it cannot represent. The frequency survives; the decay does not.
+    #
+    # The test is whether the record's two halves agree about tau. For one
+    # damped sinusoid they agree exactly -- an exponential looks the same from
+    # anywhere along it -- and for a mixture the early half is dominated by the
+    # fast component and the late half by the slow one, so they do not. A half
+    # that cannot resolve a tau for a reason OTHER than its own length or
+    # silence is itself the same evidence, and is treated as disagreement.
+    #
+    # #517 found this; `tools/probes/estimator_ground_truth.py` is the gate
+    # that holds it, and `DAMPED_HALF_TAU_RATIO` carries the measurement the
+    # threshold comes from.
+    h = len(x) // 2
+    if h >= 2 * min_samples:
+        ta, wa = _ar2_tau(x[:h], sr, max_residual, min_samples)
+        tb, wb = _ar2_tau(x[h:], sr, max_residual, min_samples)
+        soft = ("too few samples", "silent")
+        d = dict(d, half_tau=(ta, tb), half_reason=(wa, wb))
+        if ta is not None and tb is not None:
+            ratio = max(ta, tb) / min(ta, tb)
+            d = dict(d, half_ratio=ratio)
+            if ratio > DAMPED_HALF_TAU_RATIO:
+                return Damped(fe, Estimate(
+                    None, False,
+                    f"more than one decay constant in the record: its halves "
+                    f"read {ta*1e3:.2f} ms and {tb*1e3:.2f} ms (ratio "
+                    f"{ratio:.3f} > {DAMPED_HALF_TAU_RATIO}), so a single tau "
+                    f"is ambiguous -- window the record to one mode, or use "
+                    f"decay_tau", d), a1, a2, resid)
+        elif (ta is None) != (tb is None):
+            why = wa if ta is None else wb
+            if why not in soft:
+                return Damped(fe, Estimate(
+                    None, False,
+                    f"more than one decay constant in the record: one half "
+                    f"resolves a tau and the other does not ({why}), so a "
+                    f"single tau is ambiguous -- window the record to one "
+                    f"mode, or use decay_tau", d), a1, a2, resid)
     return Damped(fe, Estimate(-1.0 / (sr * math.log(r)), True, "", d), a1, a2, resid)
 
 

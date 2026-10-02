@@ -40,9 +40,20 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tools" / "probes"))
 
 import audio_measure as am                                            # noqa: E402
 import run_case as rc                                                 # noqa: E402
+#: THE SYNTHESIS PRIMITIVES LIVE IN ONE PLACE (#517 acceptance criterion 6:
+#: "folded into the new suite or explicitly left standalone -- not
+#: duplicated"). This file is left standalone -- it measures declared DOMAIN
+#: BOUNDS for #115 and is not a per-estimator gate -- but its `_damped`,
+#: `_sine` and `_two_tone` were character-for-character the same functions as
+#: `estimator_fixtures.damped`/`sine`/`two_tone`, including the phases 0.3 and
+#: 1.9 its own numbers were measured at. They are now imported, so a change to
+#: the synthesis cannot move this file's numbers and the fixture catalogue's
+#: independently.
+import estimator_fixtures as ef                                       # noqa: E402
 
 SR = 48000
 fails: list[str] = []
@@ -54,31 +65,14 @@ def check(ok: bool, what: str):
         fails.append(what)
 
 
-def _damped(f, tau, amp, n, sr=SR, phase=0.0):
-    t = np.arange(n) / sr
-    return amp * np.exp(-t / tau) * np.sin(2 * math.pi * f * t + phase)
-
-
-def _sine(f, amp, n, sr=SR, phase=0.0):
-    t = np.arange(n) / sr
-    return amp * np.sin(2 * math.pi * f * t + phase)
-
-
-def _two_tone(f1, f2, tau1, tau2, a1, a2, seconds, sr=SR, lead_ms=10.0):
-    """Two damped partials, with a TRUE PRE-ONSET LEAD by default.
-
-    `band_energy`'s own docstring states the precondition: `sosfiltfilt` pads
-    by 27 samples with an odd extension through the first sample, so a segment
-    that begins at full amplitude manufactures an edge worth up to 10 dB in a
-    sparsely-occupied band. A synthetic struck signal starts at full amplitude
-    by construction, so measuring `band_pair_db` on one without a lead measures
-    that edge and calls it the estimator. `run_case.prepare` guarantees the
-    lead on real records; this guarantees it on synthetic ones."""
-    n = int(seconds * sr)
-    x = (_damped(f1, tau1, a1, n, sr, 0.3) + _damped(f2, tau2, a2, n, sr, 1.9))
-    if lead_ms <= 0:
-        return x
-    return np.concatenate([np.zeros(int(lead_ms * 1e-3 * sr)), x])
+#: One home for the synthesis, in `estimator_fixtures`. The names are kept so
+#: the measurements below read as they did when they were taken; the bodies are
+#: gone. `two_tone`'s pre-onset lead (`band_energy`'s own precondition: a
+#: segment that begins at full amplitude manufactures a filter edge worth up
+#: to 10 dB) is part of that module's contract and is documented there.
+_damped = ef.damped
+_sine = ef.sine
+_two_tone = ef.two_tone
 
 
 # ===========================================================================

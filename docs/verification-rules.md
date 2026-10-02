@@ -98,13 +98,14 @@ cutoff error — put `corner ratio drift` in the BLIND column, because a
 **non-uniformity** metric cannot by construction see a **uniform** skew. Both
 properties were correct. One of them could never have failed for that defect.
 
-Three suites print the matrix, and they are the only three that can:
+Four suites print the matrix, and they are the only four that can:
 
 | suite | its "properties" | example |
 |---|---|---|
 | `model/sound_report.py --inject` | named acoustic properties per voice | `sd-centroid-amp-weighted` moves SD brightness 1918 → 5868 Hz and leaves SD's other **five** properties BLIND |
 | `fpga/verify_xdc_binding.py --matrix` | the nine properties that decide whether the Arty constraint file still binds this wrapper | `UART_SLASH_JOIN` — #315's own bytes — moves `hier_separators` and leaves the other **eight** BLIND, including `query_counts`: every query still has a declared required count, which is exactly why the text-level gates passed while both constraints were dropped |
 | `rtl-sketch/verify_ctl.py --inject` | the four fields of a register write, plus the write `count` and the `drain` window | `SPI_ADDR7` moves `address` on 105 of 206 writes and the other five are BLIND. `SPI_DATA24` moves `data` on 42 of 206. `SPI_ANYLEN` moves only `count` (208 writes reach the port for 206 sent) and `SPI_DRAIN_LATE` only `drain` (206 of 206 applied at `go`) — each row is printed against its OWN population, so `count` is over the 206 sent while `drain` is over the 208 that arrived |
+| `tools/probes/estimator_ground_truth.py controls` (#517) | the sixty-four estimator checks the synthetic ground-truth suite runs against `model/audio_measure.py` | twenty-two named mutants, each declared against the ONE (estimator, family) pair it must redden. `transfer` returning \|H\|&sup2; moves `transfer`, `corner_3db` and `bandwidth_q` — three of the four readers that go through it, `resonant_peak` reading the same curve's argmax and surviving a monotone squaring — and leaves the other **sixty-one** BLIND; `rms` as the mean of \|x\| moves exactly one. Thirty-nine checks are blind to every mutant, thirty-six of those were reddened by a start-red stub instead, and the run FAILS on any check reddened by **neither** |
 
 **Every other `--expect-fail` suite here is single-property by construction and
 a matrix would be a table with one column.** `verify_ladder.py`,

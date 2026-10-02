@@ -107,6 +107,31 @@ help:
 ## tools/external_claim.py (#123) refuses external-tool claims without their
 ## environment tuple and host_per_plugin entries that are neither 'unverified'
 ## nor backed by a passing claim. Its test is also in verify-fast. <0.1s.
+##
+## THE FOUR ESTIMATOR GROUND-TRUTH JOBS (#517, #158) are here and not in
+## `controls`, and the split is the runtime: `estimator_ground_truth.py check`
+## is 11 s of pure Python -- 170 synthetic fixtures over seven signal types,
+## each swept across frequency, duration, phase, SNR and level, against every
+## public callable in model/audio_measure.py -- while the mutant runs it needs
+## are a minute and live in `controls` beside the other injected defects.
+##
+## It is a gate on the MEASURING APPARATUS, which is why it runs with the fast
+## set rather than once before a release: every sound claim in docs/scorecard
+## is read through those estimators, so a change that moves one of them moves
+## every number quoted anywhere, and the answer must be known in the same turn
+## as the change. Its fixtures' answers come from their own synthesis
+## parameters and closed forms derived from them, never from another estimator,
+## so it needs no corpus and cannot go red on a reference file's absence.
+##
+## estimator_fixtures.py (1 s) is the catalogue's own axis-coverage guard: it
+## refuses a family whose swept axis took fewer than three distinct values or
+## spanned less than its stated minimum, so "swept" cannot quietly degrade to
+## "two values a per cent apart". estimator_domains.py (2 s) and
+## verify_109_claims.py (0.5 s) were committed one-off probes that ran
+## nowhere; they now share estimator_fixtures' synthesis primitives, so they
+## are gated here for the same reason the shared module is -- a change to the
+## synthesis must not be able to move their numbers unnoticed. Both print the
+## TR-808 corpus's absence as a result and exit 0 without it.
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py -q" \
@@ -138,6 +163,10 @@ verify:
 	  "$(PY) tools/check_decision_record_numbers.py" \
 	  "$(PY) tools/external_claim.py" \
 	  "$(PY) fpga/verify_live_midi.py --outdir build/live-midi" \
+	  "$(PY) tools/probes/estimator_ground_truth.py check" \
+	  "$(PY) tools/probes/estimator_fixtures.py" \
+	  "$(PY) tools/probes/estimator_domains.py" \
+	  "$(PY) tools/probes/verify_109_claims.py" \
 	  "$(PY) tools/sensitivity.py check"
 
 ## Fast sound-development checks, separate from the broad repository suite.
@@ -422,10 +451,23 @@ verify-full:
 ## re-runs a cheap decisive slice of each on every pass. A three-minute
 ## measurement that cannot change without a threshold changing does not belong
 ## in a per-push target.
+##
+## estimator_ground_truth.py controls (#517) is the same shape one level up:
+## the ground-truth suite in `verify` is a gate on sixty-four estimator
+## checks, and this is the run in which those checks are REQUIRED to go red.
+## Two start-red stubs with audio_measure's names and no behaviour (one
+## answering a confident constant, one refusing everything) plus twenty-two
+## named mutants, each declared against the ONE (estimator, family) pair it
+## must redden -- including two that remove #517's own damped_sinusoid repair,
+## because a repair with no injection is not closed (rule 5). It prints the
+## checks x defects matrix rule 4 asks for and FAILS on any check that
+## answered in the clean run and was reddened by nothing at all. Pure Python,
+## no corpus, ~65 s.
 controls:
 	@$(RUN) --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
+	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \

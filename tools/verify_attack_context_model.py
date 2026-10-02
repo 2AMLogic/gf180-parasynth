@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 import hashlib
@@ -13,6 +14,34 @@ import numpy as np
 from scipy.io import wavfile
 
 import compare_mono_attack_context as producer
+
+
+# audio_measure.py is hash-pinned as analysis basis, but this verifier reaches
+# only rms_envelope (via lead.am) and its finiteness helpers. Pinning the whole file
+# made every unrelated estimator repair (#517's damped_sinusoid) read as a
+# changed basis. The pin is narrowed to the code actually executed: the AST of
+# these definitions, docstrings included, at the recorded commit versus now.
+# Any edit to them still refuses. A NEW dependency of rms_envelope outside this
+# set is the input that defeats the narrowing;
+# test_rms_envelope_dependencies_are_pinned asserts the set stays closed.
+AUDIO_MEASURE = "model/audio_measure.py"
+AUDIO_MEASURE_BASIS = ("rms_envelope", "_as_float", "require_finite", "NonFiniteAudio", "InsufficientEvidence", "nonfinite_report", "SR_DEFAULT")
+
+
+def audio_measure_basis(source: str) -> dict:
+    """AST dump of each definition in AUDIO_MEASURE_BASIS; absent -> None."""
+    found = dict.fromkeys(AUDIO_MEASURE_BASIS)
+    for node in ast.parse(source).body:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            names = [node.name]
+        elif isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        else:
+            continue
+        for name in names:
+            if name in found:
+                found[name] = ast.dump(node)
+    return found
 
 
 def verify(report_path: Path) -> dict:
@@ -32,7 +61,14 @@ def verify(report_path: Path) -> dict:
     for name, digest in report["source_sha256"].items():
         historical = subprocess.check_output(["git", "show", f"{report['source_commit']}:{name}"], cwd=root)
         assert hashlib.sha256(historical).hexdigest() == digest, f"historical source hash differs: {name}"
-        if ref.sha256(root / name) != digest:
+        if name == AUDIO_MEASURE:
+            recorded = audio_measure_basis(historical.decode())
+            assert None not in recorded.values(), f"analysis basis definition absent at recorded commit: {name}"
+            if audio_measure_basis((root / name).read_text()) != recorded:
+                raise AssertionError(f"analysis basis changed: {name}; use the recorded checkout")
+            if ref.sha256(root / name) != digest:
+                changed_sources.append(name)  # reported; outside the executed basis
+        elif ref.sha256(root / name) != digest:
             changed_sources.append(name)
             assert name not in analysis_sources, f"analysis basis changed: {name}; use the recorded checkout"
     reference = json.loads(reference_path.read_text())
