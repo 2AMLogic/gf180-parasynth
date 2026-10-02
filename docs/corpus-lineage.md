@@ -334,7 +334,7 @@ This is a *preconditions assumed rather than asserted* defect of the shape
 `CLAUDE.md` warns about — a correct instrument in a wrong state, where the wrong
 state is "pointed at a path the operator thinks they configured". It is **not
 fixed here**: this issue is documentation, the fix touches five modules and
-needs its own controls, and it is filed separately. What this document does is
+needs its own controls, so it is filed as **#522**. What this document does is
 stop it being invisible.
 
 ## What is mechanical here and what is not
