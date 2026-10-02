@@ -44,6 +44,13 @@ evidence it rests on rather than grepped for one.
 
 ## 1. The reference audio
 
+> **Lineage, for every pack and not just these two:**
+> [`corpus-lineage.md`](corpus-lineage.md) — which unit, which session, which
+> licence, and which of the three reading groups each pack belongs to. This
+> section is the primary reference and its cross-check; that document covers all
+> ten packs reachable from here, including the ones that look like extra
+> machines and are not.
+
 ### Primary — Michael Fischer / Technopolis, CC0-1.0
 
 | | |

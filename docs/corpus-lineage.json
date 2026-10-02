@@ -1,0 +1,257 @@
+{
+  "schema": 1,
+  "what": "Reference-audio packs reachable from this repository, by SOURCE LINEAGE rather than by filename, with the group each is consumed in and the licence that bounds it. The audio is never committed; this file and docs/corpus-lineage.md are. Issue #520, part of #158.",
+  "built": "2026-10-02",
+  "built_from": "repository state only -- no corpus was mounted on the host that wrote this file (GF180_TR808_REFS unset, ~/dev/refs absent). Every field below is sourced to a committed file named in `evidence`; fields that cannot be established that way carry the literal string \"unknown -- operator with the corpus mounted must fill this in\" and are reported by `tools/corpus_lineage.py check` as OPEN.",
+  "unknown_marker": "unknown -- operator with the corpus mounted must fill this in",
+
+  "groups": {
+    "analyzer-development": "Material an estimator, metric or probe may be inspected on, tuned against and debugged with. Reading it tells you nothing about whether the instrument is right.",
+    "threshold-calibration": "Material a tolerance, bar or pass threshold is DERIVED from. A number read here becomes part of the apparatus, not part of a verdict.",
+    "held-out-validation": "Material that may be read only to produce a verdict, never to choose a parameter. A read is a recorded act (tools/holdout.py)."
+  },
+
+  "assignment_rule": [
+    "Assignment is by SOURCE LINEAGE, not by file or by pack. Dry, normalised and saturated versions of one recording session of one unit are ONE lineage and take ONE assignment together.",
+    "A lineage that appears in more than one group MUST carry `role_overlap_why` naming the separation that is in force instead -- e.g. a setting-level seal. Silence is not an option: tools/corpus_lineage.py check fails the manifest.",
+    "`lineage_status` is one of `documented` (the unit is identified from a cited source), `claimed` (the vendor or packager asserts it; nothing has measured it) or `unknown`.",
+    "WEAK EVIDENCE, two tiers, per #158. `unknown`: analyzer-development only. `claimed`: NEVER held-out-validation -- a verdict read against a pack whose unit identity is unestablished is exactly 'an extra library establishes an extra machine' -- but it may enter threshold-calibration carrying a non-empty `weak_evidence_why` that states why the calibration does not depend on the unestablished fact. Enforced by tools/corpus_lineage.py check rule R5.",
+    "Before a new pack may be called a second machine, run model/measure_harness.descent_test against the incumbent corpus. A best peak-normalised cross-correlation at or above MATCH_THRESHOLD (0.95) is a re-pressing and carries no independent information. Record the outcome in `descent_tested`.",
+    "A group that is empty for a voice is declared empty. An empty held-out-validation group is a stated no-verdict, never a pass."
+  ],
+
+  "targets": {
+    "designated-recording-match": {
+      "definition": "Does the instrument match THIS recording, of THIS unit, at THIS panel setting? An engineering target: it is well posed, it is measurable, and its answer is a distance from one machine's components, trimmers and afternoon.",
+      "current_work": "The whole scorecard (docs/scorecard/, tools/run_case.py) and tools/perceptual_gate.py rank/prove. Target and bar are both Fischer s/n 103852.",
+      "evidence": ["tools/run_case.py", "docs/scorecard/README.md", "tools/perceptual_gate.py", "docs/discrimination.md"]
+    },
+    "hardware-variation-coverage": {
+      "definition": "Does the instrument sit inside the spread that real units of this model show? Needs SEVERAL documented units. Unit-to-unit spread cannot be inferred from one unit however many packs it was re-pressed into.",
+      "current_work": "NONE. No work in this repository addresses this target, because no second documented unit is reachable. docs/drum-verification.md 1.7's +-10 % is a component tolerance about the population, not a measurement of it; tools/run_case.py says in so many words that using it as a scorecard tolerance grants the model the whole population's variation as credit against one member of it.",
+      "evidence": ["tools/run_case.py", "docs/discrimination.md", "tools/measure_repeatability.py"]
+    },
+    "processed-pack-distribution-match": {
+      "definition": "Does the instrument sit inside the distribution of a commercial sample pack? A different thing again: a pack's spread is its console, its converter, its per-voice group normalisation and its editor's trims as much as its machine.",
+      "current_work": "docs/bd-repeatability-measurement.md measures the 808 From Mars grid and the session-to-session difference between its two editions. That is used to FLOOR a tolerance, which is legitimate; it is not and must not be read as hardware fidelity.",
+      "evidence": ["docs/bd-repeatability-measurement.md", "tools/measure_repeatability.py", "refaudio/catalog.json"]
+    }
+  },
+
+  "packs": [
+    {
+      "id": "fischer-tr808-103852",
+      "name": "Roland TR-808 Rhythm Composer Sound Sample Set 1.0.0 (Michael Fischer / Technopolis, 09/08/94)",
+      "instrument": "Roland TR-808",
+      "unit": "serial no. 103852 -- a real machine, explicitly not samples of samples",
+      "lineage_status": "documented",
+      "dry_or_processed": "dry",
+      "known_settings": "Every knob position is in the filename, 0-10 sampled at 0.0/2.5/5.0/7.5/10.0, tone or tuning before decay or snappy; BD5050.WAV is TONE 5.0 DECAY 5.0. LEVEL was pinned at maximum for every voice, so cross-voice loudness in this set is NOT the machine's.",
+      "processing": "Individual voice outputs, not the master bus. 16-bit/44.1 kHz, SoundEdit 16 on a Quadra 660AV. No console, no tape, no saturation, no EQ. Every file is peak-normalised by our apparatus before measurement (ours, not the vendor's). 116 one-shots.",
+      "relationships": "One take per setting -- Fischer recorded many hits of each sound and kept the one he judged most representative, so there is no take axis and no delta=0 pair. The `808*` directories redistributed in tidalcycles/Dirt-Samples are byte-identical re-pressings of these files, cross-correlating at 1.000 (see pack dirt-samples-808).",
+      "licence": "CC0-1.0, full legal code as LICENSE in the source repository; each of the 16 _soundmeta/*.json independently declares \"license\": \"cc0\". Public-domain dedication. \"Roland\" and \"TR-808\" remain Roland's trademarks.",
+      "redistribution": "Permitted by CC0-1.0. Still not committed here: 12 MB of audio and .gitignore excludes *.wav.",
+      "storage": "Cloned by the operator; the path is resolved in exactly one place, tools/run_case.py configured_refs() -> $GF180_TR808_REFS, else /tmp/tr808-ref. Layout the code assumes: <refs>/<voice>8/<NAME>.WAV, e.g. bd8/BD5050.WAV, cy8/CY5025.WAV (model/drum_verify.py REF_MAIN). Pinned to upstream commit 85fbecf; tools/clap_d12a_probe.py verify_manifest() checks every file against tr808-fischer-85fbecf.sha256 and basis() REFUSES if the corpus git head does not start with the pin. Set GF180_REQUIRE_TR808_REFS=1 where a missing corpus must fail rather than skip.",
+      "source": "https://github.com/tidalcycles/sounds-tr808-fischer commit 85fbecf1bec32553395625ea659e2a56dfd7c0e1",
+      "roles": ["threshold-calibration", "held-out-validation"],
+      "role_overlap_why": "This lineage is on BOTH sides of the comparison it decides, and nothing can change that while it is the only documented unit reachable. tools/perceptual_gate.py bar_for() builds each sound's pass bar out of Fischer's own adjacent-knob neighbours (or, for the six no-knob sounds, a resampling of the same take labelled WEAK) and then scores a candidate against a Fischer target. The separation actually in force is at SETTING level, not lineage level: docs/scorecard/cases.csv marks twenty cases Holdout and tools/holdout.py makes a read of one a recorded act, asserted against git. That separates settings of one machine; it does NOT separate lineages, and no claim here should be read as if it did.",
+      "descent_tested": "incumbent -- this is the corpus other candidates are tested against",
+      "evidence": ["docs/drum-verification.md", "tools/run_case.py", "model/drum_verify.py", "tools/clap_d12a_probe.py", "tools/perceptual_gate.py", "tools/holdout.py", "docs/discrimination.md"]
+    },
+    {
+      "id": "dirt-samples-808",
+      "name": "tidalcycles/Dirt-Samples 808* directories",
+      "instrument": "Roland TR-808",
+      "unit": "serial no. 103852 -- the same unit as fischer-tr808-103852; these are re-pressings, not a second recording",
+      "lineage_status": "documented",
+      "dry_or_processed": "dry",
+      "known_settings": "As fischer-tr808-103852, under different file names.",
+      "processing": "None of its own: byte-identical to the Fischer files.",
+      "relationships": "A RE-PRESSING of fischer-tr808-103852. Cross-correlates at 1.000. Carries no independent information and must never be counted as a second library, a second session or a second machine.",
+      "licence": "As the Fischer set, CC0-1.0.",
+      "redistribution": "Permitted. Not used here and not fetched.",
+      "storage": "Not provisioned. Recorded in this manifest so that a future reader who finds it does not count it twice.",
+      "source": "https://github.com/tidalcycles/Dirt-Samples",
+      "roles": [],
+      "group_why": "Not used. It is the same bytes as fischer-tr808-103852; using it would double-count one lineage, which is the exact failure #158 names.",
+      "descent_tested": "yes -- documented at correlation 1.000 in docs/discrimination.md section 7",
+      "evidence": ["docs/discrimination.md", "tools/measure_repeatability.py"]
+    },
+    {
+      "id": "808-from-mars",
+      "name": "808 FROM MARS (current edition)",
+      "instrument": "Roland TR-808",
+      "unit": "Samples From Mars's own machine. Serial number not published. NOT established to be a different unit from s/n 103852 and not established to be the same one -- it is a different RECORDING (different chain, different converter, different decade), which is a weaker statement than a different machine.",
+      "lineage_status": "claimed",
+      "dry_or_processed": "processed -- including the subset named Clean",
+      "known_settings": "No panel settings ship with any of it. File names carry what the vendor chose to encode and nothing else: A = No Accent, B = Accent, C = More Accent, and for the clean bass drum a DECAY letter plus a trailing 01-06 that is the TONE knob.",
+      "processing": "Per catalog.json's own About text: Clean/Digital = the 808 through an API 1608 console at minimal gain, direct to an Apogee Symphony MKII converter, GROUP NORMALISED PER VOICE. Clean/Tape adds an Otari MTR-12 tape machine. Color = various 1608 processing including dynamics and EQ. So even Clean/Digital is console plus group normalisation, not dry. 1,946 WAV, all 44.1 kHz, 1,754 at 24-bit and 192 at 16-bit, 2,045 s.",
+      "relationships": "The trailing 01-06 on the clean bass drum is the TONE knob, NOT a take index -- the grid is 2 chains x 2 accents x 6 DECAY x 6 TONE = 144 with no take axis at all, so there are no delta=0 pairs anywhere in the pack. This correction is the subject of docs/bd-repeatability-measurement.md section 1; refaudio/README.md previously said the opposite and says so. Its own superseded edition is pack 808-from-mars-legacy, treated as a second recording session of the same machine. 808-loops-from-mars is a third product from the same vendor and machine.",
+      "licence": "Commercial Samples From Mars product (product_id 616670). No redistribution.",
+      "redistribution": "NOT redistributable. Audio is never committed; refaudio/*.wav and refaudio/cache/ are gitignored.",
+      "storage": "Operator-side storage, reached over ssh with REFAUDIO_SSH and REFAUDIO_ROOT set in the environment (never committed): `python tools/refaudio_fetch.py 808-from-mars.zip '<member path>'` lands files in the gitignored refaudio/cache/. tools/refaudio_local.py does the same from a local copy of the archive. Both have three outcomes -- FETCHED, FAIL, REFUSED (exit 2) -- and REFUSED is the normal answer on most hosts.",
+      "archive": "808-from-mars.zip",
+      "archive_sha256": "f567c6767e34734964007dda645834f5ddd3dc75eaad18d8e306638ab183ca82",
+      "index": "refaudio/index/808-from-mars.tsv",
+      "roles": ["analyzer-development", "threshold-calibration"],
+      "weak_evidence_why": "What this pack calibrates is a FLOOR taken from the session-to-session difference between its own two editions, and that number does not depend on which machine it is -- only on it being the same machine twice, which is the vendor's product lineage rather than its unit identity. So the unestablished fact (whose 808 this is) is not load-bearing for the use. It would be load-bearing for a verdict, which is why this pack is barred from held-out-validation.",
+      "role_overlap_why": "It is development data for the repeatability instrument (tools/measure_repeatability.py --self-test and --audit were written and debugged on it) and the source of the floor that instrument produces. It is NOT in held-out-validation and must not enter it: no scorecard verdict and no perceptual-gate bar reads this pack, and its lineage_status is `claimed`, which the assignment rule forbids from backing a verdict.",
+      "descent_tested": "no -- model/measure_harness.descent_test has never been run against this pack. Its independence from s/n 103852 is a vendor claim. Running it is cheap and is the first thing to do with the pack mounted.",
+      "evidence": ["refaudio/README.md", "refaudio/catalog.json", "refaudio/index/808-from-mars.tsv", "docs/bd-repeatability-measurement.md", "tools/measure_repeatability.py"]
+    },
+    {
+      "id": "808-from-mars-legacy",
+      "name": "808 FROM MARS - Legacy (Older Version)",
+      "instrument": "Roland TR-808",
+      "unit": "the same machine as 808-from-mars, per the vendor's product lineage -- a superseded earlier edition, not a different instrument. Serial number not published.",
+      "lineage_status": "claimed",
+      "dry_or_processed": "processed",
+      "known_settings": "No panel settings ship. Folder names only; catalog.json's source_basis for this pack is \"indexer inference from folder names\", weaker than the current edition's \"vendor About text\", and its `about` field is empty.",
+      "processing": "Not documented by the vendor for this edition. 1,400 WAV, all 44.1 kHz, 1,290 at 24-bit and 110 at 16-bit, 1,005 s. Trims differ from the current edition: start-trim and end-trim jitter between the two editions is what tools/measure_repeatability.py --self-test control 3 measures as EDITING NOISE, the floor beneath which a machine number is not a measurement.",
+      "relationships": "A SECOND RECORDING SESSION of 808-from-mars's machine, years apart. This pair is the only repeat axis the whole corpus has, and what it measures is session-to-session reproducibility -- strictly larger than take-to-take, and strictly what anyone comparing against one recorded reference is exposed to. It is NOT a second machine and NOT an extra library.",
+      "licence": "Commercial Samples From Mars product (product_id 77883969). No redistribution.",
+      "redistribution": "NOT redistributable. Same gitignore and cache rules as 808-from-mars.",
+      "storage": "As 808-from-mars; archive 808_from_mars_legacy.zip.",
+      "archive": "808_from_mars_legacy.zip",
+      "archive_sha256": "e1bbd0b1752e72b75d49c66dda74e5c33f9bac6815c39fb7346e61a6330d2de5",
+      "index": "refaudio/index/808_from_mars_legacy.tsv",
+      "roles": ["threshold-calibration"],
+      "weak_evidence_why": "As 808-from-mars: it is the second half of the session pair whose difference is the floor, and a difference between two sessions of one machine is well defined without knowing which machine. Barred from held-out-validation for the same reason.",
+      "descent_tested": "no -- never run. Expected to correlate highly with 808-from-mars at matched settings if it really is the same machine; that expectation has not been checked and the check is the point.",
+      "evidence": ["refaudio/README.md", "refaudio/catalog.json", "tools/measure_repeatability.py", "docs/bd-repeatability-measurement.md"]
+    },
+    {
+      "id": "808-loops-from-mars",
+      "name": "808 LOOPS FROM MARS",
+      "instrument": "Roland TR-808",
+      "unit": "as 808-from-mars, per the vendor. Serial number not published.",
+      "lineage_status": "claimed",
+      "dry_or_processed": "processed",
+      "known_settings": "None. Loops at 120-128 bpm, clean and processed, up to 16 bars.",
+      "processing": "Vendor-stated clean and processed loops; the chain is not broken out per subset in catalog.json. 725 WAV, all 44.1 kHz 24-bit, 10,004 s. `index` is null in catalog.json: this pack is NOT indexed file-by-file.",
+      "relationships": "The nearest thing in the whole corpus to one setting struck repeatedly inside one continuous take -- its bass-drum-only 4/4 loops. That is the delta=0 material 808-from-mars turned out not to have. It was not among the copies available when refaudio/README.md was last checked.",
+      "licence": "Commercial Samples From Mars product (product_id 79334748). No redistribution.",
+      "redistribution": "NOT redistributable.",
+      "storage": "Indexed in refaudio/catalog.json only (no per-file TSV); archive 808_loops_from_mars.zip, 1.36 GB.",
+      "archive": "808_loops_from_mars.zip",
+      "archive_sha256": "0142b505baed5d05360950635c1a2b3d09950d36b22c31f6fd174bd7c7be6361",
+      "index": null,
+      "roles": [],
+      "group_why": "Nothing has read it. Not available when it was wanted; no measurement rests on it. It is the candidate for an analyzer-development read of the delta=0 question, which is why it is recorded here rather than left out.",
+      "descent_tested": "no -- never run.",
+      "evidence": ["refaudio/README.md", "refaudio/catalog.json"]
+    },
+    {
+      "id": "boutique-808",
+      "name": "Apple Logic Pro, Ultrabeat \"Boutique 808\" (GB_Tasty808_*.aif)",
+      "instrument": "a Roland TR-808, or something presented as one",
+      "unit": "unknown -- operator with the corpus mounted must fill this in",
+      "lineage_status": "unknown",
+      "dry_or_processed": "unknown -- operator with the corpus mounted must fill this in",
+      "known_settings": "None. Provenance and knob settings are undocumented, which is stated wherever it is used.",
+      "processing": "Undocumented. 26 uncompressed AIFFs.",
+      "relationships": "Unknown relative to every other pack here. Never run through descent_test, so whether it is yet another re-pressing of s/n 103852 is an open question, not a settled one.",
+      "licence": "Apple factory content: licensed for use in the user's productions, NOT redistributable.",
+      "redistribution": "NOT redistributable. A private cross-check only; never committed, never quoted.",
+      "storage": "/Library/Application Support/Logic/Ultrabeat Samples/Boutique 808/ on an operator machine with Logic Pro installed. Reached by tools/perceptual_gate.py crosscheck --other <dir>.",
+      "roles": ["analyzer-development"],
+      "descent_tested": "no -- never run, and this is the pack where it matters most, because the one question it is used for (can a sound that is not this exact Fischer unit pass the gate?) is meaningless if it IS that unit re-pressed.",
+      "evidence": ["docs/drum-verification.md", "tools/perceptual_gate.py"]
+    },
+    {
+      "id": "ableton-factory-808",
+      "name": "Ableton Live Factory Packs, Drum Machines -- complete 808 kit",
+      "instrument": "a Roland TR-808, or something presented as one",
+      "unit": "unknown -- operator with the corpus mounted must fill this in",
+      "lineage_status": "unknown",
+      "dry_or_processed": "unknown -- operator with the corpus mounted must fill this in",
+      "known_settings": "None.",
+      "processing": "Unknown. Every file is Ableton's proprietary compressed AIFF-C (FORM...AIFC...able); neither ffmpeg nor scipy decodes it.",
+      "relationships": "No relationship to any other pack here has been established, and none can be established from this repository: the container does not decode, so these files cannot be compared with the Fischer set or with anything else. A bare \"Unknown.\" stood here until tools/corpus_lineage.py learned to read that as an unestablished field; this is the same fact stated so it cannot be mistaken for a gap an operator with the corpus mounted could close.",
+      "licence": "Ableton factory content. Not redistributable.",
+      "redistribution": "NOT redistributable.",
+      "storage": "~/Music/Ableton/Factory Packs/Drum Machines/ on an operator machine.",
+      "roles": [],
+      "group_why": "UNUSABLE, not merely unused: the container does not decode with any reader in this repository. Recorded so nobody repeats the search.",
+      "descent_tested": "cannot be run -- the files do not decode.",
+      "evidence": ["docs/drum-verification.md"]
+    },
+    {
+      "id": "mini-from-mars",
+      "name": "MINI FROM MARS",
+      "instrument": "Moog Minimoog",
+      "unit": "Samples From Mars's own Minimoog. Serial number not published.",
+      "lineage_status": "claimed",
+      "dry_or_processed": "processed",
+      "known_settings": "None. The pack is patch multisamples -- named patches (3 Stack Bass, Vibey Lead, ...) sampled across the keyboard. No panel settings ship.",
+      "processing": "Vendor chain, not broken out. 3,669 WAV indexed file-by-file.",
+      "relationships": "micro-from-mars is a second, different Moog ladder instrument from the same vendor, not another take of this one.",
+      "licence": "Commercial Samples From Mars product. No redistribution.",
+      "redistribution": "NOT redistributable.",
+      "storage": "Operator-side storage as 808-from-mars; index refaudio/index/mini_from_mars.tsv.",
+      "index": "refaudio/index/mini_from_mars.tsv",
+      "roles": [],
+      "group_why": "Nothing reads it, and it does not unblock what it was hoped to: capability node M3 needs one clip of a real Minimoog filter SELF-OSCILLATING, and a search of all 3,669 file names finds nothing labelled as self-oscillation, resonance, sine or sweep. M3 stays blocked on a recording made to docs/moog-recording-protocol.md. It may still serve the h5-vs-h3 probe's rejection statistics, which would be an analyzer-development read.",
+      "descent_tested": "not applicable -- there is no incumbent Minimoog corpus with documented unit identity to test descent from.",
+      "evidence": ["refaudio/README.md", "refaudio/catalog.json", "docs/capability-dag.md"]
+    },
+    {
+      "id": "micro-from-mars",
+      "name": "MICRO FROM MARS",
+      "instrument": "Moog Micromoog",
+      "unit": "Samples From Mars's own Micromoog. Serial number not published.",
+      "lineage_status": "claimed",
+      "dry_or_processed": "processed",
+      "known_settings": "None.",
+      "processing": "Vendor chain, not broken out. 1,673 WAV indexed file-by-file.",
+      "relationships": "A different instrument from mini-from-mars -- a second Moog ladder, not a second take.",
+      "licence": "Commercial Samples From Mars product. No redistribution.",
+      "redistribution": "NOT redistributable.",
+      "storage": "Operator-side storage; index refaudio/index/micro_from_mars.tsv.",
+      "index": "refaudio/index/micro_from_mars.tsv",
+      "roles": [],
+      "group_why": "Nothing reads it.",
+      "descent_tested": "not applicable -- no incumbent Micromoog corpus.",
+      "evidence": ["refaudio/README.md", "refaudio/catalog.json"]
+    },
+    {
+      "id": "legowelt-minimoog-5529",
+      "name": "Legowelt free Minimoog sample pack",
+      "instrument": "Moog Minimoog",
+      "unit": "Legowelt's 1970s Minimoog, serial no. 5529 -- the one unit in the whole corpus besides the Fischer 808 whose serial number is published",
+      "lineage_status": "documented",
+      "dry_or_processed": "unknown -- operator with the corpus mounted must fill this in",
+      "known_settings": "NONE SHIP, and that is the disqualifier: docs/moog-recording-protocol.md says that without the settings a take is a sound, not a measurement. 222 WAV.",
+      "processing": "Not documented.",
+      "relationships": "Independent of mini-from-mars (different unit, different recordist). No relationship has been measured.",
+      "licence": "Free, per model/moog_probe.py. Exact terms not recorded here -- operator to confirm before any redistribution.",
+      "redistribution": "Do not redistribute until the terms are confirmed and written down.",
+      "storage": "Operator-side. model/moog_probe.py and model/reference_compare.py read it.",
+      "roles": ["analyzer-development"],
+      "descent_tested": "not applicable -- no incumbent Minimoog corpus.",
+      "evidence": ["model/moog_probe.py", "model/reference_compare.py", "docs/moog-recording-protocol.md", "docs/capability-dag.md", "docs/v0.3-scope.md"]
+    }
+  ],
+
+  "not_acquired": [
+    {
+      "name": "kb6.de Roland content",
+      "why_rejected": "the Roland content has been deleted from the site, and it carried no explicit licence anyway",
+      "evidence": "docs/drum-verification.md"
+    },
+    {
+      "name": "archive.org tr-808-samples",
+      "why_rejected": "excellent provenance (early-revision unit, RME UFX) but NO LICENCE METADATA, and two long continuous FLACs rather than per-voice one-shots. This is the most painful rejection in the list: it is the nearest thing to a second documented unit anyone has found.",
+      "evidence": "docs/drum-verification.md"
+    },
+    {
+      "name": "archive.org 808-for-cmi",
+      "why_rejected": "no licence metadata",
+      "evidence": "docs/drum-verification.md"
+    }
+  ],
+
+  "out_of_scope": {
+    "refprofile/": "Software references, not recordings of hardware: audio rendered once through a qualified plugin rig (surge-type2, modeld, miniv3, diva), cached and hashed, 16 clips. Its own provenance and disqualification record is refprofile/README.md and refprofile/profile.json. Lineage there is a plugin build and a licence state, not a machine, so it has its own apparatus document and is deliberately not listed above."
+  }
+}

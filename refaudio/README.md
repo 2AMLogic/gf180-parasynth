@@ -15,6 +15,18 @@ own model because external grounding is expensive. This makes one kind of
 external grounding cheap: recordings of the real machines, made by someone who
 has never seen our model.
 
+**Which machine each pack is, and which group it may be read in, is
+[`docs/corpus-lineage.md`](../docs/corpus-lineage.md)** — not this file. This
+one is an index of *what exists*; that one is the lineage record: per pack the
+unit, the recording chain, the licence and redistribution terms, the
+relationships between files, and which of `analyzer-development` /
+`threshold-calibration` / `held-out-validation` it belongs to. It exists because
+a pack count is not a machine count: three of the packs indexed here descend
+from one Samples From Mars 808, and the `808*` directories in
+tidalcycles/Dirt-Samples are byte-identical to the Fischer set. Its machine-
+readable half is `docs/corpus-lineage.json`, checked by
+`tools/corpus_lineage.py check`.
+
 It is **not** a measurement set, and it must not be cited as one:
 
 - **No panel settings ship with any of it.** That is the same disqualifier
