@@ -411,6 +411,14 @@
       "ladder_tone_hz": 12000.0,
       "ladder_tone_why": "the narrowband-tone ladder is placed where #158's first escape is (12 kHz), so that column is the escape's level sweep and gives its detectable size",
       "k_selection": "K_cal = the smallest K in k_grid at which the CALIBRATION split shows zero false alarms over its permitted and correction columns. If none does, K_cal is REFUSED and the validation split gets no headline rate -- it gets the whole grid. Validation rates are read at K_cal and nowhere else.",
+      "k_selection_conditional": {
+        "exclude_columns": [
+          "delay_ms",
+          "pd_leading_silence"
+        ],
+        "what": "the same rule with the two ALIGNMENT columns left out of the calibration false alarms -- what the rates would be IF an alignment step existed. None does in this repository.",
+        "provenance": "POST-HOC: added after the first run showed those two columns set K_cal on their own. It is reported beside K_cal, labelled conditional, and never instead of it."
+      },
       "known_answer_suite": "audio_distance_floor.e0_ground_truth",
       "known_answer_note": "closed form: identical inputs read exactly 0 and a pure x2 gain reads ln 2 (without the peak normalisation used on anchors)"
     }
@@ -578,7 +586,7 @@
     "why": "permitted_differences transforms drawn on anchors use their own namespace, above that module's VALIDATE_BASE + SEED_SPAN, so no draw here coincides with a calibration, validation or false-alarm draw there"
   },
   "freeze": {
-    "definition_sha256": "27cb9839e7356b335fbfbfe8795e98c469526ced2384a4a1d6ba6959b4976d39",
+    "definition_sha256": "62c7e497f8f06c849095d25b77a57936bd62f62f7f8b9bae7bc3446cce3a146b",
     "frozen_on": "2026-10-03"
   }
 }

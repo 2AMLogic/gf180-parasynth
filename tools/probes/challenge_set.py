@@ -945,6 +945,11 @@ def mel_report(anchor_results: list[dict], defn: dict) -> dict:
     validation = None
     if k_cal is not None:
         validation = by_k[str(k_cal)].get("validation")
+    cond = spec.get("k_selection_conditional") or {}
+    excl = set(cond.get("exclude_columns") or [])
+    cal_c = [r for r in cal if r["col"] not in excl]
+    k_cond = next((k for k in grid if cal_c and not any(r["distance"] > k * r["floor"]
+                                                        for r in cal_c)), None)
     per_col = {}
     for cls, col, _ in _columns(defn):
         sel = [r for r in rows if r["col"] == col]
@@ -970,7 +975,12 @@ def mel_report(anchor_results: list[dict], defn: dict) -> dict:
         calibration_false_alarms_worst=[{k: r[k] for k in ("anchor", "col", "strength",
                                                            "distance", "floor", "ratio")}
                                         for r in worst_fa],
-        validation_at_k_cal=validation, per_column=per_col)
+        validation_at_k_cal=validation,
+        conditional=dict(exclude_columns=sorted(excl), provenance=cond.get("provenance"),
+                         k=k_cond,
+                         validation_at_k=(by_k[str(k_cond)].get("validation")
+                                          if k_cond is not None else None)),
+        per_column=per_col)
 
 
 # ===========================================================================
@@ -1249,6 +1259,12 @@ def report_text(res: dict) -> str:
           f"distance {r['distance']:.4g}  floor {r['floor']:.4g}  ({r['ratio']:.3g} x)")
     if mel.get("validation_at_k_cal") is not None:
         w(f"  validation at K_cal: {mel['validation_at_k_cal']}")
+    cond = mel.get("conditional") or {}
+    if cond:
+        w(f"  CONDITIONAL, not a result: excluding {cond.get('exclude_columns')} from the "
+          f"calibration false alarms, K = {cond.get('k')}; validation there: "
+          f"{cond.get('validation_at_k')}")
+        w(f"     {cond.get('provenance')}")
     w("")
     w("-" * 100)
     w("3. ONE REPORT PER ESTIMATOR -- no overall quality number exists in this output")
