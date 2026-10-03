@@ -279,6 +279,7 @@ def test_constant_estimator_is_blind_on_every_defect_column():
     m = cs.coverage_matrix([r], _defn())["decay_tau"]
     for col in _defn()["columns"]["defect"]:
         assert m[col]["label"] in ("BLIND", "NO-VERDICT"), (col, m[col])
+        assert m[col]["refused"] == 0                 # a constant never refuses
     assert any(m[c]["label"] == "BLIND" for c in _defn()["columns"]["defect"])
     for col in _defn()["columns"]["permitted"]:
         assert m[col]["label"] == "STILL", (col, m[col])
@@ -293,12 +294,18 @@ def test_estimator_that_answers_noise_false_alarms_on_permitted_columns():
     assert m["delay_ms"]["label"] == "FALSE-ALARM"
 
 
-def test_real_decay_tau_sees_clipping_and_tracks_the_pitch_correction():
+def test_real_decay_tau_abstains_on_clipping_and_tracks_the_pitch_correction():
     r = cs.run_anchor(_ANCHOR, _strike(), SR, _defn(), estimators=["decay_tau"],
                       with_mel=False)
     m = cs.coverage_matrix([r], _defn())["decay_tau"]
-    # a 1/e decay read on a record hard-clipped to 2 % of its peak is wrong
-    assert m["clip_fraction"]["label"] == "MOVED"
+    # WRONG-THEN-RIGHT: this test first asserted MOVED, reasoning that a decay
+    # read off a clipped record is wrong. decay_tau does better than that: it
+    # refuses ("not a single exponential") on every clipped rung, so the
+    # defect becomes a no-verdict rather than a wrong number. The no-op rung
+    # (fraction 1.0) is not counted at all.
+    cell = m["clip_fraction"]
+    assert cell["label"] == "ABSTAINS"
+    assert cell["refused"] == 5 and cell["moved"] == 0
     # tau / a, in closed form, within resolution
     assert m["genuine_pitch"]["label"] == "TRACKS", m["genuine_pitch"]
     assert m["pd_polarity"]["label"] == "STILL"
