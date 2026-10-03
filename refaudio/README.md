@@ -59,7 +59,8 @@ knob to sweep (Cowbell, Rim Shot, Claves) carry no trailing number at all.
 **There are no Δ = 0 pairs anywhere in this pack.** The nearest thing reachable
 is `808_loops_from_mars.zip`'s bass-drum-only 4/4 loops, in which one setting is
 struck repeatedly inside one continuous take — that pack is indexed in
-`catalog.json` but was not among the copies available when this was checked.
+`catalog.json` and, since 2026-10-02, reachable from the private S3 working copy
+via `tools/refaudio_s3.py` (`REFAUDIO_S3`); no per-file index is committed for it.
 → [`index/808-from-mars.tsv`](index/808-from-mars.tsv) (1,562 files). The
 vendor's superseded earlier edition is indexed too, as a second recording
 session of the same machine: [`index/808_from_mars_legacy.tsv`](index/808_from_mars_legacy.tsv).
