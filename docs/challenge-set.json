@@ -1,0 +1,166 @@
+{
+  "schema": "challenge-set/1",
+  "issue": "#521, part of #158",
+  "what": "The frozen estimator challenge set: the synthetic fixture subset (#517), the perturbation strengths (#518), the permitted transforms (#519) and the real anchors (lineage per #520) that tools/probes/challenge_set.py runs to produce a detector coverage matrix and one report per estimator. Nothing here is a threshold for the instrument; everything here is the apparatus that judges the estimators. Changing any of it is a re-freeze, which is a visible diff to this file and a new definition_sha256.",
+  "corpus_lineage": "docs/corpus-lineage.json",
+  "splits": {
+    "development": "analyzer-development",
+    "calibration": "threshold-calibration",
+    "validation": "held-out-validation"
+  },
+  "split_rule": "Assignment is by SOURCE RECORDING, and recording identity is the sha256 of the file's bytes, not its path: a byte-identical re-pressing under another name or pack is the same recording and may not sit in a second split. Every perturbation, permitted transform and correction of an anchor stays in that anchor's split. A split is admissible for an anchor only if the anchor's pack lists the split's lineage group in its `roles` (docs/corpus-lineage.json). The Fischer lineage is in both threshold-calibration and held-out-validation with a SETTING-level separation (its role_overlap_why); this file uses that separation and no other: calibration and validation hold different recordings of one machine, which separates settings, not machines.",
+  "categories": {
+    "tonal_drum": "pitched struck voices: bass drum, toms, congas, rimshot, claves",
+    "noisy_drum": "voices whose body is mostly filtered noise: snare, clap, maracas",
+    "metallic": "the square-wave oscillator bank voices: cowbell, hats, cymbal",
+    "sustained_synth": "a held synthesizer tone rather than a strike"
+  },
+  "sources": {
+    "fischer-tr808-103852": {
+      "kind": "corpus_dir",
+      "root": "tools/run_case.py configured_refs(): $GF180_TR808_REFS, else /tmp/tr808-ref",
+      "pin": "85fbecf1bec32553395625ea659e2a56dfd7c0e1"
+    },
+    "legowelt-minimoog-5529": {
+      "kind": "corpus_dir",
+      "root": "/tmp/legowelt -- model/moog_probe.py's own --set default; no environment variable is added here (#522 is about there already being too many resolvers)",
+      "pin": null
+    },
+    "refprofile": {
+      "kind": "zip",
+      "root": "refprofile/frozen-cache.zip",
+      "lineage": "out of corpus-lineage scope by that manifest's own `out_of_scope` entry: a software reference (Surge XT filter type 2) rendered once through a qualified rig, committed and hashed. NOT HARDWARE. It is here because no hardware sustained-synth recording is reachable from a Loom host, and a category measured on nothing would be a stated no-verdict on every run. It is admitted to the development split only, and every report labels it software."
+    }
+  },
+  "anchors": [
+    {"id": "bd5050", "pack": "fischer-tr808-103852", "path": "bd8/BD5050.WAV", "voice": "BD", "category": "tonal_drum", "split": "calibration", "sha256": null, "why": "the board's own BD reference (model/drum_verify.py REF_MAIN)"},
+    {"id": "bd2550", "pack": "fischer-tr808-103852", "path": "bd8/BD2550.WAV", "voice": "BD", "category": "tonal_drum", "split": "validation", "sha256": null, "why": "audio_distance_floor.py's floor reference; its T20 is accepted where BD5050's is refused"},
+    {"id": "lt50", "pack": "fischer-tr808-103852", "path": "lt8/LT50.WAV", "voice": "LT", "category": "tonal_drum", "split": "calibration", "sha256": null, "why": "the tom whose pitch-drop defect #154 corrected"},
+    {"id": "mt25", "pack": "fischer-tr808-103852", "path": "mt8/MT25.WAV", "voice": "MT", "category": "tonal_drum", "split": "validation", "sha256": null, "why": "a tom at a non-centre tuning"},
+    {"id": "ht75", "pack": "fischer-tr808-103852", "path": "ht8/HT75.WAV", "voice": "HT", "category": "tonal_drum", "split": "calibration", "sha256": null, "why": "a tom at a non-centre tuning"},
+    {"id": "lc50", "pack": "fischer-tr808-103852", "path": "lc8/LC50.WAV", "voice": "LC", "category": "tonal_drum", "split": "validation", "sha256": null, "why": "a conga, the tom circuit at a higher pitch"},
+    {"id": "rs", "pack": "fischer-tr808-103852", "path": "rs8/RS.WAV", "voice": "RS", "category": "tonal_drum", "split": "calibration", "sha256": null, "why": "the voice perturbation_ladder.py reads band_pair_db on"},
+    {"id": "cl", "pack": "fischer-tr808-103852", "path": "cl8/CL.WAV", "voice": "CL", "category": "tonal_drum", "split": "validation", "sha256": null, "why": "the shortest tonal strike in the kit"},
+    {"id": "sd5050", "pack": "fischer-tr808-103852", "path": "sd8/SD5050.WAV", "voice": "SD", "category": "noisy_drum", "split": "calibration", "sha256": null, "why": "the board's own SD reference"},
+    {"id": "sd2575", "pack": "fischer-tr808-103852", "path": "sd8/SD2575.WAV", "voice": "SD", "category": "noisy_drum", "split": "validation", "sha256": null, "why": "snappy high, tone low"},
+    {"id": "sd7525", "pack": "fischer-tr808-103852", "path": "sd8/SD7525.WAV", "voice": "SD", "category": "noisy_drum", "split": "calibration", "sha256": null, "why": "snappy low, tone high"},
+    {"id": "sd0050", "pack": "fischer-tr808-103852", "path": "sd8/SD0050.WAV", "voice": "SD", "category": "noisy_drum", "split": "validation", "sha256": null, "why": "tone at its minimum"},
+    {"id": "cp", "pack": "fischer-tr808-103852", "path": "cp8/CP.WAV", "voice": "CP", "category": "noisy_drum", "split": "validation", "sha256": null, "why": "the clap: several bursts and a reverb tail"},
+    {"id": "ma", "pack": "fischer-tr808-103852", "path": "ma8/MA.WAV", "voice": "MA", "category": "noisy_drum", "split": "calibration", "sha256": null, "why": "the maracas: a short noise burst"},
+    {"id": "cb", "pack": "fischer-tr808-103852", "path": "cb8/CB.WAV", "voice": "CB", "category": "metallic", "split": "calibration", "sha256": null, "why": "the voice perturbation_ladder.py reads tone_ratio_db on (540/800 Hz)"},
+    {"id": "ch", "pack": "fischer-tr808-103852", "path": "ch8/CH.WAV", "voice": "CH", "category": "metallic", "split": "validation", "sha256": null, "why": "the closed hat: 0.25 s, the shortest record in the set"},
+    {"id": "oh50", "pack": "fischer-tr808-103852", "path": "oh8/OH50.WAV", "voice": "OH", "category": "metallic", "split": "calibration", "sha256": null, "why": "the board's own OH reference"},
+    {"id": "oh10", "pack": "fischer-tr808-103852", "path": "oh8/OH10.WAV", "voice": "OH", "category": "metallic", "split": "validation", "sha256": null, "why": "open hat at full decay"},
+    {"id": "cy5025", "pack": "fischer-tr808-103852", "path": "cy8/CY5025.WAV", "voice": "CY", "category": "metallic", "split": "calibration", "sha256": null, "why": "the board's own CY reference"},
+    {"id": "cy7550", "pack": "fischer-tr808-103852", "path": "cy8/CY7550.WAV", "voice": "CY", "category": "metallic", "split": "validation", "sha256": null, "why": "a cymbal setting no fit in this repository has read (hh_probe5.py seen_by lists the CY50xx and CYxx50 rows; tone 7.5 / decay 5.0 is CYxx50, so it HAS been read by CY.tone_ratio -- recorded here rather than claimed unseen)"},
+    {"id": "surge-drive-0db", "pack": "refprofile", "path": "cache/surge-type2/drive-100hz-cut250-res0.50-in+0dbfs.wav", "voice": "SURGE", "category": "sustained_synth", "split": "development", "sha256": null, "why": "a held 100 Hz tone through a driven resonant low-pass, software reference"},
+    {"id": "surge-drive-m12db", "pack": "refprofile", "path": "cache/surge-type2/drive-100hz-cut250-res0.50-in-12dbfs.wav", "voice": "SURGE", "category": "sustained_synth", "split": "development", "sha256": null, "why": "the same patch 12 dB quieter into the filter: a separate render, so a separate recording"},
+    {"id": "legowelt-thin-square", "pack": "legowelt-minimoog-5529", "path": "SYNTH-SimpleThinSquareFilterSlope.wav", "voice": "MINI", "category": "sustained_synth", "split": "development", "sha256": null, "unfrozen_why": "no host that wrote this file had the Legowelt pack; an operator with it mounted runs `challenge_set.py freeze`, which fills this in and changes definition_sha256 -- a visible re-freeze", "why": "named by model/moog_probe.py as one of the two self-documenting files in the pack; hardware, serial 5529"},
+    {"id": "legowelt-resonance-zone", "pack": "legowelt-minimoog-5529", "path": "WEIRD-ResonanceZone.wav", "voice": "MINI", "category": "sustained_synth", "split": "development", "sha256": null, "unfrozen_why": "as legowelt-thin-square", "why": "the other self-documenting file model/moog_probe.py names; hardware, serial 5529"}
+  ],
+  "excluded": [
+    {"pack": "fischer-tr808-103852", "path": "cy8/CY2500.WAV", "why": "D14B's holdout recording in tools/probes/hihat/hh_probe5.py HOLDOUT, chosen as unread by every fit. Reading it here would spend that."},
+    {"pack": "dirt-samples-808", "path": "*", "why": "byte-identical re-pressing of fischer-tr808-103852 (docs/corpus-lineage.json); the sha256 split rule would reject it anyway"}
+  ],
+  "estimators": {
+    "band_pair_db": {
+      "source": "perturbation_ladder.ESTIMATOR_CASES",
+      "categories": ["tonal_drum", "noisy_drum", "metallic"],
+      "voices": null,
+      "resolution": 0.2,
+      "relative": false,
+      "unit": "dB",
+      "remit": "every drum anchor; its own validated-domain guard decides where it answers, and its refusals are counted as no-verdicts with their reasons",
+      "known_answer_suite": null,
+      "known_answer_note": "NOT in #517's synthetic suite (that suite covers model/audio_measure.py; band_pair_db lives in tools/run_case.py). Its known-answer evidence is tools/probes/estimator_domains.py section 1, which is cited and NOT re-run here."
+    },
+    "tone_ratio_db": {
+      "source": "perturbation_ladder.ESTIMATOR_CASES",
+      "categories": ["metallic"],
+      "voices": null,
+      "resolution": 0.05,
+      "relative": false,
+      "unit": "dB",
+      "remit": "the voices built from the 540 Hz and 800 Hz square oscillators: cowbell, hats, cymbal",
+      "known_answer_suite": null,
+      "known_answer_note": "NOT in #517's suite (tools/run_case.py). Known-answer evidence: tools/probes/estimator_domains.py section 4(a), cited and not re-run here."
+    },
+    "decay_tau": {
+      "source": "perturbation_ladder.ESTIMATOR_CASES",
+      "categories": ["tonal_drum", "noisy_drum", "metallic", "sustained_synth"],
+      "voices": null,
+      "resolution": 0.08,
+      "relative": true,
+      "unit": "s",
+      "remit": "every anchor -- on a sustained tone the correct answer is a refusal, which is how Q5 (does it abstain) gets a case",
+      "known_answer_suite": "decay_tau",
+      "known_answer_note": "#517: tools/probes/estimator_ground_truth.py, the `decay_tau` check over the frozen fixture subset"
+    },
+    "inharmonic_fraction_db": {
+      "source": "perturbation_ladder.ESTIMATOR_CASES",
+      "categories": [],
+      "voices": ["BD"],
+      "resolution": 0.1,
+      "relative": false,
+      "unit": "dB",
+      "remit": "the bass drum only: perturbation_ladder.py reads it at a fixed f0 of 49.4 Hz, which is the BD's",
+      "known_answer_suite": "inharmonic_fraction_db",
+      "known_answer_note": "#517: the `inharmonic_fraction_db` check over the frozen fixture subset"
+    },
+    "mel_dac": {
+      "source": "audio_distance_floor._mel_dac",
+      "categories": ["tonal_drum", "noisy_drum", "metallic", "sustained_synth"],
+      "voices": null,
+      "unit": "nats (mean absolute log mel-magnitude difference)",
+      "remit": "every anchor. A paired distance, not a property: it reads a DIFFERENCE between an anchor and its transformed self, so moving is detection on a defect column and a false alarm on a permitted or correction column.",
+      "input_convention": "both sides through run_case.prepare and then peak-normalised (audio_distance_floor.py E8's convention); a transform is applied to the prepared anchor and the result is re-normalised. Peak normalisation makes any pure gain an exact invariance BY CONSTRUCTION, so the gain columns cannot false-alarm on mel_dac and that is not evidence about mel_dac.",
+      "sample_rate_note": "called with the anchor's own sample rate. audio_distance_floor.distances() calls _mel_dac with its default sr=48000 even on the 44.1 kHz Fischer files; that is recorded in docs/challenge-set.md rather than reproduced here.",
+      "floor_definition": "floor(anchor) = mel_dac(p, shift(p, 1)), where p is the prepared, peak-normalised anchor and shift(p, 1) is p delayed by ONE sample and zero-padded back to length (audio_distance_floor.shift). This is the definition docs/audio-distance-metrics.md section 7 used, where it read 0.0085 on our own deterministic BD render; here it is measured on each real anchor. It is an APPARATUS floor (what the distance reads for a change no listener could hear), not the machine's session-to-session floor (0.264 in that document, constructed) and not an our-versus-reference baseline (never measured).",
+      "detection_rule": "a rung is DETECTED when mel_dac(p, y) > K x floor(anchor). Absolute distance, absolute floor and the ratio are reported together for every rung; a ratio is never reported alone.",
+      "k_grid": [1, 2, 5, 10, 30, 100, 300, 1000],
+      "k_selection": "K_cal = the smallest K in k_grid at which the CALIBRATION split shows zero false alarms over its permitted and correction columns. If none does, K_cal is REFUSED and the validation split gets no headline rate -- it gets the whole grid. Validation rates are read at K_cal and nowhere else.",
+      "known_answer_suite": "audio_distance_floor.e0_ground_truth",
+      "known_answer_note": "closed form: identical inputs read exactly 0 and a pure x2 gain reads ln 2 (without the peak normalisation used on anchors)"
+    }
+  },
+  "columns": {
+    "defect": {
+      "quantisation_bits": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [16, 12, 10, 8, 6, 4], "severity_ordered": true},
+      "clip_fraction": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [1.0, 0.5, 0.2, 0.1, 0.05, 0.02], "severity_ordered": true},
+      "noise_broadband_snr_db": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [80.0, 60.0, 45.0, 36.0, 24.0, 12.0], "severity_ordered": true},
+      "noise_tail_snr_db": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [80.0, 60.0, 45.0, 36.0, 24.0, 12.0], "severity_ordered": true},
+      "narrowband_tone_rel_db": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [-80.0, -60.0, -40.0, -30.0, -20.0, -10.0], "severity_ordered": true},
+      "escape_hf_tone": {"source": "audio_distance_floor.inject_hf_tone", "args": {"dbfs": -40.0, "hz": 12000.0}, "why": "#158's first named BD escape: a -40 dBFS 12 kHz tone that passes every board metric"},
+      "escape_requantise_6bit": {"source": "audio_distance_floor.inject_quantise", "args": {"bits": 6}, "why": "#158's second named BD escape"},
+      "escape_tail_noise": {"source": "audio_distance_floor.inject_tail_noise", "args": {"dbfs": -45.0, "t0": 0.25}, "why": "#158's third named BD escape; on an anchor shorter than t0 it changes nothing and is a NO-VERDICT, not a miss"}
+    },
+    "permitted": {
+      "gain_db": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [-6.0, -3.0, -1.0, 1.0, 3.0, 6.0]},
+      "delay_ms": {"source": "perturbation_ladder.PERTURBATIONS", "strengths": [0.1, 0.5, 1.0, 5.0, 10.0]},
+      "pd_polarity": {"source": "permitted_differences.TRANSFORMS", "transform": "polarity", "trials": 1},
+      "pd_leading_silence": {"source": "permitted_differences.TRANSFORMS", "transform": "leading_silence", "trials": 3},
+      "pd_gain": {"source": "permitted_differences.TRANSFORMS", "transform": "gain", "trials": 3}
+    },
+    "correction": {
+      "genuine_pitch": {"source": "perturbation_ladder.perturb_resample", "ratios": [0.97333, 0.99, 1.01, 1.0274], "why": "#158: 'a genuine pitch correction, which must produce no invented artefact'. A tape-speed change inside the machine's own session-to-session f0 spread (2.74 %, audio_distance_floor.MACHINE_FLOOR), which the board deliberately passes. It moves every decay time constant by 1/ratio as well, so decay_tau has a closed-form expectation (perturbation_ladder.expected_delta, scales_inverse) and the ratio estimators do not."}
+    }
+  },
+  "ladder_only": {
+    "resample_ratio": "perturbation_ladder.py's own resample sweep (0.90-1.10) is run inside every property estimator's five-question report and is not a matrix column: at 5-10 % it is outside the machine's spread, so it is neither a correction the board passes nor a defect class #158 names."
+  },
+  "synthetic": {
+    "fixture_source": "estimator_fixtures.catalogue()",
+    "fixture_families": ["damped_sine", "two_modes", "transient_then_ring", "envelope_plus_noise", "repeated_hits", "harmonic_mixture", "filtered_noise"],
+    "fixture_count": 170,
+    "fixture_digest": null,
+    "permitted_differences": {"trials": 12, "seed_base": "VALIDATE_BASE"}
+  },
+  "seeds": {
+    "pd_transform_base": 5210000,
+    "why": "permitted_differences transforms drawn on anchors use their own namespace, above that module's VALIDATE_BASE + SEED_SPAN, so no draw here coincides with a calibration, validation or false-alarm draw there"
+  },
+  "freeze": {
+    "definition_sha256": null,
+    "frozen_on": null
+  }
+}
