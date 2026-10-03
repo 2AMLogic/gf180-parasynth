@@ -18,7 +18,180 @@ right. The property columns are graded against the *physics* of each
 perturbation (`perturbation_ladder.py`'s frame). No external truth about the
 recording is used, because nobody has one.
 
-<!-- RESULTS -->
+**The sound requirement this unblocks.** Drum-kit qualification (#282) passes
+or fails renders on these estimators. This table answers which defect classes
+a drum render can carry past them unseen, and which estimators cannot be
+trusted on which voices. Section 3 below answers that, voice family by voice
+family.
+
+## Results (definition `62c7e497…`, full results digest `f96fa833…`)
+
+Run on 22 of 24 anchors. The two Legowelt hardware anchors are REFUSED as
+unfrozen. That makes the run PARTIAL, and it is labelled PARTIAL. The corpus
+is the Fischer set at upstream commit `85fbecf`, each file checked against
+its frozen sha256.
+
+**Re-run deterministically.** Two complete runs on the same inputs produced
+the same `full_results_sha256` and byte-identical result bodies. Provenance
+is the only block excluded from that comparison.
+
+### 1. The coverage matrix
+
+Each cell gives `moved/scored` over (anchor, rung) pairs. *r* is rungs the
+estimator refused, and *A* is anchors refused at base. Run
+`challenge_set.py report` for the full table.
+
+| failure mode | band_pair_db | tone_ratio_db | decay_tau | inharmonic_fraction_db | mel_dac (K=1) |
+|---|---|---|---|---|---|
+| quantisation | NO-VERDICT A20 | **MOVED** 26/31 r5 | abstains 0/21 r15 | **MOVED** 10/12 | **MOVED** 121/132 |
+| clipping | NO-VERDICT A20 | **MOVED** 14/25 r4 | **MOVED** 2/2 r28 | **MOVED** 10/10 | **MOVED** 109/109 |
+| broadband noise | NO-VERDICT A20 | **MOVED** 22/28 r8 | abstains 0/22 r14 | **MOVED** 10/12 | **MOVED** 121/132 |
+| tail noise (ladder) | NO-VERDICT A20 | NO-VERDICT | NO-VERDICT | NO-VERDICT | NO-VERDICT |
+| narrowband tone | NO-VERDICT A20 | BLIND 0/36 | abstains 0/14 r22 | **MOVED** 12/12 | **MOVED** 127/132 |
+| escape: 12 kHz tone −40 dBFS | NO-VERDICT A20 | BLIND 0/6 | abstains 0/2 r4 | **MOVED** 2/2 | **MOVED** 22/22 |
+| escape: 6-bit requantise | NO-VERDICT A20 | **MOVED** 5/5 | abstains r6 | **MOVED** 2/2 | **MOVED** 22/22 |
+| escape: tail noise −45 dBFS | NO-VERDICT A20 | **MOVED** 4/5 | abstains 0/3 r3 | **MOVED** 2/2 | **MOVED** 20/20 |
+| gain (ladder) | — | still 0/36 | still 0/36 | still 0/12 | still 0/132 *(by construction)* |
+| delay 0.1–10 ms | — | **FALSE 9/28** | still 0/30 | **FALSE 7/10** | **FALSE 110/110** |
+| polarity | — | still 0/6 | still 0/6 | still 0/2 | still 0/22 |
+| leading silence 5–120 ms | — | **FALSE 9/15** | still 0/18 | **FALSE 6/6** | **FALSE 66/66** |
+| gain (#519 draws) | — | still 0/18 | still 0/18 | still 0/6 | still 0/66 *(by construction)* |
+| genuine pitch ±2.74 % | — | not derivable (17/24 moved) | **TRACKS 24/24** | not derivable (8/8 moved) | **FLAGS 88/88** |
+
+What it says, estimator by estimator:
+
+- **band_pair_db has no real-anchor coverage at all.** It refuses at base on
+  all 20 drum anchors. That includes RS, the voice #518's ladder reads it on.
+  In 15 cases the reason is detuning below the validated domain, and in 5 it
+  is an A²τ decay bias outside it (RS −3.8 dB, CB 1.4, CY5025 10.8, CY7550
+  16.3, SD2575 18.4 dB). Every refusal is legitimate by its own declared
+  domain. The consequence is that on the real kit, its guard leaves nothing
+  for the rest of the table to say.
+- **decay_tau answers on 6 of 22 anchors** (BD5050, BD2550, LT50, MT25, HT75,
+  LC50) and refuses the other 16 with stated reasons. Where it answers:
+  - It never false-alarms (0 of 108 permitted rungs).
+  - It tracks the genuine pitch correction's closed-form τ/a on 24 of 24.
+  - It protects against quantisation, noise and tone by refusing rather than
+    by moving: no rung moved, and 15, 14 and 22 rungs refused respectively.
+    That is protection only because the scorecard turns a refused required
+    metric into NO_VERDICT.
+  - Known answers (#517, 170 frozen fixtures): 37 PASS with a parsed error,
+    bias +0.05 %, mean |error| 0.16 %, max 0.93 %, no FAIL.
+- **tone_ratio_db** (metallic remit, 6 anchors):
+  - It sees broadband defects and is **blind to both tones**, including #158's
+    12 kHz escape (0 of 6).
+  - It **false-alarms on leading silence** on 9 of 15 rungs, and on delay on
+    9 of 28. Recomputed outside this file: CB reads 9.959 dB, and with 10 ms
+    of leading zeros it reads 10.141 dB. That is +0.18 dB against a declared
+    resolution of 0.05 dB.
+  - 11 rank reversals. For example, OH50's error is 19.96 dB when clipped to
+    0.5 of peak, and 13.67 dB when clipped harder, to 0.2.
+  - Outside its remit it answers instead of refusing on 11 of 16 anchors. On
+    BD5050, which has no 540/800 Hz lines, it reports 0.095 dB.
+  - #517 does not cover it. Its known-answer evidence is
+    `estimator_domains.py` §4(a), which is cited here and not re-run.
+- **inharmonic_fraction_db** (BD remit, 2 anchors):
+  - It moves on every defect column, including the narrowband tone at
+    −80 dB re peak. That tone sits at 2 kHz, which is inharmonic to 49.4 Hz,
+    so the ladder's premise that the tone is "placed outside anything the
+    estimator reads" does not hold for this estimator. *(Mechanism: inferred.
+    The tone's position against the BD harmonics was computed; its
+    contribution to the estimate was not measured.)*
+  - It **false-alarms on leading silence** (6 of 6) and on delay (7 of 10).
+  - Outside its remit it answers on 13 anchors (for example LC50 at −52.3 dB).
+  - Known answers: 6 PASS, bias +1.1 %, max 3.6 %.
+
+### 2. mel_dac, with absolute values
+
+Floors on the 20 Fischer anchors run from **0.0113 to 0.0373 nats**. The two
+Surge clips read 0.0114. For comparison, `docs/audio-distance-metrics.md`
+measured 0.0085 on our own render, under the same definition.
+
+| column | distance, nats (min / median / max) | × that anchor's floor (min / median / max) |
+|---|---|---|
+| escape: 12 kHz tone −40 dBFS | 0.139 / 0.447 / 0.558 | 3.7 / 24.7 / 47.2 |
+| escape: 6-bit requantise | 0.903 / 1.99 / 2.88 | 25 / 104 / 252 |
+| escape: tail noise −45 dBFS | 0.101 / 1.68 / 3.08 | 5.2 / 78 / 265 |
+| delay 0.1–10 ms *(permitted)* | 0.038 / 0.275 / 0.914 | 2.5 / 14.6 / 61.6 |
+| leading silence *(permitted)* | 0.377 / 1.14 / 3.47 | 17 / 63 / 221 |
+| polarity, gain *(permitted)* | 0 (gain ≤ 3.7e-14) | 0 |
+| genuine pitch ±2.74 % *(correction)* | 0.290 / 0.429 / 0.591 | 12 / 23 / 41 |
+
+**"238× floor" in context.** That figure was 2.029 nats over a 0.0085 floor,
+measured on our own BD render. On the real BD5050 the same 6-bit escape reads
+**2.395 nats** over a floor of **0.01185** (202×). The 12 kHz tone reads 0.536
+nats (45×), and a genuine ±2.74 % pitch correction reads **0.365–0.393 nats**
+(31–33×). On this anchor, a correction the board passes reads about 70 % of
+the HF-tone escape's distance. On 18 (anchor, escape) pairs a correction
+reads *farther* than the escape does. The worst of these is on the snares:
+the 12 kHz tone on SD5050 reads 0.331 nats, and pitch ×1.0274 reads 0.518.
+
+**Rates.** These are from the K sweep, as detected/scored.
+
+| K | calibration: defect / permitted / correction | validation: defect / permitted / correction |
+|---|---|---|
+| 1 | 248/260, 80/180, 40/40 | 246/259, 80/180, 40/40 |
+| 10 | 211/260, 66/180, 40/40 | 207/259, 64/180, 40/40 |
+| 30 | 176/260, 34/180, 4/40 | 163/259, 30/180, 4/40 |
+| 100 | 81/260, 10/180, 0/40 | 74/259, 6/180, 0/40 |
+| **300 = K_cal** | 7/260, 0/180, 0/40 | **5/259, 0/180, 0/40** |
+| 1000 | 0/260, 0/180, 0/40 | 0/259, 0/180, 0/40 |
+
+**Read at K_cal, the frozen rule gives `mel_dac` a validation detection
+rate of 5 of 259 injected-defect rungs (1.9 %)**, with no false alarms. The
+false alarms that force K up to 300 are all leading silence: in calibration
+they reach 178× floor (SD7525, 3.47 nats over 0.0195).
+
+**Conditional result, not part of the frozen rule.** Leaving the two
+alignment columns out gives K = 100. Validation there detects 74 of 259 defect
+rungs, with 6 of 180 permitted false alarms and 0 of 40 corrections flagged.
+This alternative selection was added *after* the first run showed alignment
+alone sets K_cal, and no alignment step exists to make it real. It agrees
+with `docs/audio-distance-metrics.md` §6 (alignment gates everything). It
+does not change §8's "guard only" contract. It does add a number to that
+contract: as a guard on real recordings, without alignment, `mel_dac` flags
+a pitch change the board passes at K ≤ 10 every time.
+
+By instrument family at K = 1 (defect, then permitted): tonal drum 208/208
+and 64/144; noisy drum 145/156 and 48/108; metallic 141/155 and 48/108;
+sustained (Surge, software) 48/50 and 16/36. A diagnostic starts an
+investigation. None of these numbers names a coefficient.
+
+### 3. What this changes for the kit, and what it does not
+
+- Of the four property estimators, **nothing sees a 12 kHz feedthrough tone
+  on a non-BD voice**. tone_ratio_db is blind to it on 6 of 6 metallic
+  anchors. decay_tau never moves on it (2 rungs scored, 4 refused), and
+  band_pair_db refuses everywhere. On the BD, inharmonic_fraction_db sees it.
+- **Leading-silence handling is a live defect class in two estimators**
+  (tone_ratio_db and inharmonic_fraction_db), not only in mel_dac. A drum
+  render compared with a reference whose onset lead differs reads a property
+  difference that is not in the sound. `run_case.prepare` normalises the lead
+  for the board's own cases. Any reader that skips it inherits this.
+- Nothing here changes RTL or the model. It changes how far the next
+  drum-repair claim can lean on these four estimators.
+
+### Wrong before right, in this session
+
+Four results were wrong before they were right. None was caught by inspection
+of code. One was caught by a test, and three by reading the first real run's
+report for values that could not be true.
+
+1. A test asserted that decay_tau MOVES on clipped records. In fact it
+   refuses on every clipped rung. The matrix gained ABSTAINS, which is
+   distinct from BLIND.
+2. mel_dac read **BLIND 0/42** on tail noise. On seven anchors the transform
+   had changed only the last one or two samples, which no STFT frame reaches,
+   so the distance was exactly 0.0. A change under 1 ms is now NO-VERDICT,
+   and that input is a committed test.
+3. The sustained category had **no mel_dac at all**, because `run_case.prepare`
+   refuses a held tone. Sustained anchors are now peak-normalised only.
+4. band_pair_db's cells read "NO-VERDICT nv0", as if empty, when it had
+   refused on 20 anchors. Base refusals are now counted in the cell.
+
+A fifth problem was found and **not** fixed here, because the fix belongs to
+the file that owns it: `audio_distance_floor.distances()` computes mel_dac at
+48 kHz on the 44.1 kHz Fischer files (#533).
 
 ## What is frozen
 
