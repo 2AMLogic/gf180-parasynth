@@ -1815,6 +1815,1123 @@
    }
   }
  },
+ "take_to_take": {
+  "archive": "808_loops_from_mars.zip",
+  "audit": {
+   "admitted": [
+    "Alternate 120",
+    "Define 120",
+    "Fluid 120",
+    "Goosed 128",
+    "Inside 120",
+    "Meserole 120",
+    "Punch 120",
+    "Sassy 120",
+    "Sat 120",
+    "Simple 125",
+    "Sky Dive 120",
+    "Tite 120",
+    "Trio 120"
+   ],
+   "excluded_not_one_per_beat": [
+    "Bellsy 128",
+    "Chaos 128",
+    "Dark 120",
+    "Drive 120",
+    "Flex 120",
+    "Grit 120",
+    "Machina 128",
+    "Memory 128",
+    "Nineties 120",
+    "Peak 128",
+    "Shifty 125",
+    "Smash 120",
+    "Starter 120",
+    "Warrior 128"
+   ],
+   "loops": {
+    "Alternate 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.957115,
+     "corr_median": 0.956739,
+     "corr_min": -0.247378,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.3524877910747262,
+     "residual_rms_rel_median": 0.290949,
+     "slice_ms_median": 499.6,
+     "strikes": 32
+    },
+    "Bellsy 128": {
+     "excluded": "60 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Chaos 128": {
+     "excluded": "32 onsets in 16 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Dark 120": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Define 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.999994,
+     "corr_median": 0.99999,
+     "corr_min": 0.999973,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.004550814998656488,
+     "residual_rms_rel_median": 0.004484,
+     "slice_ms_median": 500.2,
+     "strikes": 32
+    },
+    "Drive 120": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Flex 120": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Fluid 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 1.0,
+     "corr_median": 0.999997,
+     "corr_min": 0.999983,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.002267084389385013,
+     "residual_rms_rel_median": 0.002351,
+     "slice_ms_median": 500.3,
+     "strikes": 32
+    },
+    "Goosed 128": {
+     "beat_samples": 20671.88,
+     "bpm": 128.0,
+     "corr_max": 0.999989,
+     "corr_median": 0.999969,
+     "corr_min": 0.999927,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 16,
+     "onsets": 16,
+     "pairs": 15,
+     "residual_max_abs_median": 0.019167153474527826,
+     "residual_rms_rel_median": 0.00791,
+     "slice_ms_median": 469.4,
+     "strikes": 16
+    },
+    "Grit 120": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Inside 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.999994,
+     "corr_median": 0.999962,
+     "corr_min": 0.99993,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 30,
+     "residual_max_abs_median": 0.0069050349063592975,
+     "residual_rms_rel_median": 0.008717,
+     "slice_ms_median": 500.1,
+     "strikes": 31
+    },
+    "Machina 128": {
+     "excluded": "32 onsets in 16 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Memory 128": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Meserole 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.999996,
+     "corr_median": 0.999968,
+     "corr_min": 0.999911,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 30,
+     "residual_max_abs_median": 0.01075616071237373,
+     "residual_rms_rel_median": 0.008026,
+     "slice_ms_median": 500.2,
+     "strikes": 31
+    },
+    "Nineties 120": {
+     "excluded": "16 onsets in 8 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Peak 128": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Punch 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 1.0,
+     "corr_median": 0.999994,
+     "corr_min": -0.10306,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 30,
+     "residual_max_abs_median": 0.03328980971784398,
+     "residual_rms_rel_median": 0.003577,
+     "slice_ms_median": 499.8,
+     "strikes": 31
+    },
+    "Sassy 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.999887,
+     "corr_median": 0.99977,
+     "corr_min": 0.999316,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.011129068762164657,
+     "residual_rms_rel_median": 0.021439,
+     "slice_ms_median": 500.2,
+     "strikes": 32
+    },
+    "Sat 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 1.0,
+     "corr_median": 0.999995,
+     "corr_min": 0.999984,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.00682037235847233,
+     "residual_rms_rel_median": 0.003045,
+     "slice_ms_median": 499.7,
+     "strikes": 32
+    },
+    "Shifty 125": {
+     "excluded": "32 onsets in 16 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Simple 125": {
+     "beat_samples": 21168.0,
+     "bpm": 125.0,
+     "corr_max": 0.999991,
+     "corr_median": 0.999973,
+     "corr_min": 0.999954,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 8,
+     "onsets": 8,
+     "pairs": 7,
+     "residual_max_abs_median": 0.003705330294298148,
+     "residual_rms_rel_median": 0.007318,
+     "slice_ms_median": 480.0,
+     "strikes": 8
+    },
+    "Sky Dive 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 1.0,
+     "corr_median": 0.999995,
+     "corr_min": 0.999987,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.0036014976592849968,
+     "residual_rms_rel_median": 0.003169,
+     "slice_ms_median": 499.6,
+     "strikes": 32
+    },
+    "Smash 120": {
+     "excluded": "64 onsets in 32 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Starter 120": {
+     "excluded": "16 onsets in 8 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    },
+    "Tite 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.985074,
+     "corr_median": 0.985017,
+     "corr_min": 0.984928,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 31,
+     "residual_max_abs_median": 0.2513272800870413,
+     "residual_rms_rel_median": 0.172455,
+     "slice_ms_median": 499.8,
+     "strikes": 32
+    },
+    "Trio 120": {
+     "beat_samples": 22050.0,
+     "bpm": 120.0,
+     "corr_max": 0.999994,
+     "corr_median": 0.973549,
+     "corr_min": 0.972012,
+     "duplicate_fraction": 0.0,
+     "duplicate_pairs": 0,
+     "expected_one_per_beat": 32,
+     "onsets": 32,
+     "pairs": 30,
+     "residual_max_abs_median": 0.12637909125542263,
+     "residual_rms_rel_median": 0.228477,
+     "slice_ms_median": 500.3,
+     "strikes": 31
+    },
+    "Warrior 128": {
+     "excluded": "32 onsets in 16 beats: not one strike per beat (a pattern, a fill or a layered loop, not 'one setting struck repeatedly')"
+    }
+   },
+   "refused_copy_paste": []
+  },
+  "compare": {
+   "Pitch trajectory": {
+    "estimator_editing_noise_span": 0.00035088462684029764,
+    "session_floor": 1.3852,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.001,
+    "take_pairwise_median": 0.0013695641537694314,
+    "tolerance": 5.0613,
+    "tolerance_over_take": 3695.6,
+    "units": "Hz"
+   },
+   "attack": {
+    "estimator_editing_noise_span": 0.09070294784580213,
+    "session_floor": 0.0794,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.143,
+    "take_pairwise_median": 0.011337868480725266,
+    "tolerance": 3.0839,
+    "tolerance_over_take": 272.0,
+    "units": "ms"
+   },
+   "body spectrum": {
+    "estimator_editing_noise_span": 0.567682062907803,
+    "session_floor": 0.8545,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.009,
+    "take_pairwise_median": 0.007297796270165691,
+    "tolerance": null,
+    "tolerance_over_take": null,
+    "units": "dB"
+   },
+   "body spectrum (padded)": {
+    "estimator_editing_noise_span": 0.0004578723284254238,
+    "session_floor": 0.1591,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.046,
+    "take_pairwise_median": 0.0072943256248203525,
+    "tolerance": 3.0,
+    "tolerance_over_take": 411.3,
+    "units": "dB"
+   },
+   "decay": {
+    "estimator_editing_noise_span": 0.00025233724210238506,
+    "session_floor": 0.5055,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.039,
+    "take_pairwise_median": 0.019887643879869188,
+    "tolerance": 19.3749,
+    "tolerance_over_take": 974.2,
+    "units": "ms"
+   },
+   "early/body energy": {
+    "estimator_editing_noise_span": 0.06385312958952483,
+    "session_floor": 0.4209,
+    "take_is_below_session_upper_bound": true,
+    "take_over_session": 0.036,
+    "take_pairwise_median": 0.015349157300541982,
+    "tolerance": 3.0,
+    "tolerance_over_take": 195.5,
+    "units": "dB"
+   }
+  },
+  "controls": {
+   "copy_paste_is_flagged": {
+    "corr_max": 1.0,
+    "corr_median": 1.0,
+    "corr_min": 1.0,
+    "duplicate_fraction": 1.0,
+    "duplicate_pairs": 14,
+    "pairs": 14,
+    "residual_max_abs_median": 0.0,
+    "residual_rms_rel_median": 0.0
+   },
+   "double_time_refuses": true,
+   "f0_injection": {
+    "injected_hz": 3.0,
+    "span_clean_hz": 3.185385642723304e-05,
+    "span_with_injection_hz": 3.002095797511437
+   },
+   "independent_noise_is_not_flagged": {
+    "corr_max": 1.0,
+    "corr_median": 1.0,
+    "corr_min": 1.0,
+    "duplicate_fraction": 0.0,
+    "duplicate_pairs": 0,
+    "pairs": 14,
+    "residual_max_abs_median": 6.228033535497074e-05,
+    "residual_rms_rel_median": 8.2e-05
+   },
+   "onsets_found": {
+    "expected": 16,
+    "found": 16
+   }
+  },
+  "measure": {
+   "metrics": {
+    "Pitch trajectory": {
+     "loops": 12,
+     "pairwise_abs_diff_max_loop": 0.016322932242111676,
+     "pairwise_abs_diff_median_of_loops": 0.0013695641537694314,
+     "pairwise_abs_diff_min_loop": 0.00017790435945386207,
+     "rel_sd_pct_median_of_loops": 0.002500930519915021,
+     "sd_median_of_loops": 0.0012694500043812706,
+     "strikes_refused": 16,
+     "units": "Hz"
+    },
+    "attack": {
+     "loops": 12,
+     "pairwise_abs_diff_max_loop": 0.7029478458049887,
+     "pairwise_abs_diff_median_of_loops": 0.011337868480725266,
+     "pairwise_abs_diff_min_loop": 0.0,
+     "rel_sd_pct_median_of_loops": 0.1325389129568357,
+     "sd_median_of_loops": 0.01130099725602314,
+     "strikes_refused": 16,
+     "units": "ms"
+    },
+    "body spectrum": {
+     "loops": 12,
+     "pairwise_abs_diff_max_loop": 0.6559518480914974,
+     "pairwise_abs_diff_median_of_loops": 0.007297796270165691,
+     "pairwise_abs_diff_min_loop": 0.0005255559044847757,
+     "rel_sd_pct_median_of_loops": 0.047349143206371715,
+     "sd_median_of_loops": 0.006337374082639872,
+     "strikes_refused": 16,
+     "units": "dB"
+    },
+    "body spectrum (padded)": {
+     "loops": 12,
+     "pairwise_abs_diff_max_loop": 0.6559883570746798,
+     "pairwise_abs_diff_median_of_loops": 0.0072943256248203525,
+     "pairwise_abs_diff_min_loop": 0.0005252907145916197,
+     "rel_sd_pct_median_of_loops": 0.04734820278402149,
+     "sd_median_of_loops": 0.006337346743509106,
+     "strikes_refused": 16,
+     "units": "dB"
+    },
+    "decay": {
+     "loops": 2,
+     "pairwise_abs_diff_max_loop": 0.0362922255314686,
+     "pairwise_abs_diff_median_of_loops": 0.019887643879869188,
+     "pairwise_abs_diff_min_loop": 0.003483062228269773,
+     "rel_sd_pct_median_of_loops": 0.055115080966125565,
+     "sd_median_of_loops": 0.0810892554563638,
+     "strikes_refused": 15,
+     "units": "ms"
+    },
+    "early/body energy": {
+     "loops": 12,
+     "pairwise_abs_diff_max_loop": 0.5239747458282427,
+     "pairwise_abs_diff_median_of_loops": 0.015349157300541982,
+     "pairwise_abs_diff_min_loop": 0.002436831392889971,
+     "rel_sd_pct_median_of_loops": 0.2557935639160134,
+     "sd_median_of_loops": 0.016892080628747985,
+     "strikes_refused": 16,
+     "units": "dB"
+    }
+   },
+   "per_loop": {
+    "Alternate 120": {
+     "Pitch trajectory": {
+      "mean": 51.01269127021659,
+      "n": 15,
+      "n_refused": 16,
+      "pairwise_abs_diff_median": 0.0006186602672428876,
+      "rel_sd_pct": 0.001245258205453839,
+      "sd": 0.0006352397238652063,
+      "span": 0.0022216726312578317
+     },
+     "attack": {
+      "mean": 7.026455026455024,
+      "n": 15,
+      "n_refused": 16,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.11355392919788564,
+      "sd": 0.007978815765862015,
+      "span": 0.02267573696145231
+     },
+     "body spectrum": {
+      "mean": -16.07194899374896,
+      "n": 15,
+      "n_refused": 16,
+      "pairwise_abs_diff_median": 0.0005255559044847757,
+      "rel_sd_pct": 0.0029415836639731328,
+      "sd": 0.0004727698260822137,
+      "span": 0.0014864663794149635
+     },
+     "body spectrum (padded)": {
+      "mean": -16.072108853459074,
+      "n": 15,
+      "n_refused": 16,
+      "pairwise_abs_diff_median": 0.0005252907145916197,
+      "rel_sd_pct": 0.002940783023528311,
+      "sd": 0.00047264584868551515,
+      "span": 0.0014860323010381649
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 31,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -7.940247937781487,
+      "n": 15,
+      "n_refused": 16,
+      "pairwise_abs_diff_median": 0.004020290617558153,
+      "rel_sd_pct": 0.054769959182081794,
+      "sd": 0.004348870554479012,
+      "span": 0.017187984438833404
+     }
+    },
+    "Define 120": {
+     "Pitch trajectory": {
+      "mean": 50.82790632530891,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0012622771589079207,
+      "rel_sd_pct": 0.0022908818300207572,
+      "sd": 0.001164407270586473,
+      "span": 0.004033627334358414
+     },
+     "attack": {
+      "mean": 7.025821081120618,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.12066867014204079,
+      "sd": 0.008477964865147403,
+      "span": 0.02267573696145231
+     },
+     "body spectrum": {
+      "mean": -15.553737239319833,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.004316198364133328,
+      "rel_sd_pct": 0.028650678317828745,
+      "sd": 0.004456251222837862,
+      "span": 0.013398032946193794
+     },
+     "body spectrum (padded)": {
+      "mean": -15.553785398837872,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.00431644802420017,
+      "rel_sd_pct": 0.028647382480000042,
+      "sd": 0.004455752393323485,
+      "span": 0.013397625867369811
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 31,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -4.907592408142966,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.004165033956279984,
+      "rel_sd_pct": 0.08713971801891891,
+      "sd": 0.004276462185973652,
+      "span": 0.017485992393065253
+     }
+    },
+    "Fluid 120": {
+     "Pitch trajectory": {
+      "mean": 50.794127001468595,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.00021024157565108226,
+      "rel_sd_pct": 0.001133108455508813,
+      "sd": 0.0005755525479555258,
+      "span": 0.002355820483991522
+     },
+     "attack": {
+      "mean": 7.077755833516203,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.10917827735629894,
+      "sd": 0.007727371894517949,
+      "span": 0.02267573696145142
+     },
+     "body spectrum": {
+      "mean": -14.862171433725397,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0006588217482939029,
+      "rel_sd_pct": 0.004192462949627892,
+      "sd": 0.0006230910308691178,
+      "span": 0.0017468457108602564
+     },
+     "body spectrum (padded)": {
+      "mean": -14.862270584886813,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0006592284215578559,
+      "rel_sd_pct": 0.004192943123020744,
+      "sd": 0.0006231665524137466,
+      "span": 0.0017471468818168745
+     },
+     "decay": {
+      "mean": 148.1031463850346,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.003483062228269773,
+      "rel_sd_pct": 0.0024390686680105717,
+      "sd": 0.00361233743981521,
+      "span": 0.01509323814522645
+     },
+     "early/body energy": {
+      "mean": -4.23269566485739,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0037808292456169568,
+      "rel_sd_pct": 0.08729730294426258,
+      "sd": 0.003695029157259225,
+      "span": 0.012644769334450245
+     }
+    },
+    "Goosed 128": {
+     "Pitch trajectory": {
+      "mean": 50.68937224615628,
+      "n": 15,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.00038240394401611866,
+      "rel_sd_pct": 0.0007496449224828425,
+      "sd": 0.0003799903052817378,
+      "span": 0.0012105638832338173
+     },
+     "attack": {
+      "mean": 7.068783068783068,
+      "n": 15,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.06802721088435426,
+      "rel_sd_pct": 0.7807595397365751,
+      "sd": 0.05519019815280763,
+      "span": 0.18140589569161047
+     },
+     "body spectrum": {
+      "mean": -12.180193996272687,
+      "n": 15,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.006529357356349408,
+      "rel_sd_pct": 0.051698208012843035,
+      "sd": 0.006296942028560872,
+      "span": 0.019620492392212086
+     },
+     "body spectrum (padded)": {
+      "mean": -12.180318038253557,
+      "n": 15,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0065255896662801405,
+      "rel_sd_pct": 0.05169268812984791,
+      "sd": 0.0062963338167380195,
+      "span": 0.01962214016922914
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 15,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -7.880892607097142,
+      "n": 15,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.02292035494136435,
+      "rel_sd_pct": 0.2769076234466139,
+      "sd": 0.021822792424692587,
+      "span": 0.07310394199011849
+     }
+    },
+    "Inside 120": {
+     "Pitch trajectory": {
+      "mean": 50.71642866962303,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0014768511486309421,
+      "rel_sd_pct": 0.004265705541778026,
+      "sd": 0.0021634135083520092,
+      "span": 0.006197651333067711
+     },
+     "attack": {
+      "mean": 7.070294784580501,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.13048046894563484,
+      "sd": 0.0092253537907594,
+      "span": 0.02267573696145142
+     },
+     "body spectrum": {
+      "mean": -16.926009250714657,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.008066235183981973,
+      "rel_sd_pct": 0.15116464230147916,
+      "sd": 0.025586141339758086,
+      "span": 0.07299367378113075
+     },
+     "body spectrum (padded)": {
+      "mean": -16.926087817600624,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.008063061583360565,
+      "rel_sd_pct": 0.1511655899663989,
+      "sd": 0.025586420507706757,
+      "span": 0.07299020724780547
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -6.790898785931641,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0185257533566201,
+      "rel_sd_pct": 0.37159075010512793,
+      "sd": 0.025234351737523412,
+      "span": 0.06909311608951096
+     }
+    },
+    "Meserole 120": {
+     "Pitch trajectory": {
+      "mean": 50.70096934726265,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0016186071753807596,
+      "rel_sd_pct": 0.002710979209809284,
+      "sd": 0.0013744927381760684,
+      "span": 0.005275338141842667
+     },
+     "attack": {
+      "mean": 23.174603174603167,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.022675736961453197,
+      "rel_sd_pct": 0.1284798755965956,
+      "sd": 0.029774701328734846,
+      "span": 0.09070294784580568
+     },
+     "body spectrum": {
+      "mean": -20.150050623105354,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.05216048420385633,
+      "rel_sd_pct": 0.2528283742330258,
+      "sd": 0.05094504539752895,
+      "span": 0.19478801731651174
+     },
+     "body spectrum (padded)": {
+      "mean": -20.150142050744016,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.05215955057023791,
+      "rel_sd_pct": 0.2528232268360953,
+      "sd": 0.05094423934474797,
+      "span": 0.1947811731808784
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -9.72076960017502,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.03756369637915569,
+      "rel_sd_pct": 0.38842382142492593,
+      "sd": 0.037757784752912305,
+      "span": 0.1472260712866369
+     }
+    },
+    "Punch 120": {
+     "Pitch trajectory": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "attack": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "body spectrum": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "body spectrum (padded)": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     }
+    },
+    "Sassy 120": {
+     "Pitch trajectory": {
+      "mean": 50.9162934859286,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.016322932242111676,
+      "rel_sd_pct": 0.025069604079464323,
+      "sd": 0.012764513188860382,
+      "span": 0.036637630441624935
+     },
+     "attack": {
+      "mean": 7.0389876380659775,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.022675736961450532,
+      "rel_sd_pct": 0.16159118376742848,
+      "sd": 0.011374383449593769,
+      "span": 0.022675736961450532
+     },
+     "body spectrum": {
+      "mean": -17.109600044030454,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.03711580716515783,
+      "rel_sd_pct": 0.16631974865937244,
+      "sd": 0.02845664378985533,
+      "span": 0.09576190783729643
+     },
+     "body spectrum (padded)": {
+      "mean": -17.109631243137425,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0371120845504862,
+      "rel_sd_pct": 0.16631842830659074,
+      "sd": 0.02845646977263957,
+      "span": 0.09576054540170986
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 31,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -6.819733546846893,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.030526215522441724,
+      "rel_sd_pct": 0.5232283217627445,
+      "sd": 0.035682777385857886,
+      "span": 0.12447967664329429
+     }
+    },
+    "Sat 120": {
+     "Pitch trajectory": {
+      "mean": 50.91610892856249,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.00017790435945386207,
+      "rel_sd_pct": 0.0003401816979462293,
+      "sd": 0.00017320728388133555,
+      "span": 0.000581864812922106
+     },
+     "attack": {
+      "mean": 29.174895764757505,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.038483808658590524,
+      "sd": 0.01122761106245251,
+      "span": 0.022675736961449644
+     },
+     "body spectrum": {
+      "mean": -17.17958963349769,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0013604874972230618,
+      "rel_sd_pct": 0.01752515744841048,
+      "sd": 0.0030107501322612753,
+      "span": 0.010422701986229299
+     },
+     "body spectrum (padded)": {
+      "mean": -17.179668114630655,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0013605095773847609,
+      "rel_sd_pct": 0.017525109492160067,
+      "sd": 0.0030107556474787333,
+      "span": 0.010422832595125442
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 31,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -9.75600577105586,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.002436831392889971,
+      "rel_sd_pct": 0.024175903017234466,
+      "sd": 0.002358602493566262,
+      "span": 0.009336552904839479
+     }
+    },
+    "Simple 125": {
+     "Pitch trajectory": {
+      "mean": 51.12866839020798,
+      "n": 7,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.003703331444143032,
+      "rel_sd_pct": 0.0072559501957542615,
+      "sd": 0.0037098707141458433,
+      "span": 0.008692979225209285
+     },
+     "attack": {
+      "mean": 7.010042112082928,
+      "n": 7,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.022675736961450532,
+      "rel_sd_pct": 0.22321898869669843,
+      "sd": 0.01564774510980419,
+      "span": 0.04535147392290284
+     },
+     "body spectrum": {
+      "mean": -14.832080252052858,
+      "n": 7,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.009081342728784136,
+      "rel_sd_pct": 0.043000078399900395,
+      "sd": 0.006377806136718873,
+      "span": 0.015304565029509831
+     },
+     "body spectrum (padded)": {
+      "mean": -14.832112315515904,
+      "n": 7,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.009081750551315437,
+      "rel_sd_pct": 0.043003717438195074,
+      "sd": 0.006378359670280192,
+      "span": 0.01530605798590301
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 7,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -5.096895386807744,
+      "n": 7,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.012172561244463864,
+      "rel_sd_pct": 0.23467950438541282,
+      "sd": 0.011961368832803382,
+      "span": 0.031554984026343824
+     }
+    },
+    "Sky Dive 120": {
+     "Pitch trajectory": {
+      "mean": 50.73355668738598,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0002590340999333307,
+      "rel_sd_pct": 0.0005176073723822498,
+      "sd": 0.00026260062968563777,
+      "span": 0.0010177654588545693
+     },
+     "attack": {
+      "mean": 7.160412552117621,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0,
+      "rel_sd_pct": 0.13459735696803657,
+      "sd": 0.009637726043157852,
+      "span": 0.02267573696145231
+     },
+     "body spectrum": {
+      "mean": -18.000604163966205,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.001040242239422895,
+      "rel_sd_pct": 0.006194778420200351,
+      "sd": 0.0011150975422550642,
+      "span": 0.005071732629758685
+     },
+     "body spectrum (padded)": {
+      "mean": -18.000664164757936,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.0010400322242531956,
+      "rel_sd_pct": 0.006191299594990069,
+      "sd": 0.0011144750475281806,
+      "span": 0.005069455094439235
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 31,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -7.319962305292547,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.003847016437970474,
+      "rel_sd_pct": 0.047958801457884274,
+      "sd": 0.0035105661887872212,
+      "span": 0.011307797184919366
+     }
+    },
+    "Tite 120": {
+     "Pitch trajectory": {
+      "mean": 50.97306647990287,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.011706600370082754,
+      "rel_sd_pct": 0.013076606410116511,
+      "sd": 0.00666554727874393,
+      "span": 0.015038631435125183
+     },
+     "attack": {
+      "mean": 14.442981493672734,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.7029478458049887,
+      "rel_sd_pct": 2.503816661739535,
+      "sd": 0.3616257770905355,
+      "span": 0.7482993197278898
+     },
+     "body spectrum": {
+      "mean": -16.647442550204726,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.6559518480914974,
+      "rel_sd_pct": 2.0063066885205423,
+      "sd": 0.3339987533523722,
+      "span": 0.6589887209667822
+     },
+     "body spectrum (padded)": {
+      "mean": -16.647651694748298,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.6559883570746798,
+      "rel_sd_pct": 2.0063953519739193,
+      "sd": 0.33401770981623724,
+      "span": 0.6590261056008551
+     },
+     "decay": {
+      "mean": 147.10507953027354,
+      "n": 16,
+      "n_refused": 15,
+      "pairwise_abs_diff_median": 0.0362922255314686,
+      "rel_sd_pct": 0.10779109326424056,
+      "sd": 0.1585661734729124,
+      "span": 0.5284416820105378
+     },
+     "early/body energy": {
+      "mean": -6.916343311274473,
+      "n": 31,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.5239747458282427,
+      "rel_sd_pct": 3.9374768971538856,
+      "sd": 0.27232942000928045,
+      "span": 0.550903072159989
+     }
+    },
+    "Trio 120": {
+     "Pitch trajectory": {
+      "mean": 50.786199065282375,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.005828786035401379,
+      "rel_sd_pct": 0.10651124090231656,
+      "sd": 0.05409301083155295,
+      "span": 0.11154519651370265
+     },
+     "attack": {
+      "mean": 13.55328798185941,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.022675736961450532,
+      "rel_sd_pct": 57.3320530547172,
+      "sd": 7.7703782564182475,
+      "span": 15.623582766439908
+     },
+     "body spectrum": {
+      "mean": -19.165615606954734,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.047917891592742734,
+      "rel_sd_pct": 8.182193204575757,
+      "sd": 1.568167697807361,
+      "span": 3.1910026561791724
+     },
+     "body spectrum (padded)": {
+      "mean": -19.165726254014167,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.04792030539439196,
+      "rel_sd_pct": 8.182504243468378,
+      "sd": 1.568236364026242,
+      "span": 3.1911405825199886
+     },
+     "decay": {
+      "n": 0,
+      "n_refused": 30,
+      "refused": "fewer than 3 strikes could be read"
+     },
+     "early/body energy": {
+      "mean": -8.173580092980968,
+      "n": 30,
+      "n_refused": 0,
+      "pairwise_abs_diff_median": 0.05860603570986811,
+      "rel_sd_pct": 18.777964686073755,
+      "sd": 1.5348319834479205,
+      "span": 3.1212972683230467
+     }
+    }
+   }
+  },
+  "outcome": "MEASURED",
+  "path": "808 Loops From Mars/WAV/03. Bass Drum/4x4",
+  "tool_commit": "80ebf0e",
+  "verified": "archive SHA-256 against refaudio/catalog.json (tools/refaudio_s3.py)"
+ },
  "verdicts": {
   "dominated_by_the_apparatus": [
    "body spectrum (padded)",

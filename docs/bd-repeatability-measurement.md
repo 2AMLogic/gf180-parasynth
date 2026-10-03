@@ -261,8 +261,8 @@ definitely wrong; one wider than it is merely unproven.
 
 **Session-to-session is not take-to-take.** It is larger, and it is the more
 relevant quantity for a scorecard that compares a render against one recorded
-take — but the true take-to-take number is smaller and is still unmeasured, and
-it waits on `808_loops_from_mars.zip`.
+take. The take-to-take number is now measured — see §5a — and it is smaller, as
+the upper-bound argument required.
 
 **It bounds the bass drum.** BD repeatability is not cymbal repeatability. It
 suggests an order of magnitude for the rest and no more.
@@ -278,11 +278,103 @@ converter chains differ (the current one is documented as API 1608 → Apogee
 Symphony MKII; the legacy one is not documented at all). Frequencies and times
 are chain-invariant; the dB numbers are upper bounds.
 
+## 5a. Take-to-take, from the 4x4 loops — 2026-10-03, tool commit `80ebf0e`
+
+*Issue #111, unblocked by the operator's 2026-10-02 rulings (the library is
+already owned; a private S3 working copy exists). One unit's take-to-take
+spread. It says nothing about unit-to-unit variation, which remains the larger
+term and remains unmeasured.*
+
+**Source.** `808_loops_from_mars.zip` fetched with `tools/refaudio_s3.py`
+(`REFAUDIO_S3`, profile `batch-runner-submit`); the whole archive hashed to the
+SHA-256 in `refaudio/catalog.json` before a byte was extracted. Audio was held
+in gitignored `refaudio/cache/` and deleted afterwards; **only derived metrics
+are committed** (`docs/bd-repeatability-results.json`, key `take_to_take`).
+Reproduce: `tools/measure_repeatability.py --loops --json
+docs/bd-repeatability-results.json`.
+
+**Audit (passed — not REFUSED).** 27 loops in `4x4/`. The audit does not trust
+the folder name: onsets are detected and counted, and a loop is admitted only if
+it holds **one strike per beat** across the whole file (spread-blind: strikes
+are never compared to each other to decide admission). 13 loops pass; 14 are
+patterns, double-time or layered loops and are excluded with the reason
+recorded. Among the 13, **no consecutive pair of strikes is a duplicate**: after
+integer alignment and best gain every pair leaves a residual far above 24-bit
+quantisation (residual rms 0.2–2 % of signal on the 10 loops that hold one
+setting; correlation 0.9993–1.0000, **not** a bit-identical 1.000). A copy-pasted
+strike *is* flagged by the same code (control below), so the audit could have
+refused and did not.
+
+**Measure.** One setting per loop, strikes sliced from 8 samples before each
+onset to the next onset (one beat), first strike of each loop dropped (decided
+beforehand: it alone follows silence). Estimators are the board's own, imported.
+"Take-to-take" below is the **median |difference| between two strikes of one
+loop**, median across loops — the same statistic as the session-to-session floor
+in §2/§3, so the ratio is like for like.
+
+| metric | take-to-take | session-to-session | take ÷ session | scorecard tol | tol ÷ take | loops read |
+|---|--:|--:|--:|--:|--:|--:|
+| f0 | 0.0014 Hz | 1.385 Hz | 0.001 | 5.06 Hz | 3,700× | 12 of 13 |
+| band split (padded) | 0.0073 dB | 0.159 dB | 0.046 | 3.0 dB | 410× | 12 of 13 |
+| early/body energy | 0.0153 dB | 0.421 dB | 0.036 | 3.0 dB | 196× | 12 of 13 |
+| attack | 0.0113 ms | 0.079 ms | 0.143 | 3.08 ms | 272× | 12 of 13 |
+| decay T20 | 0.0199 ms | 0.506 ms | 0.039 | 19.4 ms | 974× | **2 of 13** |
+
+**What it says.** Strike to strike, this machine is nearly deterministic: every
+metric's take-to-take spread is 0.1 %–14 % of the session-to-session figure, so
+the session numbers were indeed an upper bound, and a loose one. **No scorecard
+tolerance is finer than take-to-take variation** — the tightest ratio is 196×.
+The earlier suspicion that the board's tolerances are scoring noise is refuted
+at the take level as well as the session level. Combined with §3, the machine's
+variation that a tolerance has to absorb is dominated by session/unit
+differences, not by the strike.
+
+**Where the numbers should not be over-read.**
+
+- **Decay is 2 loops, not 13.** A one-beat slice cuts the tail of every
+  long-decay strike, and `schroeder_t20`'s own tail guard (correctly, #118)
+  declines to read them. Ten of the twelve readable loops yielded no decay at all
+  (counted as refused, never replaced by a number) and Tite yielded 16 of 31
+  strikes. The decay figure rests on Fluid and Tite only.
+- **Attack is sample-quantised and partly constructed.** Slices are aligned at
+  each strike's 2 % crossing, which is also how the attack estimator finds its
+  origin, so six loops read attack spread of exactly 0, four read 1 sample (0.0227 ms),
+  Goosed 3 samples, and Tite (alternating strikes) 0.70 ms. The figure is an upper bound on resolution, not a
+  measurement of the machine's attack jitter.
+- **Several take-to-take figures sit at or near the estimator's own floor**
+  (`--self-test` editing noise: f0 0.00035 Hz span, band split 0.0005 dB). f0
+  (4×) and band split (16×) are above it; do not read the take-to-take figure as
+  more precise than the estimator.
+- **Three admitted loops are not one setting.** Alternate, Tite and Trio have
+  consecutive-strike correlation 0.96–0.99 (alternating or accented strikes); Punch's
+  first strike differs from the rest and its slices could not be read at all
+  (every metric refused). The table's median across loops is robust to them, but
+  they are in the per-loop data, not hidden.
+- **The audit rules out bit-level copy-paste, not every re-use.** A vendor who
+  arranged one recorded strike and then re-amped or re-recorded the whole loop
+  would pass this audit and show exactly this kind of tiny residual. Nothing in
+  the file distinguishes that from a machine that is just that repeatable; the
+  vendor's notes do not say. If it happened, the true take-to-take spread is
+  *larger* than reported, so the "no tolerance is finer than the machine"
+  conclusion — which needs an upper bound on tolerance-to-machine ratio, i.e. a
+  lower bound on the spread — is the claim to weaken, not strengthen.
+- **Controls carried** (`--loops` refuses to report if any fails; also in
+  `tools/test_measure_repeatability.py`): a pasted loop is flagged 100 %
+  duplicate; independent-noise strikes are flagged 0 %; all 16 onsets are found;
+  a double-time pattern is refused; a 3 Hz f0 difference injected into every other strike is measured as
+  3.002 Hz and a clean loop as 0.00003 Hz. **Wrong-then-right:** the first
+  version of the alignment used a raw dot product and aligned *identical* strikes
+  tens of samples off, so the pasted-loop control read as a performance (residual
+  1.4 %); caught by that control, not by inspection, and fixed by normalising.
+  The audit's first form also compared every strike to strike 0, which read two
+  pasted-looking loops as varied because strike 0 alone follows silence; it now
+  uses consecutive pairs.
+
 ---
 
 ## Provenance
 
-`808-from-mars.zip` (SHA-256 verified against `refaudio/catalog.json`) and
+`808-from-mars.zip` (SHA-256 verified against `refaudio/catalog.json`), `808_loops_from_mars.zip` (§5a; SHA-256 verified, fetched with `tools/refaudio_s3.py`) and
 `808_from_mars_legacy.zip`, `…/01. Bass Drum/Clean/Digital/`, 144 + 144 files,
 each member's size checked against the committed `refaudio/index/`. Fetched with
 `tools/refaudio_local.py`. No audio is committed.
