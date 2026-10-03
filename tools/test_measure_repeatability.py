@@ -206,3 +206,120 @@ def test_the_shipped_band_split_does_not_move_when_the_head_trim_moves():
     assert abs(shipped[0] - padded[0]) < 0.01, (shipped[0], padded[0])
     assert max(before) - min(before) > 0.1, \
         f"the pre-repair path must still move, or this is not a control: {before}"
+
+
+# ---------------------------------------------------------------------------
+# #111 take-to-take from the 4x4 loops. No audio from the licensed library is
+# used or needed here: every loop is built, so its answer is known.
+# ---------------------------------------------------------------------------
+BPM = 120.0
+BEAT = int(60 / BPM * SR)
+
+
+def _tiled(strikes, bars=16):
+    x = np.zeros(BEAT * bars)
+    for i in range(bars):
+        s = strikes[i % len(strikes)][:BEAT - 20]
+        x[i * BEAT + 20:i * BEAT + 20 + len(s)] += s
+    return x / np.abs(x).max()
+
+
+def _one(f0=50.0, seed=0, tau=0.06):
+    return mr.synthetic_bd(SR, f0=f0, tau=tau, seconds=0.5, seed=seed)
+
+
+def test_loop_controls_all_pass():
+    ok, ev = mr.loop_controls(report=lambda *a: None)
+    assert ok, ev
+
+
+def test_a_pasted_loop_is_flagged_as_duplicates():
+    """START RED for the audit: if this returned < 1.0 a copy-pasted loop would
+    be measured and report a spread of exactly zero as the machine's."""
+    sl, _ = mr.slice_strikes(_tiled([_one(seed=1)]), SR, BPM)
+    frac, _ = mr.duplicate_fraction(sl)
+    assert frac == 1.0
+
+
+def test_independent_strikes_are_not_flagged():
+    sl, _ = mr.slice_strikes(_tiled([_one(seed=10 + i) for i in range(16)]), SR, BPM)
+    frac, ev = mr.duplicate_fraction(sl)
+    assert frac == 0.0 and ev["residual_max_abs_median"] > mr.DUP_ABS
+
+
+def test_alignment_does_not_prefer_the_loud_end_of_a_decaying_strike():
+    """The regression the copy-paste control caught: a raw dot product slid the
+    window toward the loud part of a decaying strike, so IDENTICAL strikes were
+    aligned tens of samples off and a pasted loop read as a performance."""
+    a = _one(seed=1)[:BEAT]
+    corr, mx, rel = mr._aligned_residual(a, a.copy())
+    assert corr == pytest.approx(1.0) and mx == 0.0 and rel == 0.0
+
+
+def test_a_duplicate_one_lsb_off_is_still_a_duplicate_but_noise_is_not():
+    s = _one(seed=1)
+    lsb = 2.0 ** -23
+    jitter = s + np.random.default_rng(0).choice([-lsb, 0.0, lsb], len(s))
+    assert mr._aligned_residual(s[:BEAT], jitter[:BEAT])[1] <= mr.DUP_ABS
+    noisy = s + np.random.default_rng(0).normal(0, 1e-4, len(s))
+    assert mr._aligned_residual(s[:BEAT], noisy[:BEAT])[1] > mr.DUP_ABS
+
+
+def test_slicing_finds_every_strike_and_refuses_double_time():
+    x = _tiled([_one(seed=3)])
+    assert len(mr.loop_onsets(x, BEAT)) == 16
+    dbl = x.copy()
+    dbl[BEAT // 2 + 20:BEAT // 2 + 4020] += 0.9 * x[20:4020]
+    with pytest.raises(mr.Refused, match="not one strike per beat"):
+        mr.slice_strikes(dbl / np.abs(dbl).max(), SR, BPM)
+
+
+def test_slicing_refuses_a_missing_strike():
+    x = _tiled([_one(seed=3)])
+    x[5 * BEAT:6 * BEAT] = 0.0
+    with pytest.raises(mr.Refused):
+        mr.slice_strikes(x, SR, BPM)
+
+
+def test_loop_measure_sees_an_injected_f0_difference_and_not_a_clean_loop():
+    """SENSITIVITY: 3 Hz injected into every other strike must be measured at
+    about 3 Hz; independent-noise strikes of one f0 must be measured as ~0."""
+    mixed = _tiled([_one(f0=50.0, seed=2), _one(f0=53.0, seed=3)])
+    clean = _tiled([_one(f0=50.0, seed=20 + i) for i in range(16)])
+    m = mr.loop_measure({"m": (mr.slice_strikes(mixed, SR, BPM)[0], SR)})
+    c = mr.loop_measure({"c": (mr.slice_strikes(clean, SR, BPM)[0], SR)})
+    assert m["per_loop"]["m"]["Pitch trajectory"]["span"] == pytest.approx(3.0, abs=0.3)
+    assert c["per_loop"]["c"]["Pitch trajectory"]["span"] < 0.01
+
+
+def test_loop_measure_drops_the_first_strike():
+    x = _tiled([_one(seed=30 + i) for i in range(16)])
+    sl, _ = mr.slice_strikes(x, SR, BPM)
+    out = mr.loop_measure({"x": (sl, SR)})
+    assert out["per_loop"]["x"]["Pitch trajectory"]["n"] == len(sl) - 1
+
+
+def test_loop_measure_records_a_refusal_instead_of_a_number():
+    """Strikes cut while still sounding: decay must be COUNTED as refused, never
+    replaced by a figure (#118)."""
+    x = _tiled([_one(seed=40 + i, tau=0.15) for i in range(16)])
+    out = mr.loop_measure({"x": (mr.slice_strikes(x, SR, BPM)[0], SR)})
+    d = out["per_loop"]["x"]["decay"]
+    assert "refused" in d and d["n_refused"] > 0
+    assert "refused" in out["metrics"]["decay"]
+
+
+def test_loop_audit_refuses_when_the_files_are_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr(mr, "LOOPS_DIR", tmp_path / "nope")
+    with pytest.raises(mr.Refused, match="refaudio_s3.py"):
+        mr.loop_files()
+
+
+def test_loop_compare_reads_the_committed_floors():
+    take = {"metrics": {"Pitch trajectory": {"units": "Hz", "loops": 1, "strikes_refused": 0,
+                                              "pairwise_abs_diff_median_of_loops": 0.0014},
+                        "decay": {"refused": "no loop yielded 3 readable strikes"}}}
+    out = mr.loop_compare(take)
+    assert out["Pitch trajectory"]["session_floor"] == pytest.approx(1.3852)
+    assert out["Pitch trajectory"]["take_over_session"] == pytest.approx(0.001, abs=1e-3)
+    assert out["decay"] == {"refused": "no loop yielded 3 readable strikes"}

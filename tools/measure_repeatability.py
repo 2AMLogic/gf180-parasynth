@@ -890,8 +890,389 @@ def verdicts(machine: dict, estimator: dict, travel: dict, report=print) -> dict
 
 
 # ===========================================================================
+# 6b. TAKE-TO-TAKE, from the loops (issue #111, operator-unblocked 2026-10-02)
+#
+# `808_loops_from_mars.zip`, `WAV/03. Bass Drum/4x4/`: bass-drum-only loops in
+# which one setting is struck once per beat, by the machine's own sequencer,
+# inside a single continuous take. Between two strikes in one loop nothing but
+# the machine's strike-to-strike variation (plus the recording chain's noise)
+# differs -- that is take-to-take, which the session-to-session numbers above
+# only bound from above.
+#
+# THREE THINGS THIS DELIBERATELY DOES NOT DO.
+#  * It does not choose loops by how similar their strikes are. A loop is
+#    admitted on STRUCTURE alone (one detected onset per beat across the whole
+#    file); picking the loops whose strikes agree would pick the answer.
+#  * It does not trust the file name's "4x4". Onsets are detected and counted.
+#  * It does not call a copy-pasted strike a repeat. `loop_audit` REFUSES a loop
+#    whose strikes are bit-for-bit duplicates, because that spread is exactly
+#    zero for a reason that has nothing to do with the machine.
+# ===========================================================================
+LOOPS_DIR = (CACHE / "808_loops_from_mars" / "808 Loops From Mars" / "WAV" /
+             "03. Bass Drum" / "4x4")
+LOOPS_FETCH = ("REFAUDIO_S3=s3://2am-batch-jobs-221082181346/refaudio/samples-from-mars "
+               "REFAUDIO_S3_PROFILE=batch-runner-submit tools/refaudio_s3.py --prefix "
+               "808_loops_from_mars.zip '808 Loops From Mars/WAV/03. Bass Drum/4x4/'")
+LOOP_BPM_RE = re.compile(r"808 Loops (?P<bpm>\d+)\.wav$")
+#: A strike is at most this much of a beat from the grid -- generous, since the
+#: sequencer is free-running against the DAW grid, and the test is only that
+#: there is ONE per beat, not that they are quantised.
+BEAT_TOL = 0.05
+#: Samples kept in front of each detected onset, so `rc.prepare` finds the
+#: onset itself inside the slice rather than being handed a record that begins
+#: on the strike (which it correctly refuses, #101).
+SLICE_LEAD = 8
+#: Two strikes are DUPLICATES when, after best integer alignment and best gain,
+#: they differ by no more than this -- a few 24-bit LSBs. A real second strike
+#: of an analogue machine through an ADC differs by orders of magnitude more
+#: than quantisation.
+DUP_ABS = 4.0 * 2.0 ** -23
+#: Per-loop metrics taken: the ones the verdict table scores, by the board's own
+#: estimators, imported through `metrics()` and not re-implemented.
+LOOP_METRICS = ("Pitch trajectory", "body spectrum (padded)", "body spectrum",
+                "decay", "attack", "early/body energy")
+
+
+def loop_onsets(m: np.ndarray, beat: float) -> np.ndarray:
+    """Coarse onset of every strike: first sample over 20 % of the loop's peak,
+    then deaf for half a beat. Level-relative, so it follows the loop."""
+    env = np.abs(m)
+    th = 0.2 * float(env.max())
+    out, i, hold = [], 0, int(beat * 0.5)
+    while i < len(m):
+        if env[i] > th:
+            out.append(i)
+            i += hold
+        else:
+            i += 1
+    return np.asarray(out, dtype=int)
+
+
+def refine_onset(m: np.ndarray, j: int, frac: float = 0.02) -> int:
+    """Walk back from a coarse 20 % onset to the first sample of that run above
+    `frac` of the strike's own local peak -- the same notion of onset
+    `rc.prepare` uses, so every slice's onset is defined identically."""
+    pk = float(np.abs(m[j:j + 2000]).max())
+    k = j
+    while k > 0 and abs(m[k - 1]) > frac * pk and j - k < 2000:
+        k -= 1
+    return k
+
+
+def slice_strikes(m: np.ndarray, sr: int, bpm: float) -> tuple[list[np.ndarray], dict]:
+    """One slice per strike, each from `SLICE_LEAD` samples before the onset to
+    the same point before the NEXT onset -- one beat. REFUSES a loop that is not
+    one strike per beat, with the reason; that is the admission rule."""
+    beat = 60.0 / bpm * sr
+    on = loop_onsets(m, beat)
+    expect = round(len(m) / beat)
+    info = {"bpm": bpm, "beat_samples": round(beat, 2), "onsets": int(len(on)),
+            "expected_one_per_beat": int(expect)}
+    if len(on) != expect:
+        raise Refused(f"{len(on)} onsets in {expect} beats: not one strike per beat "
+                      "(a pattern, a fill or a layered loop, not 'one setting struck repeatedly')")
+    gaps = np.diff(on) / beat
+    if len(gaps) and (np.abs(gaps - 1.0) > BEAT_TOL).any():
+        raise Refused(f"onset spacing leaves the beat by more than {BEAT_TOL:.0%}: "
+                      f"{np.round(gaps.min(), 3)}..{np.round(gaps.max(), 3)} beats")
+    on = np.array([refine_onset(m, int(j)) for j in on])
+    starts = np.maximum(on - SLICE_LEAD, 0)
+    cut = [np.asarray(m[a:b], dtype=np.float64) for a, b in zip(starts[:-1], starts[1:])]
+    # The last strike has no "next onset"; give it a full beat if the file does.
+    if starts[-1] + int(round(beat)) <= len(m):
+        cut.append(np.asarray(m[starts[-1]:starts[-1] + int(round(beat))], dtype=np.float64))
+    info["strikes"] = len(cut)
+    info["slice_ms_median"] = round(float(np.median([len(c) for c in cut])) / sr * 1e3, 1)
+    return cut, info
+
+
+def _aligned_residual(a: np.ndarray, b: np.ndarray, maxlag: int = 64) -> tuple[float, float, float]:
+    """(correlation, max |residual|, rms residual / rms a) after best integer
+    lag and best least-squares gain. Residual in the signal's own units."""
+    n = min(len(a), len(b)) - 2 * maxlag
+    a0 = a[maxlag:maxlag + n]
+    best = (-np.inf, 0)
+    for lag in range(-maxlag, maxlag + 1):
+        w = b[maxlag + lag:maxlag + lag + n]
+        # NORMALISED: a raw dot product prefers whichever lag slides the window
+        # toward the loud part of a decaying strike, so identical strikes were
+        # "aligned" off by tens of samples and a pasted loop read as a
+        # performance (caught by the copy-paste control, not by inspection).
+        v = float(np.dot(a0, w) / (np.linalg.norm(w) or 1.0))
+        if v > best[0]:
+            best = (v, lag)
+    b0 = b[maxlag + best[1]:maxlag + best[1] + n]
+    g = float(np.dot(a0, b0) / np.dot(b0, b0))
+    r = a0 - g * b0
+    corr = float(np.dot(a0, b0) / (np.linalg.norm(a0) * np.linalg.norm(b0)))
+    return corr, float(np.abs(r).max()), float(np.linalg.norm(r) / np.linalg.norm(a0))
+
+
+def duplicate_fraction(slices: list[np.ndarray], maxlag: int = 64) -> tuple[float, dict]:
+    """Fraction of CONSECUTIVE strike pairs that are DUPLICATES, plus the
+    correlation / residual evidence. 1.0 means a copy-pasted strike. Consecutive
+    and not "against strike 0": the first strike follows silence, so on some
+    loops it alone is unlike the rest and a comparison to it reads a pasted loop
+    as varied (Punch, Tite)."""
+    rows = [_aligned_residual(a, b, maxlag) for a, b in zip(slices[:-1], slices[1:])]
+    corr = [r[0] for r in rows]
+    dup = [r[1] <= DUP_ABS for r in rows]
+    return float(np.mean(dup)), {
+        "pairs": len(rows),
+        "corr_min": round(min(corr), 6), "corr_median": round(float(np.median(corr)), 6),
+        "corr_max": round(max(corr), 6),
+        "residual_rms_rel_median": round(float(np.median([r[2] for r in rows])), 6),
+        "residual_max_abs_median": float(np.median([r[1] for r in rows])),
+        "duplicate_pairs": int(sum(dup))}
+
+
+def loop_files() -> list[pathlib.Path]:
+    if not LOOPS_DIR.is_dir() or not list(LOOPS_DIR.glob("*.wav")):
+        raise Refused(f"the 4x4 bass-drum loops are not in refaudio/cache -- run:\n         {LOOPS_FETCH}")
+    return sorted(LOOPS_DIR.glob("*.wav"))
+
+
+def loop_audit(report=print, files: list[pathlib.Path] | None = None) -> tuple[dict, dict]:
+    """Which loops are genuine repeated strikes? Returns (admitted, evidence);
+    `admitted` maps loop name -> (slices, sr). Empty `admitted` is the REFUSAL."""
+    ev: dict = {"loops": {}, "admitted": [], "excluded_not_one_per_beat": [],
+                "refused_copy_paste": []}
+    admitted: dict = {}
+    report("  loop                          bpm strikes  corr min/median/max       "
+           "residual rms   dup")
+    for p in (files if files is not None else loop_files()):
+        mm = LOOP_BPM_RE.search(p.name)
+        short = p.name.replace("BD 4x4 ", "").replace(" 808 Loops", "")[:-4]
+        if not mm:
+            ev["loops"][short] = {"refused": "no bpm in the file name"}
+            continue
+        x, sr = load(p)
+        try:
+            slices, info = slice_strikes(x, sr, float(mm.group("bpm")))
+        except Refused as why:
+            ev["loops"][short] = {"excluded": str(why)}
+            ev["excluded_not_one_per_beat"].append(short)
+            report(f"  {short:28s} {mm.group('bpm'):>4s}   excluded: {why}")
+            continue
+        frac, e = duplicate_fraction(slices)
+        info.update(e)
+        info["duplicate_fraction"] = round(frac, 4)
+        ev["loops"][short] = info
+        report(f"  {short:28s} {info['bpm']:4.0f} {info['strikes']:6d}  "
+               f"{e['corr_min']:.5f}/{e['corr_median']:.5f}/{e['corr_max']:.5f}  "
+               f"{e['residual_rms_rel_median']:11.5f}  {frac:4.2f}")
+        if frac >= 0.5:
+            info["refused"] = "strikes are bit-for-bit duplicates: a copy-pasted sample"
+            ev["refused_copy_paste"].append(short)
+        else:
+            admitted[short] = (slices, sr)
+            ev["admitted"].append(short)
+    return admitted, ev
+
+
+def loop_measure(admitted: dict, report=print) -> dict:
+    """Per-loop and pooled take-to-take spread of every metric in LOOP_METRICS.
+
+    The FIRST strike of every loop is dropped, decided before looking: it alone
+    follows silence, every other strike is struck on the previous strike's tail.
+    `n_refused` counts strikes an estimator declined to read (a tail cut by the
+    one-beat slice, #118); a refusal is counted, never replaced by a number."""
+    plan = {k: v for k, v in metrics().items() if k in LOOP_METRICS}
+    out: dict = {"metrics": {}, "per_loop": {}}
+    pooled = collections.defaultdict(list)
+    for name, (slices, sr) in admitted.items():
+        vals = collections.defaultdict(list)
+        refused = collections.Counter()
+        for s in slices[1:]:
+            try:
+                y = rc.prepare(s, sr)
+            except rc.Refused:
+                for k in plan:
+                    refused[k] += 1
+                continue
+            r = measure_all(y, sr, plan)
+            for k in plan:
+                if r[k] is None:
+                    refused[k] += 1
+                else:
+                    vals[k].append(r[k])
+        row = {}
+        for k in plan:
+            v = np.asarray(vals[k], dtype=float)
+            if len(v) < 3:
+                row[k] = {"n": int(len(v)), "n_refused": int(refused[k]),
+                          "refused": "fewer than 3 strikes could be read"}
+                continue
+            d = np.abs(v[:, None] - v[None, :])[np.triu_indices(len(v), 1)]
+            row[k] = {"n": int(len(v)), "n_refused": int(refused[k]),
+                      "mean": float(v.mean()), "sd": float(v.std(ddof=1)),
+                      "span": float(v.max() - v.min()),
+                      "pairwise_abs_diff_median": float(np.median(d)),
+                      "rel_sd_pct": float(100 * v.std(ddof=1) / abs(v.mean())) if v.mean() else None}
+            pooled[k].append(row[k])
+        out["per_loop"][name] = row
+    for k, rows in pooled.items():
+        pw = [r["pairwise_abs_diff_median"] for r in rows]
+        rel = [r["rel_sd_pct"] for r in rows if r["rel_sd_pct"] is not None]
+        out["metrics"][k] = {
+            "units": plan[k][0], "loops": len(rows),
+            "pairwise_abs_diff_median_of_loops": float(np.median(pw)),
+            "pairwise_abs_diff_max_loop": float(np.max(pw)),
+            "pairwise_abs_diff_min_loop": float(np.min(pw)),
+            "sd_median_of_loops": float(np.median([r["sd"] for r in rows])),
+            "rel_sd_pct_median_of_loops": float(np.median(rel)) if rel else None,
+            "strikes_refused": int(sum(r["n_refused"] for r in rows))}
+    for k in plan:
+        if k not in out["metrics"]:
+            out["metrics"][k] = {"refused": "no loop yielded 3 readable strikes"}
+    return out
+
+
+def loop_controls(report=print) -> tuple[bool, dict]:
+    """START RED. Each control is an input the apparatus must get RIGHT, built
+    so its answer is known: if any fails, the loop numbers are not reported."""
+    sr, bpm = 44100, 120.0
+    beat = int(60 / bpm * sr)
+    ev: dict = {}
+
+    def tiled(strikes: list[np.ndarray], bars: int = 16) -> np.ndarray:
+        x = np.zeros(beat * bars)
+        for i in range(bars):
+            s = strikes[i % len(strikes)][:beat - 20]
+            x[i * beat + 20:i * beat + 20 + len(s)] += s
+        return x / np.abs(x).max()
+
+    def one(f0=50.0, seed=0):
+        return synthetic_bd(sr, f0=f0, tau=0.06, seconds=0.5, seed=seed)
+
+    # 1. A copy-pasted loop (one strike tiled) must be flagged DUPLICATE: if the
+    #    audit cannot tell that from a performance, a spread of zero is reported.
+    pasted = tiled([one(seed=1)])
+    sl, _ = slice_strikes(pasted, sr, bpm)
+    dupf, e1 = duplicate_fraction(sl)
+    ev["copy_paste_is_flagged"] = {"duplicate_fraction": dupf, **e1}
+    # 2. Strikes that differ only by independent noise must NOT be duplicates.
+    real = tiled([one(seed=10 + i) for i in range(16)])
+    sl2, _ = slice_strikes(real, sr, bpm)
+    dupf2, e2 = duplicate_fraction(sl2)
+    ev["independent_noise_is_not_flagged"] = {"duplicate_fraction": dupf2, **e2}
+    # 3. Slicing finds every strike.
+    on = loop_onsets(real, beat)
+    ev["onsets_found"] = {"found": int(len(on)), "expected": 16}
+    # 4. A pattern that is not one-strike-per-beat REFUSES.
+    dbl = pasted.copy()
+    dbl[beat // 2 + 20:beat // 2 + 20 + 4000] += 0.9 * pasted[20:4020]
+    try:
+        slice_strikes(dbl / np.abs(dbl).max(), sr, bpm)
+        ev["double_time_refuses"] = False
+    except Refused:
+        ev["double_time_refuses"] = True
+    # 5. SENSITIVITY: a known f0 difference injected into every other strike must
+    #    show up in the spread by about its size; a clean loop must not.
+    mixed = tiled([one(f0=50.0, seed=2), one(f0=53.0, seed=3)])
+    clean = tiled([one(f0=50.0, seed=20 + i) for i in range(16)])
+    sm = loop_measure({"mixed": (slice_strikes(mixed, sr, bpm)[0], sr)})
+    sc = loop_measure({"clean": (slice_strikes(clean, sr, bpm)[0], sr)})
+    pm_ = sm["per_loop"]["mixed"]["Pitch trajectory"].get("span")
+    pc_ = sc["per_loop"]["clean"]["Pitch trajectory"].get("span")
+    ev["f0_injection"] = {"injected_hz": 3.0, "span_with_injection_hz": pm_,
+                          "span_clean_hz": pc_}
+    ok = (dupf == 1.0 and dupf2 == 0.0 and len(on) == 16 and ev["double_time_refuses"]
+          and pm_ is not None and pc_ is not None and pm_ > 1.0 and pm_ > 10 * max(pc_, 1e-3))
+    for k, v in ev.items():
+        report(f"  control {k:34s} {v}")
+    return ok, ev
+
+
+def loop_compare(take: dict, results_path: pathlib.Path | None = None) -> dict:
+    """Take-to-take beside the committed session-to-session floor and the
+    tolerance, per metric. Both come from `docs/bd-repeatability-results.json`,
+    not recomputed, so the comparison is against the numbers PR #126/#132 published.
+
+    `session_floor` is the median |difference| between the two sessions;
+    `take_pairwise` is the median |difference| between two strikes of one loop
+    -- the same statistic, so the ratio compares like with like."""
+    path = results_path or (REPO / "docs" / "bd-repeatability-results.json")
+    res = json.loads(path.read_text(encoding="utf-8"))
+    floors = res["session_to_session"]["metrics"]
+    tols = {r["metric"]: r["tolerance"] for r in res["verdicts"]["rows"]}
+    noise = res["self_test"]["editing_noise"]
+    out = {}
+    for k, m in take["metrics"].items():
+        if "refused" in m:
+            out[k] = {"refused": m["refused"]}
+            continue
+        sess = floors[k]["abs_diff_median"]
+        tk = m["pairwise_abs_diff_median_of_loops"]
+        out[k] = {"units": m["units"], "take_pairwise_median": tk,
+                  "session_floor": sess,
+                  "estimator_editing_noise_span": (noise.get(k) or {}).get("span"),
+                  "take_over_session": round(tk / sess, 3) if sess else None,
+                  "tolerance": tols.get(k),
+                  "tolerance_over_take": round(tols[k] / tk, 1) if k in tols and tk else None,
+                  "take_is_below_session_upper_bound": bool(tk <= sess)}
+    return out
+
+
+
+
+# ===========================================================================
 # 7. CLI
 # ===========================================================================
+def loops_main(a) -> int:
+    import subprocess
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True,
+                              text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--", "tools", "model"], cwd=REPO,
+                                    capture_output=True, text=True, check=True).stdout.strip())
+        print("CONTROLS   the apparatus, on loops whose answer is constructed")
+        ok, ctl = loop_controls()
+        if not ok:
+            print("REFUSED  a loop control failed; no loop number would be trustworthy")
+            return REFUSED
+        print("\nAUDIT      are the 4x4 loops repeated strikes, or one strike pasted?")
+        admitted, aud = loop_audit()
+        out = {"controls": ctl, "audit": aud, "tool_commit": head + ("+dirty" if dirty else ""),
+               "archive": "808_loops_from_mars.zip",
+               "path": "808 Loops From Mars/WAV/03. Bass Drum/4x4",
+               "verified": "archive SHA-256 against refaudio/catalog.json (tools/refaudio_s3.py)"}
+        if not admitted:
+            out["outcome"] = "REFUSED"
+            print("REFUSED  no loop holds genuinely repeated strikes: " + (
+                "every one-per-beat loop is a copy-pasted strike" if aud["refused_copy_paste"]
+                else "no loop is one strike per beat"))
+            rc_ = REFUSED
+        else:
+            print(f"\nMEASURE    {len(admitted)} admitted loops: {', '.join(admitted)}")
+            take = loop_measure(admitted)
+            out["measure"] = take
+            cmp_ = loop_compare(take)
+            out["compare"] = cmp_
+            out["outcome"] = "MEASURED"
+            print("  metric                    units  take-to-take  session floor  take/session"
+                  "  tol  tol/take   (loops, strikes refused)")
+            for k, v in cmp_.items():
+                if "refused" in v:
+                    print(f"  {k:24s} REFUSED: {v['refused']}")
+                    continue
+                print(f"  {k:24s} {v['units']:5s} {v['take_pairwise_median']:12.4f} "
+                      f"{v['session_floor']:14.4f} {(v['take_over_session'] or 0):12.3f}  "
+                      + (f"{v['tolerance']:5.2f} {v['tolerance_over_take']:9.1f}"
+                         if v['tolerance'] is not None else "  (no tolerance row)")
+                      + f"   ({take['metrics'][k]['loops']}, {take['metrics'][k]['strikes_refused']})")
+            rc_ = MEASURED
+    except Refused as why:
+        print(f"REFUSED  {why}")
+        return REFUSED
+    if a.json:
+        base = json.loads(a.json.read_text(encoding="utf-8")) if a.json.exists() else {}
+        base["take_to_take"] = out
+        a.json.write_text(json.dumps(base, indent=1, sort_keys=True), encoding="utf-8")
+        print(f"\nwrote {a.json} [take_to_take]")
+    return rc_
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -899,8 +1280,13 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--audit", action="store_true")
     ap.add_argument("--measure", action="store_true")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--loops", action="store_true",
+                    help="take-to-take from 808_loops_from_mars 4x4 bass-drum loops "
+                         "(controls, audit, measure); --json MERGES under 'take_to_take'")
     ap.add_argument("--json", type=pathlib.Path)
     a = ap.parse_args(argv)
+    if a.loops:
+        return loops_main(a)
     if not (a.self_test or a.audit or a.measure or a.all):
         a.all = True
     out: dict = {"issue": 111, "corpus": {
