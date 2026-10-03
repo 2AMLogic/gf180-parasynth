@@ -459,11 +459,22 @@ def load_anchor(anchor: dict, defn: dict, roots: dict | None = None) -> tuple[np
 # ===========================================================================
 # 4. mel_dac and its floor
 # ===========================================================================
-def prepare_for_distance(x: np.ndarray, sr: int) -> np.ndarray:
+def prepare_for_distance(x: np.ndarray, sr: int, *, strike: bool = True) -> np.ndarray:
     """audio_distance_floor.py E8's convention: run_case.prepare, then peak
-    normalisation."""
+    normalisation -- for a STRIKE. `prepare` trims to a guaranteed pre-onset
+    lead and REFUSES a record that begins inside its own event, which every
+    held tone does ("cut into the strike"); the first run lost the whole
+    sustained category to that refusal. A held tone is therefore peak-
+    normalised only, as the definition's `prepare_categories` states."""
+    x = np.asarray(x, dtype=np.float64)
     try:
-        return adf.norm(rc.prepare(np.asarray(x, dtype=np.float64), sr, side="the anchor"))
+        am.require_finite(x, "the anchor")
+    except am.NonFiniteAudio as e:
+        raise Refused(str(e)) from e
+    if not strike:
+        return adf.norm(x)
+    try:
+        return adf.norm(rc.prepare(x, sr, side="the anchor"))
     except rc.Refused as e:
         raise Refused(str(e)) from e
 
@@ -539,8 +550,31 @@ def _variants(cls, col, spec, x, sr, anchor_id, defn, tone_case):
         raise ValueError(src)
 
 
-def _unchanged(x, y) -> bool:
-    return y is not None and len(y) == len(x) and bool(np.array_equal(x, y))
+#: A transform that changes less than this much of the record has not
+#: applied the defect it names. 1 ms, stated and not tuned.
+MIN_CHANGED_S = 1e-3
+
+
+def _unchanged(x, y, sr: int) -> str | None:
+    """Why this transform is not a test of anything, or None.
+
+    The first version asked only `np.array_equal`, and the run defeated it:
+    the ladder's tail noise is confined to after the record's sounding extent,
+    which on seven prepared Fischer anchors is the last ONE OR TWO SAMPLES.
+    `mel_dac`'s STFT frames never reach them, so it read exactly 0.0 on 42
+    rungs and the matrix called it BLIND to a defect that had changed two
+    samples. A change confined to less than `MIN_CHANGED_S` of the record is
+    now a NO-VERDICT, and that input is a committed test. Stated adversary it
+    does not stop: a change spread over more than 1 ms at negligible level
+    (the 80 dB SNR rung) is scored -- correctly, as a weak rung, not a no-op."""
+    if y is None or len(y) != len(x):
+        return None
+    k = int(np.count_nonzero(np.asarray(x) != np.asarray(y)))
+    if k == 0:
+        return "the transform did not change the record"
+    if k < max(1, int(round(MIN_CHANGED_S * sr))):
+        return f"the transform changed only {k} sample(s), under {MIN_CHANGED_S * 1e3:g} ms"
+    return None
 
 
 def run_property(case: pl.EstimatorCase, anchor: dict, x: np.ndarray, sr: int,
@@ -578,8 +612,9 @@ def run_property(case: pl.EstimatorCase, anchor: dict, x: np.ndarray, sr: int,
                 row["why"] = "no-op rung (the sweep's own identity point)"
                 rows.append(row)
                 continue
-            if _unchanged(use, y):
-                row["why"] = "the transform did not change the record"
+            why = _unchanged(use, y, sr)
+            if why:
+                row["why"] = why
                 rows.append(row)
                 continue
             got = case.measure(y, sr)
@@ -605,8 +640,9 @@ def run_property(case: pl.EstimatorCase, anchor: dict, x: np.ndarray, sr: int,
 
 
 def run_mel(anchor: dict, x: np.ndarray, sr: int, defn: dict) -> dict:
+    strike = anchor.get("category") in defn["estimators"]["mel_dac"]["prepare_categories"]
     try:
-        p = prepare_for_distance(x, sr)
+        p = prepare_for_distance(x, sr, strike=strike)
         floor = mel_floor(p, sr)
     except Refused as e:
         return dict(status="REFUSED", why=str(e))
@@ -618,8 +654,8 @@ def run_mel(anchor: dict, x: np.ndarray, sr: int, defn: dict) -> dict:
             row = dict(label)
             if row.get("no_op"):
                 row["why"] = "no-op rung (the sweep's own identity point)"
-            elif _unchanged(p, y):
-                row["why"] = "the transform did not change the record"
+            elif _unchanged(p, y, sr):
+                row["why"] = _unchanged(p, y, sr)
             else:
                 d = mel_distance(p, adf.norm(y), sr)
                 row.update(distance=_r(d), floor=_r(floor), ratio=_r(d / floor))
@@ -685,7 +721,8 @@ def _label(cls: str, moved: int, scored: int, tracked: int, mistracked: int,
 
 
 def _blank():
-    return dict(scored=0, moved=0, no_verdict=0, refused=0, tracked=0, mistracked=0)
+    return dict(scored=0, moved=0, no_verdict=0, refused=0, tracked=0, mistracked=0,
+                anchors_refused=0)
 
 
 def _tally(t: dict, row: dict, cls: str, mel: bool, k: float = 1.0):
@@ -727,7 +764,14 @@ def coverage_matrix(anchor_results: list[dict], defn: dict) -> dict:
                 if ar.get("status") != "OK":
                     continue
                 src = ar.get("mel_dac") if mel else ar.get("estimators", {}).get(name)
-                if not src or src.get("status") != "OK":
+                if not src:
+                    continue                     # outside this estimator's remit
+                if src.get("status") != "OK":
+                    # refused at BASE on this anchor: every column of it is a
+                    # no-verdict, and the cell must say so rather than read nv0
+                    for t in (cell, cell["by_category"].setdefault(ar["category"], _blank()),
+                              cell["by_split"].setdefault(ar["split"], _blank())):
+                        t["anchors_refused"] += 1
                     continue
                 for row in src["columns"].get(col, []):
                     for t in (cell, cell["by_category"].setdefault(ar["category"], _blank()),
@@ -1116,12 +1160,14 @@ OUT_OF_BAND = (
 
 def _cell(c: dict) -> str:
     if c["label"] == "NO-VERDICT":
-        return f"NO-VERDICT nv{c['no_verdict']}"
+        return (f"NO-VERDICT nv{c['no_verdict']}"
+                + (f" A{c['anchors_refused']}" if c["anchors_refused"] else ""))
     tag = {"MOVED": "MOVED", "BLIND": "BLIND", "STILL": "still", "FALSE-ALARM": "FALSE",
            "ABSTAINS": "abstains", "REFUSES": "REFUSES",
            "TRACKS": "tracks", "MISTRACKS": "MISTRACK", "NOT-DERIVABLE": "n/derive",
            "FLAGS-CORRECTION": "FLAGS"}[c["label"]]
-    return f"{tag} {c['moved']}/{c['scored']}" + (f" r{c['refused']}" if c["refused"] else "")
+    return (f"{tag} {c['moved']}/{c['scored']}" + (f" r{c['refused']}" if c["refused"] else "")
+            + (f" A{c['anchors_refused']}" if c["anchors_refused"] else ""))
 
 
 def report_text(res: dict) -> str:
@@ -1148,7 +1194,8 @@ def report_text(res: dict) -> str:
     w("")
     w("-" * 100)
     w("1. COVERAGE MATRIX (estimator x failure mode). Cell = label moved/scored over "
-      "(anchor, rung) pairs; nv = no-verdicts.")
+      "(anchor, rung) pairs; r = rungs refused,")
+    w("   nv = no-verdict rungs, A = anchors refused at BASE (no rung of them was scored).")
     w("   defect columns: MOVED protects, BLIND misses. permitted: still is right, FALSE "
       "is a false alarm. correction: tracks / MISTRACK / n/derive / FLAGS.")
     w("   mel_dac uses distance > 1 x its floor here; section 2 sweeps K.")

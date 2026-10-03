@@ -323,6 +323,48 @@ def test_a_transform_that_changes_nothing_is_no_verdict_not_blind():
     assert cell["no_verdict"] == 1 and cell["scored"] == 0
 
 
+def test_a_change_of_one_or_two_trailing_samples_is_no_verdict():
+    """The input that defeated the first version of the no-op guard, taken
+    from the first real run: tail noise confined to after the sounding extent
+    touched the last 1-2 samples of seven prepared Fischer anchors, mel_dac's
+    STFT never saw them, and 42 rungs read exactly 0.0 as BLIND."""
+    x = _strike()
+    y = x.copy()
+    y[-1] += 0.3
+    y[-2] -= 0.3
+    assert "only 2 sample" in cs._unchanged(x, y, SR)
+    y2 = x.copy()
+    y2[-200:] += 1e-3                             # > 1 ms at 44.1 kHz: a test
+    assert cs._unchanged(x, y2, SR) is None
+    assert cs._unchanged(x, x.copy(), SR) == "the transform did not change the record"
+    assert cs._unchanged(x, np.concatenate([[0.0], x]), SR) is None   # a delay
+
+
+def test_base_refusals_are_counted_in_the_cell_not_dropped():
+    """band_pair_db refused at base on every anchor of the first run, and the
+    matrix printed 'NO-VERDICT nv0' -- a cell that looked empty rather than
+    refused."""
+    def _never(x, sr):
+        return am.Estimate(None, False, "outside validated domain: test")
+    r = cs.run_anchor(_ANCHOR, _strike(), SR, _defn(), estimators=["decay_tau"],
+                      measures={"decay_tau": _never}, with_mel=False)
+    m = cs.coverage_matrix([r], _defn())["decay_tau"]
+    assert all(c["label"] == "NO-VERDICT" and c["anchors_refused"] == 1 for c in m.values())
+
+
+def test_a_held_tone_gets_a_mel_floor_without_the_strike_trim():
+    """run_case.prepare refuses a record that begins inside its own event,
+    which every held tone does; the first run lost the whole sustained
+    category to it. Sustained anchors are peak-normalised only."""
+    d = _defn()
+    a = next(a for a in d["anchors"] if a["pack"] == "refprofile")
+    x, sr = cs.load_anchor(a, d)
+    with pytest.raises(cs.Refused, match="cut into the strike"):
+        cs.prepare_for_distance(x, sr, strike=True)
+    p = cs.prepare_for_distance(x, sr, strike=False)
+    assert cs.mel_floor(p, sr) > 0
+
+
 def test_mel_dac_rows_carry_absolute_distance_and_floor_never_ratio_alone():
     r = cs.run_anchor(_ANCHOR, _strike(seconds=0.4), SR, _defn(), estimators=[],
                       with_mel=True)

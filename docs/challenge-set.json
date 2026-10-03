@@ -358,6 +358,12 @@
       "unit": "nats (mean absolute log mel-magnitude difference)",
       "remit": "every anchor. A paired distance, not a property: it reads a DIFFERENCE between an anchor and its transformed self, so moving is detection on a defect column and a false alarm on a permitted or correction column.",
       "input_convention": "both sides through run_case.prepare and then peak-normalised (audio_distance_floor.py E8's convention); a transform is applied to the prepared anchor and the result is re-normalised. Peak normalisation makes any pure gain an exact invariance BY CONSTRUCTION, so the gain columns cannot false-alarm on mel_dac and that is not evidence about mel_dac.",
+      "prepare_categories": [
+        "tonal_drum",
+        "noisy_drum",
+        "metallic"
+      ],
+      "prepare_why": "run_case.prepare is a STRIKE routine: it guarantees a pre-onset lead and REFUSES a record that begins inside its own event. Every held tone does, so the sustained_synth anchors are peak-normalised only. Found by the first run, which lost the whole category to that refusal.",
       "sample_rate_note": "called with the anchor's own sample rate. audio_distance_floor.distances() calls _mel_dac with its default sr=48000 even on the 44.1 kHz Fischer files; that is recorded in docs/challenge-set.md rather than reproduced here.",
       "floor_definition": "floor(anchor) = mel_dac(p, shift(p, 1)), where p is the prepared, peak-normalised anchor and shift(p, 1) is p delayed by ONE sample and zero-padded back to length (audio_distance_floor.shift). This is the definition docs/audio-distance-metrics.md section 7 used, where it read 0.0085 on our own deterministic BD render; here it is measured on each real anchor. It is an APPARATUS floor (what the distance reads for a change no listener could hear), not the machine's session-to-session floor (0.264 in that document, constructed) and not an our-versus-reference baseline (never measured).",
       "detection_rule": "a rung is DETECTED when mel_dac(p, y) > K x floor(anchor). Absolute distance, absolute floor and the ratio are reported together for every rung; a ratio is never reported alone.",
@@ -572,7 +578,7 @@
     "why": "permitted_differences transforms drawn on anchors use their own namespace, above that module's VALIDATE_BASE + SEED_SPAN, so no draw here coincides with a calibration, validation or false-alarm draw there"
   },
   "freeze": {
-    "definition_sha256": "f486d0677c5af22b9563afbbd55518f2785be0fb566c029525e6fad23c82257c",
+    "definition_sha256": "27cb9839e7356b335fbfbfe8795e98c469526ced2384a4a1d6ba6959b4976d39",
     "frozen_on": "2026-10-03"
   }
 }
