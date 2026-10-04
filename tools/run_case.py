@@ -166,6 +166,9 @@ SR_OURS = 48000
 #   git clone --depth 1 https://github.com/tidalcycles/sounds-tr808-fischer /tmp/tr808-ref
 REFS_ENV = "GF180_TR808_REFS"
 REFS_DEFAULT = "/tmp/tr808-ref"
+# Legacy spelling, still honoured as an ALIAS (measure_partial_balance used it as
+# its only name). Setting both to different values is an error, not a pick.
+REFS_ALIAS_ENV = "TR808_REFS"
 # Set to 1 where the reference-integration tests are a REQUIRED gate: a missing
 # corpus then fails them (REFUSED) instead of skipping, because a required
 # job that goes green through skips has checked nothing.
@@ -173,9 +176,19 @@ REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
 
 
 def configured_refs() -> pathlib.Path:
-    """The one place the corpus location is decided: ${GF180_TR808_REFS}, else
-    /tmp/tr808-ref. The CLI default and the tests both read it here."""
-    return pathlib.Path(os.environ.get(REFS_ENV) or REFS_DEFAULT)
+    """The one place the corpus location is decided: ${GF180_TR808_REFS} (alias
+    ${TR808_REFS}), else /tmp/tr808-ref. The CLI default, the tests and EVERY
+    probe read it here; tools/test_corpus_path_single_source.py fails if any
+    other module reads the variable or the default itself (#522).
+
+    The path names the Fischer repository ROOT: `<refs>/bd8/BD5050.WAV`
+    (model/drum_verify.REF_MAIN), not its parent. If both variables are set and
+    disagree this raises rather than silently choosing one."""
+    main, alias = os.environ.get(REFS_ENV), os.environ.get(REFS_ALIAS_ENV)
+    if main and alias and pathlib.Path(main) != pathlib.Path(alias):
+        raise RuntimeError(f"{REFS_ENV}={main} and {REFS_ALIAS_ENV}={alias} disagree; "
+                           f"unset {REFS_ALIAS_ENV}")
+    return pathlib.Path(main or alias or REFS_DEFAULT)
 REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
           "s/n 103852, individual voice outputs, 16-bit/44.1 kHz")
 

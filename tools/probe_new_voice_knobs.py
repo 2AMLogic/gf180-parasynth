@@ -78,7 +78,8 @@ def _load(refs, d, prefix, code):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default="/tmp/tr808-ref")
+    import run_case
+    ap.add_argument("--refs", default=str(run_case.configured_refs()))
     a = ap.parse_args(argv)
 
     print("== TUNING: does it move f0, and does it leave tau alone? ==")

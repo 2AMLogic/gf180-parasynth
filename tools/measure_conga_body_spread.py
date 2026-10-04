@@ -552,7 +552,8 @@ def validation_status(report: dict) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--refs", default="/tmp/tr808-ref", type=pathlib.Path)
+    import run_case
+    ap.add_argument("--refs", default=run_case.configured_refs(), type=pathlib.Path)
     ap.add_argument("--json", type=pathlib.Path)
     ap.add_argument("--descent", type=pathlib.Path,
                     help="directory of candidate '808 conga' files to test for "

@@ -628,9 +628,10 @@ def props_line(ev: dict) -> str:
 
 # ---------------------------------------------------------------------- main
 def main(argv=None) -> int:
+    import run_case as rc
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default=os.environ.get("GF180_TR808_REFS", "/tmp/tr808-ref"))
+    ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", default="/tmp/hh5")
     ap.add_argument("--quick", action="store_true",
                     help="skip the Q/gain grid; score the shipped values only")
@@ -651,7 +652,7 @@ def main(argv=None) -> int:
     say(json.dumps(prov, indent=2))
     if not refdir.exists():
         raise Refused(f"reference corpus not at {refdir} -- clone "
-                      f"tidalcycles/sounds-tr808-fischer or set GF180_TR808_REFS")
+                      f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
 
     # ---- preconditions --------------------------------------------------
     say("\n== PRECONDITIONS ==")

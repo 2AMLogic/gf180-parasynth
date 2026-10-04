@@ -499,7 +499,7 @@ def run_ladder(refs: pathlib.Path | None = None, *,
         return dict(
             status="REFUSED", refs=str(refs),
             why=f"the Fischer TR-808 corpus is not at {refs} "
-                f"({rc.REFS_ENV} unset, default {rc.REFS_DEFAULT} absent) -- "
+                "(the location comes from run_case.configured_refs()) -- "
                 "nothing below was measured against a real recording")
 
     cases = [c for c in ESTIMATOR_CASES if estimators is None or c.name in estimators]
@@ -554,8 +554,7 @@ def print_report(result: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--refs", default=None,
-                    help=f"the Fischer TR-808 corpus (default {rc.REFS_DEFAULT}, "
-                         f"${rc.REFS_ENV})")
+                    help="the Fischer TR-808 corpus (default: run_case.configured_refs())")
     ap.add_argument("--estimator", action="append", default=None,
                     help="restrict to this estimator (repeatable); default: all")
     ap.add_argument("--json", default=None, help="write the full report as JSON")

@@ -265,7 +265,9 @@ def _ke(x):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default="/tmp/tr808-ref")
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    import run_case
+    ap.add_argument("--refs", default=str(run_case.configured_refs()))
     ap.add_argument("--json", default="docs/condition-boundary-results.json")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 1))
     ap.add_argument("--cache", default="",

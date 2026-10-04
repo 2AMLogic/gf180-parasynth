@@ -59,7 +59,7 @@ material that is weaker evidence than its file count suggests.**
 - [The three groups, and the rule that assigns them](#the-three-groups-and-the-rule-that-assigns-them)
 - [The three targets, which are not the same question](#the-three-targets-which-are-not-the-same-question)
 - [Adding a pack: the procedure](#adding-a-pack-the-procedure)
-- [Where the corpus path comes from, and four places it disagrees with itself](#where-the-corpus-path-comes-from-and-four-places-it-disagrees-with-itself)
+- [Where the corpus path comes from, and four places it disagreed with itself](#where-the-corpus-path-comes-from-and-four-places-it-disagreed-with-itself)
 - [What is mechanical here and what is not](#what-is-mechanical-here-and-what-is-not)
 
 ## What this document is not
@@ -321,7 +321,7 @@ question is **meaningless if it turns out to be that unit re-pressed**, which
 nobody has checked. A pack can be useful, currently used, and still carry an
 open hole at the centre of its one job.
 
-## Where the corpus path comes from, and four places it disagrees with itself
+## Where the corpus path comes from, and four places it disagreed with itself
 
 The canonical resolver is `tools/run_case.py`:
 
@@ -344,9 +344,20 @@ the corpus git head does not start with the pin. Set
 `GF180_REQUIRE_TR808_REFS=1` where a missing corpus must fail rather than skip,
 *"because a required job that goes green through skips has checked nothing."*
 
-**"The one place the corpus location is decided" is not, today, the only place.**
-Four readers resolve it differently, found by grepping every corpus-path
-reference in the tree on 2026-10-02:
+**Resolved by #522.** Every reader now calls `run_case.configured_refs()`.
+Settled in the process:
+
+- `$GF180_TR808_REFS` names the **Fischer repository root** (`<refs>/bd8/BD5050.WAV`),
+  never its parent. `tools/measure_promoted_bands.py` no longer carries its own
+  deeper default, and `fpga/reports/r2/settled/go.sh` exports
+  `.../dev/refs/sounds-tr808-fischer`.
+- `$TR808_REFS` is a documented **alias** inside `configured_refs()`; setting both
+  to different values raises instead of picking one.
+- `tools/test_corpus_path_single_source.py` fails if any module other than
+  `run_case` (and its own test) names the variable, the alias, the default path
+  or `REFS_DEFAULT`, so the next divergence is a red run.
+
+The table below is the pre-#522 audit, kept as the record of what was wrong:
 
 | reader | what it resolves | consequence |
 |---|---|---|
@@ -354,13 +365,6 @@ reference in the tree on 2026-10-02:
 | `tools/measure_promoted_bands.py` | same variable, but default `~/dev/refs/sounds-tr808-fischer` | a **different layout** is the default: one level deeper than what `fpga/reports/r2/settled/go.sh` exports (`GF180_TR808_REFS=/home/ubuntu/dev/refs`). Both cannot be the corpus root |
 | `tools/measure_partial_balance.py` | `$TR808_REFS`, else `/tmp/tr808-ref` — **a different variable name** | setting `GF180_TR808_REFS` does not reach it. Three probes (`rs_guard_band`, `rs_mode_drive`, `balance_line_shape`) accept **both** names, which is how the divergence stayed invisible |
 | `tools/probes/estimator_defects.py` | `rc.REFS_DEFAULT` **directly**, not `configured_refs()` | `$GF180_TR808_REFS` has **no effect** on this probe; it only ever looks in `/tmp/tr808-ref` |
-
-This is a *preconditions assumed rather than asserted* defect of the shape
-`CLAUDE.md` warns about — a correct instrument in a wrong state, where the wrong
-state is "pointed at a path the operator thinks they configured". It is **not
-fixed here**: this issue is documentation, the fix touches five modules and
-needs its own controls, so it is filed as **#522**. What this document does is
-stop it being invisible.
 
 ## What is mechanical here and what is not
 

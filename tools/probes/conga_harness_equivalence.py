@@ -47,6 +47,12 @@ import sys
 import tempfile
 
 
+def _configured_refs() -> pathlib.Path:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+    import run_case
+    return run_case.configured_refs()
+
+
 def make_candidates(refdir: pathlib.Path, out: pathlib.Path) -> None:
     import soundfile as sf
     from scipy.signal import resample_poly
@@ -73,7 +79,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--old", type=pathlib.Path, required=True)
     ap.add_argument("--new", type=pathlib.Path, required=True)
-    ap.add_argument("--refs", type=pathlib.Path, default=pathlib.Path("/tmp/tr808-ref"))
+    ap.add_argument("--refs", type=pathlib.Path, default=_configured_refs())
     a = ap.parse_args(argv)
     if not (a.refs / "mc8/MC50.WAV").exists():
         print(f"REFUSED: no Fischer corpus at {a.refs}", file=sys.stderr)

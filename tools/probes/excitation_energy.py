@@ -66,6 +66,8 @@ from scipy.signal import butter, sosfilt, sosfilt_zi, sosfiltfilt
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
+sys.path.insert(0, str(ROOT / "tools"))
+import run_case                                  # noqa: E402
 
 import discrimination_features as dfx            # noqa: E402
 import discrimination_trajectory as dtj          # noqa: E402
@@ -75,7 +77,6 @@ import test_discrimination as td                 # noqa: E402
 N_WIN = dtj.N_WIN
 HPF_HZ = td.HPF_HZ
 FLOOR_DB = dtj.FLOOR_DB
-REFS_DEFAULT = "/tmp/tr808-ref"
 
 # A cell is only allowed to carry a claim when the disagreement clears every
 # applicable floor by this much. Chosen before the map was read.
@@ -634,7 +635,7 @@ def _verdict(summary):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--refs", default=REFS_DEFAULT)
+    ap.add_argument("--refs", default=str(run_case.configured_refs()))
     ap.add_argument("--sounds", choices=("8", "16"), default="16")
     ap.add_argument("--floors", action="store_true", help="the instrument's limits, measured")
     ap.add_argument("--map", action="store_true", help="the band x time map with floors")

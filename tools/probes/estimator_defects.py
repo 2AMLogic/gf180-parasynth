@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am                                          # noqa: E402
 import run_case as rc                                               # noqa: E402
 
-REFS = pathlib.Path(rc.REFS_DEFAULT)
+REFS = rc.configured_refs()
 SR = 48000
 fails: list[str] = []
 

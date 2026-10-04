@@ -1,6 +1,6 @@
 cd ~/work/r2i
 export PATH="$(cat ~/work/oss-path.txt):$PATH"
-export GF180_TR808_REFS=/home/ubuntu/dev/refs
+export GF180_TR808_REFS=/home/ubuntu/dev/refs/sounds-tr808-fischer
 P=/home/ubuntu/work/venv/bin/python
 O=build/r2s
 DL="$P rtl-sketch/verify_deadline.py"

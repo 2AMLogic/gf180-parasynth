@@ -21,8 +21,8 @@ convention"), and `worst` on the board is |error| / tolerance.
     python tools/measure_partial_balance.py measure     # the recordings, floor-gated
     python tools/measure_partial_balance.py apparatus   # is the failure the window, not the voice?
 
-Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $TR808_REFS or
-/tmp/tr808-ref. REFUSES rather than reports when it is absent.
+Needs the Fischer corpus (tidalcycles/sounds-tr808-fischer) at $GF180_TR808_REFS (alias
+$TR808_REFS), else /tmp/tr808-ref. REFUSES rather than reports when it is absent.
 """
 import math, os, sys, pathlib, hashlib, subprocess, datetime
 import numpy as np
@@ -34,7 +34,9 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am                      # noqa: E402
 import partial_trajectory as PT                 # noqa: E402
 
-REFDIR = pathlib.Path(os.environ.get("TR808_REFS", "/tmp/tr808-ref"))
+import run_case as rc  # noqa: E402
+
+REFDIR = rc.configured_refs()
 REF_MAIN = {"RS": "rs8/RS.WAV", "CB": "cb8/CB.WAV"}
 
 
@@ -85,7 +87,7 @@ def sha(p):
 def load_reference(voice):
     if not REFDIR.exists():
         raise Refused(f"reference corpus not at {REFDIR} -- clone "
-                      f"tidalcycles/sounds-tr808-fischer or set TR808_REFS")
+                      f"tidalcycles/sounds-tr808-fischer or point GF180_TR808_REFS at it")
     path = REFDIR / REF_MAIN[voice]
     if not path.exists():
         raise Refused(f"reference recording missing: {REF_MAIN[voice]} under {REFDIR}")

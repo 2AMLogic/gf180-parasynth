@@ -89,7 +89,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
-REFDIR = pathlib.Path("/tmp/tr808-ref")
+import run_case as _rc_refs  # noqa: E402
+
+REFDIR = _rc_refs.configured_refs()
 
 #: The TR-808's own session-to-session spread, docs/bd-repeatability-measurement.md
 MACHINE_FLOOR = {"f0_pct": 2.74, "t20_pct": 1.30, "band_db": 0.159}
