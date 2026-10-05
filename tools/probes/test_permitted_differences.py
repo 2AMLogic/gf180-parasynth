@@ -344,8 +344,8 @@ def test_safety_is_bounded_from_above_by_lost_detection():
     """The half a false-alarm measurement cannot give you: raising a threshold
     always stops the false alarms, so the upper bound has to come from the
     injected defects. At 4x all five (defect, calibrated row) pairs still go
-    red; at 8x two of them do not, and `noise/psd_slope` -- whose defect sits
-    only 1.05x above its committed threshold -- is one of them."""
+    red; at 8x `noise/centroid` does not. (`noise/psd_slope`'s defect sat 1.05x
+    above its threshold and was lost at 8x until #528 made it 2.17x.)"""
     assert pd.detection_at(pd.scaled_cases(pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
         == len(pd.DETECTION_PAIRS)
     assert pd.detection_at(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE) \

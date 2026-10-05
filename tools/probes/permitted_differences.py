@@ -75,12 +75,12 @@ catches its own injected defect. False alarms alone would recommend infinity:
     1        3/360    0.83%      3/20    5/5
     2        0/360    0.00%      0/20    5/5
     4        0/360    0.00%      0/20    5/5   <- shipped
-    8        0/360    0.00%      0/20    3/5
+    8        0/360    0.00%      0/20    4/5   (post-#528; was 3/5)
    64        0/360    0.00%      0/20    3/5
   512        0/360    0.00%      0/20    3/5
 
 So the working window is 2-4x and it is bounded on both sides by measurement:
-below it the suite false-alarms, above it two rows stop detecting. 4 is the
+below it the suite false-alarms, above it rows stop detecting (one at 8x, three by 64x). 4 is the
 conservative end of a two-element window, not a number somebody liked.
 
 NOT in `docs/sensitivity/registry.json`, deliberately and recorded here so the
@@ -100,14 +100,26 @@ one of them that row) and one of the two that stops detecting at 8x. A Welch
 slope over a 2.0 s record is the least averaged estimate in the table, and the
 window is narrow there for that reason rather than for a reason about SAFETY.
 
-The pair that bounds it from above is worth knowing: at 4x,
-`SINGLE_WINDOW_SLOPE`'s residual on `noise/psd_slope` is 0.629 dB/oct against a
-0.6 threshold -- a margin of 1.05x, the thinnest in the table, and the reason
-8x loses it. `SHORT_WINDOW_SPECTRUM` on `noise/centroid` is 1.87x. The other
-three are 1,300x (`noise/decay_tau`), 11,000x (`phase/band_ratio_db`) and
-16,000x (`phase/centroid`). That thinness is detected rather than silent: a
-recalibration that pushed the slope threshold past its defect turns
-`make controls` red, which is what that target is for.
+The pair that bounds it from above WAS thin, and #528 widened it. Before, at 4x,
+`SINGLE_WINDOW_SLOPE`'s residual on `noise/psd_slope` was 0.629 dB/oct against a
+0.6 threshold -- 1.05x, the thinnest in the table, and the reason 8x lost it
+(3/5 caught). Now the residual is 1.301 against the same 0.6: 2.17x, and 8x
+(threshold 1.18) catches it; the row that stops detecting at 8x is
+`noise/centroid` (`SHORT_WINDOW_SPECTRUM`, 1.87x), so 8x still loses 1 of 5 and
+SAFETY's upper bound has not moved (4/5 at 8x, 3/5 from 64x).
+
+WHY THE DEFECT WAS MADE GROSSER RATHER THAN THE FIXTURE LONGER (#528 option 1
+was tried first and measured, not argued). `--calibrate` at 4.0 s: worst of 96
+draws 0.138 against 0.148 at 2.0 s -- the threshold would have moved 0.60 ->
+0.56, a margin of 1.12x. A 96-pair spread check on bare white noise gave
+worst/mean of 0.144/0.052 (2 s), 0.117/0.047 (4 s), 0.090/0.023 (8 s): the
+worst draw is dominated by the lowest 1/6-octave bins, so doubling the length
+does not halve it, and 8 s would cost 4x the three noise rows' runtime. The
+fixture stays 2.0 s. The defect is now a 2048-sample excerpt Welch-averaged at
+nfft=512 (7 segments, 2x coarser than before) -- still a short-excerpt
+estimate read as a property of the process, the same class of mistake, just
+grosser. The trade named in the issue is real: the previous parameters were
+the ones a plausible mistake would use.
 
 Stochastic rows (independent noise realisation, free-running phase, and every
 row whose transform draws its own magnitude) are run over `--trials` draws and
@@ -700,7 +712,7 @@ def est_band_ratio_db(ctx: Ctx, s: Signal, lo=(0.5, 2.5), hi=(2.5, 6.5)) -> Meas
 
 def est_psd_slope(ctx: Ctx, s: Signal, band=(500.0, 8000.0)) -> Meas:
     if ctx.hooked("SINGLE_WINDOW_SLOPE"):
-        return Meas.of(am.psd_slope_db_oct(s.x[:4096], band, s.sr, nfft=1024))
+        return Meas.of(am.psd_slope_db_oct(s.x[:2048], band, s.sr, nfft=512))
     return Meas.of(am.psd_slope_db_oct(s.x, band, s.sr))
 
 
@@ -1158,7 +1170,7 @@ INJECTIONS: dict[str, Injection] = {
          "gain/accent_ratio_db", "pol/centroid", "pol/norm_rms_db")),
     "SINGLE_WINDOW_SLOPE": Injection(
         "SINGLE_WINDOW_SLOPE",
-        "the noise slope from one 1024-point window instead of a Welch average",
+        "the noise slope from a 2048-sample excerpt at nfft=512 instead of the whole record",
         ("noise/psd_slope",)),
     "SHORT_WINDOW_SPECTRUM": Injection(
         "SHORT_WINDOW_SPECTRUM",
