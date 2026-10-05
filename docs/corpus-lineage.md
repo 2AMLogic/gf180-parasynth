@@ -311,7 +311,9 @@ is not.
      directly before the keyword (`no serial 1984`, `missing serial: 1984`,
      `unknown serial #1984`, `lost s/n 1984`, `n/a serial 1984`,
      `w/o serial 1984`, `no—serial 1984` — a *denial* of a serial; a slashed
-     word is read whole, and an en/em dash separates like `-`), and
+     word is read whole and denied if it or any `/` part is a negation —
+     `used / no serial 1984`; `yes/no serial` is thus over-rejected — and an
+     en/em dash separates like `-`), and
      a serial that is one repeated digit (`s/n 0000`, `serial 1111` — a
      placeholder).
 

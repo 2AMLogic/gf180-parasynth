@@ -287,9 +287,11 @@ SERIAL_NEGATIONS = frozenset({
 #: up to the keyword. Any other punctuation (`,` `;` `:` `.`) is a clause
 #: boundary and leaves the slot empty. The word is letters with optional
 #: internal slashes (spaces allowed round them, as for `s / n`), read WHOLE:
-#: `n/a`, `w/o`, `n / a` are one token, and `yes/no` is `yes/no`, not `no`
-#: (PR #536 second review -- the slot used to read only the part after the
-#: last `/`, so `n/a` was seen as `a` and could never be denied).
+#: `n/a`, `w/o`, `n / a` are one token (PR #536 second review -- the slot used
+#: to read only the part after the last `/`, so `n/a` was seen as `a`). The
+#: token is denied if it, or ANY `/` component, is in `SERIAL_NEGATIONS` (third
+#: review: `used / no`, `boxed/no` joined a negation to a word and passed), so
+#: `yes/no serial no. 103852` is a fail-closed over-rejection.
 _PRECEDING_WORD_RE = re.compile(
     r"([a-z]+(?:\s*/\s*[a-z]+)*)[\s\-\u2010-\u2015(\[\"'`]*\Z", re.I)
 
@@ -338,8 +340,10 @@ def names_a_unit(unit: object) -> bool:
         if len(set(digits)) == 1:
             continue                                  # `0000`: placeholder
         prev = _PRECEDING_WORD_RE.search(text[:m.start()])
-        if prev and re.sub(r"\s+", "", prev.group(1)).lower() in SERIAL_NEGATIONS:
-            continue                                  # `no serial 1984`: a denial
+        if prev:
+            tok = re.sub(r"\s+", "", prev.group(1)).lower()
+            if tok in SERIAL_NEGATIONS or SERIAL_NEGATIONS & set(tok.split("/")):
+                continue                              # `no serial 1984`: a denial
         return True
     return False
 

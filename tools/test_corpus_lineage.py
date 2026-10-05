@@ -338,6 +338,13 @@ SERIAL_NOT_ASSERTED = [
     # A placeholder in the serial slot reads as established (the pass-1 shape).
     "TR-808, s/n 0000",
     "serial 000",
+    # A negation as ANY `/` component of the slot token is a denial (PR #536
+    # third review): the whole-token read let `used / no` through.
+    "TR-808, used / no serial 1984",
+    "TR-808, boxed/no serial 1984",
+    "TR-808 kit / unknown serial #1984",
+    "TR-808, working / missing serial: 1984",
+    "TR-808, yes/no serial no. 103852",       # fail-closed over-rejection, pinned
     "serial no. 1111",
     "S/N: 99999",
     # `.` ends a sentence: the keyword may not reach across it to a number.
@@ -366,10 +373,8 @@ SERIAL_ASSERTED = [
     "serial no. 103852 -- no repairs, nothing removed",
     "S/N 100001",                                           # repeated digits, not ALL one digit
     # A slashed word in the slot is read WHOLE, so an ordinary one is not a
-    # negation -- not even when its last part is (`yes/no`, read as `no` by the
-    # pre-review slot, which over-rejected this).
+    # negation. (`yes/no` is a fail-closed residual: see SERIAL_NOT_ASSERTED.)
     "TR-808, factory/original serial no. 103852",
-    "TR-808, yes/no serial no. 103852",
     "TR-808, rack—serial no. 103852",                  # em dash, ordinary word
 ]
 
