@@ -50,6 +50,12 @@ WHAT IS STATED BEFORE THE RUN, in this file and therefore in its commit
     the threshold past 0.6288", and a ratio of two worst-of-N statistics on one
     population cannot say whether that hazard has moved.
 
+AND ONE RULE ADDED AFTER THE FIRST RUN, said here rather than hidden: a
+candidate the selection picks ships only if its own confirmation HOLDS. The
+first run selected 4 s and its confirmation contradicted it; the rule as first
+committed did not say what that meant. `docs/noise-fixture-duration.md` has
+the run and the wrong-then-right entry.
+
 Exit 0: the experiment ran and the configuration it leaves shipped (selected or
 baseline) held on the confirmation population. 1: the confirmation population
 contradicts it -- a clean false alarm, a refusal, or a detection pair not
@@ -409,24 +415,37 @@ def main(argv=None) -> int:
     lit = cand[CONTROL[0]]["margin"] > base[CONTROL[0]]["margin"]
     print(f"   literal criterion only (margin_cand > margin_base): {lit} "
           f"({cand[CONTROL[0]]['margin']:.3g}x vs {base[CONTROL[0]]['margin']:.3g}x)")
-    chosen = cand if ship else base
-
     print(f"\nCONFIRMATION on CONFIRM_BASE ({a.confirm_groups} groups x "
-          f"{pd.TRIALS_DEFAULT} trials), never read by the decision")
-    conf = confirm(chosen["seconds"], chosen, groups=a.confirm_groups, full_suite=True)
-    other = confirm(cand["seconds"] if not ship else base["seconds"],
-                    cand if not ship else base, groups=a.confirm_groups, full_suite=False)
-    for label, cf in ((f"{conf['seconds']:g} s (shipped), all rows", conf),
-                      (f"{other['seconds']:g} s (not shipped), noise rows", other)):
-        print(f"   -- {label}, {cf['wall_s']:.0f} s")
+          f"{pd.TRIALS_DEFAULT} trials, all rows), never read by the decision")
+    confs = {r["seconds"]: confirm(r["seconds"], r, groups=a.confirm_groups)
+             for r in (base, cand)}
+    bads = {s: confirmation_holds(cf) for s, cf in confs.items()}
+    for s, cf in confs.items():
+        print(f"   -- {s:g} s, {cf['wall_s']:.0f} s")
         for cid, v in cf["rows"].items():
             print(f"      {cid:<26}{json.dumps(v)}")
         for key, v in cf["pairs"].items():
             print(f"      {key:<50}{json.dumps(v)}")
-    bad = confirmation_holds(conf)
-    print("\n   " + ("confirmation HOLDS: no clean false alarm, no refusal, every "
-                     "detection pair CAUGHT in every group" if not bad
-                     else "confirmation CONTRADICTS the shipped configuration:"))
+        print("      " + ("HOLDS: no clean false alarm, no refusal, every detection "
+                          "pair CAUGHT in every group" if not bads[s] else "CONTRADICTED:"))
+        for b in bads[s]:
+            print(f"         {b}")
+
+    # ADDED AFTER THE FIRST RUN, and recorded as such in
+    # docs/noise-fixture-duration.md: the rule as first committed said what to
+    # SELECT and what to CONFIRM but not what to do when the selected candidate
+    # fails its confirmation -- which is what happened (SHIP on selection, the
+    # original control MISSED in 2/10 untouched groups). A selection that does
+    # not survive its confirmation does not ship; the baseline stays, and the
+    # exit status reports whether THAT holds.
+    final = cand if (ship and not bads[cand["seconds"]]) else base
+    bad = bads[final["seconds"]]
+    print(f"\nFINAL: {final['seconds']:g} s ships"
+          + ("" if final is cand or not ship else
+             f" -- {cand['seconds']:g} s was selected but did not hold on the "
+             f"confirmation population"))
+    print("   " + ("and holds on the confirmation population" if not bad else
+                   "and its own confirmation is CONTRADICTED (exit 1):"))
     for b in bad:
         print(f"      {b}")
     total = time.time() - t_all
@@ -437,9 +456,12 @@ def main(argv=None) -> int:
             schema="noise-fixture-duration-v1", provenance=prov, grid=list(GRID),
             baseline=BASELINE, predicted_ratio=PREDICTED_RATIO,
             invariance_max_delta=inv, candidates=res,
-            decision=dict(ship=ship, seconds=chosen["seconds"], why=why,
-                          literal_margin_criterion=bool(lit)),
-            confirmation=dict(shipped=conf, other=other, contradictions=bad),
+            decision=dict(selected=cand["seconds"] if ship else base["seconds"],
+                          selection_says_ship=ship, why=why,
+                          literal_margin_criterion=bool(lit),
+                          final_seconds=final["seconds"]),
+            confirmation=dict(by_seconds={str(s): cf for s, cf in confs.items()},
+                              contradictions={str(s): b for s, b in bads.items()}),
             runtime_s=total), indent=2, default=float))
     return 1 if bad else 0
 
