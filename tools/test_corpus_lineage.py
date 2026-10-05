@@ -16,6 +16,7 @@ actually take -- not an obvious corruption.
 from __future__ import annotations
 
 import json
+import re
 import pathlib
 import shutil
 import sys
@@ -324,6 +325,16 @@ SERIAL_NOT_ASSERTED = [
     "TR-808, lost s/n 1984",
     "TR-808, serial plate removed; no-serial 1984",
     "TR-808 (unrecorded serial 1984)",
+    # PR #536 second review: the slot read only the letters after the last
+    # `/`, so a slash abbreviation was seen as `a` / `o` and could never be
+    # denied. `n/a` is the commonest placeholder there is; `w/o` is `without`.
+    "TR-808, n/a serial 1984",
+    "TR-808, N/A serial #1984",
+    "TR-808, w/o serial 1984",
+    "TR-808, n / a serial 1984",                            # spaced, as `s / n` is
+    # ...and a Unicode dash was not a slot separator, though `-` is.
+    "TR-808, no—serial 1984",                          # em dash
+    "TR-808, no–serial 1984",                          # en dash
     # A placeholder in the serial slot reads as established (the pass-1 shape).
     "TR-808, s/n 0000",
     "serial 000",
@@ -354,6 +365,12 @@ SERIAL_ASSERTED = [
     "the lost-and-found TR-808, s/n 103852",
     "serial no. 103852 -- no repairs, nothing removed",
     "S/N 100001",                                           # repeated digits, not ALL one digit
+    # A slashed word in the slot is read WHOLE, so an ordinary one is not a
+    # negation -- not even when its last part is (`yes/no`, read as `no` by the
+    # pre-review slot, which over-rejected this).
+    "TR-808, factory/original serial no. 103852",
+    "TR-808, yes/no serial no. 103852",
+    "TR-808, rack—serial no. 103852",                  # em dash, ordinary word
 ]
 
 
@@ -438,6 +455,51 @@ def test_r3b_residual_a_denial_outside_the_one_word_slot_is_not_seen(unit):
     """If any of these starts failing, the residual list in `SERIAL_RE`'s
     comment, the R3 docstring and docs/corpus-lineage.md is stale."""
     assert cl.names_a_unit(unit)
+
+
+#: The deny-list is finite: a negation word that is not in `SERIAL_NEGATIONS`
+#: passes even IN the slot. Pinned, not chased -- every vocabulary addition is
+#: one synonym behind, which is why R3b is a positive grammar first.
+SERIAL_DENY_LIST_RESIDUALS = [
+    "TR-808, undocumented serial 1984",
+    "TR-808, unspecified serial 1984",
+    "TR-808, nonexistent serial 1984",
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_DENY_LIST_RESIDUALS)
+def test_r3b_residual_a_negation_word_not_in_the_deny_list_is_not_seen(unit):
+    """If any of these starts failing, the residual list in `SERIAL_RE`'s
+    comment, the R3 docstring and docs/corpus-lineage.md is stale."""
+    word = unit.split(", ")[1].split()[0]
+    assert word not in cl.SERIAL_NEGATIONS
+    assert cl.names_a_unit(unit)
+
+
+#: Inputs whose rejection depends on the slot reading a slashed word whole and
+#: treating a Unicode dash as a separator.
+SLOT_SHAPE_DEPENDENT = [
+    "TR-808, n/a serial 1984",
+    "TR-808, N/A serial #1984",
+    "TR-808, w/o serial 1984",
+    "TR-808, no—serial 1984",
+    "TR-808, no–serial 1984",
+]
+
+#: The slot as it was before the PR #536 second review: letters only, ASCII `-`.
+_PRE_REVIEW_SLOT_RE = re.compile(r"([a-z]+)[\s\-(\[\"'`]*\Z", re.I)
+
+
+@pytest.mark.parametrize("unit", SLOT_SHAPE_DEPENDENT)
+def test_injected_bug_reverting_the_slot_reader_lets_the_denial_through(monkeypatch, unit):
+    """Injected-bug control: with the pre-review slot reader put back (and
+    `n/a`, `w/o` still in the deny-list), each denial is accepted again. So the
+    rejections above are carried by the slot's SHAPE, not by the vocabulary --
+    adding words to `SERIAL_NEGATIONS` alone fixes none of them."""
+    assert "n/a" in cl.SERIAL_NEGATIONS and "w/o" in cl.SERIAL_NEGATIONS
+    assert not cl.names_a_unit(unit)
+    monkeypatch.setattr(cl, "_PRECEDING_WORD_RE", _PRE_REVIEW_SLOT_RE)
+    assert cl.names_a_unit(unit), f"{unit!r}: control did not go red without the slot fix"
 
 
 def test_r3_does_not_fire_on_a_documented_unit_with_an_open_chain(tree):
