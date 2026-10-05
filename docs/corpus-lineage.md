@@ -309,7 +309,9 @@ is not.
      and nowhere else, so `no serial. 1984 production` does not reach across
      the sentence boundary. Two more rejections: a negation in the word
      directly before the keyword (`no serial 1984`, `missing serial: 1984`,
-     `unknown serial #1984`, `lost s/n 1984` — a *denial* of a serial), and
+     `unknown serial #1984`, `lost s/n 1984`, `n/a serial 1984`,
+     `w/o serial 1984`, `no—serial 1984` — a *denial* of a serial; a slashed
+     word is read whole, and an en/em dash separates like `-`), and
      a serial that is one repeated digit (`s/n 0000`, `serial 1111` — a
      placeholder).
 
@@ -320,7 +322,10 @@ is not.
      `serial no. 1984` passes;
    - the negation check reads exactly one word, so a denial anywhere else
      passes — `no recorded serial 1984`, `missing the serial 1984`,
-     `unknown, serial 1984`, `serial 1984 (not really: purchase year)`.
+     `unknown, serial 1984`, `serial 1984 (not really: purchase year)`;
+   - the deny-list is finite, so a negation word it does not contain passes
+     even in that one slot — `undocumented serial 1984`, `unspecified serial
+     1984`, `nonexistent serial 1984`.
 
    So the rule does **not** guarantee that a passing unit is a claim that a
    serial is known. It guarantees that passing takes text in the diff with a

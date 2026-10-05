@@ -74,6 +74,10 @@ R3  A pack whose `lineage_status` is `documented` must have an established
         "no recorded serial 1984", "missing the serial 1984", "unknown, serial
         1984", "serial 1984 (not really: purchase year)"
         (`test_r3b_residual_a_denial_outside_the_one_word_slot_is_not_seen`).
+      * The deny-list is finite: a negation word it does not contain passes
+        even in the slot -- "undocumented serial 1984", "unspecified serial
+        1984", "nonexistent serial 1984"
+        (`test_r3b_residual_a_negation_word_not_in_the_deny_list_is_not_seen`).
     Neither route, and no syntactic check, independently verifies a physical
     machine. What the rule guarantees is narrower: passing it takes TEXT in the
     diff that contains a serial-shaped assertion (or a written
@@ -237,9 +241,10 @@ UNESTABLISHED_TOKENS = frozenset({
 #:
 #: Two further rejections, applied by `names_a_unit` to each match:
 #:   * NEGATION SLOT -- the word directly before the keyword (separated only by
-#:     whitespace, `-` or an opening bracket/quote) may not be one of
+#:     whitespace, a dash or an opening bracket/quote; a slashed word such as
+#:     `n/a` or `w/o` is read whole) may not be one of
 #:     `SERIAL_NEGATIONS`: `no serial 1984`, `missing serial: 1984`, `unknown
-#:     serial #1984` are DENIALS of a serial, which the right-hand grammar alone
+#:     serial #1984`, `n/a serial 1984` are DENIALS of a serial, which the right-hand grammar alone
 #:     accepted on the year that follows. This is a deny-list on one fixed slot,
 #:     deliberately not a word search: widening it is the bounded gap again.
 #:   * PLACEHOLDER DIGITS -- a serial that is one digit repeated (`0000`,
@@ -250,8 +255,11 @@ UNESTABLISHED_TOKENS = frozenset({
 #: Residuals, each pinned by a test (rule 8): a false ASSERTION passes
 #: (`serial no. 1984`, the purchase year in the slot); a denial OUTSIDE the
 #: one-word slot passes (`no recorded serial 1984`, `missing the serial 1984`,
-#: `unknown, serial 1984`, `serial 1984 (not really: purchase year)`). The
-#: grammar checks that a serial is written as asserted; it cannot read prose.
+#: `unknown, serial 1984`, `serial 1984 (not really: purchase year)`); and the
+#: deny-list is finite, so a negation word not in `SERIAL_NEGATIONS` passes even
+#: in the slot (`undocumented serial 1984`, `unspecified serial 1984`,
+#: `nonexistent serial 1984`). The grammar checks that a serial is written as
+#: asserted; it cannot read prose.
 SERIAL_RE = re.compile(
     r"(?<![\w/.])"                                   # keyword starts a word
     r"(?:serial(?:[\s-]*(?:number|no\b\.?))?"        # serial / serial no. / serial number
@@ -271,12 +279,19 @@ SERIAL_NEGATIONS = frozenset({
     "unknown", "unrecorded", "unpublished", "unverified", "unconfirmed",
     "illegible", "unreadable", "lost", "removed", "none", "nil",
     "tbd", "tbc", "placeholder", "fake", "dummy",
+    "n/a", "w/o",
 })
 
-#: The one word directly before a keyword: letters, then only whitespace, `-`
-#: or an opening bracket/quote up to the keyword. Any other punctuation (`,`
-#: `;` `:` `.`) is a clause boundary and leaves the slot empty.
-_PRECEDING_WORD_RE = re.compile(r"([a-z]+)[\s\-(\[\"'`]*\Z", re.I)
+#: The one word directly before a keyword, then only whitespace, a dash (`-`
+#: or a Unicode hyphen/en/em dash U+2010..U+2015) or an opening bracket/quote
+#: up to the keyword. Any other punctuation (`,` `;` `:` `.`) is a clause
+#: boundary and leaves the slot empty. The word is letters with optional
+#: internal slashes (spaces allowed round them, as for `s / n`), read WHOLE:
+#: `n/a`, `w/o`, `n / a` are one token, and `yes/no` is `yes/no`, not `no`
+#: (PR #536 second review -- the slot used to read only the part after the
+#: last `/`, so `n/a` was seen as `a` and could never be denied).
+_PRECEDING_WORD_RE = re.compile(
+    r"([a-z]+(?:\s*/\s*[a-z]+)*)[\s\-\u2010-\u2015(\[\"'`]*\Z", re.I)
 
 
 class Refused(Exception):
@@ -323,7 +338,7 @@ def names_a_unit(unit: object) -> bool:
         if len(set(digits)) == 1:
             continue                                  # `0000`: placeholder
         prev = _PRECEDING_WORD_RE.search(text[:m.start()])
-        if prev and prev.group(1).lower() in SERIAL_NEGATIONS:
+        if prev and re.sub(r"\s+", "", prev.group(1)).lower() in SERIAL_NEGATIONS:
             continue                                  # `no serial 1984`: a denial
         return True
     return False
