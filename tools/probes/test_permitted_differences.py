@@ -5,8 +5,10 @@
 
 Collected by `make verify`'s broad pytest job (`pytest model/ spec/ tools/ ...`)
 and by CI's `pytest tools/ -q` job (rungs.yml, "every tools/ test, by
-directory"). 51 tests, 89 s measured alone on an 8-core box and 129 s with two
-other jobs beside it, nearly all of it in the nine injected controls and the
+directory"). 51 tests before #528, 89 s measured alone on an 8-core box and
+129 s with two other jobs beside it; 63 after #528, not yet timed on the box
+(this file plus `test_noise_fixture_duration.py`: 393 s on a laptop at load
+average 32). Nearly all of it is in the nine injected controls and the
 deterministic 96-draw calibration replay -- both of which are the point: a
 suite of invariance checks
 is trivially green if its tolerances are loose, so what has to be tested is
