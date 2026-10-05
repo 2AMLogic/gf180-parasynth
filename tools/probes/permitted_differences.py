@@ -83,6 +83,22 @@ So the working window is 2-4x and it is bounded on both sides by measurement:
 below it the suite false-alarms, above it two rows stop detecting. 4 is the
 conservative end of a two-element window, not a number somebody liked.
 
+THE UPPER END, LOCATED RATHER THAN BRACKETED (#528). `--margins` computes, per
+pair, the factor at which its threshold reaches its worst residual, and
+`test_the_upper_cliff_is_where_the_pair_is_lost` re-runs the row either side:
+
+  SINGLE_WINDOW_SLOPE       noise/psd_slope       1.05x   lost above 4.19x
+  SHORT_WINDOW_SPECTRUM     noise/centroid        1.87x   lost above 7.59x
+  TWO_POINT_TAIL_DECAY      noise/decay_tau       1.3e3x  lost above 5.3e3x
+  PHASE_SENSITIVE_SPECTRUM  phase/centroid        1.6e4x  lost above 6.2e4x
+  PHASE_SENSITIVE_SPECTRUM  phase/band_ratio_db   1.1e4x  lost above 4.4e4x
+
+So the measured upper bound is 4.19x, not "somewhere in 4-8": the shipped 4 is
+4.6 % under it. The table above was measured at 2.0 s with this exact mutant,
+which is what ships again after #528 (the PR that briefly replaced the mutant
+with a grosser one was reverted on review); it was NOT re-run by #528 -- see
+`docs/noise-fixture-duration.md` for what was and was not.
+
 NOT in `docs/sensitivity/registry.json`, deliberately and recorded here so the
 decision is visible rather than missed: that gate re-extracts a grid from a
 committed fixed-width-table artefact and checks it against an independent
@@ -108,6 +124,21 @@ three are 1,300x (`noise/decay_tau`), 11,000x (`phase/band_ratio_db`) and
 16,000x (`phase/centroid`). That thinness is detected rather than silent: a
 recalibration that pushed the slope threshold past its defect turns
 `make controls` red, which is what that target is for.
+
+#528 MEASURED HOW THIN, AND IT IS THINNER THAN 1.05x SUGGESTS
+(`tools/probes/noise_fixture_duration.py`, record `docs/noise-fixture-
+duration.md`). 1.05x is the worst of the twelve VALIDATE_BASE trials. On forty
+independent 12-trial groups (SELECT_BASE) the same control is caught in 23;
+on ten reserved groups (CONFIRM_BASE) in 7. And re-deriving the threshold on
+eight independent 96-draw populations moves it over 0.60-0.99, so seven of
+eight recalibrations would put it above the defect. The control is green
+because VALIDATE_BASE is fixed, not because the defect is reliably visible.
+A 4.0 s fixture was the candidate fix: it tightens the realisation spread by
+0.707x (Welch theory predicts 0.699x; the issue's "halve" was a variance read
+as a spread) and survives all eight recalibrations, but its own reserved
+confirmation still missed the control in 2 of 10 groups, so it does not ship
+and `NOISE_SECONDS` stays 2.0. The per-trial defect is simply too close to the
+row's own spread; what would fix it is a follow-up, not this file.
 
 Stochastic rows (independent noise realisation, free-running phase, and every
 row whose transform draws its own magnitude) are run over `--trials` draws and
@@ -222,8 +253,16 @@ SR = 48000
 CALIBRATE_BASE = 100_000
 FPR_BASE = 500_000
 VALIDATE_BASE = 900_000
+#: Two more, added by #528 for `tools/probes/noise_fixture_duration.py`. A
+#: fixture or threshold change chosen by looking at SELECT_BASE is confirmed on
+#: CONFIRM_BASE, which nothing in this file or that one reads while choosing --
+#: `--safety-sweep` reading VALIDATE_BASE again is the established population,
+#: not an untouched one (#537 review).
+SELECT_BASE = 1_100_000
+CONFIRM_BASE = 1_300_000
 SEED_SPAN = 100_000       # trials per namespace before they could collide
 assert CALIBRATE_BASE + SEED_SPAN <= FPR_BASE <= FPR_BASE + SEED_SPAN <= VALIDATE_BASE
+assert VALIDATE_BASE + SEED_SPAN <= SELECT_BASE <= SELECT_BASE + SEED_SPAN <= CONFIRM_BASE
 
 CAL_TRIALS = 96           # draws behind every committed threshold
 SAFETY = 4.0              # committed threshold = SAFETY x worst calibration draw
@@ -362,6 +401,14 @@ def build_asym(p) -> Signal:
     return Signal(x, SR, dict(f0=p["f0"], harmonics=p["harmonics"]))
 
 
+#: The `noise` fixture's length in seconds. A module constant rather than a
+#: literal so `tools/probes/noise_fixture_duration.py` can sweep it (#528); the
+#: shipped value and the measurement behind it are in that file's record,
+#: `docs/noise-fixture-duration.md`. Changing it moves three rows' thresholds
+#: and their `calibrated=` values, which `--calibrate` will report.
+NOISE_SECONDS = 2.0
+
+
 def draw_noise(rng) -> dict:
     """White noise, 2.0 s. `psd_slope_db_oct` needs 4 x nfft = 32768 samples
     for a Welch estimate and refuses below it, so the length is a precondition
@@ -372,7 +419,7 @@ def draw_noise(rng) -> dict:
     it, so the averaging is part of the case definition."""
     return dict(kind="noise",
                 amp=float(rng.uniform(0.20, 0.80)),
-                seconds=2.0,
+                seconds=NOISE_SECONDS,
                 noise_seed=int(rng.integers(1, 2**31)))
 
 
@@ -1540,9 +1587,109 @@ def detection_at(cases: list[Case], trials: int, seed_base: int) -> int:
     table; here it is asked of every candidate table, so the factor is bounded
     from both sides by measurement instead of from one side by measurement and
     the other by taste."""
+    return sum(1 for pm in pair_margins(cases, trials, seed_base) if pm.caught)
+
+
+CAUGHT, MISSED, NO_VERDICT = "CAUGHT", "MISSED", "NO-VERDICT"
+
+
+@dataclass(frozen=True)
+class PairMargin:
+    injection: str
+    cid: str
+    threshold: float
+    residual: float | None
+    margin: float | None
+    state: str
+    why: str = ""
+
+    @property
+    def caught(self) -> bool:
+        return self.state == CAUGHT
+
+
+def pair_margin(injection: str, row: RowResult) -> PairMargin:
+    """How far one injected defect's worst residual sits above its row's
+    threshold -- and, inseparably, whether that margin is evidence at all.
+
+    #528 exists because the aggregate `caught 5/5` hid a pair that cleared its
+    threshold by 5 %. A margin column is a new guard, so it is written against
+    the inputs that defeat it (docs/verification-rules.md 8, driven in
+    `test_a_non_detection_never_renders_as_caught`):
+
+      * REFUSED is not a catch, even when the trials that did answer were
+        large. The first version of this function read "any verdict that is
+        not PASS" as caught -- the nightly's old `|| true` mistake -- and the
+        guard tests were watched red against it before this was written.
+      * a non-finite residual, threshold or margin is NO-VERDICT, never a
+        number printed beside the word CAUGHT;
+      * a verdict that disagrees with its own margin (FAIL at <= 1x, PASS at
+        > 1x) is NO-VERDICT: one of the two is wrong and the report cannot
+        say which.
+
+    Defined for two-sided rows only (`permitted`, `tracks`), which are the
+    rows `SAFETY` scales and the rows `DETECTION_PAIRS` holds. A one-sided
+    floor's "margin" is a signed distance in dB, not a ratio."""
+    c = row.case
+    thr = float(c.policy.threshold)
+
+    def out(state, why, residual=None, margin=None):
+        return PairMargin(injection, c.cid, thr, residual, margin, state, why)
+
+    if row.verdict == REFUSED:
+        return out(REFUSED, f"{row.refusals}/{row.trials} trials refused")
+    if c.policy.one_sided:
+        return out(NO_VERDICT, f"{c.policy.kind} has no ratio margin")
+    if not row.residuals:
+        return out(NO_VERDICT, "no trial produced a residual")
+    worst = float(row.worst)
+    if not (np.isfinite(worst) and np.isfinite(thr) and thr > 0):
+        return out(NO_VERDICT, f"non-finite residual {worst!r} or threshold {thr!r}", worst)
+    m = worst / thr
+    if not np.isfinite(m):
+        return out(NO_VERDICT, f"non-finite margin {m!r}", worst)
+    if row.verdict == FAIL and m > 1.0:
+        return out(CAUGHT, "", worst, m)
+    if row.verdict == PASS and m <= 1.0:
+        return out(MISSED, "the worst residual is inside the threshold", worst, m)
+    return out(NO_VERDICT, f"verdict {row.verdict} disagrees with margin {m:.4g}x", worst, m)
+
+
+def render_margin(pm: PairMargin) -> str:
+    """CAUGHT and MISSED carry a number; REFUSED and NO-VERDICT never do, so a
+    reader cannot mistake either for a measured margin."""
+    if pm.state in (CAUGHT, MISSED):
+        return f"{pm.margin:.3g}x {pm.state}"
+    return f"{pm.state} ({pm.why})"
+
+
+def pair_margins(cases: list[Case], trials: int, seed_base: int) -> list[PairMargin]:
+    """`pair_margin` for every `DETECTION_PAIRS` entry against this case list."""
     by_id = {c.cid: c for c in cases}
-    return sum(1 for name, cid in DETECTION_PAIRS
-               if run_case(by_id[cid], trials, seed_base, name).verdict == FAIL)
+    return [pair_margin(name, run_case(by_id[cid], trials, seed_base, name))
+            for name, cid in DETECTION_PAIRS]
+
+
+def upper_cliff(pm: PairMargin, calibrated: float) -> float:
+    """The smallest safety factor at which this pair is LOST, from its worst
+    residual and its row's calibration: the threshold is `_signif(calibrated
+    x k)`, and an injected defect's residuals do not depend on the threshold,
+    so the pair is lost at the first k where that reaches the residual.
+    Bisected to 0.1 % relative (`_signif` is monotone in k);
+    `test_the_upper_cliff_is_where_the_pair_is_lost` re-runs the row either
+    side of it. NaN for a pair that is not CAUGHT at the shipped factor -- it
+    has no cliff above it to locate."""
+    if not pm.caught or not (np.isfinite(calibrated) and calibrated > 0):
+        return float("nan")
+    hi = pm.residual / calibrated           # _signif rounds up, so lost here
+    lo = 0.5 * hi                           # and 2 s.f. cannot round up 2x
+    while hi - lo > 1e-3 * hi:
+        mid = 0.5 * (lo + hi)
+        if _signif(calibrated * mid) >= pm.residual:
+            hi = mid
+        else:
+            lo = mid
+    return hi
 
 
 def safety_sweep(reps: int, trials: int,
@@ -1580,16 +1727,25 @@ def safety_sweep(reps: int, trials: int,
     for k in factors:
         cases = scaled_cases(k)
         red, ref, red_runs = count_false_alarms(reps, trials, cases)
-        caught = detection_at(cases, trials, VALIDATE_BASE)
+        pms = pair_margins(cases, trials, VALIDATE_BASE)
+        caught = sum(1 for pm in pms if pm.caught)
         n = reps * len(cases)
         print(f"{k:>8g}{red:>10}{n:>8}{red / n:>9.2%}"
               f"{clopper_pearson_upper(red, n):>10.2%}{red_runs:>10}{ref:>9}"
               f"{f'{caught}/{len(DETECTION_PAIRS)}':>9}"
               + ("   <- shipped" if k == SAFETY else ""))
+        # #528: the per-pair margins behind `caught`, because the aggregate
+        # hid a 1.05x pair. REFUSED / NO-VERDICT print without a number.
+        for pm in pms:
+            print(f"{'':>12}{pm.injection:<26}{pm.cid:<20}{render_margin(pm)}")
         rows.append(dict(safety=k, red_rows=red, comparisons=n, rate=red / n,
                          upper95=clopper_pearson_upper(red, n),
                          red_runs=red_runs, refused=ref, caught=caught,
-                         detection_pairs=len(DETECTION_PAIRS)))
+                         detection_pairs=len(DETECTION_PAIRS),
+                         pairs=[dict(injection=pm.injection, case=pm.cid,
+                                     threshold=pm.threshold, residual=pm.residual,
+                                     margin=pm.margin, state=pm.state, why=pm.why)
+                                for pm in pms]))
     shipped = [r for r in rows if r["safety"] == SAFETY]
     rc, notes = 0, []
     if not shipped:
@@ -1629,6 +1785,41 @@ def safety_sweep(reps: int, trials: int,
         print(f"   {n_}")
     return rc, dict(reps=reps, trials=trials, shipped_safety=SAFETY, sweep=rows,
                     notes=notes)
+
+
+def print_margins(trials: int, seed_base: int = VALIDATE_BASE) -> tuple[int, list[dict]]:
+    """`--margins`: each (injected defect, calibrated row) pair's margin at the
+    shipped factor, and the factor at which that pair would be LOST -- the
+    upper bound on SAFETY located per pair rather than read off a coarse grid.
+    Seconds, not minutes: only the five control rows run, no false-alarm
+    reps. Exit 1 unless every pair is CAUGHT."""
+    print("=" * 100)
+    print(f"PER-PAIR MARGINS at SAFETY={SAFETY:g}, {trials} trials on seed base {seed_base}")
+    print("=" * 100)
+    print(f"{'injection':<26}{'row':<20}{'thresh':>9}{'worst':>10}  {'margin':<24}"
+          f"{'lost above':>10}")
+    out, rc = [], 0
+    for pm in pair_margins(CASES, trials, seed_base):
+        cal = CASE_BY_ID[pm.cid].policy.calibrated
+        cliff = upper_cliff(pm, cal)
+        rc |= 0 if pm.caught else 1
+        worst = f"{pm.residual:.4g}" if pm.residual is not None else "--"
+        print(f"{pm.injection:<26}{pm.cid:<20}{pm.threshold:>9.3g}{worst:>10}  "
+              f"{render_margin(pm):<24}"
+              f"{(f'{cliff:.3g}x' if np.isfinite(cliff) else '--'):>10}")
+        out.append(dict(injection=pm.injection, case=pm.cid, threshold=pm.threshold,
+                        residual=pm.residual, margin=pm.margin, state=pm.state,
+                        why=pm.why, calibrated=cal,
+                        lost_above_safety=cliff if np.isfinite(cliff) else None))
+    cliffs = [d["lost_above_safety"] for d in out if d["lost_above_safety"] is not None]
+    if cliffs and len(cliffs) == len(out):
+        b = min(out, key=lambda d: d["lost_above_safety"])
+        print(f"\n   upper bound on SAFETY: {b['lost_above_safety']:.3g}x, set by "
+              f"{b['injection']} on {b['case']}")
+    else:
+        print("\n   not every pair is CAUGHT at the shipped factor, so no upper "
+              "bound is reported")
+    return rc, out
 
 
 def false_alarm_rate(reps: int, trials: int) -> tuple[int, dict]:
@@ -1701,6 +1892,9 @@ def main(argv=None) -> int:
                     help=f"re-derive the calibrated thresholds at 0.5-8x and "
                          f"measure each table's false-alarm rate over N suite "
                          f"runs -- why SAFETY is {SAFETY:g}")
+    ap.add_argument("--margins", action="store_true",
+                    help="each injected defect's margin over its calibrated row, "
+                         "and the safety factor at which it would be lost")
     ap.add_argument("--policies", action="store_true",
                     help="print what each case permits and does not permit")
     ap.add_argument("--json", type=pathlib.Path)
@@ -1714,6 +1908,12 @@ def main(argv=None) -> int:
         return 0
     if a.calibrate:
         return calibrate(a.cal_trials)
+    if a.margins:
+        rc, report["margins"] = print_margins(a.trials)
+        if a.json:
+            a.json.parent.mkdir(parents=True, exist_ok=True)
+            a.json.write_text(json.dumps(report, indent=2))
+        return rc
     if a.controls:
         rc, report["controls"] = run_controls(a.trials, VALIDATE_BASE)
         if a.json:

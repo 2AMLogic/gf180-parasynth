@@ -1,0 +1,91 @@
+====================================================================================================
+NOISE FIXTURE DURATION -- grid (2.0, 4.0), baseline 2 s; commit 9dd22ff941, 2 behind origin/main
+====================================================================================================
+   measured 2 s
+   measured 4 s
+
+ seconds                   row  cal worst   cal std   thresh  validate  ms/trial
+       2       noise/psd_slope     0.1481   0.03771      0.6      PASS      80.0
+       2        noise/centroid    0.01451   0.00355    0.059      PASS      55.4
+       2 noise/waveform_max_db      1.218    0.5563      -12      PASS      23.2
+       4       noise/psd_slope      0.138   0.02666     0.56      PASS     227.0
+       4        noise/centroid    0.01071  0.002569    0.043      PASS     179.5
+       4 noise/waveform_max_db      1.484    0.5059      -12      PASS      42.6
+
+   spread ratio 4 s / 2 s on noise/psd_slope: worst 0.932, std 0.707  (predicted 0.699 from Welch theory)
+   mutant invariance across durations: max |delta residual| 6.1e-16 dB/oct (tolerance 1e-09)
+
+ seconds  control                                     neighbour                               
+       2  SINGLE_WINDOW_SLOPE 0.6288/0.6 = 1.05x CAUGHTSHORT_WINDOW_SPECTRUM 0.1105/0.059 = 1.87x CAUGHT
+       4  SINGLE_WINDOW_SLOPE 0.6288/0.56 = 1.12x CAUGHTSHORT_WINDOW_SPECTRUM 0.1105/0.043 = 2.57x CAUGHT
+
+ seconds   recal thresholds (min..max)  control survives             select: control   select clean FA/REF
+       2                     0.6..0.99               1/8{"CAUGHT": 23, "MISSED": 17}                   0/0
+       4                    0.41..0.56               8/8{"CAUGHT": 26, "MISSED": 14}                   0/0
+
+DECISION (4 s vs 2 s, selection data only): SHIP 4 s
+   all four conditions hold
+   literal criterion only (margin_cand > margin_base): True (1.12x vs 1.05x)
+
+CONFIRMATION on CONFIRM_BASE (10 groups x 12 trials, all rows), never read by the decision
+   -- 2 s, 170 s
+      ls/decay_tau              {"PASS": 10}
+      ls/schroeder_t20          {"PASS": 10}
+      ls/onset_time             {"PASS": 10}
+      pol/norm_rms_db           {"PASS": 10}
+      pol/centroid              {"PASS": 10}
+      pol/correlated_mix_db     {"PASS": 10}
+      gain/norm_rms_db          {"PASS": 10}
+      gain/centroid             {"PASS": 10}
+      gain/decay_tau            {"PASS": 10}
+      gain/accent_ratio_db      {"PASS": 10}
+      gain/accent_second_only   {"PASS": 10}
+      noise/psd_slope           {"PASS": 10}
+      noise/centroid            {"PASS": 10}
+      noise/decay_tau           {"PASS": 10}
+      noise/waveform_max_db     {"PASS": 10}
+      phase/centroid            {"PASS": 10}
+      phase/band_ratio_db       {"PASS": 10}
+      phase/sample_rms_db       {"PASS": 10}
+      SINGLE_WINDOW_SLOPE|noise/psd_slope               {"CAUGHT": 7, "MISSED": 3}
+      SHORT_WINDOW_SPECTRUM|noise/centroid              {"MISSED": 2, "CAUGHT": 8}
+      TWO_POINT_TAIL_DECAY|noise/decay_tau              {"CAUGHT": 10}
+      PHASE_SENSITIVE_SPECTRUM|phase/centroid           {"CAUGHT": 10}
+      PHASE_SENSITIVE_SPECTRUM|phase/band_ratio_db      {"CAUGHT": 10}
+      CONTRADICTED:
+         SINGLE_WINDOW_SLOPE|noise/psd_slope: MISSED in 3/10 groups
+         SHORT_WINDOW_SPECTRUM|noise/centroid: MISSED in 2/10 groups
+   -- 4 s, 200 s
+      ls/decay_tau              {"PASS": 10}
+      ls/schroeder_t20          {"PASS": 10}
+      ls/onset_time             {"PASS": 10}
+      pol/norm_rms_db           {"PASS": 10}
+      pol/centroid              {"PASS": 10}
+      pol/correlated_mix_db     {"PASS": 10}
+      gain/norm_rms_db          {"PASS": 10}
+      gain/centroid             {"PASS": 10}
+      gain/decay_tau            {"PASS": 10}
+      gain/accent_ratio_db      {"PASS": 10}
+      gain/accent_second_only   {"PASS": 10}
+      noise/psd_slope           {"PASS": 10}
+      noise/centroid            {"PASS": 10}
+      noise/decay_tau           {"PASS": 10}
+      noise/waveform_max_db     {"PASS": 10}
+      phase/centroid            {"PASS": 10}
+      phase/band_ratio_db       {"PASS": 10}
+      phase/sample_rms_db       {"PASS": 10}
+      SINGLE_WINDOW_SLOPE|noise/psd_slope               {"CAUGHT": 8, "MISSED": 2}
+      SHORT_WINDOW_SPECTRUM|noise/centroid              {"CAUGHT": 10}
+      TWO_POINT_TAIL_DECAY|noise/decay_tau              {"CAUGHT": 10}
+      PHASE_SENSITIVE_SPECTRUM|phase/centroid           {"CAUGHT": 10}
+      PHASE_SENSITIVE_SPECTRUM|phase/band_ratio_db      {"CAUGHT": 10}
+      CONTRADICTED:
+         SINGLE_WINDOW_SLOPE|noise/psd_slope: MISSED in 2/10 groups
+
+FINAL: 2 s ships -- 4 s was selected but did not hold on the confirmation population
+   and its own confirmation is CONTRADICTED (exit 1):
+      SINGLE_WINDOW_SLOPE|noise/psd_slope: MISSED in 3/10 groups
+      SHORT_WINDOW_SPECTRUM|noise/centroid: MISSED in 2/10 groups
+
+   total 934 s
+rc=1
