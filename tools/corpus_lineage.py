@@ -58,18 +58,29 @@ R3  A pack whose `lineage_status` is `documented` must have an established
     A serial counts only when it is ASSERTED by syntax (`SERIAL_RE`: keyword,
     ordinary separators, digits). Until #527 any digits within 20 non-digit
     characters of the keyword counted, so "TR-808, serial unknown, bought
-    1984" passed R3b on its purchase year.
+    1984" passed R3b on its purchase year. After PR #536 review it also
+    rejects a negation directly before the keyword ("no serial 1984",
+    "missing serial: 1984", "unknown serial #1984"), a single-repeated-digit
+    serial ("s/n 0000"), and a `.` outside `no.` / `s.n.` between keyword and
+    digits (a sentence boundary).
 
-    Two residual weaknesses, stated rather than hidden:
+    Residual weaknesses, stated rather than hidden, each pinned by a test:
       * `unit_identity_why`: an author can write a sentence there and satisfy
         R3b without a serial.
       * The serial grammar is syntax, not truth: "serial no. 1984" with the
-        purchase year in the serial slot passes (pinned by
-        `test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone`).
+        purchase year in the serial slot passes
+        (`test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone`).
+      * The negation check reads one word: a denial anywhere else passes --
+        "no recorded serial 1984", "missing the serial 1984", "unknown, serial
+        1984", "serial 1984 (not really: purchase year)"
+        (`test_r3b_residual_a_denial_outside_the_one_word_slot_is_not_seen`).
     Neither route, and no syntactic check, independently verifies a physical
-    machine. What the rule guarantees is that passing it takes a visible,
-    explicit, written claim in the diff, not a blank field or a nearby number
-    that reads as established.
+    machine. What the rule guarantees is narrower: passing it takes TEXT in the
+    diff that contains a serial-shaped assertion (or a written
+    `unit_identity_why`), not a blank field, a placeholder token, a stated
+    unknown in the forms above, or a number that merely sits near the keyword.
+    That text can still say, in prose the grammar does not read, that the
+    serial is not known; a reviewer reading the diff is the check for that.
 R4  Every `roles` entry is one of the three group names.
 R5  WEAK EVIDENCE (#158), and it has TWO tiers because the corpus does:
       * `unknown` -- nothing is established. `analyzer-development` only.
@@ -212,22 +223,60 @@ UNESTABLISHED_TOKENS = frozenset({
 #:     KEYWORD  [SEP]  DIGITS{3,}
 #:     KEYWORD = serial | serial no[.] | serial number | serial-number
 #:               | s/n (spaces allowed round the slash) | s.n[.]
-#:     SEP     = whitespace and/or one of  : # . -  (any mix, nothing else)
+#:     SEP     = whitespace and/or one of  : # -  (any mix, nothing else)
 #:
 #: The keyword must start a word (`deserial 1984`, `pads/n 1984`, `bus.n. 1984`
 #: do not assert a serial) and no letter may follow it before the digits
 #: (`serialised 1984` does not either), so `serial unknown, 1984` and `serial: see 1982 invoice` fail
 #: however they are punctuated. Do not reintroduce a gap and do not tune a gap
 #: length: either moves the accidental boundary instead of removing it.
+#:
+#: `.` is NOT a separator (PR #536 review). It appears only inside the keywords
+#: `no.` and `s.n.`; anywhere else it is a sentence boundary, and `no serial.
+#: 1984 production` / `serial. 1984 bought` must not reach across it.
+#:
+#: Two further rejections, applied by `names_a_unit` to each match:
+#:   * NEGATION SLOT -- the word directly before the keyword (separated only by
+#:     whitespace, `-` or an opening bracket/quote) may not be one of
+#:     `SERIAL_NEGATIONS`: `no serial 1984`, `missing serial: 1984`, `unknown
+#:     serial #1984` are DENIALS of a serial, which the right-hand grammar alone
+#:     accepted on the year that follows. This is a deny-list on one fixed slot,
+#:     deliberately not a word search: widening it is the bounded gap again.
+#:   * PLACEHOLDER DIGITS -- a serial that is one digit repeated (`0000`,
+#:     `000`, `1111`) is a placeholder that reads as established. A genuine
+#:     all-one-digit serial would be rejected; it can still pass through
+#:     `unit_identity_why`.
+#:
+#: Residuals, each pinned by a test (rule 8): a false ASSERTION passes
+#: (`serial no. 1984`, the purchase year in the slot); a denial OUTSIDE the
+#: one-word slot passes (`no recorded serial 1984`, `missing the serial 1984`,
+#: `unknown, serial 1984`, `serial 1984 (not really: purchase year)`). The
+#: grammar checks that a serial is written as asserted; it cannot read prose.
 SERIAL_RE = re.compile(
     r"(?<![\w/.])"                                   # keyword starts a word
     r"(?:serial(?:[\s-]*(?:number|no\b\.?))?"        # serial / serial no. / serial number
     r"|s\s*/\s*n|s\.\s*n\.?)"                        # s/n / s.n.
-    r"[\s:#.\-]*"                                    # ordinary separators only; a
+    r"[\s:#\-]*"                                     # ordinary separators only; a
                                                      # letter here (`serialised`,
-                                                     # `serial unknown`) ends the match
+                                                     # `serial unknown`) or a `.`
+                                                     # (`serial. 1984`) ends the match
     r"(\d{3,})",
     re.I)
+
+#: Words that, directly before the serial keyword, DENY or hedge it (see
+#: `SERIAL_RE`). Matched as the whole preceding word, never as a substring, so
+#: `no-nonsense TR-808, serial no. 103852` is unaffected.
+SERIAL_NEGATIONS = frozenset({
+    "no", "not", "non", "without", "missing", "lacking", "lacks", "absent",
+    "unknown", "unrecorded", "unpublished", "unverified", "unconfirmed",
+    "illegible", "unreadable", "lost", "removed", "none", "nil",
+    "tbd", "tbc", "placeholder", "fake", "dummy",
+})
+
+#: The one word directly before a keyword: letters, then only whitespace, `-`
+#: or an opening bracket/quote up to the keyword. Any other punctuation (`,`
+#: `;` `:` `.`) is a clause boundary and leaves the slot empty.
+_PRECEDING_WORD_RE = re.compile(r"([a-z]+)[\s\-(\[\"'`]*\Z", re.I)
 
 
 class Refused(Exception):
@@ -262,8 +311,22 @@ def is_unestablished(value: object, marker: str) -> bool:
 
 
 def names_a_unit(unit: object) -> bool:
-    """True when `unit` carries a serial number -- a positive identity (R3b)."""
-    return bool(SERIAL_RE.search(str(unit or "")))
+    """True when `unit` carries a serial number -- a positive identity (R3b).
+
+    Any one match of `SERIAL_RE` suffices, provided its digits are not a
+    single repeated digit and the word directly before its keyword is not in
+    `SERIAL_NEGATIONS`.
+    """
+    text = str(unit or "")
+    for m in SERIAL_RE.finditer(text):
+        digits = m.group(1)
+        if len(set(digits)) == 1:
+            continue                                  # `0000`: placeholder
+        prev = _PRECEDING_WORD_RE.search(text[:m.start()])
+        if prev and prev.group(1).lower() in SERIAL_NEGATIONS:
+            continue                                  # `no serial 1984`: a denial
+        return True
+    return False
 
 
 def load(manifest: pathlib.Path = MANIFEST) -> dict:

@@ -302,17 +302,32 @@ is not.
 
      A serial is recognised only in an explicit form: `serial`, `serial no.`,
      `serial number`, `s/n` or `s.n.` (any case), then nothing but spaces or
-     `: # . -`, then at least three digits — e.g. `serial no. 103852`,
+     `: # -`, then at least three digits — e.g. `serial no. 103852`,
      `Serial Number: 103852`, `S/N 103852`. Any word in between ends the
      match, so `serial unknown, bought 1984` does **not** name a unit; before
-     #527 it did, on its purchase year.
+     #527 it did, on its purchase year. A `.` is part of `no.` and `s.n.`
+     and nowhere else, so `no serial. 1984 production` does not reach across
+     the sentence boundary. Two more rejections: a negation in the word
+     directly before the keyword (`no serial 1984`, `missing serial: 1984`,
+     `unknown serial #1984`, `lost s/n 1984` — a *denial* of a serial), and
+     a serial that is one repeated digit (`s/n 0000`, `serial 1111` — a
+     placeholder).
 
-   `unit_identity_why` is the residual weakness, stated rather than hidden: a
-   sentence there satisfies R3b without a serial. So is the grammar itself:
-   it checks that a serial is *asserted*, not that it is *true* —
-   `serial no. 1984` passes. What the rule guarantees is
-   that doing so is a visible written claim in the diff, not a blank that reads
-   as established. The same shape was then fixed one rule over —
+   These are the residual weaknesses, stated rather than hidden and each
+   pinned by a test in `tools/test_corpus_lineage.py`:
+   - a sentence in `unit_identity_why` satisfies R3b without a serial;
+   - the grammar checks that a serial is *asserted*, not that it is *true* —
+     `serial no. 1984` passes;
+   - the negation check reads exactly one word, so a denial anywhere else
+     passes — `no recorded serial 1984`, `missing the serial 1984`,
+     `unknown, serial 1984`, `serial 1984 (not really: purchase year)`.
+
+   So the rule does **not** guarantee that a passing unit is a claim that a
+   serial is known. It guarantees that passing takes text in the diff with a
+   serial-shaped assertion (or a written `unit_identity_why`), not a blank, a
+   placeholder, a stated unknown in the forms above, or a number that merely
+   sits near the keyword. Prose that still denies the serial is left to the
+   reviewer reading the diff. The same shape was then fixed one rule over —
    `weak_evidence_why`, `role_overlap_why`, `group_why` and a target's
    `current_work` were each satisfied by `"TBD"` and now are not.
 5. **Assign a group, or state why none.** Then add the row to the table above.
