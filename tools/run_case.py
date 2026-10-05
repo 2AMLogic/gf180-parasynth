@@ -186,7 +186,7 @@ def configured_refs() -> pathlib.Path:
     disagree this raises rather than silently choosing one."""
     main, alias = os.environ.get(REFS_ENV), os.environ.get(REFS_ALIAS_ENV)
     if main and alias and pathlib.Path(main) != pathlib.Path(alias):
-        raise RuntimeError(f"{REFS_ENV}={main} and {REFS_ALIAS_ENV}={alias} disagree; "
+        raise RuntimeError(f"REFUSED: {REFS_ENV}={main} and {REFS_ALIAS_ENV}={alias} disagree; "
                            f"unset {REFS_ALIAS_ENV}")
     return pathlib.Path(main or alias or REFS_DEFAULT)
 REF_ID = ("Fischer/Technopolis 1994, CC0-1.0 via TidalCycles, real TR-808 "
