@@ -83,6 +83,22 @@ So the working window is 2-4x and it is bounded on both sides by measurement:
 below it the suite false-alarms, above it two rows stop detecting. 4 is the
 conservative end of a two-element window, not a number somebody liked.
 
+THE UPPER END, LOCATED RATHER THAN BRACKETED (#528). `--margins` computes, per
+pair, the factor at which its threshold reaches its worst residual, and
+`test_the_upper_cliff_is_where_the_pair_is_lost` re-runs the row either side:
+
+  SINGLE_WINDOW_SLOPE       noise/psd_slope       1.05x   lost above 4.19x
+  SHORT_WINDOW_SPECTRUM     noise/centroid        1.87x   lost above 7.59x
+  TWO_POINT_TAIL_DECAY      noise/decay_tau       1.3e3x  lost above 5.3e3x
+  PHASE_SENSITIVE_SPECTRUM  phase/centroid        1.6e4x  lost above 6.2e4x
+  PHASE_SENSITIVE_SPECTRUM  phase/band_ratio_db   1.1e4x  lost above 4.4e4x
+
+So the measured upper bound is 4.19x, not "somewhere in 4-8": the shipped 4 is
+4.6 % under it. The table above was measured at 2.0 s with this exact mutant,
+which is what ships again after #528 (the PR that briefly replaced the mutant
+with a grosser one was reverted on review); it was NOT re-run by #528 -- see
+`docs/noise-fixture-duration.md` for what was and was not.
+
 NOT in `docs/sensitivity/registry.json`, deliberately and recorded here so the
 decision is visible rather than missed: that gate re-extracts a grid from a
 committed fixed-width-table artefact and checks it against an independent
@@ -108,6 +124,21 @@ three are 1,300x (`noise/decay_tau`), 11,000x (`phase/band_ratio_db`) and
 16,000x (`phase/centroid`). That thinness is detected rather than silent: a
 recalibration that pushed the slope threshold past its defect turns
 `make controls` red, which is what that target is for.
+
+#528 MEASURED HOW THIN, AND IT IS THINNER THAN 1.05x SUGGESTS
+(`tools/probes/noise_fixture_duration.py`, record `docs/noise-fixture-
+duration.md`). 1.05x is the worst of the twelve VALIDATE_BASE trials. On forty
+independent 12-trial groups (SELECT_BASE) the same control is caught in 23;
+on ten reserved groups (CONFIRM_BASE) in 7. And re-deriving the threshold on
+eight independent 96-draw populations moves it over 0.60-0.99, so seven of
+eight recalibrations would put it above the defect. The control is green
+because VALIDATE_BASE is fixed, not because the defect is reliably visible.
+A 4.0 s fixture was the candidate fix: it tightens the realisation spread by
+0.707x (Welch theory predicts 0.699x; the issue's "halve" was a variance read
+as a spread) and survives all eight recalibrations, but its own reserved
+confirmation still missed the control in 2 of 10 groups, so it does not ship
+and `NOISE_SECONDS` stays 2.0. The per-trial defect is simply too close to the
+row's own spread; what would fix it is a follow-up, not this file.
 
 Stochastic rows (independent noise realisation, free-running phase, and every
 row whose transform draws its own magnitude) are run over `--trials` draws and

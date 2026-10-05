@@ -13,7 +13,7 @@ is trivially green if its tolerances are loose, so what has to be tested is
 that each tolerance is tight enough to catch a defect and that none of them
 false-alarms.
 
-Five things are asserted here that the probe cannot assert about itself:
+Seven things are asserted here that the probe cannot assert about itself:
 
   1. **Every row states what it permits AND what it does not.** #158 is
      explicit that these differences are "not universally benign", so a row
@@ -34,9 +34,12 @@ Five things are asserted here that the probe cannot assert about itself:
      of its three verdicts -- too tight, vacuous, unsatisfiable floor -- is
      driven as an input, with the unmutated row as the control.
   6. **`SAFETY = 4` is inside a measured window.** Removing the margin
-     false-alarms; doubling it loses two of the five injected defects. Both
-     ends are re-measured here, not transcribed from the docstring's
-     `--safety-sweep` table.
+     false-alarms; doubling it loses two NAMED injected defects, and the upper
+     cliff is located per pair (~4.19x, set by the original
+     `SINGLE_WINDOW_SLOPE`). Both ends are re-measured here, not transcribed
+     from the docstring's `--safety-sweep` table.
+  7. **A per-pair margin cannot render a non-detection as a detection**
+     (#528): missed, REFUSED and non-finite inputs are driven as cases.
 """
 from __future__ import annotations
 
@@ -344,14 +347,56 @@ def test_safety_is_bounded_from_above_by_lost_detection():
     """The half a false-alarm measurement cannot give you: raising a threshold
     always stops the false alarms, so the upper bound has to come from the
     injected defects. At 4x all five (defect, calibrated row) pairs still go
-    red; at 8x two of them do not, and `noise/psd_slope` -- whose defect sits
-    only 1.05x above its committed threshold -- is one of them."""
+    red; at 8x exactly two do not, and they are NAMED here rather than counted
+    -- a count would keep passing if a different pair were lost for a
+    different reason (#537 review note)."""
     assert pd.detection_at(pd.scaled_cases(pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
         == len(pd.DETECTION_PAIRS)
-    assert pd.detection_at(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
-        < len(pd.DETECTION_PAIRS), \
-        "doubling SAFETY no longer loses any injected defect, so the sweep no " \
-        "longer bounds it from above and the shipped factor is unconstrained"
+    lost = {(pm.injection, pm.cid) for pm in
+            pd.pair_margins(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE)
+            if not pm.caught}
+    assert lost == {("SINGLE_WINDOW_SLOPE", "noise/psd_slope"),
+                    ("SHORT_WINDOW_SPECTRUM", "noise/centroid")}, \
+        f"doubling SAFETY now loses {sorted(lost)} -- re-run --margins and " \
+        f"re-derive the upper bound"
+
+
+def test_the_upper_cliff_is_where_the_pair_is_lost():
+    """The upper bound LOCATED, not bracketed by a 2x grid step (#528). The
+    binding pair is the original `SINGLE_WINDOW_SLOPE`, lost above ~4.19x --
+    4.6 % over the shipped factor -- and the row is re-run either side of the
+    cliff `upper_cliff` computes, so the arithmetic is checked against the
+    estimator rather than against itself."""
+    pms = pd.pair_margins(pd.CASES, QUICK, pd.VALIDATE_BASE)
+    cliffs = {(pm.injection, pm.cid): pd.upper_cliff(pm, pd.CASE_BY_ID[pm.cid].policy.calibrated)
+              for pm in pms}
+    assert all(math.isfinite(v) for v in cliffs.values()), cliffs
+    binding = min(cliffs, key=cliffs.get)
+    k = cliffs[binding]
+    assert binding == ("SINGLE_WINDOW_SLOPE", "noise/psd_slope"), cliffs
+    assert pd.SAFETY < k < 4.25, k
+    name, cid = binding
+    for factor, want in ((0.99 * k, pd.CAUGHT), (1.01 * k, pd.MISSED)):
+        c = {c.cid: c for c in pd.scaled_cases(factor)}[cid]
+        pm = pd.pair_margin(name, pd.run_case(c, QUICK, pd.VALIDATE_BASE, name))
+        assert pm.state == want, (factor, pm)
+
+
+def test_the_slope_control_is_the_original_short_record_mutant():
+    """#537 review: the control was once silently made grosser (2048 samples at
+    nfft=512), which widened its margin by changing the defect rather than the
+    detection. Pinned behaviourally: the hooked row must read exactly
+    `psd_slope_db_oct(x[:4096], nfft=1024)` on both sides."""
+    c = pd.CASE_BY_ID["noise/psd_slope"]
+    rng = np.random.default_rng([pd.VALIDATE_BASE, 0, pd.case_seed(c.cid)])
+    p = pd.draw_noise(rng)
+    applied = pd.t_noise_realisation(p, rng)
+    a, b = pd.build(p), applied.post(pd.build(applied.params_b))
+    want = (pd.am.psd_slope_db_oct(b.x[:4096], (500.0, 8000.0), pd.SR, nfft=1024).value
+            - pd.am.psd_slope_db_oct(a.x[:4096], (500.0, 8000.0), pd.SR, nfft=1024).value)
+    got = pd.run_trial(c, pd.VALIDATE_BASE, 0, "SINGLE_WINDOW_SLOPE").delta
+    assert got == pytest.approx(want, abs=1e-12)
+    assert pd.INJECTIONS["SINGLE_WINDOW_SLOPE"].targets == ("noise/psd_slope",)
 
 
 def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
