@@ -313,6 +313,25 @@ SERIAL_NOT_ASSERTED = [
     "bus.n. 1984",                                          # `s.n.` inside a word
     "TR-808 bought 1984, serial unknown",                   # year BEFORE the keyword
     "number 103852",                                        # no serial keyword at all
+    # PR #536 Judge review: negation BEFORE the keyword. Each is an explicit
+    # DENIAL that a serial is known, and each passed the right-hand-only grammar
+    # on the year that follows -- the #527 shape with the negation moved left.
+    "TR-808, no serial 1984 purchase",
+    "TR-808, missing serial: 1984 receipt only",
+    "TR-808, unknown serial #1984",
+    "TR-808, no serial. 1984 production",
+    "TR-808, without serial 1984",
+    "TR-808, lost s/n 1984",
+    "TR-808, serial plate removed; no-serial 1984",
+    "TR-808 (unrecorded serial 1984)",
+    # A placeholder in the serial slot reads as established (the pass-1 shape).
+    "TR-808, s/n 0000",
+    "serial 000",
+    "serial no. 1111",
+    "S/N: 99999",
+    # `.` ends a sentence: the keyword may not reach across it to a number.
+    "serial. 1984 bought",
+    "TR-808, serial. 103852",
 ]
 
 #: Explicit serial assertions in every form the grammar promises to accept,
@@ -328,6 +347,13 @@ SERIAL_ASSERTED = [
     "s.n. 103852", "S.N. 103852", "s.n.103852",
     "TR-808, bought 1984, serial no. 103852",               # a year elsewhere is harmless
     "(serial no. 103852)",
+    # The negation deny-list is a fixed slot, not a word search: these words
+    # elsewhere, or as a keyword's own suffix, must not reject a real serial.
+    "no-nonsense TR-808, serial no. 103852",
+    "TR-808, nothing missing, serial no. 103852",
+    "the lost-and-found TR-808, s/n 103852",
+    "serial no. 103852 -- no repairs, nothing removed",
+    "S/N 100001",                                           # repeated digits, not ALL one digit
 ]
 
 
@@ -391,6 +417,27 @@ def test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone():
     documents the boundary; if it ever fails, the docstring's residual note is
     stale."""
     assert cl.names_a_unit("serial no. 1984")
+
+
+#: Inputs that still defeat R3b after the PR #536 negation fix, pinned so the
+#: residual is a stated boundary rather than a discovery (rule 8). Each one
+#: DENIES or hedges the serial and still passes, because the deny-list looks at
+#: exactly one slot -- the word directly before the keyword -- and nothing to
+#: the right of the digits. Widening the slot is the bounded-gap regex (#527)
+#: pointed the other way, so it is not done; these are what that costs.
+SERIAL_NEGATION_RESIDUALS = [
+    "TR-808, no recorded serial 1984",           # negation two words before the keyword
+    "TR-808, missing the serial 1984",           # an article in the slot
+    "TR-808, serial 1984 (not really: purchase year)",  # denial AFTER the digits
+    "TR-808, unknown, serial 1984",              # a comma is a clause boundary, not the slot
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_NEGATION_RESIDUALS)
+def test_r3b_residual_a_denial_outside_the_one_word_slot_is_not_seen(unit):
+    """If any of these starts failing, the residual list in `SERIAL_RE`'s
+    comment, the R3 docstring and docs/corpus-lineage.md is stale."""
+    assert cl.names_a_unit(unit)
 
 
 def test_r3_does_not_fire_on_a_documented_unit_with_an_open_chain(tree):
