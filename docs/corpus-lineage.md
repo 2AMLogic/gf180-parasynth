@@ -300,8 +300,17 @@ is not.
      what pins the identity instead. A positive assertion cannot be routed
      around by a phrasing the deny-list has not met yet.
 
+     A serial is recognised only in an explicit form: `serial`, `serial no.`,
+     `serial number`, `s/n` or `s.n.` (any case), then nothing but spaces or
+     `: # . -`, then at least three digits — e.g. `serial no. 103852`,
+     `Serial Number: 103852`, `S/N 103852`. Any word in between ends the
+     match, so `serial unknown, bought 1984` does **not** name a unit; before
+     #527 it did, on its purchase year.
+
    `unit_identity_why` is the residual weakness, stated rather than hidden: a
-   sentence there satisfies R3b without a serial. What the rule guarantees is
+   sentence there satisfies R3b without a serial. So is the grammar itself:
+   it checks that a serial is *asserted*, not that it is *true* —
+   `serial no. 1984` passes. What the rule guarantees is
    that doing so is a visible written claim in the diff, not a blank that reads
    as established. The same shape was then fixed one rule over —
    `weak_evidence_why`, `role_overlap_why`, `group_why` and a target's

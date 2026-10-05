@@ -55,10 +55,21 @@ R3  A pack whose `lineage_status` is `documented` must have an established
         be routed around by a phrasing the deny-list has not met yet, which is
         the half that closes the hole.
 
-    `unit_identity_why` is the residual weakness and it is stated rather than
-    hidden: an author can write a sentence there and satisfy R3b without a
-    serial. What the rule guarantees is that doing so is a visible, written
-    claim in the diff, not a blank field that reads as established.
+    A serial counts only when it is ASSERTED by syntax (`SERIAL_RE`: keyword,
+    ordinary separators, digits). Until #527 any digits within 20 non-digit
+    characters of the keyword counted, so "TR-808, serial unknown, bought
+    1984" passed R3b on its purchase year.
+
+    Two residual weaknesses, stated rather than hidden:
+      * `unit_identity_why`: an author can write a sentence there and satisfy
+        R3b without a serial.
+      * The serial grammar is syntax, not truth: "serial no. 1984" with the
+        purchase year in the serial slot passes (pinned by
+        `test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone`).
+    Neither route, and no syntactic check, independently verifies a physical
+    machine. What the rule guarantees is that passing it takes a visible,
+    explicit, written claim in the diff, not a blank field or a nearby number
+    that reads as established.
 R4  Every `roles` entry is one of the three group names.
 R5  WEAK EVIDENCE (#158), and it has TWO tiers because the corpus does:
       * `unknown` -- nothing is established. `analyzer-development` only.
@@ -190,7 +201,33 @@ UNESTABLISHED_TOKENS = frozenset({
 #: documented pack in this corpus is identified this way -- Fischer s/n 103852,
 #: Legowelt s/n 5529 -- so the positive form is satisfiable on the committed
 #: state, which is the test an unsatisfiable gate fails.
-SERIAL_RE = re.compile(r"(?:serial|s\s*/\s*n|s\.\s*n\.)\D{0,20}(\d{3,})", re.I)
+#:
+#: It is a POSITIVE GRAMMAR, not a proximity match (#527). The previous form,
+#: `(?:serial|s/n|s.n.)\D{0,20}(\d{3,})`, accepted ANY prose within 20
+#: non-digits of the keyword, so "TR-808, serial unknown, bought 1984" named a
+#: unit (the purchase year was the "serial") while "serial not recorded; bought
+#: 1984" did not -- a boundary set by punctuation, not meaning. Now a serial is
+#: asserted only by this shape, case-insensitive:
+#:
+#:     KEYWORD  [SEP]  DIGITS{3,}
+#:     KEYWORD = serial | serial no[.] | serial number | serial-number
+#:               | s/n (spaces allowed round the slash) | s.n[.]
+#:     SEP     = whitespace and/or one of  : # . -  (any mix, nothing else)
+#:
+#: The keyword must start a word (`deserial 1984`, `pads/n 1984`, `bus.n. 1984`
+#: do not assert a serial) and no letter may follow it before the digits
+#: (`serialised 1984` does not either), so `serial unknown, 1984` and `serial: see 1982 invoice` fail
+#: however they are punctuated. Do not reintroduce a gap and do not tune a gap
+#: length: either moves the accidental boundary instead of removing it.
+SERIAL_RE = re.compile(
+    r"(?<![\w/.])"                                   # keyword starts a word
+    r"(?:serial(?:[\s-]*(?:number|no\b\.?))?"        # serial / serial no. / serial number
+    r"|s\s*/\s*n|s\.\s*n\.?)"                        # s/n / s.n.
+    r"[\s:#.\-]*"                                    # ordinary separators only; a
+                                                     # letter here (`serialised`,
+                                                     # `serial unknown`) ends the match
+    r"(\d{3,})",
+    re.I)
 
 
 class Refused(Exception):

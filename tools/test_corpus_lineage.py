@@ -308,6 +308,9 @@ SERIAL_NOT_ASSERTED = [
     "s.n. ?, 1984",
     "serialised 1984 by the vendor",                        # not the keyword
     "a deserialized dump from 1984",                        # not the keyword
+    "deserial 1984",                                        # keyword must start a word
+    "pads/n 1984",                                          # `s/n` inside a word
+    "bus.n. 1984",                                          # `s.n.` inside a word
     "TR-808 bought 1984, serial unknown",                   # year BEFORE the keyword
     "number 103852",                                        # no serial keyword at all
 ]
