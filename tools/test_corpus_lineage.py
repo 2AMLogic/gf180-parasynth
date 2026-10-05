@@ -285,6 +285,111 @@ def test_every_documented_pack_in_the_committed_manifest_names_a_serial():
         assert cl.names_a_unit(p["unit"]), f"{p['id']}: {p['unit']!r} names no serial"
 
 
+# ---------------------------------------------------------------------------
+# R3b serial grammar (#527) -- a serial is ASSERTED by syntax, not by a digit
+# run that happens to sit near the word "serial"
+# ---------------------------------------------------------------------------
+#: Each of these says, or implies, that the serial is NOT known, and carries an
+#: unrelated number (a purchase or production year) close to the keyword. The
+#: first is the exact historical bypass (#527): under the old bounded-gap regex
+#: `\D{0,20}` it reported `0 FALSE`, while the same sentence with a 22-char gap
+#: was caught -- a boundary decided by punctuation, not meaning.
+SERIAL_NOT_ASSERTED = [
+    "TR-808, serial unknown, bought 1984",                  # the historical bypass
+    "serial ???, 1982 production",
+    "serial: see 1982 invoice",
+    "TR-808, serial not recorded; bought 1984",             # same meaning, longer gap
+    "TR-808, Serial Unknown -- bought 1984",
+    "TR-808,serial unknown,bought 1984",
+    "TR-808 (serial unknown) bought in 1984",
+    "serial no. unknown, 1983",
+    "serial number: tbd, bought 1984",
+    "S/N unknown, 1984",
+    "s.n. ?, 1984",
+    "serialised 1984 by the vendor",                        # not the keyword
+    "a deserialized dump from 1984",                        # not the keyword
+    "TR-808 bought 1984, serial unknown",                   # year BEFORE the keyword
+    "number 103852",                                        # no serial keyword at all
+]
+
+#: Explicit serial assertions in every form the grammar promises to accept,
+#: including both committed-manifest phrasings verbatim.
+SERIAL_ASSERTED = [
+    "serial no. 103852 -- a real machine, explicitly not samples of samples",
+    "Legowelt's 1970s Minimoog, serial no. 5529 -- the one unit in the whole corpus",
+    "serial no. 103852", "Serial No. 103852", "SERIAL NO. 103852", "serial no 103852",
+    "serial no.103852", "serial number 103852", "serial number: 103852",
+    "Serial Number: 103852", "serial-number 103852", "serial: 103852", "serial 103852",
+    "serial #103852", "serial # 103852", "serial no. #103852",
+    "s/n 103852", "S/N 103852", "S/N: 103852", "s / n 103852",
+    "s.n. 103852", "S.N. 103852", "s.n.103852",
+    "TR-808, bought 1984, serial no. 103852",               # a year elsewhere is harmless
+    "(serial no. 103852)",
+]
+
+
+@pytest.mark.parametrize("unit", SERIAL_NOT_ASSERTED)
+def test_names_a_unit_rejects_a_nearby_number_that_is_not_an_asserted_serial(unit):
+    assert not cl.names_a_unit(unit), f"{unit!r} counted as naming a unit"
+
+
+@pytest.mark.parametrize("unit", SERIAL_ASSERTED)
+def test_names_a_unit_accepts_every_explicit_serial_form(unit):
+    assert cl.names_a_unit(unit), f"{unit!r} is an explicit serial and was rejected"
+
+
+@pytest.mark.parametrize("unit", SERIAL_NOT_ASSERTED)
+def test_r3b_fires_through_check_when_a_nearby_year_is_not_a_serial(tree, unit):
+    """The acceptance path, not just the helper: the #527 bypass end to end.
+    `boutique-808` relabelled `documented`, placed in `held-out-validation`,
+    with no `unit_identity_why` -- a verdict backed by a machine nobody has
+    identified. Must be an R3 FALSE naming the pack."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = unit
+    p.pop("unit_identity_why", None)
+    p["lineage_status"] = "documented"
+    p["roles"] = ["held-out-validation"]
+    tree.save(m)
+    f = tree.check()
+    assert any(x["rule"] == "R3" and x["status"] == "FALSE" and "boutique-808" in x["what"]
+               for x in f), f"unit={unit!r} + documented + held-out passed R3"
+
+
+def test_r3b_through_check_still_accepts_an_explicit_serial_on_the_same_pack(tree):
+    """Satisfiability of the tightened grammar on the same mutated pack: the
+    rejection above is about the syntax, not about `boutique-808`."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = "TR-808, bought 1984, S/N: 104417"
+    p.pop("unit_identity_why", None)
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert not any(x["rule"] == "R3" and "boutique-808" in x["what"] for x in tree.check())
+
+
+def test_r3b_alternative_identity_route_still_rescues_a_unit_with_no_serial(tree):
+    """The non-serial route is untouched: the historical bypass text PLUS a
+    written `unit_identity_why` passes, because that is a visible claim."""
+    m = tree.load()
+    p = tree.pack(m, "boutique-808")
+    p["unit"] = "TR-808, serial unknown, bought 1984"
+    p["unit_identity_why"] = ("Serial plate missing; identity pinned by the purchase "
+                              "receipt and the repair log's board photographs.")
+    p["lineage_status"] = "documented"
+    tree.save(m)
+    assert not any(x["rule"] == "R3" and "boutique-808" in x["what"] for x in tree.check())
+
+
+def test_r3b_residual_a_false_serial_assertion_is_accepted_by_syntax_alone():
+    """The input that defeats the guard (rule 8), pinned so it is stated rather
+    than hidden: R3b checks that a serial is ASSERTED, not that it is TRUE. An
+    author who writes the purchase year in the serial slot passes. This test
+    documents the boundary; if it ever fails, the docstring's residual note is
+    stale."""
+    assert cl.names_a_unit("serial no. 1984")
+
+
 def test_r3_does_not_fire_on_a_documented_unit_with_an_open_chain(tree):
     """The other half of R3, and the reason it is scoped to `unit` alone.
     `legowelt-minimoog-5529` has the best-identified unit in the corpus -- a
