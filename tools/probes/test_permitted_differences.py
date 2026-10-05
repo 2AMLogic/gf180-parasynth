@@ -344,8 +344,8 @@ def test_safety_is_bounded_from_above_by_lost_detection():
     """The half a false-alarm measurement cannot give you: raising a threshold
     always stops the false alarms, so the upper bound has to come from the
     injected defects. At 4x all five (defect, calibrated row) pairs still go
-    red; at 8x `noise/centroid` does not. (`noise/psd_slope`'s defect sat 1.05x
-    above its threshold and was lost at 8x until #528 made it 2.17x.)"""
+    red; at 8x two of them do not, and `noise/psd_slope` -- whose defect sits
+    only 1.05x above its committed threshold -- is one of them."""
     assert pd.detection_at(pd.scaled_cases(pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
         == len(pd.DETECTION_PAIRS)
     assert pd.detection_at(pd.scaled_cases(2 * pd.SAFETY), QUICK, pd.VALIDATE_BASE) \
@@ -365,3 +365,65 @@ def test_the_sweep_only_moves_the_thresholds_that_depend_on_safety():
             assert b.policy.threshold > a.policy.threshold, a.cid
     assert len(pd.CALIBRATED_ROWS) == 5, pd.CALIBRATED_ROWS
     assert len(pd.DETECTION_PAIRS) == 5, pd.DETECTION_PAIRS
+
+
+# ---------------------------------------------------------------------------
+# 8. per-pair margin reporting cannot render a non-detection as a detection
+# ---------------------------------------------------------------------------
+# #528 added a per-(injection, row) margin to the reports, because the
+# aggregate `caught 5/5` hid that one pair cleared its threshold by 5 %. A
+# margin column is a new guard, so it ships with the inputs that defeat it
+# (docs/verification-rules.md 8): a missed mutant, a REFUSED row that still
+# holds some large residuals, and a non-finite margin must never read as
+# CAUGHT. These are driven as synthetic RowResults so the guard is tested
+# without the estimator, and the first case is the control that a guard which
+# returned "not caught" unconditionally would fail.
+def _row(verdict, residuals, threshold=0.6, cid="noise/psd_slope", refusals=0):
+    c = pd.CASE_BY_ID[cid]
+    c = dataclasses.replace(c, policy=dataclasses.replace(c.policy, threshold=threshold))
+    exceed = sum(1 for r in residuals if np.isfinite(r) and r > threshold)
+    return pd.RowResult(c, verdict, 12, refusals, exceed, list(residuals), [])
+
+
+def test_a_caught_pair_reports_its_margin():
+    pm = pd.pair_margin("SINGLE_WINDOW_SLOPE", _row(pd.FAIL, [0.2, 0.9]))
+    assert pm.state == pd.CAUGHT and pm.caught
+    assert pm.margin == pytest.approx(1.5)
+    assert "1.5x" in pd.render_margin(pm)
+
+
+@pytest.mark.parametrize("label,row,state", [
+    # the mutant did not move the row past its threshold
+    ("missed", _row(pd.PASS, [0.2, 0.5]), pd.MISSED),
+    # REFUSED is not FAIL, even when the trials that did answer were large:
+    # "anything that is not green is a catch" is the nightly's old mistake
+    ("refused", _row(pd.REFUSED, [0.9, 1.4], refusals=10), pd.REFUSED),
+    # every trial refused: there is no residual to take a margin of
+    ("refused-empty", _row(pd.REFUSED, [], refusals=12), pd.REFUSED),
+    # non-finite residuals or threshold: a margin of inf or nan is not a number
+    ("inf-residual", _row(pd.FAIL, [0.2, float("inf")]), pd.NO_VERDICT),
+    ("nan-residual", _row(pd.FAIL, [float("nan")]), pd.NO_VERDICT),
+    ("zero-threshold", _row(pd.FAIL, [0.2, 0.9], threshold=0.0), pd.NO_VERDICT),
+    # a verdict that disagrees with its own margin is not evidence either way
+    ("fail-under-threshold", _row(pd.FAIL, [0.2, 0.5]), pd.NO_VERDICT),
+    ("pass-over-threshold", _row(pd.PASS, [0.2, 0.9]), pd.NO_VERDICT),
+])
+def test_a_non_detection_never_renders_as_caught(label, row, state):
+    pm = pd.pair_margin("SINGLE_WINDOW_SLOPE", row)
+    assert pm.state == state, (label, pm)
+    assert not pm.caught, label
+    text = pd.render_margin(pm)
+    assert pd.CAUGHT not in text, (label, text)
+    if state != pd.MISSED:
+        # only a real number below 1 may be printed as a margin
+        assert "x" not in text.split()[0], (label, text)
+
+
+def test_detection_counts_a_refused_control_as_not_caught(monkeypatch):
+    """The same guard at the point where the sweep counts: a control whose row
+    REFUSES with large residuals must not raise `caught`."""
+    def refusing(c, trials, seed_base, inject):
+        return _row(pd.REFUSED, [99.0], threshold=c.policy.threshold, cid=c.cid,
+                    refusals=trials)
+    monkeypatch.setattr(pd, "run_case", refusing)
+    assert pd.detection_at(pd.CASES, 12, pd.VALIDATE_BASE) == 0
