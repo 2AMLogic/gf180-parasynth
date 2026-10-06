@@ -270,6 +270,7 @@ only.
 | `land-v2` | `land` | the same, with **right-censored** stage samples folded in (Kaplan–Meier grids) | after `merge_wait` |
 | `land-2026-10-06-calm-plover` | `land` | `land-v2`'s path, then **each** of p25/p50/p75/p90 conformally calibrated against its own hit rate from `land-v2`'s landed **and** still-open (right-censored lower-bound) track record in a trailing 14-day window, per (stage, age bucket) → stage → pooled, with the per-day change of the shift rate-limited; fitted at the estimate's own `as_of` (recorded as `calibration`; #10489) | after `merge_wait` |
 | `land-2026-10-06-quick-tern` | `land` | `land-2026-10-04-twin-otter-b`'s estimate, then each of p25/p50/p75/p90 calibrated by **IPCW** split-conformal over twin-otter-b's landed and still-open track record in a **short recent window** (6 h half-life, doubling when there are too few landings), per stage → pooled. There is no rate limit; a shift within 1.5 standard errors of zero is not applied. Fitted at the estimate's own `as_of`, recorded as `calibration` with `ipcw{…}` (#10524) | at the merge |
+| `land-2026-10-06-swift-tern` | `land` | quick-tern made **drift-aware** (#10524 slice 3, #10528): when the stage's CUSUM drift check trips (residuals centred on the shift quick-tern would serve), the half-life ladder starts at 1.5 h instead of 6 h. The interval inflation the check asks for is recorded but not applied. Otherwise quick-tern's answer. Recorded as `calibration` with `ipcw.drift{…}` | at the merge |
 | `land-2026-10-06-held-heron` | `land` | `land-2026-10-04-twin-otter-b`'s estimate, except a PR that is **held** (`merge_hold`) or **sequenced** (`merge_wait` with `loom:sequenced`) at `as_of`. That PR is answered by a competing-risks hold and sequencing chain whose hazards are events ÷ exposure over the 14 days before `as_of`, read from the stage episodes and the PR flag timeline; there are no draws. Too little evidence answers as twin-otter-b. Recorded as `held_heron` (#10523) | at the merge |
 | `land-v4` | `land` | the retired `land-v3`'s grid calibration (widened about its median, Builder scaled by `points:N`, review/merge shifted by `queue_running`, review floored; recorded per stage as `distribution.adjustment`; #9970), plus the binding stall's term added to every path, operator-held PRs estimated from the stage under the hold, and no `beyond_history` refusal (a flagged residual-life tail instead; #10210) | after `merge_wait` |
 | `little-v0` | `land` | **floor baseline, never promoted** (#10208): Little's law. For a PR in `review_wait` / `doctor` / `merge_wait`, `items_ahead / drain_rate` for the current stage plus the recency-weighted mean duration of each later stage; interval from a Gamma posterior on the rate (shape = observed exits, 400 seeded draws). Refuses with a zero drain rate and items ahead, or with no queue context; a held PR (`merge_hold`) is refused `blocked`, as by every heuristic that does not model the hold | after `merge_wait` |
@@ -543,10 +544,57 @@ unresolved[]}`. The result recomputes from the explanation:
 `run_explanation` replays twin-otter's own record, or the land-v2 path, and
 then applies `shift`.
 
+`land-2026-10-06-swift-tern` (#10524, slice 3) is quick-tern made
+**drift-aware** with #10528's drift check (`eta::regime`). Quick-tern itself
+is unchanged (ids are immutable). Swift-tern ships the same way: registered,
+not current, tier `candidate`, it models the hold, and it is registered just
+after quick-tern. The method is `eta::conformal_ipcw::calibrate_drift_aware`.
+
+- **The check.** For a stage cell, the residuals `ln(actual / p50)` of
+  twin-otter-b's landings known before `as_of` go through the regime CUSUM
+  (6 h recent window, 7-day baseline spread, `k = 0.5`, `h = 8`). The CUSUM
+  is centred on the p50 shift quick-tern would serve, **not** on the
+  baseline mean (`regime::drift_about`). So a shift the calibrator has
+  already absorbed does not keep the flag up for the 7 days it takes the
+  baseline to turn over.
+- **Adaptive half-life.** When the check trips, the ladder restarts at
+  `6 h / 4 = 1.5 h` (`recency::DRIFTED_DIVISOR`). It still doubles until the
+  effective-N floor of 20 is met.
+- **Inflation is recorded, not applied.** The check is re-run about the
+  shorter fit's p50 shift. The widening #10528 would apply for the drift
+  that is left (`regime::Drift::inflation`, 1 to 2, about p50 on the log
+  scale) goes into `ipcw.drift.withheld_inflation`. Right after a shift, the
+  recent residuals are a mixture of both regimes. So the check stays up
+  after the shorter window has caught up, and applying the widening
+  over-covers. On the x0.1 fixture it would push p25–p75 coverage above
+  0.8, where the served range stays within about 0.42–0.62. Serving it
+  needs a gate and live evidence first, as #10563 found for the residual
+  tracker.
+- **The recompute.** `run_explanation` recomputes the answer by applying
+  `shift`, as for quick-tern.
+- **Otherwise** (not drifted, a pooled cell, or below the check's floor of
+  recent landings) the answer is quick-tern's exactly.
+- **The record.** `calibration.method` is `ipcw_split_conformal_log_drift`.
+  `ipcw.drift{n_recent, n_baseline, center, statistic, drifted,
+  half_life_start_sec, residual_statistic, withheld_inflation}` is present
+  whenever the check ran.
+- **Fixture evidence** (synthetic only, `eta::tests::conformal_ipcw_drift`):
+  - on the no-shift fixture the check never trips, and the answer equals
+    quick-tern's at every half hour from −12 h to +24 h;
+  - the x3, x2, x1/2 and x1/3 shifts never trip it either, so on them
+    swift-tern is quick-tern (`t_cov ≤ 12 h`). A slow-down shows first as
+    landings that have *not* happened yet, which the residual check cannot
+    see; IPCW already handles that side;
+  - a x0.1 speed-up trips it. P25–p75 coverage first reaches 40% within 1 h
+    (quick-tern: 4.5 h). Over the first 12 h the mean `|coverage − 0.5|`
+    is 0.10 (quick-tern: 0.15), and `t_cov ≤ 12 h`.
+
+  Nothing here is live-coverage evidence.
+
 *Deferred* (#10524, #10528):
-- interval inflation when #10528's drift flag is set (no drift signal exists
-  yet);
-- a drift- or regime-driven adaptive half-life;
+- serving the drift inflation, behind a gate that live evidence supports;
+- the drift signal is computed per estimate from the calibration log, not
+  consumed from a fleet-level #10528 drift event (none is emitted yet);
 - history-aware (HAPS) conditioning;
 - other bases (#10508, #10523);
 - the loom-experiments walk-forward acceptance backtest.
@@ -1196,13 +1244,28 @@ for a fit or backtest to report.
   v1 transform exactly as before; all `FEATURES_V2` names use
   `model_features_v2` with `twin_otter.input.priority`. So a v2 explanation
   recomputes from its own record, as v1's does.
-- **Roster history.** The tracker's roster history is set with
-  `Tracker::set_fleet_history` and the fit's with `rows::build_with_context`.
-  Today no reader of the fleet store's `repos.yml` commit history feeds
-  either, so both sides pass `None`. `repo_rank` and
-  `ahead_dispatch_fleet` are then unknown in training and serving alike (the
-  indicators are 1, the standardized columns constant). They are not
-  silently filled from today's file.
+- **Roster history** (`eta::roster_history`, #10586). On the ETA
+  authority, each fleet refresh cycle polls the fleet store (`fleet.repo`,
+  `fleet.ref`) before the fit: `GET repos/{store}/commits?path=repos.yml`,
+  paginated over the last 21 days (the 14-day window plus margin), plus the
+  newest earlier commit as the anchor in force when the window opens. Each
+  revision's `repos.yml` is cached content-addressed under
+  `.loom/state/eta/roster-history/`. The fit (`fit::run`) and the tracker's
+  pass (`Tracker::set_fleet_history`) both load that one cache, so the two
+  sides read one history value.
+  - *Knowability convention.* `committed_at` is the committer date.
+    `observed_at` is set only for a commit first listed by a poll that
+    follows an earlier successful poll: it is that poll's time, a bound that
+    is never early. So a backdated or late-pushed edit counts only from when
+    it was seen. Commits listed by a cache's first poll have no observation
+    and use their commit date. `FitReport.roster_history` counts each basis.
+  - *Unknown, never today's file.* The history is `None` when there is no
+    cache (no `fleet.repo`, or no successful poll yet), when any cached
+    revision is unreadable or not a valid roster, or when the last
+    successful poll is over 24 h old. `repo_rank` and
+    `ahead_dispatch_fleet` are then unknown on both sides, with their
+    indicators at 1. A failed poll leaves the cache and `last_poll_at`
+    unchanged.
 - **`ready_wait`.** keen-wren's start comes from the item's position in the
   work finder's own dispatch plan. The planner sorts that plan with the real
   comparator: level, star, star time, main-red fix, the workspace's
@@ -1210,12 +1273,11 @@ for a fit or backtest to report.
   issue is therefore earlier in the plan and gets an earlier start. No
   second ordering is defined for the ETA to drift from (#10528).
 - **Status.** keen-wren is registered in shadow (tier `candidate`,
-  after `held-heron`, before the twin-otter pair). Still open in #10508: the
-  fleet-store roster-history reader; publishing the v2 file from the captain
-  to other hosts (`fit::publish` carries v1 only, so only the fitting host
-  has a v2 file); the walk-forward backtest against twin-otter-b; and live
-  evidence that the ETA authority, the loom-ui chooser and the nightly
-  scoring pick the new id up.
+  after `held-heron`, before the twin-otter pair). Still open in #10508:
+  publishing the v2 file from the captain to other hosts (`fit::publish`
+  carries v1 only, so only the fitting host has a v2 file, #10586); the
+  walk-forward backtest against twin-otter-b; and live evidence that the ETA
+  authority, the loom-ui chooser and the nightly scoring pick the new id up.
 
 ### Friction predictors and cumulative stage age (#10521)
 
