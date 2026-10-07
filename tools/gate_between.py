@@ -193,7 +193,45 @@ def calibrate(tabs: dict, force_p: float | None = None) -> dict:
     return out
 
 
+def rank_rows(old_bar_context: dict) -> list:
+    """The shipped kit ranked by how much farther from the Fischer target it is
+    than the nearest real MARS recording of the same voice (`ours / MARS best`,
+    both as worst-feature ratios to the same-unit / WEAK bar). DESCRIPTIVE: the
+    MARS side is the most favourable take over all groups, an optimistic bound,
+    and no bar was calibrated, so nothing here is a verdict."""
+    rows = []
+    for s, r in old_bar_context.items():
+        o = r.get("ours")
+        if not o:
+            rows.append({"sound": s, "ours": None})
+            continue
+        m = r["mars_best"]["worst_ratio"]
+        rows.append({"sound": s, "bar": r["old_bar"], "ours": o["worst_ratio"], "ours_feature": o["worst_feature"],
+                     "mars_best": m, "mars_feature": r["mars_best"]["worst_feature"],
+                     "n_takes": r["n_takes"], "mars_pass_old_bar": r["mars_takes_passing_old_bar"],
+                     "ours_over_mars": (o["worst_ratio"] / m if m else math.inf)})
+    return sorted(rows, key=lambda x: -(x.get("ours_over_mars") or -1))
+
+
+def render_table(rows: list) -> str:
+    out = ["| rank | sound | ours / MARS best | ours (worst, vs old bar) | MARS best (worst) | MARS takes | bar |",
+           "|---|---|---|---|---|---|---|"]
+    for i, r in enumerate(rows, 1):
+        if not r["ours"]:
+            out.append(f"| {i} | {r['sound']} | no render | | | | |")
+            continue
+        out.append(f"| {i} | {r['sound']} | **{r['ours_over_mars']:.1f}x** | {r['ours']:.1f} ({r['ours_feature']}) "
+                   f"| {r['mars_best']:.1f} ({r['mars_feature']}) | {r['n_takes']} | {r['bar']} |")
+    return "\n".join(out)
+
+
 def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "table":
+        res = json.loads(pathlib.Path(argv[1]).read_text())
+        print(render_table(rank_rows(res["calibration"]["old_bar_context"])))
+        return 0
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", type=pathlib.Path, required=True)
     ap.add_argument("--tables", type=pathlib.Path, required=True)

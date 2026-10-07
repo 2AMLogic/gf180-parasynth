@@ -102,3 +102,15 @@ def test_bar_has_the_perceptual_floors_and_is_never_a_fit():
     t = _tab({0: [0.3] * 4, 1: [0.3] * 4})
     bar = gb.bar_p(t["rows"], t["floor"], 0.5)
     assert bar["attack"] >= pg.ATTACK_JND_MS and bar["impulse"] >= pg.IMPULSE_FLOOR_DB
+
+
+def test_rank_orders_by_distance_to_the_real_recordings_and_marks_missing_renders():
+    ctx = {"A": {"old_bar": "WEAK", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+                 "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"}, "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}},
+           "B": {"old_bar": "x", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+                 "mars_best": {"worst_ratio": 1.0, "worst_feature": "spec"}, "ours": {"worst_ratio": 9.0, "worst_feature": "pitch"}},
+           "C": {"old_bar": "x", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+                 "mars_best": {"worst_ratio": 1.0, "worst_feature": "spec"}}}
+    rows = gb.rank_rows(ctx)
+    assert [r["sound"] for r in rows] == ["B", "A", "C"]          # 9x, 2x, then the one with no render
+    assert "no render" in gb.render_table(rows)
