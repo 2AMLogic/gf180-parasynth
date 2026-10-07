@@ -206,6 +206,9 @@ def rank_rows(old_bar_context: dict) -> list:
             rows.append({"sound": s, "ours": None})
             continue
         m = r["mars_best"]["worst_ratio"]
+        # a NaN would pass `if m` below and make the sort order undefined (#134)
+        if not (math.isfinite(m) and math.isfinite(o["worst_ratio"])):
+            raise ValueError(f"REFUSED: {s}: non-finite worst ratio (ours {o['worst_ratio']}, MARS best {m})")
         rows.append({"sound": s, "bar": r["old_bar"], "ours": o["worst_ratio"], "ours_feature": o["worst_feature"],
                      "mars_best": m, "mars_feature": r["mars_best"]["worst_feature"],
                      "n_takes": r["n_takes"], "mars_pass_old_bar": r["mars_takes_passing_old_bar"],

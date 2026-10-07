@@ -52,20 +52,47 @@ def test_split_coverage_is_seeded_and_sees_a_homogeneous_pool():
     assert a == b and a["rate"] == pytest.approx(1.0)
 
 
+def _refusing_pool(n_near=14, n_far=6):
+    """A pool whose split coverage is below COVERAGE at every p in P_GRID but
+    above it at p = 0.75 and 1.0, so WIDENING past the grid would pass.
+
+    Keys are ranked by `spec`. Each of the n_near nearest keys carries a
+    private excess on one non-spec feature (value 5 + rank, cycling through the
+    six), which no nearer key covers; the n_far farthest keys are large on every
+    non-spec feature. So the best take of one half passes the other half's bar
+    only when that bar's matched set reaches a far key, and that needs a large
+    fraction of the half. Measured (SPLITS=200): mean rate 0.005, 0.005, 0.045,
+    0.045, 0.155, 0.458 over P_GRID; 0.917 at 0.75; 1.0 at 1.0."""
+    free = [f for f in pg.FEATURES if f not in ("spec", "pitch", "pitch_shape", "modulation")]
+    specs = [0.1 + 0.01 * r for r in range(n_near + n_far)]
+    tab = _tab({0: specs[0::2], 1: specs[1::2]})
+    for r in tab["rows"]:
+        rank = round((r["d"]["spec"] - 0.1) / 0.01)
+        if rank < n_near:
+            r["d"][free[rank % len(free)]] = 5.0 + rank
+        else:
+            for f in free:
+                r["d"][f] = 1000.0
+    return tab
+
+
 def test_selection_refuses_rather_than_widen_when_halves_disagree():
-    """Defeating input: every other key sits 100x farther on `spec`, so a bar
-    built from one half cannot cover the best take of the other. The answer is
-    REFUSED with no bars, not a looser p."""
-    near = [0.1 if i % 2 else 50.0 for i in range(20)]
-    # the OTHER features also alternate: the best take of a half is not covered
-    rows = _tab({0: near, 1: near})
-    for i, r in enumerate(rows["rows"]):
-        r["d"]["flatness"] = 0.1 if i % 2 else 99.0
-    cal = gb.calibrate({"BD": rows})
-    sel = cal["selection"]
-    assert "BD" in sel["eligible"]
-    # a looser p must never be chosen outside P_GRID
-    assert cal["p"] is None or cal["p"] in gb.P_GRID
+    """The answer is REFUSED with no bars, not a looser p.
+
+    Defeating input (verification rule 8): `_refusing_pool`, where every p in
+    P_GRID misses COVERAGE but p = 0.75 and 1.0 reach it. Mutation check, done
+    when this test was written: selecting from P_SWEEP instead of P_GRID in
+    `choose_p` turns this test red (it calibrates at 0.75); the previous version
+    of this test passed under that mutation."""
+    cal = gb.calibrate({"BD": _refusing_pool()})
+    by = cal["selection"]["by_p"]
+    assert "BD" in cal["selection"]["eligible"]
+    # the input really is one that widening would rescue: otherwise this proves nothing
+    assert all(by[q]["mean_rate"] < gb.COVERAGE for q in gb.P_GRID)
+    assert any(by[q]["mean_rate"] >= gb.COVERAGE for q in gb.P_SWEEP if q not in gb.P_GRID)
+    assert cal["status"].startswith("REFUSED")
+    assert cal["selection"]["chosen"] is None and cal["p"] is None
+    assert cal["sounds"] == {}                                  # no bars emitted
 
 
 def test_calibrates_homogeneous_pool_validates_and_labels_weak_sounds():
@@ -114,3 +141,15 @@ def test_rank_orders_by_distance_to_the_real_recordings_and_marks_missing_render
     rows = gb.rank_rows(ctx)
     assert [r["sound"] for r in rows] == ["B", "A", "C"]          # 9x, 2x, then the one with no render
     assert "no render" in gb.render_table(rows)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+@pytest.mark.parametrize("side", ["ours", "mars_best"])
+def test_rank_refuses_a_non_finite_ratio_rather_than_sort_it(bad, side):
+    """A NaN ratio makes the sort order undefined (#134's class); refuse it."""
+    ctx = {"A": {"old_bar": "x", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+                 "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"},
+                 "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}}}
+    ctx["A"][side]["worst_ratio"] = bad
+    with pytest.raises(ValueError, match="non-finite"):
+        gb.rank_rows(ctx)
