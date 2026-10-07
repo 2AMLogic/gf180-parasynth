@@ -1028,7 +1028,7 @@ def test_coupling_reset_off_reproduces_the_previous_stream_exactly():
     w, n = _stim_cy_bd_cp()
     d, dm, b = _play(w, n)
     assert _digest(dm, b) == GOLDEN_BUSES_SHA
-    assert d.couple_en == 0 if hasattr(d, "couple_en") else True
+    assert d.couple_en == 0, "reset-off: nothing wrote the enable"
     tw, n = _top_writes()
     out = stm.SynthTopModel().run(tw, n)
     assert _digest(out["sample"], out["dmix"], out["body"], out["dacc"], out["i2s"]) == GOLDEN_TOP_SHA

@@ -1301,7 +1301,7 @@ def report_k_sweep(path=None):
     Grid and rule come from the committed plan, never from this function, and
     the sweep REFUSES unless the plan is committed and unmodified: a grid
     stated after the results is not a grid. Also refuses unless the CY's
-    baseline is the standing offset the sweep is about (phi >= 0.8) and unless
+    baseline is the standing offset the sweep is about (beta >= 0.9, window-stable) and unless
     the K = 10 point through the experimental bus placement equals the
     production register path bit for bit, so the swept thing is the thing that
     ships. Writes a fixed-width table for tools/sensitivity.py to re-extract.
@@ -1334,6 +1334,9 @@ def report_k_sweep(path=None):
     lines = [f"Issue #551 COUPLE_K sweep -- written by `python3 tools/probes/dc_blocker.py --k-sweep`.",
              f"Grid, rule and prediction: docs/sensitivity/coupling-k-plan.json (committed before this ran).",
              f"provenance: {provenance()}",
+             f"wrong-then-right: {len(plan.get('amendments', []))} figure(s) in the plan were wrong before they were right "
+             "(phi 0.888 quoted from the 0.60 s window, 0.391 at this 2.40 s window; caught by this instrument's own "
+             "precondition before any point was rendered); see `amendments` in the plan",
              f"CY baseline phi (f = 0 bin, window-dependent) = {phi:.4f}, beta (below the K = 10 corner) = {beta:.4f}; sub20 baseline {band_energy_dbfs(base, *SUB20):.2f} dBfs",
              "", "coupling_k -- CY residual sub-20 Hz energy against K, bus placement, uncoupled = 100",
              "COUPLE_K fc_hz sub20_db sub20_resid_pct steady_db steady_resid_pct"]
