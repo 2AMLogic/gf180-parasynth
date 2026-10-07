@@ -248,7 +248,7 @@ def calibrate(tabs: dict, force_k: int | None = None) -> dict:
         cal = matched(t["rows"], 1, k)
         bar = make_bar(cal, t["floor"])
         if bar is None:
-            row["status"] = "NO-BAR: calibration group has no readable take"
+            row["status"] = "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
             out["sounds"][s] = row
             continue
         row["bar"] = bar
