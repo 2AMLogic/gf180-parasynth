@@ -73,7 +73,7 @@ OUT_DIR = os.path.join(ROOT, "docs", "res-tuning")
 
 # ---- the candidate's dials (each one a registered sensitivity record) -------
 LAW_DEGREE = 3          # 0 = shipped CUT_TRIM * fcr; 3 / 4 = refitted polynomial
-CORR_ENTRIES = 9        # 0 = no correction; else 2^b + 1 entries over res 1..2
+CORR_ENTRIES = 33       # 0 = no correction; else 2^b + 1 entries over res 1..2 (selected: sweeps.txt)
 REFIT_ENTRIES = 1       # 1 = the 129 coefficient entries refitted for interpolation
 
 # ---- the correction's integer contract --------------------------------------
