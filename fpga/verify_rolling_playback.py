@@ -115,10 +115,14 @@ def intended(fixture: str, preset: str | None = None,
 
 # ---- one run of the real CLI on the simulated device --------------------------
 class Harness:
-    def __init__(self, epoch: int = 0):
+    def __init__(self, epoch: int = 0, *, reply_delay_s: float = 0.0,
+                 tx_delay_s: float = 0.0):
+        # the two transport latencies (#306): device -> host replies and
+        # host -> device bytes. Both default to zero, the historical harness.
         self.clock = dev.SimClock()
-        self.sim = dev.UartDeviceSim(epoch_frame=epoch, clock=self.clock)
-        self.ser = dev.SimSerial(self.sim)
+        self.sim = dev.UartDeviceSim(epoch_frame=epoch, clock=self.clock,
+                                     reply_delay_s=reply_delay_s)
+        self.ser = dev.SimSerial(self.sim, tx_delay_s=tx_delay_s)
         self.bridge = None
 
     def factory(self, _port, baud):

@@ -1,0 +1,413 @@
+{
+ "what": "#306 baseline: the production CLI's held-note path on the scripted device BEFORE the fix",
+ "tree": "468339aa1fc252c93b79ab0d9dedd41d9fa5fcf5",
+ "dirty_paths": [
+  " M fpga/uart_device_sim.py",
+  " M fpga/uart_host.py",
+  " M fpga/verify_rolling_playback.py",
+  "?? fpga/hold_timing.py",
+  "?? fpga/test_hold_timing.py",
+  ""
+ ],
+ "command": ".venv/bin/python fpga/hold_timing.py measure --key <key>",
+ "frames": "device frames on the scripted device's unwrapped timeline (epoch 0, zero transport latency)",
+ "runs": {
+  "held-default": {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_timeline": [
+    {
+     "what": "status reply read",
+     "frame16": 9,
+     "device_frame": 41
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 0,
+     "frame16": 9,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 29,
+     "errs": 0,
+     "device_frame": 1016
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 35,
+     "errs": 0,
+     "device_frame": 1976
+    },
+    {
+     "what": "status reply read",
+     "frame16": 1985,
+     "device_frame": 2018
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 1976,
+     "frame16": 1985,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 2069,
+     "device_frame": 2101
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 36,
+     "errs": 0,
+     "device_frame": 2101
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 2018,
+     "frame16": 2069,
+     "rtt_frames": 83.33
+    },
+    {
+     "what": "status reply read",
+     "frame16": 3070,
+     "device_frame": 3103
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 3061,
+     "frame16": 3070,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 4072,
+     "device_frame": 4104
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 4063,
+     "frame16": 4072,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5074,
+     "device_frame": 5106
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5064,
+     "frame16": 5074,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5115,
+     "device_frame": 5148
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5106,
+     "frame16": 5115,
+     "rtt_frames": 41.67
+    }
+   ],
+   "host_record": null,
+   "device": {
+    "on": 1209,
+    "off": 4364,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 3155,
+   "hold_error": 1235,
+   "planned_on": 1243,
+   "planned_off": 4364,
+   "planned_hold": 3121,
+   "gate_on_error": 34,
+   "gate_off_error": 0,
+   "verdict": "FAIL",
+   "reason": "exit 0 with no hold bound in the host's record; device held 3155 frames for 1920 (error +1235)"
+  },
+  "held-m5a-saw": {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-saw",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_timeline": [
+    {
+     "what": "status reply read",
+     "frame16": 9,
+     "device_frame": 41
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 0,
+     "frame16": 9,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 29,
+     "errs": 0,
+     "device_frame": 1016
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 35,
+     "errs": 0,
+     "device_frame": 1976
+    },
+    {
+     "what": "status reply read",
+     "frame16": 1985,
+     "device_frame": 2018
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 1976,
+     "frame16": 1985,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 2069,
+     "device_frame": 2101
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 36,
+     "errs": 0,
+     "device_frame": 2101
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 2018,
+     "frame16": 2069,
+     "rtt_frames": 83.33
+    },
+    {
+     "what": "status reply read",
+     "frame16": 3070,
+     "device_frame": 3103
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 3061,
+     "frame16": 3070,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 4072,
+     "device_frame": 4104
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 4063,
+     "frame16": 4072,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5074,
+     "device_frame": 5106
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5064,
+     "frame16": 5074,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5115,
+     "device_frame": 5148
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5106,
+     "frame16": 5115,
+     "rtt_frames": 41.67
+    }
+   ],
+   "host_record": null,
+   "device": {
+    "on": 1209,
+    "off": 4364,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 3155,
+   "hold_error": 1235,
+   "planned_on": 1243,
+   "planned_off": 4364,
+   "planned_hold": 3121,
+   "gate_on_error": 34,
+   "gate_off_error": 0,
+   "verdict": "FAIL",
+   "reason": "exit 0 with no hold bound in the host's record; device held 3155 frames for 1920 (error +1235)"
+  },
+  "held-m5a-pulse": {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-pulse",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_timeline": [
+    {
+     "what": "status reply read",
+     "frame16": 9,
+     "device_frame": 41
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 0,
+     "frame16": 9,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 29,
+     "errs": 0,
+     "device_frame": 1016
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 35,
+     "errs": 0,
+     "device_frame": 1976
+    },
+    {
+     "what": "status reply read",
+     "frame16": 1985,
+     "device_frame": 2018
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 1976,
+     "frame16": 1985,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 2069,
+     "device_frame": 2101
+    },
+    {
+     "what": "acks/errs read",
+     "acks": 36,
+     "errs": 0,
+     "device_frame": 2101
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 2018,
+     "frame16": 2069,
+     "rtt_frames": 83.33
+    },
+    {
+     "what": "status reply read",
+     "frame16": 3070,
+     "device_frame": 3103
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 3061,
+     "frame16": 3070,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 4072,
+     "device_frame": 4104
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 4063,
+     "frame16": 4072,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5074,
+     "device_frame": 5106
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5064,
+     "frame16": 5074,
+     "rtt_frames": 41.67
+    },
+    {
+     "what": "status reply read",
+     "frame16": 5115,
+     "device_frame": 5148
+    },
+    {
+     "what": "status()",
+     "sent_device_frame": 5106,
+     "frame16": 5115,
+     "rtt_frames": 41.67
+    }
+   ],
+   "host_record": null,
+   "device": {
+    "on": 1209,
+    "off": 4364,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 3155,
+   "hold_error": 1235,
+   "planned_on": 1243,
+   "planned_off": 4364,
+   "planned_hold": 3121,
+   "gate_on_error": 34,
+   "gate_off_error": 0,
+   "verdict": "FAIL",
+   "reason": "exit 0 with no hold bound in the host's record; device held 3155 frames for 1920 (error +1235)"
+  }
+ }
+}

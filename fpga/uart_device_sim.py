@@ -515,30 +515,52 @@ class SimSerial:
     timeout, whichever comes first. The host code under test is the real
     Bridge -- only the transport and the clock are substituted."""
 
-    def __init__(self, sim: UartDeviceSim, *, boot: bool = True):
+    def __init__(self, sim: UartDeviceSim, *, boot: bool = True,
+                 tx_delay_s: float = 0.0):
         if sim._clock is None:
             raise ValueError("SimSerial needs a UartDeviceSim built with clock=")
+        if tx_delay_s < 0:
+            raise ValueError(f"tx_delay_s {tx_delay_s} < 0: a link cannot deliver "
+                             "bytes before they are written")
         self.sim = sim
         self.clock = sim._clock
         self.timeout = 1.0
         self.tx_log: list = []                  # (t_written, bytes): the host's bytes
         self.mutate = None                      # optional fn(bytes) -> bytes on the wire
+        # host -> device transport latency (#306): bytes written at t reach
+        # the device's RX at t + tx_delay_s, in write order. The device's
+        # reply latency is the sim's own `reply_delay_s`; together they are
+        # the delayed-transport seam. Protocol semantics are unchanged.
+        self.tx_delay_s = float(tx_delay_s)
+        self._in_flight: list = []              # (t_arrival, wire bytes), FIFO
         sim._t0 = sim._cursor = sim._last_byte_t = self.clock.t
         sim._wire_next_t = None
         if boot:
             sim._send(bytes([BOOT]), delay=False)
 
     def _advance(self) -> None:
+        # bytes still in transit land on the device's RX at their arrival
+        # instants, in order, on the device's chronological timeline
+        while self._in_flight and self._in_flight[0][0] <= self.clock.t:
+            t_arr, wire = self._in_flight.pop(0)
+            self.sim._advance(t_arr)
+            self._land(t_arr, wire)
         self.sim._advance(self.clock.t)
+
+    def _land(self, t: float, wire: bytes) -> None:
+        sim = self.sim
+        if not sim._wire_buf:
+            sim._wire_next_t = max(t, sim._cursor) + sim._byte_time
+        sim._wire_buf += wire
 
     def write(self, data: bytes) -> int:
         self._advance()
         self.tx_log.append((self.clock.t, bytes(data)))
         wire = self.mutate(bytes(data)) if self.mutate else bytes(data)
-        sim = self.sim
-        if not sim._wire_buf:
-            sim._wire_next_t = max(self.clock.t, sim._cursor) + sim._byte_time
-        sim._wire_buf += wire
+        if self.tx_delay_s:
+            self._in_flight.append((self.clock.t + self.tx_delay_s, wire))
+        else:
+            self._land(self.clock.t, wire)
         return len(data)
 
     def flush(self) -> None:
@@ -561,6 +583,7 @@ class SimSerial:
             # completing, or the device consuming a wire byte (which may
             # produce one)
             cands = [t for t, _b in self.sim.outbox]
+            cands += [t for t, _b in self._in_flight]
             if self.sim._wire_buf and self.sim._wire_next_t is not None:
                 cands.append(self.sim._wire_next_t)
             nxt = min([deadline] + [t for t in cands if t > self.clock.t])

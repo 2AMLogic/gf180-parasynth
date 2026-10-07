@@ -284,6 +284,48 @@ SEND_GATE_FRAMES = 120             # the send gate: send once the first due is a
                                    # queued event: margin and queue depth are
                                    # coupled, and the preflight holds both.
 
+# ---- the held-note hold (#306) ----------------------------------------------
+# A held note's gate-on is a LIVE write: the device applies it at its
+# acceptance frame + 1, and nothing on the wire timestamps that frame (an ACK
+# means "accepted into a queue", not "applied in frame N"). The gate-off is a
+# SCHEDULED event, which lands in exactly its due frame. So the hold the
+# musician gets is (gate-off due) - (gate apply frame), and the host must
+# know the second number to choose the first.
+#
+# The host no longer estimates it from an ACK drain and a STATUS minus its
+# round trip (the historical path, kept as the HOLD_ACK_DRAIN control: on the
+# scripted device it planned 3121 frames for a 1920-frame request and the
+# device held 3155). It BRACKETS it on the device's own timeline instead: a
+# STATUS query goes on the wire immediately before the gate write and another
+# immediately after it, in the same burst. Each STATUS reply carries the
+# device frame in which that query was ACCEPTED, so with the gate's 8 bytes
+# between them the gate's acceptance is bounded from both sides by device
+# frames -- no host clock, no USB latency, no read-loop granularity enters
+# the arithmetic (`gate_bracket` below has the derivation).
+#
+# THE DECLARED DOMAIN, fixed before any candidate was evaluated:
+#   * a per-run bound is DERIVED (`gate_bracket`) from the two STATUS frames,
+#     the byte time at +-HOLD_BAUD_TOLERANCE and the contract's +-1 frame on a
+#     live write's apply frame. It is reported, never assumed;
+#   * HOLD_BOUND_MAX_FRAMES is the widest per-run bound the host accepts. A
+#     gapless wire gives 1-2 frames of acceptance bracket plus the contract's
+#     +-1 apply jitter; 8 frames (0.17 ms, under two byte times) admits a
+#     sub-byte stall between the three packets and nothing more. A wider
+#     bracket means the bytes did not go out as one burst, and the hold is
+#     REFUSED (after the note is released -- see `_release_now`);
+#   * the hold itself must lie in [hold_min_frames(baud), HOLD_MAX_FRAMES]:
+#     below the minimum the gate-off packet cannot be accepted before its own
+#     due even on a zero-latency link; above the maximum its due leaves the
+#     16-bit wrap window. Both REFUSE before a byte is sent;
+#   * the gate-off's own acceptance is the DEVICE's verdict: ACK means it was
+#     queued ahead of its due and lands exactly there; ERR 3 (late) means the
+#     deadline was missed -- the device still releases the note one frame
+#     later, loudly, and the host REFUSES the hold.
+HOLD_BOUND_MAX_FRAMES = 8
+HOLD_BAUD_TOLERANCE = 0.02          # sender baud vs nominal, either way
+LIVE_APPLY_JITTER_FRAMES = 1        # the contract: live write at accept+1, +-1
+HOLD_MAX_FRAMES = WRAP_HALF - 2048  # the gate-off due stays wrap-safe
+
 
 class Refused(Exception):
     """A first-class outcome, distinct from pass and fail: the link, the
@@ -415,6 +457,74 @@ def byte_cycles(baud: int) -> int:
     re-synchronises at every start bit, so the difference never accumulates."""
     div = (CLK_HZ + baud // 2) // baud
     return BITS_PER_BYTE * div
+
+
+def _byte_frames(baud: int, tolerance: float = 0.0) -> tuple:
+    """(shortest, longest) duration of one 8N1 byte on the device's RX, in
+    frames, for a sender whose baud is within +-tolerance of `baud`."""
+    nominal = BITS_PER_BYTE * SR / baud
+    return nominal / (1 + tolerance), nominal / (1 - tolerance)
+
+
+def gate_bracket(pre_frame: int, post_frame: int, *, baud: int = DEFAULT_BAUD,
+                 gate_bytes: int = 8, query_bytes: int = 2) -> dict:
+    """The device frame a live gate write applies in, bracketed by the STATUS
+    replies to the queries sent immediately before (`pre_frame`) and after
+    (`post_frame`) it in one burst. Frames are the 16-bit STATUS values.
+
+    Derivation (device time t in frames; STATUS reports the frame REGISTER,
+    audio frame + 1, sampled when the query is ACCEPTED):
+
+      query-before accepted at t_p, with floor(t_p) + 1 = pre_frame
+      gate accepted at t_g     >= t_p + gate_bytes  * b_min   (its bytes follow)
+      query-after  accepted t_q >= t_g + query_bytes * b_min  (and so on)
+      with floor(t_q) + 1 = post_frame
+
+    Every packet is accepted at the same point of its last byte, so the
+    differences are whole byte times when the burst is gapless and LONGER
+    when it is not -- a gap can only widen the bracket, never move the truth
+    outside it. Hence t_g in [pre - 1 + 8 b_min, post - 2 b_min), the gate's
+    acceptance frame A = floor(t_g) in [A_lo, A_hi], and its apply frame
+    A + 1 +- LIVE_APPLY_JITTER_FRAMES.
+
+    The estimate is the bracket's midpoint and `bound` is the largest
+    distance from it to either end: |true apply - estimate| <= bound.
+
+    REFUSES (Refused) a bracket the protocol cannot produce: the two
+    queries less than the gate's bytes apart on the device (a frozen or
+    forged counter), or further apart than the wrap window can order."""
+    import math
+    span = (post_frame - pre_frame) & 0xFFFF
+    if span >= WRAP_HALF:
+        raise Refused(f"the gate's STATUS bracket runs backwards (f{pre_frame} -> "
+                      f"f{post_frame}): the device's frame counter cannot be ordered")
+    b_min, _b_max = _byte_frames(baud, HOLD_BAUD_TOLERANCE)
+    a_lo = math.floor(-1 + gate_bytes * b_min)            # relative to pre_frame
+    a_hi = math.ceil(span - query_bytes * b_min) - 1
+    if a_hi < a_lo:
+        raise Refused(f"the gate's STATUS bracket is {span} frames wide, less than "
+                      f"the {gate_bytes + query_bytes} bytes it must contain: the "
+                      "device's frame counter did not advance at the wire's rate")
+    g_lo = pre_frame + a_lo + 1 - LIVE_APPLY_JITTER_FRAMES
+    g_hi = pre_frame + a_hi + 1 + LIVE_APPLY_JITTER_FRAMES
+    est = (g_lo + g_hi + 1) // 2
+    return {"apply_lo": g_lo, "apply_hi": g_hi, "estimate": est,
+            "bound": max(est - g_lo, g_hi - est), "span": span}
+
+
+def hold_min_frames(baud: int = DEFAULT_BAUD) -> int:
+    """The shortest hold the protocol can deliver on a ZERO-latency link.
+
+    After the gate is accepted (t_g), the query behind it takes 2 bytes, its
+    8-byte STATUS reply must reach the host before the gate-off's due can be
+    chosen, and the gate-off's own 10-byte event packet must then be accepted
+    at least MIN_LEAD_FRAMES before its due: 20 byte times at the slowest
+    tolerated baud. The due is the gate's ESTIMATED apply frame + hold, so the
+    estimate's own worst case (HOLD_BOUND_MAX_FRAMES) is added. Any real link
+    latency comes on top, and is caught by the device's own late ERR."""
+    import math
+    _b_min, b_max = _byte_frames(baud, HOLD_BAUD_TOLERANCE)
+    return math.ceil(20 * b_max) + 1 + MIN_LEAD_FRAMES + HOLD_BOUND_MAX_FRAMES
 
 
 def plan(commands: list, *, baud: int = DEFAULT_BAUD, start_frame: int = 0,
