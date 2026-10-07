@@ -341,8 +341,8 @@ finding:
 
 At p = 1.0 the bar is the envelope of every real recording of the voice, which still does not fit the shipped or the
 rejected cymbal, but only by 1.27-1.29x, so that is a thin margin and not a separation. A bar loose enough to pass an
-untouched real recording is loose enough to miss 13 % of the seeded defects (BD and SD decay, every slide on a tom or
-conga, every wrong-pitch on a voice with a spread of tunings), and a bar tight enough to catch them fails untouched real
+untouched real recording is loose enough to miss 13 % of the seeded defects (decay on BD, SD, MA and CY; slides on BD, LT, LC, MC and HT; wrong pitch on SD,
+LT, MT, RS, MA and CY; SD brighter), and a bar tight enough to catch them fails untouched real
 recordings. **No p satisfies Q2 and Q4 together.** The #374 fixture was regenerated from `cae5f75` on the box and
 matches `prove.json`'s recorded hashes byte for byte (`ffc30d3da9c176ec`, `3078bf088ea5cbcf`), so the control is the
 same signal.
@@ -385,10 +385,10 @@ ratios are against the old same-unit / WEAK bar, so a WEAK row and a neighbour r
 | 16 | SD | **0.7x** | 2.1 (attack) | 2.9 (spec) | 216 | 808-neighbour |
 
 Read it with section 4 (rank by the old bar: MA, RS, BD, MC, LC, CP, CL, LT, CB, MT, CH, HC, HT, CY, OH, SD). **Both
-orderings put MA, RS and the toms/congas' pitch trajectory first, and SD and CB (and HT, CY) last.** SD and CB are
-already inside the spread of real recordings (0.7x, 1.0x). The pre-registered rule did not select this ordering, and the
-two orderings differ in the middle, which is why the fix list in the PR is by old-bar rank within each
-bar group.
+orderings put MA and RS at the top and SD last.** SD and CB are already inside the spread of real recordings (0.7x,
+1.0x). The two orderings differ in the middle (BD is 3rd by the old bar and 11th relative to real recordings, because
+real recordings are also far from the Fischer BD on pitch). The pre-registered rule selected neither ordering; the
+follow-up issues are scoped from both.
 
 ### Wrong-then-right, this record: 2
 
