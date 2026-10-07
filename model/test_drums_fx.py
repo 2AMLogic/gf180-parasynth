@@ -871,11 +871,18 @@ def _stim_cy_bd_cp(n=36000):
                           (14000, dx.CY, 0.7)], kit), n
 
 
+_PLAY_MEMO = {}          # the model is deterministic; the controls harness clears this per mutant
+
+
 def _play(writes, n, extra=()):
-    d = dx.DrumsFx()
     w = sorted(list(writes) + list(extra), key=lambda t: t[0])
-    dm, b = d.play(w, n)
-    return d, np.asarray(dm, dtype=np.int64), np.asarray(b, dtype=np.int64)
+    key = (tuple(map(tuple, w)), n)
+    if key not in _PLAY_MEMO:
+        d = dx.DrumsFx()
+        dm, b = d.play(w, n)
+        _PLAY_MEMO[key] = (d, np.asarray(dm, dtype=np.int64), np.asarray(b, dtype=np.int64))
+    d, dm, b = _PLAY_MEMO[key]
+    return d, dm.copy(), b.copy()
 
 
 def _digest(*arrs):
@@ -995,13 +1002,12 @@ def test_coupling_widths_are_the_proven_bounds_and_the_near_limit_hits_them():
         lo, hi = -(1 << (nb - 1)), (1 << (nb - 1)) - 1
         assert (blk.acc_limit_bits, blk.out_limit_bits) == (nb + K, nb + 1)
         ys = [blk.step(hi) for _ in range(30000)]
-        assert blk.acc == hi * 1024 + 1023 or blk.acc >= hi * 1024
-        assert hi * 1024 <= blk.acc <= hi * 1024 + 1023
+        assert blk.acc == hi * 1024                           # from below, hold hi lands exactly on hi * 2^K
         y = blk.step(lo)                                       # full-scale reversal: x - d with d at the other rail
         assert y == lo - hi and -(1 << nb) < y, (y, lo - hi)
         assert not (-(1 << (nb - 1)) <= y < (1 << (nb - 1))), "output fits in the INPUT width: the +1 bit would be unneeded"
         ys = [blk.step(lo) for _ in range(30000)]
-        assert blk.acc == lo * 1024
+        assert blk.acc == lo * 1024 + 1023                    # from above, hold lo rests at the TOP of lo's cell (floor)
         y = blk.step(hi)
         assert y == hi - lo and y < (1 << nb)
         # alternating extremes, either phase, for a long time
@@ -1009,7 +1015,7 @@ def test_coupling_widths_are_the_proven_bounds_and_the_near_limit_hits_them():
             y = blk.step(hi if i % 2 == 0 else lo)
             assert -(1 << nb) < y < (1 << nb)
             assert -(1 << (nb + K - 1)) <= blk.acc < (1 << (nb + K - 1))
-        assert blk.acc_bits <= nb + K and blk.out_bits <= nb + 1
+        assert blk.acc_bits == nb + K and blk.out_bits == nb + 1, "the bound is not tight: a narrower word would do (or is it exceeded?)"
     # outside the declared width is a contract violation, refused loudly
     blk = dx.DrumsFx().cc_dmix
     with pytest.raises(AssertionError):
@@ -1079,6 +1085,7 @@ def test_coupling_charge_survives_hits_chokes_and_retunes():
     for a, v in dx.kit_808():
         d.write(a, v)
     d.write(A_COUPLE, 1)
+    d.write(dx.A_ACCENT + dx.CY, 32768); d.write(dx.A_ACCENT + dx.BD, 32768)
     d.write(dx.A_STOPS, 1 << dx.CY)
     for _ in range(3000):
         d.frame()
@@ -1107,7 +1114,7 @@ def test_coupling_reset_clears_charge_and_enable_voice_reset_does_not():
     d = dx.DrumsFx()
     for a, v in dx.kit_808():
         d.write(a, v)
-    d.write(A_COUPLE, 1); d.write(dx.A_STOPS, 1 << dx.CY)
+    d.write(A_COUPLE, 1); d.write(dx.A_ACCENT + dx.CY, 32768); d.write(dx.A_STOPS, 1 << dx.CY)
     for _ in range(3000):
         d.frame()
     assert d.cc_dmix.acc != 0

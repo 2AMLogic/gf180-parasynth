@@ -1282,6 +1282,12 @@ sample = sat16( (v · vol + dmix · dvol + body · bvol) >> 15 )
              exact sum of three products (under 2^38), one arithmetic shift, ONE clamp
 ```
 
+(**Revision 16**: with the coupling of 15.10 enabled the two drum terms are the
+COUPLED buses, `dmix` 23 bits and `body` 20 bits signed, so the exact sum is
+under 2^38 + 2^36 < 2^39 and needs **40 bits signed**, one more than the
+uncoupled sum's 39. The shift and the single clamp are unchanged and stay
+after the sum.)
+
 With `dvol = bvol = 0` — or with no drum section — this is rev 3's
 `sat16((v · vol) >> 15)` bit for bit, and every rev-3 reference sequence is
 unchanged. Rev 5 adds the two drum terms (DR 0008) so that the two drum buses
@@ -1456,6 +1462,7 @@ legal; nothing is rejected for range. Writes apply at frame boundaries by
 | `0x00` | `STOPS` | 11 | the stop mask; bit s is stop s (15.2) |
 | `0x10 + s` | `ACCENT[s]` | 16 u | Q0.15 strike level of stop s; 32768 = 1.0, 65535 = 2.0 (15.3) |
 | `0x20 + i` | `OSC_INC[i]` | 24 u | phase increment of square oscillator i = 0..5 (15.4) |
+| `0x30` | `COUPLE` | 1 | **revision 16** (15.10): bit 0 enables the shared-bus DC coupling, K = 10 fixed; bits 31..1 reserved, ignored on write; resets to 0 = bypass |
 | `0x40 + 4e` | `ENV_CTL[e]` | 27 | `[3:0] stop`, `[7:4] choke`, `[15:8] hold`, `[17:16] bursts`, `[26:18] period` (15.3); a stop or choke index ≥ `N_STOPS` means never |
 | `0x41 + 4e` | `ENV_PEAK[e]` | 24 u | Q0.24 level at a strike, before the accent |
 | `0x42 + 4e` | `ENV_RATE[e]` | 16 u | Q0.16 decay rate, the voice's `rate` (8.3) |
@@ -1908,6 +1915,9 @@ revision 14's `ENV_FRATE`) and every state register (including `fcap`) to 0, exc
 path is OFF, every mode has zero coefficients and amp, no stop can fire
 (no bit is set), and both buses are 0 until the host writes a kit. The
 output stage's `dvol` and `bvol` reset to 0 with the voice's `vol` (14).
+**Revision 16 (15.10)**: the same RESET (`0xFF`, or the hardware reset) clears
+`COUPLE` to 0 and both coupling charge registers to 0. The voice page's RESET
+(`SEC` = 0, `0x23`) touches neither.
 
 ### 15.9 Cycles and area (informative)
 
@@ -1947,6 +1957,93 @@ with 4; 0.188 for rev 3's four with two), `drum_kit` 0.646 mm² (0.605 with
 `synth -booth`) and 0.461 mm² at 8 modes / 8 envelopes / 12 paths. The
 cost is state and its muxing, ≈120 bits per envelope and ≈100 per mode,
 not the multipliers. Whether the product takes 8 or 12 modes is 17.13.
+
+
+### 15.10 Shared-bus DC coupling (revision 16; DR 0025; #551, part of #510)
+
+`drums_fx.DrumsFx` (`write`, `frame`) and `drums_fx.DcBlockFx` are the
+specification of this subsection; `model/test_drums_fx.py::test_coupling_*` is
+its executable form and `tools/probes/coupling_controls.py` its injected
+defects. **No RTL implements it yet (#552)** and no sound claim is made here
+(#553): this subsection fixes the arithmetic so the RTL and the acoustic
+qualification have one thing to be measured against.
+
+**Register.** `COUPLE` at drum-page address `0x30`. Bit 0 is the enable; bits
+31..1 are reserved: ignored on write, with no read-back. Address `0x30` was
+audited against the model map (`0x00`, `0x10..0x1A`, `0x20..0x25`,
+`0x40..0x87`, `0x90..0xA6`, `0xB0..0xEF`, `0xFF`) and against the decoder in
+`rtl-sketch/drum_regs.v` (no literal `8'h30`, no range containing it). It is
+inside the unused gap `0x26..0x3F`, away from both blocks that have already
+grown once. Reset value 0 (bypass). A write to `COUPLE` changes nothing else.
+
+**The filter** (`DcBlockFx`, K = 10 fixed; it is not a register):
+
+```
+d   = acc >> 10            arithmetic shift: floor, not truncation toward zero
+y   = x - d
+acc = acc + y              (no saturation, no wrap: see the widths)
+```
+
+`H(z) = (1 - z^-1) / (1 - (1 - 2^-10) z^-1)`: an exact zero at DC, a pole at
+`1 - 2^-10`, corner `SR / (2 pi 2^10)` = 7.457 Hz at 48 kHz. Constants: `+1`
+gives 1024 samples of `1` then `0`; `-1` gives one sample of `-1` then `0`
+(floor is not odd-symmetric); an impulse below 2^10 is never discharged
+(`y = 0` thereafter, `acc` keeps it). For a constant `x` the charge rests in
+`[x 2^10, x 2^10 + 2^10 - 1]` with `y = 0`: from rest a positive constant stops
+at the bottom of that interval, a negative one at the top.
+
+**Placement.** One filter per bus, two total, on the two buses that leave the
+drum section: `dmix` (22 bits signed, exact, 15.5) and `body` (19 bits signed,
+15.6), each AFTER the bank and BEFORE the output stage's multiplications and
+its single clamp (12). Nothing else is filtered: not an excitation, not a
+path, not the voice's `v`. Both buses are filtered or neither is; there is one
+enable.
+
+**Widths** (`n` = the declared bus width, `K` = 10; bounds proven in the
+`DcBlockFx` docstring and driven to their ends by the near-limit tests):
+
+| signal | `dmix` | `body` | rule |
+|---|---:|---:|---|
+| input `x` | 22 s | 19 s | `-2^(n-1) <= x < 2^(n-1)`; outside is a contract violation (the model asserts; RTL is not required to saturate) |
+| charge `acc` | 32 s | 29 s | `n + K` bits; the update `acc - floor(acc / 2^K)` is nondecreasing, so `[-2^(n+K-1), 2^(n+K-1) - 1]` is closed; reachable extremes `hi 2^K` and `lo 2^K + 2^K - 1` need every bit |
+| output `y` | 23 s | 20 s | `n + 1` bits: `y` spans `lo - hi .. hi - lo`; a full-scale reversal reaches it |
+
+The output stage's exact sum of three products grows to 40 bits signed (12).
+Subtraction `x - d` and the charge update are exact in these widths. There is
+no rounding other than the floor of the shift.
+
+**Enable and disable.** Both filters run on every frame regardless of the
+enable; the enable only selects what leaves the block (`y` when 1, the raw bus
+`x` when 0). So (a) with enable 0 the buses are the previous design's bit for
+bit, including every output sample; (b) the charge tracks the bus while
+bypassed; (c) re-enabling reads the charge the whole history produced, so the
+output steps from `x` to `x - floor(acc / 2^10)` at the first frame of the
+write and then follows the recurrence; nothing is cleared, warmed up or
+ramped. A write lands at the start of its frame (4.3), like every drum-page
+write. The alternative (a frozen charge while bypassed) was rejected: it makes
+the re-enable output depend on how long the bypass lasted, not on the signal.
+
+**Lifecycle.** The charge is state of the circuit, not of a voice: a stop
+firing, an envelope choke, an accent write and a mode-coefficient retune
+leave it untouched (the five exclusive pairs share one circuit and a retune
+mid-ring must carry it across). `RESET` (`SEC` = 1, `0xFF`) and the hardware
+reset clear both charges and the enable. The voice page's `RESET` (`0x23`)
+does not reach the drum page and so does not touch the coupling.
+
+**Experimental modes.** `DrumsFx(couple=..., couple_k=...)` remains a probe
+instrument for `tools/probes/dc_blocker.py` (placements, the K sweep). It is
+not the product: `SynthTopModel` never passes it, the register path always
+uses K = 10 whatever `couple_k` is, and writing `COUPLE` to a block built with
+an experimental mode raises instead of silently choosing one.
+
+**Why K = 10, and what that rationale does not establish.** K = 10 is read off
+the bass drum's output network, C49 0.47 uF into R176 || R177 = 45.05 kOhm,
+7.52 Hz (reference 2), 0.8 % from 7.457 Hz. That is a rationale for the BD
+network only. It does not establish the cymbal's physical corner: the CY
+passes through different circuitry, and `docs/sensitivity/coupling-k.json`
+records the K = 8..13 sweep of the CY's residual sub-20 Hz energy as the
+evidence that K = 10 is a point on a measured curve. Whether 10 is the right
+point for the CY is open until #553's acoustic acceptance.
 
 ---
 
@@ -2298,6 +2395,17 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 16 (2026-10-07)** — **the shared-bus DC coupling's numeric contract**
+  (15.10; DR 0025; #551, part of #510). Model and contract only: a `COUPLE`
+  enable at drum-page `0x30` (reset off), a fixed K = 10 one-pole blocker on
+  each of `dmix` and `body` before the output stage, widths 22/32/23 and
+  19/29/20, tracking-while-bypassed enable semantics, charge preserved across
+  hits, chokes and retunes and cleared by the drum RESET only. With the enable
+  at its reset value every stream is unchanged (the pinned hashes in
+  `test_coupling_reset_off_reproduces_the_previous_stream_exactly` were taken
+  on the bypass model). Section 12's exact sum grows by one bit. **No RTL, no
+  kit change, no sound claim.**
 
 - **Rev 15 (2026-09-27)** — **the rimshot's two bridged-T modes' relative
   drive** (15.5, Appendix G; #388). No register, no state, no arithmetic and no

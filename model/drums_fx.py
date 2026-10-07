@@ -95,6 +95,12 @@ FULL24 = (1 << ENV_BITS) - 1
 # from 0x80 to 0x90 and MODE from 0xC0 to 0xB0: at 0xC0 the last mode's `num`
 # register would have been 0xFF, which is RESET.
 A_STOPS, A_ACCENT, A_OSC, A_ENV, A_PATH, A_MODE, A_RESET = 0x00, 0x10, 0x20, 0x40, 0x90, 0xB0, 0xFF
+# Revision 16 (#551, contract 15.10): the shared-bus DC coupling's enable. 0x30 is in
+# the unused gap 0x26..0x3F, 10 addresses clear of OSC_INC (..0x25) and 16 below ENV
+# (0x40..0x87), so neither block can grow into it by one or two entries; the gaps
+# 0x88..0x8F and 0xA7..0xAF were rejected because ENV and PATH have each grown
+# already and 0x88 is the very next address after ENV's last register.
+A_COUPLE = 0x30
 ENV_STRIDE, MODE_STRIDE = 4, 4   # ENV: +0 ctl, +1 peak, +2 rate, +3 frate; MODE: +0 a1, +1 a2, +2 amp, +3 num
 REG_BITS = dict(stops=N_STOPS, accent=ACCENT_BITS, osc_inc=PHASE_BITS, env_ctl=27, peak=ENV_BITS,
                 rate=RATE_Q, frate=RATE_Q, path=25, a1=26, a2=26, amp=16, num=2)
@@ -286,6 +292,12 @@ COUPLE_PLACEMENTS = (COUPLE_OFF, COUPLE_EXC, COUPLE_BUS, COUPLE_POST)
 COUPLE_K = 10                    # pole 1 - 2^-K; 7.457 Hz at SR = 48 kHz
 
 
+def signed_bits(v: int) -> int:
+    """Width of the narrowest two's-complement word holding v."""
+    v = int(v)
+    return (v if v >= 0 else ~v).bit_length() + 1
+
+
 class DcBlockFx:
     """One-pole DC blocker, integer, one register and two adders:
 
@@ -306,35 +318,63 @@ class DcBlockFx:
     which is what the RTL does. For a constant x the accumulator reaches a
     fixed point anywhere in [x*2^K, x*2^K + 2^K - 1] and y is then exactly 0:
     a standing offset is removed COMPLETELY, unlike the envelope's decay
-    (15.3) there is no residue to close with a max(1, .). What truncation does
-    cost is up to one LSB of asymmetry on the way there, counted in `n_trunc`.
+    (15.3) there is no residue to close with a max(1, .). From rest a positive
+    constant stops at x*2^K and a negative one at x*2^K + 2^K - 1 (floor is
+    not odd-symmetric): x = -1 leaves ONE nonzero sample, x = +1 leaves 1024.
+    What truncation does cost is up to one LSB of asymmetry on the way there,
+    counted in `n_trunc`.
 
     STATE IS NOT RESET BY A HIT. A capacitor does not know a stop fired, and
     the five exclusive pairs share one circuit: a retune mid-ring must carry
-    the charge across. Only A_RESET (15.8) clears it."""
-    __slots__ = ("k", "acc", "n_trunc", "acc_bits", "in_bits")
+    the charge across. Only A_RESET (15.8) clears it.
 
-    def __init__(self, k: int = COUPLE_K):
+    FINITE WIDTHS (contract 15.10). With `in_bits = n` (the declared bus
+    width, signed) the input lies in [lo, hi] = [-2^(n-1), 2^(n-1) - 1]. The
+    update f(acc) = acc - floor(acc / 2^K) is NONDECREASING in acc (acc + 1
+    raises the floor by at most one), so if acc <= hi*2^K + 2^K - 1 then
+    f(acc) <= f(that) = that - hi, and acc' = f(acc) + x <= that; likewise
+    acc >= lo*2^K is closed. Hence acc is in [-2^(n+K-1), 2^(n+K-1) - 1]: n + K
+    bits signed. The REACHABLE extremes are slightly inside that invariant
+    (hold hi from below lands exactly on hi*2^K; hold lo from above rests at
+    lo*2^K + 2^K - 1, floor again) and both need all n + K bits, which
+    the near-limit test drives and asserts is tight. The output
+    y = x - floor(acc / 2^K) has floor(acc / 2^K) in [lo, hi] too, so
+    y is in [lo - hi, hi - lo] = +-(2^n - 1): n + 1 bits signed, and the
+    full-scale reversal reaches it. An input outside [lo, hi] is a contract
+    violation and ASSERTS here (`in_bits` set), where RTL would wrap."""
+    __slots__ = ("k", "acc", "n_trunc", "acc_bits", "in_bits", "out_bits",
+                 "in_limit_bits", "acc_limit_bits", "out_limit_bits")
+
+    def __init__(self, k: int = COUPLE_K, in_bits: int | None = None):
         self.k = int(k)
+        self.in_limit_bits = in_bits
+        self.acc_limit_bits = None if in_bits is None else in_bits + self.k
+        self.out_limit_bits = None if in_bits is None else in_bits + 1
         self.n_trunc = 0            # coverage, NOT state: `reset` leaves these
         self.acc_bits = 0           # alone, as EnvFx leaves its own counters
         self.in_bits = 0            # the widest INPUT seen: what the RTL word
-        self.reset()                # has to be measured AGAINST, because the
-                                    # declared bus width is not what arrives
+        self.out_bits = 0           # has to be measured AGAINST, because the
+        self.reset()                # declared bus width is not what arrives
+
     def reset(self):
         self.acc = 0
 
     def step(self, x: int) -> int:
+        x = int(x)
+        lim = self.in_limit_bits
+        if lim is not None:
+            assert -(1 << (lim - 1)) <= x < (1 << (lim - 1)), \
+                f"bus value {x} outside the declared {lim}-bit signed width"
         d = self.acc >> self.k                       # arithmetic: floor
         self.n_trunc += (self.acc != (d << self.k))
         y = x - d
         self.acc += y
-        n = self.acc.bit_length() + 1                # +1 for the sign
-        if n > self.acc_bits:
-            self.acc_bits = n
-        m = int(x).bit_length() + 1
-        if m > self.in_bits:
-            self.in_bits = m
+        self.acc_bits = max(self.acc_bits, signed_bits(self.acc))
+        self.in_bits = max(self.in_bits, signed_bits(x))
+        self.out_bits = max(self.out_bits, signed_bits(y))
+        if lim is not None:
+            assert self.acc_bits <= self.acc_limit_bits, f"charge needs {self.acc_bits} bits"
+            assert self.out_bits <= self.out_limit_bits, f"output needs {self.out_bits} bits"
         return y
 
 
@@ -366,6 +406,14 @@ class DrumsFx:
         self.couple, self.couple_k = couple, int(couple_k)
         self.dc_exc = [DcBlockFx(couple_k) for _ in range(modes)]
         self.dc_dmix, self.dc_body = DcBlockFx(couple_k), DcBlockFx(couple_k)
+        # THE PRODUCTION COUPLING (revision 16, contract 15.10): K = COUPLE_K
+        # fixed, whatever `couple_k` says, widths from the declared bus words,
+        # enable from the register at A_COUPLE. Both blockers run EVERY frame;
+        # the enable only selects what leaves the block.
+        self.cc_dmix = DcBlockFx(COUPLE_K, in_bits=MIX_BITS)
+        self.cc_body = DcBlockFx(COUPLE_K, in_bits=BODY_BITS)
+        self.couple_en = 0
+        self.raw_dmix = self.raw_body = 0
         self.n_tapsat = 0            # coverage: taps that hit the +-8.0 rail (15.5)
         self.n_late_writes = 0       # writes scheduled past the end of a play()
         self.trace = {}
@@ -392,12 +440,21 @@ class DrumsFx:
                 f.reset()                     # a hit, a choke or a retune does
             self.dc_dmix.reset()              # not, because a capacitor cannot
             self.dc_body.reset()              # know one happened
+            self.cc_dmix.reset()              # revision 16: the production charge
+            self.cc_body.reset()              # and its enable go with them (15.8)
+        self.couple_en = 0
 
     # ---- control (contract 15.1) ---------------------------------------------
     def write(self, addr: int, value: int):
         addr, value = int(addr), int(value)
         if addr == A_RESET:
             self.reset()
+        elif addr == A_COUPLE:
+            if self.couple != COUPLE_OFF:
+                raise ValueError("A_COUPLE written on a DrumsFx built with an experimental "
+                                 f"couple={self.couple!r}: the register is the production "
+                                 "semantics and must not be silently overridden (15.10)")
+            self.couple_en = value & 1               # bits 31..1 are reserved: ignored
         elif addr == A_STOPS:
             self.stops = value & ((1 << N_STOPS) - 1)
         elif A_ACCENT <= addr < A_ACCENT + N_STOPS:
@@ -495,6 +552,14 @@ class DrumsFx:
             exc = [self.dc_exc[m].step(exc[m]) for m in range(self.M)]
         coefs = list(zip(self.a1, self.a2, self.amp))
         body = self.bank.step(exc, coefs, self.num)             # 15.6
+        # Revision 16 (15.10): the production coupling, on the shared buses,
+        # after the bank and before the output stage's clamp. It always runs;
+        # the enable selects its output, so the charge tracks the bus while
+        # bypassed and a re-enable reads the charge the whole history made.
+        self.raw_dmix, self.raw_body = dmix, body
+        cd, cb = self.cc_dmix.step(dmix), self.cc_body.step(body)
+        if self.couple_en:
+            dmix, body = cd, cb
         if self.couple == COUPLE_BUS:
             # The machine's placement: after the nonlinearities, the envelopes
             # and the resonators, before the output stage's single clamp (12).
@@ -534,15 +599,19 @@ class DrumsFx:
         noise = np.empty(n, dtype=np.int64)
         env = np.empty((self.E, n), dtype=np.int64)
         exc = np.empty((n, self.M), dtype=np.int64)
+        raw_dmix = np.empty(n, dtype=np.int64)
+        raw_body = np.empty(n, dtype=np.int64)
         for f in range(n):
             for a, v in ev.get(f, ()):
                 self.write(a, v)
             d, b, fi, nz, _, ex, _ = self.frame()
             dmix[f], body[f], fire[f], noise[f] = d, b, fi, nz
             exc[f] = ex
+            raw_dmix[f], raw_body[f] = self.raw_dmix, self.raw_body
             for e in range(self.E):
                 env[e, f] = self.envs[e].out
-        self.trace = dict(dmix=dmix, body=body, fire=fire, noise=noise, env=env, exc=exc)
+        self.trace = dict(dmix=dmix, body=body, fire=fire, noise=noise, env=env, exc=exc,
+                          dmix_raw=raw_dmix, body_raw=raw_body)
         return dmix, body
 
 
