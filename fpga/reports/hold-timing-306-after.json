@@ -1,0 +1,1108 @@
+{
+ "what": "#306 after: the production CLI's held-note path on the scripted device",
+ "tree": "42fc7f1dcb17f07ca91f1f018f694d7f75c8f0e1",
+ "commands": {
+  "selection": ".venv/bin/python fpga/hold_timing.py table --set selection --json F",
+  "untouched": ".venv/bin/python fpga/hold_timing.py table --set untouched --json F",
+  "controls": ".venv/bin/python fpga/hold_timing.py controls"
+ },
+ "frames": "device frames on the scripted device's unwrapped timeline; hold read from executed GATE_ON/GATE_OFF writes",
+ "selection": [
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1184,
+     1225
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1217,
+    "off": 3137,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1252,
+   "planned_off": 3137,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1215,
+    1218
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default"
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-saw",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1184,
+     1225
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1217,
+    "off": 3137,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1252,
+   "planned_off": 3137,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1215,
+    1218
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-saw"
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-pulse",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1184,
+     1225
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1217,
+    "off": 3137,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1252,
+   "planned_off": 3137,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1215,
+    1218
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-pulse"
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  }
+ ],
+ "untouched": [
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.002,
+   "tx_delay_s": 0.002,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1472,
+     1513
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1505,
+    "off": 3425,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1540,
+   "planned_off": 3425,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1503,
+    1506
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default",
+    "reply_delay_s": 0.002,
+    "tx_delay_s": 0.002
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-saw",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.005,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1424,
+     1465
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1457,
+    "off": 3377,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1492,
+   "planned_off": 3377,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1455,
+    1458
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-saw",
+    "reply_delay_s": 0.005,
+    "tx_delay_s": 0.0
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-pulse",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.007,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1856,
+     1897
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 1889,
+    "off": 3809,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 1924,
+   "planned_off": 3809,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1887,
+    1890
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-pulse",
+    "reply_delay_s": 0.0,
+    "tx_delay_s": 0.007
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.016,
+   "tx_delay_s": 0.001,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     2048,
+     2089
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 2081,
+    "off": 4001,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 2116,
+   "planned_off": 4001,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    2079,
+    2082
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default",
+    "reply_delay_s": 0.016,
+    "tx_delay_s": 0.001
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 64336,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     65520,
+     25
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 65553,
+    "off": 67473,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 65588,
+   "planned_off": 67473,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    65551,
+    65554
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default",
+    "epoch": 64336
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-saw",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 63136,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     64320,
+     64361
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 64353,
+    "off": 66273,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 64388,
+   "planned_off": 66273,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    64351,
+    64354
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-saw",
+    "epoch": 63136
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-pulse",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 65496,
+   "reply_delay_s": 0.003,
+   "tx_delay_s": 0.003,
+   "inject": null,
+   "requested_hold": 1920,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 1920,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 1920 +- 2 frames",
+    "status_frames": [
+     1576,
+     1617
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 3084,
+    "planned_hold_frames": 1920,
+    "delivered_hold_bounds": [
+     1919,
+     1922
+    ]
+   },
+   "device": {
+    "on": 67145,
+    "off": 69065,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 1920,
+   "hold_error": 0,
+   "planned_on": 67180,
+   "planned_off": 69065,
+   "planned_hold": 1885,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    67143,
+    67146
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-pulse",
+    "epoch": 65496,
+    "reply_delay_s": 0.003,
+    "tx_delay_s": 0.003
+   },
+   "verdict": "PASS",
+   "reason": "device held 1920 for 1920 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 97,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 97,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 97 +- 2 frames",
+    "status_frames": [
+     1184,
+     1225
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 1261,
+    "planned_hold_frames": 97,
+    "delivered_hold_bounds": [
+     96,
+     99
+    ]
+   },
+   "device": {
+    "on": 1217,
+    "off": 1314,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 97,
+   "hold_error": 0,
+   "planned_on": 1252,
+   "planned_off": 1314,
+   "planned_hold": 62,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1215,
+    1218
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 97
+   },
+   "verdict": "PASS",
+   "reason": "device held 97 for 97 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--preset",
+    "m5a-saw",
+    "--note",
+    "72",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 64296,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 98,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 98,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 98 +- 2 frames",
+    "status_frames": [
+     65480,
+     65521
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 1262,
+    "planned_hold_frames": 98,
+    "delivered_hold_bounds": [
+     97,
+     100
+    ]
+   },
+   "device": {
+    "on": 65513,
+    "off": 65611,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 98,
+   "hold_error": 0,
+   "planned_on": 65548,
+   "planned_off": 65611,
+   "planned_hold": 63,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    65511,
+    65514
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-m5a-saw",
+    "hold_frames": 98,
+    "epoch": 64296
+   },
+   "verdict": "PASS",
+   "reason": "device held 98 for 98 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 24000,
+   "rc": 0,
+   "crash": null,
+   "stderr_tail": "",
+   "device_errors": [],
+   "host_record": {
+    "schema": "hold-timing/1",
+    "requested_hold_frames": 24000,
+    "hold_min_frames": 97,
+    "declared_max_bound_frames": 8,
+    "gate_apply_kind": "bracketed estimate (STATUS before/after the gate write); not an observed frame",
+    "verdict": "WITHIN_BOUND",
+    "reason": "gate-off ACKed ahead of its due; hold 24000 +- 2 frames",
+    "status_frames": [
+     1184,
+     1225
+    ],
+    "gate_apply_bounds": [
+     1162,
+     1165
+    ],
+    "gate_apply_estimate": 1164,
+    "hold_bound_frames": 2,
+    "gate_off_due": 25164,
+    "planned_hold_frames": 24000,
+    "delivered_hold_bounds": [
+     23999,
+     24002
+    ]
+   },
+   "device": {
+    "on": 1217,
+    "off": 25217,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 24000,
+   "hold_error": 0,
+   "planned_on": 1252,
+   "planned_off": 25217,
+   "planned_hold": 23965,
+   "gate_on_error": 35,
+   "gate_off_error": 0,
+   "host_bounds_on_device": [
+    1215,
+    1218
+   ],
+   "host_bound_contains_gate": true,
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 24000
+   },
+   "verdict": "PASS",
+   "reason": "device held 24000 for 24000 (error +0, bound +-2)",
+   "expected": "PASS",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 96,
+   "rc": 2,
+   "crash": null,
+   "stderr_tail": "uart_host: REFUSED -- hold_frames 96 is shorter than the 97-frame minimum this link can deliver at 115200 baud: the gate-off packet cannot be accepted before its own due (hold_min_frames)",
+   "device_errors": [],
+   "host_record": null,
+   "device": null,
+   "ambiguous": "0 voice GATE_ON writes executed, not one",
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 96,
+    "expect": "REFUSED"
+   },
+   "verdict": "REFUSED",
+   "reason": "refused before any gate: uart_host: REFUSED -- hold_frames 96 is shorter than the 97-frame minimum this link can deliver at 115200 baud: the gate-off packet cannot be accepted before its own due (hold_min_frames)",
+   "expected": "REFUSED",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 4,
+   "rc": 2,
+   "crash": null,
+   "stderr_tail": "uart_host: REFUSED -- hold_frames 4 is shorter than the 97-frame minimum this link can deliver at 115200 baud: the gate-off packet cannot be accepted before its own due (hold_min_frames)",
+   "device_errors": [],
+   "host_record": null,
+   "device": null,
+   "ambiguous": "0 voice GATE_ON writes executed, not one",
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 4,
+    "expect": "REFUSED"
+   },
+   "verdict": "REFUSED",
+   "reason": "refused before any gate: uart_host: REFUSED -- hold_frames 4 is shorter than the 97-frame minimum this link can deliver at 115200 baud: the gate-off packet cannot be accepted before its own due (hold_min_frames)",
+   "expected": "REFUSED",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.0,
+   "tx_delay_s": 0.0,
+   "inject": null,
+   "requested_hold": 40000,
+   "rc": 2,
+   "crash": null,
+   "stderr_tail": "uart_host: REFUSED -- hold_frames 40000 exceeds 30720: the gate-off due would leave the 16-bit wrap window",
+   "device_errors": [],
+   "host_record": null,
+   "device": null,
+   "ambiguous": "0 voice GATE_ON writes executed, not one",
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 40000,
+    "expect": "REFUSED"
+   },
+   "verdict": "REFUSED",
+   "reason": "refused before any gate: uart_host: REFUSED -- hold_frames 40000 exceeds 30720: the gate-off due would leave the 16-bit wrap window",
+   "expected": "REFUSED",
+   "ok": true
+  },
+  {
+   "argv": [
+    "run",
+    "--note",
+    "45",
+    "--fixture",
+    "none"
+   ],
+   "epoch": 0,
+   "reply_delay_s": 0.004,
+   "tx_delay_s": 0.004,
+   "inject": null,
+   "requested_hold": 97,
+   "rc": 2,
+   "crash": null,
+   "stderr_tail": "uart_host: REFUSED -- the device answered the gate-off with ERR due in the past or out of order (code 3): the 97-frame deadline was missed on this link",
+   "device_errors": [
+    [
+     3,
+     35,
+     33
+    ]
+   ],
+   "host_record": null,
+   "device": {
+    "on": 1793,
+    "off": 2260,
+    "on_src": "live",
+    "off_src": "event"
+   },
+   "actual_hold": 467,
+   "hold_error": 370,
+   "planned_on": null,
+   "planned_off": null,
+   "planned_hold": null,
+   "gate_on_error": null,
+   "gate_off_error": null,
+   "condition": {
+    "key": "held-default",
+    "hold_frames": 97,
+    "reply_delay_s": 0.004,
+    "tx_delay_s": 0.004,
+    "expect": "REFUSED"
+   },
+   "verdict": "REFUSED",
+   "reason": "uart_host: REFUSED -- the device answered the gate-off with ERR due in the past or out of order (code 3): the 97-frame deadline was missed on this link",
+   "expected": "REFUSED",
+   "ok": true
+  }
+ ],
+ "controls": [
+  {
+   "control": "HOLD_ACK_DRAIN",
+   "clean": "PASS",
+   "mutant": "FAIL",
+   "mutant_reason": "device held 3155 frames for 1920 (error +1235) outside the declared +-8 (the host claimed no bound)",
+   "mutant_rc": 0,
+   "device_hold": 3155,
+   "planned_hold": 3121,
+   "host_record_hold": null,
+   "matrix": {
+    "exit": "BLIND",
+    "released": "BLIND",
+    "hold": "MOVED",
+    "bound-declared": "MOVED",
+    "bracket-contains-gate": "MOVED"
+   },
+   "caught": true,
+   "why": "the hold assertion failed, as intended"
+  },
+  {
+   "control": "HOLD_FORGED_LOG",
+   "clean": "PASS",
+   "mutant": "FAIL",
+   "mutant_reason": "device held 2520 frames for 1920 (error +600) outside the host's bound +-2",
+   "mutant_rc": 0,
+   "device_hold": 2520,
+   "planned_hold": 1885,
+   "host_record_hold": 1920,
+   "matrix": {
+    "exit": "BLIND",
+    "released": "BLIND",
+    "hold": "MOVED",
+    "bound-declared": "BLIND",
+    "bracket-contains-gate": "BLIND"
+   },
+   "caught": true,
+   "why": "the hold assertion failed, as intended"
+  }
+ ]
+}
