@@ -304,8 +304,8 @@ python3 tools/gate_calibrate.py calibrate --refs /tmp/tr808-fischer --tables tab
 
 ## 9. Between-recording bar, rule v2: REFUSED again, with the reason isolated (`mars-calibration-v2/`)
 
-`tools/gate_between.py` (8 tests in `tools/test_gate_between.py`; 36 pass with the other two gate suites on the build box),
-run at `3bdb7e9b`, tables unchanged from section 8 (derived distances only; no MARS audio was read or written this time).
+`tools/gate_between.py` (8 tests in `tools/test_gate_between.py` at the time; 36 pass with the other two gate suites on the build box),
+run at branch commit `3bdb7e9b` (base `2aceb8ce`; not a `main` commit), tables unchanged from section 8 (derived distances only; no MARS audio was read or written this time).
 The operator's ruling (2026-10-02) asks for "as close as another real 808, measured across units or recordings". Section 8
 refused under a rule with two defects. Rule v2 repairs those two and nothing else:
 
@@ -357,9 +357,16 @@ reported only in the diagnostics.
 voice (the knob positions of the Fischer take reproduced on a second documented unit), or enough recordings of the six
 knobless voices to hold something out. The MARS pack cannot supply either. This is filed as a follow-up.
 
-### The shipped kit, ranked (`rank-current/rank.json` at `3bdb7e9b`; the gate and the model are unchanged since section 4)
+### The shipped kit, ranked (`rank-current/rank.json` at branch commit `3bdb7e9b`, base `2aceb8ce`)
 
-Section 4's ratios reproduce at current `main` except RS (27.0 to 20.6; section 8 already noted this). Ranked by how much
+`3bdb7e9b` is a commit on this branch, not on `main`; its base is `2aceb8ce`. Since then `origin/main` changed the drum
+model: #554 (the #551 coupling register) added `A_COUPLE` to `model/drums_fx.py`. `couple_en` resets to 0, and on
+`origin/main` only `model/drums_fx.py` and its tests write `A_COUPLE`; no shipped program enables it. The ranking was
+NOT re-run after the rebase. Its inputs were checked instead: `tools/drum_render_hashes.py` gives identical SHA-256 for
+all 16 renders at `2aceb8ce` and at the rebased head `77962cd4` (on `origin/main` `468339aa`)
+(`rank-current/render-hashes-rebase.json`). The gate code is unchanged by the rebase, so the table below holds there.
+
+Section 4's ratios reproduce at `3bdb7e9b` except RS (27.0 to 20.6; section 8 already noted this). Ranked by how much
 farther from the Fischer target our sound is than the nearest real MARS recording of the same voice. **Descriptive, not a
 verdict:** the MARS side is the most favourable take across all groups (optimistic), no bar was calibrated, and the
 ratios are against the old same-unit / WEAK bar, so a WEAK row and a neighbour row are not commensurate with each other.
