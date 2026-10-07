@@ -599,9 +599,128 @@ def write_validation_artifact(rep: dict, plan: dict, path: str) -> None:
         fh.write("\n".join(lines) + "\n")
 
 
+# =============================================================================
+# injected controls: each must turn the acceptance verdict red
+# =============================================================================
+CONTROLS = {
+    "disabled": "the correction stage removed; refitted ROMs kept",
+    "reversed": "the table inverted about unity (65536 - word): corrects the wrong way",
+    "keyed-on-k-eff": "the table indexed by the COMPENSATED k (k * kc) instead of the host "
+                      "register -- the circular representation the curator warned of",
+    "index-off-by-one": "the table read one entry high",
+    "floor-not-round": "(cut * c) >> 15 floored instead of rounded",
+    "k-rom-not-rederived": "the refitted g ROM with the SHIPPED k ROM: DR 0006's compensation "
+                           "not re-derived against the new coefficients",
+}
+PROPERTIES = ("T1_mean_offset_travel", "T2_worst_per_cut_travel", "N1_worst_abs",
+              "N2_mean_abs", "N3_onset")
+
+
+class MutantLadder(CorrectedLadder):
+    """`CorrectedLadder` with exactly one injected defect from `CONTROLS`."""
+
+    def __init__(self, mutation: str, g_rom, k_rom, corr_rom):
+        if mutation not in CONTROLS:
+            raise ValueError(mutation)
+        self.mutation = mutation
+        if mutation == "disabled":
+            corr_rom = None
+        elif mutation == "reversed":
+            corr_rom = (2 << CORR_Q) - np.asarray(corr_rom, dtype=np.int64)
+        elif mutation == "k-rom-not-rederived":
+            k_rom = vf.make_k_rom()
+        super().__init__(g_rom, k_rom, corr_rom)
+
+    def _regs(self, res, cut, drive):
+        m = self.mutation
+        if m not in ("keyed-on-k-eff", "index-off-by-one", "floor-not-round"):
+            return super()._regs(res, cut, drive)
+        k, gain, ogain = rr._REAL_LADDER(**self.cfg).regs(res, drive)
+        cut = int(round(cut))
+        key = k
+        if m == "keyed-on-k-eff":
+            key = int(vf.k_effective(k, vf.kc_from_cut(np.array([cut]), self.k_rom)[0]))
+        if m == "index-off-by-one":
+            rom = np.append(self.corr_rom[1:], self.corr_rom[-1])
+            cr = int(corr_from_k(np.array([key]), rom)[0])
+        else:
+            cr = int(corr_from_k(np.array([key]), self.corr_rom)[0])
+        half = 0 if m == "floor-not-round" else (1 << (CORR_Q - 1))
+        c = int(np.clip((cut * cr + half) >> CORR_Q, vf.CUT_MIN, vf.CUT_MAX))
+        g = int(vf.g_from_cut(np.array([c]), self.g_rom)[0])
+        kc = int(vf.kc_from_cut(np.array([c]), self.k_rom)[0])
+        return g, int(vf.k_effective(k, kc)), gain, ogain
+
+
+def committed_candidate() -> tuple:
+    """(g_rom, k_rom, corr_rom) for the validated candidate, the table read
+    from docs/res-tuning/validation.json and REFUSED unless it is the 33-entry
+    table the sweep also produced -- one fitted table, not two."""
+    with open(os.path.join(OUT_DIR, "validation.json")) as fh:
+        val = json.load(fh)
+    with open(os.path.join(OUT_DIR, "sweeps.json")) as fh:
+        sw = json.load(fh)
+    swept = [r["corr_rom"] for r in sw["entries"] if r["CORR_ENTRIES"] == val["corr_entries"]]
+    if (val["law_degree"], val["corr_entries"]) != (LAW_DEGREE, CORR_ENTRIES) or \
+            not swept or swept[0] != val["corr_rom"]:
+        raise Refused("validation.json, sweeps.json and the module's dials do not describe "
+                      "one candidate")
+    g = g_rom_for(LAW_DEGREE, REFIT_ENTRIES)
+    k = k_rom_for(g)
+    if val["k_rom"] != [int(x) for x in k]:
+        raise Refused("the re-derived k ROM differs from the one validated")
+    return g, k, np.array(val["corr_rom"], dtype=np.int64)
+
+
+def run_controls(plan: dict, names=None) -> dict:
+    """Every control on the validate grid, against the baseline, as a
+    properties x controls matrix: MOVED where the control turns that check red,
+    BLIND where the check still passes. The clean candidate is re-run first and
+    must pass every check, or nothing here is a verdict."""
+    v = plan["grids"]["validate"]
+    g, k, corr = committed_candidate()
+
+    def evaluate(dev):
+        t = offset_table(dev, v["cuts_hz"], v["res"])
+        o = onset_table(dev, v["cuts_hz"], v["onset_below_res"], v["onset_above_res"])
+        return grid_metrics(t, v["cuts_hz"], v["res"]), o
+
+    mb, ob = evaluate(CorrectedLadder())
+    mc, oc = evaluate(CorrectedLadder(g, k, corr))
+    clean = verdict(plan, mb, mc, ob, oc)
+    if not clean["ok"]:
+        raise Refused(f"the clean candidate does not pass ({clean['checks']}); no control "
+                      "can be read")
+    out = dict(clean=dict(checks=clean["checks"], metrics=mc), controls={})
+    for name in (names or CONTROLS):
+        mm, om = evaluate(MutantLadder(name, g, k, corr))
+        vv = verdict(plan, mb, mm, ob, om)
+        out["controls"][name] = dict(
+            caught=not vv["ok"],
+            matrix={p: ("BLIND" if vv["checks"][p] else "MOVED") for p in PROPERTIES},
+            metrics={key: mm[key] for key in ("mean_offset_travel_cents",
+                                              "worst_per_cut_travel_cents",
+                                              "worst_abs_cents", "mean_abs_cents")},
+            onset_failures=[c for c, x in om.items() if x["below"] or not x["above"]])
+    return out
+
+
+def print_controls(rep: dict) -> None:
+    print(f"{'control':22s} " + " ".join(f"{p.split('_')[0]:>6s}" for p in PROPERTIES)
+          + "   travel  per-cut  worst  mean")
+    for name, c in rep["controls"].items():
+        m = c["metrics"]
+        print(f"{name:22s} " + " ".join(f"{c['matrix'][p]:>6s}" for p in PROPERTIES)
+              + f"  {m['mean_offset_travel_cents']:7.1f} {m['worst_per_cut_travel_cents']:7.1f}"
+                f" {m['worst_abs_cents']:6.1f} {m['mean_abs_cents']:5.1f}"
+              + ("" if c["caught"] else "   NOT CAUGHT"))
+    caught = sum(c["caught"] for c in rep["controls"].values())
+    print(f"{caught} of {len(rep['controls'])} controls caught by the acceptance verdict")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=("qualify", "sweep", "validate"))
+    ap.add_argument("cmd", choices=("qualify", "sweep", "validate", "controls"))
     a = ap.parse_args(argv)
     try:
         if a.cmd == "qualify":
@@ -615,6 +734,12 @@ def main(argv=None) -> int:
                   f"{q['worst_cents']:.4f} c against {q['accuracy_cents_max']} c")
             return 0 if q["ok"] else 1
         plan = load_plan()
+        if a.cmd == "controls":
+            rep = run_controls(plan)
+            with open(os.path.join(OUT_DIR, "controls.json"), "w") as fh:
+                json.dump(rep, fh, indent=1)
+            print_controls(rep)
+            return 0
         if a.cmd == "sweep":
             res = run_sweeps(plan)
             write_sweep_artifact(res, os.path.join(OUT_DIR, "sweeps.txt"))
