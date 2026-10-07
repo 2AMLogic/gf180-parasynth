@@ -1224,6 +1224,34 @@ def _render_2x(o: OscFx, n: int, inc, history: np.ndarray, phase2: int) -> tuple
     next_history = joined[-len(history):].copy()
     return sat16(filtered[1::2] >> 15).astype(np.int64), next_history, next_phase2
 
+# ---- DR 0024 (issue #257): the resonance-keyed cutoff correction, step 5c --------
+# Specified once here and mirrored by voice_dp.v's S_CR0..S_CR4 under
+# `VOICE_RES_CORR`; `model/res_tuning.py::corrected_cut` is the same function
+# and `model/test_res_tuning.py` pins the two equal.
+RES_CORR_K0 = 1 << 16        # host k register (Q3.14) at res = 1.0: the onset
+RES_CORR_SPAN_LOG2 = 16      # the table spans k = 65536 .. 131071
+RES_CORR_Q = 15              # table words are unsigned Q1.15, unity = 32768
+
+
+def corrected_cut_res(cut_hz, k_q14, rom):
+    """cut' = clamp((cut * c + 2^14) >> 15, CUT_MIN, CUT_MAX), c the floor-shifted
+    linear read of `rom` at d = clamp(k - 65536, 0, 65535). `rom` None is the
+    identity (no stage); k at or below the onset reads entry 0 (unity, for the
+    committed table), which makes the stage the identity there."""
+    if rom is None:
+        return cut_hz
+    n = len(rom) - 1
+    b = n.bit_length() - 1
+    if (1 << b) != n or b > RES_CORR_SPAN_LOG2:
+        raise ValueError(f"a correction table has 2^b + 1 entries, not {len(rom)}")
+    fb = RES_CORR_SPAN_LOG2 - b
+    d = min(max(int(k_q14) - RES_CORR_K0, 0), (1 << RES_CORR_SPAN_LOG2) - 1)
+    i, frac = d >> fb, d & ((1 << fb) - 1)
+    c = int(rom[i]) + ((int(rom[i + 1]) - int(rom[i])) * frac >> fb)
+    cut = np.asarray(cut_hz, dtype=np.int64)
+    return np.clip((cut * c + (1 << (RES_CORR_Q - 1))) >> RES_CORR_Q, CUT_MIN, CUT_MAX)
+
+
 class VoiceFx:
     """One voice: three oscillators, two envelopes, one ladder, and the state
     they keep between notes. `play` is the per-frame contract; `note` renders
@@ -1238,8 +1266,12 @@ class VoiceFx:
                  preserve_filter_headroom: bool = False,
                  causal_filter: bool = False,
                  pulse479_filter_candidate: bool = False,
-                 oversample_pulse_2x: bool = False):
-        """`g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
+                 oversample_pulse_2x: bool = False,
+                 res_corr_rom=None):
+        """`res_corr_rom` (issue #257, DR 0024): None = no correction stage, the
+        shipped datapath bit for bit; else the 33-word Q1.15 table the RTL's
+        VOICE_RES_CORR stage reads (`corrected_cut_res`).
+        `g_exact=True` bypasses the ROM and lets LadderFx compute g from Hz in
         float. NOT integer -- exists only to measure what the ROM costs.
         `k_comp=False` runs the ladder on the host's k with no compensation,
         rev 1's behaviour -- exists only to measure what DR 0006 changes."""
@@ -1247,6 +1279,7 @@ class VoiceFx:
         self.EB, self.GB, self.KB = env_bits, grom_bits, krom_bits
         self.ladder_cfg = dict(LADDER_CFG if ladder_cfg is None else ladder_cfg)
         self.g_exact, self.k_comp = g_exact, k_comp
+        self.res_corr_rom = None if res_corr_rom is None else np.asarray(res_corr_rom, dtype=np.int64)
         self.oversample_2x = oversample_2x
         self.oversample_pulse_2x = bool(oversample_pulse_2x)
         if self.oversample_pulse_2x and not self.oversample_2x:
@@ -1558,6 +1591,7 @@ class VoiceFx:
         span = self.cut_hi - self.cut_lo                         # step 5: cutoff
         cut = np.clip(self.cut_lo + ((span * fe) >> 15) + track, CUT_MIN, CUT_MAX)
         cut = np.clip((cut * mant_f) >> sh_f, CUT_MIN, CUT_MAX)  # step 5b: filter modulation
+        cut = corrected_cut_res(cut, self.k_reg, self.res_corr_rom)  # step 5c: DR 0024 (voice only)
         lad = self.ladder
         kc = kc_from_cut(cut, self.k_rom, self.KB)
         k_eff = k_effective(self.k_reg, kc) if self.k_comp else np.full(n, self.k_reg, dtype=np.int64)

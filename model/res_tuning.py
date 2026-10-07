@@ -672,6 +672,23 @@ def committed_candidate() -> tuple:
     return g, k, np.array(val["corr_rom"], dtype=np.int64)
 
 
+CORR_HEX = os.path.join(OUT_DIR, "corr_rom33.hex")
+
+
+def corr_hex_text(rom) -> str:
+    """The table as the RTL's $readmemh image: one 4-digit hex word per line.
+    REFUSES a word that does not fit the 16-bit Q1.15 unsigned field."""
+    rom = [int(x) for x in rom]
+    if len(rom) != 33 or any(not 0 <= x < (1 << CORR_WORD_BITS) for x in rom) or rom[0] != 1 << CORR_Q:
+        raise Refused("the correction table must be 33 words of 16 bits with entry 0 = unity")
+    return "".join(f"{x:04x}\n" for x in rom)
+
+
+def load_corr_hex(path: str = CORR_HEX) -> np.ndarray:
+    with open(path) as fh:
+        return np.array([int(l, 16) for l in fh.read().split()], dtype=np.int64)
+
+
 def run_controls(plan: dict, names=None) -> dict:
     """Every control on the validate grid, against the baseline, as a
     properties x controls matrix: MOVED where the control turns that check red,
@@ -720,7 +737,7 @@ def print_controls(rep: dict) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=("qualify", "sweep", "validate", "controls"))
+    ap.add_argument("cmd", choices=("qualify", "sweep", "validate", "controls", "hex"))
     a = ap.parse_args(argv)
     try:
         if a.cmd == "qualify":
@@ -733,6 +750,13 @@ def main(argv=None) -> int:
             print(f"estimator {'QUALIFIED' if q['ok'] else 'NOT QUALIFIED'}; worst "
                   f"{q['worst_cents']:.4f} c against {q['accuracy_cents_max']} c")
             return 0 if q["ok"] else 1
+        if a.cmd == "hex":
+            with open(os.path.join(OUT_DIR, "validation.json")) as fh:
+                text = corr_hex_text(json.load(fh)["corr_rom"])
+            with open(CORR_HEX, "w") as fh:
+                fh.write(text)
+            print(f"wrote {CORR_HEX}")
+            return 0
         plan = load_plan()
         if a.cmd == "controls":
             rep = run_controls(plan)
