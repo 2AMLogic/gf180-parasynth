@@ -117,10 +117,14 @@ def _to_device(frame, ref_abs):
 
 def measure(argv: list, *, epoch: int = 0, reply_delay_s: float = 0.0,
             tx_delay_s: float = 0.0, hold_frames: int | None = None,
-            inject: str | None = None, workdir: Path | None = None) -> dict:
+            inject: str | None = None, workdir: Path | None = None,
+            harness_hook=None) -> dict:
     """Run the CLI once on the scripted device and return what the DEVICE did
-    beside what the HOST claimed. Never raises for a CLI outcome."""
+    beside what the HOST claimed. Never raises for a CLI outcome.
+    `harness_hook(h)` may alter the apparatus (tests: a stalled wire)."""
     h = vrp.Harness(epoch, reply_delay_s=reply_delay_s, tx_delay_s=tx_delay_s)
+    if harness_hook is not None:
+        harness_hook(h)
     requested = REQUESTED_DEFAULT if hold_frames is None else int(hold_frames)
     tmp = None
     if workdir is None:
@@ -228,6 +232,30 @@ def measure(argv: list, *, epoch: int = 0, reply_delay_s: float = 0.0,
     return rec
 
 
+PROPERTIES = ("exit", "released", "hold", "bound-declared", "bracket-contains-gate")
+
+
+def properties(m: dict) -> dict:
+    """Each named property the verdict checks, True/False, from one
+    measurement; None where it cannot be evaluated (no device log)."""
+    dev = m.get("device")
+    hr = m.get("host_record") or {}
+    bound = hr.get("hold_bound_frames")
+    p = {k: None for k in PROPERTIES}
+    p["exit"] = m.get("rc") == 0
+    if dev is None:
+        return p
+    p["released"] = dev["off"] is not None
+    if m.get("hold_error") is not None:
+        # against the host's own bound, or the declared maximum when the host
+        # claimed none: a missing record must not make the hold unjudgeable
+        lim = bound if bound is not None else uh.HOLD_BOUND_MAX_FRAMES
+        p["hold"] = abs(m["hold_error"]) <= min(lim, uh.HOLD_BOUND_MAX_FRAMES)
+    p["bound-declared"] = bound is not None and bound <= uh.HOLD_BOUND_MAX_FRAMES
+    p["bracket-contains-gate"] = bool(m.get("host_bound_contains_gate"))
+    return p
+
+
 def hold_verdict(m: dict, *, expect_refusal: bool = False) -> tuple:
     """(verdict, reason) for one measurement against the DEVICE's hold."""
     if m.get("crash"):
@@ -237,9 +265,9 @@ def hold_verdict(m: dict, *, expect_refusal: bool = False) -> tuple:
             # refused before the note was ever started: nothing to release
             return REFUSED, f"refused before any gate: {m['stderr_tail']}"
         return NO_VERDICT, f"device log ambiguous: {m['ambiguous']}"
-    dev = m["device"]
+    p = properties(m)
     if m["rc"] == 2:
-        if dev["off"] is None:
+        if not p["released"]:
             return FAIL, "the CLI refused and left the note SOUNDING (no gate-off executed)"
         return REFUSED, m["stderr_tail"]
     if m["rc"] != 0:
@@ -247,23 +275,21 @@ def hold_verdict(m: dict, *, expect_refusal: bool = False) -> tuple:
     if expect_refusal:
         return FAIL, (f"the CLI claimed success (exit 0) where it must refuse; the "
                       f"device held {m['actual_hold']} for {m['requested_hold']}")
-    if dev["off"] is None:
+    if not p["released"]:
         return FAIL, "exit 0 and no gate-off executed: the note never ends"
-    hr = m.get("host_record") or {}
-    bound = hr.get("hold_bound_frames")
-    if bound is None:
-        return FAIL, (f"exit 0 with no hold bound in the host's record; device held "
-                      f"{m['actual_hold']} frames for {m['requested_hold']} "
-                      f"(error {m['hold_error']:+d})")
-    if bound > uh.HOLD_BOUND_MAX_FRAMES:
-        return FAIL, (f"exit 0 with a per-run bound {bound} wider than the declared "
-                      f"{uh.HOLD_BOUND_MAX_FRAMES}")
-    if abs(m["hold_error"]) > bound:
+    bound = (m.get("host_record") or {}).get("hold_bound_frames")
+    if not p["hold"]:
+        lim = bound if bound is not None else uh.HOLD_BOUND_MAX_FRAMES
         return FAIL, (f"device held {m['actual_hold']} frames for {m['requested_hold']} "
-                      f"(error {m['hold_error']:+d}) outside the host's bound +-{bound}")
-    if m.get("host_bound_contains_gate") is False:
+                      f"(error {m['hold_error']:+d}) outside "
+                      + (f"the host's bound +-{lim}" if bound is not None else
+                         f"the declared +-{lim} (the host claimed no bound)"))
+    if not p["bound-declared"]:
+        return FAIL, (f"exit 0 without a per-run bound within the declared "
+                      f"{uh.HOLD_BOUND_MAX_FRAMES} (host record: {bound})")
+    if not p["bracket-contains-gate"]:
         return FAIL, ("the host's gate bracket does not contain the device's gate frame "
-                      f"{dev['on']}: {m.get('host_bounds_on_device')}")
+                      f"{m['device']['on']}: {m.get('host_bounds_on_device')}")
     return PASS, (f"device held {m['actual_hold']} for {m['requested_hold']} "
                   f"(error {m['hold_error']:+d}, bound +-{bound})")
 
@@ -335,17 +361,22 @@ def run_control(name: str) -> dict:
            "mutant_reason": mut["reason"], "mutant_rc": mut["rc"],
            "device_hold": mut.get("actual_hold"), "planned_hold": mut.get("planned_hold"),
            "host_record_hold": ((mut.get("host_record") or {}).get("planned_hold_frames"))}
+    pc, pm = properties(clean), properties(mut)
+    # rule 4: which of the verdict's properties SAW the defect
+    res["matrix"] = {k: ("MOVED" if pc[k] != pm[k] else "BLIND") for k in PROPERTIES}
     if clean["verdict"] != PASS:
         res["caught"], res["why"] = None, f"NO VERDICT: the clean run is {clean['verdict']}"
     elif mut["rc"] != 0 or mut.get("device") is None:
         res["caught"], res["why"] = None, (f"NO VERDICT: the mutant did not execute "
                                            f"(rc {mut['rc']}, {mut['reason']})")
-    elif mut["verdict"] == FAIL and "outside the host's bound" in mut["reason"]:
+    elif mut["verdict"] == FAIL and properties(mut)["hold"] is False:
         res["caught"], res["why"] = True, "the hold assertion failed, as intended"
-    elif mut["verdict"] == FAIL and "no hold bound" in mut["reason"]:
-        res["caught"], res["why"] = True, "the hold assertion failed (no bound claimed)"
     else:
         res["caught"], res["why"] = False, f"mutant {mut['verdict']}: {mut['reason']}"
+    if res["caught"] is not None and mut.get("actual_hold") == clean.get("actual_hold"):
+        # condition 2: a hold mutant that leaves the device's hold untouched
+        # did not activate (or activated somewhere the device cannot see)
+        res["caught"], res["why"] = None, "NO VERDICT: the mutant did not move the device hold"
     return res
 
 
