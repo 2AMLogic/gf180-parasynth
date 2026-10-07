@@ -60,8 +60,11 @@ RULE v2.
              the max over its MARS_WEAK_KEYS nearest keys (all of them for the
              single-take voices), from ALL keys, and it is labelled
              WEAK-UNVALIDATED. It is a weaker bar, said so wherever it is used.
-  QUALIFIED  gate_calibrate's Q1-Q5, unchanged, plus Q6: a bar that did not
-             come from the selection (WEAK) is never counted as validated.
+  QUALIFIED  gate_calibrate's Q1-Q5, unchanged, plus Q6: the rejected #374
+             cymbal candidate must FAIL (PASS is NOT QUALIFIED; absent or
+             REFUSED leaves the control unrun, so the decision is REFUSED).
+             Separately, a bar that did not come from the selection (WEAK) is
+             never counted as validated: that is the WEAK rule above, not Q6.
 """
 from __future__ import annotations
 

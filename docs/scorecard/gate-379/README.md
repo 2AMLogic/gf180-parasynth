@@ -343,7 +343,7 @@ At p = 1.0 the bar is the envelope of every real recording of the voice, which s
 rejected cymbal, but only by 1.27-1.29x, so that is a thin margin and not a separation. A bar loose enough to pass an
 untouched real recording is loose enough to miss 13 % of the seeded defects (decay on BD, SD, MA and CY; slides on BD, LT, LC, MC and HT; wrong pitch on SD,
 LT, MT, RS, MA and CY; SD brighter), and a bar tight enough to catch them fails untouched real
-recordings. **No p satisfies Q2 and Q4 together.** The #374 fixture was regenerated from `cae5f75` on the box and
+recordings. **Neither tested p satisfies Q2 and Q4 together** (full qualification diagnostics exist only at p = 0.75 and p = 1.0; the other six sampled fractions, 0.05 to 0.50, were swept for split coverage only, and an intermediate fraction passing both is not ruled out, so this is NOT a claim about every p). The #374 fixture was regenerated from `cae5f75` on the box and
 matches `prove.json`'s recorded hashes byte for byte (`ffc30d3da9c176ec`, `3078bf088ea5cbcf`), so the control is the
 same signal.
 
