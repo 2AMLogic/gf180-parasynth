@@ -1,6 +1,7 @@
 Issue #551 COUPLE_K sweep -- written by `python3 tools/probes/dc_blocker.py --k-sweep`.
 Grid, rule and prediction: docs/sensitivity/coupling-k-plan.json (committed before this ran).
-provenance: commit fb27af89c730  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+provenance: commit cc1f9a15d630  SR 48000  render 2.40s  gain 0.45  K 10 (7.460 Hz)
+wrong-then-right: 1 figure(s) in the plan were wrong before they were right (phi 0.888 quoted from the 0.60 s window, 0.391 at this 2.40 s window; caught by this instrument's own precondition before any point was rendered); see `amendments` in the plan
 CY baseline phi (f = 0 bin, window-dependent) = 0.3907, beta (below the K = 10 corner) = 0.9828; sub20 baseline -52.58 dBfs
 
 coupling_k -- CY residual sub-20 Hz energy against K, bus placement, uncoupled = 100
