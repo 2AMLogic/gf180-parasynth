@@ -26,7 +26,11 @@ FILES = ["docs/sensitivity/registry.json",
          "docs/sensitivity/res-cut-law-degree.json",
          "docs/sensitivity/res-cut-correction-entries.json",
          "docs/res-tuning/sweeps.txt",
-         "model/res_tuning.py"]
+         "model/res_tuning.py",
+         # issue #551's record: COUPLE_K, a python-constant in the drum model
+         "docs/sensitivity/coupling-k.json",
+         "docs/sensitivity/coupling-k-sweep.txt",
+         "model/drums_fx.py"]
 
 
 @pytest.fixture

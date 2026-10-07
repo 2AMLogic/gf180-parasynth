@@ -452,6 +452,17 @@ verify-full:
 ## measurement that cannot change without a threshold changing does not belong
 ## in a per-push target.
 ##
+## coupling_controls.py (#551) is the injected-defect inventory for contract
+## 15.10's shared-bus DC coupling: eighteen named defects of the model (a
+## bypassed enable, a misplaced bus or clamp, the wrong signed shift, a charge
+## or output word one bit narrow, a charge cleared by a hit, retune or accent,
+## a reset that keeps the charge or the enable, a frozen-while-bypassed charge,
+## reserved bits, an aliased address), each declared against the ONE property of
+## model/test_drums_fx.py::test_coupling_* that must catch it, plus the clean
+## run, which must be green. CAUGHT / BLIND / NO VERDICT, and a properties x
+## defects matrix. Pure Python, no corpus, about 12 minutes on one core
+## (the model is an integer Python loop; 13 properties x 19 runs).
+##
 ## estimator_ground_truth.py controls (#517) is the same shape one level up:
 ## the ground-truth suite in `verify` is a gate on sixty-four estimator
 ## checks, and this is the run in which those checks are REQUIRED to go red.
@@ -468,6 +479,7 @@ controls:
 	  "$(PY) tools/control_capability_verdicts.py" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
 	  "$(PY) tools/probes/estimator_ground_truth.py controls" \
+	  "$(PY) tools/probes/coupling_controls.py" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only gate --inject ENV_RATE_EXP --expect-fail --outdir build/voice-env-rate-exp" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_HEADROOM --expect-fail --outdir build/voice-osc2x-headroom" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only default --osc2x --inject OSC2X_OFF --expect-fail --outdir build/voice-osc2x-off" \

@@ -161,3 +161,18 @@ integer in a Python model. Their dials do not exist in RTL yet.
   prediction in `limits` and carries no prediction block. It does not carry a
   rewritten one, because a prediction edited after the measurement is no
   longer a prediction.
+
+The fifth is **prospective** and is the first whose parameter is a *fixed*
+design constant rather than something a register can change (issue #551):
+
+- **`coupling-k.json`** — `COUPLE_K` (the shared-bus DC blocker's pole,
+  `1 - 2^-K`) against the CY's residual sub-20 Hz energy, K = 8..13.
+  `SENSITIVE`, as predicted: **0.39, 1.24, 3.27, 7.34, 14.59, 26.17 %**, every
+  adjacent pair 1.8x to 3.2x apart. The plan, `coupling-k-plan.json`, was
+  committed before any point was rendered, and its premise was corrected once
+  before any point too: the sweep instrument's own precondition refused on the
+  CY's `phi` (0.391 at the probe's 2.40 s window, not the 0.888 the plan and
+  `dc_blocker.py`'s docstring quote from 0.60 s), which is why the instrument
+  now keys on the window-stable `beta`. The record says in so many words that
+  the BD output network's 7.52 Hz rationale for K = 10 does not establish the
+  cymbal's corner.
