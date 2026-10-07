@@ -302,6 +302,116 @@ python3 tools/gate_calibrate.py calibrate --refs /tmp/tr808-fischer --tables tab
 `/tmp/tr808-fischer` is `tidalcycles/sounds-tr808-fischer` at `85fbecf`. The two `measure` runs were made at `b56af6f`
 (the measure code is unchanged since); `calibrate` at `cdeaa19`.
 
+## 9. Between-recording bar, rule v2: REFUSED again, with the reason isolated (`mars-calibration-v2/`)
+
+`tools/gate_between.py` (8 tests in `tools/test_gate_between.py`; 36 pass with the other two gate suites on the build box),
+run at `3bdb7e9b`, tables unchanged from section 8 (derived distances only; no MARS audio was read or written this time).
+The operator's ruling (2026-10-02) asks for "as close as another real 808, measured across units or recordings". Section 8
+refused under a rule with two defects. Rule v2 repairs those two and nothing else:
+
+1. the validation was ONE hash split of 5-30 keys. v2 uses 200 seeded half-splits of the pool, both directions;
+2. k was an absolute count (5 of 7 conga keys, 5 of 72 BD keys). v2's dial is a FRACTION p of the pool's keys.
+
+**What was and was not frozen before the data.** Rule v2 was designed after an exploration over ALL keys (VAL included)
+that showed coverage rising with the matched fraction. So VAL is untouched by v2's selection computation, and
+`test_selection_never_reads_the_untouched_group` proves that, but VAL is not untouched by v2's design. Its pass rate
+checks the procedure; it is not an independent test. The independent test is a second real 808, and the Boutique
+samples were not on the host that ran this. Not run.
+
+**Selection** (smallest p in 0.05-0.50 whose mean split coverage over the 9 sounds with >= 8 pool keys reaches 80 %):
+
+| p (fraction of pool keys) | 0.05 | 0.10 | 0.15 | 0.20 | 0.30 | 0.50 | 0.75 (sweep) | 1.00 (sweep) |
+|---|---|---|---|---|---|---|---|---|
+| mean coverage | 0.07 | 0.12 | 0.32 | 0.36 | 0.52 | 0.72 | 0.82 | 0.93 |
+
+No selectable p reaches 80 %, so **the calibration is REFUSED with no bars, and the existing gate keeps ranking fixes.**
+The two p values past the selectable grid are recorded so the refusal not to widen stays visible.
+
+**Diagnostic runs, labelled NOT acceptance authority (p overridden by hand).** The two requirements cross, which is the
+finding:
+
+| gate | p = 0.75 | p = 1.00 (every real setting in the pool) |
+|---|---|---|
+| Q1 start red (stub FAIL, silence REFUSED) | 16/16, 16/16 | 16/16, 16/16 |
+| Q2 seeded defects FAIL (need 90 %) | 110/121 (90.9 %) | **105/121 (86.8 %) fails** |
+| Q3 shipped cymbal FAILs | FAIL (spec_peak, centroid, modulation; 1.42x) | FAIL (centroid, modulation; 1.29x) |
+| rejected #374 candidate FAILs | FAIL (centroid, modulation; 1.27x) | FAIL (centroid, modulation; 1.27x) |
+| Q4 Fischer target stays green / untouched best take passes (need 80 %) | 16/16 / **7/9 (77.8 %) fails** | 16/16 / 9/9 |
+| Q5 corrupted corpus (every take seeded "darker") does not qualify | not qualified | not qualified |
+
+At p = 1.0 the bar is the envelope of every real recording of the voice, which still does not fit the shipped or the
+rejected cymbal, but only by 1.27-1.29x, so that is a thin margin and not a separation. A bar loose enough to pass an
+untouched real recording is loose enough to miss 13 % of the seeded defects (BD and SD decay, every slide on a tom or
+conga, every wrong-pitch on a voice with a spread of tunings), and a bar tight enough to catch them fails untouched real
+recordings. **No p satisfies Q2 and Q4 together.** The #374 fixture was regenerated from `cae5f75` on the box and
+matches `prove.json`'s recorded hashes byte for byte (`ffc30d3da9c176ec`, `3078bf088ea5cbcf`), so the control is the
+same signal.
+
+**Why, from the held-out failures** (`top_failing` in `between.json`): LT fails `flatness` and `modulation`, MT and HT
+`centroid`, HC `pitch_shape`, CY `attack`. These are the features whose spread between two recordings of one voice
+exceeds the spread between neighbouring settings of one unit. Six of 16 sounds (RS, CL, CP, MA, CB, CH; OH has 5 keys)
+carry two keys, so nothing can be held out: their v2 bar is `WEAK-UNVALIDATED` (max over the two nearest keys) and is
+reported only in the diagnostics.
+
+**What would change the answer** (it is data, not a tighter statistic): a setting-matched between-recording pair per
+voice (the knob positions of the Fischer take reproduced on a second documented unit), or enough recordings of the six
+knobless voices to hold something out. The MARS pack cannot supply either. This is filed as a follow-up.
+
+### The shipped kit, ranked (`rank-current/rank.json` at `3bdb7e9b`; the gate and the model are unchanged since section 4)
+
+Section 4's ratios reproduce at current `main` except RS (27.0 to 20.6; section 8 already noted this). Ranked by how much
+farther from the Fischer target our sound is than the nearest real MARS recording of the same voice. **Descriptive, not a
+verdict:** the MARS side is the most favourable take across all groups (optimistic), no bar was calibrated, and the
+ratios are against the old same-unit / WEAK bar, so a WEAK row and a neighbour row are not commensurate with each other.
+`gate_between.py table between.json` regenerates this.
+
+| rank | sound | ours / MARS best | ours (worst, vs old bar) | MARS best (worst) | MARS takes | bar |
+|---|---|---|---|---|---|---|
+| 1 | RS | **9.0x** | 20.6 (centroid) | 2.3 (decay) | 4 | WEAK-resampled-take |
+| 2 | MA | **7.9x** | 35.5 (centroid) | 4.5 (attack) | 4 | WEAK-resampled-take |
+| 3 | CH | **4.6x** | 9.3 (flatness) | 2.0 (spec_peak) | 4 | WEAK-resampled-take |
+| 4 | MC | **4.5x** | 19.4 (pitch_shape) | 4.3 (flatness) | 44 | 808-neighbour |
+| 5 | HC | **4.4x** | 8.7 (pitch_shape) | 2.0 (impulse) | 44 | 808-neighbour |
+| 6 | OH | **4.2x** | 4.4 (centroid) | 1.1 (attack) | 10 | 808-neighbour |
+| 7 | MT | **3.4x** | 10.5 (centroid) | 3.1 (decay) | 66 | 808-neighbour |
+| 8 | LC | **3.2x** | 16.4 (pitch_shape) | 5.2 (flatness) | 44 | 808-neighbour |
+| 9 | CP | **3.1x** | 15.9 (decay) | 5.1 (attack) | 4 | WEAK-resampled-take |
+| 10 | CL | **3.1x** | 15.8 (pitch_shape) | 5.1 (flatness) | 4 | WEAK-resampled-take |
+| 11 | BD | **3.0x** | 22.2 (pitch_shape) | 7.5 (pitch) | 144 | 808-neighbour |
+| 12 | LT | **2.6x** | 14.8 (modulation) | 5.6 (decay) | 66 | 808-neighbour |
+| 13 | CY | **2.1x** | 7.9 (centroid) | 3.7 (decay) | 48 | 808-neighbour |
+| 14 | HT | **1.7x** | 8.0 (centroid) | 4.7 (decay) | 66 | 808-neighbour |
+| 15 | CB | **1.0x** | 11.1 (pitch_shape) | 10.7 (pitch_shape) | 4 | WEAK-resampled-take |
+| 16 | SD | **0.7x** | 2.1 (attack) | 2.9 (spec) | 216 | 808-neighbour |
+
+Read it with section 4 (rank by the old bar: MA, RS, BD, MC, LC, CP, CL, LT, CB, MT, CH, HC, HT, CY, OH, SD). **Both
+orderings put MA, RS and the toms/congas' pitch trajectory first, and SD and CB (and HT, CY) last.** SD and CB are
+already inside the spread of real recordings (0.7x, 1.0x). The pre-registered rule did not select this ordering, and the
+two orderings differ in the middle, which is why the fix list in the PR is by old-bar rank within each
+bar group.
+
+### Wrong-then-right, this record: 2
+
+1. My first v2 test fixture expected p = 0.05 to be chosen on a homogeneous pool. By symmetry the half that holds the best
+   take fails half the time at a tiny p, so the smallest p reaching 80 % is larger; the test now asserts the rule, not a
+   number.
+2. The first validation fixture sat at 0.305 against a bar of 0.304 (a fixture rounding error); caught by the
+   `VALIDATED` assertion.
+
+**Not done here, and why.** The p dial is not registered in `docs/sensitivity/registry.json`: a record needs a
+fixed-width evidence table and a prediction derived independently of the measurement, and the sweep here is a JSON
+record of a gate-calibration statistic, not a shipped parameter. The sweep is committed (`between.json`) and registering
+it is part of the follow-up if a bar is ever selected.
+
+```sh
+# on the build box; tables from section 8, Fischer at 85fbecf, no MARS audio needed
+P=~/v379/bin/python; D=docs/scorecard/gate-379/mars-calibration
+$P tools/perceptual_gate.py rank --refs ~/fischer --wavs ~/out/ours --out rank.json
+$P tools/gate_between.py --refs ~/fischer --tables $D/tables.json --corrupt-tables $D/tables-corrupt-darker.json \
+    --ours ~/out/ours [--fixtures <CY5025-candidate.wav dir> --force-p 0.75] --out between.json
+$P tools/gate_between.py table between.json
+```
+
 ## Reproduce (build box)
 
 ```sh
