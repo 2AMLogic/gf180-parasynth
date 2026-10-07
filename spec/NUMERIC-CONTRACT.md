@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 15 — 2026-09-27 — status: PROPOSED. Not ratified.**
+**Revision 16 — 2026-10-07 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
@@ -8,7 +8,9 @@ its saw share already carried (6.4, 6.6, 6.6.5; DR 0017). Nothing else moves.
 Revision 14 is the clap's final strike (15.3, `ENV_FRATE`). Revision 15 changes
 no register and no arithmetic: it is two values in the reference kit (Appendix
 G), the rimshot's two bridged-T modes' relative drive and the level re-balance
-that follows it (#388). Section 18 has all three.
+that follows it (#388). Revision 16 adds one register, the shared-bus DC
+coupling's enable at drum-page `0x30` (15.10, DR 0025; #551), reset off, with
+no RTL yet. Section 18 has all four.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -18,7 +20,7 @@ TR-808-shaped set of eleven stops whose bodies and filters are the modal
 resonator bank — producing one signed 16-bit sample per frame. It is written
 from the committed reference model and claims nothing the model does not do.
 It becomes the specification RTL is verified against only when ratified
-through the two-key process this fleet uses; until then it is revision 15,
+through the two-key process this fleet uses; until then it is revision 16,
 proposed, and the status line above must not be read as
 anything else (the rule is gf180-drone-fc DR-0005's: the status field must not
 claim ratification before that act has happened).
