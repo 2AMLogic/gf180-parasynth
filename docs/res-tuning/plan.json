@@ -40,6 +40,30 @@
     "N3_onset": "at every validation cutoff: res = onset_below_res does NOT sustain a ring and res = onset_above_res does, for baseline and candidate alike. A below-onset point is classified, never given a frequency",
     "why": "a travel reduction bought by moving the whole family further out of tune does not pass: N1 bounds the worst point, N2 forbids the average point getting worse at all, N3 keeps DR 0006's 'res = 1 is the onset everywhere' property"
   },
+  "sweeps": {
+    "order": "law-degree first (correction held at 9 entries), then correction entries (law held at whatever the first sweep selects). Both on the SELECT grid only; the validate grid is evaluated once, after both are chosen",
+    "res-cut-law-degree": {
+      "parameter": "LAW_DEGREE in model/res_tuning.py",
+      "values": [0, 3, 4],
+      "value_meaning": "0 = the shipped CUT_TRIM * fcr law; 3 / 4 = a polynomial of that degree in f/SR refitted to the linearised loop (ladder_headroom.refit_tuning on REFIT_CUTS)",
+      "held_fixed": {"CORR_ENTRIES": 9, "REFIT_ENTRIES": 1},
+      "objective": "select-grid worst_abs_cents",
+      "flat_within_relative": 0.25,
+      "selection_rule": "the lowest degree in the run that contains the best point",
+      "prediction": "0 separates from 3 and 4 (the shipped law's S-shaped 1 % residual is ~17 cents at its worst, which the correction -- a function of resonance only -- cannot touch); 3 and 4 do not separate from each other, because the quartic's gain over the cubic is ~0.2 pp of law error, under the ~1.1 pp per-cutoff spread of the ring itself. Runs [[0], [3, 4]]"
+    },
+    "res-cut-correction-entries": {
+      "parameter": "CORR_ENTRIES in model/res_tuning.py",
+      "values": [0, 2, 3, 5, 9, 17, 33],
+      "value_meaning": "0 = correction disabled; n >= 2 = an n-entry Q1.15 table over res 1..2 (k 65536..131072), linearly interpolated, entry 0 fixed at unity",
+      "held_fixed": {"LAW_DEGREE": "the res-cut-law-degree selection", "REFIT_ENTRIES": 1},
+      "objective": "select-grid mean_offset_travel_cents",
+      "flat_within_relative": 0.25,
+      "flat_rule_why": "the estimator is qualified to 1 cent, so two travels (each a difference of two means) are only distinguishable when they differ by more than ~2 cents; at the 5-10 cent travel the larger tables are expected to reach, 2 cents is 20-40 %. 25 % is that granularity, stated before the data",
+      "selection_rule": "the smallest table in the run that contains the best point",
+      "prediction": "from issue #237's (in-sample) polynomial residuals: disabled ~100 cents; 2 entries is a straight line in res, ~16 cents (0.95 pp); 3 entries ~4-8 cents; 5 and above at the estimator/cutoff-spread floor and indistinguishable. Runs [[0], [2], [3], [5, 9, 17, 33]]. Recorded as a prediction; if the measurement contradicts it the record says so in its limits and does NOT carry a rewritten prediction"
+    }
+  },
   "estimator": {
     "qualified_on": "synthetic signals whose frequency is known by construction (model/res_tuning.py qualify_estimator), never on the filter",
     "accuracy_cents_max": 1.0,
