@@ -69,7 +69,7 @@ def test_selection_refuses_rather_than_widen_when_halves_disagree():
 
 
 def test_calibrates_homogeneous_pool_validates_and_labels_weak_sounds():
-    pool = {0: [0.30 + 0.002 * i for i in range(8)], 1: [0.30 + 0.002 * i for i in range(8)], 2: [0.305]}
+    pool = {0: [0.30 + 0.002 * i for i in range(8)], 1: [0.30 + 0.002 * i for i in range(8)], 2: [0.301]}
     cal = gb.calibrate({"BD": _tab(pool), "RS": _tab({0: [0.5], 1: [0.5]}, sound="RS")})
     by = cal["selection"]["by_p"]
     assert cal["status"] == "CALIBRATED"
