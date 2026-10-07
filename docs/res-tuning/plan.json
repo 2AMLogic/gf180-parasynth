@@ -1,0 +1,49 @@
+{
+  "schema": "res-tuning-plan-v1",
+  "issue": 257,
+  "what": "The grids, targets and non-regression margins for issue #257's resonance-keyed cutoff correction, COMMITTED BEFORE ANY CANDIDATE WAS FITTED OR MEASURED. model/res_tuning.py reads this file and refuses to evaluate if it is missing or dirty in git, so a target cannot be moved after its result is seen without that move being a visible commit.",
+  "stated_before_results": true,
+  "baseline": "the shipped filter: voice_fx.make_g_rom() (CUT_TRIM * fcr law, edge-sampled 129 entries), voice_fx.make_k_rom(), no resonance correction -- reference_rigs.OurLadder('ours')",
+  "grids": {
+    "fit": {
+      "role": "the resonance correction's table entries are fitted here and nowhere else",
+      "cuts_hz": [100, 200, 400, 800, 1600, 3200, 6400],
+      "res": "the table's own knots, res = 1 + i/(entries-1), i >= 1; entry 0 (res = 1.0, the onset) is fixed at unity, not fitted"
+    },
+    "select": {
+      "role": "the table size and the tuning-law degree are chosen on this grid (docs/sensitivity/res-cut-correction-*.json). Historical: these are model/ladder_headroom.py's REPORT_CUTS x REPORT_RES, the grid issue #237's 105 cents was measured on",
+      "cuts_hz": [100, 200, 400, 800, 1600, 3200, 6400],
+      "res": [1.02, 1.05, 1.10, 1.20, 1.45, 1.70, 2.00]
+    },
+    "validate": {
+      "role": "UNTOUCHED. Never used to fit or select. Intermediate resonances and cutoffs absent from both grids above, plus the low and high cutoff endpoints (30 Hz is voice_fx.CUT_MIN; 16 kHz is above anything fitted)",
+      "cuts_hz": [30, 150, 300, 566, 1131, 2263, 4525, 9000, 12000, 16000],
+      "res": [1.03, 1.15, 1.33, 1.60, 1.85, 1.99],
+      "onset_below_res": 0.97,
+      "onset_above_res": 1.03
+    }
+  },
+  "metrics": {
+    "offset_cents": "1200*log2(f_osc / commanded) of the fixed-point filter's sustained free ring, per (cut, res) point",
+    "mean_offset_travel_cents": "max minus min, over the grid's resonances, of the across-cutoff mean of offset_cents -- issue #237's travel, generalised from two resonances to every resonance on the grid",
+    "per_cut_travel_cents": "for each cutoff, max minus min of offset_cents over the grid's resonances; reported per cutoff, the worst is the gated number",
+    "worst_abs_cents": "max |offset_cents| over every point of the grid",
+    "mean_abs_cents": "mean |offset_cents| over every point of the grid"
+  },
+  "targets": {
+    "T1_mean_offset_travel_cents_max": 25.0,
+    "T2_worst_per_cut_travel_max_fraction_of_baseline": 0.5
+  },
+  "non_regression": {
+    "N1_worst_abs_cents_max_increase": 5.0,
+    "N2_mean_abs_cents_max_increase": 0.0,
+    "N3_onset": "at every validation cutoff: res = onset_below_res does NOT sustain a ring and res = onset_above_res does, for baseline and candidate alike. A below-onset point is classified, never given a frequency",
+    "why": "a travel reduction bought by moving the whole family further out of tune does not pass: N1 bounds the worst point, N2 forbids the average point getting worse at all, N3 keeps DR 0006's 'res = 1 is the onset everywhere' property"
+  },
+  "estimator": {
+    "qualified_on": "synthetic signals whose frequency is known by construction (model/res_tuning.py qualify_estimator), never on the filter",
+    "accuracy_cents_max": 1.0,
+    "min_cycles": 10,
+    "refuses": ["non-finite samples", "silence", "fewer than min_cycles cycles", "a decaying (not sustained) ring", "zero-crossing and spectral-peak estimates disagreeing by more than 0.5 %"]
+  }
+}
