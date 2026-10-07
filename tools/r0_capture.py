@@ -547,18 +547,62 @@ def host_log_problems(plan) -> list:
     return probs[:5] + ([f"... {len(probs) - 5} more"] if len(probs) > 5 else [])
 
 
-def release_qualification(ref: dict, host_plan: dict | None) -> tuple:
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+
+def _is_int(x) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def live_identity_problems(rec: dict, *, allow_synthetic: bool = False) -> list:
+    """Why a reference record's `schedule.kind == "live"` label is not backed
+    by its own replay identity (PR #563). A live render (r0_reference.py
+    render --schedule live) hashes the bytes it REPLAYED through the RTL into
+    BOTH `replayed_stimulus_sha256` and `schedule.live_cmds_sha256`, and
+    those bytes carry the gate bracket's STATUS queries, so they are never
+    the pinned dry-run command's (`cmds_sha256`). A label is cheap; these
+    three hashes are what a relabelled dry-run render cannot all satisfy.
+
+    Defeating input (rule 8), shipped as a test: a record whose hashes are
+    copied from a GENUINE live run onto a dry-run render's audio satisfies
+    every check here -- the wav is not re-derived from the bytes. Only a
+    re-render closes that; such records are marked `synthetic` (the unit
+    fixture is one) and refused unless `allow_synthetic`."""
+    sched = rec.get("schedule") or {}
+    live = sched.get("live_cmds_sha256")
+    replayed = rec.get("replayed_stimulus_sha256")
+    probs = []
+    if not allow_synthetic and ("synthetic" in sched or "synthetic" in rec):
+        probs.append("the live reference is declared synthetic (a test fixture, not a "
+                     "rendered live schedule)")
+    if not (isinstance(live, str) and _SHA256_HEX.fullmatch(live)) or live == "0" * 64:
+        probs.append(f"schedule.live_cmds_sha256 {live!r} is not a sha256 digest")
+    elif replayed != live:
+        probs.append(f"schedule.live_cmds_sha256 {live[:12]} is not the record's replayed "
+                     f"stimulus {str(replayed)[:12]}: the label is not the replay")
+    elif live == rec.get("cmds_sha256"):
+        probs.append("the replayed stimulus is the pinned dry-run command's bytes, not "
+                     "a live schedule")
+    return probs
+
+
+def release_qualification(ref: dict, host_plan: dict | None, *,
+                          allow_synthetic: bool = False) -> tuple:
     """(qualified, why) -- may this held take's RELEASE be compared?
 
     Only against a reference rendered from a LIVE schedule that binds the
-    host's own hold record: its identity must carry `schedule.kind == "live"`
-    and a `hold_timing` naming the same requested hold and bound as the
-    host log. Two planned holds that merely match are NOT enough (#306): a
-    dry-run reference's hold is the planner's, and a matching number in the
-    host log says nothing about what the board applied. No such reference
-    exists yet (rendering one is the build box's job), so today every held
-    take's release is NOT EVALUATED, and says so."""
-    sched = ((ref or {}).get("record") or {}).get("schedule")
+    host's own hold record: its identity must carry `schedule.kind == "live"`,
+    a live-bytes hash that IS the record's replayed stimulus and is not the
+    dry-run's (`live_identity_problems`), and a `hold_timing` naming the same
+    requested hold and bound as the host log. Two planned holds that merely
+    match are NOT enough (#306): a dry-run reference's hold is the planner's,
+    and a matching number in the host log says nothing about what the board
+    applied. Nor is the label alone (PR #563): a dry-run reference relabelled
+    `live` with an all-zero hash qualified until the hash was bound. No such
+    reference exists yet (rendering one is the build box's job), so today
+    every held take's release is NOT EVALUATED, and says so."""
+    rec = (ref or {}).get("record") or {}
+    sched = rec.get("schedule")
     ht = (host_plan or {}).get("hold_timing")
     if not isinstance(sched, dict) or sched.get("kind") != "live":
         return False, ("release NOT EVALUATED: the reference is the dry-run schedule's, "
@@ -566,17 +610,19 @@ def release_qualification(ref: dict, host_plan: dict | None) -> tuple:
     if not isinstance(ht, dict):
         return False, ("release NOT EVALUATED: the host log carries no hold record "
                        "(a legacy log: its hold is the planner's)")
+    ident = live_identity_problems(rec, allow_synthetic=allow_synthetic)
+    if ident:
+        return False, "release NOT EVALUATED: " + "; ".join(ident)
     bind = sched.get("hold_timing") or {}
     tol = sched.get("release_tolerance_frames")
-    if not (isinstance(sched.get("live_cmds_sha256"), str) and isinstance(tol, int)
-            and isinstance(bind.get("requested_hold_frames"), int)):
+    if not (_is_int(tol) and _is_int(bind.get("requested_hold_frames"))):
         return False, ("release NOT EVALUATED: the live reference does not bind its "
-                       "bytes, hold and release tolerance")
+                       "hold and release tolerance")
     if bind["requested_hold_frames"] != ht.get("requested_hold_frames"):
         return False, (f"release NOT EVALUATED: the live reference holds "
                        f"{bind['requested_hold_frames']} frames, the host log requested "
                        f"{ht.get('requested_hold_frames')}")
-    if not isinstance(ht.get("hold_bound_frames"), int) or ht["hold_bound_frames"] > tol:
+    if not _is_int(ht.get("hold_bound_frames")) or ht["hold_bound_frames"] > tol:
         return False, (f"release NOT EVALUATED: the host's hold bound "
                        f"{ht.get('hold_bound_frames')} exceeds the reference's release "
                        f"tolerance {tol}")
@@ -1238,8 +1284,8 @@ def analyse(bundle: pathlib.Path, refdir: pathlib.Path = REFERENCES,
                 h_cap, h_ref = planned_hold(host_plan), refs[tk["command_id"]].get("hold")
                 if h_cap is not None and h_ref is not None:
                     hold_offsets[tk["id"]] = h_cap - h_ref
-                    release_q[tk["id"]] = release_qualification(refs[tk["command_id"]],
-                                                                host_plan)
+                    release_q[tk["id"]] = release_qualification(
+                        refs[tk["command_id"]], host_plan, allow_synthetic=allow_synthetic)
                 if diff:
                     raise Refused(f"take {tk['id']} is not the released command "
                                   f"{tk['command_id']}: " + "; ".join(diff))

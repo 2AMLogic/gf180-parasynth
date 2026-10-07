@@ -481,22 +481,85 @@ def test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused(clean, tmp_
 
 
 # ---- #306: the release comparison, bound to a live schedule ------------------
+_LIVE_STIMULUS = {}
+
+
+def _live_stimulus(key, tmp_path):
+    """(sha256, host hold record) of the bytes the shipped CLI's LIVE path
+    sends for `key` against the scripted device, written in the RTL replay
+    format exactly as `r0_reference.render_one(..., schedule="live")` writes
+    them before replaying them. The RTL replay itself is NOT run here."""
+    if key not in _LIVE_STIMULUS:
+        import hold_timing as ht
+        m = ht.measure(ht.HELD_COMMANDS[key])
+        v, why = ht.hold_verdict(m)
+        assert v == ht.PASS, why
+        prefix = tmp_path / f"{key}-live"
+        ht.write_held_rtl_capture(m["_harness"], prefix)
+        _LIVE_STIMULUS[key] = (rc.sha256_file(pathlib.Path(f"{prefix}.cmds")),
+                               dict(m["host_record"]))
+    sha, rec = _LIVE_STIMULUS[key]
+    return sha, dict(rec)
+
+
 def _live_refs(tmp_path, *, requested=1920, tolerance=8, keys=("held-default",)):
-    """The committed references with `held-default` RELABELLED as a live-
-    schedule reference. SYNTHETIC: no live-schedule reference has been
-    rendered (that is the build box's job); this exercises the binding and
-    the comparison, not a rendered schedule."""
+    """The committed references with `held-default` carrying a live-schedule
+    identity that satisfies the identity invariant: `replayed_stimulus_sha256`
+    and `schedule.live_cmds_sha256` are both the hash of the CLI's real live
+    bytes, which differ from the pinned dry-run's. SYNTHETIC, and declared so:
+    the AUDIO is still the dry-run render (rendering the live schedule through
+    the RTL is the build box's job), so production qualification refuses it
+    and these tests pass `allow_synthetic=True`. This exercises the binding
+    and the comparison, not a rendered schedule."""
     d = tmp_path / "live-refs"
     shutil.copytree(rc.REFERENCES, d)
     for key in keys:
+        sha, host_record = _live_stimulus(key, tmp_path)
         p = d / f"{key}.json"
         r = json.loads(p.read_text())
-        r["schedule"] = {"kind": "live", "synthetic": "relabelled dry-run render (test)",
-                         "live_cmds_sha256": "0" * 64,
-                         "hold_timing": {"requested_hold_frames": requested},
+        assert sha != r["cmds_sha256"], "the live bytes are the dry-run's: guard premise"
+        host_record["requested_hold_frames"] = requested
+        r["replayed_stimulus_sha256"] = sha
+        r["schedule"] = {"kind": "live",
+                         "synthetic": "dry-run audio under real live-bytes identity (test)",
+                         "live_cmds_sha256": sha,
+                         "hold_timing": host_record,
                          "release_tolerance_frames": tolerance}
         p.write_text(json.dumps(r))
     return d
+
+
+def _relabelled_dry_run_refs(tmp_path, *, synthetic=True, live_hash="0" * 64,
+                             replayed=None):
+    """The Judge's defeating input (PR #563): the committed DRY-RUN reference
+    for held-default, copied and relabelled `kind: live`, with an all-zero
+    live-bytes hash. Nothing in it came from a live schedule. `replayed`
+    additionally forges the record's `replayed_stimulus_sha256`."""
+    d = tmp_path / "relabelled-refs"
+    shutil.copytree(rc.REFERENCES, d)
+    p = d / "held-default.json"
+    r = json.loads(p.read_text())
+    r["schedule"] = {"kind": "live", "live_cmds_sha256": live_hash,
+                     "hold_timing": {"requested_hold_frames": 1920},
+                     "release_tolerance_frames": 8}
+    if synthetic:
+        r["schedule"]["synthetic"] = "relabelled dry-run render (test)"
+    if replayed is not None:
+        r["replayed_stimulus_sha256"] = replayed
+    p.write_text(json.dumps(r))
+    return d
+
+
+def test_a_relabelled_dry_run_reference_qualifies_no_release(clean, tmp_path):
+    """NEGATIVE CONTROL (Judge, PR #563): the exact circular fixture -- the
+    dry-run reference copied, `kind: live` added, an all-zero hash -- on the
+    PRODUCTION path leaves every held release NOT EVALUATED."""
+    d = _held_live_session(clean, tmp_path)
+    rec = rc.analyse(d, refdir=_relabelled_dry_run_refs(tmp_path))
+    assert rec["coverage"]["release_compared"]["held-1"] is False
+    assert rec["coverage"]["release_compared"]["held-2"] is False
+    held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
+    assert "NOT EVALUATED" in held["coverage"]["excluded_why"], held["coverage"]
 
 
 def _held_live_session(clean, tmp_path, displace=0, held1_inject=None):
@@ -532,11 +595,72 @@ def test_a_live_schedule_reference_qualifies_the_release(clean, tmp_path):
     hold, a host record within its tolerance: the held takes' releases ARE
     compared, and the clean session passes with them in."""
     d = _held_live_session(clean, tmp_path)
-    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    refs = _live_refs(tmp_path)
+    rec = rc.analyse(d, refdir=refs, allow_synthetic=True)
     assert rec["verdict"] == rc.PASS, rec["reasons"]
     cov = rec["coverage"]["release_compared"]
     assert cov["held-1"] is True and cov["held-2"] is True
     assert cov["tone-1"] is False               # m5a-saw's reference is still dry-run
+    # the same fixture on the PRODUCTION path: it is synthetic (dry-run audio),
+    # so no release qualifies
+    rec = rc.analyse(d, refdir=refs)
+    assert rec["coverage"]["release_compared"]["held-1"] is False
+    held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
+    assert "declared synthetic" in held["coverage"]["excluded_why"], held["coverage"]
+
+
+def _qual_inputs(tmp_path):
+    """(reference, host log) for release_qualification, without audio."""
+    sha, host_record = _live_stimulus("held-default", tmp_path)
+    host, _ = _live_host_log("held-default", tmp_path / "h")
+    rec = json.loads((rc.REFERENCES / "held-default.json").read_text())
+    rec["replayed_stimulus_sha256"] = sha
+    rec["schedule"] = {"kind": "live", "live_cmds_sha256": sha, "hold_timing": host_record,
+                       "release_tolerance_frames": 8}
+    return rec, host
+
+
+_DRY_SHA = json.loads((rc.REFERENCES / "held-default.json").read_text())["cmds_sha256"]
+
+
+@pytest.mark.parametrize("edit,why", [
+    # the Judge's input: an all-zero hash, nothing replayed
+    (lambda r: (r["schedule"].update(live_cmds_sha256="0" * 64),
+                r.pop("replayed_stimulus_sha256")), "not a sha256 digest"),
+    # all-zero in BOTH fields: still not a digest of anything
+    (lambda r: (r["schedule"].update(live_cmds_sha256="0" * 64),
+                r.update(replayed_stimulus_sha256="0" * 64)), "not a sha256 digest"),
+    (lambda r: r["schedule"].update(live_cmds_sha256="LIVE"), "not a sha256 digest"),
+    (lambda r: r["schedule"].update(live_cmds_sha256="A" * 64), "not a sha256 digest"),
+    (lambda r: r["schedule"].pop("live_cmds_sha256"), "not a sha256 digest"),
+    # a well-formed hash that is not the record's replay
+    (lambda r: r["schedule"].update(live_cmds_sha256="1" * 64), "is not the record's replayed"),
+    (lambda r: r.pop("replayed_stimulus_sha256"), "is not the record's replayed"),
+    # the equality check's own defeating input: a dry-run render relabelled
+    # with BOTH hashes set to the pinned dry-run bytes
+    (lambda r: (r["schedule"].update(live_cmds_sha256=_DRY_SHA),
+                r.update(replayed_stimulus_sha256=_DRY_SHA)), "pinned dry-run command's"),
+    (lambda r: r["schedule"].update(synthetic="x"), "declared synthetic"),
+    (lambda r: r.update(synthetic="x"), "declared synthetic"),
+])
+def test_a_live_label_not_backed_by_its_replay_qualifies_nothing(tmp_path, edit, why):
+    rec, host = _qual_inputs(tmp_path)
+    assert rc.release_qualification({"record": rec}, host) == (
+        True, "the live-schedule reference binds this take's hold record")
+    edit(rec)
+    ok, msg = rc.release_qualification({"record": rec}, host)
+    assert ok is False and "NOT EVALUATED" in msg and why in msg, msg
+
+
+def test_the_identity_gate_is_blind_to_genuine_hashes_on_dry_run_audio(tmp_path):
+    """Rule 8, the gate's DEFEATING INPUT, recorded as BLIND: the identity is
+    three hashes in a JSON record; nothing re-derives the wav from the bytes.
+    A dry-run render carrying a genuine live run's hashes, with no
+    `synthetic` marker, qualifies. Only re-rendering (build box) closes it;
+    the unit fixture is exactly this record and is marked synthetic."""
+    rec, host = _qual_inputs(tmp_path)
+    assert "synthetic" not in rec and "synthetic" not in rec["schedule"]
+    assert rc.release_qualification({"record": rec}, host)[0] is True
 
 
 def test_an_intentionally_displaced_release_is_caught(clean, tmp_path):
@@ -548,7 +672,7 @@ def test_an_intentionally_displaced_release_is_caught(clean, tmp_path):
     only because the two takes differ. A systematic hold error -- the
     historical defect, identical on every take -- would leave that blind.)"""
     d = _held_live_session(clean, tmp_path, displace=-96)
-    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path), allow_synthetic=True)
     assert rec["verdict"] == rc.FAIL, rec["reasons"]
     held = {t["id"]: t for t in rec["takes"]}["held-1"]
     assert "residual" in held["fails"], held["fails"]
@@ -567,7 +691,7 @@ def test_a_live_reference_that_does_not_bind_this_hold_compares_no_release(
     tighter than the host's bound, qualifies nothing."""
     d = _held_live_session(clean, tmp_path)
     rec = rc.analyse(d, refdir=_live_refs(tmp_path, requested=requested,
-                                          tolerance=tolerance))
+                                          tolerance=tolerance), allow_synthetic=True)
     assert rec["coverage"]["release_compared"]["held-1"] is False
     held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
     assert "NOT EVALUATED" in held["coverage"]["excluded_why"]
@@ -588,7 +712,7 @@ def test_a_deceptive_host_log_is_caught_by_the_audio_not_the_log(clean, tmp_path
     host = json.loads((d / f"{held['host_capture']}.plan.json").read_text())
     # BLIND: every log-level check passes, and the log's hold is the claim
     assert rc.host_log_problems(host) == [] and rc.planned_hold(host) == 1920
-    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path), allow_synthetic=True)
     assert rec["verdict"] == rc.FAIL, rec["reasons"]
     assert {t["id"]: t for t in rec["takes"]}["held-1"]["fails"], rec["reasons"]
 

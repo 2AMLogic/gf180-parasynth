@@ -441,8 +441,14 @@ packet bytes carry a different due from the one the row claims, which is the
 deceptive-log control `HOLD_FORGED_LOG`. A held take's release is compared
 only when `release_qualification` holds. That needs a reference whose identity
 carries `schedule.kind = "live"`, the live bytes' hash, the requested hold and
-a release tolerance at least as wide as the host's bound. **Equal planned holds
-are not enough.** Otherwise, including at a zero offset:
+a release tolerance at least as wide as the host's bound. The hash must be a
+real sha256 digest (64 lowercase hex, not all zeros), must equal the record's
+own `replayed_stimulus_sha256`, and must differ from the pinned dry-run
+command's `cmds_sha256`. A record marked `synthetic` never qualifies outside
+the tests. **Equal planned holds are not enough, and neither is the label.**
+A dry-run reference relabelled `live` with an all-zero hash qualified until
+PR #563's review; it is now a negative control. Otherwise, including at a zero
+offset:
 
 - every waveform comparison ends before the earlier of the two releases, less a
   96-frame planned-versus-device margin, and the take records
@@ -462,8 +468,13 @@ are not enough.** Otherwise, including at a zero offset:
   **ended**. It does not show that the release timing or shape matches.
 
 A passing session therefore does not claim that any release was compared. The
-comparison itself is tested on synthetic captures against a *relabelled*
-reference (`tools/test_r0_capture.py`). A release moved 5 ms early fails there,
+comparison itself is tested on synthetic captures (`tools/test_r0_capture.py`)
+against a reference that carries the hash of the CLI's real live bytes in both
+identity fields but still holds the dry-run render's audio. It is marked
+`synthetic`, so the production path refuses it. That is also the gate's
+defeating input, kept as a test that records it as BLIND: the identity is
+hashes in a JSON record, and nothing re-derives the audio from the bytes. Only
+a re-render closes that gap. A release moved 5 ms early fails there,
 and passes unnoticed against the dry-run references, which is what the binding
 buys. **NOT EVALUATED, and why:** no live-schedule reference has been rendered.
 Rendering one replays the live bytes through the UART RTL on the build box
