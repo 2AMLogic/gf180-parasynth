@@ -21,7 +21,12 @@ FILES = ["docs/sensitivity/registry.json",
          "docs/sensitivity/drum-kit-modes.json",
          "docs/sensitivity/modal-bank-nums.json",
          "fpga/reports/mode_sweep.txt",
-         "rtl-sketch/drum_kit.v"]
+         "rtl-sketch/drum_kit.v",
+         # issue #257's two records: a Python-constant parameter and its sweep
+         "docs/sensitivity/res-cut-law-degree.json",
+         "docs/sensitivity/res-cut-correction-entries.json",
+         "docs/res-tuning/sweeps.txt",
+         "model/res_tuning.py"]
 
 
 @pytest.fixture
@@ -281,9 +286,43 @@ def test_the_variable_nobody_swept_is_the_one_the_objective_responds_to():
 
 def test_the_two_dials_are_scored_by_the_same_rule():
     """Comparing two parameters under different thresholds would decide the
-    comparison by choosing the thresholds."""
-    rows = [sens.evaluate(r) for r in sens.load_records(sens.load_registry())]
+    comparison by choosing the thresholds. Scoped to the two mode-bank dials,
+    which ARE compared with each other; issue #257's records are a different
+    objective (cents, not um2) with their own pre-registered rule."""
+    rows = [sens.evaluate(r) for r in sens.load_records(sens.load_registry())
+            if r["parameter"]["source"] == "rtl-sketch/drum_kit.v"]
+    assert len(rows) == 2
     assert len({r["tolerance"] for r in rows}) == 1
+
+
+# --------------------------------------------------------------------------
+# python-constant parameters (issue #257)
+
+
+def test_a_python_constant_is_read_at_column_zero_only():
+    text = "LAW_DEGREE = 3          # comment\nclass X:\n    LAW_DEGREE = 4\n"
+    assert sens.parse_parameter(text, "LAW_DEGREE", "x", "python-constant") == 3
+    assert sens.parse_parameter("N: int = 33\n", "N", "x", "python-constant") == 33
+
+
+def test_a_python_constant_that_is_not_an_integer_literal_refuses():
+    """`N = f(3)` or `N = 3.5` is not a value the gate can read; it must refuse
+    rather than pick up a digit from inside the expression."""
+    for text in ("N = f(3)\n", "N = 3.5\n", "N = 3 + 1\n", "# N = 3\n"):
+        with pytest.raises(sens.Refused, match="found 0 declarations"):
+            sens.parse_parameter(text, "N", "x", "python-constant")
+
+
+def test_an_unknown_parameter_kind_refuses():
+    with pytest.raises(sens.Refused, match="unknown parameter kind"):
+        sens.parse_parameter("N = 3\n", "N", "x", "yaml-key")
+
+
+def test_the_res_tuning_dials_are_read_from_the_model(root):
+    src = root / "model/res_tuning.py"
+    src.write_text(src.read_text().replace("\nCORR_ENTRIES = 33 ", "\nCORR_ENTRIES = 7 "))
+    code, text = run(root)
+    assert code == 1 and "CORR_ENTRIES ships as 7" in text, text
 
 
 # --------------------------------------------------------------------------
