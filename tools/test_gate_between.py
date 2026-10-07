@@ -153,3 +153,39 @@ def test_rank_refuses_a_non_finite_ratio_rather_than_sort_it(bad, side):
     ctx["A"][side]["worst_ratio"] = bad
     with pytest.raises(ValueError, match="non-finite"):
         gb.rank_rows(ctx)
+
+
+def _green_q():
+    return {"sounds_with_bar": ["BD"], "start_red": {"BD": "FAIL", "BD-silence": "REFUSED"},
+            "seeded_summary": {"n": 10, "caught": 10, "missed": [], "rate": 1.0},
+            "known_bad": {"shipped-cymbal": {"verdict": "FAIL"}}, "clean": {"BD": "PASS"},
+            "validation": {"sounds": 1, "best_passes": 1}}
+
+
+@pytest.mark.parametrize("verdict,status", [("FAIL", "QUALIFIED"), ("PASS", "NOT QUALIFIED"),
+                                            ("REFUSED", "REFUSED"), (None, "REFUSED")])
+def test_the_rejected_374_candidate_gates_qualification(verdict, status):
+    """Every other gate green; only the #374 candidate varies (absent == None)."""
+    q = _green_q()
+    assert gc.decide(q, False)["status"] == "QUALIFIED"           # v1 never looked at the candidate
+    if verdict:
+        q["known_bad"][gb.CANDIDATE] = {"verdict": verdict}
+    assert gb.decide(q, False)["status"] == status
+
+
+def test_a_refused_injected_run_is_not_a_caught_control():
+    """Clean qualification passes but the injected control cannot complete (its
+    shipped-cymbal control is unavailable): Q5 must stay unrun, not become a catch."""
+    qi = _green_q()
+    qi["known_bad"]["shipped-cymbal"] = {"verdict": "REFUSED"}
+    inj, inj_dec = gc.injected_outcome(qi)
+    assert inj is None and inj_dec["status"] == "REFUSED" and inj_dec["unrun"]
+    q = _green_q()
+    q["known_bad"][gb.CANDIDATE] = {"verdict": "FAIL"}
+    dec = gb.decide(q, inj)
+    assert dec["status"] == "REFUSED" and dec["unrun"] == ["Q5 corrupted corpus"]
+    assert gc.injected_outcome(_green_q())[0] is True             # a corrupted corpus that qualifies
+    assert gc.injected_outcome(None) == (None, None)
+    bad = _green_q()
+    bad["seeded_summary"].update(caught=5, rate=0.5)
+    assert gc.injected_outcome(bad)[0] is False                   # completed NOT QUALIFIED = caught

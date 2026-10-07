@@ -228,6 +228,24 @@ def render_table(rows: list) -> str:
     return "\n".join(out)
 
 
+CANDIDATE = "rejected-374-candidate"
+
+
+def decide(q: dict, injected: bool | None) -> dict:
+    """gate_calibrate's five gates plus Q6: the rejected #374 candidate must FAIL.
+    A candidate that PASSes fails the gate; one that is absent or REFUSED leaves
+    the control unrun, so the decision is REFUSED, never QUALIFIED."""
+    dec = gc.decide(q, injected)
+    kb = q["known_bad"].get(CANDIDATE, {}).get("verdict")
+    dec["gates"]["Q6 rejected #374 candidate"] = {
+        "ok": (kb == "FAIL") if kb in ("FAIL", "PASS") else None,
+        "observed": f"rejected #374 candidate {kb if kb else 'absent'}"}
+    dec["unrun"] = [k for k, g in dec["gates"].items() if g["ok"] is None]
+    dec["status"] = ("REFUSED" if dec["unrun"] else
+                     "QUALIFIED" if all(g["ok"] for g in dec["gates"].values()) else "NOT QUALIFIED")
+    return dec
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -257,15 +275,19 @@ def main(argv=None) -> int:
     if a.corrupt_tables:
         ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_p)
         qi = gc.qualify(ci, a.refs, ours) if ci.get("p") else None
-        inj = (gc.decide(qi, False)["status"] == "QUALIFIED") if qi else None
+        inj, inj_dec = gc.injected_outcome(qi)
         cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
-                                   "calibration_status": ci["status"], "qualified": inj}
+                                   "calibration_status": ci["status"], "qualified": inj,
+                                   "decision": inj_dec}
     q = gc.qualify(cal, a.refs, ours) if cal.get("p") else None
     if q and a.fixtures and (a.fixtures / "CY5025-candidate.wav").exists() and "CY" in cal["sounds"]:
         T = pg.Target(*pg.load_wav(a.refs / pg.target_rel("CY")), "CY", pg.target_rel("CY"))
-        q["known_bad"]["rejected-374-candidate"] = pg.verdict(
-            T.distance(*pg.load_wav(a.fixtures / "CY5025-candidate.wav"), "374"), cal["sounds"]["CY"]["bar"])
-    dec = gc.decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
+        try:
+            q["known_bad"][CANDIDATE] = pg.verdict(
+                T.distance(*pg.load_wav(a.fixtures / "CY5025-candidate.wav"), "374"), cal["sounds"]["CY"]["bar"])
+        except pg.Refused as e:
+            q["known_bad"][CANDIDATE] = {"verdict": "REFUSED", "why": str(e)}
+    dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
     if q and cal.get("diagnostic"):
         dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
     cal["old_bar_context"] = gc.old_bar_context(gc.regroup(tabs), a.refs, ours)
