@@ -107,3 +107,23 @@ def test_the_531aa8a_rolloff_differs_from_the_current_one_only_through_its_corne
     assert new.value == pytest.approx(-17.06, abs=0.15)
     assert old.value == pytest.approx(-18.68, abs=0.15)
     assert new.value - old.value == pytest.approx(1.62, abs=0.15)
+
+
+def test_the_current_rolloff_expectation_rejects_the_531aa8a_behaviour():
+    """Start-red control for #169. The numerical expectation the shipping
+    estimator is held to on a closed-form four-pole (-17.06 +/- 0.15 dB/oct,
+    test_run_case.py::test_filt_rolloff_of_an_ideal_4pole) is applied to both
+    estimators. The shipping one meets it; the historical moving-median one
+    (`rolloff_531aa8a`, -18.68) must MISS it by a numerical margin, so the
+    expectation can tell the two corner conventions apart. Both estimates are
+    required to be valid first: an invalid estimate is not a caught defect."""
+    import run_case as rc
+    f = np.geomspace(40, 12000, 32)
+    g = -80 * np.log10(np.abs(1 + 1j * f / 250.0))
+    new = rc.filt_rolloff(250.0)(f, g)
+    old = fsp.rolloff_531aa8a(250.0)(f, g)
+    assert new.ok and old.ok, (new.reason, old.reason)
+    expect = pytest.approx(-17.06, abs=0.15)
+    assert new.value == expect
+    assert not (old.value == expect), old.value
+    assert abs(old.value - (-17.06)) > 1.4      # measured 1.62

@@ -1921,8 +1921,11 @@ def test_filt_corner_refuses_a_curve_with_no_corner_in_it():
 
 def test_filt_rolloff_of_an_ideal_4pole():
     """An ideal 4-pole fitted between 2.2 and 7 times its measured corner is
-    not at its asymptotic -24 dB/oct; it is at about -18.7, and that is the
-    number a real 4-pole has to be read against."""
+    not at its asymptotic -24 dB/oct; on the profile grid it reads -17.06
+    (fp 250 Hz, DC-plateau corner 108.4 Hz), and that is the number a real
+    4-pole has to be read against. The earlier -18.68 belonged to the
+    moving-median corner (124.9 Hz) that #178 replaced; the historical
+    estimator is kept as test_f1_selected_path.py's control."""
     f = probe_freqs()
     e = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f))
     assert e.ok, e.reason
@@ -1935,9 +1938,13 @@ def test_filt_rolloff_of_an_ideal_4pole():
 def test_filt_rolloff_is_nearly_scale_invariant():
     """The band is 2.2-7 times each device's OWN corner, so two filters of the
     same shape should read the same slope wherever their corners sit. They do
-    not quite, because the corner is interpolated on a 20.2 %-spaced grid, and
-    this pins how much: over a 2:1 range of corners the slope must not move by
-    more than 1.5 dB/oct, the tolerance itself. Measured today it moves 1.2."""
+    not quite, because the corner is interpolated on a 20.2 %-spaced grid.
+    Measured by tools/rolloff_systematic.py on the profile grid: fp 250 / 312.5
+    / 500 Hz read -17.06 / -17.47 / -17.46 (0.41 dB/oct over 2:1, and 0.41 for
+    the 25 % pair); a fine sweep fp 200-800 Hz spans 1.13 dB/oct; the worst
+    25 % pair over fp 200-640 Hz is 0.56. These are finite-grid observations on
+    this fixture, not a general bound. The earlier 1.2 and 0.32 per 25 % were
+    read against the pre-#178 corner."""
     f = probe_freqs()
     vals = []
     for fp in (250.0, 312.5, 500.0):
@@ -1945,12 +1952,35 @@ def test_filt_rolloff_is_nearly_scale_invariant():
         assert e.ok, (fp, e.reason)
         vals.append(e.value)
     spread = max(vals) - min(vals)
-    assert spread < 1.5, vals
-    # And the part that matters for a comparison of two nearby corners: 25 %
-    # apart must cost less than a fifth of the tolerance.
+    assert spread < 0.5, vals                    # measured 0.41
     a = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f, 250.0))
     b = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f, 312.5))
-    assert abs(a.value - b.value) < 0.45, (a.value, b.value)
+    assert abs(a.value - b.value) < 0.45, (a.value, b.value)   # measured 0.41
+    # The declared domain of that statement: fp 200-640 Hz in 5 Hz steps, every
+    # pair 25 % apart, plus a fine sweep over 200-800 Hz. Shifting the corner
+    # relative to the grid moves the slope, so the bound is on the sweep.
+    worst = 0.0
+    for fp in np.linspace(200.0, 640.0, 89):
+        lo = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f, fp))
+        hi = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f, 1.25 * fp))
+        assert lo.ok and hi.ok, fp
+        worst = max(worst, abs(hi.value - lo.value))
+    assert worst < 0.65, worst                   # measured 0.56
+    fine = [rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f, 200.0 * 2 ** (k / 20.0)))
+            for k in range(41)]
+    assert all(e.ok for e in fine)
+    fv = [e.value for e in fine]
+    assert max(fv) - min(fv) < 1.3, (min(fv), max(fv))   # measured 1.13
+
+
+def test_filt_rolloff_reports_no_stale_systematic_field():
+    """`band_systematic_db_oct_per_25pct_corner=0.32` was a hardcoded number
+    from the pre-#178 corner; measured on the current estimator the 25 % figure
+    is 0.41-0.56, so a field claiming 0.32 would be false. It was retired."""
+    f = probe_freqs()
+    e = rc.filt_rolloff(IDEAL_FP)(f, ideal_4pole_db(f))
+    assert e.ok
+    assert "band_systematic_db_oct_per_25pct_corner" not in e.detail
 
 
 def test_filt_rolloff_sees_a_pole_that_is_not_there():
