@@ -401,28 +401,46 @@ def baseline(accents=(0.5, 0.7, 1.0, 1.4, 2.0), arms=None, records=RECORDS_S) ->
 
 
 # ------------------------------------------------------------------- target --
-OUT_BUS_LSB = 1.0         # one LSB of the 16-bit-equivalent drum output
+BUDGET_LSB = 1.0          # |pedestal| of the FINAL int16 output, in LSB
 TARGET_BASIS = (
     "Bound is a DECLARED OUTPUT QUANTIZATION BUDGET, not derived from any "
-    "candidate: a DC pedestal of at most 0.5 LSB of the 16-bit drum output is "
-    "below the output word's own resolution (an ideal rounder cannot produce "
-    "less), so it cannot be distinguished from a zero pedestal by the product. "
-    "It is a NECESSARY bound only. No audibility threshold for a decaying-tail "
-    "pedestal is established: the Fischer TR-808 reference corpus is not "
-    "present on the host that produced this record and no listening or "
-    "reference-noise evidence is committed. The historical -40.2 dB is a "
-    "baseline observation, not a target.")
+    "candidate: |DC pedestal| <= 1 LSB of the final int16 output. It is 1 and NOT "
+    "0.5 because the output stage is a floor (output_fx: acc >> 15): any NEGATIVE "
+    "body pedestal smaller than one LSB is quantized to exactly -1 LSB, so a "
+    "0.5-LSB bound would be satisfiable only by an exactly-zero or positive tail "
+    "(a first draft used 0.5; it was run against the shipped state and rejected: "
+    "see wrong_then_right in the PR). 1 LSB is the floor-quantization floor the "
+    "shipped kit already reaches at accents 0.7 and 1.4 and misses by 37x at "
+    "0.5, 1.0 and 2.0, so the gate is satisfiable and not already met. It is a "
+    "NECESSARY bound only. No audibility threshold for a decaying-tail pedestal "
+    "is established: the Fischer TR-808 reference corpus is not present on the "
+    "host that produced this record and no listening or reference-noise evidence "
+    "is committed. The historical -40.2 dB is a baseline observation, not a target.")
 
 
 def target(rows: list = None) -> dict:
+    """The handoff record. `current_vs_bound` is filled from the baseline rows if
+    given: the resolved FINAL-output pedestal per arm and accent, and whether it
+    is inside the declared budget. It is the shipped state's standing against the
+    bound, not an input to it."""
+    cur = []
+    for r in rows or []:
+        if r["bus"] == "final" and r["status"] == "OK":
+            cur.append(dict(arm=r["arm"], accent=r["accent"], record_s=r["record_s"],
+                            pedestal_lsb=r["pedestal_lsb"],
+                            inside_budget=abs(r["pedestal_lsb"]) <= BUDGET_LSB))
+    return dict(current_vs_bound=cur, **_target_core())
+
+
+def _target_core() -> dict:
     return dict(
         schema=1, issue=220, status="PARTIAL: budget bound only; audibility floor unestablished",
-        units=dict(pedestal="LSB of the 16-bit-equivalent drum output (dmix bus)",
+        units=dict(pedestal="LSB of the final int16 output (output_fx at the reference DVOL = BVOL = 0.45)",
                    relative="dB relative to the render peak of the same bus"),
         valid_domain=dict(record_s=">= 1.4 (tail window [1.2, end) of >= 0.2 s)",
                           tail="resolved: no residual decay, growth or drift above 10 % of the pedestal",
                           accents="0.5-2.0 (ACCENTS)"),
-        bounds=dict(pedestal_abs_lsb_max=0.5, residual_osc_lsb_max=None,
+        bounds=dict(pedestal_abs_lsb_max=BUDGET_LSB, residual_osc_lsb_max=None,
                     decay_preservation="tau within the shipped kit's, to be set by #350 "
                                        "from tools/probe_tom_numerator.py-style comparison"),
         justification=TARGET_BASIS,
