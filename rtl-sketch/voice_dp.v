@@ -275,7 +275,14 @@ module voice_dp #(
 `else
     wire [4:0]  ci_a = ci;
 `endif
+`ifdef INJECT_BUG_VOICE_CORR_INDEX_WRAP
+    // NEGATIVE CONTROL = the defect this stage's FIRST build had: i + 1 in 5 bits wraps 31 -> 0,
+    // so for k >= 129024 (res >= 1.969) the upper knot read is entry 0 (unity). Only the
+    // `extremes` scenarios reach it; the res 1.05 `waves2` scenario cannot.
     wire [15:0] crd = (state == S_CR1) ? crom[ci_a + 5'd1] : crom[ci_a];
+`else
+    wire [15:0] crd = (state == S_CR1) ? crom[{1'b0, ci_a} + 6'd1] : crom[ci_a];   // 6 bits: 31 + 1 = 32, the guard entry
+`endif
     wire signed [45:0] cr_d = mr >>> 11;                                  // floor, as the model's >>
     wire [15:0] cc_n = cr0 + cr_d[15:0];
 `ifdef INJECT_BUG_VOICE_CORR_REVERSED

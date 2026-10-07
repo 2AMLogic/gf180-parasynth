@@ -1,6 +1,6 @@
 # 0024: A resonance-keyed cutoff correction, with the two coefficient-ROM refits, in one revision
 
-- **Status**: proposed. Validated in the fixed-point MODEL only; no RTL, no contract revision, no regenerated expectation.
+- **Status**: proposed. Validated in the fixed-point MODEL; the correction STAGE (change 3 only) now exists in RTL behind `VOICE_RES_CORR`, bit-exact against the model on the quick set (see "RTL stage"). Still no contract revision, no refitted g/k ROMs in RTL, no regenerated expectation, no integrated-link or I2S measurement.
 - **Date**: 2026-10-07
 - **Decided by**: Builder, issue #257. Awaiting review; the RTL half is unbuilt.
 
@@ -101,16 +101,47 @@ that is not ambiguous). One pre-registered sweep prediction failed and is
 recorded as a limit in its sensitivity record. One confound (the SR/n lock) was
 found after the validation run.
 
+## RTL stage (increment 1 of the RTL half, issue #257)
+
+`rtl-sketch/voice_dp.v`, compiled in only under `-DVOICE_RES_CORR` (without the
+define the module is the shipped datapath state for state, and the whole quick
+set still passes bit-exact against the unchanged model). States `S_CR0`..`S_CR4`
+are 83..87, appended so the numbers `tb_voice.v` taps do not move. Spec is
+`voice_fx.corrected_cut_res`; the table the RTL's `$readmemh` reads is
+`docs/res-tuning/corr_rom33.hex`, written from `validation.json` by
+`res_tuning.py hex` and the same file `verify_voice.py --res-corr` hands the
+model. Widths as proposed above, plus: key is the 17-bit host `k`, so
+`d = clamp(k - 65536, 0, 65535)` is just `k[16] ? k[15:0] : 0`; upper knot index
+is computed in 6 bits (31 + 1 = 32, the guard entry); the product is
+non-negative so the rounded shift is unsigned. Cost measured: **+5 cycles** per
+frame on the voice path (go-to-sample 139 -> 144 on `waves2`; worst strobe cycle
+over the quick set 180 -> 185, slack 74 -> 69 of 254, no overrun, no late
+sample). The drum context is untouched by the stage and `S_DC*` is unchanged.
+
+**Found by the bench, not by the spec test.** The first build indexed the upper
+knot with a 5-bit `i + 1`, which wraps 31 -> 0, so for `k >= 129024` (res >= 1.969)
+the stage interpolated toward unity instead of toward 1.063. The model-level
+tests could not see it (they test the model); the 1200-frame `waves2` scenario
+(res 1.05) cannot reach it; the `extremes` scenario (k = 131071) did: 335 sample
+mismatches in the full quick set. Reinstated as `INJECT_BUG_VOICE_CORR_INDEX_WRAP`;
+`waves2` is BLIND to it and `extremes` catches it, recorded rather than hidden.
+
+**Controls** (`make controls`, each `--res-corr ... --expect-fail`): `DISABLED`,
+`REVERSED`, `KEFF_KEY`, `INDEX_OFF1`, `FLOOR`, `NO_COMP` on `waves2`, and
+`INDEX_WRAP` on `extremes`. Each moves the `cut` tap except `NO_COMP`, which by
+construction moves `kc`/`k_eff` only. A control run without `--res-corr` compiles
+a build with no stage and so is NOT caught -- that is a harness precondition,
+which is why every Makefile line pairs them.
+
 ## Alternatives considered
 
 - **Widened g/k ROM address including a k index.** 129 x 33 words is about 68 kbit against 528 bit. Rejected.
 - **A 9-entry table.** 3.9 c of travel on the select grid against 1.3 c for 33 entries, at 144 bits. The pre-registered rule picked 33. The difference is near the estimator granularity the rule was derived from. Choosing 9 is a reasonable RTL-review call, provided the reason is stated.
 - **Correction applied to `g`.** Avoids the integer-Hz limit. Not measured.
 
-## Consequences (owed, none done here)
+## Consequences (owed; the stage and its controls above are done)
 
-RTL in `voice_dp.v` with start-red and the six controls as `INJECT_BUG_*`
-defines. The contract revision and `spec/reference/tables/*.hex` regenerated
+The contract revision and `spec/reference/tables/*.hex` regenerated
 via `gen_tables.py`. Every bit-exact expectation regenerated (`verify_voice.py`,
 `verify_synth_top.py`, `verify_ladder.py`, the drum benches) and the affected
 `.wav`s regenerated with provenance, keeping historical ones. Then the same

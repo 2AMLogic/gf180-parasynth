@@ -153,6 +153,7 @@ verify:
 	  "$(PY) fpga/verify_pads_top.py --start-red --outdir build/pads" \
 	  "$(PY) fpga/verify_sd_dac.py --outdir build/sd-dac" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --res-corr --outdir build/voice-res-corr" \
 	  "$(PY) tools/check_decimator_saturation.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py --scope publication" \
@@ -477,6 +478,13 @@ controls:
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_LEAKFLOOR --expect-fail --outdir build/voice-drift-leakfloor" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only drift --inject DRIFT_MEANSTEP --expect-fail --outdir build/voice-drift-meanstep" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves3 --inject SHARK_BLAMP_SIGN --expect-fail --outdir build/voice-shark-blamp-sign" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_DISABLED --expect-fail --outdir build/voice-corr-disabled" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_REVERSED --expect-fail --outdir build/voice-corr-reversed" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_KEFF_KEY --expect-fail --outdir build/voice-corr-keff-key" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_INDEX_OFF1 --expect-fail --outdir build/voice-corr-index-off1" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_FLOOR --expect-fail --outdir build/voice-corr-floor" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only extremes --res-corr --inject CORR_INDEX_WRAP --expect-fail --outdir build/voice-corr-index-wrap" \
+	  "$(PY) rtl-sketch/verify_voice.py --set quick --only waves2 --res-corr --inject CORR_NO_COMP --expect-fail --outdir build/voice-corr-no-comp" \
 	  "$(PY) rtl-sketch/verify_ctl.py --link dr7rev1 --expect-fail --outdir build/ctl-rev1" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_ADDR7 --expect-fail --outdir build/ctl-addr7" \
 	  "$(PY) rtl-sketch/verify_ctl.py --inject SPI_DATA24 --expect-fail --outdir build/ctl-data24" \
