@@ -128,9 +128,9 @@ Written down because a gate whose limits are unstated gets trusted past them.
   parameter would mean teaching `sensitivity.py` a second evidence format; it
   has one, `fixed-width-table`, and the record names which it uses.
 
-## The two records that exist
+## The records that exist
 
-Both are **retrofits** of the case in `docs/failure-modes.md` mechanism 5, and
+The first two are **retrofits** of the case in `docs/failure-modes.md` mechanism 5, and
 both say so in the record.
 
 - **`drum-kit-modes.json`** — `MODES` against `drum_kit` cell area, `NUMS` held
@@ -147,3 +147,17 @@ sentence: *the dial that was argued about is flat across the range that was
 argued about, and the dial nobody looked at is the one the objective responds
 to.* `tools/test_sensitivity.py` asserts both from the committed measurements
 rather than restating them, so the claim goes red if either moves.
+
+The next two are **prospective** (issue #257). Their grids, rules and shape
+predictions were committed in `docs/res-tuning/plan.json` before any point was
+measured. Both use the second parameter kind, `python-constant`, a column-0
+integer in a Python model. Their dials do not exist in RTL yet.
+
+- **`res-cut-law-degree.json`** — `LAW_DEGREE` against the select grid's worst
+  offset in cents. `MIXED` [0], [3, 4], which matches the prediction.
+- **`res-cut-correction-entries.json`** — `CORR_ENTRIES` against mean-offset
+  travel in cents. `MIXED`. **Its prediction failed.** The relative 25 % rule
+  separates 17 and 33 entries, at 1–2 cents. The record states the failed
+  prediction in `limits` and carries no prediction block. It does not carry a
+  rewritten one, because a prediction edited after the measurement is no
+  longer a prediction.
