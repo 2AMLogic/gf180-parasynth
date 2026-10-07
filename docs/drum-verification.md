@@ -1553,3 +1553,56 @@ corpus) and `docs/tom-pitch-drop-law.json`, against `model/drums_fx.py` at
 contract revision 10. Scripts: `model/tom_drop_fit.py`, gated by
 `model/test_tom_drop_law.py`; board figures from the committed
 `docs/scorecard/results/D0{3,5,7}A.json`.*
+
+## 13. The BD DC pedestal: a deadband, not "floor without rounding" (issue #220, partial)
+
+Measured 2026-10-07 by `model/bd_pedestal.py` (record: `docs/bd-pedestal-results.json`,
+which carries the commit, the dirty flag, the command and the windows; gated by
+`model/test_bd_pedestal.py`). Measurement only: no RTL, kit or numeric default
+changed. The Fischer reference corpus was NOT available on the host that produced
+this, so nothing below is compared with the machine.
+
+**Mechanism (confirmed by intervention at five poles and three state sizes).**
+With `eps = 1 - (a1 + a2) / 2^CF`, a state `y1 = y2 = y` is a fixed point of
+`y' = (a1*y1 + a2*y2 + RND) >> CF` iff `|y| * eps < 1` and `y <= 0` (floor), or
+`|y| * eps <= 1/2` (round-half-up). So the stall is a finite-wordlength
+**deadband of width 1/eps state LSB**, fixed by how near z = 1 the pole sits,
+not by the excitation. The BD pole has `1/eps = 23 899`; the shipped kit's
+resolved pedestal at accents 0.5 / 1.0 / 2.0 is **-23 893**, six LSB inside the
+edge. Floor makes it one-sided (always negative) and twice as wide.
+
+**Rounding is refuted as the fix.** It removes the sign bias and nothing else:
+at the BD pole it leaves +/-11 943 (0.5/eps), three orders of magnitude WORSE
+than the floor's -6 at one level; at a 400 Hz pole it turns a DC offset into a
+zero-mean limit cycle of amplitude 0.5/eps that never decays. The float
+recurrence with the *same quantized coefficients* has no pedestal at any pole, so
+the cause is the integer arithmetic and not the coefficient error.
+State width does not remove it in state LSB (identical pedestals at SQ 11/15/19);
+it only shrinks it relative to the signal, 24 dB for +4 bits (predicted from the
+recurrence, shown here for the single mode only; the full-bank effect on the
+body/output buses was NOT measured and belongs to #350's sensitivity grid).
+
+**Baseline, shipped RAW BD** (state = the BD mode's own state read from the
+shipped bank, bit-exact against a one-mode replay of the recorded excitation):
+
+| accent | state pedestal | body | final output | historical estimator said |
+|---|---|---|---|---|
+| 0.5 | -23 893 LSB, -40.3 dB | -80 | -37 LSB, -40.0 dB | -40.3 |
+| 0.7 | -6, -115 dB | -1 | -1 LSB, -74 dB | -115 |
+| 1.0 | -23 893, -46.3 dB | -80 | -37 LSB, -46.0 dB | -46.3 |
+| 1.4 | **unresolved at 1.5 s** (still creeping); -6 at 3 s | -1 | -1 LSB at 3 s | **-62.5 (wrong)** |
+| 2.0 | -23 893, -52.4 dB | -80 | -37 LSB, -52.0 dB | -52.5 |
+
+The historical -40.2 dB reproduces (accent 0.5). The historical estimator
+reported a number at accent 1.4 where the tail had not finished settling.
+The peak-matched BP arm (historical, still blocked) sits at -19.4 to -22.5 dB at
+accents 0.7-2.0; it lands on the same -23 893 deadband with a state 15.6x
+smaller. The BP candidate therefore REMAINS BLOCKED on arithmetic.
+
+**Target for #350 (partial).** `pedestal_abs_lsb_max = 1` LSB of the final int16
+output, a declared output-quantization budget, necessary and not sufficient: the
+output stage floors, so any sub-LSB negative pedestal is -1 LSB and a 0.5 bound
+would be unsatisfiable. The shipped kit meets it at 2 of 5 accents and misses by
+37x at the other three. No audibility floor is established (missing: a
+reference/listening measurement of what DC under a decaying BD tail is audible;
+the oscillatory-residual bound likewise). See `target` in the results file.
