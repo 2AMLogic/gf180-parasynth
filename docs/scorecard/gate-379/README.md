@@ -204,6 +204,104 @@ ranking; no bar was changed to make anything pass.
 Two of the new tests were also wrong at first: the click test was not placed where the seed places it, and the "cut"
 test used a sine starting at 0.
 
+## 8. Between-recording calibration from the MARS 808 library: REFUSED by its own rule (`mars-calibration/`)
+
+`tools/gate_calibrate.py` (6 tests in `tools/test_gate_calibrate.py`), run at commit `cdeaa19`. The archive
+`808-from-mars.zip` came through `tools/refaudio_s3.py`, which checked it against the catalog SHA-256
+(`f567c676...ca82`) and every extracted take against the index size (1,370 files fetched, 0 failed). No audio is
+committed; `refaudio/cache/` is gitignored. Only derived per-take distances are (`tables.json`, 772 takes over 16 sounds).
+
+**What the gate now says: nothing has changed.** The pre-registered selection rule found no calibrated bar, so the
+existing same-unit / WEAK bar stays the ranking bar (§4). The calibrated bar is not acceptance authority because there
+is none.
+
+**Lineage, before any distance was read.** The pack's own About text describes one machine ("the 808") recorded
+through an API 1608 to an Apogee converter (Digital) or via Otari tape (Tape), group-normalised per voice. The Fischer take
+is a different recording. Neither documents a serial number, so:
+- **"as close as another real unit" is REFUSED as a claim.** Several libraries are not several units; the legacy MARS
+  edition is the same vendor and machine.
+- What was measured is typed **cross-recording**: Fischer target against MARS Clean takes of the same voice, with the knob
+  setting unmatched (nearest by `spec` stands in). It contains unit spread, chain, mastering and setting residual together.
+- Only the chain is separable (a Digital take against its Tape twin). That table was not produced, so no chain floor is
+  published (the `chain_floor` function exists but is not run by the CLI; not claimed).
+
+**Frozen first.** Corpus: Clean takes only, "Combo" excluded. Groups: sha256 of the path with the chain removed, mod 3 =
+development / calibration / untouched validation, so a Digital take and its Tape twin cannot straddle groups.
+Adjacent knob settings can still straddle (stated, not removed). Bar: max over the calibration group's k nearest takes
+plus the apparatus floor, with the gate's perceptual floors. k is the smallest of (1, 3, 5) whose development bar covers the
+calibration group's nearest take on at least 80 % of sounds.
+
+**Result.** Development -> calibration coverage over the 9 sounds that have both groups:
+
+| k | 1 | 3 | 5 | 8 (diagnostic) | 12 (diagnostic) |
+|---|---|---|---|---|---|
+| covered | 0/9 | 3/9 | 5/9 | 5/9 | 7/9 |
+
+No selectable k reaches 80 %, so the calibration is REFUSED with no bars, not a looser k. Widening to k = 12 would
+still be 78 %. Missing data, by reason: RS, CL, CP, CB, OH, CH have no calibration take (2 to 5 path keys cannot be split
+three ways), and MA has no untouched take. **Only 9 of 16 sounds could have been calibrated at all**; the six single-take
+sounds stay on the WEAK bar whatever else happens.
+
+**Diagnostic runs (labelled NOT acceptance authority; the rule was overridden by hand, k = 5 and 12).**
+
+| gate | k = 5 | k = 12 |
+|---|---|---|
+| Q1 start red (stub FAIL, silence REFUSED) | 10/10, 10/10 | 10/10, 10/10 |
+| Q2 seeded defects FAIL (need 90 %) | 70/77 | 68/77 (fails) |
+| Q3 shipped cymbal FAILs | FAIL | FAIL |
+| Q4 Fischer target stays green / untouched best take passes | 10/10 / **2/9 (fails)** | 10/10 / **4/9 (fails)** |
+| Q5 corrupted corpus (every take seeded "darker") does not qualify | not qualified | not qualified |
+
+Missed seeds at k = 5: SD wrong_pitch, LT slide, HT slide, MA decay_long, MA click, MA wrong_pitch, CY wrong_pitch.
+k = 12 adds BD slide and MC wrong_pitch. So the loosened bar goes blind to pitch error and pitch slides on the sounds where
+the old gate saw them. The untouched takes mostly fail the bars built from other takes: BD, SD, LC, MT, HT, HC and CY at k = 5 (7 of 9).
+**Q5 under the pre-registered rule is vacuous** (the corrupted corpus was refused by the same rule that refused the clean
+one), so it only means something in the two diagnostic runs. #374's candidate fixture was not rebuilt here, so
+that control was not run; Q3 uses the shipped cymbal (rendered from this checkout) alone.
+
+**Sound-relevant context against the existing bar (descriptive, nothing selected from it; `old_bar_context`).** No MARS take
+passes the old bar: 0 of 772. The most favourable take (any group, so optimistic) against each of our sounds, as ratios to
+the old bar at current `main`:
+
+| sound | MARS best | ours | | sound | MARS best | ours |
+|---|---|---|---|---|---|---|
+| BD | 7.5 | 22.2 | | CY | 3.7 | 7.9 |
+| LT | 5.6 | 14.8 | | OH | 1.1 | 4.4 |
+| MT | 3.1 | 10.5 | | CH | 2.0 | 9.3 |
+| HT | 4.7 | 8.0 | | RS | 2.3 | 20.6 |
+| LC | 5.2 | 16.4 | | CL | 5.1 | 15.8 |
+| MC | 4.3 | 19.4 | | CP | 5.1 | 15.9 |
+| HC | 2.0 | 8.7 | | MA | 4.5 | 35.5 |
+| SD | 2.9 | 2.1 | | CB | 10.7 | 11.1 |
+
+Another real-808 recording sits 1.1 to 10.7 times the old bar, so the old bar remains unsatisfiable by a real recording
+(§5 again, now on 772 takes). On this reading **SD and CB are already inside the range of real-recording spread**, and
+BD, MT, LC, MC, HC, RS, CL, CP, MA, CH and OH are far outside it (our ratio at least 3 times the MARS best); LT (2.6x), CY (2.1x) and HT (1.7x) are in between. That ordering is an
+indication for scoping repairs, not a verdict. The RS (27.0 to 20.6) and a few others differ from §4 because §4 was rendered
+at an earlier `main`; the table above was re-rendered at this commit.
+
+**Wrong-then-right, this calibration: 2.** (1) The first key rule paired no twin for BD, SD, toms, congas, CY and OH
+(the Tape name carries " Tape" mid-name); caught by a per-sound orphan count, now `test_twin_pairing_on_the_real_index`
+against the committed index. Tables are re-grouped from the path on read, so the stale groups were never used. (2) A
+guessed key count in that test (400 against 386). The rule above was written before any distance was computed and was
+not changed after seeing the REFUSED, which is the point of recording the k = 8 and 12 sweep.
+
+**What remains.** A calibrated bar needs either more than one unit with documented provenance (the MARS pack cannot supply
+it), or a different statistic than best-of-k nearest-by-`spec`: the within-recording setting spread dominates, and the pitch
+trajectory of the toms and congas does not transfer between recordings. Scope each repair as its own issue from the ranking
+above; the existing gate keeps ranking until a bar is qualified.
+
+```sh
+export REFAUDIO_S3=s3://2am-batch-jobs-221082181346/refaudio/samples-from-mars REFAUDIO_S3_PROFILE=batch-runner-submit
+python3 tools/refaudio_s3.py --keep-archive --prefix 808-from-mars.zip "808 From Mars/WAV/01. Individual Hits/"
+python3 tools/gate_calibrate.py measure --refs /tmp/tr808-fischer --out tables.json                 # ~6 min
+python3 tools/gate_calibrate.py measure --refs /tmp/tr808-fischer --corrupt darker --out tables-corrupt-darker.json
+python3 tools/gate_calibrate.py calibrate --refs /tmp/tr808-fischer --tables tables.json \
+    --corrupt-tables tables-corrupt-darker.json --ours <dir of rendered <SOUND>.wav> [--force-k 5] --out calibration.json
+```
+`/tmp/tr808-fischer` is `tidalcycles/sounds-tr808-fischer` at `85fbecf`. The two `measure` runs were made at `b56af6f`
+(the measure code is unchanged since); `calibrate` at `cdeaa19`.
+
 ## Reproduce (build box)
 
 ```sh
