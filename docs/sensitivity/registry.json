@@ -5,6 +5,7 @@
     "drum-kit-modes.json",
     "modal-bank-nums.json",
     "res-cut-law-degree.json",
-    "res-cut-correction-entries.json"
+    "res-cut-correction-entries.json",
+    "coupling-k.json"
   ]
 }
