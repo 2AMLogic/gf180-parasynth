@@ -1,0 +1,1479 @@
+{
+ "calibration": {
+  "selection": {
+   "by_k": {
+    "1": {
+     "sounds": 9,
+     "covered": 0,
+     "coverage": 0.0
+    },
+    "3": {
+     "sounds": 9,
+     "covered": 3,
+     "coverage": 0.3333
+    },
+    "5": {
+     "sounds": 9,
+     "covered": 5,
+     "coverage": 0.5556
+    },
+    "8": {
+     "sounds": 9,
+     "covered": 5,
+     "coverage": 0.5556
+    },
+    "12": {
+     "sounds": 9,
+     "covered": 7,
+     "coverage": 0.7778
+    }
+   },
+   "chosen": null,
+   "coverage_required": 0.8
+  },
+  "k": 5,
+  "sounds": {
+   "BD": {
+    "keys": 72,
+    "n_takes": 144,
+    "no_verdict": [],
+    "groups": {
+     "development": 32,
+     "calibration": 18,
+     "validation": 22
+    },
+    "bar": {
+     "spec": 0.0149,
+     "spec_peak": 0.2588,
+     "centroid": 0.6637,
+     "flatness": 1.9498,
+     "impulse": 3.0,
+     "attack": 2.5528,
+     "decay": 2.7758,
+     "modulation": 2.1586,
+     "pitch": 37.9062,
+     "pitch_shape": 51.5853
+    },
+    "bar_from": [
+     "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 04.wav",
+     "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 05.wav",
+     "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 02.wav",
+     "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 01.wav",
+     "01. Bass Drum/Clean/Digital/A/BD A 808 Decay D 06.wav"
+    ],
+    "validation": {
+     "matched": [
+      "01. Bass Drum/Clean/Digital/B/BD B 808 Decay D 02.wav",
+      "01. Bass Drum/Clean/Digital/B/BD B 808 Decay D 01.wav",
+      "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay D 01.wav",
+      "01. Bass Drum/Clean/Tape/B/BD B 808 Tape Decay D 02.wav",
+      "01. Bass Drum/Clean/Digital/A/BD A 808 Decay C 03.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.499
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "SD": {
+    "keys": 108,
+    "n_takes": 216,
+    "no_verdict": [],
+    "groups": {
+     "development": 31,
+     "calibration": 44,
+     "validation": 33
+    },
+    "bar": {
+     "spec": 0.1763,
+     "spec_peak": 0.253,
+     "centroid": 3.034,
+     "flatness": 3.7507,
+     "impulse": 3.0,
+     "attack": 3.2828,
+     "decay": 11.9995,
+     "modulation": null,
+     "pitch": null,
+     "pitch_shape": null
+    },
+    "bar_from": [
+     "02. Snare Drum/Clean/Digital/C/SD C 808 Tone A 06.wav",
+     "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone A 06.wav",
+     "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone A 05.wav",
+     "02. Snare Drum/Clean/Digital/C/SD C 808 Tone A 05.wav",
+     "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 05.wav"
+    ],
+    "validation": {
+     "matched": [
+      "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 04.wav",
+      "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone C 04.wav",
+      "02. Snare Drum/Clean/Digital/C/SD C 808 Tone C 03.wav",
+      "02. Snare Drum/Clean/Digital/B/SD B 808 Tone C 05.wav",
+      "02. Snare Drum/Clean/Digital/A/SD A 808 Tone B 06.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.2452
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "LT": {
+    "keys": 33,
+    "n_takes": 66,
+    "no_verdict": [],
+    "groups": {
+     "development": 13,
+     "calibration": 8,
+     "validation": 12
+    },
+    "bar": {
+     "spec": 0.0483,
+     "spec_peak": 0.204,
+     "centroid": 0.4357,
+     "flatness": 2.2663,
+     "impulse": 6.0676,
+     "attack": 1.0,
+     "decay": 12.1136,
+     "modulation": 6.1058,
+     "pitch": 120.2521,
+     "pitch_shape": 107.2131
+    },
+    "bar_from": [
+     "03. Low Tom/Clean/Digital/A/Tom Low A 808 02.wav",
+     "03. Low Tom/Clean/Digital/A/Tom Low A 808 04.wav",
+     "03. Low Tom/Clean/Digital/A/Tom Low A 808 05.wav",
+     "03. Low Tom/Clean/Digital/B/Tom Low B 808 01.wav",
+     "03. Low Tom/Clean/Digital/C/Tom Low C 808 01.wav"
+    ],
+    "validation": {
+     "matched": [
+      "03. Low Tom/Clean/Digital/A/Tom Low A 808 03.wav",
+      "03. Low Tom/Clean/Digital/B/Tom Low B 808 02.wav",
+      "03. Low Tom/Clean/Digital/A/Tom Low A 808 07.wav",
+      "03. Low Tom/Clean/Digital/B/Tom Low B 808 04.wav",
+      "03. Low Tom/Clean/Digital/A/Tom Low A 808 08.wav"
+     ],
+     "pass": [
+      true,
+      false,
+      false,
+      true,
+      false
+     ],
+     "best_passes": true,
+     "worst_ratio_best": 0.9504
+    },
+    "status": "VALIDATED"
+   },
+   "LC": {
+    "keys": 22,
+    "n_takes": 44,
+    "no_verdict": [],
+    "groups": {
+     "development": 7,
+     "calibration": 9,
+     "validation": 6
+    },
+    "bar": {
+     "spec": 0.0526,
+     "spec_peak": 0.1383,
+     "centroid": 0.2275,
+     "flatness": 1.6414,
+     "impulse": 3.0,
+     "attack": 1.7593,
+     "decay": 4.0627,
+     "modulation": 5.7719,
+     "pitch": 110.9826,
+     "pitch_shape": 25.6762
+    },
+    "bar_from": [
+     "06. Low Conga/Clean/Digital/A/Conga Low A 808 05.wav",
+     "06. Low Conga/Clean/Digital/A/Conga Low A 808 03.wav",
+     "06. Low Conga/Clean/Digital/B/Conga Low B 808 01.wav",
+     "06. Low Conga/Clean/Digital/A/Conga Low A 808 01.wav",
+     "06. Low Conga/Clean/Digital/A/Conga Low A 808 08.wav"
+    ],
+    "validation": {
+     "matched": [
+      "06. Low Conga/Clean/Digital/B/Conga Low B 808 04.wav",
+      "06. Low Conga/Clean/Digital/B/Conga Low B 808 05.wav",
+      "06. Low Conga/Clean/Digital/A/Conga Low A 808 06.wav",
+      "06. Low Conga/Clean/Digital/B/Conga Low B 808 03.wav",
+      "06. Low Conga/Clean/Digital/A/Conga Low A 808 02.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      true,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.5631
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "MT": {
+    "keys": 33,
+    "n_takes": 66,
+    "no_verdict": [],
+    "groups": {
+     "development": 12,
+     "calibration": 6,
+     "validation": 15
+    },
+    "bar": {
+     "spec": 0.0559,
+     "spec_peak": 0.1273,
+     "centroid": 0.39,
+     "flatness": 1.5725,
+     "impulse": 3.0,
+     "attack": 3.3284,
+     "decay": 9.3311,
+     "modulation": 19.0582,
+     "pitch": 81.5148,
+     "pitch_shape": 141.5606
+    },
+    "bar_from": [
+     "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 05.wav",
+     "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 03.wav",
+     "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 01.wav",
+     "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 06.wav",
+     "04. Mid Tom/Clean/Digital/C/Tom Mid C 808 04.wav"
+    ],
+    "validation": {
+     "matched": [
+      "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 04.wav",
+      "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 02.wav",
+      "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 03.wav",
+      "04. Mid Tom/Clean/Digital/B/Tom Mid B 808 02.wav",
+      "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 06.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      true
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.0323
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "MC": {
+    "keys": 22,
+    "n_takes": 44,
+    "no_verdict": [],
+    "groups": {
+     "development": 5,
+     "calibration": 8,
+     "validation": 9
+    },
+    "bar": {
+     "spec": 0.0697,
+     "spec_peak": 0.1343,
+     "centroid": 0.3992,
+     "flatness": 1.091,
+     "impulse": 5.915,
+     "attack": 1.0,
+     "decay": 8.0291,
+     "modulation": null,
+     "pitch": 127.5717,
+     "pitch_shape": 60.1043
+    },
+    "bar_from": [
+     "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 05.wav",
+     "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 06.wav",
+     "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 05.wav",
+     "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 07.wav",
+     "07. Mid Conga/Clean/Tape/B/Conga Mid B 808 Tape 06.wav"
+    ],
+    "validation": {
+     "matched": [
+      "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 03.wav",
+      "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 04.wav",
+      "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 02.wav",
+      "07. Mid Conga/Clean/Digital/B/Conga Mid B 808 01.wav",
+      "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 01.wav"
+     ],
+     "pass": [
+      true,
+      true,
+      true,
+      true,
+      true
+     ],
+     "best_passes": true,
+     "worst_ratio_best": 0.6554
+    },
+    "status": "VALIDATED"
+   },
+   "HT": {
+    "keys": 33,
+    "n_takes": 66,
+    "no_verdict": [],
+    "groups": {
+     "development": 10,
+     "calibration": 10,
+     "validation": 13
+    },
+    "bar": {
+     "spec": 0.0593,
+     "spec_peak": 0.1277,
+     "centroid": 0.371,
+     "flatness": 1.159,
+     "impulse": 6.4406,
+     "attack": 1.0476,
+     "decay": 9.7752,
+     "modulation": null,
+     "pitch": 37.5349,
+     "pitch_shape": 159.5507
+    },
+    "bar_from": [
+     "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 06.wav",
+     "05. Hi Tom/Clean/Digital/B/Tom Hi B 808 05.wav",
+     "05. Hi Tom/Clean/Digital/C/Tom Hi C 808 04.wav",
+     "05. Hi Tom/Clean/Tape/A/Tom Hi A 808 Tape 06.wav",
+     "05. Hi Tom/Clean/Tape/B/Tom Hi B 808 Tape 05.wav"
+    ],
+    "validation": {
+     "matched": [
+      "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 04.wav",
+      "05. Hi Tom/Clean/Digital/B/Tom Hi B 808 02.wav",
+      "05. Hi Tom/Clean/Digital/B/Tom Hi B 808 01.wav",
+      "05. Hi Tom/Clean/Digital/B/Tom Hi B 808 04.wav",
+      "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 01.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.09
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "HC": {
+    "keys": 22,
+    "n_takes": 44,
+    "no_verdict": [],
+    "groups": {
+     "development": 9,
+     "calibration": 9,
+     "validation": 4
+    },
+    "bar": {
+     "spec": 0.0348,
+     "spec_peak": 0.1096,
+     "centroid": 0.38,
+     "flatness": 1.1992,
+     "impulse": 10.0458,
+     "attack": 1.0,
+     "decay": 2.8208,
+     "modulation": null,
+     "pitch": 33.3478,
+     "pitch_shape": 45.8176
+    },
+    "bar_from": [
+     "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 05.wav",
+     "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 05.wav",
+     "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 06.wav",
+     "08. Hi Conga/Clean/Tape/A/Conga Hi A 808 Tape 05.wav",
+     "08. Hi Conga/Clean/Tape/B/Conga Hi B 808 Tape 06.wav"
+    ],
+    "validation": {
+     "matched": [
+      "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 07.wav",
+      "08. Hi Conga/Clean/Tape/B/Conga Hi B 808 Tape 07.wav",
+      "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 08.wav",
+      "08. Hi Conga/Clean/Tape/B/Conga Hi B 808 Tape 08.wav",
+      "08. Hi Conga/Clean/Digital/B/Conga Hi B 808 09.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 1.3564
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "RS": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 1,
+     "calibration": 0,
+     "validation": 1
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   },
+   "CL": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 1,
+     "calibration": 0,
+     "validation": 1
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   },
+   "CP": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 0,
+     "calibration": 0,
+     "validation": 2
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   },
+   "MA": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 0,
+     "calibration": 1,
+     "validation": 1
+    },
+    "bar": {
+     "spec": 0.2552,
+     "spec_peak": 0.4979,
+     "centroid": 2.3438,
+     "flatness": 1.6105,
+     "impulse": 11.3602,
+     "attack": 7.2373,
+     "decay": 10.3558,
+     "modulation": null,
+     "pitch": null,
+     "pitch_shape": null
+    },
+    "bar_from": [
+     "12. Maracas/Clean/Tape/Maracas A 808 Tape.wav",
+     "12. Maracas/Clean/Digital/Maracas A 808.wav"
+    ],
+    "status": "UNVALIDATED: no untouched take to test the bar on"
+   },
+   "CB": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 1,
+     "calibration": 0,
+     "validation": 1
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   },
+   "CY": {
+    "keys": 24,
+    "n_takes": 48,
+    "no_verdict": [],
+    "groups": {
+     "development": 9,
+     "calibration": 9,
+     "validation": 6
+    },
+    "bar": {
+     "spec": 0.1918,
+     "spec_peak": 0.214,
+     "centroid": 0.8997,
+     "flatness": 2.3055,
+     "impulse": 3.0,
+     "attack": 6.0391,
+     "decay": 9.2702,
+     "modulation": 2.5143,
+     "pitch": null,
+     "pitch_shape": null
+    },
+    "bar_from": [
+     "14. Cymbal/Clean/Digital/A/Cym A 808 Decay B 02.wav",
+     "14. Cymbal/Clean/Digital/A/Cym A 808 Decay B 03.wav",
+     "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay B 02.wav",
+     "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 03.wav",
+     "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 02.wav"
+    ],
+    "validation": {
+     "matched": [
+      "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 04.wav",
+      "14. Cymbal/Clean/Digital/B/Cym B 808 Decay A 04.wav",
+      "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 02.wav",
+      "14. Cymbal/Clean/Tape/A/Cym A 808 Tape Decay A 04.wav",
+      "14. Cymbal/Clean/Digital/B/Cym B 808 Decay A 02.wav"
+     ],
+     "pass": [
+      false,
+      false,
+      false,
+      false,
+      false
+     ],
+     "best_passes": false,
+     "worst_ratio_best": 2.6584
+    },
+    "status": "VALIDATION-FAILED: best untouched take fails the bar"
+   },
+   "OH": {
+    "keys": 5,
+    "n_takes": 10,
+    "no_verdict": [],
+    "groups": {
+     "development": 4,
+     "calibration": 0,
+     "validation": 1
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   },
+   "CH": {
+    "keys": 2,
+    "n_takes": 4,
+    "no_verdict": [],
+    "groups": {
+     "development": 2,
+     "calibration": 0,
+     "validation": 0
+    },
+    "status": "NO-BAR: the calibration group holds no take (too few keys to split three ways, or none readable)"
+   }
+  },
+  "twins": {
+   "BD": {
+    "keys": 72,
+    "unpaired": []
+   },
+   "SD": {
+    "keys": 108,
+    "unpaired": []
+   },
+   "LT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "LC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "MT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "MC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "HT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "HC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "RS": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CL": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CP": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "MA": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CB": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CY": {
+    "keys": 24,
+    "unpaired": []
+   },
+   "OH": {
+    "keys": 5,
+    "unpaired": []
+   },
+   "CH": {
+    "keys": 2,
+    "unpaired": []
+   }
+  },
+  "diagnostic": "DIAGNOSTIC: k overridden by hand after the pre-registered rule refused; NOT acceptance authority",
+  "status": "DIAGNOSTIC-CALIBRATION",
+  "injected_control": {
+   "corrupt": "darker",
+   "calibration_status": "DIAGNOSTIC-CALIBRATION",
+   "qualified": false
+  },
+  "old_bar_context": {
+   "BD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 144,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "01. Bass Drum/Clean/Digital/A/BD A 808 Decay C 03.wav",
+     "worst_ratio": 7.5032,
+     "worst_feature": "pitch",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 22.2163,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "SD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 216,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone F 06.wav",
+     "worst_ratio": 2.9159,
+     "worst_feature": "spec",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 2.0555,
+     "worst_feature": "attack"
+    }
+   },
+   "LT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "03. Low Tom/Clean/Digital/A/Tom Low A 808 01.wav",
+     "worst_ratio": 5.6497,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 14.848,
+     "worst_feature": "modulation"
+    }
+   },
+   "LC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "06. Low Conga/Clean/Digital/A/Conga Low A 808 01.wav",
+     "worst_ratio": 5.1933,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "flatness",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 16.4492,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "MT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 06.wav",
+     "worst_ratio": 3.1384,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 10.531,
+     "worst_feature": "centroid"
+    }
+   },
+   "MC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 01.wav",
+     "worst_ratio": 4.3484,
+     "worst_feature": "flatness",
+     "failing": [
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 19.4205,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "HT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 02.wav",
+     "worst_ratio": 4.6694,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.0158,
+     "worst_feature": "centroid"
+    }
+   },
+   "HC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 03.wav",
+     "worst_ratio": 1.9705,
+     "worst_feature": "impulse",
+     "failing": [
+      "impulse",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.732,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "RS": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "09. Rim Shot/Clean/Tape/Rim Shot A 808 Tape.wav",
+     "worst_ratio": 2.3023,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 20.6218,
+     "worst_feature": "centroid"
+    }
+   },
+   "CL": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "11. Claves/Clean/Digital/Claves A 808.wav",
+     "worst_ratio": 5.1166,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8195,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CP": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "10. Hand Clap/Clean/Tape/Clap A 808 Tape.wav",
+     "worst_ratio": 5.0749,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8926,
+     "worst_feature": "decay"
+    }
+   },
+   "MA": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "12. Maracas/Clean/Tape/Maracas A 808 Tape.wav",
+     "worst_ratio": 4.5154,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 35.4865,
+     "worst_feature": "centroid"
+    }
+   },
+   "CB": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "13. Cowbell/Clean/Digital/Cowbell A 808.wav",
+     "worst_ratio": 10.7181,
+     "worst_feature": "pitch_shape",
+     "failing": [
+      "spec_peak",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 11.0934,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CY": {
+    "old_bar": "808-neighbour",
+    "n_takes": 48,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 02.wav",
+     "worst_ratio": 3.6844,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 7.8605,
+     "worst_feature": "centroid"
+    }
+   },
+   "OH": {
+    "old_bar": "808-neighbour",
+    "n_takes": 10,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "15. Open HH/Clean/Tape/OH 808 Tape Decay 04.wav",
+     "worst_ratio": 1.0522,
+     "worst_feature": "attack",
+     "failing": [
+      "attack"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 4.4025,
+     "worst_feature": "centroid"
+    }
+   },
+   "CH": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "16. Closed HH/Clean/Digital/CH B 808.wav",
+     "worst_ratio": 2.0208,
+     "worst_feature": "spec_peak",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 9.2517,
+     "worst_feature": "flatness"
+    }
+   }
+  }
+ },
+ "qualification": {
+  "sounds_with_bar": [
+   "BD",
+   "CY",
+   "HC",
+   "HT",
+   "LC",
+   "LT",
+   "MA",
+   "MC",
+   "MT",
+   "SD"
+  ],
+  "sounds_without_bar": [
+   "CB",
+   "CH",
+   "CL",
+   "CP",
+   "OH",
+   "RS"
+  ],
+  "start_red": {
+   "BD": "FAIL",
+   "BD-silence": "REFUSED",
+   "SD": "FAIL",
+   "SD-silence": "REFUSED",
+   "LT": "FAIL",
+   "LT-silence": "REFUSED",
+   "LC": "FAIL",
+   "LC-silence": "REFUSED",
+   "MT": "FAIL",
+   "MT-silence": "REFUSED",
+   "MC": "FAIL",
+   "MC-silence": "REFUSED",
+   "HT": "FAIL",
+   "HT-silence": "REFUSED",
+   "HC": "FAIL",
+   "HC-silence": "REFUSED",
+   "MA": "FAIL",
+   "MA-silence": "REFUSED",
+   "CY": "FAIL",
+   "CY-silence": "REFUSED"
+  },
+  "clean": {
+   "BD": "PASS",
+   "SD": "PASS",
+   "LT": "PASS",
+   "LC": "PASS",
+   "MT": "PASS",
+   "MC": "PASS",
+   "HT": "PASS",
+   "HC": "PASS",
+   "MA": "PASS",
+   "CY": "PASS"
+  },
+  "seeded": {
+   "BD": null,
+   "SD": null,
+   "LT": null,
+   "LC": null,
+   "MT": null,
+   "MC": null,
+   "HT": null,
+   "HC": null,
+   "MA": null,
+   "CY": null
+  },
+  "known_bad": {
+   "shipped-cymbal": {
+    "verdict": "FAIL",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "attack",
+     "modulation"
+    ],
+    "worst_ratio": 2.6751,
+    "worst_feature": "centroid",
+    "features": {
+     "spec": {
+      "status": "FAIL",
+      "d": 0.25,
+      "bar": 0.1918,
+      "ratio": 1.3035
+     },
+     "spec_peak": {
+      "status": "FAIL",
+      "d": 0.402,
+      "bar": 0.214,
+      "ratio": 1.8787
+     },
+     "centroid": {
+      "status": "FAIL",
+      "d": 2.4068,
+      "bar": 0.8997,
+      "ratio": 2.6751
+     },
+     "flatness": {
+      "status": "pass",
+      "d": 1.4092,
+      "bar": 2.3055,
+      "ratio": 0.6112
+     },
+     "impulse": {
+      "status": "pass",
+      "d": 1.9759,
+      "bar": 3.0,
+      "ratio": 0.6586
+     },
+     "attack": {
+      "status": "FAIL",
+      "d": 14.7835,
+      "bar": 6.0391,
+      "ratio": 2.448
+     },
+     "decay": {
+      "status": "pass",
+      "d": 4.7473,
+      "bar": 9.2702,
+      "ratio": 0.5121
+     },
+     "modulation": {
+      "status": "FAIL",
+      "d": 3.0799,
+      "bar": 2.5143,
+      "ratio": 1.225
+     },
+     "pitch": {
+      "status": "n/a"
+     },
+     "pitch_shape": {
+      "status": "n/a"
+     }
+    }
+   }
+  },
+  "seeded_summary": {
+   "n": 77,
+   "caught": 70,
+   "missed": [
+    "SD:wrong_pitch:PASS",
+    "LT:slide:PASS",
+    "HT:slide:PASS",
+    "MA:decay_long:PASS",
+    "MA:click:PASS",
+    "MA:wrong_pitch:PASS",
+    "CY:wrong_pitch:PASS"
+   ],
+   "rate": 0.9091
+  },
+  "ours": {
+   "BD": {
+    "verdict": "FAIL",
+    "worst_ratio": 4.8512,
+    "worst_feature": "impulse",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "flatness",
+     "impulse",
+     "decay",
+     "modulation",
+     "pitch_shape"
+    ],
+    "ratios": {
+     "spec": 4.2375,
+     "spec_peak": 1.6825,
+     "centroid": 0.3974,
+     "flatness": 3.0402,
+     "impulse": 4.8512,
+     "attack": 0.6423,
+     "decay": 4.2714,
+     "modulation": 3.0927,
+     "pitch": 0.2255,
+     "pitch_shape": 4.5162
+    }
+   },
+   "SD": {
+    "verdict": "PASS",
+    "worst_ratio": 0.7608,
+    "worst_feature": "spec_peak",
+    "failing": [],
+    "ratios": {
+     "spec": 0.4433,
+     "spec_peak": 0.7608,
+     "centroid": 0.2969,
+     "flatness": 0.3051,
+     "impulse": 0.6564,
+     "attack": 0.7258,
+     "decay": 0.2526,
+     "modulation": null,
+     "pitch": null,
+     "pitch_shape": null
+    }
+   },
+   "LT": {
+    "verdict": "FAIL",
+    "worst_ratio": 4.3912,
+    "worst_feature": "modulation",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "impulse",
+     "attack",
+     "modulation"
+    ],
+    "ratios": {
+     "spec": 1.2096,
+     "spec_peak": 2.4774,
+     "centroid": 2.6331,
+     "flatness": 0.4003,
+     "impulse": 3.3687,
+     "attack": 1.2117,
+     "decay": 0.8464,
+     "modulation": 4.3912,
+     "pitch": 0.2934,
+     "pitch_shape": 0.248
+    }
+   },
+   "LC": {
+    "verdict": "FAIL",
+    "worst_ratio": 4.9693,
+    "worst_feature": "impulse",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "impulse",
+     "modulation",
+     "pitch",
+     "pitch_shape"
+    ],
+    "ratios": {
+     "spec": 1.061,
+     "spec_peak": 1.8217,
+     "centroid": 3.438,
+     "flatness": 0.4608,
+     "impulse": 4.9693,
+     "attack": 0.703,
+     "decay": 0.3435,
+     "modulation": 1.8493,
+     "pitch": 1.2399,
+     "pitch_shape": 1.1058
+    }
+   },
+   "MT": {
+    "verdict": "FAIL",
+    "worst_ratio": 4.3225,
+    "worst_feature": "impulse",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "impulse",
+     "modulation"
+    ],
+    "ratios": {
+     "spec": 1.0982,
+     "spec_peak": 3.6202,
+     "centroid": 3.6468,
+     "flatness": 0.7564,
+     "impulse": 4.3225,
+     "attack": 0.8903,
+     "decay": 0.32,
+     "modulation": 1.6165,
+     "pitch": 0.0417,
+     "pitch_shape": 0.0773
+    }
+   },
+   "MC": {
+    "verdict": "FAIL",
+    "worst_ratio": 3.0357,
+    "worst_feature": "centroid",
+    "failing": [
+     "spec_peak",
+     "centroid",
+     "flatness",
+     "impulse"
+    ],
+    "ratios": {
+     "spec": 0.5107,
+     "spec_peak": 1.9722,
+     "centroid": 3.0357,
+     "flatness": 1.5231,
+     "impulse": 2.2795,
+     "attack": 0.3813,
+     "decay": 0.0096,
+     "modulation": null,
+     "pitch": 0.0527,
+     "pitch_shape": 0.4055
+    }
+   },
+   "HT": {
+    "verdict": "FAIL",
+    "worst_ratio": 3.9183,
+    "worst_feature": "centroid",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "flatness",
+     "impulse",
+     "attack"
+    ],
+    "ratios": {
+     "spec": 1.066,
+     "spec_peak": 2.7053,
+     "centroid": 3.9183,
+     "flatness": 1.5174,
+     "impulse": 2.2995,
+     "attack": 1.6504,
+     "decay": 0.9131,
+     "modulation": null,
+     "pitch": 0.4196,
+     "pitch_shape": 0.1116
+    }
+   },
+   "HC": {
+    "verdict": "FAIL",
+    "worst_ratio": 2.9234,
+    "worst_feature": "centroid",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "flatness",
+     "impulse",
+     "pitch"
+    ],
+    "ratios": {
+     "spec": 1.794,
+     "spec_peak": 2.232,
+     "centroid": 2.9234,
+     "flatness": 1.2208,
+     "impulse": 1.1387,
+     "attack": 0.6937,
+     "decay": 0.3851,
+     "modulation": null,
+     "pitch": 1.5902,
+     "pitch_shape": 0.4308
+    }
+   },
+   "RS": {
+    "verdict": "NO-BAR"
+   },
+   "CL": {
+    "verdict": "NO-BAR"
+   },
+   "CP": {
+    "verdict": "NO-BAR"
+   },
+   "MA": {
+    "verdict": "FAIL",
+    "worst_ratio": 3.0448,
+    "worst_feature": "decay",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "flatness",
+     "attack",
+     "decay"
+    ],
+    "ratios": {
+     "spec": 2.9064,
+     "spec_peak": 2.5506,
+     "centroid": 2.4546,
+     "flatness": 1.7129,
+     "impulse": 0.055,
+     "attack": 1.7396,
+     "decay": 3.0448,
+     "modulation": null,
+     "pitch": null,
+     "pitch_shape": null
+    }
+   },
+   "CB": {
+    "verdict": "NO-BAR"
+   },
+   "CY": {
+    "verdict": "FAIL",
+    "worst_ratio": 2.6751,
+    "worst_feature": "centroid",
+    "failing": [
+     "spec",
+     "spec_peak",
+     "centroid",
+     "attack",
+     "modulation"
+    ],
+    "ratios": {
+     "spec": 1.3035,
+     "spec_peak": 1.8787,
+     "centroid": 2.6751,
+     "flatness": 0.6112,
+     "impulse": 0.6586,
+     "attack": 2.448,
+     "decay": 0.5121,
+     "modulation": 1.225,
+     "pitch": null,
+     "pitch_shape": null
+    }
+   },
+   "OH": {
+    "verdict": "NO-BAR"
+   },
+   "CH": {
+    "verdict": "NO-BAR"
+   }
+  },
+  "validation": {
+   "sounds": 9,
+   "best_passes": 2
+  }
+ },
+ "decision": {
+  "status": "DIAGNOSTIC (not authority): NOT QUALIFIED",
+  "gates": {
+   "Q1 start red": {
+    "ok": true,
+    "observed": "stub FAIL 10/10, silence REFUSED 10/10"
+   },
+   "Q2 seeded defects": {
+    "ok": true,
+    "observed": "70/77 FAIL (need 90%)"
+   },
+   "Q3 shipped cymbal": {
+    "ok": true,
+    "observed": "shipped cymbal FAIL"
+   },
+   "Q4 stays green": {
+    "ok": false,
+    "observed": "self PASS 10/10; untouched best take passes 2/9"
+   },
+   "Q5 corrupted corpus": {
+    "ok": true,
+    "observed": "corrupted-corpus calibration qualified=False"
+   }
+  },
+  "unrun": []
+ },
+ "provenance": {
+  "commit": "cdeaa197f871d00082774755fb24ee7554cfad90",
+  "sources_dirty": false,
+  "refs": "/tmp/tr808-fischer",
+  "fixtures_sha256_16": {},
+  "features": [
+   "spec",
+   "spec_peak",
+   "centroid",
+   "flatness",
+   "impulse",
+   "attack",
+   "decay",
+   "modulation",
+   "pitch",
+   "pitch_shape"
+  ],
+  "units": {
+   "spec": "loudness L1 fraction",
+   "spec_peak": "worst frame, fraction of loudest frame",
+   "centroid": "Bark RMS",
+   "flatness": "dB RMS",
+   "attack": "ms RMS of 5/20/50 % cumulative-energy times, first 100 ms (worst band)",
+   "decay": "dB RMS (worst band)",
+   "modulation": "dB RMS (worst band)",
+   "impulse": "dB, worst-sample crest >2 kHz (strike, body)",
+   "pitch": "cents, median offset",
+   "pitch_shape": "cents, worst 20 ms after the offset"
+  },
+  "weak_r": 1.0628,
+  "conventions": {
+   "rate": 48000,
+   "hp_hz": 20.0,
+   "onset_frac": 0.02,
+   "trim_s": 0.001,
+   "loudness": "BS.1770 K, 50 ms blocks, 20 dB relative gate, -23",
+   "span": "2 x target -60 dB + 50 ms, cap 3.0 s",
+   "floor_db": 60.0
+  }
+ }
+}

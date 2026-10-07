@@ -1,0 +1,515 @@
+{
+ "calibration": {
+  "selection": {
+   "by_k": {
+    "1": {
+     "sounds": 9,
+     "covered": 0,
+     "coverage": 0.0
+    },
+    "3": {
+     "sounds": 9,
+     "covered": 3,
+     "coverage": 0.3333
+    },
+    "5": {
+     "sounds": 9,
+     "covered": 5,
+     "coverage": 0.5556
+    },
+    "8": {
+     "sounds": 9,
+     "covered": 5,
+     "coverage": 0.5556
+    },
+    "12": {
+     "sounds": 9,
+     "covered": 7,
+     "coverage": 0.7778
+    }
+   },
+   "chosen": null,
+   "coverage_required": 0.8
+  },
+  "k": null,
+  "sounds": {},
+  "twins": {
+   "BD": {
+    "keys": 72,
+    "unpaired": []
+   },
+   "SD": {
+    "keys": 108,
+    "unpaired": []
+   },
+   "LT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "LC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "MT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "MC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "HT": {
+    "keys": 33,
+    "unpaired": []
+   },
+   "HC": {
+    "keys": 22,
+    "unpaired": []
+   },
+   "RS": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CL": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CP": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "MA": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CB": {
+    "keys": 2,
+    "unpaired": []
+   },
+   "CY": {
+    "keys": 24,
+    "unpaired": []
+   },
+   "OH": {
+    "keys": 5,
+    "unpaired": []
+   },
+   "CH": {
+    "keys": 2,
+    "unpaired": []
+   }
+  },
+  "diagnostic": null,
+  "status": "REFUSED: no k reaches the development->calibration coverage requirement",
+  "injected_control": {
+   "corrupt": "darker",
+   "calibration_status": "REFUSED: no k reaches the development->calibration coverage requirement",
+   "qualified": null
+  },
+  "old_bar_context": {
+   "BD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 144,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "01. Bass Drum/Clean/Digital/A/BD A 808 Decay C 03.wav",
+     "worst_ratio": 7.5032,
+     "worst_feature": "pitch",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 22.2163,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "SD": {
+    "old_bar": "808-neighbour",
+    "n_takes": 216,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "02. Snare Drum/Clean/Tape/C/SD C 808 Tape Tone F 06.wav",
+     "worst_ratio": 2.9159,
+     "worst_feature": "spec",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 2.0555,
+     "worst_feature": "attack"
+    }
+   },
+   "LT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "03. Low Tom/Clean/Digital/A/Tom Low A 808 01.wav",
+     "worst_ratio": 5.6497,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 14.848,
+     "worst_feature": "modulation"
+    }
+   },
+   "LC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "06. Low Conga/Clean/Digital/A/Conga Low A 808 01.wav",
+     "worst_ratio": 5.1933,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "flatness",
+      "decay",
+      "modulation",
+      "pitch",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 16.4492,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "MT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "04. Mid Tom/Clean/Digital/A/Tom Mid A 808 06.wav",
+     "worst_ratio": 3.1384,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 10.531,
+     "worst_feature": "centroid"
+    }
+   },
+   "MC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "07. Mid Conga/Clean/Digital/A/Conga Mid A 808 01.wav",
+     "worst_ratio": 4.3484,
+     "worst_feature": "flatness",
+     "failing": [
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 19.4205,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "HT": {
+    "old_bar": "808-neighbour",
+    "n_takes": 66,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "05. Hi Tom/Clean/Digital/A/Tom Hi A 808 02.wav",
+     "worst_ratio": 4.6694,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.0158,
+     "worst_feature": "centroid"
+    }
+   },
+   "HC": {
+    "old_bar": "808-neighbour",
+    "n_takes": 44,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "08. Hi Conga/Clean/Digital/A/Conga Hi A 808 03.wav",
+     "worst_ratio": 1.9705,
+     "worst_feature": "impulse",
+     "failing": [
+      "impulse",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 8.732,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "RS": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "09. Rim Shot/Clean/Tape/Rim Shot A 808 Tape.wav",
+     "worst_ratio": 2.3023,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 20.6218,
+     "worst_feature": "centroid"
+    }
+   },
+   "CL": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "11. Claves/Clean/Digital/Claves A 808.wav",
+     "worst_ratio": 5.1166,
+     "worst_feature": "flatness",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "decay",
+      "pitch"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8195,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CP": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "10. Hand Clap/Clean/Tape/Clap A 808 Tape.wav",
+     "worst_ratio": 5.0749,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 15.8926,
+     "worst_feature": "decay"
+    }
+   },
+   "MA": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "12. Maracas/Clean/Tape/Maracas A 808 Tape.wav",
+     "worst_ratio": 4.5154,
+     "worst_feature": "attack",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "impulse",
+      "attack",
+      "decay"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 35.4865,
+     "worst_feature": "centroid"
+    }
+   },
+   "CB": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "13. Cowbell/Clean/Digital/Cowbell A 808.wav",
+     "worst_ratio": 10.7181,
+     "worst_feature": "pitch_shape",
+     "failing": [
+      "spec_peak",
+      "decay",
+      "modulation",
+      "pitch_shape"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 11.0934,
+     "worst_feature": "pitch_shape"
+    }
+   },
+   "CY": {
+    "old_bar": "808-neighbour",
+    "n_takes": 48,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "14. Cymbal/Clean/Tape/B/Cym B 808 Tape Decay A 02.wav",
+     "worst_ratio": 3.6844,
+     "worst_feature": "decay",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "centroid",
+      "flatness",
+      "attack",
+      "decay",
+      "modulation"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 7.8605,
+     "worst_feature": "centroid"
+    }
+   },
+   "OH": {
+    "old_bar": "808-neighbour",
+    "n_takes": 10,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "15. Open HH/Clean/Tape/OH 808 Tape Decay 04.wav",
+     "worst_ratio": 1.0522,
+     "worst_feature": "attack",
+     "failing": [
+      "attack"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 4.4025,
+     "worst_feature": "centroid"
+    }
+   },
+   "CH": {
+    "old_bar": "WEAK-resampled-take",
+    "n_takes": 4,
+    "mars_takes_passing_old_bar": 0,
+    "mars_best": {
+     "rel": "16. Closed HH/Clean/Digital/CH B 808.wav",
+     "worst_ratio": 2.0208,
+     "worst_feature": "spec_peak",
+     "failing": [
+      "spec",
+      "spec_peak",
+      "flatness"
+     ]
+    },
+    "ours": {
+     "verdict": "FAIL",
+     "worst_ratio": 9.2517,
+     "worst_feature": "flatness"
+    }
+   }
+  }
+ },
+ "qualification": null,
+ "decision": {
+  "status": "REFUSED",
+  "why": "REFUSED: no k reaches the development->calibration coverage requirement"
+ },
+ "provenance": {
+  "commit": "cdeaa197f871d00082774755fb24ee7554cfad90",
+  "sources_dirty": false,
+  "refs": "/tmp/tr808-fischer",
+  "fixtures_sha256_16": {},
+  "features": [
+   "spec",
+   "spec_peak",
+   "centroid",
+   "flatness",
+   "impulse",
+   "attack",
+   "decay",
+   "modulation",
+   "pitch",
+   "pitch_shape"
+  ],
+  "units": {
+   "spec": "loudness L1 fraction",
+   "spec_peak": "worst frame, fraction of loudest frame",
+   "centroid": "Bark RMS",
+   "flatness": "dB RMS",
+   "attack": "ms RMS of 5/20/50 % cumulative-energy times, first 100 ms (worst band)",
+   "decay": "dB RMS (worst band)",
+   "modulation": "dB RMS (worst band)",
+   "impulse": "dB, worst-sample crest >2 kHz (strike, body)",
+   "pitch": "cents, median offset",
+   "pitch_shape": "cents, worst 20 ms after the offset"
+  },
+  "weak_r": 1.0628,
+  "conventions": {
+   "rate": 48000,
+   "hp_hz": 20.0,
+   "onset_frac": 0.02,
+   "trim_s": 0.001,
+   "loudness": "BS.1770 K, 50 ms blocks, 20 dB relative gate, -23",
+   "span": "2 x target -60 dB + 50 ms, cap 3.0 s",
+   "floor_db": 60.0
+  }
+ }
+}
