@@ -1317,8 +1317,12 @@ def report_k_sweep(path=None):
     grid = [int(v) for v in plan["grid"]]
     base, nb = render("CY", dx.COUPLE_OFF)
     phi = dc_fraction(base)
-    if phi < 0.8:
-        raise Refused(f"the CY baseline has phi = {phi:.3f} < 0.8: no standing offset to sweep")
+    beta = sub20_below_fc_frac(base, dx.COUPLE_K)
+    # beta, not phi: phi is the f = 0 bin's share and its width is 1/T (0.888 at
+    # 0.60 s, 0.391 at 2.40 s for the same cymbal); beta is window-stable
+    if beta < 0.9:
+        raise Refused(f"the CY baseline has beta = {beta:.3f} < 0.9: its sub-20 Hz energy is not "
+                      "below the corner, so there is no standing offset to sweep")
     # the swept filter is the shipped one: bus placement at K = 10 == the register path
     n = int(RENDER_S * SR)
     kit = dx.kit_with_sounds("CY")
@@ -1330,13 +1334,18 @@ def report_k_sweep(path=None):
     lines = [f"Issue #551 COUPLE_K sweep -- written by `python3 tools/probes/dc_blocker.py --k-sweep`.",
              f"Grid, rule and prediction: docs/sensitivity/coupling-k-plan.json (committed before this ran).",
              f"provenance: {provenance()}",
-             f"CY baseline phi (share of sub-20 Hz energy at f = 0) = {phi:.4f}; sub20 baseline {band_energy_dbfs(base, *SUB20):.2f} dBfs",
+             f"CY baseline phi (f = 0 bin, window-dependent) = {phi:.4f}, beta (below the K = 10 corner) = {beta:.4f}; sub20 baseline {band_energy_dbfs(base, *SUB20):.2f} dBfs",
              "", "coupling_k -- CY residual sub-20 Hz energy against K, bus placement, uncoupled = 100",
-             "COUPLE_K fc_hz sub20_db sub20_resid_pct"]
+             "COUPLE_K fc_hz sub20_db sub20_resid_pct steady_db steady_resid_pct"]
     for k in grid:
         out, ncl = render("CY", dx.COUPLE_BUS, k)
         db = band_energy_dbfs(out, *SUB20) - band_energy_dbfs(base, *SUB20)
-        lines.append(f"{k} {SR / (2 * np.pi * (1 << k)):.3f} {db:.2f} {100.0 * 10 ** (db / 10.0):.3f}")
+        steady = steadystate_sub20_attenuation_db(base, k)
+        if -db > steady + 0.05:
+            raise Refused(f"K = {k}: measured attenuation {-db:.2f} dB exceeds the closed-form upper "
+                          f"bound {steady:.2f} dB: the integer filter and the transfer function disagree")
+        lines.append(f"{k} {SR / (2 * np.pi * (1 << k)):.3f} {db:.2f} {100.0 * 10 ** (db / 10.0):.3f} "
+                     f"{-steady:.2f} {100.0 * 10 ** (-steady / 10.0):.3f}")
     text = "\n".join(lines) + "\n"
     pathlib.Path(path or K_SWEEP_ARTIFACT).write_text(text)
     print(text)
