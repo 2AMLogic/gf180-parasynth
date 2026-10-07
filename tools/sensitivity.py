@@ -211,10 +211,17 @@ def pct(a: float, b: float) -> float:
 
 
 PARAM = r"^\s*(?:parameter|localparam)\s+(?:\w+\s+)?{name}\s*=\s*(-?\d+)\s*[,;)]"
+# A module-level integer constant in a Python model, `NAME = 12` (optionally
+# annotated, optionally followed by a comment) at column 0. Column 0 because an
+# indented assignment is a local or a class attribute, not the module's value.
+PY_CONST = r"^{name}\s*(?::\s*[\w\[\]., ]+)?=\s*(-?\d+)\s*(?:#.*)?$"
+KIND_PATTERN = {"verilog-parameter": PARAM, "python-constant": PY_CONST}
 
 
-def parse_parameter(text: str, name: str, where: str) -> float:
-    hits = re.findall(PARAM.format(name=re.escape(name)), text, re.MULTILINE)
+def parse_parameter(text: str, name: str, where: str, kind: str = "verilog-parameter") -> float:
+    if kind not in KIND_PATTERN:
+        raise Refused(f"{where}: unknown parameter kind {kind!r}")
+    hits = re.findall(KIND_PATTERN[kind].format(name=re.escape(name)), text, re.MULTILINE)
     if len(hits) != 1:
         raise Refused(f"{where}: found {len(hits)} declarations of {name}, expected exactly 1")
     return float(hits[0])
@@ -225,12 +232,12 @@ def shipped_value(rec: dict, root: Path = ROOT, overrides: dict | None = None) -
     key = (p["source"], p["name"])
     if overrides and key in overrides:
         return float(overrides[key])
-    if p.get("kind") != "verilog-parameter":
+    if p.get("kind") not in KIND_PATTERN:
         raise Refused(f"{rec['id']}: unknown parameter kind {p.get('kind')!r}")
     path = root / p["source"]
     if not path.exists():
         raise Refused(f"{rec['id']}: parameter source {p['source']} is missing")
-    return parse_parameter(path.read_text(), p["name"], p["source"])
+    return parse_parameter(path.read_text(), p["name"], p["source"], p["kind"])
 
 
 def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
@@ -242,7 +249,8 @@ def value_at_ref(rec: dict, ref: str, root: Path = ROOT) -> float | None:
         if "exists on disk, but not in" in r.stderr or "does not exist" in r.stderr:
             return None
         raise Refused(f"cannot read {p['source']} at {ref}: {r.stderr.strip()}")
-    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}")
+    return parse_parameter(r.stdout, p["name"], f"{p['source']}@{ref}",
+                           p.get("kind", "verilog-parameter"))
 
 
 # --------------------------------------------------------------------------
