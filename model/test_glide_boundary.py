@@ -3,9 +3,9 @@
 
 SCOPE, stated plainly: this is the MODEL half only. It checks
 `voice_fx.OscFx.slew` against an independent restatement of contract 6.7 and
-against two hand-computed transitions. It does NOT exercise rtl-sketch/
+against one hand-computed transition. It does NOT exercise rtl-sketch/
 voice_dp.v, so it says nothing about the reported RTL mismatch; that needs the
-pinned build box (see docs/deadline/README.md). It exists so the build-box
+pinned build box (see docs/deadline/glide-247.md). It exists so the build-box
 regression has an independently grounded expectation to compare against, and
 so a model-side defect at these increments is excluded or found first.
 
