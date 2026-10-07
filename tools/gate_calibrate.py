@@ -76,6 +76,10 @@ FOLDER = {"BD": "01. Bass Drum", "SD": "02. Snare Drum", "LT": "03. Low Tom", "M
           "CB": "13. Cowbell", "CY": "14. Cymbal", "OH": "15. Open HH", "CH": "16. Closed HH"}
 CHAINS = ("Digital", "Tape")
 KS = (1, 3, 5)
+#: Reported, never selected from: the coverage a larger k WOULD have bought,
+#: so the refusal to widen the rule after seeing the data is visible and the
+#: dial is swept rather than argued (CLAUDE.md, sweep before arguing).
+KS_SWEEP = (1, 3, 5, 8, 12)
 COVERAGE = 0.80
 SEED_CATCH = 0.90
 GROUP_NAMES = ("development", "calibration", "validation")
@@ -88,7 +92,7 @@ def group_of(key: str) -> int:
 def key_of(rel: str) -> str:
     """The path with the chain removed, so a take and its twin share a key."""
     k = rel.replace("/Digital/", "/*/").replace("/Tape/", "/*/")
-    return re.sub(r" Tape(\.wav)$", r"\1", k)
+    return re.sub(r" Tape\b", "", k)
 
 
 def corpus(sound: str, root: pathlib.Path = CACHE) -> list:
@@ -181,9 +185,10 @@ def passes(d: dict, bar: dict) -> bool:
 
 def choose_k(tabs: dict) -> dict:
     """Development only: the bar from the development group, tried on the
-    calibration group's nearest sample. Returns per-k coverage and the choice."""
+    calibration group's nearest sample. Returns per-k coverage and the choice.
+    `by_k` covers KS_SWEEP; only KS can be chosen."""
     cov = {}
-    for k in KS:
+    for k in KS_SWEEP:
         n = ok = 0
         for t in tabs.values():
             dev = make_bar(matched(t["rows"], 0, k), t["floor"])
@@ -197,12 +202,43 @@ def choose_k(tabs: dict) -> dict:
     return {"by_k": cov, "chosen": chosen, "coverage_required": COVERAGE}
 
 
-def calibrate(tabs: dict) -> dict:
+def regroup(tabs: dict) -> dict:
+    """Re-derive key and group from each take's path, so the frozen grouping
+    rule is applied by one function and a table measured under an earlier key
+    rule cannot carry its stale groups (wrong-then-right 1: the first key rule
+    paired no BD, SD, tom, conga, CY or OH twin, because the Tape take's name
+    carries ' Tape' mid-name)."""
+    out = {}
+    for s, t in tabs.items():
+        rows = [dict(r, key=key_of(r["rel"]), group=group_of(key_of(r["rel"]))) for r in t["rows"]]
+        out[s] = dict(t, rows=rows, keys=sorted({r["key"] for r in rows}))
+    return out
+
+
+def twin_report(tabs: dict) -> dict:
+    """Digital takes with no Tape twin (and vice versa), per sound. A pairing
+    rule that pairs nothing is a leak the grouping was written to prevent."""
+    rep = {}
+    for s, t in tabs.items():
+        ch = {}
+        for r in t["rows"]:
+            ch.setdefault(r["key"], set()).add(r["chain"])
+        rep[s] = {"keys": len(ch), "unpaired": sorted(k for k, c in ch.items() if len(c) < 2)}
+    return rep
+
+
+def calibrate(tabs: dict, force_k: int | None = None) -> dict:
     """Pure function of the per-take tables: the between-recording bars, the
     validity of each, and the reason for every missing one."""
+    tabs = regroup(tabs)
     sel = choose_k(tabs)
     k = sel["chosen"]
-    out = {"selection": sel, "k": k, "sounds": {}}
+    diagnostic = force_k is not None
+    if diagnostic:
+        k = force_k
+    out = {"selection": sel, "k": k, "sounds": {}, "twins": twin_report(tabs),
+           "diagnostic": ("DIAGNOSTIC: k overridden by hand after the pre-registered rule refused; "
+                          "NOT acceptance authority" if diagnostic else None)}
     if k is None:
         out["status"] = "REFUSED: no k reaches the development->calibration coverage requirement"
         return out
@@ -227,7 +263,28 @@ def calibrate(tabs: dict) -> dict:
                                  "worst_ratio_best": pg.verdict(val[0]["d"], bar)["worst_ratio"]}
             row["status"] = "VALIDATED" if row["validation"]["best_passes"] else "VALIDATION-FAILED: best untouched take fails the bar"
         out["sounds"][s] = row
-    out["status"] = "CALIBRATED"
+    out["status"] = "DIAGNOSTIC-CALIBRATION" if diagnostic else "CALIBRATED"
+    return out
+
+
+def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
+    """DESCRIPTIVE, nothing selected from it: where the MARS takes and OUR sound
+    sit against the EXISTING (same-unit / WEAK) bar. The MARS side reports its
+    most favourable take (all groups, so it is an optimistic bound), as
+    crosscheck does for the Boutique 808."""
+    out = {}
+    for s, t in tabs.items():
+        T = pg.Target(*pg.load_wav(refs / t["target"]), s, t["target"])
+        b = pg.bar_for(s, refs, T)
+        vs = [(pg.verdict(r["d"], b["bar"]), r["rel"]) for r in t["rows"]]
+        best = min(vs, key=lambda v: v[0]["worst_ratio"])
+        row = {"old_bar": b["kind"], "n_takes": len(vs), "mars_takes_passing_old_bar": sum(v[0]["verdict"] == "PASS" for v in vs),
+               "mars_best": {"rel": best[1], "worst_ratio": best[0]["worst_ratio"],
+                             "worst_feature": best[0]["worst_feature"], "failing": best[0]["failing"]}}
+        if ours and s in ours:
+            v = pg.verdict(T.distance(*ours[s], f"ours {s}"), b["bar"])
+            row["ours"] = {"verdict": v["verdict"], "worst_ratio": v["worst_ratio"], "worst_feature": v["worst_feature"]}
+        out[s] = row
     return out
 
 
@@ -280,6 +337,21 @@ def qualify(cal: dict, refs: pathlib.Path, ours: dict | None = None) -> dict:
     else:
         q["known_bad"]["shipped-cymbal"] = {"verdict": "REFUSED", "why": "no CY bar or no render supplied"}
     val = [r for r in cal["sounds"].values() if "validation" in r]
+    if ours:
+        rk = {}
+        for s, y in ours.items():
+            if s not in bars:
+                rk[s] = {"verdict": "NO-BAR"}
+                continue
+            T = pg.Target(*pg.load_wav(refs / pg.target_rel(s)), s, pg.target_rel(s))
+            try:
+                v = pg.verdict(T.distance(*y, f"ours {s}"), bars[s])
+                rk[s] = {"verdict": v["verdict"], "worst_ratio": v["worst_ratio"],
+                         "worst_feature": v["worst_feature"], "failing": v["failing"],
+                         "ratios": {f: x.get("ratio") for f, x in v["features"].items()}}
+            except pg.Refused as e:
+                rk[s] = {"verdict": "REFUSED", "why": str(e)}
+        q["ours"] = rk
     q["validation"] = {"sounds": len(val), "best_passes": sum(r["validation"]["best_passes"] for r in val)}
     return q
 
@@ -328,6 +400,8 @@ def main(argv=None) -> int:
     c.add_argument("--tables", type=pathlib.Path, required=True)
     c.add_argument("--corrupt-tables", type=pathlib.Path, default=None)
     c.add_argument("--ours", type=pathlib.Path, default=None, help="dir of our rendered <SOUND>.wav (rank --wavs)")
+    c.add_argument("--force-k", type=int, default=None,
+                   help="DIAGNOSTIC: override the pre-registered k; the result is labelled not-authority")
     c.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     if a.cmd == "measure":
@@ -339,7 +413,7 @@ def main(argv=None) -> int:
         a.out.write_text(json.dumps(pg._r({"corrupt": a.corrupt, "archive": ARCHIVE, "tables": res}), indent=1) + "\n")
         return 0
     tabs = json.loads(a.tables.read_text())["tables"]
-    cal = calibrate(tabs)
+    cal = calibrate(tabs, a.force_k)
     ours = {}
     if a.ours:
         for s in pg.SOUNDS16:
@@ -348,13 +422,18 @@ def main(argv=None) -> int:
                 ours[s] = pg.load_wav(p)
     inj = None
     if a.corrupt_tables:
-        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"])
+        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_k)
         qi = qualify(ci, a.refs, ours) if ci.get("k") else None
-        inj = (decide(qi, False)["status"] == "QUALIFIED") if qi else False
+        # A refusal is not a pass: if the corrupted corpus is refused by the same
+        # rule that refused the clean one, the control saw nothing (None, REFUSED).
+        inj = (decide(qi, False)["status"] == "QUALIFIED") if qi else None
         cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
                                    "calibration_status": ci["status"], "qualified": inj}
     q = qualify(cal, a.refs, ours) if cal.get("k") else None
     dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
+    if q and cal.get("diagnostic"):
+        dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
+    cal["old_bar_context"] = old_bar_context(regroup(tabs), a.refs, ours)
     res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(a)}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
