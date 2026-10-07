@@ -14,6 +14,9 @@ import modal_fixed
 from modal_fixed import ModalFx, RAW, BP, HP, pole_regs
 import voice_fx as vf
 import fixed
+import hashlib
+import pathlib
+import re
 from dsp import SR
 
 FULL24 = (1 << 24) - 1
@@ -834,3 +837,353 @@ def test_a_write_past_the_end_is_dropped_and_a_negative_frame_is_not():
     assert d2.n_late_writes == 0
     with pytest.raises(AssertionError):
         dx.DrumsFx().play([(-1, dx.A_STOPS, 1)], 10)
+
+
+# =============================================================================
+# THE SHARED-BUS DC COUPLING (#551, part of #510): the register-driven blocker
+# of contract 15.10. Every test below is a plain function named
+# test_coupling_* because tools/probes/coupling_controls.py imports and calls
+# them one by one against injected defects (the properties x defects matrix).
+# =============================================================================
+import synth_top_model as stm
+
+K = 10
+A_COUPLE = getattr(dx, "A_COUPLE", 0x30)       # absent on the bypass model: the tests then fail by ASSERTION
+DMIX_BITS, BODY_BITS_ = 22, 19                 # the declared bus widths (contract 15.1)
+
+
+def _oracle(xs, k=K):
+    """The recurrence of 15.10 written as a capacitor: the charge q, the
+    registered estimate floor(q / 2^k) (Python's // IS floor), y = x - est,
+    q <- q + y. Deliberately not DcBlockFx and not `>>`."""
+    q, out = 0, []
+    for x in xs:
+        est = q // (1 << k)
+        y = int(x) - est
+        q += y
+        out.append(y)
+    return np.array(out, dtype=np.int64)
+
+
+def _stim_cy_bd_cp(n=36000):
+    kit = dx.kit_808()
+    return dx.hit_writes([(10, dx.CY, 1.0), (6000, dx.BD, 1.0), (9000, dx.CP, 1.0),
+                          (14000, dx.CY, 0.7)], kit), n
+
+
+def _play(writes, n, extra=()):
+    d = dx.DrumsFx()
+    w = sorted(list(writes) + list(extra), key=lambda t: t[0])
+    dm, b = d.play(w, n)
+    return d, np.asarray(dm, dtype=np.int64), np.asarray(b, dtype=np.int64)
+
+
+def _digest(*arrs):
+    h = hashlib.sha256()
+    for a in arrs:
+        h.update(np.ascontiguousarray(np.asarray(a, dtype=np.int64)).tobytes())
+    return h.hexdigest()
+
+
+# Computed on origin/main 7dd33fb (the bypass model, before #551) with the
+# stimuli above; reset-off must reproduce them exactly.
+GOLDEN_BUSES_SHA = "c8b2ac7fdb8949a71b76c0ec02789b54743c6c2e717e72194f0040f87114f929"
+GOLDEN_TOP_SHA = "b51fb6d5b194c9fdc6a9aa95ed389b8ee454d9339ec72d1d21f9d40a37c1b523"
+
+
+def _top_writes():
+    w, n = _stim_cy_bd_cp()
+    tw = [(f, 0, stm.SEC_DRUM, a, d) for f, a, d in w]
+    tw += [(0, 0, stm.SEC_VOICE, stm.A_DVOL, 32768), (0, 0, stm.SEC_VOICE, stm.A_BVOL, 32768)]
+    return tw, n
+
+
+def test_coupling_enabled_path_follows_the_recurrence_on_both_buses():
+    """START RED: the bypass model ignores the write, so the enabled buses
+    equal the disabled ones and the first differing sample is where the CY's
+    standing offset should have begun to leave."""
+    w, n = _stim_cy_bd_cp()
+    _, rdm, rb = _play(w, n)
+    # nonvacuous: the uncoupled CY really has a standing offset the oracle removes
+    assert abs(int(rdm.mean())) > 100 and not np.array_equal(_oracle(rdm), rdm)
+    _, dm, b = _play(w, n, extra=[(0, A_COUPLE, 1)])
+    for name, got, raw in (("dmix", dm, rdm), ("body", b, rb)):
+        want = _oracle(raw)
+        bad = np.flatnonzero(got != want)
+        assert bad.size == 0, f"{name}: {bad.size} samples differ from the recurrence, first at {bad[0]}: {got[bad[0]]} vs {want[bad[0]]}"
+
+
+def test_coupling_buses_separately_and_together():
+    """CP and CL are mix-bus-only voices, SD/toms/CB body-only: each bus is
+    coupled with the other bus exactly zero, and BOTH together for the CY."""
+    kit = dx.kit_808()
+    for stop, live, dead in ((dx.CP, "dmix", "body"), (dx.SD, "body", "dmix"), (dx.CY, "dmix", "body")):
+        w = dx.hit_writes([(10, stop, 1.0)], kit)
+        _, rdm, rb = _play(w, 20000)
+        raw = {"dmix": rdm, "body": rb}
+        _, dm, b = _play(w, 20000, extra=[(0, A_COUPLE, 1)])
+        got = {"dmix": dm, "body": b}
+        assert np.array_equal(got[live], _oracle(raw[live])), (stop, live)
+        assert not np.array_equal(got[live], raw[live]), (stop, live, "no change: the path is bypassed")
+        assert np.array_equal(got[dead], _oracle(raw[dead])), (stop, dead)
+    # together: the CY drives both buses and neither coupled bus equals its raw
+    w = dx.hit_writes([(10, dx.CY, 1.0)], kit)
+    _, rdm, rb = _play(w, 20000)
+    assert rdm.any() and rb.any()
+
+
+def test_coupling_known_answers_constants_and_impulses():
+    """Hand-derived from the recurrence (K = 10), not from the code."""
+    f = dx.DcBlockFx(10)
+    ones = [f.step(1) for _ in range(1030)]
+    assert ones[:1024] == [1] * 1024 and ones[1024:] == [0] * 6 and f.acc == 1024
+    f = dx.DcBlockFx(10)
+    assert [f.step(-1) for _ in range(5)] == [-1, 0, 0, 0, 0] and f.acc == -1       # floor: the dead zone is ONE sample
+    f = dx.DcBlockFx(10)
+    m2 = [f.step(-2) for _ in range(2060)]
+    assert m2[0] == -2 and m2[1:1024] == [-1] * 1023 and m2[1024:] == [0] * 1036 and f.acc == -1025
+    f = dx.DcBlockFx(10)
+    imp = [f.step(1000)] + [f.step(0) for _ in range(5)]
+    assert imp == [1000, 0, 0, 0, 0, 0] and f.acc == 1000                           # an impulse below 2^K is never discharged
+    f = dx.DcBlockFx(10)
+    imp = [f.step(2048)] + [f.step(0) for _ in range(1100)]
+    assert imp[0] == 2048 and imp[1] == -2 and imp[2:1025] == [-1] * 1023 and imp[1025:] == [0] * 76 and f.acc == 1023
+    # positive and negative constants of equal size are NOT mirror images (floor)
+    a, b = dx.DcBlockFx(10), dx.DcBlockFx(10)
+    ya = [a.step(7) for _ in range(40000)]
+    yb = [b.step(-7) for _ in range(40000)]
+    assert ya[-1] == 0 == yb[-1] and 7 * 1024 <= a.acc <= 7 * 1024 + 1023 and -7 * 1024 <= b.acc <= -7 * 1024 + 1023
+    # a large constant decays as c * (1 - 2^-K)^n within the truncation's two-LSB band
+    c, g = 1 << 20, dx.DcBlockFx(10)
+    for n in range(3000):
+        y = g.step(c)
+        assert abs(y - c * (1 - 2.0 ** -10) ** n) <= 3, n
+
+
+def test_coupling_dead_zone_endpoints():
+    """The accumulator comes to rest anywhere in [x*2^K, x*2^K + 2^K - 1] with
+    y exactly 0, for every small x of either sign -- a standing offset leaves
+    COMPLETELY, there is no residue."""
+    for x in range(-6, 7):
+        f = dx.DcBlockFx(10)
+        y = [f.step(x) for _ in range(60000)]
+        assert y[-2000:] == [0] * 2000, x
+        assert x * 1024 <= f.acc <= x * 1024 + 1023, (x, f.acc)
+    # the interval is tight at both ends, and from rest the two signs land on
+    # OPPOSITE ends (floor): +3 stops at 3*2^K, -3 at -3*2^K + 2^K - 1
+    pos = dx.DcBlockFx(10); [pos.step(3) for _ in range(20000)]
+    neg = dx.DcBlockFx(10); [neg.step(-3) for _ in range(20000)]
+    assert pos.acc == 3 * 1024 and neg.acc == -3 * 1024 + 1023
+    from_above = dx.DcBlockFx(10); from_above.acc = 100000
+    [from_above.step(3) for _ in range(200000)]
+    assert from_above.acc == 3 * 1024 + 1023
+
+
+def _production_blockers(d):
+    return d.cc_dmix, d.cc_body
+
+
+def test_coupling_widths_are_the_proven_bounds_and_the_near_limit_hits_them():
+    """Contract 15.10's widths from the bus widths: input n bits signed ->
+    charge n + K bits, output n + 1 bits. Derivation: the charge's update
+    acc - floor(acc/2^K) is nondecreasing, so the invariant
+    [lo*2^K, hi*2^K + 2^K - 1] is closed under x in [lo, hi]. The test drives
+    the worst case at each bus's declared limit and checks it REACHES the
+    bound (so one bit less is wrong) and never exceeds it."""
+    d = dx.DrumsFx()
+    for blk, nb in zip(_production_blockers(d), (DMIX_BITS, BODY_BITS_)):
+        lo, hi = -(1 << (nb - 1)), (1 << (nb - 1)) - 1
+        assert (blk.acc_limit_bits, blk.out_limit_bits) == (nb + K, nb + 1)
+        ys = [blk.step(hi) for _ in range(30000)]
+        assert blk.acc == hi * 1024 + 1023 or blk.acc >= hi * 1024
+        assert hi * 1024 <= blk.acc <= hi * 1024 + 1023
+        y = blk.step(lo)                                       # full-scale reversal: x - d with d at the other rail
+        assert y == lo - hi and -(1 << nb) < y, (y, lo - hi)
+        assert not (-(1 << (nb - 1)) <= y < (1 << (nb - 1))), "output fits in the INPUT width: the +1 bit would be unneeded"
+        ys = [blk.step(lo) for _ in range(30000)]
+        assert blk.acc == lo * 1024
+        y = blk.step(hi)
+        assert y == hi - lo and y < (1 << nb)
+        # alternating extremes, either phase, for a long time
+        for i in range(4000):
+            y = blk.step(hi if i % 2 == 0 else lo)
+            assert -(1 << nb) < y < (1 << nb)
+            assert -(1 << (nb + K - 1)) <= blk.acc < (1 << (nb + K - 1))
+        assert blk.acc_bits <= nb + K and blk.out_bits <= nb + 1
+    # outside the declared width is a contract violation, refused loudly
+    blk = dx.DrumsFx().cc_dmix
+    with pytest.raises(AssertionError):
+        blk.step(1 << (DMIX_BITS - 1))
+    with pytest.raises(AssertionError):
+        blk.step(-(1 << (DMIX_BITS - 1)) - 1)
+
+
+def test_coupling_reset_off_reproduces_the_previous_stream_exactly():
+    w, n = _stim_cy_bd_cp()
+    d, dm, b = _play(w, n)
+    assert _digest(dm, b) == GOLDEN_BUSES_SHA
+    assert d.couple_en == 0 if hasattr(d, "couple_en") else True
+    tw, n = _top_writes()
+    out = stm.SynthTopModel().run(tw, n)
+    assert _digest(out["sample"], out["dmix"], out["body"], out["dacc"], out["i2s"]) == GOLDEN_TOP_SHA
+    # an explicit write of 0 is the same as never writing
+    _, dm0, b0 = _play(w, n, extra=[(0, A_COUPLE, 0), (3, A_COUPLE, 0xFFFFFFFE)])
+    assert _digest(dm0, b0) == GOLDEN_BUSES_SHA
+
+
+def test_coupling_enable_transitions_track_while_bypassed():
+    """The filter runs every frame and the enable only selects its output: a
+    disabled stretch emits the raw bus, the charge keeps following it, and
+    re-enable reads the charge the whole history produced."""
+    w, n = _stim_cy_bd_cp()
+    _, rdm, rb = _play(w, n)
+    on1, off, on2 = 2000, 9500, 16000
+    ex = [(on1, A_COUPLE, 1), (off, A_COUPLE, 0), (on2, A_COUPLE, 1)]
+    _, dm, b = _play(w, n, extra=ex)
+    live = np.zeros(n, dtype=bool); live[on1:off] = True; live[on2:] = True
+    for got, raw in ((dm, rdm), (b, rb)):
+        want = np.where(live, _oracle(raw), raw)
+        bad = np.flatnonzero(got != want)
+        assert bad.size == 0, f"{bad.size} differ, first at {bad[0]}"
+    assert not np.array_equal(np.where(live, _oracle(rdm), rdm), np.where(live, rdm, rdm))
+
+
+def test_coupling_reserved_bits_and_neighbouring_addresses():
+    w, n = _stim_cy_bd_cp(); n = 8000
+    _, rdm, rb = _play(w, n)
+    # only bit 0 is the enable: 0xFFFFFFFE and 2 leave it off, 0xFFFFFFFF and 3 turn it on
+    for val, on in ((0xFFFFFFFE, False), (2, False), (0x80000000, False), (0xFFFFFFFF, True), (3, True), (1, True)):
+        d, dm, b = _play(w, n, extra=[(0, A_COUPLE, val)])
+        assert (np.array_equal(dm, _oracle(rdm)) and np.array_equal(b, _oracle(rb))) == on, hex(val)
+        assert (np.array_equal(dm, rdm) and np.array_equal(b, rb)) == (not on), hex(val)
+    # neighbours 0x2F, 0x31 .. 0x3F and 0x88..0x8F, 0xA7..0xAF, 0xF0..0xFE are not the enable
+    for a in list(range(0x26, 0x40)) + list(range(0x88, 0x90)) + list(range(0xA7, 0xB0)) + list(range(0xF0, 0xFF)):
+        if a == A_COUPLE:
+            continue
+        _, dm, b = _play(w, n, extra=[(0, a, 1)])
+        assert np.array_equal(dm, rdm) and np.array_equal(b, rb), hex(a)
+    # the write touches nothing else of the image
+    d1 = dx.DrumsFx(); d2 = dx.DrumsFx()
+    for dd in (d1, d2):
+        for a, v in dx.kit_808():
+            dd.write(a, v)
+    d2.write(A_COUPLE, 0xFFFFFFFF)
+    for attr in ("stops", "accent", "osc_inc", "paths", "a1", "a2", "amp", "num"):
+        assert getattr(d1, attr) == getattr(d2, attr), attr
+    assert [(e.stop, e.choke, e.hold, e.bursts, e.period, e.peak, e.rate, e.frate) for e in d1.envs] == \
+           [(e.stop, e.choke, e.hold, e.bursts, e.period, e.peak, e.rate, e.frate) for e in d2.envs]
+
+
+def test_coupling_charge_survives_hits_chokes_and_retunes():
+    d = dx.DrumsFx()
+    for a, v in dx.kit_808():
+        d.write(a, v)
+    d.write(A_COUPLE, 1)
+    d.write(dx.A_STOPS, 1 << dx.CY)
+    for _ in range(3000):
+        d.frame()
+    q = (d.cc_dmix.acc, d.cc_body.acc)
+    assert q[0] != 0 and q[1] != 0
+    # a hit (0 -> 1 on another stop), a choke stop, an accent write and a coefficient retune write
+    # do not touch the charge themselves ...
+    d.write(dx.A_STOPS, (1 << dx.CY) | (1 << dx.BD)); d.write(dx.A_ACCENT + dx.BD, 40000)
+    d.write(dx.A_MODE, 123456); d.write(dx.A_MODE + 1, 654321); d.write(dx.A_MODE + 3, 1)
+    d.write(dx.A_ENV + 2, 0x4000)
+    assert (d.cc_dmix.acc, d.cc_body.acc) == q
+    # ... and the frame after continues the SAME recurrence from that charge
+    ref = [dx.DcBlockFx(10), dx.DcBlockFx(10)]
+    ref[0].acc, ref[1].acc = q
+    dmix, body, *_ = d.frame()
+    assert (dmix, body) == (ref[0].step(d.raw_dmix), ref[1].step(d.raw_body))
+    # a full hit/choke/retune run equals the oracle over the whole raw stream
+    w = dx.hit_writes([(10, dx.CY, 1.0), (4000, dx.BD, 1.0), (4300, dx.CY, 1.0), (4350, dx.CH, 1.0), (4360, dx.OH, 1.0)],
+                      dx.kit_808())
+    _, rdm, rb = _play(w, 12000)
+    _, dm, b = _play(w, 12000, extra=[(0, A_COUPLE, 1)])
+    assert np.array_equal(dm, _oracle(rdm)) and np.array_equal(b, _oracle(rb))
+
+
+def test_coupling_reset_clears_charge_and_enable_voice_reset_does_not():
+    d = dx.DrumsFx()
+    for a, v in dx.kit_808():
+        d.write(a, v)
+    d.write(A_COUPLE, 1); d.write(dx.A_STOPS, 1 << dx.CY)
+    for _ in range(3000):
+        d.frame()
+    assert d.cc_dmix.acc != 0
+    d.write(dx.A_RESET, 0)
+    assert d.cc_dmix.acc == 0 and d.cc_body.acc == 0 and d.couple_en == 0
+    for _ in range(5):
+        assert d.frame()[:2] == (0, 0)
+    # through the chip: SEC = 1 RESET clears, the voice page's RESET does not, the pin does
+    tw, n = _top_writes()
+    pre = [(f, fl, sc, a, v) for f, fl, sc, a, v in tw if f < 5000] + [(0, 0, stm.SEC_DRUM, A_COUPLE, 1)]
+    m = stm.SynthTopModel(); m.run(pre, 5000)
+    q = (m.drums.cc_dmix.acc, m.drums.cc_body.acc)
+    assert q[0] != 0
+    m.run([(0, 0, stm.SEC_VOICE, stm.A_RESET, 0)], 4)
+    assert m.drums.couple_en == 1 and m.drums.cc_dmix.acc != 0, "the voice page's reset reached the drum page"
+    m.run([(0, 0, stm.SEC_DRUM, dx.A_RESET, 0)], 4)
+    assert m.drums.couple_en == 0 and m.drums.cc_dmix.acc == 0
+    m.run(pre, 5000); m.reset()
+    assert m.drums.couple_en == 0 and m.drums.cc_dmix.acc == 0 and m.drums.cc_body.acc == 0
+
+
+def _clamp(x):
+    return np.clip(x, -32768, 32767)
+
+
+def test_coupling_production_path_places_the_blocker_before_the_clamp():
+    """SynthTopModel.run, register-driven, on a stimulus where the output
+    clamp really bites (gains 2.0): sample = sat16((v*vol + c(dmix)*dvol +
+    c(body)*bvol) >> 15) with c the oracle on each RAW bus; the post-clamp
+    placement gives different samples, so the placement is discriminated."""
+    tw, n = _top_writes()
+    gains = [(0, 0, stm.SEC_VOICE, stm.A_DVOL, 65535), (0, 0, stm.SEC_VOICE, stm.A_BVOL, 65535)]
+    tw = [w for w in tw if w[3] not in (stm.A_DVOL, stm.A_BVOL) or w[2] != stm.SEC_VOICE] + gains
+    off = stm.SynthTopModel().run(tw, n)
+    on = stm.SynthTopModel().run(tw + [(0, 0, stm.SEC_DRUM, A_COUPLE, 1)], n)
+    cdm, cb = _oracle(off["dmix"]), _oracle(off["body"])
+    assert np.array_equal(on["dmix"], cdm) and np.array_equal(on["body"], cb)
+    want = _clamp((off["v"] * off["vol"] + cdm * off["dvol"] + cb * off["bvol"]) >> 15)
+    bad = np.flatnonzero(on["sample"] != want)
+    assert bad.size == 0, f"{bad.size} samples differ, first at {bad[0]}"
+    assert int((np.abs((off["v"] * off["vol"] + cdm * off["dvol"] + cb * off["bvol"]) >> 15) > 32767).sum()) > 0, "the clamp never bit: placement not discriminated"
+    post = _clamp(_oracle(_clamp((off["v"] * off["vol"] + off["dmix"] * off["dvol"] + off["body"] * off["bvol"]) >> 15)))
+    assert not np.array_equal(post, want), "post-clamp placement is indistinguishable on this stimulus"
+    # the I2S stream carries the coupled sample one frame later
+    assert np.array_equal(on["i2s"][1:], want[:-1])
+
+
+def test_coupling_register_is_at_a_free_drum_page_address():
+    ranges = [(dx.A_STOPS, dx.A_STOPS + 1), (dx.A_ACCENT, dx.A_ACCENT + dx.N_STOPS),
+              (dx.A_OSC, dx.A_OSC + dx.N_OSC), (dx.A_ENV, dx.A_ENV + dx.N_ENV * dx.ENV_STRIDE),
+              (dx.A_PATH, dx.A_PATH + dx.N_PATH), (dx.A_MODE, dx.A_MODE + dx.N_MODES * dx.MODE_STRIDE),
+              (dx.A_RESET, dx.A_RESET + 1)]
+    assert A_COUPLE == 0x30
+    assert not any(lo <= A_COUPLE < hi for lo, hi in ranges)
+    rtl = (pathlib.Path(__file__).resolve().parent.parent / "rtl-sketch" / "drum_regs.v").read_text()
+    lits = {int(m, 16) for m in re.findall(r"8'h([0-9A-Fa-f]{2})", rtl)}
+    assert 0x30 not in lits, "drum_regs.v already decodes 0x30 literally"
+    # every literal range base in the decoder is one the model map knows
+    assert lits <= {lo for lo, _ in ranges} | {0x18, 0x26, 0x87} | {0x00}, sorted(hex(x) for x in lits)
+    # and no kit or hit sequence ever writes it
+    assert all(a != A_COUPLE for a, _ in dx.kit_808())
+
+
+def test_coupling_constructor_modes_do_not_override_the_register():
+    assert dx.COUPLE_K == 10
+    assert stm.SynthTopModel().drums.couple == dx.COUPLE_OFF
+    d = dx.DrumsFx(couple=dx.COUPLE_BUS)
+    with pytest.raises((ValueError, AssertionError)):
+        d.write(A_COUPLE, 1)
+    # the register path is K = 10 whatever the experimental knob says
+    w, n = _stim_cy_bd_cp(); n = 9000
+    _, rdm, rb = _play(w, n)
+    d = dx.DrumsFx(couple_k=13)
+    dm, b = d.play(sorted(list(w) + [(0, A_COUPLE, 1)], key=lambda t: t[0]), n)
+    assert np.array_equal(dm, _oracle(rdm)) and np.array_equal(b, _oracle(rb))
+    # and it IS the experimental bus placement at K = 10, bit for bit
+    e = dx.DrumsFx(couple=dx.COUPLE_BUS, couple_k=10)
+    edm, eb = e.play(w, n)
+    assert np.array_equal(edm, dm) and np.array_equal(eb, b)

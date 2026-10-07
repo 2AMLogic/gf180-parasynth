@@ -1,0 +1,20 @@
+# start-red record (#551): model/test_drums_fx.py -k coupling against the UNMODIFIED bypass model (origin/main 7dd33fb); python 3.12, pytest --tb=line
+E   AssertionError: dmix: 35988 samples differ from the recurrence, first at 11: -136 vs -135
+E   AssertionError: (6, 'dmix')
+E   AttributeError: 'DrumsFx' object has no attribute 'cc_dmix'. Did you mean: 'dc_dmix'?
+E   AssertionError: 27500 differ, first at 2000
+E   AssertionError: 0xffffffff
+E   AttributeError: 'DrumsFx' object has no attribute 'cc_dmix'. Did you mean: 'dc_dmix'?
+E   AttributeError: 'DrumsFx' object has no attribute 'cc_dmix'. Did you mean: 'dc_dmix'?
+E   assert (False)
+E   Failed: DID NOT RAISE any of (ValueError, AssertionError)
+FAILED model/test_drums_fx.py::test_coupling_enabled_path_follows_the_recurrence_on_both_buses
+FAILED model/test_drums_fx.py::test_coupling_buses_separately_and_together - ...
+FAILED model/test_drums_fx.py::test_coupling_widths_are_the_proven_bounds_and_the_near_limit_hits_them
+FAILED model/test_drums_fx.py::test_coupling_enable_transitions_track_while_bypassed
+FAILED model/test_drums_fx.py::test_coupling_reserved_bits_and_neighbouring_addresses
+FAILED model/test_drums_fx.py::test_coupling_charge_survives_hits_chokes_and_retunes
+FAILED model/test_drums_fx.py::test_coupling_reset_clears_charge_and_enable_voice_reset_does_not
+FAILED model/test_drums_fx.py::test_coupling_production_path_places_the_blocker_before_the_clamp
+FAILED model/test_drums_fx.py::test_coupling_constructor_modes_do_not_override_the_register
+9 failed, 4 passed, 43 deselected in 23.66s
