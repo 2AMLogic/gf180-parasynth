@@ -383,12 +383,15 @@ def test_a_good_transcript_on_real_looking_metadata_is_accepted(clean, tmp_path)
     assert rec["verdict"] == rc.PASS, rec["reasons"]
 
 
-def _live_host_log(key, prefix, epoch=0):
+def _live_host_log(key, prefix, epoch=0, inject=None):
     """What the shipped CLI's LIVE path writes with --capture, driven against
     the repository's scripted device (fpga/verify_rolling_playback.Harness):
-    the closest thing to hardware this checkout has."""
+    the closest thing to hardware this checkout has. The device hold is read
+    by REGISTER identity on the device's unwrapped log (fpga/hold_timing.py),
+    not as "first event minus last live write" (#306)."""
     import contextlib
     import io
+    import hold_timing as ht
     import r0_reference as rr
     import uart_host as uh
     import verify_rolling_playback as vrp
@@ -396,12 +399,22 @@ def _live_host_log(key, prefix, epoch=0):
     argv = rr.cli_argv(man["commands"][key]["command"]) + ["--port", "sim",
                                                            "--capture", str(prefix)]
     h = vrp.Harness(epoch)
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        code = uh.main(argv, bridge_factory=h.factory)
+    saved = set(uh.INJECT_BUGS)
+    uh.INJECT_BUGS.clear()
+    if inject:
+        uh.INJECT_BUGS.add(inject)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            code = uh.main(argv, bridge_factory=h.factory)
+    finally:
+        uh.INJECT_BUGS.clear()
+        uh.INJECT_BUGS.update(saved)
     assert code == 0, (key, code)
-    live = [w for w in h.sim.writes if w[5] == "live"]
-    ev = [w for w in h.sim.writes if w[5] == "event"]
-    device_hold = ((ev[0][0] - live[-1][0]) & 0xFFFF) if (live and ev) else None
+    h.ser.run_until(h.clock.t + 0.25)
+    device_hold = None
+    if key.startswith("held-"):
+        g = ht.device_gates(h.sim)
+        device_hold = g["off"] - g["on"]
     return json.loads(pathlib.Path(f"{prefix}.plan.json").read_text()), device_hold
 
 
@@ -419,17 +432,32 @@ def test_the_live_cli_host_log_passes_the_identity_gate(key, tmp_path):
 
 
 def test_the_live_held_note_hold_offset_is_measured_not_assumed(tmp_path):
-    """Judge B2: the live planned hold is 3121 frames against the dry-run's
-    1920 -- 1201 frames, 25 ms, not "a few". On the scripted device the gate-
-    off actually fires 3155 frames after the gate, so the host log's planned
-    hold is itself 34 frames off what the device did. Recorded here as
-    measured numbers, so a change in the CLI's anchoring shows up."""
+    """HISTORICAL BASELINE (Judge B2), now an injected control: the pre-#306
+    live path, `HOLD_ACK_DRAIN`, planned 3121 frames against the dry-run's
+    1920 -- 1201 frames, 25 ms -- and the scripted device fired the gate-off
+    3155 frames after the gate, 34 off the host's own plan. Kept as measured
+    numbers so the control stays the bug it claims to be."""
     ref = json.loads((rc.REFERENCES / "held-default.plan.json").read_text())
-    host, device_hold = _live_host_log("held-default", tmp_path / "h")
+    host, device_hold = _live_host_log("held-default", tmp_path / "h",
+                                       inject="HOLD_ACK_DRAIN")
     assert rc.planned_hold(ref) == 1920
     assert rc.planned_hold(host) == 3121
     assert device_hold == 3155
     assert abs(device_hold - rc.planned_hold(host)) <= rc.HOLD_UNCERTAINTY_FRAMES
+    assert "hold_timing" not in host            # the historical path claimed nothing
+
+
+@pytest.mark.parametrize("key", ["held-default", "held-m5a-saw", "held-m5a-pulse"])
+def test_the_live_held_note_delivers_the_requested_hold(key, tmp_path):
+    """#306: the live path brackets the gate on the device's timeline. Its
+    log's hold is the record's (due - estimate) = 1920, the DEVICE holds 1920
+    within the record's bound, and the planner's live-row prediction -- a
+    plan, not an observation -- is no longer what planned_hold reads."""
+    host, device_hold = _live_host_log(key, tmp_path / "h")
+    rec = host["hold_timing"]
+    assert rec["verdict"] == "WITHIN_BOUND" and rc.hold_timing_problems(host) == []
+    assert rc.planned_hold(host) == 1920
+    assert abs(device_hold - 1920) <= rec["hold_bound_frames"] <= rec["declared_max_bound_frames"]
 
 
 def test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused(clean, tmp_path):
@@ -444,7 +472,156 @@ def test_clean_audio_with_live_cli_host_logs_is_analysed_not_refused(clean, tmp_
     rec = rc.analyse(d)
     assert rec["verdict"] == rc.PASS, rec["reasons"]
     held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
-    assert held["hold_offset_frames"] == 1201 and held["release_compared"] is False
+    # #306: the live log now plans the requested hold -- offset 0 -- and the
+    # release is STILL not compared: the committed reference is the dry-run
+    # schedule's, and equal planned holds are not a qualified release
+    assert held["hold_offset_frames"] == 0 and held["release_compared"] is False
+    assert "NOT EVALUATED" in held["coverage"]["excluded_why"], held["coverage"]
+    assert rec["coverage"]["release_compared"]["held-1"] is False
+
+
+# ---- #306: the release comparison, bound to a live schedule ------------------
+def _live_refs(tmp_path, *, requested=1920, tolerance=8, keys=("held-default",)):
+    """The committed references with `held-default` RELABELLED as a live-
+    schedule reference. SYNTHETIC: no live-schedule reference has been
+    rendered (that is the build box's job); this exercises the binding and
+    the comparison, not a rendered schedule."""
+    d = tmp_path / "live-refs"
+    shutil.copytree(rc.REFERENCES, d)
+    for key in keys:
+        p = d / f"{key}.json"
+        r = json.loads(p.read_text())
+        r["schedule"] = {"kind": "live", "synthetic": "relabelled dry-run render (test)",
+                         "live_cmds_sha256": "0" * 64,
+                         "hold_timing": {"requested_hold_frames": requested},
+                         "release_tolerance_frames": tolerance}
+        p.write_text(json.dumps(r))
+    return d
+
+
+def _held_live_session(clean, tmp_path, displace=0, held1_inject=None):
+    d = _as_real(clean, tmp_path)
+    s = json.loads((d / "session.json").read_text())
+    for i, t in enumerate(s["takes"]):
+        if t["command_id"] != "silence":
+            _live_host_log(t["command_id"], d / t["host_capture"], epoch=5000 * i,
+                           inject=held1_inject if t["id"] == "held-1" else None)
+    if displace:
+        # the held-1 take with its release moved `displace` frames: EARLIER
+        # (> 0) cuts the sustain short just before the release, LATER (< 0)
+        # repeats the last |displace| frames of sustain; the rest of the note
+        # follows unchanged -- the intentionally displaced release
+        ref = rc.load_reference(rc.REFERENCES, "held-default")
+        x = ref["x"]
+        r = int(np.flatnonzero(x)[0]) + int(ref["hold"])
+        if displace > 0:
+            xd = np.concatenate([x[:r - displace], x[r:], np.zeros(displace)])
+        else:
+            xd = np.concatenate([x[:r], x[r + displace:r], x[r:]])[:x.size]
+        i = next(k for k, t in enumerate(s["takes"]) if t["id"] == "held-1")
+        y = rc.synth_take(xd, delay=rc.CLEAN["delays"][i % len(rc.CLEAN["delays"])],
+                          gain=rc.CLEAN["gain"], ppm=rc.CLEAN["ppm"],
+                          noise_dbfs=rc.CLEAN["noise_dbfs"], hpf_hz=rc.CLEAN["hpf_hz"],
+                          rng=np.random.default_rng(99))
+        rc.write_capture_wav(d / s["takes"][i]["wav"], y)
+    return d
+
+
+def test_a_live_schedule_reference_qualifies_the_release(clean, tmp_path):
+    """The binding satisfied -- a live-schedule reference for the requested
+    hold, a host record within its tolerance: the held takes' releases ARE
+    compared, and the clean session passes with them in."""
+    d = _held_live_session(clean, tmp_path)
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    assert rec["verdict"] == rc.PASS, rec["reasons"]
+    cov = rec["coverage"]["release_compared"]
+    assert cov["held-1"] is True and cov["held-2"] is True
+    assert cov["tone-1"] is False               # m5a-saw's reference is still dry-run
+
+
+def test_an_intentionally_displaced_release_is_caught(clean, tmp_path):
+    """The control for the comparison the binding enables: held-1's release
+    96 frames (2 ms) LATE must FAIL -- and is NOT caught when the release is
+    excluded (the dry-run references), which is what the binding buys.
+    (Measured while writing this: 240 frames early or late is also caught
+    against the dry-run references, but only by held-2's repeat check, i.e.
+    only because the two takes differ. A systematic hold error -- the
+    historical defect, identical on every take -- would leave that blind.)"""
+    d = _held_live_session(clean, tmp_path, displace=-96)
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    assert rec["verdict"] == rc.FAIL, rec["reasons"]
+    held = {t["id"]: t for t in rec["takes"]}["held-1"]
+    assert "residual" in held["fails"], held["fails"]
+    # every reason is the displaced take, directly or as held-2's repeat partner
+    assert all(r.startswith(("held-1:", "held-2: repeat")) for r in rec["reasons"]), \
+        rec["reasons"]
+    # BLIND without the live reference: the release is outside the scored region
+    rec0 = rc.analyse(d)
+    assert rec0["verdict"] == rc.PASS, rec0["reasons"]
+
+
+@pytest.mark.parametrize("requested,tolerance", [(1919, 8), (1920, 1)])
+def test_a_live_reference_that_does_not_bind_this_hold_compares_no_release(
+        clean, tmp_path, requested, tolerance):
+    """A live reference for another hold, or one whose release tolerance is
+    tighter than the host's bound, qualifies nothing."""
+    d = _held_live_session(clean, tmp_path)
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path, requested=requested,
+                                          tolerance=tolerance))
+    assert rec["coverage"]["release_compared"]["held-1"] is False
+    held = {t["id"]: t for t in rec["takes"]}["held-1"]["metrics"]
+    assert "NOT EVALUATED" in held["coverage"]["excluded_why"]
+
+
+def test_a_deceptive_host_log_is_caught_by_the_audio_not_the_log(clean, tmp_path):
+    """HOLD_FORGED_LOG: the host's rows, bytes-as-logged and record all claim
+    the requested 1920 while the wire carried a due 600 frames later, so the
+    board releases 12.5 ms late. Nothing in the log can see that -- it is
+    self-consistent by construction -- so the take's AUDIO must, and against
+    a live-schedule reference it FAILS. (Against the dry-run references a
+    600-frame displacement happens to break the coarse alignment and fails
+    as `routing` -- the wrong property, at an ncc of 0.489 against a 0.5
+    limit -- so nothing is asserted about that path.)"""
+    d = _held_live_session(clean, tmp_path, displace=-600, held1_inject="HOLD_FORGED_LOG")
+    s = json.loads((d / "session.json").read_text())
+    held = next(t for t in s["takes"] if t["id"] == "held-1")
+    host = json.loads((d / f"{held['host_capture']}.plan.json").read_text())
+    # BLIND: every log-level check passes, and the log's hold is the claim
+    assert rc.host_log_problems(host) == [] and rc.planned_hold(host) == 1920
+    rec = rc.analyse(d, refdir=_live_refs(tmp_path))
+    assert rec["verdict"] == rc.FAIL, rec["reasons"]
+    assert {t["id"]: t for t in rec["takes"]}["held-1"]["fails"], rec["reasons"]
+
+
+def test_a_log_whose_row_is_not_its_own_packet_is_refused(tmp_path):
+    """The log-level guard (rule 8): an event row whose `due` is not the due
+    its own packet bytes carry. Its defeating input is the forged log above,
+    which rewrites both consistently -- only the device or the audio sees it."""
+    host, _ = _live_host_log("held-default", tmp_path / "h")
+    assert rc.host_log_problems(host) == []
+    ev = next(r for r in host["rows"] if r["kind"] == "event")
+    ev["due"] += 600
+    host["hold_timing"]["gate_off_due"] += 600
+    host["hold_timing"]["gate_apply_estimate"] += 600
+    host["hold_timing"]["gate_apply_bounds"] = [x + 600 for x in
+                                                host["hold_timing"]["gate_apply_bounds"]]
+    probs = rc.host_log_problems(host)
+    assert any("the packet carries due" in p for p in probs), probs
+
+
+@pytest.mark.parametrize("edit,why", [
+    (lambda h: h.update(gate_off_due=h["gate_off_due"] + 1), "event row"),
+    (lambda h: h.update(hold_bound_frames=99), "exceeds the declared"),
+    (lambda h: h.update(verdict="REFUSED"), "did not establish"),
+    (lambda h: h.update(gate_apply_estimate=h["gate_apply_estimate"] - 50,
+                        gate_off_due=h["gate_off_due"]), "outside its own bracket"),
+])
+def test_a_hold_record_that_disagrees_with_its_log_is_refused(tmp_path, edit, why):
+    host, _ = _live_host_log("held-default", tmp_path / "h")
+    assert rc.hold_timing_problems(host) == []
+    edit(host["hold_timing"])
+    probs = rc.hold_timing_problems(host)
+    assert any(why in p for p in probs), probs
 
 
 def test_a_live_host_log_of_another_command_is_still_refused(clean, tmp_path):
@@ -759,3 +936,14 @@ def test_an_io_error_at_the_in_progress_write_is_an_execution_error(
     assert code == 3, out
     assert not ran
     assert list(d.iterdir()) == []
+
+
+def test_a_live_schedule_render_never_overwrites_the_frozen_references():
+    """#306: legacy R0 evidence is frozen. A live-schedule render REFUSES the
+    frozen directory before anything is simulated or written."""
+    import r0_reference as rr
+    before = {p.name: p.read_bytes() for p in rc.REFERENCES.iterdir() if p.is_file()}
+    code = rr.main(["render", "--out", str(rc.REFERENCES), "--schedule", "live",
+                    "--commands", "held-default"])
+    assert code == 2
+    assert {p.name: p.read_bytes() for p in rc.REFERENCES.iterdir() if p.is_file()} == before

@@ -1277,7 +1277,8 @@ class Bridge:
             # musical t=0 and the rest rolls from there. Its acceptance is
             # policed by the roller (a due that died is REFUSED there) and by
             # main()'s final error check; the record says so.
-            self._run_acks_expected = len(rows_live)
+            # the bracket's two STATUS queries are answered, not ACKed
+            self._run_acks_expected = sum(1 for r in rows_live if r.kind != "status")
             ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
             self.performance_origin = origin2 & 0xFFFF
             timing.update(verdict="UNCONFIRMED", reason="the gate-off rides the rolling "
@@ -1447,7 +1448,8 @@ class Bridge:
             # gate-off event is musical t=0 (it IS the hold's deadline), and
             # the rest rolls from there. Live rows are already counted; the
             # roller adds its own windows to the expected-ACK total.
-            self._run_acks_expected = len(rows_live)
+            # the bracket's two STATUS queries are answered, not ACKed
+            self._run_acks_expected = sum(1 for r in rows_live if r.kind != "status")
             ev_abs = [(origin2 + c[1], c) for c in ev_cmds]
             self.performance_origin = origin2 & 0xFFFF
             rows_ev = self._roll_events(ev_abs, baud=baud, quiet=quiet)

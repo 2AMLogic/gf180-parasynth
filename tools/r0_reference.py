@@ -6,6 +6,8 @@ the release CLI sends exactly the bytes the manifest pins.
     python tools/r0_reference.py render --out build/r0-reference            # all commands
     python tools/r0_reference.py render --out DIR --commands held-default
     python tools/r0_reference.py check  fpga/release/evidence/r0-reference  # re-verify a set
+    python tools/r0_reference.py render --out build/r0-reference-live --schedule live \
+        --commands held-default held-m5a-saw held-m5a-pulse       # #306, build box only
 
 WHAT RUNS, per command in the manifest's `commands` table:
 
@@ -193,8 +195,11 @@ def calibration_window(x: np.ndarray, sr: int = SR) -> dict:
                     f"{CAL_WINDOW_S * 1e3:.0f} ms long"}
 
 
+FROZEN_REFERENCES = ROOT / "fpga" / "release" / "evidence" / "r0-reference"
+
+
 def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
-               tail_s: float) -> dict:
+               tail_s: float, schedule: str = "dry-run") -> dict:
     import uart_host as uh
     import verify_uart_bridge as vub
     work = out / "work" / key
@@ -211,6 +216,26 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
                       f"{spec['cmds_sha256'][:12]} -- not the released command")
     replay_prefix = prefix
     fixture = rolling_fixture(spec["command"])
+    live = None
+    if schedule == "live":
+        # #306: a held note's LIVE schedule -- the bytes the CLI really sends
+        # (the gate bracket's STATUS queries, the gate-off at estimate + hold)
+        # from its run against the scripted device -- replayed through the
+        # RTL. The command identity above (cmds_sha256) is still the pinned
+        # dry-run's; the replayed stimulus is bound separately, beside the
+        # host's hold record and the RTL's own measured hold.
+        import hold_timing as ht
+        if key not in ht.HELD_COMMANDS:
+            raise Refused(f"{key}: a live-schedule reference is defined for held notes only")
+        m = ht.measure(ht.HELD_COMMANDS[key])
+        v, why = ht.hold_verdict(m)
+        if v != ht.PASS:
+            raise Refused(f"{key}: the live run against the scripted device is not clean: {why}")
+        replay_prefix = work / "live"
+        ht.write_held_rtl_capture(m["_harness"], replay_prefix)
+        live = {"kind": "live", "live_cmds_sha256": sha256_file(f"{replay_prefix}.cmds"),
+                "hold_timing": m["host_record"],
+                "release_tolerance_frames": uh.HOLD_BOUND_MAX_FRAMES}
     if fixture:
         # A MUSICAL-length fixture is delivered in rolling windows, each
         # anchored on a STATUS answer. The dry-run's virtual anchors are not a
@@ -241,6 +266,14 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
         raise Refused(f"{key}: the replay did not compile the image's sources: "
                       + "; ".join(probs[:4]))
     ok, comp, detail = vub.analyze(run)
+    if live is not None:
+        import hold_timing as ht
+        live["rtl_hold"] = ht.rtl_hold_verdict(vub._rows(run["files"]["wrs"]),
+                                               live["hold_timing"]["requested_hold_frames"],
+                                               live["hold_timing"]["hold_bound_frames"])
+        if live["rtl_hold"]["verdict"] != ht.PASS:
+            raise Refused(f"{key}: the RTL did not deliver the live schedule's hold: "
+                          f"{live['rtl_hold']['reason']}")
     i2s = read_i2s(run["files"]["i2s"])
     lr = int(np.count_nonzero(i2s[:, 0] != i2s[:, 1]))
     rec = {"schema": SCHEMA, "command_id": key, "command": spec["command"],
@@ -259,6 +292,8 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
                       "detail": list(detail)[:5]},
            "tail_s": tail_s, "periods": int(len(i2s)), "l_ne_r": lr,
            "peak_lsb": int(np.abs(i2s[:, 0].astype(np.int32)).max())}
+    if live is not None:
+        rec["schedule"] = live
     if not ok:
         rec["verdict"] = "FAIL"
         return rec
@@ -305,6 +340,9 @@ def main(argv=None) -> int:
     r.add_argument("--out", type=pathlib.Path, required=True)
     r.add_argument("--commands", nargs="*", default=None)
     r.add_argument("--tail-s", type=float, default=1.0)
+    r.add_argument("--schedule", choices=("dry-run", "live"), default="dry-run",
+                   help="live (#306): held notes only, rendered from the CLI's live "
+                        "bytes against the scripted device; never into the frozen set")
     c = sub.add_parser("check")
     c.add_argument("dir", type=pathlib.Path)
     a = ap.parse_args(argv)
@@ -312,6 +350,10 @@ def main(argv=None) -> int:
         manifest = load_manifest()
         if a.cmd == "check":
             return check(a.dir, manifest)
+        if a.schedule == "live" and a.out.resolve() == FROZEN_REFERENCES.resolve():
+            # the frozen set is R0's legacy evidence: a live render goes beside it
+            raise Refused(f"a live-schedule render may not overwrite the frozen R0 "
+                          f"references in {FROZEN_REFERENCES.relative_to(ROOT)}")
         probs = image_source_problems(manifest)
         if probs:
             raise Refused("this tree's RTL is not the image's (render on a scratch clone "
@@ -326,12 +368,13 @@ def main(argv=None) -> int:
         a.out.mkdir(parents=True, exist_ok=True)
         worst = 0
         for key in keys:
-            rec = render_one(key, manifest["commands"][key], manifest, a.out, a.tail_s)
+            rec = render_one(key, manifest["commands"][key], manifest, a.out, a.tail_s,
+                             schedule=a.schedule)
             print(f"r0_reference: {key}: {rec['verdict']} -- {rec['periods']} periods, "
                   f"peak {rec['peak_lsb']} LSB, replay {rec['replay']['comparison']}")
             if rec["verdict"] != "PASS":
                 worst = 1
-            if key == "held-default" and rec["verdict"] == "PASS":
+            if key == "held-default" and rec["verdict"] == "PASS" and a.schedule != "live":
                 _, x = read_wav_int16(a.out / rec["wav"])
                 srec = silence_record(x[:, 0])
                 (a.out / "silence.json").write_text(json.dumps(srec, indent=1) + "\n")

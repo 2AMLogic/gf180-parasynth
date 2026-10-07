@@ -38,7 +38,7 @@ The apparatus knobs are the device's: `epoch` (counter start, for the wrap),
 `reply_delay_s` (device -> host latency) and `tx_delay_s` (host -> device
 latency). The scripted device has NO host-clock noise: a real FTDI link adds
 latency (which the knobs model) and USB packetisation (which they do not --
-see docs/capture-r0.md, "held-note hold").
+see docs/capture-r0.md, "Held notes: the release is NOT compared").
 """
 from __future__ import annotations
 
@@ -229,6 +229,7 @@ def measure(argv: list, *, epoch: int = 0, reply_delay_s: float = 0.0,
             rec["host_bound_contains_gate"] = b[0] <= on <= b[1]
     if tmp is not None:
         tmp.cleanup()
+    rec["_harness"] = h                            # not JSON: the RTL capture reads it
     return rec
 
 
@@ -390,6 +391,139 @@ def _row(m: dict) -> str:
             f"{m['verdict']:<8} (want {m['expected']})")
 
 
+# ---- the UART RTL replay (build box) -------------------------------------------
+# The scripted device is a Python model of the contract. The RTL is the device.
+# `rtl` replays the host's ACTUAL bytes -- the SimSerial transmit log, the
+# bracket's STATUS queries included, at the frames the host wrote them --
+# through fpga/verify_uart_bridge.py's wrapper bench (UART pins in, I2S out),
+# and reports three verdicts SEPARATELY:
+#   model    the bench's own comparison: every write executed on its predicted
+#            frame (events exactly at their due), the I2S wire bit-exact with
+#            the integer model driven by the same schedule, no X, no overrun;
+#   hold     the RTL's own write log, by register identity: the one voice
+#            GATE_ON to the one voice GATE_OFF, against the request and the
+#            host's per-run bound -- the bracket's derivation tested against
+#            the real receiver, not against the Python sim it was written with;
+#   release  the gate-off's identity (section, address, data) and that nothing
+#            the queue reported went wrong (drops, late, resync).
+# A heavy run (the whole wrapper, ~15 min for a held note plus 1 s of tail).
+# It runs on the build box, never on a dispatch worker.
+
+def write_held_rtl_capture(h, prefix: Path) -> dict:
+    """<prefix>.cmds/.plan.json in verify_uart_bridge's replay format from the
+    host's TRANSMIT LOG. The wire model is verify_rolling_playback's (true
+    baud, the receiver's stop-bit acceptance). Expectations come from the
+    packets themselves: the bench checks the device EXECUTES what the host
+    sent, on the frames the contract predicts; the HOLD is judged separately
+    against the request (`rtl_hold_verdict`), so a host that sent a wrong due
+    is not excused by an expectation built from it."""
+    if h.sim.epoch != 0 or h.sim.resets:
+        raise ValueError("an RTL capture needs an epoch-0 run with no reset")
+    bc = 10 * uh.CLK_HZ / uh.DEFAULT_BAUD
+    div = (uh.CLK_HZ + uh.DEFAULT_BAUD // 2) // uh.DEFAULT_BAUD
+    rows, wire_free = [], 0
+    for t, data in h.ser.tx_log:
+        send = int(t * uh.SR) + 1
+        for pkt in vrp._packets(data):
+            start = max(send * uh.CYC_PER_FRAME + 1, wire_free)
+            wire_free = start + len(pkt) * bc
+            push = start + (len(pkt) - 1) * bc + 4 + 9 * div + div // 2
+            accept = int(push // uh.CYC_PER_FRAME)
+            row = {"index": len(rows), "packet": pkt.hex(), "send_frame": send,
+                   "accept_frame": accept}
+            if pkt[0] == uh.OP_WRITE:
+                f, s_, a, d = uh.decode_reg_frame(pkt[1:7])
+                row.update(kind="write", due=-1, apply_frame=accept + 1,
+                           expect={"flag": f, "sec": s_, "addr": a, "data": d})
+            elif pkt[0] == uh.OP_EVENT:
+                f, s_, a, d = uh.decode_reg_frame(pkt[3:9])
+                due16 = pkt[1] | (pkt[2] << 8)
+                k = (due16 - accept) & 0xFFFF
+                due = accept + (k if k < 0x8000 else k - 0x10000)
+                row.update(kind="event", due=due, apply_frame=due,
+                           expect={"flag": f, "sec": s_, "addr": a, "data": d})
+            elif pkt[0] == uh.OP_STATUS:
+                row.update(kind="status", due=-1, apply_frame=-1, expect=None)
+            else:
+                raise ValueError(f"unexpected opcode 0x{pkt[0]:02x} in the transmit log")
+            rows.append(row)
+    prefix = Path(prefix)
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    with open(f"{prefix}.cmds", "w") as fh:
+        for r in rows:
+            fh.write(f"S {r['send_frame']} {bytes.fromhex(r['packet']).hex(' ')}\n")
+    rec = {"origin": 0, "baud": uh.DEFAULT_BAUD, "base_send_frame": 0,
+           "source": "SimSerial transmit log (held note, #306)", "rows": rows}
+    Path(f"{prefix}.plan.json").write_text(json.dumps(rec, indent=1) + "\n")
+    return {"rows": len(rows), "writes": sum(r["kind"] == "write" for r in rows),
+            "events": sum(r["kind"] == "event" for r in rows),
+            "status": sum(r["kind"] == "status" for r in rows)}
+
+
+def rtl_hold_verdict(write_rows: list, requested: int, bound: int) -> dict:
+    """The hold from the RTL bench's executed-write log (rows of
+    `frame flag sec addr data ...`), by register identity. Ambiguity -- not
+    exactly one voice GATE_ON and one voice GATE_OFF after it, or an X in a
+    gate row -- is REFUSED, never read as a hold."""
+    on_addr, off_addr = _gate_addrs()
+    ons, offs = [], []
+    for r in write_rows:
+        try:
+            frame, sec, addr = int(r[0]), int(r[2]), int(r[3])
+        except (ValueError, IndexError):
+            # an X (or a short row) could be a gate: nothing can be concluded
+            return {"verdict": REFUSED, "reason": f"unreadable write row {r}: the "
+                    "gate writes cannot be identified"}
+        if sec == SEC_VOICE and addr == on_addr:
+            ons.append(frame)
+        elif sec == SEC_VOICE and addr == off_addr:
+            offs.append(frame)
+    if len(ons) != 1 or len(offs) != 1 or offs[0] <= ons[0]:
+        return {"verdict": REFUSED, "reason": f"the RTL executed {len(ons)} gate-on and "
+                f"{len(offs)} gate-off writes: the hold is ambiguous",
+                "gate_on": ons, "gate_off": offs}
+    hold = offs[0] - ons[0]
+    ok = abs(hold - requested) <= bound
+    return {"verdict": PASS if ok else FAIL, "hold": hold, "requested": requested,
+            "bound": bound, "gate_on": ons[0], "gate_off": offs[0],
+            "reason": f"the RTL held {hold} frames for {requested} (bound +-{bound})"}
+
+
+def rtl_replay(key: str, outdir: Path, *, tail_s: float = 1.0) -> dict:
+    """The build-box run. Returns the three verdicts; never raises for them."""
+    import verify_uart_bridge as vub
+    m = measure(HELD_COMMANDS[key])
+    v, why = hold_verdict(m)
+    if v != PASS:
+        return {"state": REFUSED, "reason": f"the scripted-device run is not clean: {why}"}
+    outdir = Path(outdir).resolve()
+    cap = write_held_rtl_capture(m["_harness"], outdir / key)
+    run = vub.simulate_replay(str(outdir / key), ROOT / "build" / "hold-rtl" / key,
+                              tail_frames=int(tail_s * uh.SR), timeout_s=4 * 3600)
+    if run is None:
+        return {"state": REFUSED, "reason": "the RTL replay did not run", "capture": cap}
+    ok, comp, detail = vub.analyze(run)
+    hold = rtl_hold_verdict(vub._rows(run["files"]["wrs"]), m["requested_hold"],
+                            m["host_record"]["hold_bound_frames"])
+    errs = {k: comp.get(k) for k in ("writes_bad", "frame_pred_bad", "frame_no_pred",
+                                     "overrun", "wire_mismatch") if k in comp}
+    off_rows = [r for r in json.loads(Path(f"{outdir / key}.plan.json").read_text())["rows"]
+                if r["kind"] == "event"]
+    release_identity = {"verdict": PASS if (len(off_rows) == 1 and off_rows[0]["expect"]
+                                   == {"flag": 0, "sec": 0, "addr": _gate_addrs()[1],
+                                       "data": 0}) else FAIL,
+               "gate_off_row": off_rows}
+    return {"state": "COMPLETE", "capture": cap,
+            "model": {"verdict": PASS if ok else FAIL, "comparison": comp,
+                      "detail": list(detail)[:10]},
+            "hold": hold, "release_identity": release_identity,
+            "queue_and_errors": errs,
+            "host_record": m["host_record"],
+            "live_cmds_sha256": __import__("hashlib").sha256(
+                Path(f"{outdir / key}.cmds").read_bytes()).hexdigest(),
+            "run_identity": vub.rtl_run_report(run)}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -405,13 +539,37 @@ def main(argv=None) -> int:
     tb.add_argument("--inject", default=None)
     tb.add_argument("--json", type=Path, default=None)
     sub.add_parser("controls")
+    rt = sub.add_parser("rtl", help="BUILD BOX ONLY: replay the host's bytes "
+                                    "through the UART RTL (~15 min per command)")
+    rt.add_argument("--key", choices=sorted(HELD_COMMANDS), nargs="+",
+                    default=sorted(HELD_COMMANDS))
+    rt.add_argument("--outdir", type=Path, required=True)
+    rt.add_argument("--tail-s", type=float, default=1.0)
     a = ap.parse_args(argv)
+    if a.cmd == "rtl":
+        worst = 0
+        for key in a.key:
+            r = rtl_replay(key, a.outdir, tail_s=a.tail_s)
+            (Path(a.outdir) / f"{key}.hold-rtl.json").write_text(
+                json.dumps(r, indent=1, default=str) + "\n")
+            if r["state"] != "COMPLETE":
+                print(f"{key}: {r['state']} -- {r['reason']}")
+                worst = max(worst, 2)
+                continue
+            print(f"{key}: model {r['model']['verdict']}, hold {r['hold']['verdict']} "
+                  f"({r['hold']['reason']}), release identity "
+                  f"{r['release_identity']['verdict']}")
+            if (r["model"]["verdict"], r["hold"]["verdict"],
+                    r["release_identity"]["verdict"]) != (PASS, PASS, PASS):
+                worst = max(worst, 1)
+        return worst
     if a.cmd == "measure":
         m = measure(HELD_COMMANDS[a.key], epoch=a.epoch,
                     reply_delay_s=a.reply_delay_ms / 1e3, tx_delay_s=a.tx_delay_ms / 1e3,
                     hold_frames=a.hold_frames, inject=a.inject)
         v, why = hold_verdict(m)
         m["verdict"], m["reason"] = v, why
+        m.pop("_harness", None)
         print(json.dumps(m, indent=1))
         return {PASS: 0, FAIL: 1, REFUSED: 2}.get(v, 3)
     if a.cmd == "table":
@@ -420,6 +578,8 @@ def main(argv=None) -> int:
         for m in rows:
             print(_row(m))
         if a.json:
+            for m in rows:
+                m.pop("_harness", None)
             a.json.write_text(json.dumps(rows, indent=1, default=str) + "\n")
         if any(m["verdict"] == NO_VERDICT for m in rows):
             return 3

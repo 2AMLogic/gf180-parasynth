@@ -166,3 +166,53 @@ def test_a_stalled_burst_is_refused_and_the_note_released():
     v, why = ht.hold_verdict(m, expect_refusal=True)
     assert m["rc"] == 2 and "wider than the declared" in m["stderr_tail"], m["stderr_tail"]
     assert v == ht.REFUSED and m["device"]["off"] is not None, why
+
+
+# ---- the rolling verifier now enforces the hold it reports --------------------
+def test_the_rolling_verifier_enforces_the_requested_hold():
+    """verify_rolling_playback's held branch used to record a number it called
+    `hold_frames_observed` -- the gate-off's distance from the host-chosen
+    performance origin -- and assert nothing about the hold. It now checks
+    the device's gate-on -> gate-off against the request; the historical host
+    path must turn it red for that reason."""
+    import verify_rolling_playback as vrp
+    clean = vrp.check(vrp.run_cli("bar808", note=45))
+    assert clean["ok"] and clean["hold_delivered"] is not None, clean["reasons"]
+    assert abs(clean["hold_delivered"] - 1920) <= clean["hold_bound"]
+    bad = vrp.check(vrp.run_cli("bar808", note=45, inject="HOLD_ACK_DRAIN"))
+    assert any(r.startswith("held note: the device held") for r in bad["reasons"]), \
+        bad["reasons"]
+
+
+# ---- the RTL replay tooling (the replay itself runs on the build box) ---------
+def test_the_held_rtl_capture_replays_the_hosts_actual_bytes(tmp_path):
+    """No RTL here: the capture must be exactly the host's transmit log, carry
+    the bracket's two STATUS queries, parse in the bench's own reader, and --
+    on the bench's wire model, not the sim's -- put the gate-off at the
+    requested hold from the gate's predicted apply frame, within the bound."""
+    import verify_uart_bridge as vub
+    m = ht.measure(ht.HELD_COMMANDS["held-default"])
+    cap = ht.write_held_rtl_capture(m["_harness"], tmp_path / "held-default")
+    sent = b"".join(d for _t, d in m["_harness"].ser.tx_log)
+    lines = (tmp_path / "held-default.cmds").read_text().splitlines()
+    replayed = b"".join(bytes.fromhex("".join(ln.split()[2:])) for ln in lines)
+    assert replayed == sent
+    assert cap["writes"] == 35 and cap["events"] == 1 and cap["status"] >= 3
+    items, rows, _origin, _baud = vub.rows_from_capture(str(tmp_path / "held-default"))
+    on = next(r for r in rows[0] if r.kind == "write"
+              and uh.decode_reg_frame(r.packet[1:7])[2] == 0x20)
+    off = next(r for r in rows[0] if r.kind == "event")
+    assert abs((off.due - on.apply_frame) - 1920) <= m["host_record"]["hold_bound_frames"] + 1
+
+
+@pytest.mark.parametrize("rows,verdict", [
+    ([["100", "0", "0", "32", "0"], ["2020", "0", "0", "33", "0"]], ht.PASS),
+    ([["100", "0", "0", "32", "0"], ["2030", "0", "0", "33", "0"]], ht.FAIL),
+    # the defeating inputs of a "first gate-off minus first gate-on" reader:
+    ([["100", "0", "0", "32", "0"], ["2020", "0", "0", "33", "0"],
+      ["2500", "0", "0", "33", "0"]], ht.REFUSED),           # two gate-offs
+    ([["100", "0", "1", "32", "0"], ["2020", "0", "0", "33", "0"]], ht.REFUSED),  # drum page
+    ([["100", "0", "0", "32", "0"], ["x", "0", "0", "33", "0"]], ht.REFUSED),     # X
+])
+def test_rtl_hold_verdict_reads_gates_by_identity(rows, verdict):
+    assert ht.rtl_hold_verdict(rows, 1920, 2)["verdict"] == verdict
