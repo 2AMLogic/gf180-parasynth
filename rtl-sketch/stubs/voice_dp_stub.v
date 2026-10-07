@@ -48,8 +48,10 @@ module voice_dp #(
     reg signed [35:0] macc = 36'bx;   // tb_voice taps macc >>> 15 for the out_v column
     reg [23:0] level_a = 24'bx, level_f = 24'bx;
     reg [1:0]  seg_a = 2'bx, seg_f = 2'bx;
+    reg [9:0]  drift_cnt = 10'bx;      // the per-oscillator drift taps tb_voice reads in its STATE line (DR 0019);
+    reg signed [15:0] drift_acc [0:2]; //   missing, the red run did not compile (status 2, not 1)
     integer i;
-    initial for (i = 0; i < 3; i = i + 1) begin inc_acc[i] = 32'bx; phase[i] = 24'bx; phase_os2[i] = 24'bx; inc_mod[i] = 24'bx; sh[i] = 5'bx; r[i] = 16'bx; end
+    initial for (i = 0; i < 3; i = i + 1) begin inc_acc[i] = 32'bx; phase[i] = 24'bx; phase_os2[i] = 24'bx; inc_mod[i] = 24'bx; drift_acc[i] = 16'bx; sh[i] = 5'bx; r[i] = 16'bx; end
 
     reg [1:0] d;
     assign busy = 1'b0;
