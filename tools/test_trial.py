@@ -1068,3 +1068,125 @@ def test_judge_forged_removal_of_the_reuse_requirement(repo):
     ok, problems, _ = _forge(path, forged)
     assert not ok
     assert any("reuse" in p for p in problems), problems
+
+
+# ---- #283: the receipt's population is bound to its recorded registry ---------
+# A receipt is only as strong as its child LIST: deleting the failing child (and
+# its directory) and re-sealing used to leave a receipt every other check
+# accepted -- check_receipt walked whatever the receipt said it contained.
+import shutil                                                  # noqa: E402
+
+
+def _failing_late():
+    return {"rc": 1, "files": {"record.json": copy.deepcopy(REAL_LATE)}}
+
+
+def _forge_delete_child(run_dir, child_id):
+    """Delete a required child (entry + directory), recompute the composite and
+    re-seal: a self-consistent forgery, structurally well-formed."""
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    forged["children"] = [c for c in forged["children"] if c["id"] != child_id]
+    shutil.rmtree(run_dir / child_id)
+    forged["verdict"], forged["verdict_reasons"] = trial.composite(
+        forged["children"], forged["controls"])
+    forged["coverage"]["required_children"] = len(forged["children"])
+    return forged, path
+
+
+def _failing_run(repo, extra_passing):
+    """A mode whose c1 (and optionally c2) are required; the failing one is last."""
+    if extra_passing:
+        repo.child(ok_deadline())
+    bad = repo.child(_failing_late())
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    assert rec["verdict"] == trial.FAIL, rec["verdict_reasons"]
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
+    assert ok, problems                                # the clean fixture is VALID
+    return run_dir, bad
+
+
+def test_forgery_a_deleting_one_required_failing_child_is_rejected(repo):
+    run_dir, bad = _failing_run(repo, extra_passing=True)
+    forged, path = _forge_delete_child(run_dir, bad)
+    assert forged["verdict"] == trial.PASS, "the forgery launders FAIL into PASS"
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+    assert any("population" in p and bad in p for p in problems), problems
+
+
+def test_forgery_b_deleting_the_sole_required_child_is_rejected(repo):
+    run_dir, bad = _failing_run(repo, extra_passing=False)
+    forged, path = _forge_delete_child(run_dir, bad)
+    assert forged["children"] == []
+    # the pre-fix composite read an empty required list as PASS; the forger
+    # states that verdict regardless of what composite() now answers
+    forged["verdict"] = trial.PASS
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+    assert any("population" in p and bad in p for p in problems), problems
+
+
+def test_composite_of_no_required_children_is_no_verdict():
+    caught = [{"id": "k", "caught": True, "reasons": []}]
+    verdict, reasons = trial.composite([], caught)
+    assert verdict == trial.NO_VERDICT
+    assert any("no required child" in r for r in reasons)
+
+
+def test_required_child_moved_to_controls_changes_the_population(repo):
+    run_dir, _ = _failing_run(repo, extra_passing=True)
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    moved = forged["children"].pop(0)
+    moved["role"] = "control"
+    forged["controls"].append(moved)
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("population" in p for p in problems), problems
+
+
+@pytest.mark.parametrize("edit", ["drop_field", "change_field"])
+def test_altered_interpreter_spec_is_rejected(repo, edit):
+    run_dir, _ = _failing_run(repo, extra_passing=True)
+    path = run_dir / "receipt.json"
+    forged = json.loads(path.read_text())
+    spec = forged["children"][0]["interpreter"]
+    if edit == "drop_field":
+        spec["token_prefix"] = "x"                      # a field the registry never had
+    else:
+        spec["interpret"] = "bound_text"
+    ok, problems, _ = _forge(path, forged)
+    assert not ok and any("population" in p and "interpreter" in p for p in problems), problems
+
+
+def test_registry_drift_is_checked_against_the_recorded_registry(repo):
+    """The working-tree registry changed after the run; the receipt is still
+    VALID because the recorded registry is retrievable from git history."""
+    def git(*a):
+        subprocess.run(["git", "-C", str(repo.root), *a], check=True, capture_output=True)
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    repo.child(ok_deadline())
+    repo.child(late_control(), role="control")
+    run_dir, rec = repo.run()
+    git("add", "docs/trials.json")
+    git("commit", "-qm", "registry")
+    reg = repo.root / "docs/trials.json"
+    reg.write_text(reg.read_text().replace('"x/1"', '"x/2"'))        # working tree drifts
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json", root=repo.root)
+    assert ok, problems
+    # ... and a forged deletion is still rejected against the history copy
+    forged, path = _forge_delete_child(run_dir, "c1")
+    ok, problems, _ = _forge(path, forged)
+    assert not ok
+
+
+def test_unresolvable_recorded_registry_is_unverifiable_never_valid(repo):
+    run_dir, _ = _failing_run(repo, extra_passing=True)
+    (repo.root / "docs/trials.json").unlink()            # no registry, no git history
+    ok, problems, _ = trial.check_receipt(run_dir / "receipt.json", root=repo.root)
+    assert not ok
+    assert any(p.startswith("UNVERIFIABLE") for p in problems), problems
+    assert not any("population" in p for p in problems), "unavailable is not forged"
