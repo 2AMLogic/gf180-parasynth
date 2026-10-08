@@ -117,7 +117,12 @@ def included(h, conditioning_by_even):
     """Odd partials are always included. An even partial is included only if
     its reference conditioning is >= NOTCH_DB."""
     k = int(h[1:])
-    return True if k % 2 else conditioning_by_even[h] >= NOTCH_DB
+    if k % 2:
+        return True
+    c = conditioning_by_even[h]
+    if isinstance(c, float) and math.isnan(c):
+        raise Refused(f"{h}: conditioning is NaN")
+    return c >= NOTCH_DB
 
 
 def rms(values):
@@ -173,6 +178,8 @@ def select(rows, baseline_drive=BASELINE):
 def confirmation_stats(errors, include):
     """errors/include: list over events of {hk: value}/{hk: bool}."""
     cells = [(i, h) for i, e in enumerate(errors) for h in PARTIALS if include[i][h]]
+    for i, h in cells:
+        finite(f"confirmation error at event {i} {h}", errors[i][h])
     return {"n_included": len(cells),
             "e_conf_db": rms(errors[i][h] for i, h in cells),
             "e_43_db": rms(errors[MIDI43_EVENT][h] for i, h in cells if i == MIDI43_EVENT),
@@ -310,7 +317,7 @@ def matched_render(drive, vol, ref_rows):
         mix = d.render(patch, p)[:n]
         iso = d.relative_phase(d.render(open_p, p, (1., 0., 0.))[:n].astype(np.float64) / 32768,
                                d.render(open_p, p, (0., m, 0.))[:n].astype(np.float64) / 32768, e)
-        err = d.wrap(iso["psi_deg"] - r["psi_deg"])
+        err = finite(f"drive {drive}: event {i} matched psi error", d.wrap(iso["psi_deg"] - r["psi_deg"]))
         if abs(err) > PSI_MATCH_TOL_DEG:
             raise Refused(f"drive {drive}: matched render missed the reference psi at event {i} by {err:.2f} deg")
         out.append({"osc2_phase": int(p), "psi_error_deg": err, "pcm_sha256": d.pcm_sha(mix),
@@ -394,8 +401,8 @@ def main():
             print(f"dev drive {drive}: max E {rows[drive]['max_error_db']:.3f} ({rows[drive]['worst_partial']}), "
                   f"mean {rows[drive]['mean_error_db']:.3f}, odd range {rows[drive]['odd_range_mean_db']:.2f}", flush=True)
         for h in ap.ODD:
-            if abs(rows[BASELINE]["_mp"]["partials"][h]["range_db"]
-                   - phase["summaries"]["model"]["partials"][h]["range_db"]) > 1e-9:
+            if abs(finite(f"baseline moving-phase {h} range", rows[BASELINE]["_mp"]["partials"][h]["range_db"])
+                   - finite(f"#219 model {h} range", phase["summaries"]["model"]["partials"][h]["range_db"])) > 1e-9:
                 raise Refused("baseline moving-phase render does not reproduce #219's model curves")
         for drive, row in rows.items():
             row["violations"] = ([] if drive == BASELINE else

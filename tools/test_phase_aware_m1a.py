@@ -219,7 +219,7 @@ def test_matched_render_refuses_psi_miss(monkeypatch):
     monkeypatch.setattr(m.d, "wrap", lambda x: x)
     monkeypatch.setattr(m.d, "pcm_sha", lambda x: "sha")
     monkeypatch.setattr(m.d, "partials", lambda *a, **k: {})
-    for miss, refused in ((6., True), (4., False)):
+    for miss, refused in ((6., True), (NAN, True), (4., False)):
         monkeypatch.setattr(m.d, "relative_phase", lambda a, b, e, miss=miss: {"psi_deg": 10. + miss})
         if refused:
             with pytest.raises(m.Refused):
@@ -238,3 +238,12 @@ def test_main_exit_2_on_refusal_and_report_untouched(monkeypatch, tmp_path, caps
     assert m.main() == 2
     assert "REFUSED" in capsys.readouterr().out
     assert not (tmp_path / "out").exists()
+
+
+def test_other_nan_guards_refuse():
+    """The same class elsewhere: NaN psi error, NaN confirmation cell, NaN conditioning."""
+    with pytest.raises(m.Refused):
+        m.confirmation_stats([{h: NAN for h in m.PARTIALS}] * 3, [{h: True for h in m.PARTIALS}] * 3)
+    with pytest.raises(m.Refused):
+        m.included("h4", {"h4": NAN})
+    assert m.included("h4", {"h4": -math.inf}) is False       # exact cancellation is a real exclusion
