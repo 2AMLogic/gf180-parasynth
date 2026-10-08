@@ -193,7 +193,7 @@ read the M1A patch. Their qualification is not extended to any resonant setting.
 
 **Selection: drive 0.25. Confirmation on the frozen phrase, phase-matched:
 CONFIRMED.** Every rule passed and none failed. The record is `report.json`,
-written from clean commit `626a39b` (`worktree_dirty: false`). One process
+written from clean commit `2b3aad3` (`worktree_dirty: false`). One process
 ran for 3 min 38 s.
 
 **In sound terms:** the M1A round bass already sounds like the Mini V3 once the
