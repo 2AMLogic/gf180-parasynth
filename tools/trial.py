@@ -48,9 +48,14 @@ execution did not complete.
 
 What that does NOT prove: `receipt_sha256` is an unkeyed self-hash, so it
 detects accidental edits, not a forger. A forger who also edits a child's
-recorded exit status or interpreter spec, or deletes a child's entry together
-with its directory, is caught only by re-running the trial or comparing its
-children to docs/trials.json at the recorded registry hash.
+recorded exit status is caught only by re-running the trial. Since #283 the
+child LIST is bound too: check-receipt compares the children, controls, roles,
+checkers and interpreter specs with the mode definition in the registry whose
+sha256 the receipt recorded (found by hash: file, then git history), so
+deleting a child with its directory is rejected as a `population` problem;
+when that registry cannot be retrieved the result is `UNVERIFIABLE`, never
+VALID. The registry hash is the receipt's own claim: a forger who also supplies
+a registry file with a matching hash is a re-run / provenance matter.
 
 Exit: 0 PASS, 1 FAIL, 2 NO VERDICT (the repository's verifier convention; the
 receipt, not this number, is the record).
@@ -66,6 +71,7 @@ import os
 import pathlib
 import shlex
 import signal
+import subprocess
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -636,7 +642,12 @@ def judge_child(spec: dict, run: dict, out: pathlib.Path, role: str, *,
 
 
 def composite(required: list[dict], controls: list[dict]) -> tuple[str, list[str]]:
-    """docs/trials.md rule 4."""
+    """docs/trials.md rule 4. Rule 0 (#283): a population that is empty answered
+    nothing -- all([]) is True, so without this guard deleting every required
+    child turns a failed product question into a PASS."""
+    if not required:
+        return NO_VERDICT, ["no required child answered the product question: an empty "
+                            "required population is not a PASS (#283)"]
     fails = [c for c in required if c["verdict"] == FAIL]
     if fails:
         return FAIL, [f"{c['id']}: FAIL -- " + "; ".join(c["reasons"][:3]) for c in fails]
@@ -987,7 +998,109 @@ def rtl_reuse_summary(receipt: dict) -> dict:
             or asked_for_reuse(c)}
 
 
-def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
+def _member(c: dict, role: str) -> str:
+    """The identity of one child that affects what it answers and how it is
+    re-derived: id, role, checker, and the interpreter spec."""
+    if "interpreter" in c:                              # a receipt entry: as recorded
+        interp = c["interpreter"]
+    else:                                               # a registry definition
+        interp = {k: c[k] for k in INTERPRETER_KEYS if k in c}
+        if REUSE_FLAG in (c.get("args") or []):
+            interp["rtl_reuse"] = "report"              # run_trial's rule
+    return json.dumps({"id": c.get("id"), "role": role, "checker": c.get("checker"),
+                       "interpreter": interp}, sort_keys=True)
+
+
+def _recorded_registry(rec: dict, root: pathlib.Path) -> tuple[dict | None, str]:
+    """The registry whose sha256 the receipt recorded, found by hash: the file at
+    the recorded path, the working tree's, then any commit in git history.
+    (parsed registry or None, how it was found / why not)."""
+    ident = (rec.get("identities") or {}).get("registry") or {}
+    want = ident.get("sha256")
+    if not isinstance(want, str) or not want:
+        return None, "the receipt records no registry sha256"
+    paths = []
+    if isinstance(ident.get("path"), str):
+        paths.append(pathlib.Path(ident["path"]))
+    paths.append(root / "docs" / "trials.json")
+    for p in paths:
+        try:
+            if p.is_file() and sha256_file(p) == want:
+                return json.loads(p.read_text()), f"file {p}"
+        except (OSError, ValueError):
+            continue
+    try:
+        commits = subprocess.run(
+            ["git", "-C", str(root), "log", "--all", "--format=%H", "--", "docs/trials.json"],
+            capture_output=True, text=True, check=True).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        commits = []
+    for c in commits:
+        try:
+            blob = subprocess.run(["git", "-C", str(root), "show", f"{c}:docs/trials.json"],
+                                  capture_output=True, check=True).stdout
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        if hashlib.sha256(blob).hexdigest() == want:
+            try:
+                return json.loads(blob), f"git {c[:12]}"
+            except ValueError:
+                return None, f"git {c[:12]} matches the hash but is not JSON"
+    return None, f"no file or git commit under {root} has sha256 {want[:12]}"
+
+
+def membership_problems(rec: dict, root: pathlib.Path = ROOT) -> list[str]:
+    """#283: the receipt's child list is a claim about what was run. Compare it
+    with the mode definition in the registry the receipt itself is bound to.
+    Problems starting 'UNVERIFIABLE' mean the registry could not be
+    authenticated (not a forgery finding); 'population' means a real difference."""
+    status = (rec.get("execution") or {}).get("status")
+    if status in ("in-progress", "preflight-refused"):
+        if rec.get("children") or rec.get("controls"):
+            return [f"population: execution {status!r} cannot list children"]
+        return []
+    reg, how = _recorded_registry(rec, root)
+    t = rec.get("trial") or {}
+    if reg is None:
+        return [f"UNVERIFIABLE: the child set cannot be checked, the recorded registry "
+                f"is not retrievable ({how})"]
+    try:
+        mode = reg["trials"][t["id"]]["modes"][t["mode"]]
+        cand = t.get("candidate") or "baseline"
+        as_cand = cand.split(":", 1)[1] if cand.startswith("control:") else None
+        req, ctl = _children(mode, as_cand)
+    except (KeyError, TypeError, AttributeError, RegistryError) as exc:
+        return [f"population: the recorded registry has no such mode ({exc!r})"]
+    out = []
+    for label, got, want in (
+            ("required", [_member(c, "required") for c in rec.get("children", [])
+                          if isinstance(c, dict)],
+             [_member(c, "required") for c in req]),
+            ("control", [_member(c, "control") for c in rec.get("controls", [])
+                         if isinstance(c, dict)],
+             [_member(c, "control") for c in ctl])):
+        if sorted(got) == sorted(want):
+            continue
+        g = {json.loads(x)["id"]: x for x in got}
+        w = {json.loads(x)["id"]: x for x in want}
+        for i in sorted(set(w) - set(g)):
+            out.append(f"population: {label} child {i!r} is in the recorded registry ({how}) "
+                       "but not in the receipt")
+        for i in sorted(set(g) - set(w)):
+            out.append(f"population: {label} child {i!r} is in the receipt but not in "
+                       f"the recorded registry ({how})")
+        for i in sorted(set(g) & set(w)):
+            if g[i] != w[i]:
+                out.append(f"population: {label} child {i!r} interpreter/role/checker "
+                           f"differs from the recorded registry ({how})")
+        if not out:
+            out.append(f"population: {label} children differ in multiplicity from the "
+                       f"recorded registry ({how})")
+    return out
+
+
+def check_receipt(path: pathlib.Path, root: pathlib.Path = ROOT
+                  ) -> tuple[bool, list[str], dict | None]:
     """(valid, problems, receipt). Valid means: the receipt is intact, every
     artifact it names is present with its recorded sha256 and nothing else is
     in the run directory, every child's verdict (and control's `caught`) is what
@@ -1008,6 +1121,7 @@ def check_receipt(path: pathlib.Path) -> tuple[bool, list[str], dict | None]:
     if rec.get("verdict") not in VERDICTS:
         problems.append(f"verdict {rec.get('verdict')!r} is not one of {VERDICTS}")
     run_dir = path.parent
+    problems += membership_problems(rec, root)
     listed = {"receipt.json"}
     for c in rec.get("children", []) + rec.get("controls", []):
         for a in c.get("artifacts", []):
