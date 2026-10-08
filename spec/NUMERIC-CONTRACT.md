@@ -1,6 +1,6 @@
 # Monosynth Voice — Numeric Contract
 
-**Revision 16 — 2026-10-07 — status: PROPOSED. Not ratified.**
+**Revision 17 — 2026-10-08 — status: PROPOSED. Not ratified.**
 
 Revision 13 is one normative change: the shark-tooth's triangle share now
 carries a **polyBLAMP** correction on its two corners as well as the PolyBLEP
@@ -10,7 +10,9 @@ no register and no arithmetic: it is two values in the reference kit (Appendix
 G), the rimshot's two bridged-T modes' relative drive and the level re-balance
 that follows it (#388). Revision 16 adds one register, the shared-bus DC
 coupling's enable at drum-page `0x30` (15.10, DR 0025; #551), reset off, with
-no RTL yet. Section 18 has all four.
+no RTL yet. Revision 17 changes nothing: it records in 5.1 and 5.2 the seven
+registers and the fourth `wave` bit that revision 9 shipped (#321). Section 18
+has all five.
 
 This document is a proposal for the complete, bit-exact specification of the
 gf180-parasynth voice: three band-limited oscillators with an on-chip glide, a
@@ -260,8 +262,9 @@ product the host's job (5.5).
 | Register | Width | Per | Meaning | Model |
 |---|---:|---|---|---|
 | `inc_tgt[k]` | 24 u | osc | phase-increment target; `inc[k] = inc_acc[k] >> 8` is what the phase accumulator adds (6.7) | `OscFx.inc_tgt` |
-| `wave[k]` | 3 | osc | one of saw, square, pulse25, tri, sine (encoding in 5.2) | `waves[k]` |
+| `wave[k]` | 4 | osc | one of nine shapes, codes 0–8; 9–15 are sine (table in 6.4, encoding in 5.2) | `waves[k]` |
 | `w[k]` | 16 u | osc | mixer weight, Q0.15 | `weights[k]` |
+| `WN` | 16 u | voice | noise mixer weight, Q0.15, the fourth term of 7; the noise colour is `NSEL` (6.10) | `weights[3]` |
 | `a_inc`, `d_dec`, `sus` | 24 u | env ×2 | attack increment, decay decrement, sustain level, Q0.24 | `AdsrFx.a_inc`, `.d_dec`, `.sus` |
 | `rate` | 24 u | env ×2 | release fraction as 16-bit Q0.16 mantissa + 8-bit binary exponent | `AdsrFx.rate` |
 | `gate` | 1 | voice | envelope gate (both envelopes) | `VoiceFx.gate` |
@@ -271,6 +274,12 @@ product the host's job (5.5).
 | `k` | 17 u | voice | ladder resonance, 4·res in Q3.14, before the compensation of 10.2 | `LadderFx.regs`, `VoiceFx.k_reg` |
 | `gain` | 20 u | voice | ladder input gain, drive·2.6 in Q4.16 | same |
 | `ogain` | 20 u | voice | ladder output gain, (1+2·res)/2.6 in Q4.16 | same |
+| `NSEL` | 1 | voice | noise colour: clear puts white in the mixer and pink on the modulation bus, set puts pink and red (6.10) | `nsel` |
+| `MROUTE` | 3 | voice | modulation routing: bit 0 OSC, bit 1 FILT, bit 2 OSC-3 as a destination (6.9) | `mroute` |
+| `MMIX` | 16 u | voice | MOD MIX pan between oscillator 3 and noise, Q1.15, values above 32768 clamp to 32768 (6.9) | `mmix` |
+| `MWHEEL` | 16 u | voice | modulation amount, Q1.15; 0 is bit-identical to no modulation path (6.9) | `mwheel` |
+| `MPD` | 16 u | voice | oscillator modulation depth: the full-scale (`amt` = 1.0) swing in octaves, Q3.12 (6.9) | `mpd` |
+| `MFD` | 16 u | voice | filter modulation depth: the full-scale swing in octaves, Q3.12 (6.9) | `mfd` |
 | `drift` | 16 u | voice | per-oscillator drift depth, Q0.16; 0 is off and bit-identical to no drift at all (6.11) | `VoiceFx.drift` |
 
 The two envelopes are `amp` (section 9) and `filt` (section 10); each has its
@@ -309,13 +318,16 @@ and `seg` per envelope (section 8.1), the ladder's `y[0..3]`, `w[0..3]`,
 | Write | Effect at the next frame boundary (4.3) |
 |---|---|
 | SET_INC k, v, jump | `inc_tgt[k] ← v`. If `jump = 1` or `glide = 0`, `inc_acc[k] ← v << 8` at once; otherwise the slew of 6.7 walks it there frame by frame. Whenever `inc_acc[k] >> 8` changes, `(e[k], r[k])` MUST be recomputed by 6.6.1 before it is next used, i.e. before the next sample's PolyBLEP. `phase[k]` is not touched. |
-| SET_WAVE k, s | `wave[k] ← s`. Takes effect from the next sample, mid-note. |
-| SET_WEIGHT k, v | `w[k] ← v`. |
+| SET_WAVE k, s | `wave[k] ← s` (4 bits). Takes effect from the next sample, mid-note. |
+| SET_WEIGHT k, v | `w[k] ← v`. `WN ← v` is the noise term's weight. |
 | SET_ENV e, a_inc/d_dec/sus/rate | the named parameter of envelope e ← v. The envelope update at the end of the frame in which the write was applied already uses it. |
 | SET_CUT lo/hi/track | the named cutoff register ← v. |
 | SET_LADDER k/gain/ogain | the named coefficient ← v. Held for the whole frame (both passes). |
 | SET_GLIDE v | `glide ← v`. |
 | SET_VOL v | `vol ← v`. |
+| SET_NSEL v | `NSEL ← v[0]`. Selects the noise colours of 6.10. |
+| SET_MROUTE v | `MROUTE ← v[2:0]`. Read by the next frame's modulation step (6.9). |
+| SET_MOD v | `MMIX`, `MWHEEL`, `MPD` or `MFD` ← v (16 bits). `mod_sig` is computed at the end of a frame and read at the start of the next (6.9), so the write is seen by the following frame's pan and the next frame's amount. |
 | SET_DRIFT v | `drift ← v`. Takes effect on the next frame's deviation (6.11), not at the next walk update: the three walks advance whether `drift` is zero or not, so when drift was switched on does not change what it does. |
 | GATE_ON | `gate ← 1`, and for both envelopes `seg ← ATTACK` with `level` unchanged (8.5, DR 0003). Nothing else changes: no phase, no ladder state. |
 | TRIG | for both envelopes `seg ← ATTACK` with `level` and `gate` unchanged (8.5): the multi-trigger retrigger while a key is held. |
@@ -328,14 +340,17 @@ bits, a page bit, an 8-bit address and 32 data bits,
 1's 32-bit frame could not address the drum image of 15.1 at all, and the
 measurement is in that record). `SEC` = 0 is this page. The addresses
 (DR 0007 section 3): `INC_TGT[k]` 0x00–0x02 with `F` = jump; `WAVE[k]`
-0x04–0x06; `W[k]` 0x08–0x0A; `GLIDE` 0x0C; `VOL` 0x0D; amp envelope
+0x04–0x06; `W[k]` 0x08–0x0A; `WN` 0x0B; `GLIDE` 0x0C; `VOL` 0x0D; amp envelope
 `a_inc, d_dec, sus, rate` 0x10–0x13 and filter envelope 0x14–0x17;
-`CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `K, GAIN, OGAIN` 0x1C–0x1E; `GATE_ON`
-0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `NOP` 0x3F.
+`CUT_LO, CUT_HI, TRACK_HZ` 0x18–0x1A; `NSEL` 0x1B; `K, GAIN, OGAIN` 0x1C–0x1E;
+`MROUTE` 0x1F; `GATE_ON`
+0x20, `GATE_OFF` 0x21, `TRIG` 0x22, `RESET` 0x23 (data ignored); `MMIX` 0x24,
+`MWHEEL` 0x25, `MPD` 0x26, `MFD` 0x27; `NOP` 0x3F.
 `BVOL` is 0x2C, `DVOL` 0x0E (12) and `DRIFT` 0x2D (6.11). A register narrower than 32 bits takes
 the low bits of `D`; the rest MUST be zero. `SEC` = 1 selects the drum
-section's page, whose map is 15.1's unchanged. **`wave[k]`: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, and 5–7 also
-sine** (bit 2 set selects sine, so every 3-bit value is defined). The chip
+section's page, whose map is 15.1's unchanged. **`wave[k]` is four bits: 0 saw, 1 square, 2 pulse25, 3 tri, 4 sine, 5 shark-tooth,
+6 reverse saw, 7 pulse29, 8 pulse15, and 9–15 also sine** (6.4's table is
+normative; every 4-bit value is defined, and the register keeps `D[3:0]`). The chip
 adds registers outside this voice — the drum bus level, the drum routing
 and the drum filter, 0x0E, 0x0F, 0x28–0x2B, and the drum section's 0x40–0x7F
 — which `docs/ARCHITECTURE.md` and the drum section's own record define.
@@ -2397,6 +2412,24 @@ record that extends this document; none may be resolved by picking a reading.
 ---
 
 ## 18. Revision history
+
+- **Rev 17 (2026-10-08)** — **records what revision 9 already shipped in 5.1
+  and 5.2** (#321; found while writing Rev 9's own entry, #301). **No behaviour
+  change**: no arithmetic, width, address, clamp or reset value moves, and no
+  pinned table, hash or reference sequence changes. Revision 9 added seven
+  host-writable voice registers — `WN` 0x0B (16 u), `NSEL` 0x1B (1), `MROUTE`
+  0x1F (3), `MMIX` 0x24, `MWHEEL` 0x25, `MPD` 0x26, `MFD` 0x27 (16 u each) —
+  and widened `wave[k]` from 3 to 4 bits, and described them in 6.4, 6.9, 6.10
+  and 7 but never in the control-interface sections, so 5.1 and 5.2 still
+  specified a 3-bit `wave` that could not reach six of 6.4's nine codes. 5.1
+  now lists the seven and states `wave[k]` as 4 bits; 5.2 lists their
+  addresses and rewrites the encoding sentence to 6.4's nine codes with 9–15
+  sine. Widths were read from `model/synth_top_model.py` (the `W1`/`W3`/`W4`/
+  `W16` masks) and `rtl-sketch/voice_dp.v`'s write case, which agree.
+  `spec/reference/test_register_map.py` is the gate that keeps the two halves
+  from drifting again: every address the model decodes must appear in 5.2, the
+  model and RTL decode the same set, the stated widths equal the enforced ones,
+  and every 6.4 code fits `wave[k]`'s width.
 
 - **Rev 16 (2026-10-07)** — **the shared-bus DC coupling's numeric contract**
   (15.10; DR 0025; #551, part of #510). Model and contract only: a `COUPLE`
