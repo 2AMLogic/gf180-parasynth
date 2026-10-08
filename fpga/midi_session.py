@@ -1070,7 +1070,7 @@ def open_midi_input(spec: str, *, backend=None):
         raise cmi.MidiPortRefused(f"cannot open MIDI input {spec}: {exc}") from exc
 
 
-def main(argv=None) -> int:
+def main(argv=None, *, _inject=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n", 1)[1])
@@ -1093,6 +1093,18 @@ def main(argv=None) -> int:
                          "or tree (built from this tree, revision 14, "
                          "development -- implied by --port sim, which refuses release)")
     a = ap.parse_args(argv)
+    # Fail closed on the boundary between the verifier and a real session:
+    # the fault-injection hooks exist only so verify_live_midi.py can prove
+    # its checks catch defects.  `_inject` is an internal/test seam, not a CLI
+    # flag.  Refusal is on non-emptiness (no allowlist of control names), and
+    # happens before ANY resource opener (CoreMIDI, MIDI input, simulator,
+    # serial) runs.
+    if _inject:
+        print("midi_session: REFUSED -- a non-empty fault-injection set "
+              f"({sorted(map(str, _inject))}) was presented to the real-session "
+              "entry point; injection is for fpga/verify_live_midi.py only, "
+              "which constructs MidiSession directly", file=sys.stderr)
+        return 2
     if a.list_midi_ports:
         try:
             ports = cmi.CoreMidiBackend().sources()

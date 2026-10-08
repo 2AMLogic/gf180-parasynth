@@ -320,3 +320,58 @@ def test_release_domain_property_moves_when_the_session_lets_a_note_out(monkeypa
     r = vlm.check(run)
     assert r["props"]["release_domain"]["moved"], r["props"]["release_domain"]
     assert "INC_RANGE" in r["props"]["release_domain"]["detail"]
+
+
+# ---- the real-session entry point refuses an injection set (#288) -------------
+import coremidi_input as _cmi                              # noqa: E402
+import uart_host as _uh                                    # noqa: E402
+
+
+def _arm_fail_fast_openers(monkeypatch):
+    """Every resource main() can touch becomes a tripwire, so a refusal that
+    came AFTER an opener ran is red, not merely a wrong return code."""
+    def boom(name):
+        def f(*_a, **_k):
+            raise AssertionError(f"{name} ran before the injection refusal")
+        return f
+    monkeypatch.setattr(ms, "resolve_image", boom("resolve_image"))
+    monkeypatch.setattr(ms, "open_midi_input", boom("open_midi_input"))
+    monkeypatch.setattr(ms, "MidiSession", boom("MidiSession"))
+    monkeypatch.setattr(dev, "UartDeviceSim", boom("UartDeviceSim"))
+    monkeypatch.setattr(_cmi, "CoreMidiBackend", boom("CoreMidiBackend"))
+    monkeypatch.setattr(_uh, "_require_serial", boom("_require_serial"))
+
+
+@pytest.mark.parametrize("inject", [
+    {"DROP_NOTE_OFF"}, {"WRONG_DRUM_MAP"}, {"DELAYED_EVENT"}, {"WRONG_ALT"},
+    {"FUTURE_CONTROL"},                         # a control that does not exist yet
+    {"FUTURE_CONTROL", "DROP_NOTE_OFF"}, frozenset({"X"}), ["FUTURE_CONTROL"]])
+def test_main_refuses_any_nonempty_injection_before_opening_anything(
+        monkeypatch, capsys, inject):
+    _arm_fail_fast_openers(monkeypatch)
+    rc = ms.main(["--port", "sim", "--midi-in", "scripted:coverage"], _inject=inject)
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert err.startswith("midi_session: REFUSED -- ")
+    assert sorted(inject)[0] in err
+
+
+def test_injection_refusal_also_precedes_list_midi_ports(monkeypatch, capsys):
+    _arm_fail_fast_openers(monkeypatch)
+    assert ms.main(["--list-midi-ports"], _inject={"FUTURE_CONTROL"}) == 2
+    assert "REFUSED" in capsys.readouterr().err
+
+
+def test_empty_injection_is_not_refused_and_reaches_the_openers(monkeypatch, capsys):
+    # the tripwires fire: an empty set must get PAST the guard to resolve_image
+    _arm_fail_fast_openers(monkeypatch)
+    for empty in (None, set(), frozenset(), []):
+        with pytest.raises(AssertionError, match="resolve_image ran"):
+            ms.main(["--port", "sim", "--midi-in", "scripted:coverage"], _inject=empty)
+
+
+def test_the_verifier_can_still_construct_a_session_with_injection():
+    clock = dev.SimClock()
+    s = ms.MidiSession(dev.SimSerial(dev.UartDeviceSim(clock=clock)), clock=clock,
+                       image="tree", inject={"FUTURE_CONTROL", "DROP_NOTE_OFF"})
+    assert s.inject == {"FUTURE_CONTROL", "DROP_NOTE_OFF"}
