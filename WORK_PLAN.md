@@ -7,7 +7,7 @@ Forge lifecycle snapshot maintained by Guide. The milestone is #282: a great-sou
 
 The model increments in PR #549 (cutoff correction) and PR #554 (cymbal coupling) have merged. RTL correction PR #555 remains in changes-requested; coupling tasks #552 and #553 remain open. No new measurement, RTL equivalence verdict, image or physical capture was produced by this Guide cycle.
 
-No issue currently carries `loom:building`. Sound qualification needs a continuous owner; the unclaimed sound queue and capability holds need operator attention. Building labels alone would not prove liveness; orphan recovery found no orphaned tasks.
+No issue currently carries `loom:building`. Sound qualification needs a continuous owner; the unclaimed sound queue and capability holds need operator attention. Cymbal task #369's sweep relapsed into an insta-crash quarantine on 2026-10-08; the daemon recorded a 7200-second pause and an environment/configuration diagnosis to investigate. Its older dependency #432 is closed, but that does not release the quarantine. Building labels alone would not prove liveness; orphan recovery found no orphaned tasks.
 
 ## Operator Attention: Merge-Risk-Hold Pileup
 
@@ -53,6 +53,16 @@ Curated work awaiting or already carrying separate lifecycle decisions: #33, #10
 
 - **#564**: Collect currently undiscovered measurement tests.
 - **#565**: Refuse incomplete nextpnr logs as routing evidence.
+- **#568**: Refuse blank synthesis cell counts after yosys failure.
+- **#569**: Consolidate duplicated file-hash helpers.
+
+## Auditor findings
+
+- **#567**: Python runtime capability request; validation remains unavailable on this host.
+- **#570–#572**: Stash, checkpoint-write and Python-deletion guard findings.
+- **#574**: Retain the guard that catches a literal file path used as a comment body.
+
+These findings do not establish instrument defects or authorize guard changes.
 
 ## Epics
 
@@ -65,10 +75,10 @@ No `loom:epic-phase` issues were returned; a phase-completion percentage cannot 
 
 | Category | Count |
 |---|---:|
-| Open issues | 83 |
-| Goal-advancing tier | 25 |
+| Open issues | 90 |
+| Goal-advancing tier | 26 |
 | Goal-supporting tier | 9 |
-| Maintenance tier | 3 |
+| Maintenance tier | 5 |
 | Approved issues missing a tier | 0 |
 | Ready by lifecycle labels, excluding approved closing PRs | 9 |
 | Building claims | 0 |
@@ -80,6 +90,7 @@ Tier counts cover all open issues, including held and unapproved work; they are 
 ## Dependency holds
 
 - **#510**: #551 closed; #552 and #553 remain open. Keep blocked.
+- **#369**: #432 closed; current daemon quarantine and reference/build capability requirements remain. Keep blocked.
 - **#310**: Upstream rjwalters/loom#9160 remains open. Its park record does not yet name the cross-repo blocker in a parseable field.
 - **#122**: Reference rig #124 remains open.
 - **#33**: Deferred behind sound milestone #282.
