@@ -35,6 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir))
 CONTRACT = os.path.join(ROOT, "spec", "NUMERIC-CONTRACT.md")
 VOICE_DP = os.path.join(ROOT, "rtl-sketch", "voice_dp.v")
+SYNTH_TOP = os.path.join(ROOT, "rtl-sketch", "synth_top.v")
 sys.path.insert(0, os.path.join(ROOT, "model"))
 
 
@@ -81,7 +82,7 @@ def model_mask_bits(addr):
 
 
 def rtl_voice_addresses():
-    """Addresses in voice_dp.v's `case (wr_addr)` block."""
+    """Addresses in voice_dp.v's `case (wr_addr)` block, plus synth_top.v's RESET."""
     text = read(VOICE_DP)
     i = text.find("case (wr_addr)")
     if i < 0:
@@ -94,7 +95,12 @@ def rtl_voice_addresses():
             found |= {int(h, 16) for h in re.findall(r"8'h([0-9A-Fa-f]{2})", lhs)}
     if len(found) < 20:
         raise Refused("only %d addresses parsed from the RTL write case" % len(found))
-    return found
+    # RESET is decoded one level up, in synth_top.v (`soft_rst`), not by the datapath
+    m = re.search(r"soft_rst\s*=\s*wr_voice\s*&&\s*\(wr_addr\s*==\s*8'h([0-9A-Fa-f]{2})\)",
+                  read(SYNTH_TOP))
+    if not m:
+        raise Refused("no soft_rst decode in synth_top.v")
+    return found | {int(m.group(1), 16)}
 
 
 # ---- the contract ------------------------------------------------------------
